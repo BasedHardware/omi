@@ -66,6 +66,11 @@ evenly across those slices, so timestamps stay proportional to the text they
 carry. A slice is never emitted without text: an entry with fewer words than
 slices is split into as many slices as it has words.
 
+Post-processing stores the normalized result under the `prerecorded` transcript
+model and exposes that key through the transcript comparison API. The former
+`fal_whisperx` collection is a legacy read path only and is not the active
+post-processing output.
+
 Every `/v4/listen` stream receives a durable, user-scoped `recording_session`
 resource before it creates or resumes a conversation. A client-generated
 `client_conversation_id` remains that resource's ID when present; legacy

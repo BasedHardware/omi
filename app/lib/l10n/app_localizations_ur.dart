@@ -9911,4 +9911,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'آخری خرابی: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'پہلے سے ریکارڈ شدہ';
 }

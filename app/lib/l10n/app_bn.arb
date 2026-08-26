@@ -10797,5 +10797,6 @@
     "appReEnableFailedTitle": "পুনরায় সক্রিয় করা যায়নি",
     "appReEnableFailedBody": "এই অ্যাপটি পুনরায় সক্রিয় করা যায়নি। আবার চেষ্টা করুন।",
     "appDisabledOn": "{date} তারিখে নিষ্ক্রিয় করা হয়েছে।",
-    "appDisabledLastError": "শেষ ত্রুটি: {error}"
+    "appDisabledLastError": "শেষ ত্রুটি: {error}",
+    "prerecordedTranscript": "প্রি-রেকর্ডেড"
 }

@@ -3266,5 +3266,6 @@
     "appReEnableFailedTitle": "Yeniden etkinleştirilemedi",
     "appReEnableFailedBody": "Bu uygulama yeniden etkinleştirilemedi. Lütfen tekrar deneyin.",
     "appDisabledOn": "{date} tarihinde devre dışı bırakıldı.",
-    "appDisabledLastError": "Son hata: {error}."
+    "appDisabledLastError": "Son hata: {error}.",
+    "prerecordedTranscript": "Önceden kaydedilmiş"
 }

@@ -9820,4 +9820,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'השגיאה האחרונה: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'הוקלט מראש';
 }

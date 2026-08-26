@@ -9713,4 +9713,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String appDisabledLastError(String error) {
     return '最后的错误：$error';
   }
+
+  @override
+  String get prerecordedTranscript => '预录';
 }

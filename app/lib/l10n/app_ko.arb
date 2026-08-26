@@ -3231,5 +3231,6 @@
     "appReEnableFailedTitle": "다시 활성화할 수 없음",
     "appReEnableFailedBody": "이 앱을 다시 활성화하지 못했습니다. 다시 시도해 주세요.",
     "appDisabledOn": "{date}에 비활성화되었습니다.",
-    "appDisabledLastError": "마지막 오류: {error}"
+    "appDisabledLastError": "마지막 오류: {error}",
+    "prerecordedTranscript": "사전 녹음"
 }

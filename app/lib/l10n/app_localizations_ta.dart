@@ -9969,4 +9969,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'கடைசி பிழை: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'முன் பதிவு';
 }

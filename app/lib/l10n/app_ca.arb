@@ -3209,5 +3209,6 @@
     "appReEnableFailedTitle": "No s'ha pogut reactivar",
     "appReEnableFailedBody": "No s'ha pogut reactivar aquesta app. Torna-ho a provar.",
     "appDisabledOn": "Desactivada el {date}.",
-    "appDisabledLastError": "Últim error: {error}."
+    "appDisabledLastError": "Últim error: {error}.",
+    "prerecordedTranscript": "Pregravat"
 }

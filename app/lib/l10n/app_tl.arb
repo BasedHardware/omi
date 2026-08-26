@@ -10797,5 +10797,6 @@
     "appReEnableFailedTitle": "Hindi ma-enable muli",
     "appReEnableFailedBody": "Hindi ma-enable muli ang app na ito. Pakisubukan ulit.",
     "appDisabledOn": "Na-disable noong {date}.",
-    "appDisabledLastError": "Huling error: {error}."
+    "appDisabledLastError": "Huling error: {error}.",
+    "prerecordedTranscript": "Paunang-rekord"
 }

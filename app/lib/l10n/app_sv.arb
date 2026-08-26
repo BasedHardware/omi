@@ -3231,5 +3231,6 @@
     "appReEnableFailedTitle": "Kunde inte återaktivera",
     "appReEnableFailedBody": "Den här appen kunde inte återaktiveras. Försök igen.",
     "appDisabledOn": "Inaktiverad den {date}.",
-    "appDisabledLastError": "Senaste fel: {error}."
+    "appDisabledLastError": "Senaste fel: {error}.",
+    "prerecordedTranscript": "Förinspelat"
 }

@@ -9936,4 +9936,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Последна грешка: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Предварително записано';
 }

@@ -3267,5 +3267,6 @@
     "appReEnableFailedTitle": "Não foi possível reativar",
     "appReEnableFailedBody": "Não foi possível reativar esta app. Tente novamente.",
     "appDisabledOn": "Desativada em {date}.",
-    "appDisabledLastError": "Último erro: {error}."
+    "appDisabledLastError": "Último erro: {error}.",
+    "prerecordedTranscript": "Pré-gravado"
 }

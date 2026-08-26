@@ -10797,5 +10797,6 @@
     "appReEnableFailedTitle": "Ponovna omogočitev ni uspela",
     "appReEnableFailedBody": "Te aplikacije ni bilo mogoče znova omogočiti. Poskusi znova.",
     "appDisabledOn": "Onemogočeno {date}.",
-    "appDisabledLastError": "Zadnja napaka: {error}."
+    "appDisabledLastError": "Zadnja napaka: {error}.",
+    "prerecordedTranscript": "Vnaprej posneto"
 }

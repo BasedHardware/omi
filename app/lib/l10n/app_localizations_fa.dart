@@ -9899,4 +9899,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'آخرین خطا: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'از پیش ضبط‌شده';
 }

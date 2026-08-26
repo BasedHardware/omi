@@ -3266,5 +3266,6 @@
     "appReEnableFailedTitle": "Nie udało się włączyć ponownie",
     "appReEnableFailedBody": "Nie udało się ponownie włączyć tej aplikacji. Spróbuj ponownie.",
     "appDisabledOn": "Wyłączona {date}.",
-    "appDisabledLastError": "Ostatni błąd: {error}."
+    "appDisabledLastError": "Ostatni błąd: {error}.",
+    "prerecordedTranscript": "Wstępnie nagrane"
 }
