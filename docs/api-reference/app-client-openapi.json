@@ -6881,12 +6881,27 @@
             "title": "Sample",
             "type": "array"
           },
+          "scan_cap": {
+            "description": "Per-strategy Firestore scan cap (see _ACTION_ITEMS_LIST_HARD_MAX)",
+            "title": "Scan Cap",
+            "type": "integer"
+          },
+          "scan_truncated": {
+            "description": "True if total_open_action_items exceeds scan_cap, so strategies may not have considered every open task as a candidate",
+            "title": "Scan Truncated",
+            "type": "boolean"
+          },
           "session_id": {
             "title": "Session Id",
             "type": "string"
           },
           "total_candidates": {
             "title": "Total Candidates",
+            "type": "integer"
+          },
+          "total_open_action_items": {
+            "description": "True count of the user's open action items, independent of any scan cap",
+            "title": "Total Open Action Items",
             "type": "integer"
           }
         },
@@ -6897,7 +6912,10 @@
           "sample",
           "candidate_ids",
           "candidate_meta",
-          "expires_in_seconds"
+          "expires_in_seconds",
+          "total_open_action_items",
+          "scan_cap",
+          "scan_truncated"
         ],
         "title": "CleanupPreviewResponse",
         "type": "object"
