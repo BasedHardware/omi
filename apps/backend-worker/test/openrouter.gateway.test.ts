@@ -10,6 +10,8 @@ beforeAll(async () => {
   handler = worker.default;
 });
 
+const OFFICIAL_GATEWAY_URL = "https://openrouter.ai/api/v1/chat/completions";
+
 const baseEnv = {
   ENVIRONMENT: "test",
   API_TOKEN: "test-token",
@@ -250,7 +252,7 @@ describe("openrouter gateway fail-closed validation", () => {
     const { openrouter } = await import("../src/openrouter");
     const valid = {
       OPENROUTER_GATEWAY_ENABLED: "true",
-      OPENROUTER_GATEWAY_URL: "https://gateway.example.invalid/openrouter",
+      OPENROUTER_GATEWAY_URL: OFFICIAL_GATEWAY_URL,
       OPENROUTER_API_KEY: "secret",
       OPENROUTER_MODEL: openrouter.LUNA_MODEL,
     };
@@ -297,7 +299,7 @@ describe("openrouter gateway fail-closed validation", () => {
     expect(
       openrouter.gatewayReady({
         OPENROUTER_GATEWAY_ENABLED: "false",
-        OPENROUTER_GATEWAY_URL: "https://gateway.example.invalid/openrouter",
+        OPENROUTER_GATEWAY_URL: OFFICIAL_GATEWAY_URL,
         OPENROUTER_API_KEY: "secret",
         OPENROUTER_MODEL: "test-model",
       })
@@ -342,5 +344,146 @@ describe("openrouter gateway fail-closed validation", () => {
       OPENROUTER_GATEWAY_ENABLED: "false",
     });
     expect(response.status).toBe(200);
+  });
+
+  test("worker /ready returns 200 when gateway mode is enabled and fully configured", async () => {
+    const response = await fetchWorker("/ready", {
+      ...baseEnv,
+      OPENROUTER_GATEWAY_ENABLED: "true",
+      OPENROUTER_GATEWAY_URL: OFFICIAL_GATEWAY_URL,
+      OPENROUTER_API_KEY: "test-openrouter-key",
+      OPENROUTER_MODEL: "openai/gpt-5.6-luna",
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()) as unknown).toEqual({
+      status: "ready",
+      environment: "test",
+      observability_sink_mode: "cloudflare_only",
+    });
+  });
+
+  test("worker /ready returns 503 when gateway mode is enabled but host is not openrouter.ai", async () => {
+    const response = await fetchWorker("/ready", {
+      ...baseEnv,
+      OPENROUTER_GATEWAY_ENABLED: "true",
+      OPENROUTER_GATEWAY_URL: "https://evil.example/openrouter",
+      OPENROUTER_API_KEY: "test-openrouter-key",
+      OPENROUTER_MODEL: "openai/gpt-5.6-luna",
+    });
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as Record<string, unknown>;
+    const error = body["error"] as Record<string, unknown>;
+    expect(error["code"]).toBe("service_unavailable");
+  });
+});
+
+describe("openrouter gateway host pin and timeout", () => {
+  test("rejects non-openrouter hosts even with a key and the pinned Luna model", async () => {
+    const { openrouter } = await import("../src/openrouter");
+    const base = {
+      OPENROUTER_GATEWAY_ENABLED: "true",
+      OPENROUTER_API_KEY: "secret",
+      OPENROUTER_MODEL: openrouter.LUNA_MODEL,
+    };
+    const rejected = [
+      "https://evil.example/openrouter",
+      "https://openrouter.ai.evil.com/api/v1/chat/completions",
+      "https://notopenrouter.ai/api/v1/chat/completions",
+      "https://openrouter.example/api/v1/chat/completions",
+      "https://openrouter.com/api/v1/chat/completions",
+      "https://api.openrouter.ai/api/v1/chat/completions",
+    ];
+    for (const url of rejected) {
+      expect(
+        openrouter.gatewayConfig({ ...base, OPENROUTER_GATEWAY_URL: url })
+      ).toBeNull();
+    }
+  });
+
+  test("rejects http even when the hostname is the official OpenRouter host", async () => {
+    const { openrouter } = await import("../src/openrouter");
+    expect(
+      openrouter.gatewayConfig({
+        OPENROUTER_GATEWAY_ENABLED: "true",
+        OPENROUTER_GATEWAY_URL: "http://openrouter.ai/api/v1/chat/completions",
+        OPENROUTER_API_KEY: "secret",
+        OPENROUTER_MODEL: openrouter.LUNA_MODEL,
+      })
+    ).toBeNull();
+  });
+
+  test("accepts the official https OpenRouter URL with the pinned Luna model shape", async () => {
+    const { openrouter } = await import("../src/openrouter");
+    const config = openrouter.gatewayConfig({
+      OPENROUTER_GATEWAY_ENABLED: "true",
+      OPENROUTER_GATEWAY_URL: OFFICIAL_GATEWAY_URL,
+      OPENROUTER_API_KEY: "secret",
+      OPENROUTER_MODEL: openrouter.LUNA_MODEL,
+    });
+    expect(config).not.toBeNull();
+    if (config === null) throw new Error("expected official config");
+    expect(config.url).toBe(OFFICIAL_GATEWAY_URL);
+    expect(config.model).toBe(openrouter.LUNA_MODEL);
+    expect(config.model).toBe("openai/gpt-5.6-luna");
+
+    const fetchMock = captureFetch(
+      () =>
+        new Response(
+          JSON.stringify({ choices: [{ message: { content: "luna-ok" } }] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    );
+    try {
+      const result = await openrouter.generateViaGateway(
+        config,
+        "official shape",
+        "corr-official-1"
+      );
+      expect(result.kind).toBe("ok");
+      if (result.kind === "ok") expect(result.text).toBe("luna-ok");
+      const request = fetchMock.calls[0];
+      if (request === undefined) throw new Error("no fetch call captured");
+      expect(request.url).toBe(OFFICIAL_GATEWAY_URL);
+      expect(request.signal).toBeInstanceOf(AbortSignal);
+      const body = (await request.json()) as Record<string, unknown>;
+      expect(body["model"]).toBe(openrouter.LUNA_MODEL);
+    } finally {
+      fetchMock.restore();
+    }
+  });
+
+  test("fails closed on abort/timeout without leaking secret, prompt, or URL", async () => {
+    const { openrouter } = await import("../src/openrouter");
+    expect(openrouter.GATEWAY_FETCH_TIMEOUT_MS).toBe(15_000);
+    expect(openrouter.OPENROUTER_GATEWAY_HOST).toBe("openrouter.ai");
+
+    const hanging = captureFetch(() => {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    });
+    const logs = captureLogs();
+    try {
+      const result = await openrouter.generateViaGateway(
+        {
+          url: OFFICIAL_GATEWAY_URL,
+          model: openrouter.LUNA_MODEL,
+          secret: "leak-me-never",
+        },
+        "sensitive prompt content",
+        "corr-timeout-1"
+      );
+      expect(result.kind).toBe("error");
+      const request = hanging.calls[0];
+      if (request === undefined) throw new Error("no fetch call captured");
+      expect(request.signal).toBeInstanceOf(AbortSignal);
+      const combined = logs.entries.join("\n");
+      expect(combined).toContain("corr-timeout-1");
+      expect(combined).not.toContain("leak-me-never");
+      expect(combined).not.toContain("sensitive prompt content");
+      expect(combined).not.toContain("openrouter.ai");
+      expect(combined).not.toContain(OFFICIAL_GATEWAY_URL);
+    } finally {
+      hanging.restore();
+      logs.restore();
+    }
   });
 });
