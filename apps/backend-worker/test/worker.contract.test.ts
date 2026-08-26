@@ -655,7 +655,12 @@ describe("worker request contract", () => {
     expect(envelope.status).toBe(200);
     const page = (await envelope.json()) as {
       items: Array<{ id: string; title: string; overview: string }>;
-      window: { status: string; complete: boolean; hasMore: boolean; nextCursor: string | null };
+      window: {
+        status: string;
+        complete: boolean;
+        hasMore: boolean;
+        nextCursor: string | null;
+      };
       absence: { kind: string } | null;
     };
     expect(page.items.map((item) => item.id)).toEqual([
@@ -749,7 +754,12 @@ describe("worker request contract", () => {
     expect(second.status).toBe(200);
     const secondPage = (await second.json()) as {
       items: Array<{ id: string }>;
-      window: { status: string; complete: boolean; hasMore: boolean; nextCursor: string | null };
+      window: {
+        status: string;
+        complete: boolean;
+        hasMore: boolean;
+        nextCursor: string | null;
+      };
     };
     expect(secondPage.items.map((item) => item.id)).toEqual(["session-a"]);
     expect(secondPage.window).toEqual({
