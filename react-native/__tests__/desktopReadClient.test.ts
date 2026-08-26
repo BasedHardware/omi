@@ -27,6 +27,20 @@ import type {
 } from '../src/desktopReadClient';
 import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
 import {omiAuth as browserOmiAuth} from '../src/omiNative.web';
+import {
+  disableCloudApp,
+  enableCloudApp,
+  exploreApps,
+  installedApps,
+  loadAccountSettings,
+  loadConnectors,
+  myApps,
+  parseCloudApp,
+  parseCloudApps,
+  parseCloudProfile,
+  parseEnabledAppIds,
+  serviceApps,
+} from '../src/desktopCloudClient';
 
 test('keeps first-run onboarding copy off the retired host', () => {
   const onboardingSource = readFileSync(
@@ -62,6 +76,30 @@ test('treats onboarding as complete in the JavaScript-only adapter', async () =>
   await expect(
     browserOmiAuth.markOnboardingComplete(),
   ).resolves.toBeUndefined();
+  expect(await browserOmiAuth.hasCloudSession()).toBe(false);
+  await expect(browserOmiAuth.signOut()).resolves.toEqual({signedOut: true});
+  expect(await browserOmiAuth.hasCloudSession()).toBe(false);
+});
+
+test('macOS sign-out ignores environment tokens so the session stays empty', () => {
+  const auth = readFileSync(
+    resolve(__dirname, '../macos/RnRuntime-macOS/OmiAuthModule.mm'),
+    'utf8',
+  );
+  const gate = readFileSync(
+    resolve(__dirname, '../src/app/useOnboarding.ts'),
+    'utf8',
+  );
+
+  expect(auth).toContain('OmiAuthSetEnvironmentCloudTokensIgnored(YES)');
+  expect(auth).toMatch(
+    /if \(!OmiAuthEnvironmentCloudTokensIgnored\(\)\) \{[^]*OMI_CLOUD_API_TOKEN[^]*OMI_API_TOKEN/,
+  );
+  expect(gate).toMatch(
+    /const result = await auth\.signOut\(\);[^]*const hasSession = await auth\.hasCloudSession\(\);[^]*setOnboardingRequired\(true\)/,
+  );
+  expect(auth).not.toContain('unsetenv');
+  expect(auth).not.toContain('.zshrc');
 });
 
 const page = (items: unknown[], completenessVersion: string) => ({
@@ -708,4 +746,151 @@ test('maps a cloud 401 to typed unauthorized copy without fabricating rows', asy
     status: 'error',
     error: desktopBackendUnauthorizedCopy,
   });
+});
+
+
+test('parses catalogue, enabled, owned, and service app records without inventing rows', () => {
+  const app = parseCloudApp(
+    {
+      id: 'catalog-app-1',
+      name: 'Catalog fixture app',
+      description: 'A mocked catalogue record.',
+      category: 'productivity',
+      author: 'fixture-author',
+      enabled: false,
+      uid: 'user-1',
+      external_integration: {webhook_url: 'https://example.test/hook'},
+      connected_accounts: ['calendar'],
+    },
+    'App 0',
+  );
+  expect(app).toEqual(
+    expect.objectContaining({
+      enabled: false,
+      hasExternalIntegration: true,
+      connectedAccounts: ['calendar'],
+      uid: 'user-1',
+    }),
+  );
+  expect(parseEnabledAppIds(['catalog-app-1'], 'Enabled')).toEqual([
+    'catalog-app-1',
+  ]);
+  expect(() => parseCloudApps({items: []}, 'Apps response')).toThrow(
+    'Apps response is malformed',
+  );
+  expect(() => parseEnabledAppIds({items: []}, 'Enabled')).toThrow(
+    'Enabled is malformed',
+  );
+});
+
+test('loadConnectors merges enabled ids and keeps owner filtering honest', async () => {
+  const backend = backendFor(request => {
+    if (request.path === '/v1/apps') {
+      return {
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-1',
+            name: 'Owned app',
+            uid: 'user-1',
+            enabled: false,
+            external_integration: {webhook_url: 'https://example.test/hook'},
+          },
+          {id: 'catalog-app-2', name: 'Other app', uid: 'user-2'},
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {status: 200, body: JSON.stringify(['catalog-app-1'])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {status: 200, body: JSON.stringify({uid: 'user-1', name: 'Ada'})};
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadConnectors(backend);
+  expect(snapshot.ownerUid).toBe('user-1');
+  expect(exploreApps(snapshot).map(app => app.id)).toEqual([
+    'catalog-app-1',
+    'catalog-app-2',
+  ]);
+  expect(installedApps(snapshot).map(app => app.id)).toEqual(['catalog-app-1']);
+  expect(myApps(snapshot, snapshot.ownerUid).map(app => app.id)).toEqual([
+    'catalog-app-1',
+  ]);
+  expect(serviceApps(snapshot).map(app => app.id)).toEqual(['catalog-app-1']);
+});
+
+test('enableCloudApp requires a real ok status and does not treat errors as installed', async () => {
+  await expect(
+    enableCloudApp(
+      backendFor(() => ({status: 400, body: '{"detail":"setup incomplete"}'})),
+      'catalog-app-1',
+    ),
+  ).rejects.toThrow('desktop-app-enable failed (400)');
+  await expect(
+    enableCloudApp(
+      backendFor(() => ({status: 200, body: '{"status":"pending"}'})),
+      'catalog-app-1',
+    ),
+  ).rejects.toThrow('desktop-app-enable failed');
+  await enableCloudApp(
+    backendFor(() => ({status: 200, body: '{"status":"ok"}'})),
+    'catalog-app-1',
+  );
+  await disableCloudApp(
+    backendFor(() => ({status: 200, body: '{"status":"ok"}'})),
+    'catalog-app-1',
+  );
+});
+
+test('loadAccountSettings keeps failed slices independent', async () => {
+  const backend = backendFor(request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        status: 200,
+        body: JSON.stringify({uid: 'user-1', email: 'ada@example.test'}),
+      };
+    }
+    if (request.path === '/v1/users/me/subscription') {
+      return {status: 503, body: null};
+    }
+    if (request.path === '/v1/users/store-recording-permission') {
+      return {
+        status: 200,
+        body: JSON.stringify({store_recording_permission: true}),
+      };
+    }
+    if (request.path === '/v1/users/training-data-opt-in') {
+      return {status: 200, body: JSON.stringify({opted_in: false})};
+    }
+    if (request.path === '/v1/users/private-cloud-sync') {
+      return {
+        status: 200,
+        body: JSON.stringify({private_cloud_sync_enabled: false}),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {status: 404, body: null};
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadAccountSettings(backend);
+  expect(parseCloudProfile({uid: 'user-1'}, 'Profile')).toEqual({
+    uid: 'user-1',
+    name: null,
+    email: null,
+    company: null,
+    job: null,
+    dataProtectionLevel: null,
+  });
+  expect(snapshot.profile).toEqual(
+    expect.objectContaining({uid: 'user-1', email: 'ada@example.test'}),
+  );
+  expect(snapshot.subscription).toBeNull();
+  expect(snapshot.subscriptionError).toBe('desktop-subscription-read failed (503)');
+  expect(snapshot.storeRecordingPermission).toBe(true);
+  expect(snapshot.trainingOptedIn).toBe(false);
+  expect(snapshot.privateCloudSync).toBe(false);
+  expect(snapshot.webhooks).toBeNull();
 });

@@ -159,6 +159,71 @@ test('owns an in-app PKCE sign-in session and stores its cloud token locally', (
   expect(backend).not.toContain('com.omi.desktop.firebase-rest-session');
 });
 
+test('signs out by deleting only this app firebase-rest-session keychain item', () => {
+  const auth = readNativeSource('OmiAuthModule.mm');
+  const header = readNativeSource('OmiAuthModule.h');
+  const methodStart = auth.indexOf('RCT_REMAP_METHOD(signOut');
+  expect(methodStart).toBeGreaterThan(-1);
+  const methodEnd = auth.indexOf('@end', methodStart);
+  const method = auth.slice(methodStart, methodEnd);
+
+  expect(header).toContain('@interface OmiAuthModule : NSObject <RCTBridgeModule>');
+  expect(auth).toContain('#import "OmiAuthModule.h"');
+  expect(auth).toContain('RCT_EXPORT_MODULE(OmiAuth)');
+  expect(method).toContain('OmiAuthClearSession');
+  expect(method).toContain('OmiAuthSetEnvironmentCloudTokensIgnored(YES)');
+  expect(method).toContain('errSecSuccess');
+  expect(method).toContain('errSecItemNotFound');
+  expect(method).toContain('@{@"signedOut" : @YES}');
+  expect(method).toContain('OMI_AUTH_KEYCHAIN');
+  expect(method).toContain('Could not clear the Omi cloud session');
+  expect(method).toContain('NSOSStatusErrorDomain');
+  expect(auth).toContain('com.omi.rnruntime.firebase-rest-session');
+  expect(auth).not.toContain('com.omi.desktop.firebase-rest-session');
+  expect(method).not.toContain('authorization');
+  expect(method).not.toContain('Bearer');
+  expect(method).not.toContain('127.0.0.1');
+  expect(method).not.toContain('/Applications/Omi.app');
+  expect(method).not.toContain('omi.onboarding.completed');
+  expect(method).not.toMatch(/NSLog\([^\n]*(token|Authorization)/i);
+});
+
+
+test('ignores environment cloud tokens after explicit sign-out until the next sign-in', () => {
+  const auth = readNativeSource('OmiAuthModule.mm');
+  const header = readNativeSource('OmiAuthModule.h');
+  const backend = readNativeSource('OmiBackendModule.mm');
+
+  expect(header).toContain('OmiAuthEnvironmentCloudTokensIgnored');
+  expect(header).toContain('OmiAuthSetEnvironmentCloudTokensIgnored');
+  expect(auth).toContain('static BOOL OmiAuthIgnoreEnvironmentCloudTokens = NO');
+  expect(auth).toContain('OmiAuthSetEnvironmentCloudTokensIgnored(YES)');
+  expect(auth).toContain('OmiAuthSetEnvironmentCloudTokensIgnored(NO)');
+  expect(auth).toMatch(
+    /hasCloudSessionWithResolver:[^]*if \(!OmiAuthEnvironmentCloudTokensIgnored\(\)\) \{[^]*OMI_CLOUD_API_TOKEN[^]*OMI_API_TOKEN[^]*\[self resolveStoredToken:/,
+  );
+  expect(auth.indexOf('OmiAuthSetEnvironmentCloudTokensIgnored(YES)')).toBeGreaterThan(
+    auth.indexOf('RCT_REMAP_METHOD(signOut'),
+  );
+  expect(auth.indexOf('OmiAuthSetEnvironmentCloudTokensIgnored(NO)')).toBeGreaterThan(
+    auth.indexOf('finishSignInAttempt:'),
+  );
+  expect(auth.indexOf('OmiAuthSetEnvironmentCloudTokensIgnored(NO)')).toBeLessThan(
+    auth.indexOf('RCT_REMAP_METHOD(hasCloudSession'),
+  );
+  expect(backend).toContain('OmiAuthEnvironmentCloudTokensIgnored()');
+  expect(backend).toMatch(
+    /if \(cloud\.length == 0 && !OmiAuthEnvironmentCloudTokensIgnored\(\)\) \{[^]*OMI_CLOUD_API_TOKEN[^]*OMI_API_TOKEN/,
+  );
+  expect(auth).not.toContain('unsetenv');
+  expect(auth).not.toContain('.zshrc');
+  expect(auth).not.toContain('.zprofile');
+  expect(auth).not.toContain('.bashrc');
+  expect(auth).not.toContain('launchctl');
+  expect(auth).not.toMatch(/NSLog\([^\n]*(token|Authorization|OMI_CLOUD_API_TOKEN|OMI_API_TOKEN)/i);
+  expect(backend).not.toMatch(/NSLog\([^\n]*(token|Authorization|OMI_CLOUD_API_TOKEN|OMI_API_TOKEN)/i);
+});
+
 test('refreshes expiring macOS cloud sessions without using stale tokens', () => {
   const auth = readNativeSource('OmiAuthModule.mm');
   const backend = readNativeSource('OmiBackendModule.mm');

@@ -1,8 +1,9 @@
+#import "OmiAuthModule.h"
+
 #import <AppKit/AppKit.h>
 #import <AuthenticationServices/AuthenticationServices.h>
 #import <CommonCrypto/CommonDigest.h>
 #import <LocalAuthentication/LocalAuthentication.h>
-#import <React/RCTBridgeModule.h>
 #import <Security/Security.h>
 #import <arpa/inet.h>
 #import <netinet/in.h>
@@ -13,6 +14,21 @@
 static NSString *const OmiAuthKeychainService = @"com.omi.rnruntime.firebase-rest-session";
 static NSString *const OmiAuthKeychainAccount = @"firebase-rest-tokens";
 static NSString *const OmiOnboardingCompletedKey = @"omi.onboarding.completed";
+
+static BOOL OmiAuthIgnoreEnvironmentCloudTokens = NO;
+
+BOOL OmiAuthEnvironmentCloudTokensIgnored(void) {
+  @synchronized (OmiAuthKeychainService) {
+    return OmiAuthIgnoreEnvironmentCloudTokens;
+  }
+}
+
+void OmiAuthSetEnvironmentCloudTokensIgnored(BOOL ignored) {
+  @synchronized (OmiAuthKeychainService) {
+    OmiAuthIgnoreEnvironmentCloudTokens = ignored;
+  }
+}
+
 
 static NSString *OmiAuthBase64URL(NSData *data) {
   NSString *value = [data base64EncodedStringWithOptions:0];
@@ -174,8 +190,8 @@ static NSDictionary *OmiAuthStoredSession(void) {
   return [session isKindOfClass:NSDictionary.class] ? session : nil;
 }
 
-static void OmiAuthClearSession(void) {
-  SecItemDelete((__bridge CFDictionaryRef)OmiAuthKeychainQuery());
+static OSStatus OmiAuthClearSession(void) {
+  return SecItemDelete((__bridge CFDictionaryRef)OmiAuthKeychainQuery());
 }
 
 static BOOL OmiAuthSessionTokenIsFresh(NSDictionary *session) {
@@ -248,7 +264,7 @@ static BOOL OmiAuthStoreSession(NSString *idToken, NSString *refreshToken, NSNum
   return status == errSecSuccess;
 }
 
-@interface OmiAuthModule : NSObject <RCTBridgeModule, ASWebAuthenticationPresentationContextProviding>
+@interface OmiAuthModule () <ASWebAuthenticationPresentationContextProviding>
 @property(nonatomic, strong) ASWebAuthenticationSession *authenticationSession;
 @property(nonatomic) int loopbackListener;
 @property(nonatomic) BOOL settled;
@@ -411,8 +427,12 @@ RCT_EXPORT_MODULE(OmiAuth)
   [self.authenticationSession cancel];
   self.authenticationSession = nil;
   [self closeLoopback];
-  if (code != nil) reject(code, message, error);
-  else resolve(value);
+  if (code != nil) {
+    reject(code, message, error);
+    return;
+  }
+  OmiAuthSetEnvironmentCloudTokensIgnored(NO);
+  resolve(value);
 }
 
 - (void)finishWithTokenResponse:(NSDictionary *)tokenResponse
@@ -578,11 +598,13 @@ RCT_EXPORT_MODULE(OmiAuth)
 RCT_REMAP_METHOD(hasCloudSession,
                  hasCloudSessionWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
-  NSDictionary *environment = NSProcessInfo.processInfo.environment;
-  if ([environment[@"OMI_CLOUD_API_TOKEN"] length] > 0 ||
-      [environment[@"OMI_API_TOKEN"] length] > 0) {
-    resolve(@YES);
-    return;
+  if (!OmiAuthEnvironmentCloudTokensIgnored()) {
+    NSDictionary *environment = NSProcessInfo.processInfo.environment;
+    if ([environment[@"OMI_CLOUD_API_TOKEN"] length] > 0 ||
+        [environment[@"OMI_API_TOKEN"] length] > 0) {
+      resolve(@YES);
+      return;
+    }
   }
   [self resolveStoredToken:^(NSString *token, NSError *error) {
     if (error != nil) {
@@ -698,6 +720,20 @@ RCT_REMAP_METHOD(signIn,
       }
     }
   });
+}
+
+RCT_REMAP_METHOD(signOut,
+                 signOutWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  OSStatus status = OmiAuthClearSession();
+  if (status == errSecSuccess || status == errSecItemNotFound) {
+    OmiAuthSetEnvironmentCloudTokensIgnored(YES);
+    resolve(@{@"signedOut" : @YES});
+    return;
+  }
+  reject(@"OMI_AUTH_KEYCHAIN",
+         @"Could not clear the Omi cloud session",
+         [NSError errorWithDomain:NSOSStatusErrorDomain code:status userInfo:nil]);
 }
 
 @end

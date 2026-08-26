@@ -57,6 +57,7 @@ const mockAuth = {
   hasCloudSession: jest.fn(async () => false),
   markOnboardingComplete: jest.fn(async () => undefined),
   signIn: jest.fn(async () => ({signedIn: true})),
+  signOut: jest.fn(async () => ({signedOut: true})),
 };
 
 jest.mock('react-native', () => {
@@ -93,13 +94,15 @@ jest.mock('react-native', () => {
       this.value = value;
     }
   }
-  const timing = jest.fn(() => ({start: jest.fn()}));
-  const spring = jest.fn(() => ({start: jest.fn()}));
+  const timing = jest.fn(() => ({start: jest.fn(), stop: jest.fn()}));
+  const spring = jest.fn(() => ({start: jest.fn(), stop: jest.fn()}));
   const parallel = jest.fn((animations: Array<{start: () => void}>) => ({
     start: () => animations.forEach(animation => animation.start()),
+    stop: jest.fn(),
   }));
   const sequence = jest.fn((animations: Array<{start: () => void}>) => ({
     start: () => animations.forEach(animation => animation.start()),
+    stop: jest.fn(),
   }));
   const stagger = jest.fn(
     (_delay: number, animations: Array<{start: () => void}>) =>
@@ -160,6 +163,7 @@ jest.mock('react-native', () => {
     Easing: {
       bezier: jest.fn((x1, y1, x2, y2) => [x1, y1, x2, y2]),
       cubic: 'cubic',
+      linear: jest.fn(value => value),
       out: jest.fn(value => value),
     },
     FlatList,
@@ -332,6 +336,7 @@ jest.mock('../src/omiNative', () => ({
     hasCloudSession: () => mockAuth.hasCloudSession(),
     markOnboardingComplete: () => mockAuth.markOnboardingComplete(),
     signIn: () => mockAuth.signIn(),
+    signOut: () => mockAuth.signOut(),
   },
   isBluetoothScanAvailable: (state: string | undefined) =>
     state === 'poweredOn' || state === 'available' || state === 'selected',
@@ -434,6 +439,7 @@ beforeEach(() => {
   mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
   mockAuth.markOnboardingComplete.mockResolvedValue(undefined);
   mockAuth.signIn.mockResolvedValue({signedIn: true});
+  mockAuth.signOut.mockResolvedValue({signedOut: true});
   mockNative.getSnapshot.mockImplementation(() => new Promise(() => {}));
   mockNative.startScan.mockResolvedValue([]);
 });
@@ -902,8 +908,8 @@ test('navigates to rewritten-backend read projections and replays the stage tran
     ['Conversations', 'Recaps unavailable'],
     ['Memories', 'No memories yet.'],
     ['Tasks', 'No tasks yet.'],
-    ['Connectors', 'Apps and external services belong together here.'],
-    ['Settings', 'settings unavailable'],
+    ['Connectors', 'Omi cloud needs a signed-in session.'],
+    ['Settings', 'Omi cloud needs a signed-in session.'],
   ];
 
   for (const [destination, emptyCopy] of destinations) {
@@ -976,10 +982,11 @@ test('keeps unsupported connectors and settings truthful and non-mutating', asyn
 
   await ReactTestRenderer.act(async () => tabs()[4].props.onPress());
   let output = JSON.stringify(renderer.toJSON());
-  expect(output).toContain('Connectors unavailable');
-  expect(output).toContain('No connector records or connection controls');
+  expect(output).toContain('Omi cloud needs a signed-in session.');
+  expect(output).toContain('Signed out');
   expect(output).not.toContain('Connect Google');
   expect(output).not.toContain('Disconnect');
+  expect(output).not.toContain('v5 backend');
 
   await ReactTestRenderer.act(async () => tabs()[5].props.onPress());
   const privacy = renderer.root.find(
@@ -987,9 +994,310 @@ test('keeps unsupported connectors and settings truthful and non-mutating', asyn
   );
   await ReactTestRenderer.act(async () => privacy.props.onPress());
   output = JSON.stringify(renderer.toJSON());
-  expect(output).toContain('settings unavailable');
-  expect(output).toContain('No settings were inferred or changed.');
+  expect(output).toContain('Omi cloud needs a signed-in session.');
   expect(output).not.toContain('Save settings');
+  expect(output).not.toContain('v5 backend');
+  expect(output).not.toContain('settings unavailable');
+});
+
+const catalogApp = {
+  id: 'catalog-app-1',
+  name: 'Catalog fixture app',
+  description: 'A mocked catalogue record.',
+  category: 'productivity',
+  author: 'fixture-author',
+  enabled: false,
+  uid: 'user-1',
+  private: false,
+  official: false,
+  installs: 3,
+  external_integration: {webhook_url: 'https://example.test/hook'},
+  connected_accounts: [],
+};
+
+function mockCloudRoutes(request: MockRequest): MockResponse | null {
+  if (request.path === '/v1/apps') {
+    return {id: request.id, status: 200, body: JSON.stringify([catalogApp])};
+  }
+  if (request.path === '/v1/apps/enabled') {
+    return {id: request.id, status: 200, body: '[]'};
+  }
+  if (request.path === '/v1/users/profile') {
+    return {
+      id: request.id,
+      status: 200,
+      body: JSON.stringify({
+        uid: 'user-1',
+        name: 'Ada Fixture',
+        email: 'ada@example.test',
+      }),
+    };
+  }
+  if (request.path === '/v1/users/me/subscription') {
+    return {
+      id: request.id,
+      status: 200,
+      body: JSON.stringify({
+        subscription: {plan: 'basic', status: 'active'},
+        transcription_seconds_used: 12,
+        transcription_seconds_limit: 60,
+      }),
+    };
+  }
+  if (request.path === '/v1/users/store-recording-permission') {
+    return {
+      id: request.id,
+      status: 200,
+      body: JSON.stringify({store_recording_permission: false}),
+    };
+  }
+  if (request.path === '/v1/users/training-data-opt-in') {
+    return {id: request.id, status: 200, body: JSON.stringify({opted_in: false})};
+  }
+  if (request.path === '/v1/users/private-cloud-sync') {
+    return {
+      id: request.id,
+      status: 200,
+      body: JSON.stringify({private_cloud_sync_enabled: true}),
+    };
+  }
+  if (request.path === '/v1/users/developer/webhooks/status') {
+    return {
+      id: request.id,
+      status: 200,
+      body: JSON.stringify({memory_created: {enabled: true, url: null}}),
+    };
+  }
+  return null;
+}
+
+test('renders an honest empty catalogue when the signed-in cloud returns no apps', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {id: request.id, status: 200, body: '[]'};
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: '[]'};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return mockBackendResponse(request);
+  });
+  const renderer = await renderApp('Connectors');
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('Explore');
+  expect(output).toContain('No apps were returned by the catalogue.');
+  expect(output).toContain('No installed apps.');
+  expect(output).toContain('No apps owned by this account.');
+  expect(output).toContain(
+    'No apps with an external service connection were returned.',
+  );
+  expect(output).not.toContain('Connect Google');
+  expect(output).not.toContain('v5 backend');
+});
+
+test('lists mocked cloud apps and reports a real install failure', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    const cloud = mockCloudRoutes(request);
+    if (cloud !== null) {
+      return cloud;
+    }
+    if (request.path.startsWith('/v1/apps/enable')) {
+      return {id: request.id, status: 400, body: '{"detail":"setup incomplete"}'};
+    }
+    return mockBackendResponse(request);
+  });
+  const renderer = await renderApp('Connectors');
+  let output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('Catalog fixture app');
+  expect(output).toContain('A mocked catalogue record.');
+  expect(output).toContain('Not installed');
+  expect(output).not.toContain('Connect Google');
+  const install = renderer.root.findAll(
+    node => node.props.accessibilityLabel === 'Install Catalog fixture app',
+  )[0];
+  await ReactTestRenderer.act(async () => {
+    await install.props.onPress();
+  });
+  output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('desktop-app-enable failed (400)');
+  expect(output).toContain('Not installed');
+  expect(output).not.toContain('Installed ·');
+});
+
+test('shows mocked account settings without inventing missing controls', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    return mockCloudRoutes(request) ?? mockBackendResponse(request);
+  });
+  const renderer = await renderApp('Settings');
+  let output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('Ada Fixture');
+  expect(output).toContain('ada@example.test');
+  expect(output).toContain('user-1');
+  expect(output).toContain('basic · active');
+  expect(output).toContain('Sign out');
+  expect(output).toContain(
+    "Leave this app's cloud session. Your Omi account stays in the cloud.",
+  );
+  expect(output).not.toContain('Sign out is not exposed by this app session');
+  expect(output).not.toContain('Save settings');
+  const privacy = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Privacy settings',
+  );
+  await ReactTestRenderer.act(async () => privacy.props.onPress());
+  output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('Cloud recording storage is off.');
+  expect(output).toContain('This account has not opted in to training data.');
+  expect(output).toContain('Private cloud sync is on.');
+  expect(output).not.toContain('Export started');
+});
+
+test('signs out of Settings and returns the signed-out empty state', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockAuth.signOut.mockImplementation(async () => {
+    mockAuth.hasCloudSession.mockResolvedValue(false);
+    return {signedOut: true};
+  });
+  mockBackend.request.mockImplementation(async request => {
+    return mockCloudRoutes(request) ?? mockBackendResponse(request);
+  });
+  const renderer = await renderApp('Settings');
+  expect(JSON.stringify(renderer.toJSON())).toContain('Ada Fixture');
+  const signOut = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Sign out',
+  );
+
+  await ReactTestRenderer.act(async () => {
+    await signOut.props.onPress();
+  });
+
+  expect(mockAuth.signOut).toHaveBeenCalledTimes(1);
+  expect(mockAuth.hasCloudSession).toHaveBeenCalled();
+  await expect(mockAuth.hasCloudSession()).resolves.toBe(false);
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('Omi cloud needs a signed-in session.');
+  expect(output).toContain('Sign in');
+  expect(output).not.toContain('Ada Fixture');
+  expect(output).not.toContain('user-1');
+});
+
+test('keeps Settings signed in when native sign-out fails', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockAuth.signOut.mockRejectedValue(
+    new Error('Could not clear the Omi cloud session'),
+  );
+  mockBackend.request.mockImplementation(async request => {
+    return mockCloudRoutes(request) ?? mockBackendResponse(request);
+  });
+  const renderer = await renderApp('Settings');
+  const signOut = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Sign out',
+  );
+
+  await ReactTestRenderer.act(async () => {
+    await signOut.props.onPress();
+  });
+
+  expect(mockAuth.signOut).toHaveBeenCalledTimes(1);
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('Ada Fixture');
+  expect(output).toContain('Could not clear the Omi cloud session');
+  expect(output).not.toContain('Omi cloud needs a signed-in session.');
+});
+
+test('returns to first-run onboarding after macOS sign-out clears the session', async () => {
+  mockPlatformOS = 'macos';
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockAuth.signOut.mockImplementation(async () => {
+    mockAuth.hasCloudSession.mockResolvedValue(false);
+    return {signedOut: true};
+  });
+  mockBackend.request.mockImplementation(async request => {
+    return mockCloudRoutes(request) ?? mockBackendResponse(request);
+  });
+  const renderer = await renderApp('Settings');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toHaveLength(0);
+  const signOut = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Sign out',
+  );
+
+  await ReactTestRenderer.act(async () => {
+    await signOut.props.onPress();
+  });
+
+  expect(mockAuth.signOut).toHaveBeenCalledTimes(1);
+  expect(mockAuth.hasCloudSession).toHaveBeenCalled();
+  await expect(mockAuth.hasCloudSession()).resolves.toBe(false);
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toBeDefined();
+  expect(JSON.stringify(renderer.toJSON())).toContain('Welcome');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Home desktop timeline surface' ||
+        node.props.accessibilityLabel === 'Desktop application chrome',
+    ),
+  ).toHaveLength(0);
+});
+
+
+test('macOS sign-out stays first-run even when an environment token remains in this process', async () => {
+  mockPlatformOS = 'macos';
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockAuth.signOut.mockImplementation(async () => {
+    // Native latch: OMI_CLOUD_API_TOKEN / OMI_API_TOKEN must not resurrect
+    // hasCloudSession after an explicit Settings sign-out.
+    mockAuth.hasCloudSession.mockResolvedValue(false);
+    return {signedOut: true};
+  });
+  mockBackend.request.mockImplementation(async request => {
+    return mockCloudRoutes(request) ?? mockBackendResponse(request);
+  });
+  const renderer = await renderApp('Settings');
+  expect(JSON.stringify(renderer.toJSON())).toContain('Ada Fixture');
+  const signOut = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Sign out',
+  );
+
+  await ReactTestRenderer.act(async () => {
+    await signOut.props.onPress();
+  });
+
+  expect(mockAuth.signOut).toHaveBeenCalledTimes(1);
+  await expect(mockAuth.hasCloudSession()).resolves.toBe(false);
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toBeDefined();
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('Welcome');
+  expect(output).not.toContain('Ada Fixture');
+  expect(output).not.toContain('user-1');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Home desktop timeline surface' ||
+        node.props.accessibilityLabel === 'Desktop application chrome',
+    ),
+  ).toHaveLength(0);
 });
 
 test('renders memory body separately from provenance and searches only loaded rows', async () => {
@@ -1751,6 +2059,37 @@ test('fills the macOS content area with first-run onboarding', async () => {
         node.props.accessibilityLabel === 'Home search dock',
     ),
   ).toHaveLength(0);
+  const workspace = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Desktop workspace material',
+  );
+  expect(workspace.props.glassCornerRadius).toBe(0);
+  expect(workspace.props.pointerEvents).toBe('none');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'First-run onboarding material',
+    ),
+  ).toHaveLength(0);
+  const inkDots = renderer.root.findAll(node => {
+    if (String(node.type) !== 'AnimatedView') {
+      return false;
+    }
+    return ([] as Array<Record<string, unknown>>)
+      .concat(node.props.style)
+      .filter((entry): entry is Record<string, unknown> => entry != null)
+      .some(entry => {
+        const color = String(entry.backgroundColor ?? '')
+          .trim()
+          .toLowerCase();
+        return color === '#ffffff' || color === '#fff' || color === 'white';
+      });
+  });
+  expect(inkDots).toHaveLength(8);
+  const rainbow = Array.from({length: 8}, (_, index) =>
+    omiDotColor('omi', index),
+  );
+  for (const color of rainbow) {
+    expect(rendered).not.toContain(color);
+  }
 });
 
 test('hides Search Omi and Home search dock during first-run onboarding', async () => {
@@ -1861,6 +2200,46 @@ test('skips onboarding and records completion when a cloud session exists', asyn
       node => node.props.accessibilityLabel === 'Home desktop timeline surface',
     ),
   ).toBeDefined();
+});
+
+test('reduce-motion first-run is a static white mark on shared glass', async () => {
+  mockPlatformOS = 'macos';
+  mockReduceMotion = true;
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    mockReduceMotionListener?.(true);
+    await Promise.resolve();
+  });
+
+  const workspace = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Desktop workspace material',
+  );
+  expect(workspace.props.pointerEvents).toBe('none');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'First-run onboarding material',
+    ),
+  ).toHaveLength(0);
+  const dots = renderer.root.find(
+    node =>
+      node.props.identity === 'omi' &&
+      node.props.size === 104 &&
+      node.props.tone === 'ink',
+  );
+  expect(dots.props).toMatchObject({
+    animate: false,
+    reduceMotion: true,
+    tone: 'ink',
+  });
+  const stage = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home stage',
+  );
+  expect(stage.props.style[1].opacity.setValue).toHaveBeenCalledWith(1);
+  expect(
+    stage.props.style[1].transform[0].translateY.setValue,
+  ).toHaveBeenCalledWith(0);
 });
 
 test('signs in from first-run onboarding, records completion, and shows Home', async () => {
@@ -2521,7 +2900,7 @@ test.each([
   },
 );
 
-test('removes translation and shortens fades when reduced motion is enabled', async () => {
+test('removes translation and skips stage fades when reduced motion is enabled', async () => {
   mockViewportWidth = 390;
   mockReduceMotion = true;
   const renderer = await renderApp();
@@ -2531,13 +2910,10 @@ test('removes translation and shortens fades when reduced motion is enabled', as
     await Promise.resolve();
   });
 
-  expect(Animated.timing).toHaveBeenCalledWith(
-    expect.anything(),
-    expect.objectContaining({duration: 1, toValue: 1}),
-  );
   const stage = renderer.root.find(
     node => node.props.accessibilityLabel === 'Home stage',
   );
+  expect(stage.props.style[1].opacity.setValue).toHaveBeenCalledWith(1);
   expect(
     stage.props.style[1].transform[0].translateY.setValue,
   ).toHaveBeenCalledWith(0);

@@ -34,6 +34,8 @@ export type {
   NativeHttpRequest,
   NativeHttpResponse,
   OmiAuth,
+  OmiAuthSignInResult,
+  OmiAuthSignOutResult,
   OmiBackend,
 } from './omiNativeTypes';
 
@@ -319,6 +321,9 @@ const browserAuth: OmiAuth = {
   async markOnboardingComplete() {},
   async signIn() {
     return {signedIn: false};
+  },
+  async signOut() {
+    return {signedOut: true};
   },
 };
 
