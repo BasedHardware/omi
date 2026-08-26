@@ -9,9 +9,16 @@ import XCTest
   private let paywallKey = "desktop_isPaywalled"
 
   private func setAllBYOKKeys() {
+    // Keys count only when their fingerprints are enrolled (the
+    // enrollment-verifying BYOK model): store and enroll together, as the
+    // production activation path does.
+    var fingerprints: [String: String] = [:]
     for p in BYOKProvider.allCases {
-      UserDefaults.standard.set("sk-test-\(p.rawValue)", forKey: p.storageKey)
+      let key = "sk-test-\(p.rawValue)"
+      UserDefaults.standard.set(key, forKey: p.storageKey)
+      fingerprints[p.rawValue] = APIKeyService.byokFingerprint(key)
     }
+    APIKeyService.persistEnrolledFingerprints(fingerprints)
   }
 
   private func clearAllBYOKKeys() {
@@ -37,6 +44,11 @@ import XCTest
     for p in BYOKProvider.allCases.dropLast() {
       UserDefaults.standard.set("k", forKey: p.storageKey)
     }
+    APIKeyService.persistEnrolledFingerprints(
+      Dictionary(
+        uniqueKeysWithValues: BYOKProvider.allCases.dropLast().map {
+          ($0.rawValue, APIKeyService.byokFingerprint("k"))
+        }))
     XCTAssertTrue(APIKeyService.isByokActive)
 
     // All configured providers remain active.
@@ -55,6 +67,8 @@ import XCTest
   func testBuildHeadersAttachSelectedLLMByokKey() async throws {
     clearAllBYOKKeys()
     UserDefaults.standard.set("sk-test-openai", forKey: BYOKProvider.openai.storageKey)
+    APIKeyService.persistEnrolledFingerprints(
+      [BYOKProvider.openai.rawValue: APIKeyService.byokFingerprint("sk-test-openai")])
 
     let client = APIClient()
     await client.setTestAuthHeader("Bearer test-token")
