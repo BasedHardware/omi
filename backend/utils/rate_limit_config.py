@@ -140,6 +140,14 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # reason as its parent policy.
     "action_items:list_hot_client": (ACTION_ITEMS_LIST_HOT_CLIENT_MAX, 60),
     "action_items:write": (120, 3600),
+    # Cleanup preview fans strategies=[llm_relevance, conversation_context] out to
+    # two ThreadPoolExecutor(max_workers=5) pools of conv_discard LLM calls per
+    # click, over up to 2000 tasks — one click is already ~10 concurrent LLM
+    # calls. Capped well below action_items:write to bound repeated clicks.
+    "action_items:cleanup_preview": (15, 3600),
+    # Execute is destructive (irreversible batch delete of staged candidates),
+    # so it gets the same order-of-magnitude cap as memories:delete_batch.
+    "action_items:cleanup_execute": (10, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),
     # Memory batch writes — each request can create up to 100 memories, so the

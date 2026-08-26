@@ -108,7 +108,10 @@ def _delete_session(uid: str, session_id: str) -> None:
 
 
 @router.post('/v1/action-items/cleanup/preview', response_model=CleanupPreviewResponse, tags=['action-items'])
-def cleanup_preview(request: CleanupPreviewRequest, uid: str = Depends(auth.get_current_user_uid)):
+def cleanup_preview(
+    request: CleanupPreviewRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'action_items:cleanup_preview')),
+):
     """
     Compute cleanup candidates and stage them server-side.
     Returns a session_id, summary counts, and a small sample for user review.
@@ -190,7 +193,10 @@ def cleanup_preview(request: CleanupPreviewRequest, uid: str = Depends(auth.get_
 
 
 @router.post('/v1/action-items/cleanup/execute', response_model=CleanupExecuteResponse, tags=['action-items'])
-def cleanup_execute(request: CleanupExecuteRequest, uid: str = Depends(auth.get_current_user_uid)):
+def cleanup_execute(
+    request: CleanupExecuteRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'action_items:cleanup_execute')),
+):
     """
     Delete the candidates staged by a prior preview call.
     Falls back to recomputing if the session has expired.

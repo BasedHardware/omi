@@ -9,6 +9,7 @@ handlers are called directly (bypassing FastAPI DI) so auth is passed as a kwarg
 """
 
 import os
+import re
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
@@ -17,8 +18,15 @@ import pytest
 from fastapi import HTTPException
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from utils.rate_limit_config import RATE_POLICIES
 
 _BACKEND = Path(__file__).resolve().parents[2]
+_ROUTER_PATH = _BACKEND / "routers" / "action_items_cleanup.py"
+
+
+def _grep_router(pattern: str) -> list[str]:
+    with open(_ROUTER_PATH, encoding="utf-8") as f:
+        return [line.strip() for line in f if re.search(pattern, line)]
 
 
 @pytest.fixture(scope="module")
@@ -51,6 +59,38 @@ def router():
 
 def _three_candidates(strategy: str = "stale_age"):
     return [{"id": f"t{i}", "description": f"task {i}", "strategy": strategy} for i in range(3)]
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
+
+
+class TestCleanupRateLimitPolicies:
+    def test_cleanup_preview_policy_exists(self):
+        assert "action_items:cleanup_preview" in RATE_POLICIES
+        max_req, window = RATE_POLICIES["action_items:cleanup_preview"]
+        assert max_req == 15
+        assert window == 3600
+
+    def test_cleanup_execute_policy_exists(self):
+        assert "action_items:cleanup_execute" in RATE_POLICIES
+        max_req, window = RATE_POLICIES["action_items:cleanup_execute"]
+        assert max_req == 10
+        assert window == 3600
+
+
+class TestCleanupRateLimitWiring:
+    # Source-level check (not a live-router test): the strategy/Redis fakes in
+    # the `router` fixture stub out utils.other.endpoints entirely, so this
+    # verifies the actual on-disk wiring instead of the mocked module.
+    def test_preview_endpoint_has_rate_limit(self):
+        matches = _grep_router(r"with_rate_limit.*action_items:cleanup_preview")
+        assert len(matches) == 1, f"POST cleanup/preview must have action_items:cleanup_preview, found: {matches}"
+
+    def test_execute_endpoint_has_rate_limit(self):
+        matches = _grep_router(r"with_rate_limit.*action_items:cleanup_execute")
+        assert len(matches) == 1, f"POST cleanup/execute must have action_items:cleanup_execute, found: {matches}"
 
 
 # ---------------------------------------------------------------------------
