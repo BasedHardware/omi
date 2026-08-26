@@ -615,11 +615,19 @@ class DailySweepAgentMemory(BaseModel):
         default="",
         description="The memory's evidentiary basis: 'decided' (commitment on tape), 'proposed', or 'observed'",
     )
+    slot: str = Field(
+        default="",
+        description="Snake_case standing-attribute name when this memory updates one (the ledger supersedes the old value); empty for one-off facts",
+    )
 
 
 class DailySweepTranscriptRequest(BaseModel):
     conversation_id: str = Field(description="Id of the conversation whose raw transcript to fetch")
     reason: str = Field(default="", description="What specific detail needs verification")
+
+
+class DailySweepMemoryLookup(BaseModel):
+    query: str = Field(description="Short search query over the user's prior memory ledger")
 
 
 class DailySweepFolderAssignment(BaseModel):
@@ -630,6 +638,7 @@ class DailySweepFolderAssignment(BaseModel):
 class DailySweepAgentPassOutput(BaseModel):
     memories: List[DailySweepAgentMemory] = Field(default=[])
     transcript_requests: List[DailySweepTranscriptRequest] = Field(default=[])
+    memory_lookups: List[DailySweepMemoryLookup] = Field(default=[])
     folder_assignments: List[DailySweepFolderAssignment] = Field(default=[])
 
 
@@ -660,12 +669,19 @@ def run_daily_sweep_summary_agent(
     max_candidates: int = 8,
     max_transcript_fetches: int = 8,
     max_fetch_characters: int = 8_000,
+    memory_searcher: Optional[Any] = None,
+    max_memory_lookups: int = 4,
+    cache_key: Optional[str] = None,
     llm: Optional[Any] = None,
 ) -> DailySweepAgentPassOutput:
     """Run the bounded two-phase daily agent; raises MemoryExtractionError on failure.
 
     Strict by design: the sweep treats any raise as an indeterminate invocation
     (source incomplete, no cursor advance) rather than attesting an empty day.
+    ``memory_searcher(query) -> Sequence[str]`` is a read-only seam over the
+    user's prior memory ledger; absent or failing lookups degrade to an empty
+    result block, never to a failed day.  Both phases share one byte-identical
+    prompt prefix so phase B reuses phase A's provider prompt cache.
     """
 
     from utils.prompts import daily_sweep_summary_agent_prompt, daily_sweep_transcript_review_prompt
@@ -686,21 +702,40 @@ def run_daily_sweep_summary_agent(
     }
 
     def invoke(prompt: Any, prompt_input: Dict[str, Any]) -> DailySweepAgentPassOutput:
-        model = llm if llm is not None else get_llm('memories')
+        model = llm if llm is not None else get_llm('memories', cache_key=cache_key)
         return parser.invoke(model.invoke(prompt.invoke(prompt_input)))
+
+    def lookup_results_block(lookups: Sequence[Any]) -> str:
+        sections = []
+        for lookup in lookups:
+            query = str(getattr(lookup, "query", "") or "").strip()[:200]
+            if not query:
+                continue
+            try:
+                results = list(memory_searcher(query) or []) if callable(memory_searcher) else []
+            except Exception:
+                results = []
+            rendered = "\n".join(f"- {str(item)[:400]}" for item in results[:10]) or "- (no matches)"
+            sections.append(f"Q: {query}\n{rendered}")
+        return "\n\n".join(sections)
 
     try:
         with track_usage(uid, Features.MEMORIES):
             first = invoke(
                 daily_sweep_summary_agent_prompt,
-                {**common, 'max_transcript_fetches': max_transcript_fetches},
+                {
+                    **common,
+                    'max_transcript_fetches': max_transcript_fetches,
+                    'max_memory_lookups': max_memory_lookups,
+                },
             )
             requests = [
                 request
                 for request in first.transcript_requests
                 if request.conversation_id in known_ids and transcript_lookup.get(request.conversation_id)
             ][: max(0, max_transcript_fetches)]
-            if not requests:
+            lookups = list(first.memory_lookups)[: max(0, max_memory_lookups)] if callable(memory_searcher) else []
+            if not requests and not lookups:
                 return _sanitized_daily_sweep_output(first, known_ids, max_candidates)
             excerpts = "\n\n".join(
                 f"[{request.conversation_id}] ({request.reason})\n"
@@ -712,11 +747,17 @@ def run_daily_sweep_summary_agent(
             )
             second = invoke(
                 daily_sweep_transcript_review_prompt,
-                {**common, 'draft_block': draft or '(none)', 'excerpts_block': excerpts},
+                {
+                    **common,
+                    'draft_block': draft or '(none)',
+                    'excerpts_block': excerpts or '(none requested)',
+                    'prior_memories_block': lookup_results_block(lookups) or '(none requested)',
+                },
             )
         merged = DailySweepAgentPassOutput(
             memories=second.memories,
             transcript_requests=[],
+            memory_lookups=[],
             folder_assignments=second.folder_assignments or first.folder_assignments,
         )
         return _sanitized_daily_sweep_output(merged, known_ids, max_candidates)
@@ -736,7 +777,14 @@ def _sanitized_daily_sweep_output(
         content = " ".join((memory.content or "").split())
         if not cited or not content:
             continue
-        memories.append(DailySweepAgentMemory(content=content, conversation_ids=cited, basis=memory.basis))
+        memories.append(
+            DailySweepAgentMemory(
+                content=content,
+                conversation_ids=cited,
+                basis=memory.basis,
+                slot=(memory.slot or "").strip()[:64],
+            )
+        )
         if len(memories) >= max(0, max_candidates):
             break
     assignments = [
@@ -744,4 +792,6 @@ def _sanitized_daily_sweep_output(
         for assignment in output.folder_assignments
         if assignment.conversation_id in known_ids and assignment.folder_id.strip()
     ]
-    return DailySweepAgentPassOutput(memories=memories, transcript_requests=[], folder_assignments=assignments)
+    return DailySweepAgentPassOutput(
+        memories=memories, transcript_requests=[], memory_lookups=[], folder_assignments=assignments
+    )

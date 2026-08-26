@@ -166,3 +166,108 @@ def test_empty_day_returns_empty_without_model_call():
     llm = _ScriptedLlm([])
     output = run_daily_sweep_summary_agent("uid-1", (), {}, llm=llm)
     assert output.memories == [] and llm.prompts == []
+
+
+def test_memory_lookups_trigger_second_pass_with_results():
+    queries = []
+
+    def searcher(query):
+        queries.append(query)
+        return (f"prior fact about {query} [slot: gym_schedule]",)
+
+    llm = _ScriptedLlm(
+        [
+            _response(
+                memories=[{"content": "Dave lifts on Tuesdays", "conversation_ids": ["conversation-2"]}],
+                # memory_lookups ride the same output schema
+            ).replace(
+                '"folder_assignments": []', '"folder_assignments": [], "memory_lookups": [{"query": "gym schedule"}]'
+            ),
+            _response(
+                memories=[
+                    {
+                        "content": "Dave now lifts on Tuesdays and Fridays",
+                        "conversation_ids": ["conversation-2"],
+                        "slot": "gym_schedule",
+                    }
+                ]
+            ),
+        ]
+    )
+    output = run_daily_sweep_summary_agent("uid-1", _ROWS, dict(_TRANSCRIPTS), memory_searcher=searcher, llm=llm)
+    assert queries == ["gym schedule"]
+    assert len(llm.prompts) == 2
+    assert "prior fact about gym schedule" in llm.prompts[1]
+    assert [memory.slot for memory in output.memories] == ["gym_schedule"]
+
+
+def test_lookups_without_searcher_stay_single_pass():
+    llm = _ScriptedLlm(
+        [
+            _response(memories=[{"content": "Dave lifts on Tuesdays", "conversation_ids": ["conversation-2"]}]).replace(
+                '"folder_assignments": []', '"folder_assignments": [], "memory_lookups": [{"query": "anything"}]'
+            )
+        ]
+    )
+    output = run_daily_sweep_summary_agent("uid-1", _ROWS, dict(_TRANSCRIPTS), llm=llm)
+    assert len(llm.prompts) == 1
+    assert [memory.content for memory in output.memories] == ["Dave lifts on Tuesdays"]
+
+
+def test_failing_searcher_degrades_to_empty_results():
+    def searcher(_query):
+        raise RuntimeError("index down")
+
+    llm = _ScriptedLlm(
+        [
+            _response().replace(
+                '"folder_assignments": []', '"folder_assignments": [], "memory_lookups": [{"query": "x"}]'
+            ),
+            _response(memories=[{"content": "final", "conversation_ids": ["conversation-1"]}]),
+        ]
+    )
+    output = run_daily_sweep_summary_agent("uid-1", _ROWS, dict(_TRANSCRIPTS), memory_searcher=searcher, llm=llm)
+    assert len(llm.prompts) == 2
+    assert "(no matches)" in llm.prompts[1]
+    assert [memory.content for memory in output.memories] == ["final"]
+
+
+def test_phase_prompts_share_a_cacheable_prefix():
+    """Phase B must reuse phase A's provider prompt cache: the two rendered
+    prompts must be byte-identical through the summaries block (OpenAI prompt
+    caching is strict prefix matching)."""
+
+    import os as _os
+
+    from langchain_core.output_parsers import PydanticOutputParser
+    from utils.llm.memories import DailySweepAgentPassOutput as _Out
+    from utils.llm.memories import _daily_sweep_folder_task, _daily_sweep_summaries_block
+    from utils.prompts import daily_sweep_summary_agent_prompt, daily_sweep_transcript_review_prompt
+
+    parser = PydanticOutputParser(pydantic_object=_Out)
+    common = {
+        "user_name": "Dave",
+        "current_date": "2026-08-26",
+        "memories_str": "existing facts",
+        "summaries_block": _daily_sweep_summaries_block(_ROWS),
+        "folder_task": _daily_sweep_folder_task((), ()),
+        "max_candidates": 8,
+        "format_instructions": parser.get_format_instructions(),
+    }
+    phase_a = (
+        daily_sweep_summary_agent_prompt.invoke({**common, "max_transcript_fetches": 8, "max_memory_lookups": 4})
+        .to_messages()[0]
+        .content
+    )
+    phase_b = (
+        daily_sweep_transcript_review_prompt.invoke(
+            {**common, "draft_block": "- d", "excerpts_block": "e", "prior_memories_block": "p"}
+        )
+        .to_messages()[0]
+        .content
+    )
+    shared = _os.path.commonprefix([phase_a, phase_b])
+    # The shared prefix must cover everything up to and including the day's
+    # summaries — the bulk of the tokens.
+    assert common["summaries_block"] in shared
+    assert len(shared) >= phase_a.find(common["summaries_block"]) + len(common["summaries_block"])

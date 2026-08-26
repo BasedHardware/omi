@@ -3955,6 +3955,8 @@ def _load_or_stage_daily_summary_candidates(
             max_candidates=max_candidates,
             max_transcript_fetches=MAX_DAILY_TRANSCRIPT_FETCHES,
             max_fetch_characters=MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS,
+            memory_searcher=_daily_sweep_ledger_searcher(uid, db_client=db_client),
+            cache_key=f"daily-sweep:{uid}",
         )
         candidates: List[DailySweepCandidate] = []
         for index, memory in enumerate(getattr(output, "memories", ()) or ()):
@@ -3989,6 +3991,10 @@ def _load_or_stage_daily_summary_candidates(
                     authority=SweepAuthority.sweep_inference,
                     subject_scope=MemorySubjectScope.primary_user,
                     subject_entity_id=getattr(memory, "subject_entity_id", None),
+                    # A slot names a standing attribute; the canonical occupancy
+                    # check turns an occupied-slot add into an amend, which is
+                    # how the daily run maintains the rendered profile.
+                    slot=(str(getattr(memory, "slot", "") or "").strip() or None),
                 )
             )
             if len(candidates) >= max_candidates:
@@ -4080,6 +4086,37 @@ def _load_or_stage_daily_summary_candidates(
         return candidate_page, folder_assignments
     except Exception:
         return None
+
+
+def _daily_sweep_ledger_searcher(uid: str, *, db_client: Any) -> Any:
+    """Build the read-only prior-memory search seam for the daily agent.
+
+    Keyword search runs against the versioned ledger projection (provider
+    fail-soft: an unconfigured or failing index yields no matches, never a
+    failed day) and every hit is re-read through the authoritative canonical
+    store before its content is disclosed to the model.
+    """
+
+    def search(query: str) -> Tuple[str, ...]:
+        try:
+            from utils.memory.atom_keyword_index import keyword_search_ledger_memory_ids
+
+            memory_ids = keyword_search_ledger_memory_ids(uid, query, limit=8, db_client=db_client)
+        except Exception:
+            return ()
+        results: List[str] = []
+        for memory_id in memory_ids[:8]:
+            try:
+                item = read_canonical_memory_item(uid, memory_id, db_client=db_client)
+            except Exception:
+                continue
+            if item is None or item.status != MemoryItemStatus.active:
+                continue
+            slot_label = f" [slot: {item.slot}]" if getattr(item, "slot", None) else ""
+            results.append(f"{item.content}{slot_label}")
+        return tuple(results)
+
+    return search
 
 
 def _read_daily_sweep_folder_options(uid: str, *, db_client: Any) -> Tuple[Tuple[str, str], ...]:

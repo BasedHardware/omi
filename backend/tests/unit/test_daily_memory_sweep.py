@@ -1625,3 +1625,41 @@ def test_legacy_compatibility_proof_allows_more_than_two_unslotted_facts():
     # backfill can recreate data after account deletion. Identity is derived
     # in memory for this bounded proof instead.
     assert writes == []
+
+
+def test_completed_day_agent_slot_reaches_the_candidate(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    window = completed_local_day_window(local_date, "UTC")
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
+        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+    )
+    model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
+
+    def agent(_uid, _rows, _lookup, **_kwargs):
+        return _agent_output(
+            memories=[
+                SimpleNamespace(
+                    content="David lives in New York",
+                    conversation_ids=["conversation-1"],
+                    slot="Current City",
+                )
+            ]
+        )
+
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        agent_runner=agent,
+        window_override=window,
+    )
+    assert result.source_status == "complete"
+    # The candidate validator normalizes slot names to snake_case.
+    assert result.daily_summary[0].slot == "current_city"
