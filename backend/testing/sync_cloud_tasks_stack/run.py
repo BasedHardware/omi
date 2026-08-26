@@ -87,6 +87,25 @@ def _wait_for_port(port: int, *, label: str, timeout: float = 30.0) -> None:
     raise StackFailure(f'{label} did not listen on 127.0.0.1:{port} within {timeout:.0f}s')
 
 
+def _wait_for_port_free(port: int, *, label: str, timeout: float = 10.0) -> None:
+    # Scenarios run back-to-back and each allocates fresh ports, but a child of
+    # the previous stack that is still tearing down can keep its listener alive
+    # past close(). A later stack's TCP probe then connects to that corpse and
+    # reports readiness for a service that never came up (observed in CI as
+    # "timed out waiting for Sync admission health endpoint" after the port
+    # wait had already succeeded). Failing to free a port here is a warning,
+    # not a failure: the next stack binds different ports, this only shrinks
+    # the cross-scenario collision window.
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection(('127.0.0.1', port), timeout=0.25):
+                time.sleep(0.1)
+        except OSError:
+            return
+    print(f'WARNING: {label} still accepting connections on 127.0.0.1:{port} after {timeout:.0f}s', flush=True)
+
+
 def _wait_until(predicate: Callable[[], bool], *, label: str, timeout: float = 25.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -271,7 +290,11 @@ class Stack:
             except (httpx.HTTPError, ValueError):
                 return False
 
-        _wait_until(healthy, label=f'Sync {role} health endpoint', timeout=20.0)
+        # Health is the authoritative readiness signal (a TCP accept only
+        # proves *something* listens — uvicorn accepts before the app finishes
+        # importing, and on a contended runner the backend import chain alone
+        # can exceed 20s). Give the strong check the generous budget.
+        _wait_until(healthy, label=f'Sync {role} health endpoint', timeout=60.0)
 
     def start(self) -> None:
         redis_binary = shutil.which('redis-server')
@@ -344,6 +367,12 @@ class Stack:
     def close(self) -> None:
         for name in list(self.children):
             self.stop(name)
+        for port, label in (
+            (self.redis_port, 'isolated Redis'),
+            (self.worker_port, 'Sync worker'),
+            (self.admission_port, 'Sync admission'),
+        ):
+            _wait_for_port_free(port, label=label)
         self.http.close()
 
     def cleanup_workspace_files(self) -> None:

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scrollEdgesOf } from '@/lib/scrollEdges';
+import { scrollEdgesOf, shouldFollowLiveEdge } from '@/lib/scrollEdges';
 
 describe('scrollEdgesOf', () => {
   it('reports both ends for content that does not fill the scroller', () => {
@@ -39,5 +39,19 @@ describe('scrollEdgesOf', () => {
     expect(
       scrollEdgesOf({ scrollTop: 1199.66, scrollHeight: 2000, clientHeight: 800 }),
     ).toMatchObject({ atBottom: true });
+  });
+});
+
+describe('shouldFollowLiveEdge', () => {
+  it('follows while the scroller is already at the live edge', () => {
+    expect(shouldFollowLiveEdge({ pinnedToBottom: true })).toBe(true);
+  });
+
+  it('does not steal the viewport once the reader has left the live edge', () => {
+    expect(shouldFollowLiveEdge({ pinnedToBottom: false })).toBe(false);
+  });
+
+  it('places a newly opened exchange even if the scroller is not at the bottom yet', () => {
+    expect(shouldFollowLiveEdge({ pinnedToBottom: false, force: true })).toBe(true);
   });
 });
