@@ -2015,3 +2015,100 @@ def test_dedup_candidates_unchanged_without_conversation_context():
         eligible = process_conversation._fetch_dedup_candidates('user-1', structured)
 
     assert [item['id'] for item in eligible] == ['open-item']
+
+
+def _ledger_gate_conversation(conversation_id: str) -> Conversation:
+    return Conversation(
+        id=conversation_id,
+        created_at=datetime(2026, 8, 25, tzinfo=timezone.utc),
+        started_at=datetime(2026, 8, 25, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 8, 25, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        language='en',
+        structured=Structured(title='t', overview='o'),
+        transcript_segments=[
+            TranscriptSegment(
+                id='seg-1',
+                text='hello there, this is a transcript segment',
+                speaker='SPEAKER_00',
+                speaker_id=0,
+                is_user=True,
+                start=0.0,
+                end=1.0,
+            )
+        ],
+        status=ConversationStatus.processing,
+    )
+
+
+def test_ledger_writer_mode_skips_eager_extraction(monkeypatch):
+    """A cut-over (ledger writer mode) user must not pay for per-conversation
+    L1 extraction: the compatibility write would be refused by writer admission
+    after the model call was already spent, failing finalization. The daily
+    sweep owns memory formation for those users."""
+    import sys
+
+    from models.memory_apply import WriterMode
+
+    memory_system_stub = sys.modules['utils.memory.memory_system']
+    monkeypatch.setattr(
+        memory_system_stub,
+        'ensure_canonical_apply_control_state',
+        lambda uid, *, db_client: SimpleNamespace(writer_mode=WriterMode.ledger),
+        raising=False,
+    )
+    canonical = MagicMock(side_effect=AssertionError('canonical extraction must not run under ledger writer mode'))
+    monkeypatch.setattr(process_conversation, '_extract_memories_canonical', canonical)
+    monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: MagicMock())
+
+    result = process_conversation._extract_memories_inner('uid-ledger', _ledger_gate_conversation('conv-ledger'))
+
+    assert result.count == 0
+    canonical.assert_not_called()
+
+
+def test_compatibility_writer_mode_still_runs_eager_extraction(monkeypatch):
+    import sys
+
+    from models.memory_apply import WriterMode
+
+    memory_system_stub = sys.modules['utils.memory.memory_system']
+    monkeypatch.setattr(
+        memory_system_stub,
+        'ensure_canonical_apply_control_state',
+        lambda uid, *, db_client: SimpleNamespace(writer_mode=WriterMode.compatibility),
+        raising=False,
+    )
+    sentinel = process_conversation.ConversationMemoryExtractionResult(
+        count=3, source='transcription', path='canonical'
+    )
+    canonical = MagicMock(return_value=sentinel)
+    monkeypatch.setattr(process_conversation, '_extract_memories_canonical', canonical)
+    monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: MagicMock())
+
+    result = process_conversation._extract_memories_inner('uid-compat', _ledger_gate_conversation('conv-compat'))
+
+    assert result is sentinel
+    canonical.assert_called_once()
+
+
+def test_unreadable_writer_mode_preserves_legacy_extraction(monkeypatch):
+    import sys
+
+    memory_system_stub = sys.modules['utils.memory.memory_system']
+
+    def unavailable(uid, *, db_client):
+        raise RuntimeError('control state unreadable')
+
+    monkeypatch.setattr(memory_system_stub, 'ensure_canonical_apply_control_state', unavailable, raising=False)
+    sentinel = process_conversation.ConversationMemoryExtractionResult(
+        count=1, source='transcription', path='canonical'
+    )
+    canonical = MagicMock(return_value=sentinel)
+    monkeypatch.setattr(process_conversation, '_extract_memories_canonical', canonical)
+    monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: MagicMock())
+
+    result = process_conversation._extract_memories_inner('uid-err', _ledger_gate_conversation('conv-err'))
+
+    assert result is sentinel
+    canonical.assert_called_once()

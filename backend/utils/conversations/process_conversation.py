@@ -1532,6 +1532,32 @@ def _extract_memories_inner(
     db_client = getattr(db_client_module, 'db', None)
     memory_service = MemoryService(db_client=db_client)
     memory_service.ensure_canonical_mutation_ready(uid)
+    # A user whose writer mode has left ``compatibility`` (ledger cutover, or a
+    # transition in flight) must not run eager per-conversation extraction: the
+    # daily sweep owns memory formation for ledger users, and the compatibility
+    # write below would be refused by writer admission AFTER the extraction
+    # model call was already paid — failing the whole finalization. Skipping
+    # here is both the cost saving the cutover promises and the correctness
+    # fix. Only a positively-read non-compatibility mode skips; any read
+    # failure preserves the legacy eager path.
+    try:
+        from models.memory_apply import WriterMode
+        from utils.memory.memory_system import ensure_canonical_apply_control_state
+
+        control = ensure_canonical_apply_control_state(uid, db_client=db_client)
+        writer_mode = getattr(control, 'writer_mode', WriterMode.compatibility)
+    except Exception:
+        return _extract_memories_canonical(uid, conversation, db_client=db_client, parity_capture=parity_capture)
+    if writer_mode != WriterMode.compatibility:
+        logger.info(
+            'memory extraction skipped: writer_mode=%s owns formation uid=%s conv=%s',
+            getattr(writer_mode, 'value', writer_mode),
+            uid,
+            conversation.id,
+        )
+        return ConversationMemoryExtractionResult(
+            count=0, source=source_for_conversation(conversation), path=PATH_CANONICAL
+        )
     return _extract_memories_canonical(uid, conversation, db_client=db_client, parity_capture=parity_capture)
 
 
