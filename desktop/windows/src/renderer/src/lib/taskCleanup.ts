@@ -1,0 +1,55 @@
+import { omiApi } from './apiClient'
+
+export type CleanupStrategy =
+  | 'stale_age'
+  | 'overdue'
+  | 'semantic_dedup'
+  | 'llm_relevance'
+  | 'conversation_context'
+  | 'vague'
+
+export interface CleanupPreviewParams {
+  strategies: CleanupStrategy[]
+  age_days?: number
+  overdue_days?: number
+  similarity_threshold?: number
+  llm_confidence_threshold?: number
+}
+
+export interface CleanupSampleItem {
+  description: string
+  strategy: string
+}
+
+export interface CleanupPreviewResult {
+  session_id: string
+  total_candidates: number
+  breakdown: Record<string, number>
+  sample: CleanupSampleItem[]
+  expires_in_seconds: number
+}
+
+export interface CleanupExecuteResult {
+  deleted_count: number
+}
+
+// LLM strategies over a large task set can take 60–120 seconds server-side.
+const PREVIEW_TIMEOUT_MS = 180_000
+
+export async function taskCleanupPreview(
+  params: CleanupPreviewParams
+): Promise<CleanupPreviewResult> {
+  const r = await omiApi.post<CleanupPreviewResult>(
+    '/v1/action-items/cleanup/preview',
+    params,
+    { timeout: PREVIEW_TIMEOUT_MS }
+  )
+  return r.data
+}
+
+export async function taskCleanupExecute(sessionId: string): Promise<CleanupExecuteResult> {
+  const r = await omiApi.post<CleanupExecuteResult>('/v1/action-items/cleanup/execute', {
+    session_id: sessionId
+  })
+  return r.data
+}

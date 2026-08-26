@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Download, Upload, Wrench, FolderSearch, Network, RotateCcw } from 'lucide-react'
+import { Download, Upload, Wrench, FolderSearch, Network, RotateCcw, Trash2 } from 'lucide-react'
 import { auth } from '../../../lib/firebase'
 import { toast } from '../../../lib/toast'
 import { type MemorySource } from '../../../lib/memoryExtract'
@@ -20,6 +20,7 @@ import { runMemoryExport } from '../../../lib/memoryExport'
 import { useMemories, type Memory } from '../../../hooks/useMemories'
 import { resetOnboarding } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
+import { TaskCleanupModal } from '../TaskCleanupModal'
 import { IntegrationsTab } from './IntegrationsTab'
 import { DeveloperKeysSection } from './DeveloperKeysSection'
 import { AiProfileCard } from './AiProfileCard'
@@ -223,6 +224,9 @@ export function AdvancedTab(): React.JSX.Element {
     window.location.reload()
   }
 
+  // --- Task cleanup ---
+  const [taskCleanupOpen, setTaskCleanupOpen] = useState(false)
+
   return (
     <>
       <SettingRow
@@ -400,6 +404,19 @@ export function AdvancedTab(): React.JSX.Element {
           )}
         </div>
       </SettingRow>
+
+      <SettingRow
+        icon={Trash2}
+        title="Task maintenance"
+        subtitle="Find and remove stale, overdue, vague, or duplicate tasks from your account."
+        keywords="task cleanup stale overdue duplicate vague delete remove"
+        control={
+          <button onClick={() => setTaskCleanupOpen(true)} className="btn-ghost">
+            Clean up tasks…
+          </button>
+        }
+      />
+      <TaskCleanupModal open={taskCleanupOpen} onOpenChange={setTaskCleanupOpen} />
 
       {/* Integrations (Sticky Notes, Google) live under Advanced. */}
       <IntegrationsTab />
