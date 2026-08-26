@@ -302,3 +302,6 @@ tests/unit/test_memory_offset_read_cost.py::test_status_lookups_are_not_repeated
 tests/unit/test_list_read_budget_contract.py::test_conversations_large_offsets_are_served_and_charged[20000-19000-1000]
 # First test in the file-isolated memories router suite amortizes the module import.
 tests/unit/test_memories_archive_and_read_contracts.py::test_get_memories_forwards_include_archive
+# Full listen-runtime bootstrap (STT selection, fair-use, onboarding admission)
+# sits exactly at the 0.30s CPU budget under a saturated pre-push fanout.
+tests/unit/test_listen_runtime_regressions.py::test_bootstrap_forces_single_language_before_selecting_stt_for_onboarding
