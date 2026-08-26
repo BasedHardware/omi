@@ -360,7 +360,13 @@ jobs:
     name: Backend Hermetic Merge Gate
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    if: ${{ always() }}
+    # `!cancelled()` rather than `always()`: with cancel-in-progress above, a
+    # superseding push cancels this run mid-flight, and under `always()` the
+    # gate still executed against `cancelled` upstream results and reported a
+    # hard red with no code cause (3 of the last 4 re-run-to-green cycles on
+    # this workflow were exactly that). A cancelled run's verdict belongs to
+    # the superseding run, so the gate must go neutral, not red.
+    if: ${{ !cancelled() }}
     needs: [scope, hermetic-e2e, listen-pusher-stack-gauntlet, sync-cloud-tasks-stack-gauntlet]
     steps:
       - name: Fail closed on selected hermetic checks
@@ -371,6 +377,16 @@ jobs:
           LISTEN_PUSHER_RESULT: ${{ needs.listen-pusher-stack-gauntlet.result }}
           SYNC_CLOUD_TASKS_RESULT: ${{ needs.sync-cloud-tasks-stack-gauntlet.result }}
         run: |
+          # Belt to the `!cancelled()` suspenders: a partially-cancelled run
+          # (one upstream job cancelled without the gate itself being
+          # cancelled) is still superseded work, not a failure.
+          for result_name in SCOPE_RESULT HERMETIC_E2E_RESULT LISTEN_PUSHER_RESULT SYNC_CLOUD_TASKS_RESULT; do
+            if [[ "${!result_name}" == 'cancelled' ]]; then
+              echo "$result_name was cancelled by a superseding run; deferring to that run's gate."
+              exit 0
+            fi
+          done
+
           if [[ "$SCOPE_RESULT" != 'success' ]]; then
             echo "Hermetic backend scope failed with result: $SCOPE_RESULT" >&2
             exit 1
