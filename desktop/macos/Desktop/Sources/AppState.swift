@@ -319,7 +319,10 @@ class AppState: ObservableObject {
   /// continue into the WAL while the transport reconnects, so this stays
   /// visible until the backend is ready or the active session is reset.
   @Published var transcriptionServiceError: String?
-  var alertPresenter: any DesktopAlertPresenting = AppKitSheetAlertPresenter()
+  // Assigned in init(): a stored-property default here makes Xcode 16.4's
+  // SILGen crash (signal 11) emitting the property initializer for the
+  // presenter's default-argument closures.
+  var alertPresenter: any DesktopAlertPresenting
   /// Monotonically increasing counter — incremented for each recording start or stop request.
   /// Used to prevent asynchronous work from mutating a newer recording decision.
   var recordingGeneration: UInt64 = 0
@@ -655,6 +658,9 @@ class AppState: ObservableObject {
   }
 
   init() {
+    // See the alertPresenter declaration: initialized here to keep the
+    // construction out of the stored-property initializer Xcode 16.4 crashes on.
+    alertPresenter = AppKitSheetAlertPresenter()
     // Fold any legacy PTT-only microphone choice into the shared preference before
     // anything reads it. Running this only from PTT routing meant a user who had picked a
     // PTT microphone saw "System Default" in Transcription — and was recorded by it —
