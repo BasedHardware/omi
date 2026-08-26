@@ -9934,4 +9934,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Папярэдне запісанае';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant усё яшчэ запісвае, таму захаваны гук нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а потым сінхранізуйце зноў.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Памяць Pendant запоўнена, і ён усё яшчэ ў рэжыме запісу, таму захаванае аўдыя нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а затым сінхранізуйце зноў.';
 }

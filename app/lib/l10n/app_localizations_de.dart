@@ -9985,4 +9985,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Voraufgezeichnet';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Dein Pendant nimmt noch auf, daher kann das gespeicherte Audio nicht übertragen werden. Drücke die Taste am Pendant, um die Aufnahme zu stoppen, und synchronisiere dann erneut.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Der Speicher deines Pendants ist voll und es befindet sich noch im Aufnahmemodus, daher kann das gespeicherte Audio nicht übertragen werden. Drücke die Taste am Pendant, um die Aufnahme zu stoppen, und synchronisiere dann erneut.';
 }

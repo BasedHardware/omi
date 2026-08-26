@@ -9907,4 +9907,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'প্রি-রেকর্ডেড';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant এখনও রেকর্ড করছে, তাই এর সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant-এর স্টোরেজ পূর্ণ এবং এটি এখনও রেকর্ডিং মোডে আছে, তাই সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।';
 }
