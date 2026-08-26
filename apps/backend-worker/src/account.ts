@@ -19,6 +19,7 @@ import {
   terminalEvent,
   type Admission,
 } from "./chat";
+import { composeGenerationPrompt } from "./generation-prompt";
 import type { ChatCreate, GenerationEvent } from "./wire";
 
 export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
@@ -53,11 +54,7 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     const accountId = this.accountId;
     const pending = await readPendingGeneration(this.env.DB, accountId);
     if (pending === null) return;
-    await this.runGeneration(
-      accountId,
-      pending.generationId,
-      pending.input.text
-    );
+    await this.runGeneration(accountId, pending.generationId, pending.input);
     await this.ensureGenerationAlarm(accountId);
   }
 
@@ -138,10 +135,24 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
   private async runGeneration(
     accountId: string,
     generationId: string,
-    prompt: string
+    input: ChatCreate
   ): Promise<void> {
     const terminal = await terminalEvent(this.env.DB, accountId, generationId);
     if (terminal !== null) return;
+
+    const composed = await composeGenerationPrompt(
+      this.env.DB,
+      this.env.ATTACHMENTS,
+      accountId,
+      input.id,
+      input.text
+    );
+    if (composed.kind === "fail") {
+      const event = await failGeneration(this.env.DB, accountId, generationId);
+      this.notifyWaiters(generationId, event);
+      return;
+    }
+    const prompt = composed.prompt;
 
     if (gatewayModeEnabled(this.env)) {
       const config = gatewayConfig(this.env);

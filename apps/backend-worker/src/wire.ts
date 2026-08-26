@@ -21,8 +21,16 @@ export const CHAT_CAPABILITIES: ChatCapabilitiesWire = {
     "image/png",
     "image/jpeg",
     "application/pdf",
+    "text/plain",
+    "text/markdown",
   ] as readonly string[],
 };
+
+export const MAX_CLIENT_ID_LENGTH = 128;
+
+export function isClientId(value: string): boolean {
+  return value.length > 0 && value.length <= MAX_CLIENT_ID_LENGTH;
+}
 
 export const json = (
   value: unknown,

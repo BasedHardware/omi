@@ -31,7 +31,7 @@ const taskSchema =
 
 const authenticatedHeaders = {
   authorization: "Bearer test-token",
-  "x-omi-client-id": "test-client",
+  "x-omi-client-id": "test-account",
 };
 
 const chatCreate = (id: string, text = "hello") => ({
@@ -577,5 +577,120 @@ describe("D1 chat attachment admit bind", () => {
     expect(payload.attachments).toEqual([
       expect.objectContaining({ id: "d1-att-ready", displayName: "notes.pdf" }),
     ]);
+  });
+});
+
+describe("generation reads bound attachment bytes", () => {
+  test("bound text/plain R2 bytes appear in the mocked AI prompt", async () => {
+    const r2Key = "attachments/test-account/d1-att-text";
+    await insertAttachment({
+      id: "d1-att-text",
+      accountId: "test-account",
+      state: "ingested",
+      displayName: "notes.txt",
+      mimeType: "text/plain",
+      sizeBytes: 18,
+    });
+    await env.ATTACHMENTS.put(r2Key, "plain file contents", {
+      httpMetadata: { contentType: "text/plain" },
+    });
+
+    const admitted = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("d1-gen-text", "summarize the file"),
+        attachmentIds: ["d1-att-text"],
+      }),
+    });
+    expect(admitted.status).toBe(201);
+
+    const captured: string[] = [];
+    const stub = env.ACCOUNTS.getByName("test-account");
+    await runInDurableObject(stub, (instance) => {
+      Object.defineProperty(instance, "env", {
+        configurable: true,
+        value: {
+          ...(instance as unknown as { env: Record<string, unknown> }).env,
+          AI: {
+            run: async (
+              _model: string,
+              input: { messages?: Array<{ role: string; content: string }> }
+            ) => {
+              const user = input.messages?.find(
+                (message) => message.role === "user"
+              );
+              if (user !== undefined) captured.push(user.content);
+              return { response: "ok" };
+            },
+          },
+        },
+      });
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toContain("summarize the file");
+    expect(captured[0]).toContain("plain file contents");
+  });
+
+  test("foreign-account and missing R2 text do not leak into the prompt", async () => {
+    await insertAttachment({
+      id: "d1-att-foreign-text",
+      accountId: "other-account",
+      state: "bound",
+      boundMessageId: "d1-gen-iso",
+      displayName: "secret.txt",
+      mimeType: "text/plain",
+      sizeBytes: 12,
+    });
+    await env.ATTACHMENTS.put(
+      "attachments/other-account/d1-att-foreign-text",
+      "foreign-secret-bytes",
+      { httpMetadata: { contentType: "text/plain" } }
+    );
+    await insertAttachment({
+      id: "d1-att-missing-text",
+      accountId: "test-account",
+      state: "ingested",
+      displayName: "gone.txt",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+    });
+
+    const admitted = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("d1-gen-iso", "hello without file"),
+        attachmentIds: ["d1-att-missing-text"],
+      }),
+    });
+    expect(admitted.status).toBe(201);
+
+    const captured: string[] = [];
+    const stub = env.ACCOUNTS.getByName("test-account");
+    await runInDurableObject(stub, (instance) => {
+      Object.defineProperty(instance, "env", {
+        configurable: true,
+        value: {
+          ...(instance as unknown as { env: Record<string, unknown> }).env,
+          AI: {
+            run: async (
+              _model: string,
+              input: { messages?: Array<{ role: string; content: string }> }
+            ) => {
+              const user = input.messages?.find(
+                (message) => message.role === "user"
+              );
+              if (user !== undefined) captured.push(user.content);
+              return { response: "ok" };
+            },
+          },
+        },
+      });
+    });
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    expect(captured).toEqual(["hello without file"]);
+    expect(captured[0]).not.toContain("foreign-secret-bytes");
   });
 });

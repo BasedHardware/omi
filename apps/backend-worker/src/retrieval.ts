@@ -56,6 +56,11 @@ export interface CanonicalMemoryStore {
   ): Promise<readonly (CanonicalMemory | null)[]>;
 }
 
+/** No D1 memory table exists. Every id fails revalidation. */
+export const noCanonicalMemoryStore: CanonicalMemoryStore = {
+  load: async (_accountId, ids) => ids.map(() => null),
+};
+
 export interface RetrievalEnv {
   readonly AI: Ai;
   readonly VECTORIZE?: Vectorize;
