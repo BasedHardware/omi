@@ -26,6 +26,7 @@ from utils.memory.import_write_guard import (
     import_write_violation_for_guard,
     is_per_file_local_import_tags,
 )
+from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout_sync
 from utils.memory.memory_api_contract import MemoryApiExposure
 from utils.memory.memory_api_response import memory_item_response, memory_list_response
 from utils.memory.memory_system import MemorySystem
@@ -690,6 +691,14 @@ def get_ledger_history(
     ``X-Omi-List-Truncated: true``.  Tombstoned and hidden rows are never
     resurrected for history UI.
     """
+
+    # The mobile client calls this on every memories-tab load for every user.
+    # Outside the JIT rollout no ledger history can exist, so answer empty
+    # without paying the bounded 501-row provider scan for the whole fleet.
+    # Unknown/error rollout states also take this cheap path (fail closed).
+    rollout = resolve_jit_rollout_sync(uid, stage=JITDecisionStage.READ_ONLY)
+    if not rollout.permits_work:
+        return memory_list_response([], MemoryApiExposure.CANONICAL, headers={'Cache-Control': 'no-store'})
 
     db_client = getattr(db_client_module, 'db', None)
     budget = list_read_budget_for_request(request, route='memories-ledger-history')

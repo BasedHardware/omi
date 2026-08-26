@@ -274,6 +274,23 @@ CORE_TOOLS = [
     search_historical_facts,
 ]
 
+# JIT-only tools: schemas must not reach the model for users outside the JIT
+# rollout — a legacy user has no ledger/playbook/frame data, so exposing these
+# only burns tool-call budget on "no entries found" answers and changes chat
+# behavior for the whole fleet. Filtered per request off the same resolved
+# rollout boolean that gates the JIT prompt appendix, keeping the tool block
+# stable per user within a rollout state.
+JIT_ONLY_TOOL_NAMES = frozenset(
+    tool.name
+    for tool in (
+        look_at_frame_tool,
+        get_entity_timeline_tool,
+        search_knowledge,
+        read_playbook,
+        search_historical_facts,
+    )
+)
+
 # Standard tool names (used to detect app tools by exclusion)
 STANDARD_TOOL_NAMES = {t.name for t in CORE_TOOLS}
 
@@ -1329,8 +1346,13 @@ async def execute_agentic_chat_stream(
             except Exception as error:
                 logger.error('Could not get prompt metadata error_type=%s', type(error).__name__)
 
-            # Core tools (fixed order) — always available to the agent
-            core_tools = list(CORE_TOOLS)
+            # Core tools (fixed order). JIT-only tools are withheld unless the
+            # server-owned rollout admitted this user; order is preserved.
+            core_tools = [
+                tool
+                for tool in CORE_TOOLS
+                if jit_conversation_retrieval_enabled or tool.name not in JIT_ONLY_TOOL_NAMES
+            ]
 
             # Dynamic app tools — deferred for Anthropic; exposed directly in managed mode
             app_tools = []

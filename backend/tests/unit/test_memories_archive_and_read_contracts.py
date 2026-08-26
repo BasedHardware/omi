@@ -375,3 +375,31 @@ def test_memory_item_to_memorydb_preserves_canonical_alias_for_portability():
 
     assert projected.canonical_memory_id == "canonical-row"
     assert projected.model_dump(mode="json")["canonical_memory_id"] == "canonical-row"
+
+
+def test_ledger_history_route_answers_empty_without_scan_outside_rollout():
+    """Fleet-cost guard: the memories tab calls this on every load for every
+    user; outside the JIT rollout (including unknown/error states) the route
+    must answer empty without paying the bounded provider scan."""
+
+    mem_mod = _load_memories_router()
+    service = MagicMock()
+    with (
+        patch.object(mem_mod, "MemoryService", return_value=service),
+        patch.object(
+            mem_mod,
+            "resolve_jit_rollout_sync",
+            return_value=types.SimpleNamespace(permits_work=False),
+        ),
+        patch.object(mem_mod, "memory_list_response", side_effect=lambda values, _exposure, headers=None: values),
+    ):
+        result = mem_mod.get_ledger_history(
+            response=MagicMock(),
+            request=None,
+            limit=50,
+            offset=0,
+            uid="uid-1",
+        )
+
+    assert result == []
+    service.read_ledger_history_page.assert_not_called()
