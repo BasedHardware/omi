@@ -6,6 +6,11 @@ import Image from '@tschk/moonshine-next/image';
 import { Brain } from 'lucide-react';
 import type { ClientMessage } from '@/types/conversation';
 import { cn } from '@/lib/utils';
+import {
+  nearestVerticalScroller,
+  scrollEdgesOf,
+  shouldFollowLiveEdge,
+} from '@/lib/scrollEdges';
 import { ChatMarkdown } from './ChatMarkdown';
 
 /**
@@ -65,11 +70,31 @@ export function ChatTranscript({
   autoScroll = true,
 }: ChatTranscriptProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const placedExchangeRef = useRef(false);
 
-  // Scroll to bottom when messages change or streaming text updates
+  // Follow the live edge only while the reader is already there. Home's
+  // history sits in the same overflow ancestor, so a blanket scrollIntoView
+  // here is what yanks an upward history gesture back down.
   useEffect(() => {
-    if (autoScroll) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [autoScroll, messages, streamingText]);
+    if (!autoScroll) {
+      placedExchangeRef.current = false;
+      return;
+    }
+    const end = messagesEndRef.current;
+    if (!end) return;
+    const scroller = nearestVerticalScroller(end.parentElement);
+    const pinnedToBottom = scroller
+      ? scrollEdgesOf({
+          scrollTop: scroller.scrollTop,
+          scrollHeight: scroller.scrollHeight,
+          clientHeight: scroller.clientHeight,
+        }).atBottom
+      : true;
+    const force = !placedExchangeRef.current;
+    if (!shouldFollowLiveEdge({ pinnedToBottom, force })) return;
+    placedExchangeRef.current = true;
+    end.scrollIntoView({ behavior: force ? 'auto' : 'smooth' });
+  }, [autoScroll, messages, streamingText, isStreaming, currentThinking]);
 
   if (isLoading && messages.length === 0) {
     return (
