@@ -262,6 +262,69 @@ export async function readAttachment(
   return row;
 }
 
+export type BoundChatAttachment = {
+  id: string;
+  displayName: string;
+  mediaType: string;
+  sizeBytes: number;
+  contentReference: string | null;
+};
+
+export type AdmitAttachmentsResult =
+  | { kind: "ok"; attachments: BoundChatAttachment[] }
+  | { kind: "rejected" };
+
+export async function resolveAttachmentsForAdmit(
+  db: D1Database,
+  accountId: string,
+  attachmentIds: readonly string[],
+  messageId: string,
+  capabilities: AttachmentCapabilities = ATTACHMENT_CAPABILITIES
+): Promise<AdmitAttachmentsResult> {
+  if (attachmentIds.length === 0) return { kind: "ok", attachments: [] };
+  if (attachmentIds.length > capabilities.maxAttachmentsPerMessage)
+    return { kind: "rejected" };
+  const seen = new Set<string>();
+  const attachments: BoundChatAttachment[] = [];
+  for (const id of attachmentIds) {
+    if (seen.has(id)) return { kind: "rejected" };
+    seen.add(id);
+    const row = await readAttachment(db, accountId, id);
+    if (row === null) return { kind: "rejected" };
+    if (
+      !capabilities.allowedAttachmentMimeTypes.includes(row.media_type) ||
+      row.size_bytes <= 0 ||
+      row.size_bytes > capabilities.maxAttachmentBytes
+    )
+      return { kind: "rejected" };
+    const replay = row.state === "bound" && row.bound_message_id === messageId;
+    const ready = row.state === "ingested" && row.bound_message_id === null;
+    if (!replay && !ready) return { kind: "rejected" };
+    attachments.push({
+      id: row.id,
+      displayName: row.display_name,
+      mediaType: row.media_type,
+      sizeBytes: row.size_bytes,
+      contentReference: row.id,
+    });
+  }
+  return { kind: "ok", attachments };
+}
+
+export function bindAttachmentStatement(
+  db: D1Database,
+  accountId: string,
+  messageId: string,
+  attachmentId: string,
+  now: number
+): D1PreparedStatement {
+  return db
+    .prepare(
+      "UPDATE chat_attachments SET state = 'bound', bound_message_id = ?, updated_at = ? WHERE id = ? AND account_id = ? AND state = 'ingested' AND bound_message_id IS NULL"
+    )
+    .bind(messageId, now, attachmentId, accountId);
+}
+
 export function stagingResponse(
   id: string,
   displayName: string,

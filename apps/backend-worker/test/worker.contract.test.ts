@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
 import { parseTaskPageJson } from "@omi-core/ratified-contracts/projections/tasks";
 import {
   parseChatGenerationEventStream,
@@ -7,6 +8,11 @@ import {
 } from "@omi-core/adapters-platform";
 
 import type { AccountBackend } from "../src/account";
+import {
+  CONVERSATIONS_FRONTIER,
+  CONVERSATIONS_READ_CONTRACT_VERSION,
+  MAIN_CONVERSATION_ID,
+} from "../src/conversations";
 import { CHAT_CAPABILITIES, isChatCreate } from "../src/wire";
 import { createD1Mock } from "./d1-mock";
 
@@ -76,9 +82,40 @@ const accountStub = {
       return { ...prior, created: false };
     }
     if (admissions.size >= chatLimit) return "entitlement" as const;
+    const attachmentRows: Array<{
+      id: string;
+      displayName: string;
+      mediaType: string;
+      sizeBytes: number;
+      contentReference: string | null;
+    }> = [];
+    const requestedIds = Array.isArray(input["attachmentIds"])
+      ? input["attachmentIds"]
+      : [];
+    for (const attachmentId of requestedIds) {
+      const row = await d1Mock
+        .prepare(
+          "SELECT id, display_name, media_type, size_bytes FROM chat_attachments WHERE id = ? AND account_id = ?"
+        )
+        .bind(String(attachmentId), "test-account")
+        .first<{
+          id: string;
+          display_name: string;
+          media_type: string;
+          size_bytes: number;
+        }>();
+      if (row === null) continue;
+      attachmentRows.push({
+        id: row.id,
+        displayName: row.display_name,
+        mediaType: row.media_type,
+        sizeBytes: row.size_bytes,
+        contentReference: row.id,
+      });
+    }
     const admission = {
       payload,
-      message: canonicalMessage(input),
+      message: { ...canonicalMessage(input), attachments: attachmentRows },
       generation: { id: `generation-${String(input["id"])}` },
     };
     admissions.set(String(input["id"]), admission);
@@ -159,6 +196,131 @@ const chatCreate = (id: string) => ({
   chatSessionId: null,
   attachmentIds: [],
 });
+
+const emptyConversationPage = () => ({
+  contractVersion: CONVERSATIONS_READ_CONTRACT_VERSION,
+  items: [],
+  window: {
+    status: "complete",
+    complete: true,
+    hasMore: false,
+    nextCursor: null,
+  },
+  completeness: {
+    version: "conversations-completeness-v1",
+    status: "complete",
+    reasons: [],
+    frontiers: {
+      declaredFrontier: CONVERSATIONS_FRONTIER,
+      newestAppliedFrontier: CONVERSATIONS_FRONTIER,
+      missingAppliedFrontierReason: null,
+    },
+  },
+  absence: { kind: "query_gap" },
+});
+
+const emptyRecallPage = () => ({
+  contractVersion: "1.0.0",
+  items: [],
+  window: {
+    status: "complete",
+    complete: true,
+    hasMore: false,
+    nextCursor: null,
+  },
+  completeness: {
+    version: "recall-completeness-v1",
+    status: "complete",
+    reasons: [],
+    frontiers: {
+      declaredFrontier: "frontier-v1:declared",
+      newestSearchedAcceptedFrontier: null,
+      missingAcceptedFrontierReason: "no_accepted_work",
+      newestSearchedStmFrontier: null,
+      missingStmFrontierReason: "no_eligible_stm",
+    },
+  },
+  absence: { kind: "query_gap" },
+});
+
+const insertAttachment = async (input: {
+  id: string;
+  accountId: string;
+  state: string;
+  boundMessageId?: string | null;
+  displayName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+}) => {
+  const now = Date.now();
+  await d1Mock
+    .prepare(
+      "INSERT INTO chat_attachments (id, account_id, op_id, display_name, media_type, size_bytes, state, r2_key, expires_at, bound_message_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(
+      input.id,
+      input.accountId,
+      `op-${input.id}`,
+      input.displayName ?? "report.pdf",
+      input.mimeType ?? "application/pdf",
+      input.sizeBytes ?? 1024,
+      input.state,
+      `attachments/${input.accountId}/${input.id}`,
+      now + 86_400_000,
+      input.boundMessageId ?? null,
+      now,
+      now
+    )
+    .run();
+};
+
+const insertChatMessage = async (input: {
+  id: string;
+  accountId: string;
+  text: string;
+  createdAt: number;
+  position: number;
+  chatSessionId: string | null;
+  sender?: "human" | "ai";
+  generationOutcome?: "completed" | "cancelled" | null;
+}) => {
+  const sender = input.sender ?? "human";
+  const generationOutcome =
+    input.generationOutcome ?? (sender === "human" ? null : "completed");
+  await d1Mock
+    .prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(
+      input.id,
+      input.accountId,
+      input.text,
+      sender,
+      input.createdAt,
+      generationOutcome,
+      input.position,
+      JSON.stringify({
+        id: input.id,
+        text: input.text,
+        sender,
+        type: "text",
+        createdAt: input.createdAt,
+        updatedAt: input.createdAt,
+        chatSessionId: input.chatSessionId,
+        appId: null,
+        journalRevision: 0,
+        payloadHash: "sha256:test",
+        messageSource:
+          sender === "human" ? "desktop_chat" : "assistant_generation",
+        rating: null,
+        reported: false,
+        generationOutcome,
+        revision: String(input.position),
+        attachments: [],
+      })
+    )
+    .run();
+};
 
 beforeEach(() => {
   d1Mock = createD1Mock();
@@ -365,14 +527,8 @@ describe("worker request contract", () => {
       headers: authenticatedHeaders,
     });
 
-    expect(response.status).toBe(503);
-    expect((await response.json()) as unknown).toEqual({
-      error: {
-        code: "projection_unavailable",
-        retryable: true,
-        action: "retry",
-      },
-    });
+    expect(response.status).toBe(200);
+    expect((await response.json()) as unknown).toEqual(emptyConversationPage());
   });
 
   test("a provisioned secret still refuses the empty bearer credential", async () => {
@@ -415,7 +571,7 @@ describe("worker request contract", () => {
     expect(accountCalls).toEqual([]);
   });
 
-  test("unwired projections refuse instead of reporting canonical empty data", async () => {
+  test("wired chat conversations and unwired memories stay honest empty successes", async () => {
     const conversations = await fetchWorker("/v1/conversations", {
       headers: authenticatedHeaders,
     });
@@ -426,22 +582,14 @@ describe("worker request contract", () => {
       headers: authenticatedHeaders,
     });
 
-    expect(conversations.status).toBe(503);
-    expect(memories.status).toBe(503);
-    expect((await conversations.json()) as unknown).toEqual({
-      error: {
-        code: "projection_unavailable",
-        retryable: true,
-        action: "retry",
-      },
-    });
-    expect((await memories.json()) as unknown).toEqual({
-      error: {
-        code: "projection_unavailable",
-        retryable: true,
-        action: "retry",
-      },
-    });
+    expect(conversations.status).toBe(200);
+    expect(memories.status).toBe(200);
+    expect((await conversations.json()) as unknown).toEqual(
+      emptyConversationPage()
+    );
+    const memoriesBody = await memories.text();
+    expect(JSON.parse(memoriesBody) as unknown).toEqual(emptyRecallPage());
+    expect(parseSynthesizedPageJson(memoriesBody)).not.toBeNull();
     const tasksBody = await tasks.text();
     expect(JSON.parse(tasksBody) as unknown).toEqual({
       contractVersion: "1.0.0",
@@ -465,6 +613,196 @@ describe("worker request contract", () => {
       absence: { kind: "query_gap" },
     });
     expect(parseTaskPageJson(tasksBody)).not.toBeNull();
+  });
+
+  test("conversations project grouped D1 chat sessions, not a 503", async () => {
+    await insertChatMessage({
+      id: "main-one",
+      accountId: "test-account",
+      text: "hello from main",
+      createdAt: 1_000,
+      position: 1,
+      chatSessionId: null,
+    });
+    await insertChatMessage({
+      id: "main-two",
+      accountId: "test-account",
+      text: "follow up",
+      createdAt: 2_000,
+      position: 2,
+      chatSessionId: null,
+    });
+    await insertChatMessage({
+      id: "session-one",
+      accountId: "test-account",
+      text: "other session",
+      createdAt: 3_000,
+      position: 3,
+      chatSessionId: "session-alpha",
+    });
+    await insertChatMessage({
+      id: "foreign",
+      accountId: "other-account",
+      text: "must not leak",
+      createdAt: 4_000,
+      position: 1,
+      chatSessionId: "session-foreign",
+    });
+
+    const envelope = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(envelope.status).toBe(200);
+    const page = (await envelope.json()) as {
+      items: Array<{ id: string; title: string; overview: string }>;
+      window: { status: string; hasMore: boolean; nextCursor: string | null };
+      absence: { kind: string } | null;
+    };
+    expect(page.items.map((item) => item.id)).toEqual([
+      "session-alpha",
+      MAIN_CONVERSATION_ID,
+    ]);
+    expect(page.items[0]).toMatchObject({
+      id: "session-alpha",
+      title: "other session",
+      overview: "other session",
+      source: "chat",
+      status: "in_progress",
+      discarded: false,
+      starred: false,
+      visibility: "private",
+      isLocked: false,
+      folderId: null,
+      revision: null,
+    });
+    expect(page.items[1]).toMatchObject({
+      id: MAIN_CONVERSATION_ID,
+      title: "hello from main",
+      overview: "follow up",
+      createdAt: 1_000,
+      updatedAt: 2_000,
+    });
+    expect(page.window).toEqual({
+      status: "complete",
+      complete: true,
+      hasMore: false,
+      nextCursor: null,
+    });
+    expect(page.absence).toBeNull();
+
+    const legacy = await fetchWorker("/v1/conversations?limit=50&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    expect(legacy.status).toBe(200);
+    const records = (await legacy.json()) as Array<{
+      id: string;
+      structured: { title: string; overview: string };
+      created_at: string;
+      is_locked: boolean;
+      folder_id: string | null;
+    }>;
+    expect(records).toHaveLength(2);
+    expect(records[0]).toMatchObject({
+      id: "session-alpha",
+      structured: { title: "other session", overview: "other session" },
+      is_locked: false,
+      folder_id: null,
+    });
+    expect(records[1]?.id).toBe(MAIN_CONVERSATION_ID);
+    expect(Number.isFinite(Date.parse(records[0]!.created_at))).toBe(true);
+  });
+
+  test("conversation pagination and query validation match neighboring list routes", async () => {
+    await insertChatMessage({
+      id: "page-a",
+      accountId: "test-account",
+      text: "first session",
+      createdAt: 10,
+      position: 1,
+      chatSessionId: "session-a",
+    });
+    await insertChatMessage({
+      id: "page-b",
+      accountId: "test-account",
+      text: "second session",
+      createdAt: 20,
+      position: 2,
+      chatSessionId: "session-b",
+    });
+
+    const first = await fetchWorker("/v1/conversations?limit=1", {
+      headers: authenticatedHeaders,
+    });
+    expect(first.status).toBe(200);
+    const firstPage = (await first.json()) as {
+      items: Array<{ id: string }>;
+      window: { status: string; hasMore: boolean; nextCursor: string | null };
+    };
+    expect(firstPage.items.map((item) => item.id)).toEqual(["session-b"]);
+    expect(firstPage.window.hasMore).toBe(true);
+    expect(firstPage.window.nextCursor).toBe("session-b");
+
+    const second = await fetchWorker(
+      `/v1/conversations?limit=1&cursor=${encodeURIComponent("session-b")}`,
+      { headers: authenticatedHeaders }
+    );
+    expect(second.status).toBe(200);
+    const secondPage = (await second.json()) as {
+      items: Array<{ id: string }>;
+      window: { status: string; complete: boolean; nextCursor: string | null };
+    };
+    expect(secondPage.items.map((item) => item.id)).toEqual(["session-a"]);
+    expect(secondPage.window).toEqual({
+      status: "complete",
+      complete: true,
+      hasMore: false,
+      nextCursor: null,
+    });
+
+    const offsetPage = await fetchWorker("/v1/conversations?limit=1&offset=1", {
+      headers: authenticatedHeaders,
+    });
+    expect(offsetPage.status).toBe(200);
+    expect((await offsetPage.json()) as Array<{ id: string }>).toEqual([
+      expect.objectContaining({ id: "session-a" }),
+    ]);
+
+    const invalidLimit = await fetchWorker("/v1/conversations?limit=0", {
+      headers: authenticatedHeaders,
+    });
+    const invalidCursor = await fetchWorker("/v1/conversations?cursor=", {
+      headers: authenticatedHeaders,
+    });
+    const unknownCursor = await fetchWorker(
+      "/v1/conversations?cursor=missing-session",
+      { headers: authenticatedHeaders }
+    );
+    const extra = await fetchWorker("/v1/conversations?limit=1&extra=1", {
+      headers: authenticatedHeaders,
+    });
+    expect(invalidLimit.status).toBe(400);
+    expect(invalidCursor.status).toBe(400);
+    expect(unknownCursor.status).toBe(400);
+    expect(extra.status).toBe(400);
+  });
+
+  test("memories stay an honest empty recall page because no store exists", async () => {
+    const response = await fetchWorker("/v1/memories?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(parseSynthesizedPageJson(body)).not.toBeNull();
+    expect(JSON.parse(body) as unknown).toEqual(emptyRecallPage());
+
+    const emptyCursor = await fetchWorker("/v1/memories?cursor=", {
+      headers: authenticatedHeaders,
+    });
+    const extra = await fetchWorker("/v1/memories?limit=1&extra=1", {
+      headers: authenticatedHeaders,
+    });
+    expect(emptyCursor.status).toBe(400);
+    expect(extra.status).toBe(400);
   });
 
   test("chat history validates pagination before resolving the account", async () => {
@@ -728,7 +1066,7 @@ describe("settings entitlement admission contract", () => {
     });
   });
 
-  test("nonempty attachment sends fail until attachment staging exists", async () => {
+  test("unknown attachment ids stay rejected with the existing error shape", async () => {
     const response = await fetchWorker("/v1/chat-messages", {
       method: "POST",
       headers: { ...authenticatedHeaders, "content-type": "application/json" },
@@ -746,6 +1084,113 @@ describe("settings entitlement admission contract", () => {
         action: "edit_request",
       },
     });
+  });
+
+  test("foreign-account and incomplete attachments are rejected", async () => {
+    await insertAttachment({
+      id: "att-foreign",
+      accountId: "other-account",
+      state: "ingested",
+    });
+    await insertAttachment({
+      id: "att-staged",
+      accountId: "test-account",
+      state: "staged",
+    });
+
+    const foreign = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("attach-foreign"),
+        attachmentIds: ["att-foreign"],
+      }),
+    });
+    const incomplete = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("attach-incomplete"),
+        attachmentIds: ["att-staged"],
+      }),
+    });
+
+    expect(foreign.status).toBe(422);
+    expect((await foreign.json()) as unknown).toEqual({
+      error: {
+        code: "attachment_rejected",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
+    expect(incomplete.status).toBe(422);
+    expect((await incomplete.json()) as unknown).toEqual({
+      error: {
+        code: "attachment_rejected",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
+    expect(accountCalls).toEqual([]);
+  });
+
+  test("completed same-account attachments are admitted with real metadata", async () => {
+    await insertAttachment({
+      id: "att-ready",
+      accountId: "test-account",
+      state: "ingested",
+      displayName: "notes.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 2048,
+    });
+
+    const response = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("attach-ready"),
+        attachmentIds: ["att-ready"],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      message: {
+        id: string;
+        attachments: Array<{
+          id: string;
+          displayName: string;
+          mediaType: string;
+          sizeBytes: number;
+          contentReference: string | null;
+        }>;
+      };
+    };
+    expect(body.message.id).toBe("attach-ready");
+    expect(body.message.attachments).toEqual([
+      {
+        id: "att-ready",
+        displayName: "notes.pdf",
+        mediaType: "application/pdf",
+        sizeBytes: 2048,
+        contentReference: "att-ready",
+      },
+    ]);
+    expect(wireToChatAdmissionEnvelope(body)).not.toBeNull();
+  });
+
+  test("zero attachments still admit as today", async () => {
+    const response = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(chatCreate("attach-none")),
+    });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      message: { attachments: unknown[] };
+    };
+    expect(body.message.attachments).toEqual([]);
   });
 
   test("oversized send bodies fail before account storage", async () => {

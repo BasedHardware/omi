@@ -31,7 +31,7 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     accountId: string,
     input: ChatCreate,
     chatLimit: number | null
-  ): Promise<Admission | "conflict" | "entitlement"> {
+  ): Promise<Admission | "conflict" | "entitlement" | "attachment_rejected"> {
     const result = await admitMessage(this.env.DB, accountId, input, chatLimit);
     if (result !== "conflict" && result !== "entitlement") {
       await this.ensureGenerationAlarm(accountId);
