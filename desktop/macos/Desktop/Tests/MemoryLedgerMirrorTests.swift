@@ -317,6 +317,60 @@ final class MemoryLedgerMirrorTests: XCTestCase {
     }
   }
 
+  /// A dogfood machine can already carry one of these columns from an earlier build of this
+  /// branch, where the column shipped under a different migration identifier. A bare ADD COLUMN
+  /// there fails with "duplicate column name" and kills the whole ladder.
+  func testEvidenceMigrationSucceedsWhenAColumnAlreadyExists() throws {
+    for preExisting in ["ledgerEvidenceJson", "ledgerEvidenceRevision"] {
+      let queue = try DatabaseQueue()
+      try queue.write { database in
+        try database.create(table: "memories") { table in
+          table.autoIncrementedPrimaryKey("id")
+          table.column("backendId", .text)
+          table.column("content", .text).notNull()
+          table.column("updatedAt", .datetime).notNull()
+          table.column(preExisting, preExisting.hasSuffix("Revision") ? .datetime : .text)
+        }
+        try database.execute(
+          sql: "INSERT INTO memories (backendId, content, updatedAt) VALUES (?, ?, ?)",
+          arguments: ["half-migrated", "Keep this populated row", Date(timeIntervalSince1970: 42)]
+        )
+      }
+
+      var migrator = DatabaseMigrator()
+      RewindDatabase.registerMemoryLedgerEvidenceMigrations(on: &migrator)
+      XCTAssertNoThrow(try migrator.migrate(queue), "pre-existing \(preExisting) must not fail the ladder")
+
+      try queue.read { database in
+        let columns = try database.columns(in: "memories").map(\.name)
+        XCTAssertTrue(columns.contains("ledgerEvidenceJson"))
+        XCTAssertTrue(columns.contains("ledgerEvidenceRevision"))
+        XCTAssertEqual(columns.filter { $0 == preExisting }.count, 1)
+        let content = try String.fetchOne(
+          database,
+          sql: "SELECT content FROM memories WHERE backendId = ?",
+          arguments: ["half-migrated"]
+        )
+        XCTAssertEqual(content, "Keep this populated row")
+      }
+    }
+  }
+
+  func testLedgerMetadataColumnGuardIsIdempotent() throws {
+    let queue = try DatabaseQueue()
+    try queue.write { database in
+      try database.create(table: "memories") { table in
+        table.autoIncrementedPrimaryKey("id")
+        table.column("ledgerMetadataJson", .text)
+      }
+      XCTAssertNoThrow(
+        try RewindDatabase.addMemoryColumnIfMissing(
+          database, name: "ledgerMetadataJson", type: .text))
+      let columns = try database.columns(in: "memories").map(\.name)
+      XCTAssertEqual(columns.filter { $0 == "ledgerMetadataJson" }.count, 1)
+    }
+  }
+
   func testAbsentLedgerRowIsSoftDeletedWithoutErasingMirrorMetadata() async throws {
     let memory = makeMemory(id: "ledger-delete-\(UUID().uuidString)", metadata: canonicalMetadata())
     try await MemoryStorage.shared.syncServerMemory(memory)

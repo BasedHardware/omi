@@ -63,9 +63,11 @@ final class TaskDetailPanelTests: XCTestCase {
     )
 
     let links = TaskDetailSourceLinkPolicy.links(for: task)
-    XCTAssertEqual(links.count, 1)
+    XCTAssertEqual(links.count, 2)
     XCTAssertTrue(links.contains { $0.route == .memory(id: "memory-1") })
-    XCTAssertFalse(links.contains { $0.route == .rewind })
+    // A screen ref the frame contract cannot resolve still routes to the
+    // Rewind page. Only refs with no valid destination at all are dropped.
+    XCTAssertTrue(links.contains { $0.route == .rewind })
     XCTAssertFalse(links.contains { $0.id.contains("artifact-1") })
   }
 

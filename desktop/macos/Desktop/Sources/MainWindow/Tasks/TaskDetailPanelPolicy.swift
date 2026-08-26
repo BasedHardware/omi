@@ -156,15 +156,25 @@ enum TaskDetailSourceLinkPolicy {
         subtitle = evidenceID
         systemImage = "brain.head.profile"
       case .local_screen:
-        guard
-          let screenshotID = RewindEvidenceCardPolicy.card(
-            for: evidence,
-            currentDeviceID: ClientDeviceService.shared.clientDeviceId
-          )?.screenshotID
-        else { continue }
-        route = .rewindFrame(id: screenshotID)
-        title = "Screen evidence"
-        subtitle = "Open Rewind · frame \(screenshotID)"
+        if let screenshotID = RewindEvidenceCardPolicy.card(
+          for: evidence,
+          currentDeviceID: ClientDeviceService.shared.clientDeviceId
+        )?.screenshotID {
+          route = .rewindFrame(id: screenshotID)
+          title = "Screen evidence"
+          subtitle = "Open Rewind · frame \(screenshotID)"
+        } else {
+          // Every screen ref this policy cannot resolve to an exact frame —
+          // `capture.v2` rows written before the frame contract existed, refs
+          // from another Mac, legacy nil versions — still had a source row
+          // before the frame deep link shipped. Rewind is the established
+          // desktop surface and the page itself is always a valid
+          // destination, so fall back to it rather than dropping the only
+          // provenance the task has.
+          route = .rewind
+          title = "Screen context"
+          subtitle = "Open Rewind"
+        }
         systemImage = "rectangle.dashed.and.paperclip"
       case .external:
         guard let url = URL(string: evidenceID), url.scheme != nil else { continue }

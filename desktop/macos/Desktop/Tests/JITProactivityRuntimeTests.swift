@@ -41,6 +41,50 @@ final class JITProactivityRuntimeTests: XCTestCase {
     }
   }
 
+  /// The coordinator's observation carries a calendar query that reaches EventKit on every
+  /// context visit. A non-admitted owner must not pay for it to reach a decision that never
+  /// reads the observation.
+  func testNonAdmittedOwnerNeverBuildsTheObservationInputs() async throws {
+    for flags in [
+      JITProactivityFlags(rollout: .unknown, killSwitch: .unknown),
+      JITProactivityFlags(rollout: .disabled, killSwitch: .disabled),
+      JITProactivityFlags(rollout: .enabled, killSwitch: .enabled),
+    ] {
+      let probe = ObservationBuildProbe()
+      let runtime = JITProactivityRuntime(
+        flags: { _ in flags },
+        snapshots: { _ in
+          XCTFail("non-admitted authority must not read a new-runtime snapshot")
+          throw ProactiveLaneClientError.invalidResponse
+        })
+
+      let decision = await runtime.admission(
+        authorizationSnapshot: try snapshot(),
+        observationProvider: { await probe.build() })
+
+      let builds = await probe.builds
+      XCTAssertEqual(builds, 0)
+      guard case .legacyContextBucketFallback = decision else {
+        return XCTFail("non-admitted authority must keep the legacy lane, got \(decision)")
+      }
+    }
+  }
+
+  func testAdmittedOwnerStillBuildsTheObservationExactlyOnce() async throws {
+    let probe = ObservationBuildProbe()
+    let runtime = JITProactivityRuntime(
+      flags: { _ in JITProactivityFlags(rollout: .enabled, killSwitch: .disabled) },
+      snapshots: { _ in throw ProactiveLaneClientError.invalidResponse })
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observationProvider: { await probe.build() })
+
+    let builds = await probe.builds
+    XCTAssertEqual(builds, 1)
+    XCTAssertEqual(decision, .suppressed(reason: "authoritative_snapshot_unavailable"))
+  }
+
   func testRolloutWireStatesFailClosed() {
     XCTAssertEqual(ProactiveLaneClient.jitState("enabled"), .enabled)
     XCTAssertEqual(ProactiveLaneClient.jitState("disabled"), .disabled)
@@ -569,5 +613,15 @@ private actor AdmissionRaceGate {
   func resumeFirstAdmission() {
     release?.resume()
     release = nil
+  }
+}
+
+/// Counts how many times the deferred observation inputs were actually built.
+private actor ObservationBuildProbe {
+  private(set) var builds = 0
+
+  func build() -> KnowledgeLedgerTriggerObservation {
+    builds += 1
+    return KnowledgeLedgerTriggerObservation(text: "release")
   }
 }

@@ -12,25 +12,29 @@ actor JITProactivityCoordinator {
     frame: CapturedFrame,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async -> Bool {
-    let calendarEvents = await SystemCalendarMeetingContextService.shared.authorizedTriggerEvents(
-      around: frame.captureTime)
-    let observation = KnowledgeLedgerTriggerObservation(
-      eventID: frame.screenshotId.map(String.init),
-      text: snapshot.validatedFacts.joined(separator: "\n"),
-      appName: frame.appName,
-      windowTitle: frame.windowTitle,
-      occurredAt: frame.captureTime,
-      calendarEvents: calendarEvents)
+    // The observation is built behind the rollout gate, never in front of it. The calendar leg
+    // queries EventKit, and this runs on every context visit — a default-off install must not
+    // pay for (or prompt for) calendar access to reach a decision that ignores the observation.
     let decision = await JITProactivityRuntime.shared.admission(
       authorizationSnapshot: authorizationSnapshot,
-      observation: observation,
       ambient: JITAmbientRuntimeContext(
         id: snapshot.bucketID,
         semanticFingerprint: JITAmbientRuntimeContext.semanticFingerprint(
           contextID: snapshot.bucketID, validatedFacts: snapshot.validatedFacts),
         locallyRelevant: snapshot.notifyWorthiness > 0,
         boundedEvidence: snapshot.validatedFacts.prefix(20).map { String($0.prefix(400)) }
-          .joined(separator: "\n")))
+          .joined(separator: "\n")),
+      observationProvider: {
+        let calendarEvents = await SystemCalendarMeetingContextService.shared
+          .authorizedTriggerEvents(around: frame.captureTime)
+        return KnowledgeLedgerTriggerObservation(
+          eventID: frame.screenshotId.map(String.init),
+          text: snapshot.validatedFacts.joined(separator: "\n"),
+          appName: frame.appName,
+          windowTitle: frame.windowTitle,
+          occurredAt: frame.captureTime,
+          calendarEvents: calendarEvents)
+      })
     switch decision {
     case .legacyContextBucketFallback(let reason):
       await ContextProactivityTelemetry.recordJITAdmission(outcome: "legacy_fallback", reason: reason)

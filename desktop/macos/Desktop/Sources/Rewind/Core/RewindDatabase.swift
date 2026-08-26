@@ -569,6 +569,23 @@ actor RewindDatabase {
       throw CancellationError()
     }
 
+    // Migrate BEFORE publishing the pool. `initialize()` treats
+    // `dbQueue != nil && openedForUserId == targetUser` as "already
+    // initialized", so publishing first and then throwing out of the schema
+    // ladder would latch a half-migrated schema in permanently: every later
+    // initialize() returns early and every caller is handed a pool whose
+    // tables do not match the code. Leaving both unset means the next
+    // initialize() retries the migration from the top.
+    do {
+      try migrate(
+        activeQueue,
+        ownerID: expectedUserId,
+        legacyOwnerFallback: migratedLegacyOwnerID)
+    } catch {
+      try? activeQueue.close()
+      throw error
+    }
+
     dbQueue = activeQueue
     // Bump the pool epoch on every (re)open so storage actors that cached the
     // previous pool revalidate and drop it — recovery may have replaced the
@@ -579,8 +596,6 @@ actor RewindDatabase {
     poolEpoch += 1
     openedForUserId = expectedUserId
     consecutiveQueryIOErrors = 0
-
-    try migrate(activeQueue, legacyOwnerFallback: migratedLegacyOwnerID)
 
     // After unclean shutdown, do a cheap schema sanity check (not a full DB scan).
     // PRAGMA quick_check scans the ENTIRE database regardless of the (N) argument
@@ -1145,7 +1160,13 @@ actor RewindDatabase {
 
   // MARK: - Migrations
 
-  private func migrate(_ queue: DatabasePool, legacyOwnerFallback: String? = nil) throws {
+  /// `ownerID` is passed explicitly because migration now runs *before* `openedForUserId` is
+  /// published, so the owner-scoped migrations cannot read it back off the actor.
+  private func migrate(
+    _ queue: DatabasePool,
+    ownerID: String? = nil,
+    legacyOwnerFallback: String? = nil
+  ) throws {
     var migrator = DatabaseMigrator()
 
     // Migration 1: Create screenshots table
@@ -2568,7 +2589,7 @@ actor RewindDatabase {
       }
     }
 
-    let contextBucketOwnerID = openedForUserId ?? targetUserId()
+    let contextBucketOwnerID = ownerID ?? openedForUserId ?? targetUserId()
     ContextBucketSchema.registerMigration(
       on: &migrator,
       defaults: .standard,
@@ -2587,9 +2608,7 @@ actor RewindDatabase {
     // fail closed in the prompt projection until a canonical payload refreshes
     // their metadata.
     migrator.registerMigration("addMemoryLedgerMetadata") { db in
-      try db.alter(table: "memories") { t in
-        t.add(column: "ledgerMetadataJson", .text)
-      }
+      try Self.addMemoryColumnIfMissing(db, name: "ledgerMetadataJson", type: .text)
     }
 
     Self.registerMemoryLedgerEvidenceMigrations(on: &migrator)
@@ -2620,14 +2639,27 @@ actor RewindDatabase {
   /// pre-evidence table exercises the same path as the production migrator.
   static func registerMemoryLedgerEvidenceMigrations(on migrator: inout DatabaseMigrator) {
     migrator.registerMigration("addMemoryLedgerEvidence") { db in
-      try db.alter(table: "memories") { t in
-        t.add(column: "ledgerEvidenceJson", .text)
-      }
+      try Self.addMemoryColumnIfMissing(db, name: "ledgerEvidenceJson", type: .text)
     }
     migrator.registerMigration("addMemoryLedgerEvidenceRevision") { db in
-      try db.alter(table: "memories") { t in
-        t.add(column: "ledgerEvidenceRevision", .datetime)
-      }
+      try Self.addMemoryColumnIfMissing(db, name: "ledgerEvidenceRevision", type: .datetime)
+    }
+  }
+
+  /// A dogfood or QA machine can already carry one of these columns from an earlier build of the
+  /// same branch, where the migration ran under a different identifier. A bare `ADD COLUMN` there
+  /// fails with "duplicate column name" and kills the whole ladder, so probe the table first —
+  /// the same guard `KnowledgeLedgerMirrorStagingSchema` uses.
+  static func addMemoryColumnIfMissing(
+    _ db: Database,
+    name: String,
+    type: Database.ColumnType
+  ) throws {
+    guard try db.columns(in: "memories").contains(where: { $0.name == name }) == false else {
+      return
+    }
+    try db.alter(table: "memories") { t in
+      t.add(column: name, type)
     }
   }
 

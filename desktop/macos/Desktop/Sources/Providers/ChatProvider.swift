@@ -1073,7 +1073,11 @@ class ChatProvider: ObservableObject {
   /// Watchdog tasks capture their gen and only reset state if it still
   /// matches — so a watchdog fired by a stuck send #N won't cancel a
   /// later, healthy send #N+1. See sendMessage() and stopAgent().
-  private var sendGeneration: Int = 0
+  ///
+  /// Readable (never writable) outside the provider so a test can assert that a
+  /// transcript reset actually revoked the in-flight turn — the bump is what
+  /// makes `ChatQueryResultAuthority` reject the dead turn's late result.
+  private(set) var sendGeneration: Int = 0
   private var sendLockOwnership = ChatSendLockOwnership()
 
   /// Whether a new turn can start right now. The bridge holds one message
@@ -2367,6 +2371,13 @@ class ChatProvider: ObservableObject {
   /// Select a session and load its messages
   func selectSession(_ session: ChatSession, force: Bool = false) async {
     guard force || currentSession?.id != session.id || isInDefaultChat else { return }
+
+    // This replaces the transcript, so it is a transcript reset and must go
+    // through the one revocation authority — same as `selectApp`/`reinitialize`.
+    // Without it a turn still in flight for the previous session stays
+    // generation-current, and its late result (including the reconstructed
+    // failure notice) is accepted into *this* session's transcript.
+    revokeActiveTurn(reason: .superseded)
 
     currentSession = session
     isInDefaultChat = false
@@ -6628,6 +6639,12 @@ class ChatProvider: ObservableObject {
   func clearChat() async {
     isClearing = true
     defer { isClearing = false }
+
+    // Clearing blanks the transcript, so revoke first. Otherwise the in-flight
+    // turn keeps the send lock and stays generation-current, and its late
+    // result — the reconstructed failure notice included — resurrects a row in
+    // the transcript the user just cleared.
+    revokeActiveTurn(reason: .superseded)
 
     if isInDefaultChat {
       let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)

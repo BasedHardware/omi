@@ -190,7 +190,7 @@ final class RewindEvidenceCardTests: XCTestCase {
     }
   }
 
-  func testTaskDetailLocalEvidenceIsOmittedWhenItCannotBeValidated() {
+  func testTaskDetailLocalEvidenceFallsBackToRewindWhenItCannotBeValidated() throws {
     let task = TaskActionItem(
       id: "task-1",
       description: "Review context",
@@ -207,9 +207,37 @@ final class RewindEvidenceCardTests: XCTestCase {
       ]
     )
 
-    let links = TaskDetailSourceLinkPolicy.links(for: task)
+    let link = try XCTUnwrap(TaskDetailSourceLinkPolicy.links(for: task).first)
 
-    XCTAssertTrue(links.isEmpty)
+    XCTAssertEqual(link.route, .rewind)
+    XCTAssertEqual(link.title, "Screen context")
+    XCTAssertEqual(link.subtitle, "Open Rewind")
+  }
+
+  /// Every screen-derived task written before the frame contract carries
+  /// `capture.v2`. Those rows must keep the source row they already had.
+  func testTaskDetailLegacyCaptureProvenanceStillRendersItsSourceRow() throws {
+    let task = TaskActionItem(
+      id: "task-1b",
+      description: "Review the legacy capture",
+      completed: false,
+      createdAt: Date(timeIntervalSince1970: 1),
+      source: "screenshot",
+      provenance: [
+        makeEvidence(
+          deviceID: ClientDeviceService.shared.clientDeviceId,
+          id: "screen-42",
+          version: ScreenCandidateAdapter.captureEvidenceVersion
+        )
+      ]
+    )
+
+    let link = try XCTUnwrap(TaskDetailSourceLinkPolicy.links(for: task).first)
+
+    XCTAssertEqual(ScreenCandidateAdapter.captureEvidenceVersion, "capture.v2")
+    XCTAssertEqual(link.route, .rewind)
+    XCTAssertEqual(link.title, "Screen context")
+    XCTAssertEqual(link.subtitle, "Open Rewind")
   }
 
   func testTaskDetailCurrentDeviceEvidenceCarriesTheExactFrameIntoRewind() throws {

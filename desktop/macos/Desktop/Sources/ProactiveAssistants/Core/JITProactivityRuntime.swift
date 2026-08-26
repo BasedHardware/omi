@@ -157,10 +157,26 @@ actor JITProactivityRuntime {
     observation: KnowledgeLedgerTriggerObservation,
     ambient: JITAmbientRuntimeContext? = nil
   ) async -> JITProactivityDecision {
+    await admission(
+      authorizationSnapshot: authorizationSnapshot,
+      ambient: ambient,
+      observationProvider: { observation })
+  }
+
+  /// Admission for callers whose observation inputs cost something real to build — the calendar
+  /// leg goes to EventKit on every context visit. The provider runs only after the rollout gate
+  /// admits this owner, so a default-off install performs no such work. The non-admitted decision
+  /// never reads the observation, so deferring it is behaviour-preserving for admitted owners.
+  func admission(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    ambient: JITAmbientRuntimeContext? = nil,
+    observationProvider: @Sendable () async -> KnowledgeLedgerTriggerObservation
+  ) async -> JITProactivityDecision {
     let resolved = await flags(authorizationSnapshot)
     guard resolved.permitsNewLane else {
       return JITProactivityPolicy.decide(flags: resolved, planned: [], ambient: [])
     }
+    let observation = await observationProvider()
     do {
       let snapshot = try await snapshots(authorizationSnapshot)
       let receipt = try await reconcile(snapshot, authorizationSnapshot: authorizationSnapshot)

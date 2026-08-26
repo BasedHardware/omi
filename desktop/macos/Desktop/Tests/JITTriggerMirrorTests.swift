@@ -4,6 +4,39 @@ import XCTest
 @testable import Omi_Computer
 
 final class JITTriggerMirrorTests: XCTestCase {
+  /// The JIT mirror's create-table migrations must survive a machine that already carries the
+  /// tables from an earlier build of this branch, where the same schema shipped under a
+  /// different migration identifier and so left no row in `grdb_migrations`.
+  func testJITTriggerMirrorSchemaSurvivesPreExistingTables() throws {
+    let queue = try DatabaseQueue()
+    try queue.write { database in
+      // The pre-`snoozedUntil` shape an earlier build of this branch installed.
+      try database.create(table: "jit_trigger_mirror") { table in
+        table.column("memoryID", .text).primaryKey()
+        table.column("accountGeneration", .integer).notNull()
+        table.column("itemRevision", .integer).notNull()
+        table.column("updatedAt", .datetime).notNull()
+        table.column("conditionJSON", .text).notNull()
+        table.column("actionType", .text).notNull()
+        table.column("actionPrompt", .text).notNull()
+        table.column("wakeupBudgetPerDay", .integer)
+      }
+      try database.create(table: "jit_knowledge_ledger_mirror_receipts") { table in
+        table.column("ownerID", .text).primaryKey()
+      }
+    }
+
+    var migrator = DatabaseMigrator()
+    JITTriggerMirrorSchema.registerMigration(on: &migrator)
+    XCTAssertNoThrow(try migrator.migrate(queue))
+
+    try queue.read { database in
+      XCTAssertTrue(try database.columns(in: "jit_trigger_mirror").contains { $0.name == "snoozedUntil" })
+      XCTAssertTrue(try database.tableExists("jit_knowledge_ledger_mirror_members"))
+      XCTAssertTrue(try database.tableExists("jit_ambient_context_state"))
+    }
+  }
+
   func testSnoozedUntilDecodesTimezoneAwareAndMalformedValueFailsClosed() throws {
     let expiry = Date(timeIntervalSince1970: 1_787_572_800)
     let encoder = JSONEncoder()

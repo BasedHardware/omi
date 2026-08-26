@@ -305,8 +305,12 @@ enum JITTriggerMirrorSchema {
   }
 
   static func registerMigration(on migrator: inout DatabaseMigrator) {
+    // Every create here is `ifNotExists` on purpose: a dogfood machine can already carry these
+    // tables from an earlier build of this branch, where the same schema shipped under a
+    // different migration identifier. Without the guard the ladder dies on "table already
+    // exists" and no later migration ever runs.
     migrator.registerMigration("createJITTriggerMirror") { db in
-      try db.create(table: "jit_trigger_mirror") { table in
+      try db.create(table: "jit_trigger_mirror", ifNotExists: true) { table in
         table.column("memoryID", .text).primaryKey()
         table.column("accountGeneration", .integer).notNull()
         table.column("itemRevision", .integer).notNull()
@@ -316,7 +320,7 @@ enum JITTriggerMirrorSchema {
         table.column("actionPrompt", .text).notNull()
         table.column("wakeupBudgetPerDay", .integer)
       }
-      try db.create(table: "jit_trigger_snapshot_receipts") { table in
+      try db.create(table: "jit_trigger_snapshot_receipts", ifNotExists: true) { table in
         table.column("ownerID", .text).primaryKey()
         table.column("accountGeneration", .integer).notNull()
         table.column("headCommitID", .text).notNull()
@@ -325,7 +329,7 @@ enum JITTriggerMirrorSchema {
         table.column("rowCount", .integer).notNull()
         table.column("updatedAt", .datetime).notNull()
       }
-      try db.create(table: "jit_trigger_wakeup_receipts") { table in
+      try db.create(table: "jit_trigger_wakeup_receipts", ifNotExists: true) { table in
         table.column("continuityKey", .text).primaryKey()
         table.column("triggerID", .text).notNull()
         table.column("lane", .text).notNull()
@@ -340,7 +344,8 @@ enum JITTriggerMirrorSchema {
       try db.create(
         index: "idx_jit_trigger_wakeup_budget",
         on: "jit_trigger_wakeup_receipts",
-        columns: ["triggerID", "budgetDay", "state"])
+        columns: ["triggerID", "budgetDay", "state"],
+        options: [.ifNotExists])
     }
     migrator.registerMigration("createJITAmbientContextState") { db in
       try db.create(table: "jit_ambient_context_state", ifNotExists: true) { table in
@@ -365,7 +370,7 @@ enum JITTriggerMirrorSchema {
       }
     }
     migrator.registerMigration("createJITKnowledgeLedgerMirror") { db in
-      try db.create(table: "jit_knowledge_ledger_mirror_receipts") { table in
+      try db.create(table: "jit_knowledge_ledger_mirror_receipts", ifNotExists: true) { table in
         table.column("ownerID", .text).primaryKey()
         table.column("accountGeneration", .integer).notNull()
         table.column("sourceGeneration", .integer).notNull()
@@ -381,7 +386,7 @@ enum JITTriggerMirrorSchema {
         table.column("aliasCount", .integer).notNull()
         table.column("updatedAt", .datetime).notNull()
       }
-      try db.create(table: "jit_knowledge_ledger_mirror_members") { table in
+      try db.create(table: "jit_knowledge_ledger_mirror_members", ifNotExists: true) { table in
         table.column("ownerID", .text).notNull()
         table.column("memoryID", .text).notNull()
         table.column("itemRevision", .integer).notNull()
@@ -391,7 +396,7 @@ enum JITTriggerMirrorSchema {
         table.column("contentPurged", .boolean).notNull()
         table.primaryKey(["ownerID", "memoryID"])
       }
-      try db.create(table: "jit_knowledge_ledger_mirror_aliases") { table in
+      try db.create(table: "jit_knowledge_ledger_mirror_aliases", ifNotExists: true) { table in
         table.column("ownerID", .text).notNull()
         table.column("aliasMemoryID", .text).notNull()
         table.column("canonicalMemoryID", .text).notNull()
@@ -402,7 +407,8 @@ enum JITTriggerMirrorSchema {
       try db.create(
         index: "idx_jit_knowledge_ledger_canonical_alias",
         on: "jit_knowledge_ledger_mirror_aliases",
-        columns: ["ownerID", "canonicalMemoryID"])
+        columns: ["ownerID", "canonicalMemoryID"],
+        options: [.ifNotExists])
     }
   }
 }

@@ -199,6 +199,75 @@ final class ChatTurnStateFailureTests: XCTestCase {
     XCTAssertEqual(provider.draftText, "")
   }
 
+  // MARK: - A late failure belongs to the transcript it came from
+
+  /// The failed-turn fallback appends the reconstructed notice unconditionally,
+  /// so the only thing keeping it out of a transcript the reader has moved on
+  /// from is the revocation `selectSession` now performs: bumping
+  /// `sendGeneration` makes `ChatQueryResultAuthority` reject the dead turn
+  /// before its catch block ever reaches the fallback.
+  func testSessionSwitchMidFlightRejectsTheAbandonedTurnsLateResult() async {
+    let provider = ChatProvider()
+    provider.messages = [
+      ChatMessage(id: "u1", clientTurnId: "t1", text: "session A question", sender: .user),
+      ChatMessage(id: "a1", clientTurnId: "t1", text: "", sender: .ai, isStreaming: true),
+    ]
+    provider.isSending = true
+    let abandonedGeneration = provider.sendGeneration
+
+    await provider.selectSession(ChatSession(id: "session-b", title: "Session B"))
+
+    XCTAssertFalse(
+      provider.isSending,
+      "Switching session must revoke the in-flight turn, not leave the composer latched busy"
+    )
+    XCTAssertNotEqual(
+      provider.sendGeneration, abandonedGeneration,
+      "The switch must bump the generation — that is what disowns the abandoned turn"
+    )
+    XCTAssertFalse(
+      ChatQueryResultAuthority.acceptsContinuation(
+        currentGeneration: provider.sendGeneration,
+        turnGeneration: abandonedGeneration,
+        turnAcceptsResult: true
+      ),
+      "Session B must not accept session A's late failure notice"
+    )
+    XCTAssertFalse(
+      provider.messages.contains { $0.id == "a1" },
+      "Session A's rows must not survive into session B's transcript"
+    )
+  }
+
+  /// Same contract for Clear: the cleared transcript must not have a row
+  /// resurrected into it by a turn that was still in flight when it was
+  /// cleared.
+  func testClearChatMidFlightRejectsTheAbandonedTurnsLateResult() async {
+    let provider = ChatProvider()
+    provider.messages = [
+      ChatMessage(id: "u1", clientTurnId: "t1", text: "cleared question", sender: .user),
+      ChatMessage(id: "a1", clientTurnId: "t1", text: "", sender: .ai, isStreaming: true),
+    ]
+    provider.isSending = true
+    let abandonedGeneration = provider.sendGeneration
+
+    await provider.clearChat()
+
+    XCTAssertFalse(
+      provider.isSending,
+      "Clearing must revoke the in-flight turn, not leave the composer latched busy"
+    )
+    XCTAssertNotEqual(provider.sendGeneration, abandonedGeneration)
+    XCTAssertFalse(
+      ChatQueryResultAuthority.acceptsContinuation(
+        currentGeneration: provider.sendGeneration,
+        turnGeneration: abandonedGeneration,
+        turnAcceptsResult: true
+      ),
+      "A cleared transcript must not accept the abandoned turn's late failure notice"
+    )
+  }
+
   // MARK: - Which endings earn a marker
 
   /// `forTurn` is the one decision point. Stop earns nothing, the watchdog
