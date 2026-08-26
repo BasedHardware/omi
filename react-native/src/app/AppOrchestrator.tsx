@@ -1,9 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Animated,
   Easing,
@@ -78,7 +73,6 @@ const quickPrompts = [
   'What should I remember?',
   'Summarize my recent conversations',
 ];
-
 
 function App({initialRoute}: AppProps): React.JSX.Element {
   const {width} = useWindowDimensions();
@@ -200,8 +194,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     const query = searchQuery.trim().toLocaleLowerCase();
     return reads.filter(
       item =>
-        query === '' ||
-        item.searchableText.toLocaleLowerCase().includes(query),
+        query === '' || item.searchableText.toLocaleLowerCase().includes(query),
     );
   }, [reads, searchQuery]);
   const homeSearching = searchQuery.trim() !== '';
@@ -1275,18 +1268,18 @@ function App({initialRoute}: AppProps): React.JSX.Element {
 
   const macDestinationMenu =
     macMenuOpen && !onboardingRequired ? (
-    <Sheet
-      onDismiss={() => setMacMenuOpen(false)}
-      onSelect={destination => {
-        setRoute(destination);
-        if (destination === 'Home') {
-          setHomeChatOpen(false);
-        }
-        setMacMenuOpen(false);
-      }}
-      route={route}
-    />
-  ) : null;
+      <Sheet
+        onDismiss={() => setMacMenuOpen(false)}
+        onSelect={destination => {
+          setRoute(destination);
+          if (destination === 'Home') {
+            setHomeChatOpen(false);
+          }
+          setMacMenuOpen(false);
+        }}
+        route={route}
+      />
+    ) : null;
 
   return (
     <PageShell

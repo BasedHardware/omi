@@ -748,7 +748,6 @@ test('maps a cloud 401 to typed unauthorized copy without fabricating rows', asy
   });
 });
 
-
 test('parses catalogue, enabled, owned, and service app records without inventing rows', () => {
   const app = parseCloudApp(
     {
@@ -888,7 +887,9 @@ test('loadAccountSettings keeps failed slices independent', async () => {
     expect.objectContaining({uid: 'user-1', email: 'ada@example.test'}),
   );
   expect(snapshot.subscription).toBeNull();
-  expect(snapshot.subscriptionError).toBe('desktop-subscription-read failed (503)');
+  expect(snapshot.subscriptionError).toBe(
+    'desktop-subscription-read failed (503)',
+  );
   expect(snapshot.storeRecordingPermission).toBe(true);
   expect(snapshot.trainingOptedIn).toBe(false);
   expect(snapshot.privateCloudSync).toBe(false);

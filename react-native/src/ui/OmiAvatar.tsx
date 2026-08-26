@@ -4,10 +4,7 @@ import {styles} from './styles';
 
 const AVATAR_BASE = 40;
 const MARK_DOT_COUNT = 8;
-const MARK_PHASE_SAMPLES = Array.from(
-  {length: 33},
-  (_, step) => step / 32,
-);
+const MARK_PHASE_SAMPLES = Array.from({length: 33}, (_, step) => step / 32);
 
 export const OMI_MARK_INK = '#ffffff';
 
@@ -55,10 +52,7 @@ export function omiMarkDotCenter(index: number): {x: number; y: number} {
   };
 }
 
-export function omiMarkBrightness(
-  index: number,
-  phase: number | null,
-): number {
+export function omiMarkBrightness(index: number, phase: number | null): number {
   if (phase == null) {
     return 1;
   }
@@ -69,8 +63,7 @@ export function omiMarkBrightness(
   }
   const bump = Math.max(0, 1 - distance / omiMarkGeometry.pulseWidth);
   return (
-    omiMarkGeometry.idleBrightness +
-    (1 - omiMarkGeometry.idleBrightness) * bump
+    omiMarkGeometry.idleBrightness + (1 - omiMarkGeometry.idleBrightness) * bump
   );
 }
 
