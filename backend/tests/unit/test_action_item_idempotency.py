@@ -1,4 +1,4 @@
-"""Tests for content-hash idempotency on create_action_item.
+"""Tests for optional-key idempotency on create_action_item.
 
 `database.action_items.create_action_item` historically allocated a fresh
 Firestore id on every call. A flaky-network retry from the desktop client
@@ -9,12 +9,13 @@ would happily produce a duplicate document. The fix:
   its id without creating a new one. The key is stored on the document so
   later calls can find it.
 
-- ``routers/action_items.create_action_item`` (the FastAPI handler) computes
-  a stable key from ``sha256(f"{uid}:{normalized_description}")`` so a
-  retried POST of the same task collapses to the original.
+- ``routers/action_items.create_action_item`` honors an optional
+  ``Idempotency-Key`` header. It must not hash the description: two tasks
+  named "123" are two tasks, and hashing the title returned the first
+  document (wrong due date, gone after reload).
 
 These tests exercise the db-layer contract (idempotency hit / miss / no-key
-backwards compat) and the router-layer key derivation.
+backwards compat) and the router-layer key handling.
 """
 
 from unittest.mock import MagicMock
@@ -243,41 +244,65 @@ def test_create_retries_precommit_contention_without_duplicate_write(monkeypatch
 
 
 # ---------------------------------------------------------------------------
-# router-layer content key
+# router-layer Idempotency-Key
 # ---------------------------------------------------------------------------
 
 
-def test_content_key_is_stable_for_same_input():
-    a = action_items_router._content_idempotency_key('uid-1', 'Buy milk')
-    b = action_items_router._content_idempotency_key('uid-1', 'Buy milk')
-    assert a == b
+def test_client_idempotency_key_strips_and_drops_blank():
+    assert action_items_router._client_idempotency_key(None) is None
+    assert action_items_router._client_idempotency_key('') is None
+    assert action_items_router._client_idempotency_key('   ') is None
+    assert action_items_router._client_idempotency_key(' retry-1 ') == 'retry-1'
 
 
-def test_content_key_normalizes_case_and_whitespace():
-    a = action_items_router._content_idempotency_key('uid-1', 'Buy Milk')
-    b = action_items_router._content_idempotency_key('uid-1', '  buy milk  ')
-    assert a == b
+def _stub_router_create(monkeypatch, *, capture):
+    monkeypatch.setattr(action_items_router.task_links, 'validate_task_links', lambda *args, **kwargs: None)
+    monkeypatch.setattr(action_items_router, 'upsert_action_item_vector', lambda *args, **kwargs: None)
+    monkeypatch.setattr(action_items_router, 'submit_with_context', lambda *args, **kwargs: None)
+    monkeypatch.setattr(action_items_router, 'send_action_item_data_message', lambda **kwargs: None)
+    monkeypatch.setattr(action_items_router, '_wake_task_changes', lambda *args, **kwargs: None)
+
+    def _create(uid, data, idempotency_key=None, **kwargs):
+        capture.append({'data': data, 'idempotency_key': idempotency_key})
+        return f'task-{len(capture)}'
+
+    monkeypatch.setattr(action_items_db, 'create_action_item', _create)
+    monkeypatch.setattr(
+        action_items_db,
+        'get_action_item',
+        lambda uid, task_id: {'id': task_id, 'description': '123', 'completed': False, 'due_at': None},
+    )
 
 
-def test_content_key_separates_users():
-    a = action_items_router._content_idempotency_key('uid-1', 'Buy milk')
-    b = action_items_router._content_idempotency_key('uid-2', 'Buy milk')
-    assert a != b
+def test_router_does_not_hash_description_as_idempotency_key(monkeypatch):
+    """Two POSTs with the same title and no header must both insert.
+
+    Hashing (uid, description) made the second create return the first
+    document, so the UI showed a clone with the old due date that vanished
+    on reload.
+    """
+    capture = []
+    _stub_router_create(monkeypatch, capture=capture)
+    request = action_items_router.CreateActionItemRequest(description='123')
+
+    first = action_items_router.create_action_item(request, uid='user-1')
+    second = action_items_router.create_action_item(request, uid='user-1')
+
+    assert first.id != second.id
+    assert [row['idempotency_key'] for row in capture] == [None, None]
 
 
-def test_content_key_separates_descriptions():
-    a = action_items_router._content_idempotency_key('uid-1', 'Buy milk')
-    b = action_items_router._content_idempotency_key('uid-1', 'Buy bread')
-    assert a != b
+def test_router_honors_client_idempotency_key(monkeypatch):
+    capture = []
+    _stub_router_create(monkeypatch, capture=capture)
 
+    action_items_router.create_action_item(
+        action_items_router.CreateActionItemRequest(description='123'),
+        uid='user-1',
+        idempotency_key='retry-1',
+    )
 
-def test_content_key_avoids_separator_collision():
-    """Length-prefixed encoding must distinguish (uid='org', desc='user:task')
-    from (uid='org:user', desc='task'). A naive ``f"{uid}:{desc}"`` encoding
-    would collapse both to the same hash; the length prefix prevents this."""
-    a = action_items_router._content_idempotency_key('org', 'user:task')
-    b = action_items_router._content_idempotency_key('org:user', 'task')
-    assert a != b
+    assert capture[0]['idempotency_key'] == 'retry-1'
 
 
 def test_create_dispatches_auto_sync_outside_the_database_pool(monkeypatch):
@@ -296,6 +321,7 @@ def test_create_dispatches_auto_sync_outside_the_database_pool(monkeypatch):
     monkeypatch.setattr(legacy_db_executor, 'submit', lambda function: database_submissions.append(function))
     monkeypatch.setattr(action_items_router, 'db_executor', legacy_db_executor, raising=False)
     monkeypatch.setattr(action_items_router.task_links, 'validate_task_links', lambda *args, **kwargs: None)
+    monkeypatch.setattr(action_items_router, '_wake_task_changes', lambda *args, **kwargs: None)
     monkeypatch.setattr(action_items_db, 'create_action_item', lambda *args, **kwargs: 'task-1')
     monkeypatch.setattr(
         action_items_db,

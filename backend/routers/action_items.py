@@ -1,12 +1,11 @@
 import asyncio
-import hashlib
 import logging
 import uuid
 
 from utils.executors import postprocess_executor, submit_with_context
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from typing import Optional, List
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from typing import Annotated, Optional, List
 from datetime import datetime, timezone
 
 import database.action_items as action_items_db
@@ -276,30 +275,30 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
 # *****************************
 
 
-def _content_idempotency_key(uid: str, description: str) -> str:
-    """Stable idempotency key from (uid, normalized description).
+def _client_idempotency_key(raw: Optional[str]) -> Optional[str]:
+    """Return a caller-supplied retry key, or None to always insert.
 
-    Two POSTs from the same user with the same description (modulo case +
-    surrounding whitespace) collapse to the same key, so a flaky-network
-    retry no longer creates a duplicate Firestore document.
-
-    Uses a length-prefixed encoding so the boundary between ``uid`` and
-    ``description`` is unambiguous: ``f"{len(uid)}:{uid}:{description}"``.
-    Without this, a uid containing ``:`` (federated identities, future
-    multi-tenant ids) could collide with a different ``(uid, description)``
-    pair after concatenation.
+    Task titles are not unique: hashing the description treated a second
+    "Buy milk" as a retry of the first and returned the existing document
+    (same due date, gone after reload). Real retries must send their own
+    ``Idempotency-Key``.
     """
-    normalized = (description or '').strip().lower()
-    payload = f"{len(uid)}:{uid}:{normalized}"
-    return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+    if raw is None:
+        return None
+    key = raw.strip()
+    return key or None
 
 
 @router.post("/v1/action-items", response_model=ActionItemResponse, tags=['action-items'])
-def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth.get_current_user_uid)):
+def create_action_item(
+    request: ActionItemCreateRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    idempotency_key: Annotated[Optional[str], Header(alias='Idempotency-Key', max_length=256)] = None,
+):
     """Create a new action item.
 
-    Content-idempotent on (uid, normalized description): a retry of the same
-    request returns the original action_item rather than creating a duplicate.
+    Idempotent only when the client sends ``Idempotency-Key``. Two creates
+    with the same description (and different keys, or no key) are two tasks.
     """
     try:
         task_links.validate_task_links(uid, goal_id=request.goal_id, workstream_id=request.workstream_id)
@@ -307,9 +306,10 @@ def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     action_item_data = request.storage_payload()
 
-    idempotency_key = _content_idempotency_key(uid, request.description)
     try:
-        action_item_id = action_items_db.create_action_item(uid, action_item_data, idempotency_key=idempotency_key)
+        action_item_id = action_items_db.create_action_item(
+            uid, action_item_data, idempotency_key=_client_idempotency_key(idempotency_key)
+        )
     except FirestoreContentionExhausted as exc:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:

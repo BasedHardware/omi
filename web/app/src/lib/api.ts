@@ -349,6 +349,7 @@ export async function createActionItem(
 ): Promise<ActionItem> {
   return fetchWithAuth<ActionItem>('/v1/action-items', {
     method: 'POST',
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
     body: JSON.stringify(params),
   });
 }
