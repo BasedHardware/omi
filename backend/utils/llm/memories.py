@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, Dict, List, Literal, Optional, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -669,7 +669,7 @@ def run_daily_sweep_summary_agent(
     max_candidates: int = 8,
     max_transcript_fetches: int = 8,
     max_fetch_characters: int = 8_000,
-    memory_searcher: Optional[Any] = None,
+    memory_searcher: Optional[Callable[[str], Sequence[str]]] = None,
     max_memory_lookups: int = 4,
     cache_key: Optional[str] = None,
     llm: Optional[Any] = None,
@@ -711,10 +711,12 @@ def run_daily_sweep_summary_agent(
             query = str(getattr(lookup, "query", "") or "").strip()[:200]
             if not query:
                 continue
-            try:
-                results = list(memory_searcher(query) or []) if callable(memory_searcher) else []
-            except Exception:
-                results = []
+            results: List[str] = []
+            if memory_searcher is not None:
+                try:
+                    results = [str(item) for item in memory_searcher(query)]
+                except Exception:
+                    results = []
             rendered = "\n".join(f"- {str(item)[:400]}" for item in results[:10]) or "- (no matches)"
             sections.append(f"Q: {query}\n{rendered}")
         return "\n\n".join(sections)
