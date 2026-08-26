@@ -1347,12 +1347,12 @@ async def execute_agentic_chat_stream(
                 logger.error('Could not get prompt metadata error_type=%s', type(error).__name__)
 
             # Core tools (fixed order). JIT-only tools are withheld unless the
-            # server-owned rollout admitted this user; order is preserved.
-            core_tools = [
-                tool
-                for tool in CORE_TOOLS
-                if jit_conversation_retrieval_enabled or tool.name not in JIT_ONLY_TOOL_NAMES
-            ]
+            # server-owned rollout admitted this user; order is preserved. Both
+            # branches copy CORE_TOOLS (never mutate it) per the prompt-cache
+            # optimization contract.
+            core_tools = list(CORE_TOOLS)
+            if not jit_conversation_retrieval_enabled:
+                core_tools = [tool for tool in core_tools if tool.name not in JIT_ONLY_TOOL_NAMES]
 
             # Dynamic app tools — deferred for Anthropic; exposed directly in managed mode
             app_tools = []
