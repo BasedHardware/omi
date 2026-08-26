@@ -57,6 +57,7 @@ class CleanupSampleItem(BaseModel):
 class CleanupCandidateMeta(BaseModel):
     id: str
     strategy: str
+    description: str
 
 
 class CleanupPreviewResponse(BaseModel):
@@ -71,6 +72,9 @@ class CleanupPreviewResponse(BaseModel):
 
 class CleanupExecuteRequest(BaseModel):
     session_id: str
+    excluded_ids: List[str] = Field(
+        default_factory=list, description="Candidate IDs from the preview to keep (not delete)"
+    )
 
 
 class CleanupExecuteResponse(BaseModel):
@@ -178,7 +182,9 @@ def cleanup_preview(request: CleanupPreviewRequest, uid: str = Depends(auth.get_
         breakdown=breakdown,
         sample=sample,
         candidate_ids=[c['id'] for c in candidates],
-        candidate_meta=[CleanupCandidateMeta(id=c['id'], strategy=c['strategy']) for c in candidates],
+        candidate_meta=[
+            CleanupCandidateMeta(id=c['id'], strategy=c['strategy'], description=c['description']) for c in candidates
+        ],
         expires_in_seconds=_SESSION_TTL,
     )
 
@@ -192,7 +198,8 @@ def cleanup_execute(request: CleanupExecuteRequest, uid: str = Depends(auth.get_
     session = _load_session(uid, request.session_id)
 
     if session:
-        ids = session['ids']
+        excluded = set(request.excluded_ids)
+        ids = [i for i in session['ids'] if i not in excluded]
         _delete_session(uid, request.session_id)
     else:
         # Session expired — recompute from stored parameters

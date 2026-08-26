@@ -137,6 +137,20 @@ class TestCleanupPreview:
         assert result.breakdown["stale_age"] == 3
         assert result.breakdown["vague"] == 3
 
+    def test_candidate_meta_includes_description_for_every_candidate(self, router, monkeypatch):
+        # candidate_meta backs per-item review/exclusion in the UI, so it must carry
+        # the full description for every candidate, not just the capped sample.
+        many = [{"id": f"t{i}", "description": f"task {i}", "strategy": "stale_age"} for i in range(10)]
+        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: many)
+        monkeypatch.setattr(router, "merge_candidates", lambda lists: lists[0] if lists else [])
+        monkeypatch.setattr(router, "_save_session", lambda *a, **kw: None)
+
+        req = router.CleanupPreviewRequest(strategies=["stale_age"])
+        result = router.cleanup_preview(req, uid="uid-1")
+
+        assert len(result.candidate_meta) == 10
+        assert {(m.id, m.description) for m in result.candidate_meta} == {(f"t{i}", f"task {i}") for i in range(10)}
+
 
 # ---------------------------------------------------------------------------
 # Execute endpoint
@@ -225,3 +239,47 @@ class TestCleanupExecute:
         assert len(vector_calls) == 1
         assert len(notify_calls) == 1
         assert notify_calls[0]["user_id"] == "uid-1"
+
+    def test_excluded_ids_are_kept_out_of_deletion(self, router, monkeypatch):
+        ids = ["t1", "t2", "t3"]
+        monkeypatch.setattr(
+            router,
+            "_load_session",
+            lambda uid, sid: {"ids": ids, "strategies": ["stale_age"], "age_days": 90},
+        )
+        monkeypatch.setattr(router, "_delete_session", lambda *a, **kw: None)
+        deleted_arg = []
+        monkeypatch.setattr(
+            router.action_items_db,
+            "delete_action_items_batch",
+            lambda uid, id_list: deleted_arg.append(id_list) or id_list,
+        )
+        monkeypatch.setattr(router, "delete_action_item_vectors_batch", lambda *a, **kw: None)
+        monkeypatch.setattr(router, "send_action_items_batch_deletion_message", lambda **kw: None)
+
+        req = router.CleanupExecuteRequest(session_id="sess-1", excluded_ids=["t2"])
+        result = router.cleanup_execute(req, uid="uid-1")
+
+        assert deleted_arg == [["t1", "t3"]]
+        assert result.deleted_count == 2
+
+    def test_excluding_every_candidate_deletes_nothing(self, router, monkeypatch):
+        ids = ["t1", "t2"]
+        monkeypatch.setattr(
+            router,
+            "_load_session",
+            lambda uid, sid: {"ids": ids, "strategies": ["stale_age"], "age_days": 90},
+        )
+        monkeypatch.setattr(router, "_delete_session", lambda *a, **kw: None)
+        delete_called = []
+        monkeypatch.setattr(
+            router.action_items_db,
+            "delete_action_items_batch",
+            lambda *a, **kw: delete_called.append(True) or [],
+        )
+
+        req = router.CleanupExecuteRequest(session_id="sess-1", excluded_ids=["t1", "t2"])
+        result = router.cleanup_execute(req, uid="uid-1")
+
+        assert result.deleted_count == 0
+        assert delete_called == [], "delete must not be called when every candidate is excluded"
