@@ -313,7 +313,7 @@ sed -i "s|^OMI_LLM_GATEWAY_SERVICE_TOKEN=.*|OMI_LLM_GATEWAY_SERVICE_TOKEN=$TOK|"
 #   OMI_LLM_GATEWAY_FEATURE_MODE=gateway · OMI_LLM_GATEWAY_URL=http://llm_gateway:9080 ·
 #   OMI_LLM_GATEWAY_SERVICE_TOKEN=$TOK · OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
 # Pin the chat model to one your endpoint serves (all features -> one local model):
-#   deploy/onprem/helm/omi-oss/files/generated_route_overrides.yaml   (default: qwen2.5:14b)
+#   deploy/onprem/helm/omi-oss/files/generated_route_overrides.yaml   (default: qwen3-vl:8b-instruct — vision-capable, so ONE model serves every lane)
 docker compose -f compose.dev.yaml --profile chat up -d
 ```
 
@@ -1668,7 +1668,9 @@ Prerequisites:
   (`omi-realm.example.json`) omits `omi-test`/`testuser` (review #5). The client's DEV secret is in the
   realm JSON and in `backend.env.seed(.example)` — they must match; regenerate a strong secret for production.
 - Backend reachable at `--api-url`, validating the same issuer's JWKS. Mongo (`STORAGE_BACKEND=mongo`).
-- Operator LLM (chat, e.g. `qwen2.5:14b` via the gateway) + a 1024-dim embeddings model (`bge-m3`).
+- Operator LLM (chat AND the image lanes, e.g. `qwen3-vl:8b-instruct` via the gateway) + a 1024-dim
+  embeddings model (`bge-m3`). ONE LLM: the reference is vision-capable, so no second model is pulled
+  for `screen_frame_judge`. Embeddings stay their own lane (`OMI_EMBEDDINGS_MODEL`).
 - **`OLLAMA_NUM_PARALLEL=1`** is NOT required, but on a single small GPU concurrent chat + embeddings
   can `cudaMalloc`-OOM; the seeder paces one conversation at a time (`api_wait_enriched`) to stay serial.
 

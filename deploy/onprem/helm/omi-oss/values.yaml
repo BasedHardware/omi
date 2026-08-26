@@ -178,7 +178,7 @@ chat:
     enabled: false
     # The single model your endpoint serves, by its /v1/chat/completions name. Every feature lane is
     # pinned to it — the on-prem posture is one local model, not a per-feature vendor mix.
-    model: "qwen2.5:14b"
+    model: "qwen3-vl:8b-instruct"
     # Shared secret between backend and gateway. A mismatch is a 401 on every chat turn, which the
     # user sees as a canned apology rather than an error: generate one and set it here.
     #   openssl rand -hex 24
