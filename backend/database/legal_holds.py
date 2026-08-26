@@ -26,6 +26,16 @@ LEGAL_HOLD_SCHEMA_VERSION = "legal_hold.v1"
 LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION = "legal_hold_deletion_gate.v1"
 _AUTHORIZED_ISSUERS = frozenset({"admin", "legal_hold_service"})
 _GATE_STATES = frozenset({"running", "failed", "completed"})
+# A gate row whose holder crashed before finishing would otherwise block that
+# account forever: there is no janitor for this collection. A "running" gate
+# older than this bound is treated as abandoned — acquire may take it over and
+# fences stop honoring it. Real destructive operations finish in minutes; the
+# bound is deliberately generous so it can never race a live wipe.
+GATE_STALE_AFTER_SECONDS = 6 * 60 * 60
+# Historical kind written by provider-write paths in earlier builds of this
+# branch. Writers now use ``external_write_fence`` and never own the gate, so
+# a lingering "running" row of this kind is always an abandoned artifact.
+_OBSOLETE_WRITER_GATE_KIND = "external_data_write"
 _ACTIVE_GATE: ContextVar[tuple[str, str, str] | None] = ContextVar("active_legal_hold_deletion_gate", default=None)
 
 
@@ -98,6 +108,16 @@ def _validated_gate(snapshot: Any) -> dict[str, Any] | None:
     return payload
 
 
+def _gate_blocks(gate: dict[str, Any] | None, now: datetime) -> bool:
+    """True when a validated gate row represents a live destructive operation."""
+
+    if gate is None or gate["state"] != "running":
+        return False
+    if gate["kind"] == _OBSOLETE_WRITER_GATE_KIND:
+        return False
+    return (now - gate["started_at"]).total_seconds() < GATE_STALE_AFTER_SECONDS
+
+
 def _assert_hold_inactive(snapshot: Any) -> None:
     hold = _validated_hold(snapshot)
     if hold is not None and hold["active"] is True:
@@ -133,10 +153,7 @@ def _place_legal_hold_transaction(
     account_ref = _document(client, f"account_deletions/{uid}")
     gate = _validated_gate(gate_ref.get(transaction=transaction))
     account = _snapshot_payload(account_ref.get(transaction=transaction), label="account deletion authority")
-    if active and (
-        (gate is not None and gate["state"] == "running")
-        or (account is not None and account.get("wipe_status") == "running")
-    ):
+    if active and (_gate_blocks(gate, now) or (account is not None and account.get("wipe_status") == "running")):
         raise DestructiveOperationInProgress("legal hold cannot overtake deletion already in progress")
     transaction.set(
         hold_ref,
@@ -196,7 +213,10 @@ def _acquire_destructive_operation_transaction(
     if gate is not None and gate["state"] == "running":
         if gate["uid"] == uid and gate["kind"] == kind and gate["token"] == token:
             return
-        raise DestructiveOperationInProgress("another destructive operation owns the account gate")
+        if _gate_blocks(gate, now):
+            raise DestructiveOperationInProgress("another destructive operation owns the account gate")
+        # Abandoned gate (holder crashed, or an obsolete writer-kind row):
+        # take it over rather than leaving the account permanently blocked.
     transaction.set(
         gate_ref,
         {
@@ -304,7 +324,7 @@ def assert_no_destructive_operation_transaction(
 
     gate_ref = _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}")
     gate = _validated_gate(gate_ref.get(transaction=transaction))
-    if gate is not None and gate["state"] == "running":
+    if _gate_blocks(gate, datetime.now(timezone.utc)):
         raise DestructiveOperationInProgress("canonical mutation blocked by destructive operation")
 
 
@@ -331,12 +351,50 @@ def destructive_operation_gate(
     try:
         yield token
     except BaseException:
-        finish_destructive_operation(uid, kind=kind, token=token, outcome="failed", firestore_client=client)
+        # Best-effort release: the original failure must never be masked by a
+        # secondary authority error. An unreleased gate self-expires via the
+        # staleness bound instead of blocking the account forever.
+        try:
+            finish_destructive_operation(uid, kind=kind, token=token, outcome="failed", firestore_client=client)
+        except Exception:
+            pass
         raise
     else:
         finish_destructive_operation(uid, kind=kind, token=token, outcome="completed", firestore_client=client)
     finally:
         _ACTIVE_GATE.reset(reset)
+
+
+@contextmanager
+def external_write_fence(uid: str, *, firestore_client: Any | None = None) -> Iterator[None]:
+    """Fence one owner-scoped provider write against destructive operations.
+
+    Unlike ``destructive_operation_gate`` this takes no lock and writes
+    nothing: it performs two plain reads and raises when the account is being
+    deleted or a live destructive operation owns the gate. Concurrent provider
+    writes for one account therefore never contend with each other — the
+    exclusive gate is reserved for genuinely destructive work. The residual
+    race (a write already in flight when deletion begins) is closed by the
+    deletion side, which verifies its purges left nothing behind and fails
+    closed otherwise.
+    """
+
+    if not uid:
+        raise LegalHoldAuthorityUnavailable("external write fence requires a uid")
+    client = firestore_client or get_firestore_client()
+    account_payload = _snapshot_payload(
+        _document(client, f"account_deletions/{uid}").get(), label="account deletion authority"
+    )
+    account_status = normalize_account_deletion_status(
+        marker_exists=account_payload is not None,
+        raw_status=account_payload.get("wipe_status") if account_payload is not None else None,
+    )
+    if account_deletion_blocks_access(account_status):
+        raise DestructiveOperationInProgress("external data write blocked by account deletion")
+    gate = _validated_gate(_document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}").get())
+    if _gate_blocks(gate, datetime.now(timezone.utc)):
+        raise DestructiveOperationInProgress("external data write blocked by destructive operation")
+    yield None
 
 
 def current_destructive_operation_token(uid: str, *, kind: str) -> str:
@@ -360,6 +418,7 @@ __all__ = [
     "assert_no_destructive_operation_transaction",
     "current_destructive_operation_token",
     "destructive_operation_gate",
+    "external_write_fence",
     "finish_destructive_operation",
     "place_legal_hold",
 ]

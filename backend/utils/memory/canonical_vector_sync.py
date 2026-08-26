@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Optional
 
-from database._client import db as default_db_client
-from database.legal_holds import destructive_operation_gate
 from models.memory_evidence import SourceState
 from models.product_memory import (
     RESTRICTED_SENSITIVITY_LABELS,
@@ -60,12 +58,8 @@ def sync_canonical_memory_vector(
     try:
         from database.vector_db import upsert_canonical_memory_vector
 
-        with destructive_operation_gate(
-            item.uid,
-            kind="external_data_write",
-            firestore_client=db_client if db_client is not None else default_db_client,
-        ):
-            result = upsert_canonical_memory_vector(item, projection_commit_id=projection_commit_id)
+        # upsert_canonical_memory_vector carries its own external-write fence.
+        result = upsert_canonical_memory_vector(item, projection_commit_id=projection_commit_id)
     except Exception:
         logger.exception(
             "canonical vector sync failed memory_id=%s uid=%s",

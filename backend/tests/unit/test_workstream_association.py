@@ -592,7 +592,7 @@ def test_derived_vector_index_returns_ids_only_and_uses_versioned_namespace(monk
     fake = FakeIndex()
     monkeypatch.setattr(vector_db, 'index', fake)
     monkeypatch.setattr(vector_db, 'embeddings', SimpleNamespace(embed_query=lambda text: [0.1, 0.2]))
-    monkeypatch.setattr(vector_db, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(vector_db, 'external_write_fence', lambda *args, **kwargs: nullcontext())
 
     assert vector_db.upsert_workstream_association_vector(
         'uid-1',

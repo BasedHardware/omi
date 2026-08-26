@@ -90,6 +90,7 @@ def _install_storage_import_stubs(monkeypatch):
         "database.legal_holds": _module(
             "database.legal_holds",
             destructive_operation_gate=MagicMock(),
+            external_write_fence=MagicMock(),
         ),
         "utils.encryption": _module("utils.encryption"),
         "utils.cloud_tasks": _module(

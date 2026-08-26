@@ -91,11 +91,11 @@ def test_real_gcs_owner_write_is_blocked_before_mutation(monkeypatch):
     monkeypatch.setattr(storage_mod, '_uses_real_gcs_bucket', lambda value: True)
 
     @contextmanager
-    def blocked_gate(uid, *, kind='external_data_write', firestore_client=None):
+    def blocked_gate(uid, *, firestore_client=None):
         raise RuntimeError('account deletion owns gate')
         yield  # pragma: no cover
 
-    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', blocked_gate)
+    monkeypatch.setattr(storage_mod, 'external_write_fence', blocked_gate)
     upload = MagicMock()
     monkeypatch.setattr(blob, 'upload_from_filename', upload, raising=False)
     monkeypatch.setattr(bucket, 'blob', lambda name: blob)
@@ -133,11 +133,11 @@ def test_uid_scoped_temporary_sync_upload_is_fenced(monkeypatch):
     monkeypatch.setattr(storage_mod, '_uses_real_gcs_bucket', lambda value: True)
 
     @contextmanager
-    def blocked_gate(uid, *, kind='external_data_write', firestore_client=None):
+    def blocked_gate(uid, *, firestore_client=None):
         raise RuntimeError('account deletion owns gate')
         yield  # pragma: no cover
 
-    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', blocked_gate)
+    monkeypatch.setattr(storage_mod, 'external_write_fence', blocked_gate)
 
     with pytest.raises(RuntimeError, match='owns gate'):
         storage_mod.upload_syncing_temporal_file('syncing/uid1/job/input.bin')

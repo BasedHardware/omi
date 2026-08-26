@@ -157,7 +157,7 @@ class _UnlockDb:
 
 def test_unlock_all_memories_updates_legacy_and_canonical_lock_fields(monkeypatch):
     fake = _UnlockDb()
-    monkeypatch.setattr(memories, "destructive_operation_gate", lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(memories, "external_write_fence", lambda *args, **kwargs: nullcontext())
 
     memories.unlock_all_memories("u1", firestore_client=fake)
 

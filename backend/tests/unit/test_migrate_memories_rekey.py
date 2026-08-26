@@ -52,13 +52,12 @@ def enc(monkeypatch):
     monkeypatch.setattr(memories, "encryption", FakeEnc)
 
     @contextmanager
-    def allow_external_write(uid, *, kind, firestore_client):
+    def allow_external_write(uid, *, firestore_client=None):
         assert uid == "newuid"
-        assert kind == "external_data_write"
         assert firestore_client is not None
-        yield "writer-token"
+        yield None
 
-    monkeypatch.setattr(memories, "destructive_operation_gate", allow_external_write)
+    monkeypatch.setattr(memories, "external_write_fence", allow_external_write)
     return FakeEnc
 
 
@@ -137,13 +136,12 @@ def test_mixed_batch_rekeys_only_enhanced(enc):
 
 def test_destination_deletion_fence_blocks_background_migration_before_any_copy(enc, monkeypatch):
     @contextmanager
-    def blocked_external_write(uid, *, kind, firestore_client):
+    def blocked_external_write(uid, *, firestore_client=None):
         assert uid == "newuid"
-        assert kind == "external_data_write"
         raise DestructiveOperationInProgress("account deletion owns destination")
         yield  # pragma: no cover
 
-    monkeypatch.setattr(memories, "destructive_operation_gate", blocked_external_write)
+    monkeypatch.setattr(memories, "external_write_fence", blocked_external_write)
     db, batch = _make_db([{"id": "m1", "content": "private", "data_protection_level": "standard"}])
 
     with pytest.raises(DestructiveOperationInProgress, match="account deletion"):

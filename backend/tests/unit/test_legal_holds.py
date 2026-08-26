@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from datetime import timedelta
 
 from database import legal_holds
 
@@ -54,14 +55,14 @@ class _FakeClient:
         return _Transaction(self)
 
 
-def _gate(*, token="token-1", state="running"):
+def _gate(*, token="token-1", state="running", kind="explicit_memory_deletion", started_at=None):
     return {
         "schema_version": "legal_hold_deletion_gate.v1",
         "uid": "uid1",
-        "kind": "explicit_memory_deletion",
+        "kind": kind,
         "token": token,
         "state": state,
-        "started_at": legal_holds.datetime.now(legal_holds.timezone.utc),
+        "started_at": started_at or legal_holds.datetime.now(legal_holds.timezone.utc),
         "finished_at": None,
     }
 
@@ -205,7 +206,10 @@ def test_irreversible_transaction_revalidates_matching_hold_and_gate():
         )
 
 
-def test_external_writer_and_deletion_gate_have_exactly_one_owner():
+def test_obsolete_writer_gate_never_blocks_deletion_acquisition():
+    """Provider writes no longer own the gate; a lingering writer-kind row is
+    always an abandoned artifact and must not block destructive work."""
+
     now = legal_holds.datetime.now(legal_holds.timezone.utc)
     client = _FakeClient()
 
@@ -213,10 +217,75 @@ def test_external_writer_and_deletion_gate_have_exactly_one_owner():
         client.transaction(), client, "uid1", "external_data_write", "writer-token", now
     )
 
+    legal_holds._acquire_destructive_operation_transaction.to_wrap(
+        client.transaction(), client, "uid1", "account_deletion", "delete-token", now
+    )
+    assert client.docs["legal_hold_deletion_gates/uid1"]["kind"] == "account_deletion"
+
+
+def test_live_destructive_gate_still_has_exactly_one_owner():
+    now = legal_holds.datetime.now(legal_holds.timezone.utc)
+    client = _FakeClient()
+
+    legal_holds._acquire_destructive_operation_transaction.to_wrap(
+        client.transaction(), client, "uid1", "account_deletion", "delete-token", now
+    )
+
     with pytest.raises(legal_holds.DestructiveOperationInProgress):
         legal_holds._acquire_destructive_operation_transaction.to_wrap(
-            client.transaction(), client, "uid1", "account_deletion", "delete-token", now
+            client.transaction(), client, "uid1", "explicit_memory_deletion", "memory-token", now
         )
+
+
+def test_stale_destructive_gate_is_taken_over_instead_of_bricking_the_account():
+    """A gate whose holder crashed self-expires: without this, one crash between
+    acquire and finish permanently blocks every gated operation for the uid."""
+
+    now = legal_holds.datetime.now(legal_holds.timezone.utc)
+    stale_started = now - timedelta(seconds=legal_holds.GATE_STALE_AFTER_SECONDS + 60)
+    client = _FakeClient(
+        {"legal_hold_deletion_gates/uid1": _gate(kind="account_deletion", token="dead-token", started_at=stale_started)}
+    )
+
+    legal_holds._acquire_destructive_operation_transaction.to_wrap(
+        client.transaction(), client, "uid1", "explicit_memory_deletion", "new-token", now
+    )
+    gate = client.docs["legal_hold_deletion_gates/uid1"]
+    assert gate["token"] == "new-token"
+    assert gate["kind"] == "explicit_memory_deletion"
+
+
+def test_external_write_fence_takes_no_lock_and_allows_concurrency():
+    client = _FakeClient()
+
+    with legal_holds.external_write_fence("uid1", firestore_client=client):
+        # A second concurrent write for the same account must not contend.
+        with legal_holds.external_write_fence("uid1", firestore_client=client):
+            pass
+    assert "legal_hold_deletion_gates/uid1" not in client.docs
+
+
+def test_external_write_fence_blocks_during_account_deletion():
+    client = _FakeClient({"account_deletions/uid1": {"wipe_status": "accepted"}})
+
+    with pytest.raises(legal_holds.DestructiveOperationInProgress, match="account deletion"):
+        with legal_holds.external_write_fence("uid1", firestore_client=client):
+            raise AssertionError("write must not proceed")
+
+
+def test_external_write_fence_blocks_during_live_destructive_gate_but_not_stale():
+    now = legal_holds.datetime.now(legal_holds.timezone.utc)
+    client = _FakeClient({"legal_hold_deletion_gates/uid1": _gate(kind="explicit_memory_deletion", token="live-token")})
+    with pytest.raises(legal_holds.DestructiveOperationInProgress):
+        with legal_holds.external_write_fence("uid1", firestore_client=client):
+            raise AssertionError("write must not proceed")
+
+    stale_started = now - timedelta(seconds=legal_holds.GATE_STALE_AFTER_SECONDS + 60)
+    client.docs["legal_hold_deletion_gates/uid1"] = _gate(
+        kind="explicit_memory_deletion", token="dead-token", started_at=stale_started
+    )
+    with legal_holds.external_write_fence("uid1", firestore_client=client):
+        pass
 
 
 def test_account_deletion_marker_blocks_stale_external_writer_before_provider_work():

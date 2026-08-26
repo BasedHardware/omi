@@ -53,6 +53,7 @@ sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenErr
 
 legal_holds_stub = types.ModuleType('database.legal_holds')
 legal_holds_stub.destructive_operation_gate = lambda *_args, **_kwargs: nullcontext()
+legal_holds_stub.external_write_fence = lambda *_args, **_kwargs: nullcontext()
 sys.modules['database.legal_holds'] = legal_holds_stub
 
 # Stub `utils.llm.clients.embeddings` only. Don't overwrite `utils` or

@@ -81,6 +81,7 @@ def vector_db():
         yield "writer-token"
 
     legal_holds_stub.destructive_operation_gate = allow_external_provider_write
+    legal_holds_stub.external_write_fence = allow_external_provider_write
 
     fakes = {
         "pinecone": pinecone_stub,

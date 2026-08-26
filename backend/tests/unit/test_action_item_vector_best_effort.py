@@ -38,7 +38,7 @@ class _EmbeddingsOutage:
 def embeddings_down(monkeypatch):
     monkeypatch.setattr(vector_db, 'index', MagicMock(), raising=False)
     monkeypatch.setattr(vector_db, 'embeddings', _EmbeddingsOutage(), raising=False)
-    monkeypatch.setattr(vector_db, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(vector_db, 'external_write_fence', lambda *args, **kwargs: nullcontext())
 
 
 def test_upsert_action_item_vector_degrades_to_none(embeddings_down):

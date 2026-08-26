@@ -23,7 +23,7 @@ else:
 from google.cloud.exceptions import NotFound, NotFound as BlobNotFound
 
 from database.redis_db import cache_signed_url, get_cached_signed_url, delete_cached_signed_url
-from database.legal_holds import destructive_operation_gate
+from database.legal_holds import external_write_fence
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
 from utils.observability.fallback import record_fallback
@@ -113,11 +113,13 @@ def _uses_real_gcs_bucket(bucket: Any) -> bool:
 def owner_storage_write_gate(uid: str, bucket: Any = None):
     """Fence one owner-scoped GCS mutation against account deletion.
 
-    The gate is deliberately acquired after authorization/encoding but before
-    the upload/copy call. Account deletion owns the same per-account gate and
-    therefore either waits for this mutation to finish or prevents it from
-    starting. Local/offline providers and injected test buckets remain
-    hermetic and do not need Firestore authority.
+    The fence is checked after authorization/encoding but before the
+    upload/copy call: a write is refused while the account is being deleted
+    or a destructive operation owns the account gate. It takes no lock, so
+    concurrent uploads for one account never contend with each other; the
+    deletion side verifies its purges left nothing behind. Local/offline
+    providers and injected test buckets remain hermetic and do not need
+    Firestore authority.
     """
 
     if not uid:
@@ -127,8 +129,8 @@ def owner_storage_write_gate(uid: str, bucket: Any = None):
     if stage in {'local', 'offline'} or provider_mode == 'offline' or not _uses_real_gcs_bucket(bucket):
         yield None
         return
-    with destructive_operation_gate(uid, kind='external_data_write') as token:
-        yield token
+    with external_write_fence(uid):
+        yield None
 
 
 def _owner_uid_from_sync_path(file_path: str) -> Optional[str]:

@@ -279,13 +279,13 @@ def _universal_memory(monkeypatch):
     monkeypatch.setattr(atom_index, "ensure_canonical_apply_control_state", lambda *args, **kwargs: None)
 
     @contextmanager
-    def allow_external_provider_write(uid, *, kind, firestore_client):
+    def allow_external_provider_write(uid, *, kind="explicit_memory_deletion", firestore_client=None):
         assert uid
         assert kind in {"external_data_write", "explicit_memory_deletion"}
         assert firestore_client is not None
         yield "writer-token"
 
-    monkeypatch.setattr(atom_index, "destructive_operation_gate", allow_external_provider_write)
+    monkeypatch.setattr(atom_index, "external_write_fence", allow_external_provider_write)
     monkeypatch.setattr(canonical_adapter, "destructive_operation_gate", allow_external_provider_write)
     monkeypatch.setattr(
         canonical_adapter,

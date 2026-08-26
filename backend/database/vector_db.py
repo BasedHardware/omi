@@ -13,7 +13,7 @@ from pinecone import Pinecone
 
 from database import projection_repair
 from database._client import db as default_db_client
-from database.legal_holds import destructive_operation_gate
+from database.legal_holds import external_write_fence
 from database.memory_vector_metadata import (
     build_archive_memory_vector_filter,
     build_canonical_memory_vector_delete_filter,
@@ -47,11 +47,7 @@ def _account_external_data_write(func: Callable[..., R]) -> Callable[..., R]:
         uid = account.uid if isinstance(account, MemoryItem) else account
         if not isinstance(uid, str) or not uid:
             raise ValueError("provider mutation requires an account identity")
-        with destructive_operation_gate(
-            uid,
-            kind="external_data_write",
-            firestore_client=default_db_client,
-        ):
+        with external_write_fence(uid, firestore_client=default_db_client):
             return func(account, *args, **kwargs)
 
     return wrapped

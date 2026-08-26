@@ -15,7 +15,7 @@ from typing import Any, Collection, Dict, List, Optional, cast
 
 from database._client import db as default_db_client
 from database.memory_vector_metadata import canonical_memory_provider_id
-from database.legal_holds import destructive_operation_gate
+from database.legal_holds import external_write_fence
 from models.knowledge_ledger_search import (
     LEDGER_INDEX_VERSION,
     LEDGER_SEARCH_KINDS,
@@ -269,19 +269,15 @@ def upsert_atom_keyword_doc(item: MemoryItem, *, db_client: Any = None) -> bool:
         return False
     try:
         client = db_client if db_client is not None else default_db_client
-        with destructive_operation_gate(
-            item.uid,
-            kind="external_data_write",
-            firestore_client=client,
-        ):
+        with external_write_fence(item.uid, firestore_client=client):
             ensure_memories_collection()
             if item.ledger_schema_version == "knowledge_ledger.v1":
                 ensure_ledger_keyword_schema()
             doc = build_atom_keyword_document(item)
             documents = _typesense_client().collections[memories_collection_name()].documents
-            # The account-wide gate linearizes this provider write against
-            # explicit/account deletion; a stale rebuild cannot upsert after
-            # privacy cleanup reports success.
+            # The fence refuses this provider write while explicit/account
+            # deletion owns the account gate; a stale rebuild cannot upsert
+            # after privacy cleanup reports success.
             documents.delete({"filter_by": _provider_identity_delete_filter(item.uid, item.memory_id)})
             documents.upsert(doc)
         return True

@@ -24,7 +24,7 @@ from database.firestore_index_registry import (
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
 )
 from database.memory_collections import MemoryCollections
-from database.legal_holds import destructive_operation_gate
+from database.legal_holds import external_write_fence
 from database import short_term_memories as short_term_db
 from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
@@ -43,7 +43,7 @@ def _account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(function)
     def wrapped(uid: str, *args: Any, **kwargs: Any) -> Any:
         database = _get_db(kwargs.get("firestore_client"))
-        with destructive_operation_gate(uid, kind="external_data_write", firestore_client=database):
+        with external_write_fence(uid, firestore_client=database):
             return function(uid, *args, **kwargs)
 
     return wrapped
@@ -53,7 +53,7 @@ def _destination_account_write_gated(function: Callable[..., Any]) -> Callable[.
     @wraps(function)
     def wrapped(prev_uid: str, new_uid: str, *args: Any, **kwargs: Any) -> Any:
         database = _get_db(kwargs.get("firestore_client"))
-        with destructive_operation_gate(new_uid, kind="external_data_write", firestore_client=database):
+        with external_write_fence(new_uid, firestore_client=database):
             return function(prev_uid, new_uid, *args, **kwargs)
 
     return wrapped
