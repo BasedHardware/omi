@@ -184,7 +184,7 @@ git -C "$REPO" reset -q --hard
 printf 'const c = {d:1}\n' >"$REPO/web/frontend/src/a.ts"
 printf 'void main() {   }\n' >"$REPO/app/lib/main.dart"
 git -C "$REPO" add -A
-rm -rf "$REPO/web/frontend/node_modules" "$STUBS/flutter"
+rm -rf "$REPO/web/frontend/node_modules"
 run_hook OMI_SKIP_WEB_FORMAT=1 OMI_SKIP_DART_FORMAT=1 >/dev/null
 test "$(cat "$REPO/web/frontend/src/a.ts")" = "const c = {d:1}"
 test "$(cat "$REPO/app/lib/main.dart")" = "void main() {   }"
