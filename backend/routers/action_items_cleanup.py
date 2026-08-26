@@ -111,6 +111,17 @@ def cleanup_preview(request: CleanupPreviewRequest, uid: str = Depends(auth.get_
     if 'vague' in request.strategies:
         strategy_fns['vague'] = lambda: candidates_vague(uid)
 
+    if not strategy_fns:
+        return CleanupPreviewResponse(
+            session_id='',
+            total_candidates=0,
+            breakdown={},
+            sample=[],
+            candidate_ids=[],
+            candidate_meta=[],
+            expires_in_seconds=_SESSION_TTL,
+        )
+
     results: dict[str, list] = {}
     with ThreadPoolExecutor(max_workers=len(strategy_fns)) as pool:
         futures = {pool.submit(fn): name for name, fn in strategy_fns.items()}
