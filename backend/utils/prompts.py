@@ -583,15 +583,25 @@ You are forming durable memories about {user_name} from ONE completed day of the
 
 Today's date is {current_date}; treat it as the present.
 
+These conversations were captured by {user_name}'s own always-on recorder, so {user_name} is a participant in nearly all of them. Summaries often refer to {user_name} impersonally as "Speaker", "the speaker", or "the user" — read those as {user_name} unless the summary clearly attributes the words to a named other person. In raw transcript excerpts, first-person voice ("I", "my") is usually {user_name}.
+
 You are given every conversation from that day as a SUMMARY (id, time, category, title, overview). You see the whole day at once: connect related conversations, merge repeated mentions into one memory, and prefer the day's strongest evidence.
 
-**What makes a good memory**: a fact about {user_name} (or a clearly attributed fact about someone in their life) that was expensive to learn and will matter later — decisions, preferences, relationships, commitments, plans, corrections of earlier beliefs. Not summaries of what happened, not trivia, not speculation.
+**What makes a good memory**: a fact that was expensive to learn and will STILL MATTER IN 30 DAYS — decisions, relationships, preferences, commitments, plans, agreed numbers/terms, corrections of earlier beliefs. Apply that 30-day test ruthlessly: an open bug, this week's logistics, or an in-progress task is NOT a memory unless it encodes a decision or a standing commitment. Not summaries of what happened, not trivia, not speculation.
 
 **Rules**:
-- At most {max_candidates} memories. Fewer good ones beat many weak ones. An empty list is a valid answer.
+- At most {max_candidates} memories, ONE fact per memory (never weld two facts together). Fewer good ones beat many weak ones — never pad toward the maximum. An empty list is a valid answer.
+- Cover the day's high-salience facts FIRST: money amounts and financial commitments, unit economics and business metrics, stated intent toward a named company or person, identity facts, and any decision whose consequence outlasts this week. Only then, and only if slots remain, may an operational fact appear — and only when it encodes a standing policy or number, never meeting logistics, dashboard state, or where something is stored.
+- Write every memory in active voice with a named actor: "{user_name} decided…", "Josh advised…". Never "the user", "the speaker", or passives like "X was invited". If the actor cannot be identified, request the transcript or drop the memory.
+- Label every memory's basis honestly and bind the verb to it: "decided" (a commitment is on tape — only then may you write decided/committed/is doing), "proposed" (write proposed/suggested/is considering), or "observed". A topic that was discussed with no outcome is NOT a memory — drop it, never soften it.
+- Personal attributes need first-person proof. A claim about someone's health, diet, habits, possessions, finances, or character requires that person's own words ("I take…", "my machines…"). A topic merely discussed or recommended in their presence is NEVER their attribute or regimen. A judgment about a named person is stored as someone's assessment ("X assessed that…"), never as fact.
+- A fact about another person is only a memory when it matters to {user_name}'s life — phrase it through that relationship.
 - Every memory MUST cite the conversation id(s) it came from in conversation_ids.
 - Do NOT repeat anything from the existing memories list below.
-- If a memory hinges on a specific detail (a name, number, date, amount, or exact commitment) that the summary does not state precisely, do NOT guess: instead add a transcript_request for that conversation (at most {max_transcript_fetches}) and leave the uncertain memory out or mark what needs verification in its content. You will see the raw transcript excerpts in a follow-up.
+- NEVER guess the direction of an invitation, offer, payment, request, or commitment (who invited whom, who owes whom, who committed to what). If a summary is passive or ambiguous about who did what — including any use of "Speaker" where the actor matters — add a transcript_request for that conversation instead of guessing.
+- If a memory hinges on a specific detail (a name, number, date, amount, or exact commitment) that the summary does not state precisely, do NOT guess: add a transcript_request for that conversation (at most {max_transcript_fetches}) and leave the uncertain memory out. You will see the raw transcript excerpts in a follow-up.
+- When in doubt about whether to request a transcript: request it. A verified memory is worth far more than a plausible one.
+- Do NOT defer your whole answer to verification: write every memory the summaries already support cleanly in THIS pass, and use transcript_requests only for the specific facts that need them.
 - Raw transcripts are noisy speech-to-text; summaries are your primary source.
 
 {folder_task}
@@ -614,11 +624,15 @@ You are finalizing durable memories about {user_name} from ONE completed day of 
 
 Today's date is {current_date}; treat it as the present.
 
-In a first pass over the day's summaries you drafted memories and requested raw transcript excerpts to verify specific details. The excerpts are below. Raw transcripts are noisy speech-to-text: use them only to confirm or correct specifics.
+In a first pass over the day's summaries you drafted memories and requested raw transcript excerpts to verify specific details. The excerpts are below. Raw transcripts are noisy speech-to-text: use them only to confirm or correct specifics. These conversations were captured by {user_name}'s own recorder: first-person voice ("I", "my") in an excerpt is usually {user_name} speaking, which settles who-did-what questions the summaries left ambiguous.
 
 **Rules**:
-- Return the FINAL list of at most {max_candidates} memories, citing conversation_ids for each.
-- Correct any drafted memory the transcript contradicts; drop any memory whose key detail you still cannot verify.
+- Return the FINAL list of at most {max_candidates} memories, ONE fact per memory, citing conversation_ids for each. Never pad toward the maximum.
+- Write every memory in active voice with a named actor ("{user_name} …", "Josh …"), never "the user", "the speaker", or passives.
+- Correct any drafted memory the transcript contradicts; drop any memory whose key detail — including the direction of an invitation, offer, or commitment — you still cannot verify.
+- Bind every verb to its basis: decided/committed only when a commitment is on tape; proposed/suggested/is considering for proposals; a topic discussed with no outcome is dropped, never softened.
+- Personal attributes need first-person proof; a topic discussed or recommended in someone's presence is never their attribute. A judgment about a named person is stored as someone's assessment, never as fact.
+- Keep only what will still matter in 30 days: decisions, relationships, preferences, commitments, agreed terms. Drop transient operational state.
 - Do NOT repeat anything from the existing memories list.
 - Do not request more transcripts; transcript_requests must be empty.
 

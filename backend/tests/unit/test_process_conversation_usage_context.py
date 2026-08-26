@@ -1242,11 +1242,11 @@ def test_all_callsites_use_get_llm():
         kg_calls.count('knowledge_graph') == 2
     ), f"Expected 2 get_llm('knowledge_graph') calls, got {kg_calls.count('knowledge_graph')}"
 
-    # memories.py: 6 callsites (memories x3 incl. the memory-log extract SSOT, learnings x1,
-    # memory_category x1, memory_conflict x1)
+    # memories.py: 7 callsites (memories x4 incl. the memory-log extract SSOT and the
+    # daily-sweep summary agent, learnings x1, memory_category x1, memory_conflict x1)
     mem_source = (backend_dir / "utils" / "llm" / "memories.py").read_text(encoding="utf-8")
     mem_calls = re.findall(r"get_llm\(\s*'(\w+)'", mem_source)
-    assert mem_calls.count('memories') == 3, f"Expected 3 get_llm('memories') calls, got {mem_calls.count('memories')}"
+    assert mem_calls.count('memories') == 4, f"Expected 4 get_llm('memories') calls, got {mem_calls.count('memories')}"
     assert 'learnings' in mem_calls, "Missing get_llm('learnings') in memories.py"
     assert 'memory_category' in mem_calls, "Missing get_llm('memory_category') in memories.py"
     assert 'memory_conflict' in mem_calls, "Missing get_llm('memory_conflict') in memories.py"
@@ -1256,7 +1256,7 @@ def test_all_callsites_use_get_llm():
     # conv_app_result callsite was invisible to it, so the count was calibrated against a scan that
     # silently skipped wrapped calls.
     total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
-    assert total == 19, f"Expected 19 total get_llm() callsites, got {total}"
+    assert total == 20, f"Expected 20 total get_llm() callsites, got {total}"
 
 
 def test_no_direct_llm_instance_usage_in_wired_files():

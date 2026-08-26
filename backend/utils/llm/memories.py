@@ -611,6 +611,10 @@ class DailySweepAgentMemory(BaseModel):
     conversation_ids: List[str] = Field(
         default=[], description="Ids of the conversations this memory came from (at least one)"
     )
+    basis: str = Field(
+        default="",
+        description="The memory's evidentiary basis: 'decided' (commitment on tape), 'proposed', or 'observed'",
+    )
 
 
 class DailySweepTranscriptRequest(BaseModel):
@@ -732,7 +736,7 @@ def _sanitized_daily_sweep_output(
         content = " ".join((memory.content or "").split())
         if not cited or not content:
             continue
-        memories.append(DailySweepAgentMemory(content=content, conversation_ids=cited))
+        memories.append(DailySweepAgentMemory(content=content, conversation_ids=cited, basis=memory.basis))
         if len(memories) >= max(0, max_candidates):
             break
     assignments = [
