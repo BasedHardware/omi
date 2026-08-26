@@ -1,3 +1,0 @@
-{
-  "change": "Agent cloud VMs now require auth on health checks so database status is not publicly readable"
-}

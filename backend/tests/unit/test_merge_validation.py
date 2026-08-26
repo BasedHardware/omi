@@ -104,8 +104,11 @@ def merge():
     canonical_activation_stub = ModuleType("utils.memory.canonical_activation")
     setattr(canonical_activation_stub, "canonical_write_enabled", MagicMock(return_value=False))
 
-    surface_routing_stub = ModuleType("utils.memory.surface_routing")
-    setattr(surface_routing_stub, "pin_memory_system", MagicMock(return_value=_MemorySystem.LEGACY))
+    # The retraction-scope helpers decide whether a source's canonical retraction
+    # can be skipped; only the delete path in perform_merge_async calls them.
+    retraction_scope_stub = ModuleType("utils.memory.retraction_scope")
+    for _name in ["canonical_intake_is_fenced", "historical_source_conversation_ids", "retraction_can_be_skipped"]:
+        setattr(retraction_scope_stub, _name, MagicMock())
 
     fakes: dict[str, ModuleType] = {
         "database": database_pkg,
@@ -121,7 +124,7 @@ def merge():
         "utils.memory.memory_service": memory_service_stub,
         "utils.memory.memory_system": memory_system_stub,
         "utils.memory.canonical_activation": canonical_activation_stub,
-        "utils.memory.surface_routing": surface_routing_stub,
+        "utils.memory.retraction_scope": retraction_scope_stub,
     }
     fakes.update(model_stubs)
 

@@ -27,6 +27,9 @@ struct AgentRuntimeFailure: Equatable, Sendable {
   let adapterId: String?
   let provider: String?
   let retryable: Bool?
+  let recoveryAction: String?
+  let recoveryOutcome: String?
+  let retryDisposition: String?
 
   init(
     code: String,
@@ -36,7 +39,10 @@ struct AgentRuntimeFailure: Equatable, Sendable {
     source: String? = nil,
     adapterId: String? = nil,
     provider: String? = nil,
-    retryable: Bool? = nil
+    retryable: Bool? = nil,
+    recoveryAction: String? = nil,
+    recoveryOutcome: String? = nil,
+    retryDisposition: String? = nil
   ) {
     self.code = code
     self.failureCode = failureCode
@@ -46,6 +52,9 @@ struct AgentRuntimeFailure: Equatable, Sendable {
     self.adapterId = adapterId
     self.provider = provider
     self.retryable = retryable
+    self.recoveryAction = recoveryAction
+    self.recoveryOutcome = recoveryOutcome
+    self.retryDisposition = retryDisposition
   }
 
   var displayMessage: String {
@@ -78,7 +87,10 @@ struct AgentRuntimeFailure: Equatable, Sendable {
       source: payload["source"] as? String,
       adapterId: payload["adapterId"] as? String,
       provider: payload["provider"] as? String,
-      retryable: payload["retryable"] as? Bool
+      retryable: payload["retryable"] as? Bool,
+      recoveryAction: payload["recoveryAction"] as? String,
+      recoveryOutcome: payload["recoveryOutcome"] as? String,
+      retryDisposition: payload["retryDisposition"] as? String
     )
   }
 }

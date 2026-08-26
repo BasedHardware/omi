@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/utils/mutex.dart';
@@ -95,6 +96,9 @@ class SyncUploadGate {
   }) async {
     await _uploadMutex.acquire();
     try {
+      if (!AccountCutoverRuntime.instance.allowsOfflineQueueUpload) {
+        throw const SyncOfflineQueueQuarantinedException();
+      }
       // Honor an active Retry-After without immediately probing fair-use
       // status. Lifecycle/manual entry points may reconcile active state, but
       // queued parallel uploads must stop at the established cooldown.
@@ -131,4 +135,12 @@ class SyncUploadGate {
       _uploadMutex.release();
     }
   }
+}
+
+/// Raised when the server cutover control quarantines legacy offline uploads.
+class SyncOfflineQueueQuarantinedException implements Exception {
+  const SyncOfflineQueueQuarantinedException();
+
+  @override
+  String toString() => 'SyncOfflineQueueQuarantinedException';
 }

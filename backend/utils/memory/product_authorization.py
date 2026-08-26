@@ -469,7 +469,7 @@ def authorize_memory_product_memory_route(
     """Authorize a memory product memory route before any `memory_items` access.
 
     The shared seam performs the server-side decision in one place:
-    global read gate/kill switch first, then persisted per-user rollout/grant
+    global read gate/kill switch first, then optional persisted consumer-grant
     state, and for Archive routes both explicit Archive intent and persisted
     Archive capability. It never creates a default policy with Archive enabled.
     """
@@ -500,9 +500,8 @@ def authorize_memory_product_memory_route(
     rollout = rollout_reader(uid=context.uid, db_client=db_client, consumer=context.consumer)
     rollout_observability = _rollout_observability(rollout, context)
 
-    # Rollout normalization already encodes grant + projection gates in
-    # `read_decision` (including SHADOW_ONLY / USE_LEGACY_SAFE / explicit-deny
-    # and Archive-capability outcomes with their exact reason strings).
+    # Shared normalization encodes the universal default plus explicit consumer
+    # grant denial and Archive capability outcomes in `read_decision`.
     if rollout.read_decision != MemoryReadDecision.USE_MEMORY:
         return _deny(
             context=context,

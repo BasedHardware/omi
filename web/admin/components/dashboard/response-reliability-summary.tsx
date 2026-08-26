@@ -22,6 +22,7 @@ import {
   type ResponseReliabilityPayload,
   type ResponseReliabilitySeries,
 } from "@/lib/response-reliability";
+import { latestPeriodChange } from "@/lib/period-change";
 
 const tooltipStyle = {
   backgroundColor: "hsl(var(--card))",
@@ -51,6 +52,12 @@ const rateWithCounts = (
   success: number,
   failure: number,
 ): string => `${formatRate(value)} (${success}/${success + failure})`;
+
+function combinedSuccessRate(point: ReliabilityDailyPoint): number | null {
+  const success = point.chatSuccess + point.voiceSuccess;
+  const total = success + point.chatFailure + point.voiceFailure;
+  return total > 0 ? (success / total) * 100 : null;
+}
 
 function ChannelReliabilityChart({
   data,
@@ -239,6 +246,11 @@ export function useResponseReliabilityItems({
       {
         id: "response-reliability-production",
         title: "Production response reliability",
+        periodChange: latestPeriodChange(
+          coveredByChannel.production,
+          combinedSuccessRate,
+          "vs previous day",
+        ),
         subtitle: subtitle("production"),
         icon: <MessageSquare className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 5 },
@@ -247,6 +259,11 @@ export function useResponseReliabilityItems({
       {
         id: "response-reliability-beta",
         title: "Beta response reliability",
+        periodChange: latestPeriodChange(
+          coveredByChannel.beta,
+          combinedSuccessRate,
+          "vs previous day",
+        ),
         subtitle: subtitle("beta"),
         icon: <Mic2 className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 5 },

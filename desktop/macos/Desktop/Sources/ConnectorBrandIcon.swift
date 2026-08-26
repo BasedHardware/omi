@@ -247,10 +247,10 @@ struct ConnectorBrandIcon: View {
   var body: some View {
     ZStack {
       RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
+        .fill(Ink.wash)
         .overlay(
           RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            .stroke(Ink.separator, lineWidth: 1)
         )
 
       if brand == .agents {
@@ -260,7 +260,7 @@ struct ConnectorBrandIcon: View {
         // X's wordmark glyph — no SF Symbol or app icon exists for it.
         Text("𝕏")
           .font(.system(size: size * 0.5, weight: .bold))
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
       } else if let image = ConnectorBrandImageLoader.image(for: brand) {
         Image(nsImage: image)
           .resizable()
@@ -270,7 +270,7 @@ struct ConnectorBrandIcon: View {
       } else {
         Image(systemName: brand.fallbackSymbol)
           .font(.system(size: size * 0.38, weight: .semibold))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .frame(width: size, height: size)

@@ -376,6 +376,9 @@ class _PlansSheetState extends State<PlansSheet> {
     // Check if user is upgrading from monthly to annual
     final provider = context.read<UsageProvider>();
     final currentSub = provider.subscription?.subscription;
+    if (currentSub?.cancelAtPeriodEnd == true && priceId != currentSub?.currentPriceId) {
+      return;
+    }
     // Only show "no charge until renewal" dialog for same-tier monthly→annual switch.
     // Cross-tier changes are immediate+prorated on the backend, not deferred.
     final currentTierName = currentSub?.plan.wireName; // backend plan_id, e.g. 'plus', 'unlimited_v2'
@@ -483,7 +486,7 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     if (selectedPrice == null) {
-      AppSnackbar.showSnackbarError('Selected plan is not available. Please try again.');
+      AppSnackbar.showSnackbarError(context.l10n.selectedPlanNotAvailable);
       return;
     }
 
@@ -897,9 +900,9 @@ class _PlansSheetState extends State<PlansSheet> {
                               builder: (context) {
                                 final hasScheduledUpgrade = _hasScheduledUpgrade();
                                 if (hasScheduledUpgrade) {
-                                  return const Text(
-                                    'Upgrade Scheduled',
-                                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                  return Text(
+                                    context.l10n.upgradeScheduled,
+                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                                   );
                                 } else {
                                   return Text(
@@ -917,15 +920,13 @@ class _PlansSheetState extends State<PlansSheet> {
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             if (hasScheduledUpgrade) {
                               return Text(
-                                'Your upgrade to the annual plan is already scheduled',
+                                context.l10n.upgradeAlreadyScheduled,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
                               );
                             } else {
                               return Text(
-                                isUnlimited
-                                    ? context.l10n.youAreOnAPaidPlan
-                                    : 'Choose your plan to unlock unlimited Omi.',
+                                isUnlimited ? context.l10n.youAreOnAPaidPlan : context.l10n.planSheetChooseYourPlan,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
                               );
@@ -946,14 +947,14 @@ class _PlansSheetState extends State<PlansSheet> {
                               if (periodEnded) {
                                 // Scenario B: Must create new subscription
                                 return Text(
-                                  'Your plan ended on $renewalDate.\nResubscribe now - you\'ll be charged immediately for a new billing period.',
+                                  context.l10n.planEndedOn(renewalDate),
                                   textAlign: TextAlign.center,
                                   style: TextStyle(fontSize: 14, color: Colors.orange.shade400),
                                 );
                               } else {
                                 // Scenario A: Can reactivate without charge
                                 return Text(
-                                  'Your plan is set to cancel on $renewalDate.\nResubscribe now to keep your benefits - no charge until $renewalDate.',
+                                  context.l10n.planSetToCancelOn(renewalDate),
                                   textAlign: TextAlign.center,
                                   style: TextStyle(fontSize: 14, color: Colors.blue.shade400),
                                 );
@@ -967,13 +968,13 @@ class _PlansSheetState extends State<PlansSheet> {
                               final hasScheduledUpgrade = _hasScheduledUpgrade();
                               if (hasScheduledUpgrade) {
                                 return Text(
-                                  'Your annual plan will start automatically when your monthly plan ends.',
+                                  context.l10n.annualPlanStartsAutomatically,
                                   textAlign: TextAlign.center,
                                   style: TextStyle(color: Colors.deepPurple.shade400, fontSize: 14),
                                 );
                               } else {
                                 return Text(
-                                  'Your plan renews on $renewalDate.',
+                                  context.l10n.planRenewsOn(renewalDate),
                                   textAlign: TextAlign.center,
                                   style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
                                 );
@@ -986,18 +987,24 @@ class _PlansSheetState extends State<PlansSheet> {
                         ...[
                           Column(
                             children: [
-                              _buildFeatureItem(faIcon: FontAwesomeIcons.infinity, text: 'Unlimited conversations'),
+                              _buildFeatureItem(
+                                faIcon: FontAwesomeIcons.infinity,
+                                text: context.l10n.unlimitedConversations,
+                              ),
                               const SizedBox(height: 16),
                               _buildFeatureItem(
                                 faIcon: FontAwesomeIcons.solidComments,
-                                text: 'Ask Omi anything about your life',
+                                text: context.l10n.askOmiAnything,
                               ),
                               const SizedBox(height: 16),
-                              _buildFeatureItem(faIcon: FontAwesomeIcons.brain, text: 'Unlock Omi\'s infinite memory'),
+                              _buildFeatureItem(
+                                faIcon: FontAwesomeIcons.brain,
+                                text: context.l10n.unlockOmiInfiniteMemory,
+                              ),
                               const SizedBox(height: 16),
                               _buildFeatureItem(
                                 faIcon: FontAwesomeIcons.globe,
-                                text: 'Available on Mac, mobile, and web',
+                                text: context.l10n.availableOnMacMobileWeb,
                               ),
                             ],
                           ),
@@ -1049,7 +1056,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       const Icon(Icons.schedule, color: Colors.deepPurple, size: 32),
                                       const SizedBox(height: 8),
                                       Text(
-                                        'Upgrade Scheduled!',
+                                        context.l10n.upgradeScheduled,
                                         style: TextStyle(
                                           color: Colors.deepPurple.shade300,
                                           fontSize: 16,
@@ -1058,7 +1065,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        'Your annual plan will start automatically when your monthly plan ends.',
+                                        context.l10n.annualPlanStartsAutomatically,
                                         textAlign: TextAlign.center,
                                         style: TextStyle(color: Colors.deepPurple.shade400, fontSize: 14),
                                       ),
@@ -1079,7 +1086,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       const Icon(Icons.check_circle_outline, color: Colors.blue, size: 32),
                                       const SizedBox(height: 8),
                                       Text(
-                                        'You\'re on the Annual Plan',
+                                        context.l10n.youreOnAnnualPlan,
                                         style: TextStyle(
                                           color: Colors.blue.shade300,
                                           fontSize: 16,
@@ -1088,7 +1095,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        'You already have the best value plan. No changes needed.',
+                                        context.l10n.alreadyBestValuePlan,
                                         textAlign: TextAlign.center,
                                         style: TextStyle(color: Colors.blue.shade400, fontSize: 14),
                                       ),
@@ -1162,18 +1169,24 @@ class _PlansSheetState extends State<PlansSheet> {
                         _buildPromoCodeField(),
                         const SizedBox(height: 16),
 
-                        // Continue/Keep Unlimited button - only show for non-annual unlimited users
+                        // Continue/Upgrade — hidden for same-tier annual (nothing to
+                        // change) and for desktop-plan → mobile-tier switches.
                         Builder(
                           builder: (context) {
                             final currentPlan = _getCurrentPlanDetails();
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton = !isOnAnnualPlan &&
-                                !hasScheduledUpgrade &&
-                                !isCancelled &&
-                                !usageProvider.isLoadingPlans &&
-                                usageProvider.availablePlans != null;
+                            final currentSub = usageProvider.subscription?.subscription;
+                            final shouldShowContinueButton = shouldShowPlanContinueButton(
+                              isOnAnnualPlan: isOnAnnualPlan,
+                              hasScheduledUpgrade: hasScheduledUpgrade,
+                              isCancelled: isCancelled,
+                              plansLoaded: !usageProvider.isLoadingPlans && usageProvider.availablePlans != null,
+                              selectedTierId: selectedTierId,
+                              currentTierId: currentSub?.plan.wireName,
+                              currentGrantsDesktop: currentSub?.plan.grantsDesktop ?? false,
+                            );
 
                             if (!shouldShowContinueButton) {
                               return const SizedBox.shrink();
@@ -1236,7 +1249,7 @@ class _PlansSheetState extends State<PlansSheet> {
                         if (!isUnlimited) ...[
                           const SizedBox(height: 32),
                           Text(
-                            'Omi is free, but freemium has limits that affect your experience:',
+                            context.l10n.freemiumLimitsIntro,
                             textAlign: TextAlign.center,
                             style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
                           ),
@@ -1255,7 +1268,7 @@ class _PlansSheetState extends State<PlansSheet> {
                               const SizedBox(height: 12),
                               _buildLimitationItem(
                                 icon: FontAwesomeIcons.clock,
-                                text: '5-7 second delay (not real-time)',
+                                text: context.l10n.downgradeLimitDelayNotRealTime,
                               ),
                               const SizedBox(height: 12),
                               _buildLimitationItem(
@@ -1296,9 +1309,9 @@ class _PlansSheetState extends State<PlansSheet> {
                                             width: 20,
                                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey),
                                           )
-                                        : const Text(
-                                            'Downgrade to Freemium',
-                                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                                        : Text(
+                                            context.l10n.downgradeToFreemiumAction,
+                                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                                           ),
                                   ),
                                 ),
@@ -1365,7 +1378,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           },
                         ),
                         const SizedBox(height: 16),
-                        if (isUnlimited == true && !isCancelled) ...[
+                        if (isUnlimited == true || sub?.stripeSubscriptionId?.isNotEmpty == true) ...[
                           SizedBox(
                             width: double.infinity,
                             height: 50,
@@ -1384,6 +1397,12 @@ class _PlansSheetState extends State<PlansSheet> {
                                       ),
                                     ),
                                   );
+                                  // The user may have paid an overdue invoice or
+                                  // recovered a canceled plan inside the portal, so
+                                  // refresh subscription state on return instead of
+                                  // leaving the UI showing Free until a manual reload.
+                                  await provider.fetchSubscription();
+                                  await provider.loadAvailablePlans();
                                 } else {
                                   AppSnackbar.showSnackbarError(l10n.couldNotOpenPaymentSettings);
                                 }
@@ -1398,15 +1417,17 @@ class _PlansSheetState extends State<PlansSheet> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: () {
-                              _handleCancelSubscription();
-                            },
-                            child: Text(
-                              context.l10n.cancelSubscription,
-                              style: const TextStyle(color: Colors.red, fontSize: 16),
+                          if (isUnlimited == true && !isCancelled) ...[
+                            TextButton(
+                              onPressed: () {
+                                _handleCancelSubscription();
+                              },
+                              child: Text(
+                                context.l10n.cancelSubscription,
+                                style: const TextStyle(color: Colors.red, fontSize: 16),
+                              ),
                             ),
-                          ),
+                          ],
                           const SizedBox(height: 8),
                         ],
                       ],
@@ -1671,7 +1692,7 @@ class _PlansSheetState extends State<PlansSheet> {
             child: _buildDynamicPlanOption(
               isSelected: isSelected,
               planData: planDataWithName,
-              saveTag: isYearly ? annualSaveTag(tierPlans) : null,
+              saveTag: isYearly ? _monthsFreeLabel(annualMonthsFree(tierPlans)) : null,
               isPopular: eyebrow == 'Most popular',
               featureSummary: planSubtitle,
               features: planFeatures,
@@ -1694,7 +1715,7 @@ class _PlansSheetState extends State<PlansSheet> {
         _buildDynamicPlanOption(
           isSelected: selectedPlan == 'yearly',
           planData: plans.firstWhere((plan) => plan['interval'] == 'year', orElse: () => plans.first),
-          saveTag: annualSaveTag(plans),
+          saveTag: _monthsFreeLabel(annualMonthsFree(plans)),
           isPopular: true,
           onTap: () {
             HapticFeedback.lightImpact();
@@ -1797,9 +1818,9 @@ class _PlansSheetState extends State<PlansSheet> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                        child: const Text(
-                          'POPULAR',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.popularBadge,
+                          style: const TextStyle(
                             color: Colors.black,
                             fontSize: 9,
                             fontWeight: FontWeight.w600,
@@ -1862,7 +1883,7 @@ class _PlansSheetState extends State<PlansSheet> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              'Ends on $endsOnDate',
+                              context.l10n.endsOnDate(endsOnDate),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 9,
@@ -2046,7 +2067,7 @@ class _PlansSheetState extends State<PlansSheet> {
       saveTag: saveTag,
       isPopular: isPopular,
       title: title,
-      subtitle: interval == 'year' ? '12 months / \$${unitAmount / 100}' : null,
+      subtitle: interval == 'year' ? context.l10n.annualBillingSummary(12, '\$${unitAmount / 100}') : null,
       monthlyPrice: priceString,
       onTap: isActive ? () {} : onTap,
       isActive: isActive && !isCancelled,
@@ -2074,6 +2095,8 @@ class _PlansSheetState extends State<PlansSheet> {
     }
   }
 
+  String? _monthsFreeLabel(int? months) => months == null ? null : context.l10n.monthsFreeBadge(months);
+
   Widget _buildDesktopAccessRow(bool granted) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -2084,7 +2107,7 @@ class _PlansSheetState extends State<PlansSheet> {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              granted ? 'Works on Desktop' : "Doesn't work on Desktop",
+              granted ? context.l10n.worksOnDesktop : context.l10n.noDesktopAccess,
               style: TextStyle(
                 color: granted ? Colors.grey[300] : Colors.red[300],
                 fontSize: 12,
@@ -2143,12 +2166,12 @@ class _PlansSheetState extends State<PlansSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Get Free Unlimited Access',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                    Text(
+                      context.l10n.getFreeUnlimitedAccess,
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 4),
-                    Text('Training data program', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+                    Text(context.l10n.trainingDataProgram, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
                   ],
                 ),
               ),
@@ -2209,12 +2232,12 @@ class _PlansSheetState extends State<PlansSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Get Free Unlimited Access',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                    Text(
+                      context.l10n.getFreeUnlimitedAccess,
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 4),
-                    Text('Your request is under review', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+                    Text(context.l10n.yourRequestUnderReview, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
                   ],
                 ),
               ),
@@ -2242,12 +2265,12 @@ class _PlansSheetState extends State<PlansSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Get Free Unlimited Access',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  Text(
+                    context.l10n.getFreeUnlimitedAccess,
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
-                  Text('Share data for training', style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+                  Text(context.l10n.shareDataForTraining, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
                 ],
               ),
             ),

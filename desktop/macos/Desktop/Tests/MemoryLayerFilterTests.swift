@@ -139,10 +139,19 @@ final class MemoryLayerFilterTests: XCTestCase {
   func testLegacyDeviceScopeFallbackDoesNotLocallyHideUnprovenancedMemories() throws {
     let source = try memoriesPageSource()
 
-    // omi-test-quality: source-inspection -- static contract: local device filtering must not run unless the backend advertises device provenance, avoiding silent hiding of unprovenanced memories
+    // omi-test-quality: source-inspection -- static contract: the page must reach device scoping only
+    // through the one shared guardrail, so a second reader of the view model cannot obey a copy of the
+    // rule that lives inside this page's private recompute. The *behaviour* — an account the backend
+    // cannot scope keeps its unprovenanced rows instead of emptying the list — is covered by
+    // MemoryVisibilityGuardrailTests.testDeviceScopeIsNotAppliedLocallyWhenTheBackendCannotSupportIt,
+    // which exercises the policy rather than asserting on this file's text.
     XCTAssertTrue(
+      source.contains("MemoryPageProjection.guardrailed("),
+      "The page must apply device scope through the shared guardrail, not a private copy."
+    )
+    XCTAssertFalse(
       source.contains("if filterThisDeviceOnly && deviceScopeSupported {"),
-      "The local device matcher must run only when the backend can provide device provenance."
+      "The in-page copy of the device-scope branch must not come back; it is what leaked archive to Home."
     )
   }
 

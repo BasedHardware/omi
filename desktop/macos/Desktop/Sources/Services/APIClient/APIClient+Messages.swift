@@ -105,6 +105,9 @@ extension APIClient {
     fileURLs: [URL],
     conversationId: String? = nil
   ) async throws -> UploadLocalFilesResult {
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      throw APIError.accountCutoverOfflineQueueBlocked
+    }
     guard var components = URLComponents(string: baseURL + "v2/sync-local-files") else {
       throw APIError.invalidResponse
     }

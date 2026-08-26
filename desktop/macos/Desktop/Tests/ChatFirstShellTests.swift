@@ -12,6 +12,39 @@ final class ChatFirstShellTests: XCTestCase {
     )
   }
 
+  private func conversation(id: String) -> ServerConversation {
+    ServerConversation(
+      id: id,
+      createdAt: Date(timeIntervalSince1970: 1_000),
+      updatedAt: Date(timeIntervalSince1970: 1_001),
+      startedAt: Date(timeIntervalSince1970: 1_000),
+      finishedAt: Date(timeIntervalSince1970: 1_060),
+      structured: Structured(
+        title: "Meeting notes",
+        overview: "Overview",
+        emoji: "",
+        category: "other",
+        actionItems: [],
+        events: []
+      ),
+      transcriptSegments: [],
+      transcriptSegmentsIncluded: false,
+      geolocation: nil,
+      photos: [],
+      appsResults: [],
+      source: .desktop,
+      language: "en",
+      status: .completed,
+      discarded: false,
+      deleted: false,
+      isLocked: false,
+      starred: false,
+      folderId: nil,
+      inputDeviceName: nil,
+      deferred: false
+    )
+  }
+
   func testSuccessfulSampleSelectsChatFirstAndCannotLiveSwap() throws {
     var sample = ChatFirstShellCapabilitySample()
     sample.resolve(
@@ -42,6 +75,25 @@ final class ChatFirstShellTests: XCTestCase {
 
     XCTAssertTrue(projection.chatFirstUi)
     XCTAssertEqual(projection.controlGeneration, 9)
+  }
+
+  func testOnlyLegacyShellUsesThePostOnboardingFloatingPopup() {
+    var enabled = ChatFirstShellCapabilitySample()
+    enabled.resolve(
+      control: enabledControl(),
+      requestedOwnerID: "owner-a",
+      ownerIsStillCurrent: true
+    )
+
+    XCTAssertFalse(
+      DesktopShellPresentationPolicy.usesLegacyPostOnboardingPopup(false, enabled.variant),
+      "chat-first starter prompts belong to the main chat")
+    XCTAssertTrue(
+      DesktopShellPresentationPolicy.usesLegacyPostOnboardingPopup(false, .legacy),
+      "the server-selected legacy shell retains its floating prompt")
+    XCTAssertTrue(
+      DesktopShellPresentationPolicy.usesLegacyPostOnboardingPopup(true, enabled.variant),
+      "the explicit legacy preference remains authoritative")
   }
 
   func testMissingStaleAndOwnerChangedSamplesFailClosed() {
@@ -91,18 +143,59 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertFalse(restored.isFocusedEntityAcknowledged)
   }
 
-  func testEscapeReturnsToChatFromSecondaryRoutesAndRemainsUnhandledOnChat() throws {
+  func testConversationDeepLinkCarriesFetchedRecordOutsidePaginatedList() throws {
+    let suiteName = "ChatFirstShellTests.conversation-deeplink.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    let fetched = conversation(id: "older-meeting-42")
+    navigation.open(conversation: fetched)
+
+    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.pendingConversation, fetched)
+    XCTAssertNil(navigation.pendingFocus)
+  }
+
+  func testBackNavigationReturnsToChatFromPrimaryAndSettingsRoutes() throws {
     let suiteName = "ChatFirstShellTests.escape-navigation.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let navigation = ChatFirstShellNavigation(defaults: defaults)
-    navigation.selectPrimary(.tasks)
+    for route: ChatFirstRoute in [.tasks, .more(.settings)] {
+      switch route {
+      case .more(let page): navigation.selectMore(page)
+      default: navigation.selectPrimary(route)
+      }
 
-    XCTAssertTrue(navigation.handleEscapeNavigation())
-    XCTAssertEqual(navigation.route, .chat)
+      XCTAssertTrue(navigation.handleEscapeNavigation(), route.stableName)
+      XCTAssertEqual(navigation.route, .chat, route.stableName)
+    }
     XCTAssertFalse(navigation.handleEscapeNavigation())
     XCTAssertEqual(navigation.route, .chat)
+  }
+
+  func testSettingsRouteMountsSectionNavigationAndContentInTheSameDestination() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/ChatFirst/ChatFirstShell.swift")
+    // omi-test-quality: source-inspection -- static contract: SwiftUI settings composition wiring
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+    let moreDestination = try XCTUnwrap(
+      source.components(separatedBy: "private func moreDestination").last
+    )
+    let settingsTail = try XCTUnwrap(
+      moreDestination.components(separatedBy: "case .settings:").dropFirst().first
+    )
+    let settingsDestination = try XCTUnwrap(
+      settingsTail.components(separatedBy: "/// Existing Dashboard").first
+    )
+
+    XCTAssertTrue(settingsDestination.contains("SettingsSidebar("))
+    XCTAssertTrue(settingsDestination.contains("SettingsPage("))
+    XCTAssertTrue(settingsDestination.contains("navigation.handleEscapeNavigation()"))
   }
 
   func testMemoryFocusRequiresTheRequestedMemoryToBeVisibleBeforeAcknowledgement() {
@@ -186,7 +279,10 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertEqual(navigation.route, .more(.settings))
     XCTAssertNil(navigation.pendingFocus)
 
-    navigation.selectLegacyDestination(.chat)
+    // `.chat` was removed from `SidebarNavItem` when the standalone chat page was deleted (Home is
+    // the only chat). Legacy dashboard callbacks now re-enter that canonical Chat route rather than
+    // selecting a second dashboard presentation.
+    navigation.selectLegacyDestination(.dashboard)
     XCTAssertEqual(navigation.route, .chat)
   }
 
@@ -266,6 +362,46 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertEqual(events, [.routeEntered(route: .goals, origin: .chatDeeplink)])
   }
 
+  func testNewerConversationLinkResolutionPreventsAStaleCompletionFromNavigating() throws {
+    let suiteName = "ChatFirstShellTests.conversation-link-resolution.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+
+    let staleResolution = navigation.beginConversationLinkResolution()
+    let currentResolution = navigation.beginConversationLinkResolution()
+
+    XCTAssertFalse(
+      navigation.completeConversationLinkResolution(
+        conversation: conversation(id: "meeting-old"),
+        generation: staleResolution))
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertNil(navigation.pendingConversation)
+    XCTAssertTrue(
+      navigation.completeConversationLinkResolution(
+        conversation: conversation(id: "meeting-new"),
+        generation: currentResolution))
+    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.pendingConversation?.id, "meeting-new")
+  }
+
+  func testDirectNavigationInvalidatesAnInFlightConversationLinkResolution() throws {
+    let suiteName = "ChatFirstShellTests.conversation-link-direct-navigation.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+
+    let resolution = navigation.beginConversationLinkResolution()
+    navigation.selectPrimary(.tasks)
+
+    XCTAssertFalse(
+      navigation.completeConversationLinkResolution(
+        conversation: conversation(id: "meeting-old"),
+        generation: resolution))
+    XCTAssertEqual(navigation.route, .tasks)
+    XCTAssertNil(navigation.pendingConversation)
+  }
+
   func testDirectNavigationInvalidatesAnInFlightGoalLinkResolution() throws {
     let suiteName = "ChatFirstShellTests.goal-link-direct-navigation.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -305,8 +441,8 @@ final class ChatFirstShellTests: XCTestCase {
 
   func testAutomationNavigationVisibilityAcceptsTheMountedShellForSharedNames() {
     XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "settings"), .more(.settings))
-    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "help"), .more(.help))
-    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "home"), .more(.dashboard))
+    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "home"), .chat)
+    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "dashboard"), .chat)
 
     XCTAssertTrue(
       DesktopAutomationNavigationVisibilityPolicy.isTargetVisible(
@@ -400,5 +536,107 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertFalse(
       DesktopShellPresentationPolicy.usesChatFirst(false, .legacy)
     )
+  }
+
+  /// **The legacy shell has no Home stage, and must not claim one.** Its Home is the query surface;
+  /// the only branch there that still mounts `DashboardPage` needs `useLegacyHomeDesign`, which
+  /// renders `legacyHome`. So no value of any input can make the legacy shell report a stage mode.
+  ///
+  /// The bug this replaces reported `hub` for exactly this shell, forever, because the guard was
+  /// written when the non-legacy legacy-shell Home *was* `DashboardPage`. It never read as broken:
+  /// `hub` is a legitimate mode, so `/state` looked healthy while describing a surface that was not
+  /// mounted, and a flow waiting for `chat` waited for a transition nothing could produce.
+  func testTheLegacyShellReportsNoHomeStageModeWhateverItWasLastTold() {
+    for route in [ChatFirstRoute.chat, .more(.dashboard), .tasks] {
+      XCTAssertNil(
+        HomeStageAutomationPolicy.reportedHomeMode(
+          usesChatFirstShell: false,
+          chatFirstRoute: route,
+          lastPublishedMode: "hub"),
+        "the legacy shell renders no stage, so it may not report one even with a route in hand")
+    }
+    XCTAssertNil(
+      HomeStageAutomationPolicy.reportedHomeMode(
+        usesChatFirstShell: false,
+        chatFirstRoute: nil,
+        lastPublishedMode: "connect"))
+  }
+
+  /// On the shell that *does* mount `DashboardPage`, the field carries what that page published —
+  /// unchanged, and `nil` until it has published anything. The shell is a courier here, not a source:
+  /// substituting a default is what turned a missing reading into a false one.
+  func testTheChatFirstShellCarriesTheStageOwnersValueWithoutInventingOne() {
+    for mode in ["hub", "chat", "connect"] {
+      XCTAssertEqual(
+        HomeStageAutomationPolicy.reportedHomeMode(
+          usesChatFirstShell: true,
+          chatFirstRoute: .chat,
+          lastPublishedMode: mode),
+        mode)
+    }
+    XCTAssertNil(
+      HomeStageAutomationPolicy.reportedHomeMode(
+        usesChatFirstShell: true,
+        chatFirstRoute: .chat,
+        lastPublishedMode: nil),
+      "before DashboardPage reports, the honest answer is 'not known', not 'hub'")
+  }
+
+  func testChatFirstGlassBoundaryWrapsOnlyRoutesWithoutTheirOwnPanels() {
+    let wrapped: [ChatFirstRoute] = [
+      .conversations, .tasks, .goals, .memories,
+      .more(.apps), .more(.permissions), .more(.settings),
+    ]
+    let selfContained: [ChatFirstRoute] = [.chat, .more(.dashboard), .more(.rewind)]
+
+    for route in wrapped {
+      XCTAssertTrue(ChatFirstPageGlassLanePolicy.shouldWrap(route), route.stableName)
+      XCTAssertNotEqual(
+        ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: route),
+        SidebarNavItem.dashboard.rawValue,
+        route.stableName)
+      XCTAssertNotEqual(
+        ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: route),
+        SidebarNavItem.rewind.rawValue,
+        route.stableName)
+    }
+    for route in selfContained {
+      XCTAssertFalse(ChatFirstPageGlassLanePolicy.shouldWrap(route), route.stableName)
+    }
+
+    // The memory route mounts the hub, whose Activity page carries Home's own two panels. Wrapping
+    // that one puts glass inside glass and doubles the scrim.
+    XCTAssertFalse(
+      ChatFirstPageGlassLanePolicy.shouldWrap(
+        .memories, memoryDestinationRawValue: MemoryHubDestination.activity.rawValue))
+    for destination in MemoryHubDestination.allCases where destination != .activity {
+      XCTAssertTrue(
+        ChatFirstPageGlassLanePolicy.shouldWrap(
+          .memories, memoryDestinationRawValue: destination.rawValue),
+        destination.title)
+    }
+  }
+
+  /// Only the two routes that mount `DashboardPage` have a stage. Navigating away publishes `nil`
+  /// rather than leaving the last mode standing, which is how the field stops describing a page that
+  /// is no longer on screen.
+  func testOnlyTheRoutesThatMountDashboardPageReportAStage() {
+    XCTAssertTrue(HomeStageAutomationPolicy.mountsHomeStage(.chat))
+    XCTAssertTrue(HomeStageAutomationPolicy.mountsHomeStage(.more(.dashboard)))
+
+    for route: ChatFirstRoute in [
+      .conversations, .tasks, .goals, .memories,
+      .more(.apps), .more(.rewind), .more(.settings), .more(.permissions),
+    ] {
+      XCTAssertFalse(
+        HomeStageAutomationPolicy.mountsHomeStage(route),
+        "\(route.stableName) does not render the stage")
+      XCTAssertNil(
+        HomeStageAutomationPolicy.reportedHomeMode(
+          usesChatFirstShell: true,
+          chatFirstRoute: route,
+          lastPublishedMode: "connect"),
+        "\(route.stableName) must not keep reporting the mode the stage had before we left it")
+    }
   }
 }

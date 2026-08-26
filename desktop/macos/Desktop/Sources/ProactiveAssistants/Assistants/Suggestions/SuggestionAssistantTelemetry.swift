@@ -23,7 +23,6 @@ enum SuggestionAssistantTelemetry {
     case eligible
     case disabled
     case excludedApp = "excluded_app"
-    case snoozed
     case dwell
     case cooldown
     case dailyBudget = "daily_budget"
@@ -34,7 +33,6 @@ enum SuggestionAssistantTelemetry {
       case .evaluate: self = .eligible
       case .skippedDisabled: self = .disabled
       case .skippedExcludedApp: self = .excludedApp
-      case .skippedSnoozed: self = .snoozed
       case .skippedDwell: self = .dwell
       case .skippedCooldown: self = .cooldown
       case .skippedDailyBudget: self = .dailyBudget
@@ -80,6 +78,79 @@ enum SuggestionAssistantTelemetry {
     case over120Seconds = "120s_plus"
   }
 
+  /// Closed failure class for `Suggestion Assistant Evaluation Failed`.
+  /// Raw error strings, URLs, and user content are never accepted.
+  enum EvaluationFailureReason: String, CaseIterable, Sendable {
+    case network
+    case httpStatus4xx = "http_status_4xx"
+    case httpStatus5xx = "http_status_5xx"
+    case rateLimited = "rate_limited"
+    case decodeFailed = "decode_failed"
+    case timeout
+    case cancelled
+    case other
+
+    init(_ error: Error) {
+      self = Self.classify(error)
+    }
+
+    private static func classify(_ error: Error) -> EvaluationFailureReason {
+      if error is CancellationError { return .cancelled }
+      if error is DecodingError { return .decodeFailed }
+      if let urlError = error as? URLError {
+        switch urlError.code {
+        case .timedOut: return .timeout
+        case .cancelled: return .cancelled
+        default: return .network
+        }
+      }
+      if let geminiError = error as? GeminiClient.GeminiClientError {
+        switch geminiError {
+        case .networkError(let underlying):
+          return classify(underlying)
+        case .invalidResponse:
+          return .decodeFailed
+        case .apiError(let message, _):
+          return classifyAPIMessage(message)
+        case .missingAPIKey:
+          return .other
+        }
+      }
+      let nsError = error as NSError
+      if nsError.domain == NSURLErrorDomain {
+        switch nsError.code {
+        case NSURLErrorTimedOut: return .timeout
+        case NSURLErrorCancelled: return .cancelled
+        default: return .network
+        }
+      }
+      let typeName = String(describing: type(of: error))
+      if typeName.contains("SuggestionEvaluationError") { return .decodeFailed }
+      return .other
+    }
+
+    private static func classifyAPIMessage(_ message: String) -> EvaluationFailureReason {
+      if let status = httpStatus(from: message) {
+        if status == 429 { return .rateLimited }
+        if (400..<500).contains(status) { return .httpStatus4xx }
+        if (500..<600).contains(status) { return .httpStatus5xx }
+      }
+      let lower = message.lowercased()
+      if lower.contains("rate limit") || lower.contains("resource exhausted") || lower.contains("quota") {
+        return .rateLimited
+      }
+      if lower.contains("timeout") || lower.contains("timed out") { return .timeout }
+      return .other
+    }
+
+    private static func httpStatus(from message: String) -> Int? {
+      let prefix = "HTTP "
+      guard message.hasPrefix(prefix) else { return nil }
+      let digits = message.dropFirst(prefix.count).prefix(while: \.isNumber)
+      return Int(digits)
+    }
+  }
+
   /// Terminal state after a decoded model yield asks to interrupt the user.
   /// `delivered` is emitted only after the floating bar presents the card;
   /// the existing `Notification Sent` event shares the same presentation point.
@@ -87,6 +158,8 @@ enum SuggestionAssistantTelemetry {
     case delivered
     case filteredLowConfidence = "filtered_low_confidence"
     case filteredDuplicate = "filtered_duplicate"
+    /// A commitment nudge that named work absent from the grounding it was given.
+    case filteredUngroundedCommitment = "filtered_ungrounded_commitment"
     case rejectedOwner = "rejected_owner"
   }
 
@@ -126,17 +199,22 @@ enum SuggestionAssistantTelemetry {
     let memoryCount: Int
     let commitmentCount: Int
     let relatedScreenCount: Int
+    let goalCount: Int
 
     init(model: Model, previewData: Data, grounding: SuggestionGrounding) {
       self.model = model
       imageWidthBucket = Self.imageWidthBucket(for: previewData)
       imageBytesBucket = Self.imageBytesBucket(for: previewData)
-      // The source queries cap these at 15 memories, 25 commitments, and 12
-      // screens. Keep an explicit ceiling here as defense-in-depth if a source
-      // changes before the telemetry contract does.
+      // The source queries cap these at 15 memories, 25 commitments, 12 screens,
+      // and 4 active goals. Keep an explicit ceiling here as defense-in-depth if a
+      // source changes before the telemetry contract does.
       memoryCount = min(max(grounding.memories.count, 0), 15)
       commitmentCount = min(max(grounding.openCommitments.count, 0), 25)
       relatedScreenCount = min(max(grounding.relatedScreens.count, 0), 12)
+      // Goals count toward `SuggestionGrounding.isEmpty`, so a goal-only grounding can be
+      // the sole reason an evaluation is paid for. Leaving it out of the shape would report
+      // grounding_source_count=0 for a spend that did happen.
+      goalCount = min(max(grounding.goals.count, 0), 8)
     }
 
     private static func imageWidthBucket(for data: Data) -> ImageWidthBucket {
@@ -196,10 +274,12 @@ enum SuggestionAssistantTelemetry {
   static func evaluationFailedPayload(
     identity: Identity,
     shape: EvaluationShape,
-    latency: TimeInterval
+    latency: TimeInterval,
+    reason: EvaluationFailureReason
   ) -> [String: Any] {
     var payload = evaluationPayload(identity: identity, shape: shape)
     payload["latency_bucket"] = latencyBucket(latency).rawValue
+    payload["reason"] = reason.rawValue
     return payload
   }
 
@@ -231,9 +311,11 @@ enum SuggestionAssistantTelemetry {
   }
 
   private static func evaluationPayload(identity: Identity, shape: EvaluationShape) -> [String: Any] {
-    let sourceCount = [shape.memoryCount, shape.commitmentCount, shape.relatedScreenCount]
-      .filter { $0 > 0 }
-      .count
+    let sourceCount = [
+      shape.memoryCount, shape.commitmentCount, shape.relatedScreenCount, shape.goalCount,
+    ]
+    .filter { $0 > 0 }
+    .count
     return [
       "evaluation_id": identity.evaluationID.uuidString,
       "model": shape.model.rawValue,
@@ -246,6 +328,8 @@ enum SuggestionAssistantTelemetry {
       "has_commitments": shape.commitmentCount > 0,
       "related_screen_count": shape.relatedScreenCount,
       "has_related_screens": shape.relatedScreenCount > 0,
+      "goal_count": shape.goalCount,
+      "has_goals": shape.goalCount > 0,
     ]
   }
 }

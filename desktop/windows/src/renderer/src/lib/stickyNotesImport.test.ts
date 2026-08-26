@@ -2,11 +2,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock only the network boundary; the real extractNoteMemories synthesis + dedup
-// runs against the mocked desktop client, and the real tagged-write loop runs
-// against the mocked omi client.
-const { desktopPost, omiPost } = vi.hoisted(() => ({ desktopPost: vi.fn(), omiPost: vi.fn() }))
+// runs against the mocked backend connector-synthesis call, and the real
+// tagged-write loop runs against the same mocked omi client.
+const { omiPost } = vi.hoisted(() => ({ omiPost: vi.fn() }))
 vi.mock('./apiClient', () => ({
-  desktopApi: { post: desktopPost },
   omiApi: { post: omiPost }
 }))
 
@@ -17,8 +16,8 @@ import {
   STICKY_PROFILE_TAG
 } from './stickyNotesImport'
 
-function synthReply(obj: unknown): { data: unknown } {
-  return { data: { choices: [{ message: { content: JSON.stringify(obj) } }] } }
+function synthReply(obj: { memories: string[]; profile: string }): { data: unknown } {
+  return { data: { memories: obj.memories, tasks: [], profile: obj.profile } }
 }
 
 function stubStickyRead(result: unknown): void {
@@ -28,7 +27,6 @@ function stubStickyRead(result: unknown): void {
 }
 
 beforeEach(() => {
-  desktopPost.mockReset()
   omiPost.mockReset()
 })
 
@@ -48,7 +46,7 @@ describe('readAndExtractStickyNotes — resting states', () => {
     expect(await readAndExtractStickyNotes([])).toEqual({ status: 'empty', reason: 'no-notes' })
 
     stubStickyRead({ available: true, notes: [{ id: '1', text: 'hi', updatedAt: 0 }] })
-    desktopPost.mockResolvedValue(synthReply({ memories: [], profile: '' }))
+    omiPost.mockResolvedValue(synthReply({ memories: [], profile: '' }))
     expect(await readAndExtractStickyNotes([])).toEqual({
       status: 'empty',
       reason: 'no-new-memories'
@@ -57,7 +55,7 @@ describe('readAndExtractStickyNotes — resting states', () => {
 
   it('returns the synthesized memories + profile on success', async () => {
     stubStickyRead({ available: true, notes: [{ id: '1', text: 'Loves hiking', updatedAt: 0 }] })
-    desktopPost.mockResolvedValue(synthReply({ memories: ['Loves hiking'], profile: 'Outdoorsy.' }))
+    omiPost.mockResolvedValue(synthReply({ memories: ['Loves hiking'], profile: 'Outdoorsy.' }))
     expect(await readAndExtractStickyNotes([])).toEqual({
       status: 'ok',
       memories: ['Loves hiking'],

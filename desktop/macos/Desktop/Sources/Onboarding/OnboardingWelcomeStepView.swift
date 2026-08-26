@@ -25,23 +25,17 @@ struct OnboardingWelcomeStepView: View {
           .textFieldStyle(.plain)
           .padding(.horizontal, OmiSpacing.lg)
           .padding(.vertical, OmiSpacing.md)
-          .background(
-            RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-              .fill(OmiColors.backgroundSecondary)
-              .overlay(
-                RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-                  .stroke(Color.white.opacity(0.08), lineWidth: 1)
-              )
-          )
-          .foregroundColor(OmiColors.textPrimary)
+          .glassField()
+          .foregroundColor(Ink.primary)
           .frame(maxWidth: 320)
           .onSubmit(confirmName)
 
         if let error = coordinator.lastActionError {
           Text(error)
             .font(.system(size: 12, weight: .medium))
-            .foregroundColor(OmiColors.warning)
+            .foregroundColor(PageGlass.warning)
             .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
         }
 
         HStack(spacing: OmiSpacing.md) {
@@ -50,7 +44,7 @@ struct OnboardingWelcomeStepView: View {
           Button("Continue") {
             confirmName()
           }
-          .buttonStyle(OmiButtonStyle(.primary))
+          .buttonStyle(InkButtonStyle(kind: .primary))
           .keyboardShortcut(.defaultAction)
         }
 
@@ -61,8 +55,7 @@ struct OnboardingWelcomeStepView: View {
             onForceComplete?()
           }
           .buttonStyle(.plain)
-          .font(.system(size: 12, weight: .medium))
-          .foregroundColor(OmiColors.textTertiary)
+          .inkStyle(InkType.statusLabel, color: Ink.secondary)
         }
       }
       .frame(maxWidth: .infinity, alignment: .center)

@@ -25,6 +25,7 @@ from utils.integration_telemetry import (
     emit_sync_failed,
     emit_sync_succeeded,
 )
+from utils.share_links import build_share_url
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +172,7 @@ async def write_conversation_link_to_calendar_event(
     """
     Write the conversation link into the Google Calendar event description.
 
-    Appends https://h.omi.me/conversations/<conversation_id> to the event description.
+    Appends a share URL for the conversation to the event description.
     Silently no-ops on any error — linking the conversation to the event is the primary
     action; failing to write the description link should not block the caller.
     """
@@ -184,7 +185,7 @@ async def write_conversation_link_to_calendar_event(
     if not access_token:
         return
 
-    conversation_link = f"https://h.omi.me/conversations/{conversation_id}"
+    conversation_link = build_share_url(f'/conversations/{conversation_id}')
     telemetry_context = IntegrationTelemetryContext(
         integration_name=GOOGLE_CALENDAR,
         operation='write_conversation_link',

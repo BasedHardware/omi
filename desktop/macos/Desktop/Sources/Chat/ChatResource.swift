@@ -408,7 +408,7 @@ private struct ChatResourceCard: View {
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(resource.title)
           .scaledFont(size: isCompact ? OmiType.caption : OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .lineLimit(1)
           .truncationMode(.middle)
         if let subtitle = resource.subtitle, !subtitle.isEmpty {
@@ -440,23 +440,26 @@ private struct ChatResourceCard: View {
     .frame(width: isCompact ? 30 : 36, height: isCompact ? 30 : 36)
   }
 
-  /// Generated artifacts get a slightly brighter, warmer badge so "the agent
-  /// made this" reads differently from a file the user attached, without any
-  /// off-brand accent color.
+  /// Generated artifacts get a slightly stronger badge so "the agent made this" reads differently
+  /// from a file the user attached, without reaching for a hue.
+  ///
+  /// These were white washes, which is what made the badge disappear on the light panel: white at
+  /// 8% over glass is glass. The two glass row washes carry the same one-step difference and
+  /// composite correctly on any ground.
   private var iconBadgeFill: Color {
-    let boost: Double = resource.origin == .generatedArtifact ? 0.05 : 0
-    return Color.white.opacity((isHovering ? 0.14 : 0.08) + boost)
+    let isEmphasized = isHovering || resource.origin == .generatedArtifact
+    return isEmphasized ? Ink.rowFillHover : Ink.rowFill
   }
 
   private var iconTint: Color {
-    resource.origin == .generatedArtifact ? OmiColors.textPrimary : OmiColors.textSecondary
+    resource.origin == .generatedArtifact ? Ink.primary : Ink.secondary
   }
 
   private var subtitleColor: Color {
     if case .failed = resource.state {
-      return OmiColors.warning
+      return PageGlass.warning
     }
-    return OmiColors.textTertiary
+    return Ink.secondary
   }
 
   @ViewBuilder
@@ -467,7 +470,7 @@ private struct ChatResourceCard: View {
     case .failed:
       Image(systemName: "exclamationmark.triangle.fill")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.warning)
+        .foregroundColor(PageGlass.warning)
         .help(resource.subtitle ?? "Unavailable")
     default:
       if resource.canOpen {
@@ -485,7 +488,7 @@ private struct ChatResourceCard: View {
   private var openIndicator: some View {
     Image(systemName: "arrow.up.right")
       .scaledFont(size: isCompact ? OmiType.micro : OmiType.caption, weight: .semibold)
-      .foregroundColor(isHovering ? OmiColors.textSecondary : OmiColors.textQuaternary)
+      .foregroundColor(isHovering ? Ink.primary : Ink.secondary)
       .frame(width: 18, height: 26)
       .omiAnimation(.easeInOut(duration: 0.12), value: isHovering)
   }
@@ -496,11 +499,11 @@ private struct ChatResourceCard: View {
     } label: {
       Image(systemName: didCopyPath ? "checkmark" : "doc.on.clipboard")
         .scaledFont(size: isCompact ? OmiType.caption : OmiType.body, weight: .medium)
-        .foregroundColor(didCopyPath ? OmiColors.success : OmiColors.textTertiary)
+        .foregroundColor(didCopyPath ? Ink.listeningGreen : Ink.secondary)
         .frame(width: 26, height: 26)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous)
-            .fill(Color.white.opacity(isHovering ? 0.08 : 0))
+            .fill(isHovering ? Ink.rowFill : Color.clear)
         )
         .contentShape(RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous))
     }
@@ -583,7 +586,7 @@ private struct ChatResourceCard: View {
         default:
           ProgressView()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
+            .background(Ink.rowFill)
         }
       }
     } else {
@@ -593,26 +596,27 @@ private struct ChatResourceCard: View {
 
   private var fallbackPlaceholder: some View {
     ZStack {
-      OmiColors.backgroundTertiary.opacity(0.6)
+      Ink.rowFill
       Image(systemName: iconName)
         .scaledFont(size: 26)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
   }
 
   // MARK: Styling
 
+  /// The card itself, as a row on the glass rather than an opaque tile over it.
+  ///
+  /// `PageGlass.rowFill` is the shared answer for exactly this state pair, so a resource card and a
+  /// task row are visibly the same object. Only the hoverable card lifts: a card that cannot be
+  /// opened has nothing to promise.
   private var fillColor: Color {
-    let base = OmiColors.backgroundTertiary.opacity(isCompact ? 0.72 : 0.9)
-    return isHovering && resource.canOpen
-      ? OmiColors.backgroundQuaternary.opacity(0.85)
-      : base
+    PageGlass.rowFill(isHovering && resource.canOpen ? .hover : .rest)
   }
 
+  /// Was a white hairline at 14% / 5% — a white line on white glass, i.e. no border at all.
   private var borderColor: Color {
-    isHovering && resource.canOpen
-      ? Color.white.opacity(0.14)
-      : Color.white.opacity(0.05)
+    isHovering && resource.canOpen ? Ink.hairline : Ink.separator
   }
 
   // MARK: Menu

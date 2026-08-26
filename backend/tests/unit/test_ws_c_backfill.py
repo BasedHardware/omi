@@ -81,10 +81,8 @@ from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.canonical_memory_adapter import extraction_memory_id, read_canonical_memories
 from utils.memory.legacy_backfill import (
-    BackfillCohortGateError,
     LegacyBackfillBucket,
     LegacyBackfillRemediationAction,
-    assert_canonical_cohort_for_backfill,
     both_store_canonical_duplicate_exists,
     live_extraction_memory_id_for_legacy_row,
 )
@@ -94,9 +92,9 @@ from tests.unit.test_ws_b_short_term_lifecycle import (
     _PromotionFakeDb,
     _canonical_db_with_control,
     _seed_canonical_short_term,
-    _set_canonical_cohort,
+    _configure_universal_memory,
 )
-from tests.unit.test_ws_i_write_convergence import _stored_item, _trusted_account_generation
+from tests.unit.fixtures.canonical_memory_fakes import _stored_item, _trusted_account_generation
 
 LEGACY_UID = "uid-legacy-backfill"
 NOW_TS = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
@@ -207,35 +205,12 @@ def _seed_legacy_evidence(db: _PromotionFakeDb, rows: list[dict]) -> None:
                 }
 
 
-@pytest.fixture(autouse=True)
-def _canonical_cohort_for_backfill(monkeypatch, request):
-    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort, set_canonical_cohort
-
-    if "test_gate_blocks_non_whitelisted_uid" in request.node.name:
-        clear_canonical_cohort(monkeypatch)
-        return
-    set_canonical_cohort(monkeypatch, LEGACY_UID)
-
-
 @pytest.fixture
 def _trusted_account(monkeypatch):
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
     )
-
-
-def test_gate_blocks_non_whitelisted_uid(_trusted_account):
-    rows = [_legacy_row(legacy_id="leg-gate", content="Gated fact", conversation_id="conv-gate")]
-    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
-    db = _canonical_db_with_control(LEGACY_UID)
-
-    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
-
-    assert report.cohort_gated is True
-    assert report.written_count == 0
-    assert report.errors == ["cohort_gate: uid not in CANONICAL_MEMORY_USERS (use allow_admin_override=True to bypass)"]
-    assert not any(path.startswith(f"users/{LEGACY_UID}/memory_items/") for path in db.docs)
 
 
 def test_manual_note_id_fallback_enables_both_store_dedup(_trusted_account):
@@ -312,61 +287,23 @@ def test_semantic_duplicate_skipped_in_run(_trusted_account):
     assert len(item_paths) == 1
 
 
-def test_admin_override_without_ack_hard_fails(_trusted_account, monkeypatch):
-    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
-
-    clear_canonical_cohort(monkeypatch)
-    uid = "uid-orphan-override"
-    rows = [_legacy_row(legacy_id="leg-orphan", content="Orphan fact", conversation_id="conv-orphan")]
-    rows[0]["uid"] = uid
-    get_non_filtered_fn, _ = _make_non_filtered_store(rows, uid=uid)
-    db = _canonical_db_with_control(uid)
-
-    report = backfill_user(
-        uid,
-        db_client=db,
-        get_non_filtered_memories_fn=get_non_filtered_fn,
-        allow_admin_override=True,
-        acknowledge_non_canonical_uid=False,
-    )
-
-    assert report.cohort_gated is True
-    assert report.written_count == 0
-    assert "acknowledge_non_canonical_uid" in report.errors[0]
-    assert not any(path.startswith(f"users/{uid}/memory_items/") for path in db.docs)
-
-    with pytest.raises(BackfillCohortGateError, match="acknowledge_non_canonical_uid"):
-        assert_canonical_cohort_for_backfill(uid, allow_admin_override=True, acknowledge_non_canonical_uid=False)
-
-
-def test_admin_override_with_ack_writes_and_logs(_trusted_account, monkeypatch, caplog):
-    import logging
-
-    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
-
-    clear_canonical_cohort(monkeypatch)
-    uid = "uid-orphan-override-ok"
-    rows = [_legacy_row(legacy_id="leg-orphan-ok", content="Orphan ok fact", conversation_id="conv-orphan-ok")]
+def test_explicit_uid_repair_uses_universal_authority(_trusted_account):
+    uid = "uid-explicit-repair"
+    rows = [_legacy_row(legacy_id="leg-repair", content="Repair fact", conversation_id="conv-repair")]
     rows[0]["uid"] = uid
     get_non_filtered_fn, _ = _make_non_filtered_store(rows, uid=uid)
     db = _canonical_db_with_control(uid)
     _seed_legacy_evidence(db, rows)
 
-    with caplog.at_level(logging.WARNING, logger="utils.memory.legacy_backfill"):
-        report = backfill_user(
-            uid,
-            db_client=db,
-            get_non_filtered_memories_fn=get_non_filtered_fn,
-            allow_admin_override=True,
-            acknowledge_non_canonical_uid=True,
-            operator_context="test-operator",
-        )
+    report = backfill_user(
+        uid,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+        operator_context="test-operator",
+    )
 
-    assert report.cohort_gated is False
     assert report.completed is True
     assert report.written_count == 1
-    assert any("legacy backfill cohort override" in record.message for record in caplog.records)
-    assert any(getattr(record, "uid", None) == uid for record in caplog.records)
 
 
 def test_dedup_prevents_doubles_when_live_written(monkeypatch, _trusted_account):
@@ -1426,7 +1363,7 @@ def test_count_reconciliation_flags_missing_destination(_trusted_account):
 
 def test_archive_hidden_long_term_visible_in_canonical_read(monkeypatch, _trusted_account):
     uid = "uid-archive-read"
-    _set_canonical_cohort(monkeypatch, uid)
+    _configure_universal_memory(monkeypatch, uid)
     db = _canonical_db_with_control(uid)
     long_term_id = _seed_canonical_short_term(
         db,
@@ -1578,8 +1515,8 @@ def test_fetch_active_legacy_memories_passes_explicit_firestore_client():
     assert calls[0][3] is db_client
 
 
-def test_legacy_read_path_unaffected_for_non_canonical_uid(_trusted_account, monkeypatch):
-    non_canonical_uid = "uid-non-canonical"
+def test_historical_read_path_is_non_mutating_for_arbitrary_uid(_trusted_account, monkeypatch):
+    arbitrary_uid = "uid-arbitrary"
     rows = [_legacy_row(legacy_id="leg-legacy-read", content="Legacy only", conversation_id="conv-lr")]
     get_non_filtered_fn, _ = _make_non_filtered_store(rows)
     db = _canonical_db_with_control(LEGACY_UID)
@@ -1590,25 +1527,34 @@ def test_legacy_read_path_unaffected_for_non_canonical_uid(_trusted_account, mon
     backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
 
     assert _legacy_memory_docs_snapshot(db, LEGACY_UID) == legacy_before
-    assert resolve_memory_system(non_canonical_uid, db_client=db) == MemorySystem.LEGACY
+    assert resolve_memory_system(arbitrary_uid, db_client=db) == MemorySystem.CANONICAL
 
-    non_canonical_rows = [
+    arbitrary_rows = [
         {
             **_legacy_row(legacy_id="leg-nc-1", content="Non-canonical legacy", conversation_id="conv-nc"),
-            "uid": non_canonical_uid,
+            "uid": arbitrary_uid,
         }
     ]
-    _seed_legacy_memories_in_db(db, non_canonical_uid, non_canonical_rows)
-    non_canonical_before = _legacy_memory_docs_snapshot(db, non_canonical_uid)
+    _seed_legacy_memories_in_db(db, arbitrary_uid, arbitrary_rows)
+    arbitrary_before = _legacy_memory_docs_snapshot(db, arbitrary_uid)
 
+    def _index_from_fake_db(uid, limit, offset=0, **kwargs):
+        return _get_memories_from_fake_db(db, uid, limit=limit, offset=offset)
+
+    def _ids_from_fake_db(uid, memory_ids, **kwargs):
+        wanted = set(memory_ids)
+        return [row for row in _get_memories_from_fake_db(db, uid, limit=10_000) if row.get("id") in wanted]
+
+    monkeypatch.setattr("utils.memory.memory_service.memories_db.get_memories", _index_from_fake_db)
     monkeypatch.setattr(
-        "utils.memory.memory_service.memories_db.get_memories",
-        lambda uid, limit, offset=0, **kwargs: _get_memories_from_fake_db(db, uid, limit=limit, offset=offset),
+        "utils.memory.memory_service.memories_db.list_memory_updated_or_created_index",
+        _index_from_fake_db,
     )
+    monkeypatch.setattr("utils.memory.memory_service.memories_db.get_memories_by_ids", _ids_from_fake_db)
     service = MemoryService(db_client=db)
-    legacy_memories = service.read(non_canonical_uid, limit=10)
+    legacy_memories = service.read(arbitrary_uid, limit=10)
 
-    assert _legacy_memory_docs_snapshot(db, non_canonical_uid) == non_canonical_before
+    assert _legacy_memory_docs_snapshot(db, arbitrary_uid) == arbitrary_before
     assert len(legacy_memories) == 1
     assert legacy_memories[0].content == "Non-canonical legacy"
 

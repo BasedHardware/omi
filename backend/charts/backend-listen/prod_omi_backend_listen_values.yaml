@@ -87,6 +87,8 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: REFERRAL_PUBLIC_BASE_URL
+    value: "https://omi.me"
   - name: ACCOUNT_DELETION_DISPATCH_MODE
     value: "cloud_tasks"
   - name: ACCOUNT_DELETION_TASKS_QUEUE
@@ -129,7 +131,23 @@ env:
     value: "prod"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
+  - name: OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED
+    value: "true"
+  - name: CONVERSATION_NOTES_V2_ENABLED
+    value: "false"
+  - name: MEETING_RECEIPT_RECONCILER_ENABLED
+    value: "false"
+  - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
+    value: "true"
+  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
+    value: "false"
+  - name: CONVERSATION_OCR_CONTEXT_ENABLED
+    value: "false"
+  - name: OMI_LLM_CHAT_AGENT_ROUTE
+    value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
+    value: "off"
+  - name: ACCOUNT_CUTOVER_ENFORCEMENT
     value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE
     value: "true"
@@ -140,12 +158,13 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
-  - name: MEMORY_MODE
-    value: "off"
-  - name: MEMORY_ENABLED_USERS
-    value: ""
-  - name: MEMORY_V3_GET_ENABLED
-    value: "false"
+  - name: MEMORY_ENABLED
+    value: "on"
+  - name: MEMORY_V3_CURSOR_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MEMORY_V3_CURSOR_SECRET
   - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
   - name: FAL_KEY
@@ -290,8 +309,15 @@ env:
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
+  - name: DEEPGRAM_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: DEEPGRAM_API_KEY
+  - name: DEEPGRAM_SELF_HOSTED_ENABLED
+    value: "false"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,parakeet"
+    value: "dg-nova-3,modulate-velma-2,parakeet"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS

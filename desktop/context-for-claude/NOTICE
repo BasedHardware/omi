@@ -1,0 +1,68 @@
+Context for Claude
+Copyright (c) 2024 Based Hardware Contributors
+
+This product is part of the Omi repository (https://github.com/BasedHardware/omi)
+and is licensed under the MIT License. See LICENSE in this directory.
+
+--------------------------------------------------------------------------------
+Code carried over from the Omi desktop app
+--------------------------------------------------------------------------------
+
+This package is standalone: it shares no code, no database, and no data directory
+with the Omi desktop app at `desktop/macos/`. Where it needed the same behaviour,
+it was ported — a real copy, adapted — rather than depended upon. Both are under
+the same MIT license and the same copyright above, so the copies carry no separate
+attribution obligation; they are recorded here because knowing what was copied,
+and what was deliberately not, is what makes the port reviewable.
+
+Capture pipeline
+  Sources/ContextApp/Capture/
+  Ported from desktop/macos/Desktop/Sources/ (see README.md).
+
+Rewind timeline window
+  Sources/ContextApp/Rewind/
+  Ported from desktop/macos/Desktop/Sources/Rewind/UI/ and
+  desktop/macos/Desktop/Sources/FloatingControlBar/. Two workarounds are carried
+  over verbatim, comments included, because each encodes a real macOS crash that
+  is not obvious from the code alone:
+
+    - The container-view pattern in RewindWindow.swift, from
+      FloatingControlBarWindow.swift:714-741. Making an NSHostingView the
+      contentView of a window directly causes re-entrant constraint updates that
+      crash in _postWindowNeedsUpdateConstraints.
+
+    - The viewWillMove(toWindow:) tooltip teardown in RewindTrack.swift, from
+      InteractiveTimelineBar.swift:507-515. Mouse-exit never fires when a view is
+      removed from its window mid-hover, which orphans a borderless floating
+      tooltip window on screen.
+
+  The Vision coordinate flip in LiveText.swift (LiveTextBlock.screenRect) is taken
+  from Rewind/Core/RewindOCRService.swift:17.
+
+  Deliberately NOT ported, and why:
+    - The HEVC chunk / AVAssetReader / ffmpeg-subprocess frame reader. This
+      package stores one independent HEIC per frame, which decodes directly.
+    - The gap machinery (isGap, gapDuration, drawGapIndicator, gapAtPoint,
+      formatGapDuration, GapTooltipView). It is unreachable in the original:
+      rebuildSegments() unconditionally appends exactly one segment spanning
+      everything, so no gap is ever constructed.
+    - Their segment computation. ContextCore's Queries.activity(_:since:until:)
+      already collapses consecutive same-app frames with gap splitting and a
+      minimum duration.
+    - Their per-app colour, which keys on String.hashValue. Swift seeds that per
+      process, so track colours changed on every launch; RewindPalette computes
+      FNV-1a instead, over a hue range that excludes purple (INV-UI-1).
+    - Their index-linear track geometry, replaced by a time-linear one.
+
+--------------------------------------------------------------------------------
+Third-party dependencies
+--------------------------------------------------------------------------------
+
+GRDB.swift — https://github.com/groue/GRDB.swift — MIT License
+FluidAudio — https://github.com/FluidInference/FluidAudio — Apache License 2.0
+
+Open Runde (Resources/Fonts/OpenRunde-*.otf) — https://github.com/lauridskern/open-runde
+  SIL Open Font License 1.1
+
+Each dependency's full license text ships with its own source, resolved by Swift
+Package Manager into .build/checkouts/ and recorded in Package.resolved.

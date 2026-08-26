@@ -44,6 +44,8 @@ covers:
   - desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/GlobalShortcutManager.swift
   - desktop/macos/Desktop/Sources/VADGateService.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkButtonTrigger.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkMicButton.swift
 preconditions:
   - automation_bridge_ready
 

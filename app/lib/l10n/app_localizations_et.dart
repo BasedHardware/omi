@@ -323,7 +323,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get searchApps => 'Otsi rakendusi...';
 
   @override
-  String get myApps => 'Minu rakendused';
+  String get myApps => 'Minu loodud';
 
   @override
   String get installedApps => 'Paigaldatud rakendused';
@@ -744,11 +744,6 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'Teie plaan tühistatakse $date.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'Teie plaan uueneb $date.';
   }
 
   @override
@@ -2127,16 +2122,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String get editMemory => '✏️ Muuda mälestust';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Kinnita alusena';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Eemalda aluselt';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Alusmälu';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Alati kontekstis';
 
   @override
   String get memoryContentHint => 'Mulle meeldib süüa jäätist...';
@@ -9770,4 +9765,132 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Sünkroonimiseks liiga vana — Omi ei saa seda vastu võtta';
+
+  @override
+  String get planSheetChooseYourPlan => 'Vali oma pakett, et avada piiramatu Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Saadaval Macis, mobiilis ja veebis';
+
+  @override
+  String get popularBadge => 'POPULAARNE';
+
+  @override
+  String get worksOnDesktop => 'Töötab arvutis';
+
+  @override
+  String get noDesktopAccess => 'Ei tööta arvutis';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months kuud / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kuud tasuta',
+      one: '1 kuu tasuta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi on tasuta, kuid tasuta versioonil on piirangud, mis mõjutavad sinu kogemust:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 sekundi viivitus (mitte reaalajas)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Mine üle tasuta versioonile';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Saa tasuta piiramatu juurdepääs';
+
+  @override
+  String get shareDataForTraining => 'Jaga andmeid treenimiseks';
+
+  @override
+  String get yourRequestUnderReview => 'Sinu taotlus on läbivaatamisel';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Päivitys vaaditaan';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => 'Asenna uusin Omi-sovellus jatkaaksesi tilin siirron jälkeen.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Siirto käynnissä';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.';
+
+  @override
+  String get accountCutoverOpenStore => 'Avaa kauppa';
+
+  @override
+  String get chatScopeToday => 'Täna';
+
+  @override
+  String get chatScopeThisWeek => 'Sel nädalal';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Teave: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Küsi selle kohta';
+
+  @override
+  String get sendRawAudioToOmi => 'Saada töötlemata heli Omisse';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Lülita välja, et töötlemata heli Omisse ei saadetaks. Transkriptsioone ja pilvefunktsioonide jaoks vajalikke andmeid võidakse endiselt Omisse saata.';
+
+  @override
+  String get findDevice => 'Leia';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostikat ei õnnestunud jagada. Proovi uuesti.';
+
+  @override
+  String get appDisabledTitle => 'See rakendus on välja lülitatud ja seda ei saa paigaldada.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Selle lõpp-punkt ebaõnnestus 72 tundi järjest, seega saatmine peatati.';
+
+  @override
+  String get appDisabledGeneric => 'Omi lülitas selle välja.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Paranda kõigepealt lõpp-punkt — uuesti sisselülitamisel kontrollitakse iga seadistatud URL uuesti.';
+
+  @override
+  String get appReEnable => 'Lülita uuesti sisse';
+
+  @override
+  String get appReEnableFailedTitle => 'Uuesti sisselülitamine ebaõnnestus';
+
+  @override
+  String get appReEnableFailedBody => 'Seda rakendust ei õnnestunud uuesti sisse lülitada. Proovi uuesti.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Välja lülitatud $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Viimane viga: $error.';
+  }
 }

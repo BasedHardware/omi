@@ -323,7 +323,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get searchApps => 'பயன்பாடுகளைத் தேடுங்கள்...';
 
   @override
-  String get myApps => 'என் பயன்பாடுகள்';
+  String get myApps => 'நான் உருவாக்கியவை';
 
   @override
   String get installedApps => 'நிறுவப்பட்ட பயன்பாடுகள்';
@@ -747,11 +747,6 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'உங்கள் திட்டம் $date இல் ரத்துசெய்யப்படும்.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'உங்கள் திட்டம் $date இல் புதுப்பிக்கப்படும்.';
   }
 
   @override
@@ -2139,16 +2134,16 @@ class AppLocalizationsTa extends AppLocalizations {
   String get editMemory => '✏️ பதிவை திருத்தவும்';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'அடிப்படையாகப் பின் செய்';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'அடிப்படையிலிருந்து அகற்று';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'அடிப்படை நினைவு';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'எப்போதும் சூழலில்';
 
   @override
   String get memoryContentHint => 'நான் ஐஸ் கிரீம் சாப்பிட விரும்புவேன்...';
@@ -9844,4 +9839,134 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'ஒத்திசைக்க மிகவும் பழையது — Omi இதை ஏற்க முடியாது';
+
+  @override
+  String get planSheetChooseYourPlan => 'வரம்பற்ற Omi-ஐ திறக்க உங்கள் திட்டத்தைத் தேர்ந்தெடுக்கவும்.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, மொபைல் மற்றும் வலையில் கிடைக்கிறது';
+
+  @override
+  String get popularBadge => 'பிரபலம்';
+
+  @override
+  String get worksOnDesktop => 'டெஸ்க்டாப்பில் இயங்கும்';
+
+  @override
+  String get noDesktopAccess => 'டெஸ்க்டாப்பில் இயங்காது';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months மாதங்கள் / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count மாதங்கள் இலவசம்',
+      one: '1 மாதம் இலவசம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi இலவசம், ஆனால் இலவச பதிப்பில் உங்கள் அனுபவத்தைப் பாதிக்கும் வரம்புகள் உள்ளன:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 வினாடி தாமதம் (நிகழ்நேரம் அல்ல)';
+
+  @override
+  String get downgradeToFreemiumAction => 'இலவச பதிப்புக்கு மாறவும்';
+
+  @override
+  String get getFreeUnlimitedAccess => 'இலவச வரம்பற்ற அணுகலைப் பெறுங்கள்';
+
+  @override
+  String get shareDataForTraining => 'பயிற்சிக்காக தரவைப் பகிரவும்';
+
+  @override
+  String get yourRequestUnderReview => 'உங்கள் கோரிக்கை பரிசீலனையில் உள்ளது';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'अपडेट आवश्यक';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'माइग्रेशन जारी है';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।';
+
+  @override
+  String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String get chatScopeToday => 'இன்று';
+
+  @override
+  String get chatScopeThisWeek => 'இந்த வாரம்';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title பற்றி';
+  }
+
+  @override
+  String get askAboutThisConversation => 'இதைப் பற்றி கேள்';
+
+  @override
+  String get sendRawAudioToOmi => 'மூல ஆடியோவை Omi-க்கு அனுப்பவும்';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'மூல ஆடியோ Omi-க்கு அனுப்பப்படுவதைத் தடுக்க இதை அணைக்கவும். உரைமாற்றங்களும் கிளவுட் அம்சங்களுக்குத் தேவையான தரவும் இன்னும் Omi-க்கு அனுப்பப்படலாம்.';
+
+  @override
+  String get findDevice => 'கண்டறி';
+
+  @override
+  String get diagnosticsShareFailed => 'கண்டறிதல் தரவைப் பகிர முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get appDisabledTitle => 'இந்த ஆப் முடக்கப்பட்டுள்ளது, நிறுவ முடியாது.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'அதன் எண்ட்பாயிண்ட் தொடர்ந்து 72 மணி நேரம் தோல்வியடைந்ததால், அனுப்புதல் நிறுத்தப்பட்டது.';
+
+  @override
+  String get appDisabledGeneric => 'இதை Omi முடக்கியது.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'முதலில் எண்ட்பாயிண்டை சரிசெய்யவும் — மீண்டும் இயக்கும்போது அமைக்கப்பட்ட ஒவ்வொரு URL-ஐயும் மீண்டும் சரிபார்க்கும்.';
+
+  @override
+  String get appReEnable => 'மீண்டும் இயக்கு';
+
+  @override
+  String get appReEnableFailedTitle => 'மீண்டும் இயக்க முடியவில்லை';
+
+  @override
+  String get appReEnableFailedBody => 'இந்த ஆப்பை மீண்டும் இயக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date அன்று முடக்கப்பட்டது.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'கடைசி பிழை: $error';
+  }
 }

@@ -37,7 +37,7 @@ struct OnboardingExportsStepView: View {
           Button("Continue") {
             onContinue()
           }
-          .buttonStyle(OmiButtonStyle(.primary))
+          .buttonStyle(InkButtonStyle(kind: .primary))
           .keyboardShortcut(.defaultAction)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -95,20 +95,12 @@ struct OnboardingExportsStepView: View {
     VStack(alignment: .leading, spacing: 0) {
       ForEach(visibleEntries) { entry in
         exportRow(entry: entry)
-        Divider()
+        GlassSeparator()
           .padding(.leading, 66)
-          .background(Color.white.opacity(0.05))
       }
       moreRow
     }
-    .background(
-      RoundedRectangle(cornerRadius: 22, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
-        .overlay(
-          RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-    )
+    .glassCard()
   }
 
   private var moreRow: some View {
@@ -118,16 +110,15 @@ struct OnboardingExportsStepView: View {
       HStack(alignment: .center, spacing: OmiSpacing.md) {
         Image(systemName: showMore ? "minus" : "plus")
           .font(.system(size: 15, weight: .semibold))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 38, height: 38)
           .background(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-              .fill(OmiColors.backgroundPrimary)
+              .fill(Ink.rowFill)
           )
 
         Text(showMore ? "Less" : "More")
-          .font(.system(size: 15, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
+          .inkStyle(InkType.rowCopy, color: Ink.primary)
 
         Spacer(minLength: 12)
       }
@@ -152,11 +143,11 @@ struct OnboardingExportsStepView: View {
 
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(entry.title)
-          .font(.system(size: 15, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
+          .inkStyle(InkType.rowCopy, color: Ink.primary)
+          .fixedSize(horizontal: false, vertical: true)
         Text(metrics)
-          .font(.system(size: 12))
-          .foregroundColor(OmiColors.textTertiary)
+          .inkStyle(InkType.statusLabel, color: Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       Spacer(minLength: 12)
@@ -166,17 +157,10 @@ struct OnboardingExportsStepView: View {
       }
       .buttonStyle(.plain)
       .font(.system(size: 13, weight: .semibold))
-      .foregroundColor(OmiColors.textSecondary)
+      .foregroundColor(Ink.secondary)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(
-        Capsule(style: .continuous)
-          .fill(OmiColors.backgroundPrimary)
-      )
-      .overlay(
-        Capsule(style: .continuous)
-          .stroke(Color.white.opacity(0.08), lineWidth: 1)
-      )
+      .glassChip()
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.md)

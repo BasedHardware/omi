@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-cache-prefix-evicted-from-head",
+  "violated_contract": "A buffer whose head is a provider cache prefix must not be evicted from that head on every write. Prompt caching matches on longest common prefix, so removing the oldest entries — which live at the head — invalidates the entire cached segment, while appending to the tail preserves it. A structure that appends at one end and evicts at the other cannot hold a cache prefix if it is trimmed to its exact budget on every publish.",
+  "canonical_prevention": "Evict to a low-water mark below the budget rather than to the budget itself, so one prefix break buys many stable writes, and keep the eviction in a pure function with a test that appends repeatedly past saturation and asserts the head is unchanged across those writes. Verify with a negative control: restoring trim-to-budget must fail that test.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ContextBucketPromptAssemblerTests.swift"
+  ],
+  "evidence_prs": [
+    11668
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketRollup.swift"
+  ],
+  "status": "open"
+}

@@ -22,6 +22,7 @@ from database import (
     llm_usage as llm_usage_db,
     users as users_db,
 )
+from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export
 from services.users.account_deletion import background_wipe_user_data, start_account_deletion
@@ -53,7 +54,8 @@ from database.users import (
     set_user_transcription_preferences,
 )
 from config.stt_provider_policy import supports_live_multilingual_mode
-from utils.user_language import normalize_user_language
+from models.users import AvailableLanguage, AvailableLanguagesResponse
+from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
@@ -68,10 +70,12 @@ from models.users import (
     ChatUsageQuota,
     ChatQuotaUnit,
     WebhookType,
+    webhook_url_from_setting,
     UserSubscriptionResponse,
     Subscription,
     SubscriptionPlan,
     SubscriptionStatus,
+    PlanLimits,
     PlanType,
     PricingOption,
     PhoneCallQuota,
@@ -82,7 +86,9 @@ from models.users import (
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    enforce_chat_quota,
     get_chat_quota_snapshot,
+    get_default_basic_subscription,
     get_paid_plan_definitions,
     get_plan_display_name,
     get_plan_limits,
@@ -92,7 +98,6 @@ from utils.subscription import (
     neo_grandfather_until,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
-    has_ever_purchased,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
     wire_plan_for_client,
@@ -107,7 +112,7 @@ from utils.cloud_tasks import (
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
 )
-from utils.executors import cleanup_executor, db_executor, run_blocking
+from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
@@ -481,7 +486,7 @@ def set_user_webhook_endpoint(
 ):
     url = data.url
     set_user_webhook_db(uid, wtype, url)
-    if url == '' or url == ',':
+    if not webhook_url_from_setting(wtype, url):
         disable_user_webhook_db(uid, wtype)
     else:
         enable_user_webhook_db(uid, wtype)
@@ -610,7 +615,7 @@ def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
 # ****************************************
 
 
-# TODO: consider adding person photo.
+# Person photo deferred — see models.other.Person (no photo field / storage yet).
 @router.post('/v1/users/people', tags=['v1'], response_model=Person)
 def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
     """Create a new person or return existing one with same name (idempotent by name).
@@ -829,6 +834,12 @@ def set_chat_message_analytics(
 # ***************************************
 # ************* Language ****************
 # ***************************************
+
+
+@router.get('/v1/users/available-languages', tags=['v1'], response_model=AvailableLanguagesResponse)
+def get_available_languages(uid: str = Depends(auth.get_current_user_uid)):
+    """Primary-language options for the picker, in render order."""
+    return {'languages': [{'code': code, 'name': name} for code, name in PRIMARY_LANGUAGE_OPTIONS]}
 
 
 @router.get('/v1/users/language', tags=['v1'], response_model=UserLanguageResponse)
@@ -1240,7 +1251,23 @@ def get_user_subscription_endpoint(
     words_transcribed_used = usage.get('words_transcribed', 0)
     insights_gained_used = usage.get('insights_gained', 0)
 
-    # Get limits from subscription (0 means unlimited)
+    # WIRE BRIDGE: the backend has retired the `0 == unlimited` sentinel — the catalog
+    # represents unlimited as typed `{"kind": "unlimited"}`, projected as `None`. The wire
+    # has NOT been migrated: shipped clients still read `0` as unlimited (e.g. web
+    # SettingsPage `limit <= 0`, macOS `decodeIfPresent(...) ?? 0`), so `None -> 0` here is
+    # deliberate and load-bearing, not a leftover coercion.
+    #
+    # Retiring the wire sentinel is a breaking client change and belongs to work item W1
+    # in docs/agents/plan-source-of-truth.md, gated on released tolerant decoders. Do not
+    # "fix" this to emit None/-1 without that sequence: it silently reinterprets every
+    # unlimited plan as a zero allowance on clients already in the field.
+    #
+    # The inverse hazard, for whoever does W1: `or 0` also launders a *finite zero* into
+    # the unlimited sentinel. No plan declares a finite-zero transcription/words/insights
+    # allowance today (phone-call zero travels a separate has_access=False path), so this
+    # is latent rather than live -- but a catalog that ever declares one would silently
+    # grant unlimited to a plan entitled to nothing. W1 must distinguish the two zeros,
+    # not just move the sentinel.
     transcription_seconds_limit = subscription.limits.transcription_seconds or 0
     words_transcribed_limit = subscription.limits.words_transcribed or 0
     insights_gained_limit = subscription.limits.insights_gained or 0
@@ -1251,10 +1278,7 @@ def get_user_subscription_endpoint(
     if not new_plans_enabled:
         all_definitions = adapt_plans_for_legacy_client(all_definitions)
     available_plans: List[SubscriptionPlan] = []
-    ever_purchased = has_ever_purchased(uid, raw_subscription)
-    definitions_for_user = filter_plans_for_user(
-        all_definitions, subscription.plan, platform=x_app_platform, ever_purchased=ever_purchased
-    )
+    definitions_for_user = filter_plans_for_user(all_definitions, subscription.plan, platform=x_app_platform)
     for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
         monthly_price_id = definition["monthly_price_id"]
@@ -1384,7 +1408,14 @@ def get_user_chat_usage_quota(
             reset_at=None,
         )
 
-    snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform)
+    # This is the desktop-only quota display (see docstring), so it must read the
+    # same customer Firestore project that enforce_desktop_chat_quota() enforces
+    # against — otherwise a named dev/named bundle shows the dev project's plan
+    # here while /v2/chat/completions gates on the customer project's, and the
+    # two disagree for the same uid (#11199).
+    snapshot = get_chat_quota_snapshot(
+        uid, platform=x_app_platform, firestore_client=get_customer_firestore_client(), provision=False
+    )
     plan = snapshot['plan']
 
     if snapshot['limit'] is not None and snapshot['limit'] > 0:
@@ -1511,12 +1542,18 @@ class TestDailySummaryRequest(BaseModel):
 
 
 @router.post('/v1/users/daily-summary-settings/test', tags=['v1'], response_model=DailySummaryTestResponse)
-def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depends(auth.get_current_user_uid)):
+def test_daily_summary(
+    request: TestDailySummaryRequest = None,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
     """
     Test endpoint to manually trigger daily summary for the authenticated user.
     This bypasses the time check and sends a summary immediately.
     Optionally accepts a date parameter (YYYY-MM-DD) to generate summary for a specific date.
     """
+    # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
     time_zone_name = notification_db.get_user_time_zone(uid)
     tokens = notification_db.get_all_tokens(uid)
 
@@ -1680,12 +1717,18 @@ _REGENERATE_COOLDOWN_SECONDS = 30
 
 
 @router.post('/v1/users/daily-summaries/{summary_id}/regenerate', tags=['v1'], response_model=DailySummaryResponse)
-def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def regenerate_daily_summary(
+    summary_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
     """
     Re-run summary generation for the date of an existing daily summary and
     overwrite the same doc in place. No push notification — the user is
     already looking at the page.
     """
+    # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
@@ -1896,8 +1939,11 @@ def get_llm_top_features(
 @router.get('/v1/users/export', tags=['v1'], responses={200: {'model': UserDataExportResponse}})
 def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
     """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
+    # Iterator construction eagerly spools canonical memories so an authority
+    # failure is raised before StreamingResponse commits HTTP 200 and headers.
+    export_stream = iter_user_data_export(uid)
     return StreamingResponse(
-        iter_user_data_export(uid),
+        export_stream,
         media_type='application/json',
         headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
     )
@@ -1951,9 +1997,12 @@ class FocusAssistantSettings(BaseModel):
     excluded_apps: list[str] | None = None
 
 
+ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH = 10000
+
+
 class TaskAssistantSettings(BaseModel):
     enabled: bool | None = None
-    analysis_prompt: str | None = Field(None, max_length=10000)
+    analysis_prompt: str | None = Field(None, max_length=ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH)
     extraction_interval: float | None = None
     min_confidence: float | None = Field(None, ge=0.0, le=1.0)
     notifications_enabled: bool | None = None
@@ -1984,6 +2033,10 @@ class FloatingBarSettings(BaseModel):
     elevenlabs_voice_id: str | None = Field(None, max_length=200)
 
 
+class WebSearchAssistantSettings(BaseModel):
+    enabled: bool | None = None
+
+
 class UpdateAssistantSettingsRequest(BaseModel):
     shared: SharedAssistantSettings | None = None
     focus: FocusAssistantSettings | None = None
@@ -1991,6 +2044,7 @@ class UpdateAssistantSettingsRequest(BaseModel):
     advice: AdviceAssistantSettings | None = None
     memory: MemoryAssistantSettings | None = None
     floating_bar: FloatingBarSettings | None = None
+    web_search: WebSearchAssistantSettings | None = None
     update_channel: str | None = Field(None, max_length=50)
 
 
@@ -2047,6 +2101,67 @@ def update_ai_profile(
     )
 
 
+class SynthesizeAIUserProfileRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    memories: List[str] = Field(default_factory=list, max_length=500)
+    tasks: List[str] = Field(default_factory=list, max_length=500)
+    goals: List[str] = Field(default_factory=list, max_length=500)
+    conversations: List[str] = Field(default_factory=list, max_length=500)
+    messages: List[str] = Field(default_factory=list, max_length=500)
+    past_profiles: List[str] = Field(default_factory=list, max_length=5)
+
+
+class SynthesizeAIUserProfileResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    profile_text: str
+    data_sources_used: List[str]
+    item_count: int
+
+
+@router.post(
+    '/v1/users/ai-profile/synthesize',
+    tags=['users'],
+    response_model=SynthesizeAIUserProfileResponse,
+)
+async def synthesize_ai_profile(
+    body: SynthesizeAIUserProfileRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "users:ai_profile_synthesize")),
+):
+    """Return-only two-stage AI user profile synthesis through the managed memories feature.
+
+    Does not write Firestore. Desktop clients send their formatted source lines plus up to
+    five past profiles (oldest first) instead of carrying the prompts and calling Anthropic
+    Haiku themselves, then persist through PATCH /v1/users/ai-profile.
+    """
+    from utils.llm import ai_user_profile as ai_user_profile_llm
+
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
+    synthesis = await run_blocking(
+        llm_executor,
+        lambda: ai_user_profile_llm.synthesize_ai_user_profile(
+            uid,
+            ai_user_profile_llm.ProfileSources(
+                memories=body.memories,
+                tasks=body.tasks,
+                goals=body.goals,
+                conversations=body.conversations,
+                messages=body.messages,
+            ),
+            past_profiles=body.past_profiles,
+        ),
+    )
+    if synthesis is None:
+        raise HTTPException(status_code=502, detail="ai_profile_synthesis_failed")
+    return SynthesizeAIUserProfileResponse(
+        profile_text=synthesis.profile_text,
+        data_sources_used=list(synthesis.data_sources_used),
+        item_count=synthesis.item_count,
+    )
+
+
 # ============================================================================
 # Bucket-based LLM Usage (extends existing /v1/users/me/llm-usage endpoints above)
 # ============================================================================
@@ -2058,7 +2173,7 @@ class RecordLlmUsageBucketRequest(BaseModel):
     cache_read_tokens: int = Field(0, ge=0)
     cache_write_tokens: int = Field(0, ge=0)
     total_tokens: int = Field(0, ge=0)
-    cost_usd: float = Field(0.0, ge=0.0)
+    cost_usd: float | None = Field(None, ge=0.0)
     account: str = Field('omi', max_length=100)
 
 

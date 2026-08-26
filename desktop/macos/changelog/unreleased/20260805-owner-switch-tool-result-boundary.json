@@ -1,3 +1,0 @@
-{
-  "change": "Switching accounts while a chat tool is writing to your local data no longer reports that write's result into the new account's chat."
-}

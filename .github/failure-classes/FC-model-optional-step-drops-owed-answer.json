@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-model-optional-step-drops-owed-answer",
+  "status": "open",
+  "violated_contract": "When the client already holds deterministic evidence that the user asked a question \u2014 a validated user-authored-question fact \u2014 every stage between that evidence and the delivered answer must run mechanically. Leaving any stage to the model's discretion (whether to request the lookup, whether to weigh the anti-repetition list, whether to copy the citation ref) turns delivery into a coin flip: each stage individually complies most of the time, and the product still drops the answer most of the time because the stages multiply. Discretion belongs only to the stage that owns judgment \u2014 whether the retrieved content actually answers the question.",
+  "canonical_prevention": "ContextDirectorRetrievalHop.forcedLookupQuery makes retrieval mandatory when a validated user-question fact exists (the fact statement is the query, the evaluation runs once with retrieved context attached, and the recent-deliveries list is omitted mechanically); ContextFactWritePolicy.isUserAuthoredQuestion floors the fact class deterministically at write time; ContextDirectorRetrievalHop.impliedCitations attributes the citation when the message provably carries retrieved content. Content matching nothing retrieved still dies at the grounding veto.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ContextProactivityRetrievalHopTests.swift",
+    "desktop/macos/Desktop/Tests/ContextFactWritePolicyTests.swift"
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/**"
+  ],
+  "evidence_prs": [
+    11976
+  ]
+}

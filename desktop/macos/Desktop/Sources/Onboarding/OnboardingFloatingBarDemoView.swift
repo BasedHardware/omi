@@ -35,15 +35,14 @@ struct OnboardingFloatingBarDemoView: View {
         Button(action: onSkip) {
           Text("Skip")
             .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.vertical, OmiSpacing.lg)
 
-      Divider()
-        .background(OmiColors.backgroundTertiary)
+      GlassSeparator()
 
       OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
         .frame(maxWidth: .infinity, alignment: .center)
@@ -57,19 +56,18 @@ struct OnboardingFloatingBarDemoView: View {
           VStack(spacing: OmiSpacing.md) {
             if !barActivated {
               Text("Omi sees your screen and gives you hyper-personalized responses")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(OmiColors.textPrimary)
+                .inkStyle(InkType.stepHeadline, color: Ink.primary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 560)
 
               Text("Press this shortcut to try it.")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundColor(OmiColors.textSecondary)
+                .inkStyle(InkType.prose, color: Ink.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             } else {
               Text("Omi is answering 'Which computer should I buy?' in the floating bar")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundColor(OmiColors.textPrimary)
+                .inkStyle(InkType.stepHeadline, color: Ink.primary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             }
@@ -83,15 +81,15 @@ struct OnboardingFloatingBarDemoView: View {
                   if index > 0 {
                     Text("+")
                       .font(.system(size: 15, weight: .medium))
-                      .foregroundColor(OmiColors.textTertiary)
+                      .foregroundColor(Ink.secondary)
                   }
                   keyCap(symbol, isPressed: pressedTokens.contains(symbol))
                 }
               }
 
               Text("Omi answers in the floating bar at the top of your screen.")
-                .font(.system(size: 13))
-                .foregroundColor(OmiColors.textTertiary)
+                .inkStyle(InkType.statusLabel, color: Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, OmiSpacing.xxs)
             .transition(.opacity)
@@ -111,14 +109,8 @@ struct OnboardingFloatingBarDemoView: View {
           if showContinue {
             Button(action: onComplete) {
               Text("Continue")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(.black)
-                .frame(maxWidth: 280)
-                .padding(.vertical, OmiSpacing.md)
-                .background(Color.white)
-                .cornerRadius(OmiChrome.smallControlRadius)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(InkButtonStyle(kind: .primary))
             .keyboardShortcut(.defaultAction)
             .transition(.move(edge: .bottom).combined(with: .opacity))
           }
@@ -127,7 +119,6 @@ struct OnboardingFloatingBarDemoView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(OmiColors.backgroundPrimary)
     .onAppear {
       // Set up the real floating bar (creates the window if needed)
       FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
@@ -244,30 +235,24 @@ struct OnboardingFloatingBarDemoView: View {
 
   // MARK: - Key Cap
 
+  /// A keycap on glass: a wash with a hairline outline, inverting to an `Ink.primary` fill with an
+  /// `Ink.surface` glyph while the key is held. The inversion is the whole affordance — a glow or a
+  /// black drop shadow reads as dirt on a light panel.
   private func keyCap(_ key: String, isPressed: Bool = false) -> some View {
     Text(key)
       .font(.system(size: 15, weight: .medium, design: .rounded))
-      .foregroundColor(isPressed ? .black : OmiColors.textPrimary)
+      .foregroundColor(isPressed ? Ink.surface : Ink.primary)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isPressed ? Color.white : OmiColors.backgroundTertiary)
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+          .fill(isPressed ? Ink.primary : Ink.rowFill)
           .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-              .stroke(
-                isPressed ? Color.white : OmiColors.backgroundQuaternary.opacity(0.5),
-                lineWidth: 1
-              )
-          )
-          .shadow(
-            color: isPressed ? Color.white.opacity(0.5) : .black.opacity(0.2),
-            radius: isPressed ? 8 : 1,
-            x: 0,
-            y: isPressed ? 0 : 1
+            RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+              .strokeBorder(isPressed ? Color.clear : Ink.hairline, lineWidth: 1)
           )
       )
-      .animation(.easeOut(duration: 0.08), value: isPressed)
+      .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isPressed)
   }
 }
 
@@ -286,16 +271,13 @@ private struct MacLineupPreview: View {
           .resizable()
           .interpolation(.high)
           .scaledToFit()
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.cardRadius, style: .continuous))
+          .clipShape(RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous))
       } else {
-        RoundedRectangle(cornerRadius: OmiChrome.cardRadius)
-          .fill(Color.white.opacity(0.06))
+        Text("Mac lineup image unavailable")
+          .inkStyle(InkType.rowCopy, color: Ink.secondary)
+          .frame(maxWidth: .infinity)
           .frame(height: 280)
-          .overlay(
-            Text("Mac lineup image unavailable")
-              .font(.system(size: 14, weight: .medium))
-              .foregroundColor(OmiColors.textTertiary)
-          )
+          .glassCard()
       }
     }
   }

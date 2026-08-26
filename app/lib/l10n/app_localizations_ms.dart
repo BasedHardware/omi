@@ -322,7 +322,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get searchApps => 'Cari apl...';
 
   @override
-  String get myApps => 'Aplikasi Saya';
+  String get myApps => 'Dicipta oleh saya';
 
   @override
   String get installedApps => 'Aplikasi Dipasang';
@@ -744,11 +744,6 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'Pelan anda akan dibatalkan pada $date.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'Pelan anda diperbaharui pada $date.';
   }
 
   @override
@@ -2135,16 +2130,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String get editMemory => '✏️ Edit Memori';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Sematkan sebagai asas';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Nyahsemat daripada asas';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Memori asas';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Sentiasa dalam konteks';
 
   @override
   String get memoryContentHint => 'Saya suka makan ais krim...';
@@ -9799,4 +9794,135 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Terlalu lama untuk disegerakkan — Omi tidak boleh menerimanya';
+
+  @override
+  String get planSheetChooseYourPlan => 'Pilih pelan anda untuk membuka Omi tanpa had.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Tersedia di Mac, mudah alih dan web';
+
+  @override
+  String get popularBadge => 'POPULAR';
+
+  @override
+  String get worksOnDesktop => 'Berfungsi pada desktop';
+
+  @override
+  String get noDesktopAccess => 'Tidak berfungsi pada desktop';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months bulan / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bulan percuma',
+      one: '1 bulan percuma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi adalah percuma, tetapi versi percuma mempunyai had yang menjejaskan pengalaman anda:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Lengah 5-7 saat (bukan masa nyata)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Turun ke versi percuma';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Dapatkan akses tanpa had secara percuma';
+
+  @override
+  String get shareDataForTraining => 'Kongsi data untuk latihan';
+
+  @override
+  String get yourRequestUnderReview => 'Permintaan anda sedang disemak';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Pembaruan diperlukan';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Instal aplikasi Omi terbaru untuk melanjutkan setelah migrasi akun.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migrasi sedang berlangsung';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.';
+
+  @override
+  String get accountCutoverOpenStore => 'Buka toko';
+
+  @override
+  String get chatScopeToday => 'Hari ini';
+
+  @override
+  String get chatScopeThisWeek => 'Minggu ini';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Perihal: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Tanya tentang ini';
+
+  @override
+  String get sendRawAudioToOmi => 'Hantar audio mentah ke Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Matikan untuk menghalang audio mentah daripada dihantar ke Omi. Transkrip dan data yang diperlukan oleh ciri awan mungkin masih dihantar ke Omi.';
+
+  @override
+  String get findDevice => 'Cari';
+
+  @override
+  String get diagnosticsShareFailed => 'Tidak dapat berkongsi diagnostik. Sila cuba lagi.';
+
+  @override
+  String get appDisabledTitle => 'Apl ini dilumpuhkan dan tidak boleh dipasang.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Endpoint-nya gagal selama 72 jam berturut-turut, jadi penghantaran dihentikan.';
+
+  @override
+  String get appDisabledGeneric => 'Ia dilumpuhkan oleh Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Betulkan endpoint dahulu — pengaktifan semula akan menyemak semula setiap URL yang dikonfigurasikan.';
+
+  @override
+  String get appReEnable => 'Aktifkan semula';
+
+  @override
+  String get appReEnableFailedTitle => 'Gagal mengaktifkan semula';
+
+  @override
+  String get appReEnableFailedBody => 'Apl ini tidak dapat diaktifkan semula. Sila cuba lagi.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Dilumpuhkan pada $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Ralat terakhir: $error.';
+  }
 }

@@ -9,11 +9,11 @@ struct TaskDetailPanel: View {
   let onDismiss: () -> Void
   let onToggle: () -> Void
   let onEdit: () -> Void
-  let onInvestigate: (() -> Void)?
   let onOpenChat: (() -> Void)?
   let onIncrementIndent: (() -> Void)?
   let onDecrementIndent: (() -> Void)?
   let onDelete: () -> Void
+  let onPriorityChange: ((String) -> Void)?
 
   @State private var isCopyingLink = false
   @State private var copyStatus: String?
@@ -27,31 +27,32 @@ struct TaskDetailPanel: View {
     onDismiss: @escaping () -> Void,
     onToggle: @escaping () -> Void,
     onEdit: @escaping () -> Void,
-    onInvestigate: (() -> Void)? = nil,
     onOpenChat: (() -> Void)? = nil,
     onIncrementIndent: (() -> Void)? = nil,
     onDecrementIndent: (() -> Void)? = nil,
-    onDelete: @escaping () -> Void
+    onDelete: @escaping () -> Void,
+    onPriorityChange: ((String) -> Void)? = nil
   ) {
     self.task = task
     self.onDismiss = onDismiss
     self.onToggle = onToggle
     self.onEdit = onEdit
-    self.onInvestigate = onInvestigate
     self.onOpenChat = onOpenChat
     self.onIncrementIndent = onIncrementIndent
     self.onDecrementIndent = onDecrementIndent
     self.onDelete = onDelete
+    self.onPriorityChange = onPriorityChange
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       header
-      Divider().overlay(OmiColors.border.opacity(0.25))
+      Divider().overlay(Ink.separator.opacity(0.25))
 
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.xl) {
           descriptionSection
+          prioritySection
           whySection
           linkedSourcesSection
           detailsSection
@@ -63,7 +64,7 @@ struct TaskDetailPanel: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.rowFill)
     .accessibilityIdentifier("task-detail-panel")
   }
 
@@ -72,10 +73,10 @@ struct TaskDetailPanel: View {
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text("Task details")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Text(content.status)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
       Spacer(minLength: OmiSpacing.xs)
       DismissButton(action: onDismiss)
@@ -90,25 +91,62 @@ struct TaskDetailPanel: View {
       sectionTitle("Task")
       Text(content.description)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
 
+  /// Priority lives here rather than on the task row: it is a rarely-changed
+  /// attribute, and the row's hover strip is reserved for per-task actions.
+  @ViewBuilder
+  private var prioritySection: some View {
+    if let onPriorityChange {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+        sectionTitle("Priority")
+        HStack(spacing: OmiSpacing.xs) {
+          ForEach(TaskDetailPanel.priorityOptions, id: \.value) { option in
+            let isSelected = task.priority?.lowercased() == option.value
+            Button {
+              guard !isSelected else { return }
+              onPriorityChange(option.value)
+            } label: {
+              Text(option.label)
+                .scaledFont(size: OmiType.caption, weight: isSelected ? .semibold : .regular)
+                .foregroundColor(isSelected ? Ink.surface : Ink.primary)
+                .padding(.horizontal, OmiSpacing.md)
+                .padding(.vertical, OmiSpacing.xs)
+                .background(
+                  Capsule().fill(isSelected ? Ink.primary : Ink.rowFillHover)
+                )
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("Set \(option.label.lowercased()) priority")
+            .accessibilityIdentifier("task-detail-priority-\(option.value)")
+          }
+        }
+      }
+    }
+  }
+
+  private static let priorityOptions: [(value: String, label: String)] = [
+    ("low", "Low"), ("medium", "Medium"), ("high", "High"),
+  ]
+
   private var whySection: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       sectionTitle("Why Omi added this")
       Text(content.whyOmiAddedThis)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(OmiSpacing.md)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-            .fill(OmiColors.backgroundTertiary)
+            .fill(Ink.rowFillHover)
         )
         .accessibilityIdentifier("task-detail-why")
     }
@@ -121,13 +159,13 @@ struct TaskDetailPanel: View {
         Spacer()
         Text("\(content.linkedSources.count) linked source\(content.linkedSources.count == 1 ? "" : "s")")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
 
       if content.linkedSources.isEmpty {
         Text("No navigable source was attached to this task.")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       } else {
         VStack(spacing: OmiSpacing.xs) {
           ForEach(content.linkedSources) { source in
@@ -137,27 +175,27 @@ struct TaskDetailPanel: View {
               HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: source.systemImage)
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .foregroundColor(Ink.secondary)
                   .frame(width: 20)
                 VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                   Text(source.title)
                     .scaledFont(size: OmiType.caption, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(Ink.primary)
                   Text(source.subtitle)
                     .scaledFont(size: OmiType.micro)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(Ink.secondary)
                     .lineLimit(1)
                 }
                 Spacer(minLength: OmiSpacing.xs)
                 Image(systemName: "arrow.up.right")
                   .scaledFont(size: OmiType.micro, weight: .semibold)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
               .padding(OmiSpacing.sm)
               .frame(maxWidth: .infinity, alignment: .leading)
               .background(
                 RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-                  .fill(OmiColors.backgroundTertiary)
+                  .fill(Ink.rowFillHover)
               )
             }
             .buttonStyle(.plain)
@@ -176,11 +214,11 @@ struct TaskDetailPanel: View {
           HStack(alignment: .top, spacing: OmiSpacing.sm) {
             Text(field.label)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .frame(width: 84, alignment: .leading)
             Text(field.value)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .textSelection(.enabled)
           }
         }
@@ -191,11 +229,10 @@ struct TaskDetailPanel: View {
   @ViewBuilder
   private var contextSection: some View {
     let metadata = task.parsedMetadata ?? [:]
-    if task.contextSummary != nil || task.currentActivity != nil || task.agentPlan != nil
+    if task.contextSummary != nil || task.currentActivity != nil
       || metadata["context_summary"] as? String != nil
       || metadata["current_activity"] as? String != nil
       || metadata["reasoning"] as? String != nil
-      || metadata["agent_plan"] as? String != nil
     {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         sectionTitle("Context")
@@ -208,9 +245,6 @@ struct TaskDetailPanel: View {
           }
           if let reasoning = metadata["reasoning"] as? String, !reasoning.isEmpty {
             detailBlock("Reasoning", reasoning)
-          }
-          if let plan = task.agentPlan ?? metadata["agent_plan"] as? String, !plan.isEmpty {
-            detailBlock("Agent plan", String(plan.prefix(2000)))
           }
         }
       }
@@ -229,14 +263,6 @@ struct TaskDetailPanel: View {
         )
         actionButton(title: "Edit task", systemImage: "pencil", action: onEdit, identifier: "task-detail-edit")
 
-        if let onInvestigate {
-          actionButton(
-            title: "Execute with Omi",
-            systemImage: "sparkles",
-            action: onInvestigate,
-            identifier: "task-detail-execute"
-          )
-        }
         if let onOpenChat {
           actionButton(
             title: task.workstreamId == nil ? "Work on this with Omi" : "Open thread",
@@ -274,7 +300,7 @@ struct TaskDetailPanel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .padding(.vertical, OmiSpacing.xs)
         .accessibilityIdentifier("task-detail-delete")
       }
@@ -292,7 +318,7 @@ struct TaskDetailPanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     .buttonStyle(.plain)
-    .foregroundColor(OmiColors.textPrimary)
+    .foregroundColor(Ink.primary)
     .padding(.vertical, OmiSpacing.xs)
     .accessibilityIdentifier(identifier)
   }
@@ -300,7 +326,7 @@ struct TaskDetailPanel: View {
   private func sectionTitle(_ title: String) -> some View {
     Text(title.uppercased())
       .scaledFont(size: OmiType.micro, weight: .semibold)
-      .foregroundColor(OmiColors.textQuaternary)
+      .foregroundColor(Ink.secondary)
       .tracking(0.6)
   }
 
@@ -308,10 +334,10 @@ struct TaskDetailPanel: View {
     VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
       Text(label)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
       Text(value)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
         .textSelection(.enabled)
     }

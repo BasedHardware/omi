@@ -4,18 +4,22 @@ import asyncio
 import base64
 import json
 import re
+import sys
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRoute
 
+from database._client import get_customer_firestore_client
 from database import llm_usage as llm_usage_db
 from database import redis_db
+from database import users as users_db
 from utils.http_client import get_llm_gateway_semaphore
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -27,28 +31,38 @@ from utils.llm.desktop_llm_stub import (
 )
 from utils.llm.gateway_client import (
     CHAT_AGENT_AUTO_LANE_ID,
+    CHAT_STRUCTURED_AUTO_LANE_ID,
+    feature_auto_lane_id,
     get_llm_gateway_base_url,
     get_llm_gateway_client,
     llm_gateway_headers,
-    should_route_features_through_gateway,
+    should_route_chat_agent_through_gateway,
 )
 from utils.llm.gateway_observability import record_gateway_request_result
 from utils.llm.gateway_resilience import gateway_circuit, observe_gateway_first_byte
 from utils.llm.gateway_serving import is_gateway_transport_failure
+from utils.llm.private_context import (
+    flatten_text_blocks,
+    openai_messages_carry_private_tool_output,
+)
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
+from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
+from utils.observability.journeys import ClientJourneyAttempt
 from utils.other import endpoints as auth
-from utils.subscription import enforce_chat_quota
+from utils.subscription import enforce_desktop_chat_quota
 
 _MAX_BODY_BYTES = 16 * 1024 * 1024
 _RATE_LIMIT_PER_MINUTE = 120
 _MAX_PAUSE_TURN_CONTINUATIONS = 3
 _WEB_SEARCH_COST_PER_REQUEST = 10.0 / 1_000.0
 
-# Anthropic's direct server-side web search. The desktop OpenAI-compatible
-# client never sees or executes this tool; Anthropic owns the lookup and returns
-# the grounded answer in the same completion contract. Keep the basic direct
-# tool contract: the newer version defaults to code-execution callers.
+# Kill-switch / BYOK Anthropic path only. Managed public-web turns use the
+# gateway `omi:auto:web-search` lane (Perplexity sonar-pro) instead. The desktop
+# OpenAI-compatible client never sees or executes this tool; Anthropic owns the
+# lookup and returns the grounded answer in the same completion contract. Keep
+# the basic direct tool contract: the newer version defaults to code-execution
+# callers.
 _WEB_SEARCH_TOOL = {
     'type': 'web_search_20250305',
     'name': 'web_search',
@@ -62,6 +76,31 @@ _PUBLIC_WEB_ROUTING_INSTRUCTION = (
     'access; if the lookup itself fails, state that the lookup failed instead. Do not use private Omi context unless '
     'the user explicitly asks for it.</omi_retrieval_policy>'
 )
+
+# Both Anthropic (direct/kill-switch) and Perplexity (managed `omi:auto:web-search`)
+# run search on their own servers, so query strings escape the `fetch_url`
+# allowlist and SSRF guard entirely. Any client tool result already in the
+# request is private context the search query could carry out, so server-side
+# search is only offered when every tool result in the transcript comes from this
+# allowlist of write/permission tools that return no user data. Unknown tool names
+# are treated as private.
+_PUBLIC_SAFE_CLIENT_TOOLS = frozenset(
+    {
+        'cancel_agent_run',
+        'check_permission_status',
+        'create_action_item',
+        'create_calendar_event',
+        'point_click',
+        'request_permission',
+        'set_desktop_attention_override',
+        'update_action_item',
+        'update_agent_artifact_lifecycle',
+    }
+)
+# Per-user capability record under `assistant_settings`. Absent means allowed:
+# principals that predate this gate keep the behavior they shipped with, and a
+# denial has to be a stored decision.
+_WEB_SEARCH_SETTINGS_SECTION = 'web_search'
 
 _EXPLICIT_WEB_REQUESTS = (
     'search the web',
@@ -205,41 +244,66 @@ _MANAGED_CHAT_ALIASES = {
     'omi-sonnet',
     'claude-sonnet-4-6',
     'claude-sonnet-4-20250514',
+    'omi-opus',
+    'claude-opus-4-6',
+    'claude-opus-4-20250514',
+    'omi-luna',
+    'omi-auto',
+    CHAT_AGENT_AUTO_LANE_ID,
 }
+# Non-conversational desktop callers (the automation planner and the local-agent
+# loop) ask for a single-shot structured completion, not a chat turn. They select
+# the structured lane explicitly so they never inherit chat-agent routing.
+_MANAGED_STRUCTURED_ALIASES = {
+    'omi-structured',
+    CHAT_STRUCTURED_AUTO_LANE_ID,
+}
+WEB_SEARCH_AUTO_LANE_ID = feature_auto_lane_id('web_search')
 _MAX_TOKENS = 16_384
+# Top-level automatic prompt caching. Anthropic places this breakpoint on the last
+# cacheable block (tools → system → messages). TTL=1h: the default became 5m on
+# 2026-03-06, which is shorter than typical gaps between desktop-chat turns.
+# The ~14k-token tools+system prefix only hits if those bytes stay identical
+# across requests from the same client; volatile content belongs in the user turn.
+_PROMPT_CACHE_CONTROL = {'type': 'ephemeral', 'ttl': '1h'}
+
+
+def _managed_lane_id(body: Mapping[str, object]) -> str:
+    """Lane a managed desktop request routes to. Chat is the default."""
+    model = body.get('model')
+    normalized = model.strip().lower() if isinstance(model, str) else ''
+    if normalized in _MANAGED_STRUCTURED_ALIASES:
+        return CHAT_STRUCTURED_AUTO_LANE_ID
+    return CHAT_AGENT_AUTO_LANE_ID
 
 
 def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
-    """Route conversational Sonnet traffic to Luna, but preserve specialist calls.
+    """Route managed conversational traffic to Luna, but preserve specialist calls.
 
-    Desktop conversational traffic uses the managed Luna chat agent only for
-    the supported Sonnet aliases. Extraction jobs use Haiku and some callers
-    explicitly request Opus; those legacy Anthropic calls must not inherit the
-    chat-agent personality/system prompt or have their requested model rewritten
-    to Luna. An omitted model uses the managed chat-agent default; an explicit
-    unknown model fails closed in the normal request validation path.
+    Desktop conversational traffic uses the managed Luna chat agent for Sonnet
+    and leftover Opus aliases plus explicit auto/Luna lane ids. Extraction jobs
+    still use Haiku; those legacy Anthropic calls must not inherit the chat-agent
+    personality/system prompt or have their requested model rewritten to Luna.
+    An omitted model uses the managed chat-agent default; an explicit unknown
+    model fails closed in the normal request validation path.
     """
     if 'model' not in body:
         return True
     model = body['model']
     if not isinstance(model, str):
         return False
-    normalized = model.lower()
+    normalized = model.strip().lower()
+    if not normalized:
+        return True
+    if normalized in _MANAGED_CHAT_ALIASES or normalized in _MANAGED_STRUCTURED_ALIASES:
+        return True
     if normalized in _MODEL_ROUTES:
         return normalized in _MANAGED_CHAT_ALIASES
     return False
 
 
 def _text(content: object) -> str:
-    if isinstance(content, str):
-        return content
-    if not isinstance(content, list):
-        return ''
-    return ''.join(
-        block.get('text', '')
-        for block in content
-        if isinstance(block, Mapping) and block.get('type') == 'text' and isinstance(block.get('text'), str)
-    )
+    return flatten_text_blocks(content)
 
 
 def _normalize_policy_text(text: str) -> str:
@@ -302,13 +366,109 @@ def _has_public_web_routing_instruction(messages: object) -> bool:
     return bool(latest_user and _text(latest_user.get('content')).lstrip().startswith(_PUBLIC_WEB_ROUTING_INSTRUCTION))
 
 
-def _direct_web_search_requested(body: Mapping[str, object]) -> bool:
+def _web_search_requested(body: Mapping[str, object]) -> bool:
+    messages = body.get('messages')
+    client_tools = _anthropic_client_tools(body.get('tools'))
+    requested_tool_choice = body.get('tool_choice')
+    required_client_tools = bool(client_tools) and (
+        requested_tool_choice == 'required'
+        or (isinstance(requested_tool_choice, Mapping) and requested_tool_choice.get('type') == 'function')
+    )
+    return bool(
+        requested_tool_choice != 'none'
+        and _last_message_is_user(messages)
+        and not required_client_tools
+        and (body.get('omi_web_search') is True or _has_public_web_routing_instruction(messages))
+    )
+
+
+# Web-search authorization outcome. ``denied`` is a stored per-user decision;
+# ``unavailable`` means the lookup failed closed and must not also be reported
+# as an explicit denial. Keeps the two fallback reasons mutually exclusive.
+WebSearchAuthorization = Literal['authorized', 'denied', 'unavailable']
+
+
+def _web_search_supported_for_upstream(upstream_model: str) -> bool:
+    return not upstream_model.startswith('claude-haiku')
+
+
+def _web_search_eligible(
+    body: Mapping[str, object],
+    *,
+    authorization: WebSearchAuthorization,
+    web_search_supported: bool = True,
+) -> bool:
     messages = body.get('messages')
     return bool(
-        body.get('tool_choice') != 'none'
-        and _last_message_is_user(messages)
+        web_search_supported
         and not _public_web_is_prohibited(messages)
-        and (body.get('omi_web_search') is True or _has_public_web_routing_instruction(messages))
+        and _web_search_requested(body)
+        and authorization == 'authorized'
+        and not _carries_private_tool_output(messages)
+    )
+
+
+def _record_web_search_withheld(
+    body: Mapping[str, object],
+    *,
+    authorization: WebSearchAuthorization,
+    web_search_supported: bool,
+    from_mode: str,
+) -> None:
+    messages = body.get('messages')
+    if not _web_search_requested(body) or _public_web_is_prohibited(messages):
+        return
+    if not web_search_supported:
+        record_fallback(
+            component='other',
+            from_mode=from_mode,
+            to_mode='model_knowledge',
+            reason='capability_mismatch',
+            outcome='degraded',
+        )
+        return
+    if _carries_private_tool_output(messages):
+        record_fallback(
+            component='other',
+            from_mode=from_mode,
+            to_mode='model_knowledge',
+            reason='private_tool_output_in_context',
+            outcome='degraded',
+        )
+    elif authorization == 'denied':
+        record_fallback(
+            component='other',
+            from_mode=from_mode,
+            to_mode='model_knowledge',
+            reason='not_authorized',
+            outcome='degraded',
+        )
+
+
+def _with_public_web_routing_instruction(messages: list[dict[str, object]]) -> list[dict[str, object]]:
+    if _has_public_web_routing_instruction(messages):
+        return messages
+    updated = [dict(message) for message in messages]
+    for message in updated:
+        if message.get('role') in {'system', 'developer'}:
+            existing = _text(message.get('content'))
+            message['content'] = (
+                f'{existing.rstrip()}\n\n{_PUBLIC_WEB_ROUTING_INSTRUCTION}'
+                if existing.strip()
+                else _PUBLIC_WEB_ROUTING_INSTRUCTION
+            )
+            return updated
+    return [{'role': 'system', 'content': _PUBLIC_WEB_ROUTING_INSTRUCTION}, *updated]
+
+
+def _carries_private_tool_output(messages: object) -> bool:
+    # The desktop hub also inlines tool output into the user turn behind a
+    # literal marker instead of sending an OpenAI `tool` message, so the same
+    # private data reaches the request without a tool_call_id to classify.
+    return openai_messages_carry_private_tool_output(
+        messages,
+        public_safe_tools=_PUBLIC_SAFE_CLIENT_TOOLS,
+        inline_private_markers=(_UNTRUSTED_TOOL_CONTEXT_DELIMITER,),
     )
 
 
@@ -397,7 +557,88 @@ def _gateway_user_content(content: object) -> object:
     return blocks or ''
 
 
-def _gateway_body(body: Mapping[str, object]) -> dict[str, object]:
+# Top-level request keys the gateway will accept. The gateway validates the
+# forwarded body against a strict allowlist and rejects the whole request with
+# HTTP 400 on the first unknown key, so anything the desktop client sends that
+# is not listed here must be dropped rather than passed through.
+#
+# This is not a style preference. Forwarding the client body verbatim took every
+# managed desktop chat turn down for ~19 hours: the local pi-mono agent runs the
+# OpenAI JS SDK, which sets `store` on every request (and `reasoning_effort`
+# whenever a thinking level is set). Neither is in the gateway's allowlist, so
+# each turn 400ed before a lane was ever resolved, and `_stream` reported that as
+# an in-band `502 Upstream provider error` inside an HTTP 200 — invisible to
+# status-code monitoring.
+#
+# `test_gateway_forwardable_params_stay_within_the_gateway_allowlist` pins this
+# set against the gateway's own validator so the two cannot drift apart again.
+_GATEWAY_FORWARDABLE_PARAMS = frozenset(
+    {
+        'frequency_penalty',
+        'logit_bias',
+        'logprobs',
+        'max_completion_tokens',
+        'max_tokens',
+        'metadata',
+        'n',
+        'presence_penalty',
+        'prompt_cache_key',
+        'prompt_cache_options',
+        'response_format',
+        'seed',
+        'service_tier',
+        'stop',
+        'stream',
+        'stream_options',
+        'temperature',
+        'tool_choice',
+        'tools',
+        'top_logprobs',
+        'top_p',
+        'user',
+    }
+)
+
+
+def _log_gateway_rejection(response: httpx.Response, *, lane_id: str, request_id: str) -> None:
+    """Record why the gateway refused a request.
+
+    A 4xx from the gateway carries a typed body naming the offending field
+    (`{"error": {"message": ..., "param": ...}}`), and both call sites used to
+    discard it and report a bare `502 Upstream provider error`. That left the
+    real reason recorded nowhere: during the 2026-08-20 outage the rejected
+    parameter appeared in no log line in either GCP project, so a one-request
+    diagnosis took hours of log archaeology instead.
+
+    Client-supplied content is never logged — only the gateway's own error
+    message and param, which are gateway-authored and carry no user data.
+    """
+    status_code = response.status_code
+    message = ''
+    param = ''
+    try:
+        payload = response.json()
+    except Exception:
+        payload = None
+    if isinstance(payload, Mapping):
+        error = payload.get('error')
+        if isinstance(error, Mapping):
+            message = str(error.get('message') or '')[:200]
+            param = str(error.get('param') or '')[:100]
+    event = {
+        'event': 'desktop_chat_gateway_refused',
+        'message': 'desktop_chat_gateway_refused',
+        'lane_id': lane_id,
+        'status_code': status_code,
+        'param': param or 'unknown',
+        'reason': message or 'unavailable',
+        'request_id': request_id,
+        'severity': 'WARNING',
+    }
+    sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
+
+
+def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LANE_ID) -> dict[str, object]:
     messages = body.get('messages')
     if not isinstance(messages, list):
         raise ValueError('messages must be an array')
@@ -412,8 +653,15 @@ def _gateway_body(body: Mapping[str, object]) -> dict[str, object]:
         elif 'content' not in updated or updated.get('content') is None:
             updated['content'] = ''
         translated.append(updated)
-    gateway_body = {key: value for key, value in body.items() if key != 'omi_web_search'}
-    return {**gateway_body, 'model': CHAT_AGENT_AUTO_LANE_ID, 'messages': translated}
+    gateway_body = {key: value for key, value in body.items() if key in _GATEWAY_FORWARDABLE_PARAMS}
+    result = {**gateway_body, 'model': lane_id, 'messages': translated}
+    if lane_id == WEB_SEARCH_AUTO_LANE_ID:
+        # The Perplexity web-search lane has tools: false. Public-web turns
+        # are a live lookup, not a client-tool continuation.
+        result.pop('tools', None)
+        result.pop('tool_choice', None)
+        result['messages'] = _with_public_web_routing_instruction(translated)
+    return result
 
 
 def _tool_choice(choice: object) -> dict[str, str] | None:
@@ -447,7 +695,9 @@ def _anthropic_client_tools(tools: object) -> list[dict[str, object]]:
     ]
 
 
-def _request(body: object) -> tuple[str, dict[str, object]]:
+def _request(
+    body: object, *, web_search_authorization: WebSearchAuthorization = 'unavailable'
+) -> tuple[str, dict[str, object]]:
     if not isinstance(body, Mapping):
         raise ValueError('request body must be an object')
     model = body.get('model')
@@ -516,38 +766,17 @@ def _request(body: object) -> tuple[str, dict[str, object]]:
     choice = _tool_choice(body.get('tool_choice'))
     client_tools = _anthropic_client_tools(tools)
     upstream_model = cast(str, result['model'])
-    public_web_prohibited = _public_web_is_prohibited(messages)
-    requested_tool_choice = body.get('tool_choice')
-    required_client_tools = bool(client_tools) and (
-        requested_tool_choice == 'required'
-        or (isinstance(requested_tool_choice, Mapping) and requested_tool_choice.get('type') == 'function')
+    web_search_supported = _web_search_supported_for_upstream(upstream_model)
+    _record_web_search_withheld(
+        body,
+        authorization=web_search_authorization,
+        web_search_supported=web_search_supported,
+        from_mode='anthropic_web_search',
     )
-    web_search_requested = (
-        body.get('tool_choice') != 'none'
-        and _last_message_is_user(messages)
-        and (
-            not required_client_tools
-            and (
-                body.get('omi_web_search') is True
-                or bool(client_tools)
-                or _has_public_web_routing_instruction(messages)
-            )
-        )
-    )
-    web_search_supported = not upstream_model.startswith('claude-haiku')
-    if web_search_requested and not web_search_supported and not public_web_prohibited:
-        record_fallback(
-            component='other',
-            from_mode='anthropic_web_search',
-            to_mode='model_knowledge',
-            reason='capability_mismatch',
-            outcome='degraded',
-        )
-    inject_web_search = (
-        web_search_supported
-        and body.get('tool_choice') != 'none'
-        and not public_web_prohibited
-        and web_search_requested
+    inject_web_search = _web_search_eligible(
+        body,
+        authorization=web_search_authorization,
+        web_search_supported=web_search_supported,
     )
     if inject_web_search:
         existing_system = result.get('system')
@@ -560,6 +789,7 @@ def _request(body: object) -> tuple[str, dict[str, object]]:
         result['tools'] = ([_WEB_SEARCH_TOOL] if inject_web_search else []) + client_tools
     if choice is not None and result.get('tools'):
         result['tool_choice'] = choice
+    result['cache_control'] = dict(_PROMPT_CACHE_CONTROL)
     return model, result
 
 
@@ -775,18 +1005,57 @@ def _openai_usage_as_anthropic(usage: object) -> SimpleNamespace:
 
 async def _record_usage(uid: str, usage: object) -> None:
     if get_byok_key('anthropic'):
+
+        def _exclude(record_uid: str) -> None:
+            llm_usage_db.record_llm_cost_exclusion(
+                record_uid,
+                bucket='desktop_chat',
+                account='omi',
+                cost_exclusion='byok_provider_cost',
+                firestore_client=get_customer_firestore_client(),
+            )
+
+        await run_blocking(db_executor, _exclude, uid)
         return
     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens = _usage_values(usage)
+    total_tokens = input_tokens + output_tokens + cache_read_tokens + cache_write_tokens
+    web_search_requests = _web_search_requests(usage)
+    cost = web_search_requests * _WEB_SEARCH_COST_PER_REQUEST
+    cost_status = 'partial' if web_search_requests else 'missing'
+    cost_exclusion = 'provider_token_cost_not_recorded'
+
+    def _write(
+        record_uid: str,
+        in_tokens: int,
+        out_tokens: int,
+        cache_read: int,
+        cache_write: int,
+        combined_tokens: int,
+        cost_usd: float,
+    ) -> None:
+        llm_usage_db.record_llm_usage_bucket(
+            record_uid,
+            in_tokens,
+            out_tokens,
+            cache_read,
+            cache_write,
+            combined_tokens,
+            cost_usd if cost_status != 'missing' else None,
+            cost_status=cost_status,
+            cost_exclusion=cost_exclusion,
+            firestore_client=get_customer_firestore_client(),
+        )
+
     await run_blocking(
         db_executor,
-        llm_usage_db.record_llm_usage_bucket,
+        _write,
         uid,
         input_tokens,
         output_tokens,
         cache_read_tokens,
         cache_write_tokens,
-        input_tokens + output_tokens + cache_read_tokens + cache_write_tokens,
-        _web_search_requests(usage) * _WEB_SEARCH_COST_PER_REQUEST,
+        total_tokens,
+        cost,
     )
 
 
@@ -1036,18 +1305,36 @@ def _sse_json_payloads(frame_buffer: bytearray, chunk: bytes) -> list[dict[str, 
     return payloads
 
 
-def _gateway_request_headers(request_id: str) -> dict[str, str]:
-    headers = llm_gateway_headers(feature='chat_agent')
+def _gateway_feature_for_lane(lane_id: str) -> str:
+    """Accounting feature for a managed lane.
+
+    Structured-lane and web-search traffic must not be written to the ledger and
+    reliability metrics as chat-agent traffic, or per-feature cost and failure
+    signals for those lanes vanish into chat.
+    """
+    if lane_id == CHAT_STRUCTURED_AUTO_LANE_ID:
+        return 'chat_structured'
+    if lane_id == WEB_SEARCH_AUTO_LANE_ID:
+        return 'web_search'
+    return 'chat_agent'
+
+
+def _gateway_request_headers(
+    request_id: str, lane_id: str = CHAT_AGENT_AUTO_LANE_ID, platform: str | None = None
+) -> dict[str, str]:
+    headers = llm_gateway_headers(feature=_gateway_feature_for_lane(lane_id), platform=platform)
     headers['X-Omi-Request-ID'] = request_id
     return headers
 
 
-def _record_gateway_result(*, outcome: str, reason: str, request_id: str) -> None:
+def _record_gateway_result(
+    *, outcome: str, reason: str, request_id: str, lane_id: str = CHAT_AGENT_AUTO_LANE_ID
+) -> None:
     record_gateway_request_result(
-        feature='chat_agent',
+        feature=_gateway_feature_for_lane(lane_id),
         outcome=outcome,
         reason=reason,
-        route=CHAT_AGENT_AUTO_LANE_ID,
+        route=lane_id,
         mode='gateway',
         request_id=request_id,
         credential_source='omi_managed',
@@ -1055,27 +1342,33 @@ def _record_gateway_result(*, outcome: str, reason: str, request_id: str) -> Non
 
 
 async def _record_chat_quota_question(uid: str, request_id: str, platform: str | None) -> None:
-    await run_blocking(
-        db_executor,
-        llm_usage_db.record_chat_quota_question,
-        uid,
-        f'desktop_chat_completions:{request_id}',
-        'desktop_chat_completions',
-        platform=platform,
-    )
+    def _write() -> None:
+        llm_usage_db.record_chat_quota_question(
+            uid,
+            f'desktop_chat_completions:{request_id}',
+            'desktop_chat_completions',
+            platform=platform,
+            firestore_client=get_customer_firestore_client(),
+        )
+
+    await run_blocking(db_executor, _write)
 
 
 async def _stream_gateway(
-    gateway_payload: dict[str, object], uid: str, request_id: str = 'unknown', platform: str | None = None
+    gateway_payload: dict[str, object],
+    uid: str,
+    request_id: str = 'unknown',
+    platform: str | None = None,
+    lane_id: str = CHAT_AGENT_AUTO_LANE_ID,
 ) -> AsyncIterator[bytes]:
-    usage_token = set_usage_context(uid, 'chat_agent')
+    usage_token = set_usage_context(uid, _gateway_feature_for_lane(lane_id))
     frame_buffer = bytearray()
     usage_recorded = False
     started_at = time.monotonic()
     result_recorded = False
     try:
         if not gateway_circuit.allow_request():
-            _record_gateway_result(outcome='error', reason='circuit_open', request_id=request_id)
+            _record_gateway_result(lane_id=lane_id, outcome='error', reason='circuit_open', request_id=request_id)
             yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}}).encode()
             yield b'data: [DONE]\n\n'
             return
@@ -1083,7 +1376,7 @@ async def _stream_gateway(
             async with get_llm_gateway_client().stream(
                 'POST',
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                headers=_gateway_request_headers(request_id),
+                headers=_gateway_request_headers(request_id, lane_id, platform),
                 json=gateway_payload,
             ) as response:
                 if response.status_code >= 400:
@@ -1091,12 +1384,14 @@ async def _stream_gateway(
                     transport_failure = is_gateway_transport_failure(status_error)
                     if transport_failure:
                         gateway_circuit.record_transport_failure()
+                    _log_gateway_rejection(response, lane_id=lane_id, request_id=request_id)
                     observe_gateway_first_byte(
-                        feature='chat_agent',
+                        feature=_gateway_feature_for_lane(lane_id),
                         started_at=started_at,
                         outcome='transport_failure' if transport_failure else 'error',
                     )
                     _record_gateway_result(
+                        lane_id=lane_id,
                         outcome='fallback' if transport_failure else 'error',
                         reason=f'http_{response.status_code}',
                         request_id=request_id,
@@ -1108,7 +1403,9 @@ async def _stream_gateway(
                     yield b'data: [DONE]\n\n'
                     return
                 await _record_chat_quota_question(uid, request_id, platform)
-                observe_gateway_first_byte(feature='chat_agent', started_at=started_at, outcome='success')
+                observe_gateway_first_byte(
+                    feature=_gateway_feature_for_lane(lane_id), started_at=started_at, outcome='success'
+                )
                 async for chunk in response.aiter_bytes():
                     if not chunk:
                         continue
@@ -1119,11 +1416,11 @@ async def _stream_gateway(
                             usage_recorded = True
                     yield chunk
         gateway_circuit.record_transport_success()
-        _record_gateway_result(outcome='success', reason='ok', request_id=request_id)
+        _record_gateway_result(lane_id=lane_id, outcome='success', reason='ok', request_id=request_id)
         result_recorded = True
     except asyncio.CancelledError:
         if not result_recorded:
-            _record_gateway_result(outcome='cancelled', reason='cancelled', request_id=request_id)
+            _record_gateway_result(lane_id=lane_id, outcome='cancelled', reason='cancelled', request_id=request_id)
         raise
     except Exception as exc:
         if not result_recorded:
@@ -1131,12 +1428,15 @@ async def _stream_gateway(
             if transport_failure:
                 gateway_circuit.record_transport_failure()
             observe_gateway_first_byte(
-                feature='chat_agent',
+                feature=_gateway_feature_for_lane(lane_id),
                 started_at=started_at,
                 outcome='transport_failure' if transport_failure else 'error',
             )
             _record_gateway_result(
-                outcome='fallback' if transport_failure else 'error', reason='request_error', request_id=request_id
+                lane_id=lane_id,
+                outcome='fallback' if transport_failure else 'error',
+                reason='request_error',
+                request_id=request_id,
             )
         yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}}).encode()
         yield b'data: [DONE]\n\n'
@@ -1165,8 +1465,117 @@ async def _meter_server_request(uid: str) -> None:
         )
 
 
-@router.post('/v2/chat/completions', response_model=None)
-async def chat_completions(
+async def _web_search_authorized(uid: str, *, from_mode: str = 'anthropic_web_search') -> WebSearchAuthorization:
+    try:
+        settings = await run_blocking(db_executor, users_db.get_assistant_settings, uid)
+    except Exception:
+        record_fallback(
+            component='other',
+            from_mode=from_mode,
+            to_mode='model_knowledge',
+            reason='authorization_unavailable',
+            outcome='degraded',
+        )
+        return 'unavailable'
+    section = cast(Mapping[str, object], settings or {}).get(_WEB_SEARCH_SETTINGS_SECTION)
+    if isinstance(section, Mapping) and section.get('enabled') is False:
+        return 'denied'
+    return 'authorized'
+
+
+class _DesktopChatStreamOutcome:
+    """Incrementally prove an OpenAI-compatible stream delivered an answer."""
+
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+        self.has_content = False
+        self.has_terminal = False
+        self.has_error = False
+
+    def observe(self, item: object) -> None:
+        if isinstance(item, str):
+            chunk = item.encode('utf-8')
+        elif isinstance(item, (bytes, bytearray, memoryview)):
+            chunk = bytes(item)
+        else:
+            return
+        self._buffer.extend(chunk)
+        normalized = bytes(self._buffer).replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+        self._buffer = bytearray(normalized)
+        while b'\n\n' in self._buffer:
+            frame, _, remainder = self._buffer.partition(b'\n\n')
+            self._buffer = bytearray(remainder)
+            data = b'\n'.join(line[5:].lstrip() for line in frame.splitlines() if line.startswith(b'data:'))
+            if not data:
+                continue
+            if data.strip() == b'[DONE]':
+                self.has_terminal = True
+                continue
+            try:
+                payload = json.loads(data)
+            except (TypeError, ValueError):
+                continue
+            if isinstance(payload, Mapping):
+                if payload.get('error'):
+                    self.has_error = True
+                if _desktop_chat_payload_has_content(payload):
+                    self.has_content = True
+
+    def failure_when(self, item: object) -> bool:
+        self.observe(item)
+        return self.has_error
+
+    def success_when(self, _item: object) -> bool:
+        return self.has_content and self.has_terminal
+
+
+def _desktop_chat_payload_has_content(payload: Mapping[str, object]) -> bool:
+    choices = payload.get('choices')
+    if not isinstance(choices, list):
+        return False
+    for choice in choices:
+        if not isinstance(choice, Mapping):
+            continue
+        message = choice.get('message')
+        delta = choice.get('delta')
+        for value in (message, delta):
+            if not isinstance(value, Mapping):
+                continue
+            content = value.get('content')
+            if isinstance(content, str) and content.strip():
+                return True
+            tool_calls = value.get('tool_calls')
+            if isinstance(tool_calls, list) and tool_calls:
+                return True
+    return False
+
+
+def _desktop_chat_issue_class(exc: BaseException) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return 'upstream_timeout'
+    if isinstance(exc, HTTPException):
+        if exc.status_code in {408, 504}:
+            return 'upstream_timeout'
+        if exc.status_code == 503:
+            return 'dependency_unavailable'
+        if exc.status_code >= 500:
+            return 'provider_error'
+        return 'upstream_rejected'
+    if isinstance(exc, httpx.HTTPStatusError):
+        return 'upstream_rejected'
+    return 'provider_error'
+
+
+def _desktop_chat_client_kind(x_app_platform: object, user_agent: object) -> ClientKind:
+    headers: dict[str, str] = {}
+    if isinstance(x_app_platform, str):
+        headers['x-app-platform'] = x_app_platform
+    if isinstance(user_agent, str):
+        headers['user-agent'] = user_agent
+    return resolve_client_kind_from_headers(headers)
+
+
+async def _chat_completions_unobserved(
     body: dict[str, object],
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
@@ -1193,12 +1602,7 @@ async def chat_completions(
         return JSONResponse(stub_chat_completions_json(body), headers=stub_headers)
     payload: dict[str, object] = {}
     try:
-        direct_web_search_requested = _direct_web_search_requested(body)
-        gateway_mode = (
-            should_route_features_through_gateway()
-            and _uses_managed_chat_agent(body)
-            and not direct_web_search_requested
-        )
+        gateway_mode = should_route_chat_agent_through_gateway() and _uses_managed_chat_agent(body)
         if gateway_mode and get_byok_key('anthropic'):
             record_fallback(
                 component='llm_gateway',
@@ -1209,12 +1613,28 @@ async def chat_completions(
             )
             gateway_mode = False
         if gateway_mode:
-            public_model = str(body.get('model') or CHAT_AGENT_AUTO_LANE_ID)
-            gateway_payload = _gateway_body(body)
+            public_model = _managed_lane_id(body)
+            # Structured single-shot callers must not inherit the web-search
+            # lane even if a leftover client still sets omi_web_search.
+            if public_model == CHAT_AGENT_AUTO_LANE_ID and _web_search_requested(body):
+                web_search_authorization = await _web_search_authorized(uid, from_mode='managed_web_search')
+                if _web_search_eligible(body, authorization=web_search_authorization):
+                    public_model = WEB_SEARCH_AUTO_LANE_ID
+                else:
+                    _record_web_search_withheld(
+                        body,
+                        authorization=web_search_authorization,
+                        web_search_supported=True,
+                        from_mode='managed_web_search',
+                    )
+            gateway_payload = _gateway_body(body, public_model)
         else:
-            public_model, payload = _request(body)
+            web_search_authorization = 'authorized' if _web_search_requested(body) else 'unavailable'
+            if web_search_authorization == 'authorized':
+                web_search_authorization = await _web_search_authorized(uid)
+            public_model, payload = _request(body, web_search_authorization=web_search_authorization)
             gateway_payload = {}
-        enforce_chat_quota(uid, platform=x_app_platform)
+        enforce_desktop_chat_quota(uid, platform=x_app_platform)
         await _meter_server_request(uid)
     except HTTPException:
         raise
@@ -1225,7 +1645,7 @@ async def chat_completions(
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
-                _stream_gateway(gateway_payload, uid, request_id, x_app_platform),
+                _stream_gateway(gateway_payload, uid, request_id, x_app_platform, public_model),
                 media_type='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
@@ -1249,26 +1669,30 @@ async def chat_completions(
             },
         )
     if gateway_mode:
-        usage_token = set_usage_context(uid, 'chat_agent')
+        usage_token = set_usage_context(uid, _gateway_feature_for_lane(public_model))
         started_at = time.monotonic()
         result_recorded = False
         try:
             if not gateway_circuit.allow_request():
-                _record_gateway_result(outcome='error', reason='circuit_open', request_id=request_id)
+                _record_gateway_result(
+                    lane_id=public_model, outcome='error', reason='circuit_open', request_id=request_id
+                )
                 result_recorded = True
                 raise HTTPException(status_code=503, detail='Upstream provider unavailable')
             async with get_llm_gateway_semaphore():
                 response = await get_llm_gateway_client().post(
                     f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                    headers=_gateway_request_headers(request_id),
+                    headers=_gateway_request_headers(request_id, public_model, x_app_platform),
                     json=gateway_payload,
                 )
             response.raise_for_status()
             response_body = response.json()
             await _record_chat_quota_question(uid, request_id, x_app_platform)
             gateway_circuit.record_transport_success()
-            observe_gateway_first_byte(feature='chat_agent', started_at=started_at, outcome='success')
-            _record_gateway_result(outcome='success', reason='ok', request_id=request_id)
+            observe_gateway_first_byte(
+                feature=_gateway_feature_for_lane(public_model), started_at=started_at, outcome='success'
+            )
+            _record_gateway_result(lane_id=public_model, outcome='success', reason='ok', request_id=request_id)
             result_recorded = True
             await _record_usage(uid, _openai_usage_as_anthropic(response_body.get('usage')))
             return JSONResponse(
@@ -1286,11 +1710,12 @@ async def chat_completions(
                 if transport_failure:
                     gateway_circuit.record_transport_failure()
                 observe_gateway_first_byte(
-                    feature='chat_agent',
+                    feature=_gateway_feature_for_lane(public_model),
                     started_at=started_at,
                     outcome='transport_failure' if transport_failure else 'error',
                 )
                 _record_gateway_result(
+                    lane_id=public_model,
                     outcome='fallback' if transport_failure else 'error',
                     reason='request_error',
                     request_id=request_id,
@@ -1318,3 +1743,56 @@ async def chat_completions(
             'X-Request-Id': request_id,
         },
     )
+
+
+@router.post('/v2/chat/completions', response_model=None)
+async def chat_completions(
+    body: dict[str, object],
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
+    x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
+    user_agent: str | None = Header(None, alias='User-Agent'),
+) -> JSONResponse | StreamingResponse:
+    attempt = ClientJourneyAttempt(
+        'desktop_chat',
+        _desktop_chat_client_kind(x_app_platform, user_agent),
+    )
+    try:
+        response = await _chat_completions_unobserved(
+            body,
+            uid=uid,
+            x_app_platform=x_app_platform,
+            x_omi_chat_contract_version=x_omi_chat_contract_version,
+            x_omi_request_id=x_omi_request_id,
+        )
+    except asyncio.CancelledError:
+        attempt.cancel()
+        raise
+    except Exception as exc:
+        attempt.fail(_desktop_chat_issue_class(exc))
+        raise
+
+    if isinstance(response, StreamingResponse):
+        outcome = _DesktopChatStreamOutcome()
+        response.body_iterator = attempt.observe_stream(
+            response.body_iterator,
+            success_when=outcome.success_when,
+            failure_when=outcome.failure_when,
+            failure_class='provider_error',
+            missing_success_class='empty_answer',
+        )
+        return response
+
+    try:
+        payload = json.loads(bytes(response.body))
+    except (TypeError, ValueError):
+        attempt.fail('invalid_response')
+    else:
+        if isinstance(payload, Mapping) and payload.get('error'):
+            attempt.fail('provider_error')
+        elif isinstance(payload, Mapping) and _desktop_chat_payload_has_content(payload):
+            attempt.succeed()
+        else:
+            attempt.fail('empty_answer')
+    return response

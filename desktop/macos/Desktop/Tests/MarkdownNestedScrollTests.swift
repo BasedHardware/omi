@@ -21,7 +21,7 @@ final class MarkdownNestedScrollTests: XCTestCase {
       contentRect: NSRect(x: 0, y: 0, width: 360, height: 400),
       styleMask: [.titled], backing: .buffered, defer: false)
     window.contentView = host
-    window.orderFrontRegardless()
+    NonintrusiveTestWindow.orderIn(window)
     defer {
       window.orderOut(nil)
       window.contentView = nil
@@ -56,7 +56,7 @@ final class MarkdownNestedScrollTests: XCTestCase {
       contentRect: NSRect(x: 0, y: 0, width: 400, height: 400),
       styleMask: [.titled], backing: .buffered, defer: false)
     window.contentView = outer
-    window.orderFrontRegardless()
+    NonintrusiveTestWindow.orderIn(window)
     defer {
       window.orderOut(nil)
       window.contentView = nil

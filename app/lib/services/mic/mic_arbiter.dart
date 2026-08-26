@@ -97,4 +97,9 @@ class ArbitratedMic implements IMicRecorderService {
     _inner.stop();
     _arbiter.release(_owner);
   }
+
+  @override
+  void probeStallAfterForeground() {
+    _inner.probeStallAfterForeground();
+  }
 }

@@ -17,12 +17,13 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/utils/share_links.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -55,6 +56,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool appLoading = false;
   bool isLoading = false;
   bool chatButtonLoading = false;
+  bool _reEnabling = false;
   Map<String, dynamic>? _subscriptionData;
   bool _isCancelingSubscription = false;
   Timer? _paymentCheckTimer;
@@ -110,7 +112,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     setState(() => appLoading = true);
     var prefs = SharedPreferencesUtil();
-    var enabled = await enableAppServer(app.id);
+    var (enabled, _) = await enableAppServer(app.id);
 
     if (!mounted) return;
 
@@ -302,7 +304,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
       var details = await getAppDetailsServer(appId);
       if (details != null && details['is_user_paid']) {
-        var enabled = await enableAppServer(appId);
+        var (enabled, _) = await enableAppServer(appId);
         if (enabled) {
           PlatformManager.instance.analytics.appPurchaseCompleted(appId);
           prefs.enableApp(appId);
@@ -687,7 +689,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   box != null ? box.localToGlobal(Offset.zero) & box.size : null;
 
                               await Share.share(
-                                'https://h.omi.me/apps/${app.id}',
+                                appShareUrl(app.id),
                                 subject: app.name,
                                 sharePositionOrigin: sharePositionOrigin,
                               );
@@ -791,11 +793,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       ),
                                       if (app.official) ...[
                                         const SizedBox(width: 4),
-                                        const FaIcon(
-                                          FontAwesomeIcons.solidCircleCheck,
-                                          size: 14,
-                                          color: Colors.deepPurpleAccent,
-                                        ),
+                                        const FaIcon(FontAwesomeIcons.solidCircleCheck, size: 14, color: Colors.white),
                                       ],
                                     ],
                                   ),
@@ -814,7 +812,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     child: Row(
                                       children: [
                                         if (app.ratingCount > 0) ...[
-                                          const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: Color(0xFF8B5CF6)),
+                                          const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: Colors.white),
                                           const SizedBox(width: 4),
                                           Text(
                                             '${app.getRatingAvg()} (${app.ratingCount})',
@@ -876,7 +874,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                   await _toggleApp(app.id, true);
                                                 }
                                               },
-                                              color: const Color(0xFF8B5CF6),
+                                              color: Colors.white,
+                                              // AnimatedLoadingButton defaults both to white; on a
+                                              // white surface the label and spinner vanish.
+                                              textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+                                              loaderColor: Colors.black,
                                             )
                                           : AnimatedLoadingButton(
                                               width: 75,
@@ -908,7 +910,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                   _toggleApp(app.id, true);
                                                 }
                                               },
-                                              color: const Color(0xFF8B5CF6),
+                                              color: Colors.white,
+                                              // AnimatedLoadingButton defaults both to white; on a
+                                              // white surface the label and spinner vanish.
+                                              textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+                                              loaderColor: Colors.black,
                                             )),
                             ],
                           ),
@@ -1042,6 +1048,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           ],
                         )
                       : const SizedBox.shrink(),
+                  app.isDisabled() ? _buildDisabledNotice() : const SizedBox.shrink(),
                   const SizedBox(height: 24),
                   ...(hasAuthSteps
                       ? app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
@@ -1206,7 +1213,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => FullScreenImageViewer(imageUrl: app.thumbnailUrls[index]),
+                                  builder: (context) => MediaViewerPage(
+                                    items: app.thumbnailUrls
+                                        .map((url) => MediaViewerItem(
+                                              imageUrl: url,
+                                            ))
+                                        .toList(),
+                                    initialIndex: index,
+                                    maxScaleMultiplier: 2,
+                                    showCloseButton: true,
+                                    wrapBodyInSafeArea: false,
+                                  ),
                                 ),
                               );
                             },
@@ -1431,6 +1448,97 @@ class _AppDetailPageState extends State<AppDetailPage> {
     );
   }
 
+  /// Shown when the backend has latched `disabled` on the app.
+  ///
+  /// Nothing surfaced this state before, so a disabled app read as healthy here
+  /// while every install failed, and the owner had no control that could clear it.
+  Widget _buildDisabledNotice() {
+    final isOwner = app.isOwner(SharedPreferencesUtil().uid);
+    final reason = app.disabledReason == 'webhook_failures'
+        ? context.l10n.appDisabledWebhookFailures
+        : context.l10n.appDisabledGeneric;
+    final when = app.disabledAt != null && app.disabledAt!.length >= 10
+        ? ' ${context.l10n.appDisabledOn(app.disabledAt!.substring(0, 10))}'
+        : '';
+    final lastError = app.disabledError != null && app.disabledError!.isNotEmpty
+        ? ' ${context.l10n.appDisabledLastError(app.disabledError!)}'
+        : '';
+
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const FaIcon(FontAwesomeIcons.triangleExclamation, color: Colors.grey, size: 18),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: MediaQuery.of(context).size.width * 0.78,
+              child: Text(
+                '${context.l10n.appDisabledTitle} $reason$when$lastError',
+                style: const TextStyle(color: Colors.grey),
+              ),
+            ),
+          ],
+        ),
+        if (isOwner) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.78,
+            child: Text(
+              context.l10n.appDisabledOwnerHint,
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: _reEnabling ? null : _reEnableApp,
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.grey.shade900,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _reEnabling
+                ? const SizedBox(
+                    width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Text(context.l10n.appReEnable, style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _reEnableApp() async {
+    setState(() => _reEnabling = true);
+    final (ok, detail) = await reEnableAppServer(app.id);
+    if (!mounted) return;
+    setState(() => _reEnabling = false);
+
+    if (ok) {
+      setState(() {
+        app.disabled = false;
+        app.disabledReason = null;
+        app.disabledAt = null;
+        app.disabledError = null;
+      });
+      context.read<AppProvider>().getApps();
+      return;
+    }
+
+    // The rejection names the URL to fix, so it is shown verbatim rather than
+    // replaced with a generic retry prompt.
+    showDialog(
+      context: context,
+      builder: (c) => getDialog(
+        context,
+        () => Navigator.pop(context),
+        () => Navigator.pop(context),
+        context.l10n.appReEnableFailedTitle,
+        detail.isNotEmpty ? detail : context.l10n.appReEnableFailedBody,
+        singleButton: true,
+      ),
+    );
+  }
+
   Future<void> _navigateToSetup() async {
     bool isIntegration = app.worksExternally();
     bool hasSetupInstructions = isIntegration && app.externalIntegration?.setupInstructionsFilePath?.isNotEmpty == true;
@@ -1503,12 +1611,15 @@ class _AppDetailPageState extends State<AppDetailPage> {
     setState(() => appLoading = true);
 
     if (isEnabled) {
-      var enabled = await enableAppServer(appId);
+      var (enabled, detail) = await enableAppServer(appId);
 
       if (!mounted) return;
 
       if (!enabled) {
-        if (app.worksExternally()) {
+        // Setup is only the right guess when the backend gave no reason. A
+        // disabled app used to land here and get sent to setup instructions,
+        // so the developer re-ran a setup that was never the problem.
+        if (app.worksExternally() && detail.isEmpty) {
           setState(() => appLoading = false);
           await _navigateToSetup();
           return;
@@ -1519,8 +1630,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
               context,
               () => Navigator.pop(context),
               () => Navigator.pop(context),
-              'Error activating the app',
-              'There was an issue activating this app. Please try again.',
+              context.l10n.errorActivatingApp,
+              detail.isNotEmpty ? detail : context.l10n.issueActivatingApp,
               singleButton: true,
             ),
           );
@@ -1606,7 +1717,7 @@ class RatingDistributionWidget extends StatelessWidget {
                   child: FaIcon(
                     FontAwesomeIcons.solidStar,
                     size: 14,
-                    color: index < ratingAvg.round() ? Colors.deepPurple : Colors.grey.shade700,
+                    color: index < ratingAvg.round() ? Colors.white : Colors.grey.shade700,
                   ),
                 );
               }),
@@ -1793,9 +1904,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.deepPurple.withValues(alpha: 0.1),
+        color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1833,7 +1944,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                   child: FaIcon(
                     FontAwesomeIcons.solidStar,
                     size: 24,
-                    color: index < editRating ? Colors.deepPurple : Colors.grey.shade600,
+                    color: index < editRating ? Colors.white : Colors.grey.shade600,
                   ),
                 ),
               );
@@ -1864,8 +1975,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
               key: const ValueKey('app_detail_submit_review_button'),
               onPressed: isSubmitting ? null : _submitReview,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                foregroundColor: Colors.white,
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
@@ -1875,7 +1986,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                       width: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        // The button surface is now white, so a white spinner would be invisible.
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
                       ),
                     )
                   : Text(
@@ -1909,8 +2021,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                 seed: avatarSeed,
                 username: review.username,
                 size: 36,
-                backgroundColor: isUserReview ? Colors.deepPurple.withValues(alpha: 0.2) : null,
-                foregroundColor: isUserReview ? Colors.deepPurple : null,
+                backgroundColor: isUserReview ? Colors.white.withValues(alpha: 0.2) : null,
+                foregroundColor: isUserReview ? Colors.white : null,
               ),
               const SizedBox(width: 12),
               // Name, date, and stars
@@ -1923,7 +2035,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                         Text(
                           displayName,
                           style: TextStyle(
-                            color: isUserReview ? Colors.deepPurple : Colors.grey,
+                            color: isUserReview ? Colors.white : Colors.grey,
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
@@ -1945,7 +2057,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                           child: FaIcon(
                             FontAwesomeIcons.solidStar,
                             size: 14,
-                            color: index < review.score.round() ? Colors.deepPurple : Colors.grey.shade700,
+                            color: index < review.score.round() ? Colors.white : Colors.grey.shade700,
                           ),
                         );
                       }),

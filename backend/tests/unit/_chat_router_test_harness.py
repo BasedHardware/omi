@@ -121,6 +121,11 @@ def wire_common_stubs(install) -> SimpleNamespace:
     sanitizer.sanitize_pii = lambda value: value
     observability = install('utils.observability', ModuleType('utils.observability'))
     observability.submit_langsmith_feedback = MagicMock()
+    # routers.chat imports utils.observability.fallback as a submodule; keep it
+    # stubbed here so suites that only load the router do not require the real package.
+    fallback_observability = install('utils.observability.fallback', ModuleType('utils.observability.fallback'))
+    fallback_observability.record_fallback = MagicMock()
+    observability.record_fallback = fallback_observability.record_fallback
 
     journey_observability = install('utils.observability.journeys', ModuleType('utils.observability.journeys'))
 
@@ -141,7 +146,54 @@ def wire_common_stubs(install) -> SimpleNamespace:
             self.finished = True
             self.outcomes.append(outcome)
 
+    class ClientJourneyAttempt:
+        """Stream-aware spy for the client-segmented journey wired by the router."""
+
+        instances = []
+
+        def __init__(self, journey, client_kind):
+            self.journey = journey
+            self.client_kind = client_kind
+            self.finished = False
+            self.outcome = None
+            self.issue_class = None
+            self.__class__.instances.append(self)
+
+        def finish(self, outcome, *, issue_class=None):
+            if self.finished:
+                return
+            self.finished = True
+            self.outcome = outcome
+            self.issue_class = issue_class
+
+        def observe_stream(
+            self,
+            source,
+            *,
+            success_when,
+            failure_when,
+            failure_class='provider_error',
+            missing_success_class='empty_answer',
+        ):
+            async def observed():
+                success_observed = False
+                async for item in source:
+                    if not self.finished:
+                        if failure_when(item):
+                            self.finish('failure', issue_class=failure_class)
+                        elif success_when(item):
+                            success_observed = True
+                    yield item
+                if not self.finished:
+                    if success_observed:
+                        self.finish('success')
+                    else:
+                        self.finish('failure', issue_class=missing_success_class)
+
+            return observed()
+
     journey_observability.JourneyAttempt = JourneyAttempt
+    journey_observability.ClientJourneyAttempt = ClientJourneyAttempt
     transcription_observability = install(
         'utils.observability.transcription', ModuleType('utils.observability.transcription')
     )
@@ -172,6 +224,9 @@ def wire_common_stubs(install) -> SimpleNamespace:
     storage.schedule_syncing_temporal_file_deletion = MagicMock()
     chat_file = install('utils.other.chat_file', ModuleType('utils.other.chat_file'))
     chat_file.FileChatTool = MagicMock()
+    # routers.chat imports this name; the stub must carry it or the module fails to load. A local
+    # subclass keeps the real module (PIL, openai, database) out of these suites' import graph.
+    chat_file.UnsupportedChatFileError = type('UnsupportedChatFileError', (Exception,), {})
 
     sync_files = install('utils.sync.files', ModuleType('utils.sync.files'))
     sync_files.retrieve_file_paths = MagicMock(return_value=[])

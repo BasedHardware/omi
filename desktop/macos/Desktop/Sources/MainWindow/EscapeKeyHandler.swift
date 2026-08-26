@@ -19,7 +19,15 @@ struct OverlayModalEscapeCatcher: View {
   }
 }
 
+/// Declaration order is the priority order: `dispatchEscape` walks `allCases` **backwards**, so the
+/// last case declared gets first refusal and the first case declared is the fallback nobody else
+/// wanted.
 enum EscapeKeyPriority: Int, CaseIterable {
+  /// The window itself. Lowest by construction, because putting the shell away is what Escape means
+  /// only when nothing inside it claimed the key — a page navigates Home first (`navigation`), an open
+  /// editor cancels first (`editing`), a modal closes first (`modal`). Registered by `ShellSummon`
+  /// against the window, not by a view, so no destination can forget to compose it.
+  case shell
   case navigation
   case content
   case editing

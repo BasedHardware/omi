@@ -4,6 +4,15 @@ import XCTest
 
 @MainActor
 final class DashboardIntelligenceStoreTests: XCTestCase {
+  override func setUp() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+    AccountCutoverControlManager.shared.apply(.legacyDefault)
+  }
+
+  override func tearDown() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+  }
+
   func testEmptyProjectionIsAValidCalmState() async {
     let api = FakeDashboardIntelligenceClient()
     api.projection = projection(items: [])
@@ -255,6 +264,24 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
     )
   }
 
+  @MainActor
+  func testNavigationRequestClearsOnRuntimeOwnerChange() async {
+    let navigation = TaskNavigationRequestStore()
+    navigation.request(
+      task: TaskActionItem(
+        id: "task-owner-a",
+        description: "Owner A task",
+        completed: false,
+        createdAt: Date(timeIntervalSince1970: 0)
+      ))
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    await Task.yield()
+
+    XCTAssertNil(navigation.peek())
+    XCTAssertNil(navigation.pendingTask)
+  }
+
   func testExactNavigationTargetsAreHydratedBeforeDashboardAcceptsTheRoute() async {
     let api = FakeDashboardIntelligenceClient()
     api.exactCandidate = candidate(id: "candidate-101")
@@ -271,6 +298,49 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
 
     XCTAssertEqual(candidate?.candidateId, "candidate-101")
     XCTAssertEqual(task?.id, "old-task")
+  }
+
+  /// A recommendation can outlive its task: the projection is minted before the
+  /// task is cancelled/superseded/deleted. `TaskActionItem.isRetired` is the
+  /// projection that reads canonical lifecycle status, because detail responses
+  /// may omit legacy `deleted` entirely — so a raw `deleted` read (or, as here,
+  /// no retirement check at all) hands a retired task back as a live route.
+  func testRetiredTaskIsNotOpenedByNavigation() async {
+    for status in ["cancelled", "superseded"] {
+      let api = FakeDashboardIntelligenceClient()
+      api.exactTask = TaskActionItem(
+        id: "retired-task",
+        description: "Retired server-side after the recommendation was minted",
+        completed: false,
+        createdAt: Date(timeIntervalSince1970: 0),
+        deleted: nil,
+        taskStatus: status
+      )
+      let store = DashboardIntelligenceStore(client: api, outboxStore: MemoryDashboardOutbox())
+
+      let task = await store.taskForNavigation(taskID: "retired-task")
+
+      XCTAssertNil(task, "a \(status) task must not open as a live navigation target")
+      XCTAssertEqual(store.error, "This task is no longer available.")
+    }
+  }
+
+  /// The legacy marker still retires a task on backends that send it.
+  func testLegacyDeletedTaskIsNotOpenedByNavigation() async {
+    let api = FakeDashboardIntelligenceClient()
+    api.exactTask = TaskActionItem(
+      id: "deleted-task",
+      description: "Deleted server-side",
+      completed: false,
+      createdAt: Date(timeIntervalSince1970: 0),
+      deleted: true
+    )
+    let store = DashboardIntelligenceStore(client: api, outboxStore: MemoryDashboardOutbox())
+
+    let task = await store.taskForNavigation(taskID: "deleted-task")
+
+    XCTAssertNil(task)
+    XCTAssertEqual(store.error, "This task is no longer available.")
   }
 
   func testWriteSidecarModeDoesNotExposeDashboardIntelligence() async {
@@ -743,6 +813,15 @@ private final class MemoryDashboardOutbox: DashboardFeedbackOutboxPersisting {
 
 @MainActor
 final class DashboardFeedbackOutboxOwnerIsolationTests: XCTestCase {
+  override func setUp() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+    AccountCutoverControlManager.shared.apply(.legacyDefault)
+  }
+
+  override func tearDown() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+  }
+
   func testDefaultOwnerTracksAuthenticationChanges() {
     let suite = "DashboardFeedbackOutboxOwnerIsolationTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!

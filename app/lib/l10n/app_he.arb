@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "האפליקציות שלי",
+    "myApps": "נוצר על ידי",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -959,16 +959,6 @@
     "cancelAtPeriodEnd": "התוכנית שלך תבוטל ב-{date}.",
     "@cancelAtPeriodEnd": {
         "description": "Cancellation message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
-    "renewsOn": "התוכנית שלך מתחדשת ב-{date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
         "placeholders": {
             "date": {
                 "type": "String",
@@ -10767,5 +10757,45 @@
     "whisperModelSizeLarge": "גדול",
     "whisperModelSizeMedium": "בינוני",
     "whisperModelSizeSmall": "קטן",
-    "whisperModelSizeTiny": "זעיר"
+    "whisperModelSizeTiny": "זעיר",
+    "planSheetChooseYourPlan": "בחרו תוכנית כדי לפתוח את Omi ללא הגבלה.",
+    "availableOnMacMobileWeb": "זמין ב-Mac, בנייד ובאינטרנט",
+    "popularBadge": "פופולרי",
+    "worksOnDesktop": "עובד במחשב",
+    "noDesktopAccess": "לא עובד במחשב",
+    "annualBillingSummary": "{months} חודשים / {price}",
+    "monthsFreeBadge": "{count, plural, =1{חודש אחד חינם} other{{count} חודשים חינם}}",
+    "freemiumLimitsIntro": "Omi בחינם, אבל לגרסה החינמית יש מגבלות שמשפיעות על החוויה שלכם:",
+    "downgradeLimitDelayNotRealTime": "עיכוב של 5-7 שניות (לא בזמן אמת)",
+    "downgradeToFreemiumAction": "מעבר לגרסה החינמית",
+    "getFreeUnlimitedAccess": "קבלו גישה בלתי מוגבלת בחינם",
+    "shareDataForTraining": "שיתוף נתונים לאימון",
+    "yourRequestUnderReview": "הבקשה שלכם בבדיקה",
+    "pinAsBaseline": "הצמדה כבסיס",
+    "unpinAsBaseline": "ביטול הצמדה מהבסיס",
+    "baselineMemory": "זיכרון בסיס",
+    "alwaysInContext": "תמיד בהקשר",
+    "accountCutoverUpdateRequiredTitle": "נדרש עדכון",
+    "accountCutoverUpdateRequiredMessage": "התקינו את אפליקציית Omi העדכנית כדי להמשיך לאחר העברת החשבון.",
+    "accountCutoverMigrationInProgressTitle": "העברה בתהליך",
+    "accountCutoverMigrationInProgressMessage": "החשבון שלכם בהעברה. תכונות המוצר מושהות עד לסיום ההעברה.",
+    "accountCutoverMigrationRollbackMessage": "החשבון שלכם בתחזוקה לאחר ביטול העברה. ייתכן שנתונים חדשים יותר נותרו מבודדים.",
+    "accountCutoverOpenStore": "פתחו חנות",
+    "chatScopeToday": "היום",
+    "chatScopeThisWeek": "השבוע הזה",
+    "chatScopeAbout": "אודות: {title}",
+    "askAboutThisConversation": "שאל על זה",
+    "sendRawAudioToOmi": "שליחת שמע גולמי ל-Omi",
+    "sendRawAudioToOmiDescription": "כבו כדי למנוע שליחת שמע גולמי ל-Omi. תמלילים ונתונים הדרושים לתכונות הענן עדיין עשויים להישלח ל-Omi.",
+    "findDevice": "איתור",
+    "diagnosticsShareFailed": "לא ניתן היה לשתף את האבחון. נסה שוב.",
+    "appDisabledTitle": "האפליקציה הזו מושבתת ולא ניתן להתקין אותה.",
+    "appDisabledWebhookFailures": "נקודת הקצה שלה נכשלה 72 שעות ברציפות, ולכן המשלוחים הופסקו.",
+    "appDisabledGeneric": "היא הושבתה על ידי Omi.",
+    "appDisabledOwnerHint": "תקן קודם את נקודת הקצה — הפעלה מחדש בודקת שוב כל כתובת URL מוגדרת.",
+    "appReEnable": "הפעל מחדש",
+    "appReEnableFailedTitle": "ההפעלה מחדש נכשלה",
+    "appReEnableFailedBody": "לא ניתן היה להפעיל מחדש את האפליקציה הזו. נסה שוב.",
+    "appDisabledOn": "הושבתה בתאריך {date}.",
+    "appDisabledLastError": "השגיאה האחרונה: {error}"
 }

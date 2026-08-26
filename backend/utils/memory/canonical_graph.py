@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from google.cloud import firestore
@@ -16,7 +17,11 @@ from database.firestore_index_registry import CANONICAL_MEMORY_ATLAS_READ_QUERY
 from database.memory_collections import MemoryCollections
 from models.memory_promotion import MemoryGraphAssertion
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
-from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
+from utils.memory.v3.account_generation_source import (
+    V3AccountGenerationFailureReason,
+    V3TrustedAccountGenerationResult,
+    read_memory_v3_trusted_account_generation,
+)
 from utils.memory.v3.cursor import (
     V3CursorContext,
     V3CursorError,
@@ -84,22 +89,67 @@ def _firestore_client(db_client: Any = None) -> Any:
     return db_client if db_client is not None else get_firestore_client()
 
 
-def _read_canonical_graph_revision(uid: str, *, db_client: Any) -> _CanonicalGraphRevision:
-    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
-    if trusted.read_error_reason is not None:
-        raise CanonicalGraphReadUnavailable(trusted.read_error_reason.value)
+def _revision_from_trusted(trusted: V3TrustedAccountGenerationResult) -> Optional[_CanonicalGraphRevision]:
+    """Build the revision fence from a trusted head read, or ``None`` if malformed."""
     if (
         trusted.account_generation is None
         or trusted.commit_sequence is None
         or not isinstance(trusted.head_commit_id, str)
         or not trusted.head_commit_id
     ):
-        raise CanonicalGraphReadUnavailable('malformed_memory_state_head')
+        return None
     return _CanonicalGraphRevision(
         account_generation=trusted.account_generation,
         commit_sequence=trusted.commit_sequence,
         head_commit_id=trusted.head_commit_id,
     )
+
+
+def _read_canonical_graph_revision(uid: str, *, db_client: Any) -> _CanonicalGraphRevision:
+    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    if trusted.read_error_reason is not None:
+        raise CanonicalGraphReadUnavailable(trusted.read_error_reason.value)
+    revision = _revision_from_trusted(trusted)
+    if revision is None:
+        raise CanonicalGraphReadUnavailable('malformed_memory_state_head')
+    return revision
+
+
+class CanonicalGraphState(str, Enum):
+    """Tri-state answer to "is canonical graph state established for this account?".
+
+    ``UNESTABLISHED`` is a positive answer: the state-head document is genuinely
+    absent, so no derived state exists. ``INDETERMINATE`` means the question was
+    not answered — a timed-out read, a corrupt head, a schema the reader does not
+    understand. A caller deciding whether derived state exists must never
+    collapse ``INDETERMINATE`` into ``UNESTABLISHED``: on a destructive path that
+    turns a transient Firestore blip into permanent data loss.
+    """
+
+    ESTABLISHED = 'established'
+    UNESTABLISHED = 'unestablished'
+    INDETERMINATE = 'indeterminate'
+
+
+def probe_canonical_graph_state(uid: str, *, db_client: Any = None) -> CanonicalGraphState:
+    """One-document probe of the canonical revision fence.
+
+    ``users/{uid}/memory_state/head`` is the fence every canonical graph read is
+    built on, and only the canonical apply transaction writes it. Its existence
+    — not whether a materialized page happens to carry assertions — is the
+    "canonical state is established" signal, so this reads the head directly
+    instead of paging the atlas. That also keeps the probe independent of
+    ``MEMORY_V3_CURSOR_SECRET`` and of the atlas composite index.
+    """
+    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=_firestore_client(db_client))
+    reason = trusted.read_error_reason
+    if reason is V3AccountGenerationFailureReason.MISSING_STATE_HEAD:
+        return CanonicalGraphState.UNESTABLISHED
+    if reason is not None:
+        return CanonicalGraphState.INDETERMINATE
+    if _revision_from_trusted(trusted) is None:
+        return CanonicalGraphState.INDETERMINATE
+    return CanonicalGraphState.ESTABLISHED
 
 
 def _canonical_graph_cursor_secret() -> bytes:
@@ -235,6 +285,7 @@ def _canonical_graph_query_item_is_eligible(
         and _enum_value(item.get('processing_state')) == 'processed'
         and _enum_value(item.get('source_state')) == 'active'
         and not set(sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
+        and promotion.get('is_locked') is not True
         and promotion.get('user_review') is not False
     )
 

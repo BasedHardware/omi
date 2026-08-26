@@ -36,8 +36,25 @@ async def _enforce_account_deletion_access(uid: str) -> None:
     await run_blocking(db_executor, enforce_account_deletion_http_access, uid)
 
 
+def _enforce_cutover_http_if_request(uid: str, request: Request | None) -> None:
+    """Apply cutover fencing when FastAPI injected a Request (MCP/API-key lanes)."""
+    if request is None or not auth_endpoints.cutover_enforcement_enabled():
+        return
+    auth_endpoints.enforce_account_cutover_http_access(
+        uid,
+        method=request.method,
+        path=request.url.path,
+        headers=request.headers,
+    )
+
+
+async def _enforce_cutover_access(uid: str, request: Request | None) -> None:
+    await run_blocking(db_executor, _enforce_cutover_http_if_request, uid, request)
+
+
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
 ) -> str:
     if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -49,13 +66,17 @@ async def get_current_user_id(
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
     uid = decoded_token["uid"]
     await _enforce_account_deletion_access(uid)
+    await _enforce_cutover_access(uid, request)
     return uid
 
 
 api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 
 
-async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> str:
+async def get_uid_from_mcp_api_key(
+    api_key: str = Security(api_key_header),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
+) -> str:
     if not api_key or not api_key.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
@@ -73,6 +94,7 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
         raise HTTPException(status_code=401, detail="Invalid API Key")
     user_id = user_data["user_id"]
     await _enforce_account_deletion_access(user_id)
+    await _enforce_cutover_access(user_id, request)
     await _check_api_key_rate_limit_async(
         prefix="mcp",
         uid=user_id,
@@ -83,7 +105,10 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
     return user_id
 
 
-async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiKeyAuth":
+async def get_mcp_api_key_auth(
+    api_key: str = Security(api_key_header),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
+) -> "ApiKeyAuth":
     """Extract uid plus persisted MCP app/key/scope context from an MCP API key.
 
     Existing uid-only MCP auth remains available through get_uid_from_mcp_api_key.
@@ -107,6 +132,7 @@ async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiK
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
     await _enforce_account_deletion_access(user_data["user_id"])
+    await _enforce_cutover_access(user_data["user_id"], request)
 
     return ApiKeyAuth(
         uid=user_data["user_id"],
@@ -185,7 +211,10 @@ class ApiKeyAuth:
         self.key_id = key_id
 
 
-async def get_api_key_auth(api_key: str = Security(api_key_header)) -> ApiKeyAuth:
+async def get_api_key_auth(
+    api_key: str = Security(api_key_header),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
+) -> ApiKeyAuth:
     """Extract user ID and scopes from API key"""
     if not api_key or not api_key.startswith("Bearer "):
         raise HTTPException(
@@ -205,6 +234,7 @@ async def get_api_key_auth(api_key: str = Security(api_key_header)) -> ApiKeyAut
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
     await _enforce_account_deletion_access(user_data["user_id"])
+    await _enforce_cutover_access(user_data["user_id"], request)
 
     return ApiKeyAuth(
         uid=user_data["user_id"],
@@ -309,12 +339,29 @@ def _require_conversations_read_scope(auth: ApiKeyAuth):
         )
 
 
+async def _check_conversation_read_budgets_async(
+    *,
+    request: Optional[Request],
+    auth: ApiKeyAuth,
+    route_policy_name: str,
+) -> None:
+    """Charge a conversation read against the shared ceiling, then its per-route budget.
+
+    The shared ceiling is checked first so sustained polling is rejected on the
+    aggregate budget regardless of which read route it targets. Without it, adding a
+    per-route policy would hand each key a fresh bucket and raise the total number of
+    conversation reads it can make -- the opposite of what these limits are for.
+    """
+    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversation_reads_total")
+    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name=route_policy_name)
+
+
 async def get_auth_with_conversations_read(
     auth: ApiKeyAuth = Depends(get_api_key_auth),
     request: Request = None,
 ) -> ApiKeyAuth:
     _require_conversations_read_scope(auth)
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversations_read")
+    await _check_conversation_read_budgets_async(request=request, auth=auth, route_policy_name="dev:conversations_read")
     return auth
 
 
@@ -323,12 +370,29 @@ async def get_auth_with_conversation_detail_read(
     request: Request = None,
 ) -> ApiKeyAuth:
     _require_conversations_read_scope(auth)
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversation_detail_read")
+    await _check_conversation_read_budgets_async(
+        request=request, auth=auth, route_policy_name="dev:conversation_detail_read"
+    )
     return auth
 
 
 async def get_uid_with_conversations_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
     await get_auth_with_conversations_read(auth)
+    return auth.uid
+
+
+async def get_uid_with_conversations_read_ask(
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+    request: Request = None,
+) -> str:
+    """conversations:read plus the tighter dev:ask budget for the billable RAG endpoint.
+
+    POST /v1/dev/user/ask invokes an LLM (qa_rag) per call, so it carries its own low
+    per-key hourly cap rather than riding the cheap dev:conversations_read list limit —
+    a leaked or overused key can't turn it into an unbounded billable endpoint.
+    """
+    _require_conversations_read_scope(auth)
+    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:ask")
     return auth.uid
 
 

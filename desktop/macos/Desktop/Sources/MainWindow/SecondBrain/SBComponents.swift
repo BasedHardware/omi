@@ -2,12 +2,32 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
+// The SB components are shared chrome: the shell, the chat surfaces, sign-in and onboarding are all
+// built out of them. On glass they render in `Ink` rather than the `SBInk` white-alpha scale — that
+// scale is layered on a *white* base in dark mode, so every one of these components drew white ink on
+// a light-pinned panel and disappeared. The `SBInk` parameters stay in the API (callers outside this
+// file pass them) but are collapsed onto the two rungs glass carries; see `SBInk.glassRung`.
+
+// MARK: - The ladder
+
+extension SBInk {
+  /// The two rungs glass carries. `Ink.tertiary` is illegal on a translucent panel (it measures
+  /// under AA there — see `Ink.tertiary`), so the design's thirty-two-step white-alpha scale
+  /// collapses onto exactly two: anything the design set at 0.70 or above is something the reader
+  /// acts on, and everything fainter is something the reader reads.
+  var glassRung: Color {
+    switch self {
+    case .w9, .w88, .w85, .w8, .w75, .w7: return Ink.primary
+    default: return Ink.secondary
+    }
+  }
+}
+
 // MARK: - Logo
 
 /// The 8-dot Omi mark, tinted to the current ink. Spins ONLY while Omi is
 /// actively working (listening / thinking) — never decoratively.
 struct SBLogo: View {
-  @Environment(\.sbTheme) private var sb
   var size: CGFloat = 16
   var spinning: Bool = false
   /// Override the tint (defaults to solid ink). The notch passes white.
@@ -30,10 +50,10 @@ struct SBLogo: View {
         // A missing bitmap must never turn Omi into a generic progress ring.
         // Keep the same eight-dot brand silhouette at every shared SBLogo call
         // site while the signed bundle's resource lookup is unavailable.
-        OmiBrandMarkFallback(size: size, color: tint ?? sb.ink)
+        OmiBrandMarkFallback(size: size, color: tint ?? Ink.primary)
       }
     }
-    .foregroundStyle(tint ?? sb.ink)
+    .foregroundStyle(tint ?? Ink.primary)
     .frame(width: size, height: size)
     .opacity(opacity)
     .rotationEffect(.degrees(angle))
@@ -45,9 +65,9 @@ struct SBLogo: View {
   private func syncSpin() {
     if spinning {
       angle = 0
-      withAnimation(SBMotion.logoSpin) { angle = 360 }
+      InkReduceMotion.perform(SBMotion.logoSpin) { angle = 360 }
     } else {
-      withAnimation(.easeOut(duration: 0.2)) { angle = 0 }
+      InkReduceMotion.perform(.easeOut(duration: InkMotion.settle)) { angle = 0 }
     }
   }
 }
@@ -129,7 +149,6 @@ private struct OmiBrandMarkFallback: View {
 // MARK: - Section label (Geist Mono, letter-spaced, muted)
 
 struct SBSectionLabel: View {
-  @Environment(\.sbTheme) private var sb
   let text: String
   var trailing: String? = nil
   var onTrailingTap: (() -> Void)? = nil
@@ -138,11 +157,11 @@ struct SBSectionLabel: View {
     HStack(alignment: .firstTextBaseline, spacing: 8) {
       Text(text.uppercased())
         .geistMono(size: 12, weight: .medium, tracking: 12 * 0.08)
-        .foregroundStyle(sb.ink(.w35))
+        .foregroundStyle(Ink.secondary)
       if let trailing {
         Text(trailing)
           .geistMono(size: 12, tracking: 0)
-          .foregroundStyle(sb.ink(.w25))
+          .foregroundStyle(Ink.secondary)
           .onTapGesture { onTrailingTap?() }
           .contentShape(Rectangle())
       }
@@ -153,10 +172,12 @@ struct SBSectionLabel: View {
 
 // MARK: - Buttons
 
-/// The one accent in the whole design: an inverted-ink filled button.
+/// The primary action: `Ink.primary` fill, `Ink.surface` label — the label ladder inverted, which is
+/// high-contrast in both appearances by construction and owes no second colour pair.
 struct SBInkButton: View {
-  @Environment(\.sbTheme) private var sb
   let title: String
+  /// Retained for source compatibility. The button's metrics are the design system's
+  /// (`InkButtonStyle`), so a caller cannot make one action pill a different size from another.
   var size: CGFloat = 14
   var horizontalPadding: CGFloat = 18
   var verticalPadding: CGFloat = 9
@@ -166,15 +187,10 @@ struct SBInkButton: View {
   var body: some View {
     Button(action: action) {
       Text(title)
-        .geist(size: size, weight: .semibold)
-        .foregroundStyle(sb.inkInverted)
-        .padding(.horizontal, horizontalPadding)
-        .padding(.vertical, verticalPadding)
-        .background(
-          RoundedRectangle(cornerRadius: 9, style: .continuous).fill(sb.ink)
-        )
     }
-    .buttonStyle(.plain)
+    // A full stadium capsule, never a rounded rectangle, and press feedback is
+    // opacity rather than scale. Both come from the one button style.
+    .buttonStyle(InkButtonStyle(kind: .primary))
     .modifier(SBDefaultActionKeyboardShortcut(enabled: isDefaultAction))
   }
 }
@@ -193,71 +209,49 @@ private struct SBDefaultActionKeyboardShortcut: ViewModifier {
 }
 
 struct SBOutlineButton: View {
-  @Environment(\.sbTheme) private var sb
   let title: String
+  /// See `SBInkButton.size` — the metrics belong to `InkButtonStyle`.
   var size: CGFloat = 14
   let action: () -> Void
 
   var body: some View {
     Button(action: action) {
       Text(title)
-        .geist(size: size, weight: .medium)
-        .foregroundStyle(sb.ink(.w85))
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
-        .background(
-          RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .stroke(sb.ink(.w18), lineWidth: 1)
-        )
     }
-    .buttonStyle(.plain)
+    .buttonStyle(InkButtonStyle(kind: .secondary))
   }
 }
 
 // MARK: - Glass panel modifier
 
-private struct SBGlassPanelModifier: ViewModifier {
-  @Environment(\.sbTheme) private var sb
-  var radius: CGFloat = 14
-  var strokeToken: SBInk = .w09
-
-  func body(content: Content) -> some View {
-    content
-      .background(
-        RoundedRectangle(cornerRadius: radius, style: .continuous)
-          .fill(sb.ink(.w04))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: radius, style: .continuous)
-          .stroke(sb.ink(strokeToken), lineWidth: 1)
-      )
-  }
-}
-
 extension View {
-  func sbCard(radius: CGFloat = 14, stroke: SBInk = .w09) -> some View {
-    modifier(SBGlassPanelModifier(radius: radius, strokeToken: stroke))
+  /// A card on the panel. Delegates to the shared content chrome so a card here and a card on a
+  /// content page cannot disagree; `stroke` is retained for source compatibility and ignored,
+  /// because a card's outline is `Ink.separator` and nothing else.
+  func sbCard(radius: CGFloat = PageGlass.cardRadius, stroke: SBInk = .w09) -> some View {
+    _ = stroke
+    return glassCard(cornerRadius: radius)
   }
 }
 
 // MARK: - Toggle (the design's pill knob)
 
 struct SBToggleSwitch: View {
-  @Environment(\.sbTheme) private var sb
   @Binding var isOn: Bool
   var width: CGFloat = 30
   var height: CGFloat = 17
 
   var body: some View {
     Button {
-      withAnimation(SBMotion.toggle) { isOn.toggle() }
+      InkReduceMotion.perform(SBMotion.toggle) { isOn.toggle() }
     } label: {
       ZStack(alignment: isOn ? .trailing : .leading) {
-        RoundedRectangle(cornerRadius: height / 2, style: .continuous)
-          .fill(isOn ? sb.ink : sb.ink(.w15))
+        Capsule(style: .continuous)
+          .fill(isOn ? Ink.primary : Ink.rowFillHover)
+          .overlay(Capsule(style: .continuous).strokeBorder(isOn ? .clear : Ink.hairline, lineWidth: 1))
           .frame(width: width, height: height)
         Circle()
-          .fill(isOn ? sb.inkInverted : sb.ink(.w6))
+          .fill(isOn ? Ink.surface : Ink.primary)
           .frame(width: height - 3, height: height - 3)
           .padding(.horizontal, 1.5)
       }
@@ -272,7 +266,6 @@ struct SBToggleSwitch: View {
 /// A single tappable row with a 1px hairline separator underneath — the design's
 /// core list primitive (rows, not cards).
 struct SBHairlineRow<Trailing: View>: View {
-  @Environment(\.sbTheme) private var sb
   let title: String
   var subtitle: String? = nil
   var titleToken: SBInk = .w9
@@ -284,12 +277,10 @@ struct SBHairlineRow<Trailing: View>: View {
       HStack(spacing: 12) {
         VStack(alignment: .leading, spacing: 2) {
           Text(title)
-            .geist(size: 15)
-            .foregroundStyle(sb.ink(titleToken))
+            .inkStyle(InkType.rowCopy, color: titleToken.glassRung)
           if let subtitle {
             Text(subtitle)
-              .geist(size: 12.5)
-              .foregroundStyle(sb.ink(.w38))
+              .inkStyle(InkType.statusLabel, color: Ink.secondary)
           }
         }
         Spacer(minLength: 8)
@@ -299,7 +290,7 @@ struct SBHairlineRow<Trailing: View>: View {
       .contentShape(Rectangle())
       .onTapGesture { onTap?() }
 
-      Rectangle().fill(sb.ink(.w07)).frame(height: 1)
+      Rectangle().fill(Ink.separator).frame(height: 1)
     }
   }
 }

@@ -286,6 +286,12 @@ abstract class IMicRecorderService {
   });
 
   void stop();
+
+  /// Soft-rearm frame/progress liveness after the app returns to foreground.
+  /// iOS may suspend Dart timers while Stage Manager lets another app steal
+  /// the mic (#4706). Must not immediately escalate — that races native rebuild
+  /// and false-restarts healthy sessions. No-op on flutter_sound stacks.
+  void probeStallAfterForeground();
 }
 
 class MicRecorderBackgroundService implements IMicRecorderService {
@@ -331,6 +337,9 @@ class MicRecorderBackgroundService implements IMicRecorderService {
   void stop() {
     _runner.stopRecorder();
   }
+
+  @override
+  void probeStallAfterForeground() {}
 }
 
 class MicRecorderService implements IMicRecorderService {
@@ -460,4 +469,7 @@ class MicRecorderService implements IMicRecorderService {
     _onRecording = null;
     _onStalled = null;
   }
+
+  @override
+  void probeStallAfterForeground() {}
 }

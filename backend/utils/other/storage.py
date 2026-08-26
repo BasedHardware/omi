@@ -19,15 +19,14 @@ except Exception as e:
     _opus_import_error: Optional[Exception] = e
 else:
     _opus_import_error = None
-from google.cloud import storage
-from google.oauth2 import service_account
-from google.cloud.exceptions import NotFound as BlobNotFound
-from google.cloud.exceptions import NotFound
+from google.cloud.exceptions import NotFound, NotFound as BlobNotFound
 
-from database.redis_db import cache_signed_url, get_cached_signed_url
+from database.redis_db import cache_signed_url, get_cached_signed_url, delete_cached_signed_url
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
+from utils.observability.fallback import record_fallback
 from utils.other.deferred_delete import DeferredDeleter
+from utils.other.local_storage import create_storage_client, local_public_url
 from database import users as users_db
 import logging
 
@@ -66,15 +65,7 @@ def _get_storage_client() -> Any:
     if storage_client is None:
         with _storage_client_lock:
             if storage_client is None:
-                if os.environ.get('SERVICE_ACCOUNT_JSON'):
-                    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-                    credentials = service_account.Credentials.from_service_account_info(service_account_info)  # type: ignore[reportUnknownMemberType]  # google.oauth2 partial stubs
-                    storage_client = storage.Client(credentials=credentials)
-                else:
-                    _gcs_project = (
-                        os.environ.get('GOOGLE_CLOUD_PROJECT') or os.environ.get('FIREBASE_PROJECT_ID') or ''
-                    ).strip()
-                    storage_client = storage.Client(project=_gcs_project) if _gcs_project else storage.Client()
+                storage_client = create_storage_client()
     return storage_client
 
 
@@ -87,6 +78,7 @@ omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
 chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 desktop_updates_bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
+screen_frames_bucket = os.getenv('BUCKET_SCREEN_FRAMES')
 
 _did_warn_missing_speech_profiles_bucket = False
 
@@ -125,7 +117,7 @@ def upload_profile_audio(file_path: str, uid: str) -> str:
     path = f'{uid}/speech_profile.wav'
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'
+    return blob.public_url
 
 
 def get_user_has_speech_profile(uid: str) -> bool:
@@ -292,7 +284,7 @@ def upload_postprocessing_audio(file_path: str) -> str:
     bucket = _get_storage_client().bucket(postprocessing_audio_bucket)
     blob = bucket.blob(file_path)
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{postprocessing_audio_bucket}/{file_path}'
+    return blob.public_url
 
 
 def delete_postprocessing_audio(file_path: str) -> None:
@@ -308,9 +300,9 @@ def delete_postprocessing_audio(file_path: str) -> None:
 
 def upload_sdcard_audio(file_path: str) -> str:
     bucket = _get_storage_client().bucket(postprocessing_audio_bucket)
-    blob = bucket.blob(file_path)
+    blob = bucket.blob(f'sdcard/{file_path}')
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{postprocessing_audio_bucket}/sdcard/{file_path}'
+    return blob.public_url
 
 
 def download_postprocessing_audio(file_path: str, destination_file_path: str) -> None:
@@ -329,7 +321,7 @@ def upload_conversation_recording(file_path: str, uid: str, conversation_id: str
     path = f'{uid}/{conversation_id}.wav'
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{memories_recordings_bucket}/{path}'
+    return blob.public_url
 
 
 def get_conversation_recording_if_exists(uid: str, memory_id: str) -> Optional[str]:
@@ -370,7 +362,7 @@ def get_syncing_file_temporal_url(file_path: str):
     bucket = _get_storage_client().bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{syncing_local_bucket}/{file_path}'
+    return blob.public_url
 
 
 def get_syncing_file_temporal_signed_url(file_path: str):
@@ -771,6 +763,36 @@ def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
         blob.delete()
 
 
+# PCM16 mono: one sample is 2 bytes. A chunk whose byte count is not a multiple
+# of this is truncated mid-sample.
+_PCM16_FRAME_BYTES = 2
+
+
+def _align_pcm16_frames(pcm_data: bytes, source: str) -> bytes:
+    """Drop a trailing partial PCM16 sample so decoded chunks stay frame-aligned.
+
+    A chunk stored truncated mid-sample (interrupted upload) makes every later
+    chunk in the merge byte-misaligned and leaves the merged buffer an odd byte
+    count, which pydub rejects with a deterministic ValueError. The audio-merge
+    Cloud Task retried that unretryable error to exhaustion and then marked
+    playback permanently unavailable, losing the artifact for the conversation.
+    Trimming the partial sample costs 1/32000s and keeps the merge buildable.
+    """
+    remainder = len(pcm_data) % _PCM16_FRAME_BYTES
+    if not remainder:
+        return pcm_data
+    record_fallback(
+        component='audio_merge',
+        from_mode='pcm16_frames',
+        to_mode='pcm16_frames_truncated',
+        reason='malformed_doc',
+        outcome='recovered',
+        log=logger,
+    )
+    logger.warning(f'audio chunk not PCM16 frame-aligned, trimming {remainder} trailing byte(s): {source}')
+    return pcm_data[:-remainder]
+
+
 def download_audio_chunks_and_merge(
     uid: str,
     conversation_id: str,
@@ -853,7 +875,7 @@ def download_audio_chunks_and_merge(
             else:
                 pcm_data = raw_data
 
-            return pcm_data
+            return _align_pcm16_frames(pcm_data, path)
         except Exception as e:
             logger.warning(f"Failed to decode/decrypt {path}: {e}")
             return None
@@ -888,7 +910,7 @@ def download_audio_chunks_and_merge(
                 else:
                     pcm_data = raw_data
 
-                return (timestamp, pcm_data)
+                return (timestamp, _align_pcm16_frames(pcm_data, chunk_path))
             except Exception as e:
                 logger.warning(
                     f"Failed to decode/decrypt {ext} chunk at {formatted_timestamp}: {e}, trying next format"
@@ -1501,7 +1523,7 @@ def upload_app_logo(file_path: str, app_id: str):
     blob = bucket.blob(path)
     blob.cache_control = 'public, no-cache'
     blob.upload_from_filename(file_path)
-    return f'https://storage.googleapis.com/{omi_apps_bucket}/{path}'
+    return blob.public_url
 
 
 def delete_app_logo(img_url: str):
@@ -1524,13 +1546,15 @@ def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
     blob = bucket.blob(path)
     blob.cache_control = 'public, no-cache'
     blob.upload_from_filename(file_path)
-    public_url = f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
-    return public_url
+    return blob.public_url
 
 
 def get_app_thumbnail_url(thumbnail_id: str) -> str:
     path = f'{thumbnail_id}.jpg'
-    return f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+    return (
+        local_public_url(app_thumbnails_bucket, path)
+        or f'https://storage.googleapis.com/{app_thumbnails_bucket}/{path}'
+    )
 
 
 # **********************************
@@ -1558,7 +1582,7 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> Dict[str, str]:
                 blob.make_public()
             except Exception as e:
                 logger.warning(f"Could not make blob public (may need bucket-level IAM): {e}")
-            dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
+            dictFiles[name] = blob.public_url
         except Exception as e:
             logger.error("Failed to upload {} due to exception: {}".format(name, e))
     return dictFiles
@@ -1585,3 +1609,78 @@ def get_desktop_update_signed_url(blob_path: str, expiration_hours: int = 1) -> 
 
     # Use existing _get_signed_url helper with caching
     return _get_signed_url(blob, expiration_hours * 60)
+
+
+# **************************************************
+# ****** SCREEN FRAMES (meeting-note screenshots) ***
+# **************************************************
+#
+# Path convention: {uid}/{conversation_id}/{frame_id}.jpg and
+# {uid}/{conversation_id}/{frame_id}_thumb.jpg (contract §8).
+#
+# upload_screen_frame_blobs is called from exactly one place in the codebase:
+# utils/screen_frames/writer.py — the writer described in contract §5 that is
+# the only code path allowed to write BUCKET_SCREEN_FRAMES. Nothing else
+# should call it. In production this bucket-writing call runs under a
+# separate service account scoped to BUCKET_SCREEN_FRAMES only (contract §5
+# deploy prerequisite; not something this change provisions).
+
+SCREEN_FRAME_SIGNED_URL_MINUTES = 60
+
+
+def _screen_frame_blob_path(uid: str, conversation_id: str, frame_id: str) -> str:
+    return f'{uid}/{conversation_id}/{frame_id}.jpg'
+
+
+def _screen_frame_thumbnail_blob_path(uid: str, conversation_id: str, frame_id: str) -> str:
+    return f'{uid}/{conversation_id}/{frame_id}_thumb.jpg'
+
+
+def _require_screen_frames_bucket() -> str:
+    if not screen_frames_bucket:
+        raise RuntimeError('BUCKET_SCREEN_FRAMES is not configured')
+    return screen_frames_bucket
+
+
+def upload_screen_frame_blobs(
+    uid: str,
+    conversation_id: str,
+    frame_id: str,
+    jpeg_bytes: bytes,
+    thumbnail_jpeg_bytes: bytes,
+) -> None:
+    """Write the canonical frame and its thumbnail. Writer-only — see module note above."""
+    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
+    content_blob = bucket.blob(_screen_frame_blob_path(uid, conversation_id, frame_id))
+    content_blob.upload_from_string(jpeg_bytes, content_type='image/jpeg')
+    thumb_blob = bucket.blob(_screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id))
+    thumb_blob.upload_from_string(thumbnail_jpeg_bytes, content_type='image/jpeg')
+
+
+def get_screen_frame_signed_url(uid: str, conversation_id: str, frame_id: str) -> str:
+    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
+    blob = bucket.blob(_screen_frame_blob_path(uid, conversation_id, frame_id))
+    return _get_signed_url(blob, SCREEN_FRAME_SIGNED_URL_MINUTES)
+
+
+def get_screen_frame_thumbnail_signed_url(uid: str, conversation_id: str, frame_id: str) -> str:
+    bucket = _get_storage_client().bucket(_require_screen_frames_bucket())
+    blob = bucket.blob(_screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id))
+    return _get_signed_url(blob, SCREEN_FRAME_SIGNED_URL_MINUTES)
+
+
+def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str) -> None:
+    """Delete both GCS objects for a frame and their cached signed URLs.
+
+    A delete that leaves bytes in the bucket, or a still-live cached signed
+    URL, is a bug, not a partial success (contract §8) — so both object
+    deletes and both cache evictions happen here unconditionally, even if
+    one of the blobs was already missing.
+    """
+    content_path = _screen_frame_blob_path(uid, conversation_id, frame_id)
+    thumb_path = _screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id)
+    bucket_name = _require_screen_frames_bucket()
+    delete_blob(bucket_name, content_path)
+    delete_blob(bucket_name, thumb_path)
+    delete_cached_signed_url(content_path)
+    delete_cached_signed_url(thumb_path)

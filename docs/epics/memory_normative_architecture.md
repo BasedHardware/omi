@@ -91,33 +91,35 @@ Access is derived from canonical state; do not persist drifting booleans like `n
 
 ---
 
-## 3. Rollout and rollback
+## 3. Universal operations and rollback
 
-Keep a simple external rollout mode, but define exact semantics:
+Every authenticated account uses the same memory authority. Deployment modes
+are global incident/cost declarations only; they never select users or stores:
 
 | Mode | Behavior |
 |---|---|
-| `off` | Legacy only. No memory reads/writes/workers for non-whitelisted users. |
-| `shadow` | Legacy authoritative; memory audit artifacts only; no product-visible writes. |
-| `write` | Legacy reads remain authoritative; memory sidecar writes may run for whitelisted users after gates pass. |
-| `read` | Superset of `write`; memory read service becomes authoritative for whitelisted users. |
+| `off` | Pause new canonical intake and scheduled maintenance; keep the universal dual-format reader so canonical data never disappears. |
+| `shadow` | Deprecated observation declaration; it cannot change product routing. |
+| `write` | Canonical intake enabled globally; the universal reader remains authoritative. |
+| `read` | Normal universal operation: canonical writes plus canonical/historical merged reads. |
 
-Required per-user rollout state:
+Required per-account correctness state:
 
 ```text
-mode_epoch
-cutover_epoch
 account_generation
-last_reconciled_legacy_revision
-fallback_projection_ready
-stage gate statuses
+head_commit_id / source_generation
+writes_blocked
+historical materialization overrides and tombstones
 ```
 
 Rollback:
 
-- `read → write` can be one config change only because reads fall back to the reconciled memory-derived compatibility projection.
-- `write → off` is not a blind flag flip after persistent memory writes; it requires explicit decommission reconciliation.
-- Rollback must not make memory-created memories disappear, resurrect deleted legacy values, or expose stale vectors.
+- The universal dual-format reader is the rollback floor. Never roll back to a
+  legacy-only reader after canonical writes have started.
+- A global pause may stop intake or L2 work, but cannot make canonical memories
+  disappear or resurrect suppressed historical rows.
+- Privacy tombstones and account-generation fences are irreversible routing
+  authority even while provider cleanup is retrying.
 
 ---
 

@@ -17,7 +17,6 @@ ACTION_ITEMS_FOLDERS_DART_PATH = (
     ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'action_items_folders_wire.g.dart'
 )
 API_KEYS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'api_keys_wire.g.dart'
-AGENT_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'agent_wire.g.dart'
 PHONE_CALLS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'phone_calls_wire.g.dart'
 PEOPLE_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'people_wire.g.dart'
 IMPORTS_INTEGRATIONS_DART_PATH = (
@@ -66,7 +65,9 @@ def test_conversation_wire_dart_is_generated_from_app_client_openapi():
     assert GENERATED_DART_PATH.read_text() == generated
     for schema_name in generate_dart_models.SCHEMA_GROUPS['conversation']['schemas']:
         assert f'class Generated{schema_name}' in generated
-    assert 'items: _required(_readFieldValue<List<GeneratedConversation>>' in generated
+    assert 'items: _required(_readFieldValue<List<GeneratedConversationSearchItem>>' in generated
+    assert 'class GeneratedConversationSearchItem' in generated
+    assert 'class GeneratedTranscriptMatchSnippet' in generated
     assert 'class GeneratedSyncJobStartResponse' in generated
     assert 'class GeneratedSyncJobStatusResponse' in generated
     assert 'result: _readFieldValue<GeneratedSyncLocalFilesResultResponse>' in generated
@@ -150,16 +151,6 @@ def test_api_keys_wire_dart_is_generated_from_app_client_openapi():
     assert 'final List<String>? scopes;' in generated
     assert 'final String? appId;' in generated
     assert 'createdAt: _required(_readFieldValue<DateTime>' in generated
-
-
-def test_agent_wire_dart_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
-    generated = generate_dart_models.build_output(spec, 'agent')
-
-    assert AGENT_DART_PATH.read_text() == generated
-    assert 'class GeneratedAgentVmInfo' in generated
-    assert 'class GeneratedAgentKeepaliveResponse' in generated
-    assert 'hasVm: _required(_readFieldValue<bool>' in generated
 
 
 def test_phone_calls_wire_dart_is_generated_from_app_client_openapi():

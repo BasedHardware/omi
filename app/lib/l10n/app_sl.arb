@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Moje aplikacije",
+    "myApps": "Ustvarjeno od mene",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -959,16 +959,6 @@
     "cancelAtPeriodEnd": "Vaš načrt bo preklican na {date}.",
     "@cancelAtPeriodEnd": {
         "description": "Cancellation message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
-    "renewsOn": "Vaš načrt se obnavlja na {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
         "placeholders": {
             "date": {
                 "type": "String",
@@ -10767,5 +10757,45 @@
     "whisperModelSizeLarge": "Velik",
     "whisperModelSizeMedium": "Srednji",
     "whisperModelSizeSmall": "Majhen",
-    "whisperModelSizeTiny": "Najmanjši"
+    "whisperModelSizeTiny": "Najmanjši",
+    "planSheetChooseYourPlan": "Izberite svoj paket in odklenite neomejeni Omi.",
+    "availableOnMacMobileWeb": "Na voljo na Macu, mobilnem in spletu",
+    "popularBadge": "PRILJUBLJENO",
+    "worksOnDesktop": "Deluje na računalniku",
+    "noDesktopAccess": "Ne deluje na računalniku",
+    "annualBillingSummary": "{months} mesecev / {price}",
+    "monthsFreeBadge": "{count, plural, one{{count} mesec brezplačno} two{{count} meseca brezplačno} few{{count} mesece brezplačno} other{{count} mesecev brezplačno}}",
+    "freemiumLimitsIntro": "Omi je brezplačen, vendar ima brezplačna različica omejitve, ki vplivajo na vašo izkušnjo:",
+    "downgradeLimitDelayNotRealTime": "Zamik 5–7 sekund (ne v realnem času)",
+    "downgradeToFreemiumAction": "Preklopi na brezplačno različico",
+    "getFreeUnlimitedAccess": "Pridobite brezplačen neomejen dostop",
+    "shareDataForTraining": "Deli podatke za učenje",
+    "yourRequestUnderReview": "Vaša zahteva je v pregledu",
+    "pinAsBaseline": "Pripni kot osnovo",
+    "unpinAsBaseline": "Odpni z osnove",
+    "baselineMemory": "Osnovni spomin",
+    "alwaysInContext": "Vedno v kontekstu",
+    "accountCutoverUpdateRequiredTitle": "Je vyžadována aktualizace",
+    "accountCutoverUpdateRequiredMessage": "Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.",
+    "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
+    "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
+    "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
+    "accountCutoverOpenStore": "Otevřít obchod",
+    "chatScopeToday": "Danes",
+    "chatScopeThisWeek": "Ta teden",
+    "chatScopeAbout": "O: {title}",
+    "askAboutThisConversation": "Vprašaj o tem",
+    "sendRawAudioToOmi": "Pošiljaj neobdelan zvok v Omi",
+    "sendRawAudioToOmiDescription": "Izklopite, da preprečite pošiljanje neobdelanega zvoka v Omi. Prepisi in podatki, potrebni za funkcije v oblaku, se lahko še vedno pošiljajo v Omi.",
+    "findDevice": "Poišči",
+    "diagnosticsShareFailed": "Diagnostike ni bilo mogoče deliti. Poskusi znova.",
+    "appDisabledTitle": "Ta aplikacija je onemogočena in je ni mogoče namestiti.",
+    "appDisabledWebhookFailures": "Njena končna točka je odpovedovala 72 ur zapored, zato je bila dostava ustavljena.",
+    "appDisabledGeneric": "Onemogočila jo je Omi.",
+    "appDisabledOwnerHint": "Najprej popravi končno točko — ponovna omogočitev znova preveri vsak nastavljen URL.",
+    "appReEnable": "Znova omogoči",
+    "appReEnableFailedTitle": "Ponovna omogočitev ni uspela",
+    "appReEnableFailedBody": "Te aplikacije ni bilo mogoče znova omogočiti. Poskusi znova.",
+    "appDisabledOn": "Onemogočeno {date}.",
+    "appDisabledLastError": "Zadnja napaka: {error}."
 }

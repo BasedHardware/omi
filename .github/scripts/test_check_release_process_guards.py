@@ -379,23 +379,32 @@ def _desktop_candidate_trigger_guard_root(tmp_path: Path, monkeypatch) -> tuple[
     return codemagic, candidate
 
 
-def test_desktop_candidate_trigger_guard_keeps_native_tag_lane_and_preview_exception(tmp_path, monkeypatch):
+def test_desktop_candidate_trigger_guard_keeps_direct_tag_lane_and_preview_exception(tmp_path, monkeypatch):
     _desktop_candidate_trigger_guard_root(tmp_path, monkeypatch)
 
     assert GUARDS.check_desktop_candidate_trigger_authority() == []
 
 
-def test_desktop_candidate_trigger_guard_rejects_non_tag_normal_trigger(tmp_path, monkeypatch):
+def test_desktop_candidate_trigger_guard_rejects_native_trigger_race(tmp_path, monkeypatch):
     codemagic, _ = _desktop_candidate_trigger_guard_root(tmp_path, monkeypatch)
     _mutate(
         codemagic,
-        "    triggering:\n      events:\n        - tag\n      tag_patterns:\n        - pattern: \"v*-macos\"\n          include: true\n",
-        "    triggering:\n      events:\n        - push\n      branch_patterns:\n        - pattern: main\n          include: true\n",
+        "    working_directory: desktop/macos\n",
+        "    triggering:\n      events:\n        - tag\n    working_directory: desktop/macos\n",
     )
 
     errors = GUARDS.check_desktop_candidate_trigger_authority()
 
-    assert any("must natively trigger on v*-macos tags" in error for error in errors), errors
+    assert any("must not race direct dispatch with a native trigger" in error for error in errors), errors
+
+
+def test_desktop_candidate_trigger_guard_rejects_missing_direct_dispatch(tmp_path, monkeypatch):
+    _, candidate = _desktop_candidate_trigger_guard_root(tmp_path, monkeypatch)
+    _mutate(candidate, "--timeout-seconds 0", "--timeout-seconds 600")
+
+    errors = GUARDS.check_desktop_candidate_trigger_authority()
+
+    assert any("missing direct Codemagic dispatch: --timeout-seconds 0" in error for error in errors), errors
 
 
 def test_desktop_candidate_trigger_guard_rejects_direct_build_api_for_normal_lane(tmp_path, monkeypatch):
@@ -441,7 +450,11 @@ def test_mobile_codemagic_dispatcher_guard_rejects_missing_dispatch_command(tmp_
     dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
     dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
-    _mutate(dispatcher, "python3 .github/scripts/dispatch_mobile_internal_builds.py", "python3 .github/scripts/other_dispatcher.py")
+    _mutate(
+        dispatcher,
+        "python3 .github/scripts/dispatch_mobile_internal_builds.py",
+        "python3 .github/scripts/other_dispatcher.py",
+    )
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
 
     errors = GUARDS.check_mobile_codemagic_release_triggers()
@@ -458,7 +471,11 @@ def test_mobile_codemagic_dispatcher_guard_rejects_missing_workflow_target(tmp_p
     dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
     dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
-    _mutate(dispatcher_script, 'MOBILE_WORKFLOWS = ("ios-internal-auto", "android-internal-auto")', 'MOBILE_WORKFLOWS = ("ios-internal-auto",)')
+    _mutate(
+        dispatcher_script,
+        'MOBILE_WORKFLOWS = ("ios-internal-auto", "android-internal-auto")',
+        'MOBILE_WORKFLOWS = ("ios-internal-auto",)',
+    )
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
 
     errors = GUARDS.check_mobile_codemagic_release_triggers()
@@ -951,3 +968,19 @@ def test_firmware_release_metadata_reports_status_when_shell_has_no_output(tmp_p
     )
 
     assert GUARDS.check_firmware_release_metadata() == ["firmware release body smoke failed: exit 9"]
+
+
+def test_desktop_promotion_guard_rejects_reintroduced_qualification_trigger(tmp_path, monkeypatch):
+    workflows = tmp_path / ".github/workflows"
+    workflows.mkdir(parents=True)
+    for name in ("desktop_promote_beta.yml", "desktop_recover_beta.yml"):
+        shutil.copy2(REPO_ROOT / ".github/workflows" / name, workflows / name)
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    assert GUARDS.check_desktop_promotion_independent_of_qualification() == []
+
+    promotion = workflows / "desktop_promote_beta.yml"
+    original = promotion.read_text(encoding="utf-8")
+    promotion.write_text(original + "\nqualification_run_id: 1\n", encoding="utf-8")
+    errors = GUARDS.check_desktop_promotion_independent_of_qualification()
+    assert any("still depends on qualification" in error for error in errors), errors

@@ -1,6 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  createContext,
+  useContext,
+  ReactNode,
+} from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -35,10 +42,13 @@ interface ToastProviderProps {
 export function ToastProvider({ children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const showToast = useCallback((message: string, type: ToastType = 'info', duration = 4000) => {
-    const id = `toast-${Date.now()}-${Math.random()}`;
-    setToasts((prev) => [...prev, { id, message, type, duration }]);
-  }, []);
+  const showToast = useCallback(
+    (message: string, type: ToastType = 'info', duration = 4000) => {
+      const id = `toast-${Date.now()}-${Math.random()}`;
+      setToasts((prev) => [...prev, { id, message, type, duration }]);
+    },
+    [],
+  );
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -93,7 +103,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   const colors = {
     success: 'bg-green-500/10 border-green-500/30 text-green-400',
     error: 'bg-error/10 border-error/30 text-error',
-    info: 'bg-purple-primary/10 border-purple-primary/30 text-purple-primary',
+    info: 'bg-white/[0.08] border-white/25 text-text-primary',
   }[toast.type];
 
   return (
@@ -106,11 +116,13 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
         'flex items-center gap-3 px-4 py-3 rounded-xl',
         'border backdrop-blur-lg shadow-lg',
         'min-w-[280px] max-w-[400px]',
-        colors
+        colors,
       )}
     >
       <Icon className="w-5 h-5 flex-shrink-0" />
-      <span className="flex-1 text-sm font-medium text-text-primary">{toast.message}</span>
+      <span className="flex-1 text-sm font-medium text-text-primary">
+        {toast.message}
+      </span>
       <button
         onClick={() => onRemove(toast.id)}
         className="p-1 rounded-lg hover:bg-white/10 transition-colors"

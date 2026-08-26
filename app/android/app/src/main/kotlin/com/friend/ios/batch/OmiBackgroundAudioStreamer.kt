@@ -272,6 +272,10 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
 
     private fun loadConfig(): Config? {
         if (!boolPref("nativeBleStreamingEnabled", false)) return null
+        if (!CustomSttRawAudioPolicy.allowsForwarding(stringPref("customSttConfig"))) {
+            Log.i(TAG, "Raw Omi audio blocked by Custom STT forwarding policy")
+            return null
+        }
         val raw = stringPref("nativeBleStreamConfig")
         if (raw.isEmpty()) return null
 
@@ -299,7 +303,7 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
     }
 
     private fun buildRequest(url: String): Request? {
-        val token = stringPref("authToken")
+        val token = stringPref("nativeAuthToken").ifEmpty { stringPref("authToken") }
         if (token.isEmpty()) {
             Log.w(TAG, "Cannot open background transcription socket without auth token")
             return null

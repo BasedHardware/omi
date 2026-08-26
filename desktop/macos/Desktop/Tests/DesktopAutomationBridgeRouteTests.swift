@@ -48,6 +48,38 @@ private final class StubPresentationCoordinator: DesktopAutomationPresentationCo
 
 @MainActor
 final class DesktopAutomationBridgeRouteTests: XCTestCase {
+  func testQuietNavigationKeepsItsNonActivatingContractAcrossTheNotificationHandoff() {
+    let payload = DesktopAutomationNavigationRequest(
+      target: "settings",
+      settingsSection: "rewind",
+      highlightedSettingId: nil,
+      activateApp: false,
+      settleMs: nil,
+      waitForVisibility: false)
+    let activates = DesktopAutomationNavigationDelivery.resolvesActivation(
+      explicit: payload.activateApp)
+    let userInfo = DesktopAutomationNavigationDelivery.userInfo(
+      for: payload,
+      activateApp: activates)
+
+    XCTAssertFalse(activates)
+    XCTAssertEqual(userInfo["activateApp"] as? Bool, false)
+    XCTAssertEqual(userInfo["target"] as? String, "settings")
+    XCTAssertEqual(userInfo["settingsSection"] as? String, "rewind")
+  }
+
+  func testAutomationNavigationOnlyActivatesWithExplicitOptIn() {
+    XCTAssertFalse(
+      DesktopAutomationNavigationDelivery.resolvesActivation(
+        explicit: nil))
+    XCTAssertFalse(
+      DesktopAutomationNavigationDelivery.resolvesActivation(
+        explicit: false))
+    XCTAssertTrue(
+      DesktopAutomationNavigationDelivery.resolvesActivation(
+        explicit: true))
+  }
+
   func testNavigationAcknowledgementReturnsCachedRouteWithoutMountedWait() async throws {
     let calls = NavigationWaitCallCounter()
     let response = try await DesktopAutomationNavigationResponseMode.snapshot(

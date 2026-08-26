@@ -294,6 +294,59 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
       "revoked while running → a relaunch can't help; the grant flow handles it")
   }
 
+  func testScreenCaptureKitInvokedOnlyWhenGrantWasLiveAtLaunch() {
+    XCTAssertTrue(
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(grantedAtLaunch: true),
+      "SCK is usable when this process launched with Screen Recording already granted")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(grantedAtLaunch: false),
+      "an in-session first grant is not live on this window-server connection")
+  }
+
+  func testFirstGrantPathsDoNotCallScreenCaptureKitUntilRelaunch() throws {
+    // omi-test-quality: source-inspection -- static contract: SCK abort after an
+    // in-session first grant is not reproducible in XCTest without a WindowServer
+    // connection that predates TCC; every SCK entry must consult the policy gate.
+    let src = try sourceFile("Sources/ScreenCaptureService.swift")
+    XCTAssertTrue(src.contains("requestScreenCaptureKitPermissionIfUsableInThisProcess()"))
+    XCTAssertTrue(
+      src.contains("ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit("),
+      "ScreenCaptureService must consult the launch-time SCK gate")
+
+    guard let rfn = src.range(of: "static func requestAllScreenCapturePermissions() {"),
+      let rend = src.range(of: "\n  }", range: rfn.upperBound..<src.endIndex)?.lowerBound
+    else { return XCTFail("requestAllScreenCapturePermissions must exist") }
+    let rbody = String(src[rfn.upperBound..<rend])
+    XCTAssertTrue(
+      rbody.contains("requestScreenCaptureKitPermissionIfUsableInThisProcess()"),
+      "requestAll must not call SCK until the grant is live in this process")
+    XCTAssertFalse(
+      rbody.contains("await requestScreenCaptureKitPermission()"),
+      "requestAll must not call raw SCK after the first TCC dialog")
+
+    guard
+      let pfn = src.range(of: "static func primeCaptureConsent() async {"),
+      let pend = src.range(of: "\n  }", range: pfn.upperBound..<src.endIndex)?.lowerBound
+    else { return XCTFail("primeCaptureConsent must exist") }
+    let pbody = String(src[pfn.upperBound..<pend])
+    XCTAssertTrue(
+      pbody.contains("shouldInvokeScreenCaptureKit"),
+      "primeCaptureConsent must skip SCK when the grant arrived after launch")
+
+    let onboarding = try sourceFile("Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift")
+    guard let ofn = onboarding.range(of: "func primeScreenCaptureConsentIfNeeded() {"),
+      let oend = onboarding.range(of: "\n  }", range: ofn.upperBound..<onboarding.endIndex)?
+        .lowerBound
+    else { return XCTFail("primeScreenCaptureConsentIfNeeded must exist") }
+    let obody = String(onboarding[ofn.upperBound..<oend])
+    XCTAssertTrue(
+      obody.contains("shouldInvokeScreenCaptureKit"),
+      "onboarding must not prime SCK until a relaunch makes the grant live")
+    XCTAssertTrue(
+      obody.contains("screenRecordingGrantedAtLaunch"),
+      "onboarding must use AppState's launch-time snapshot, not a post-grant preflight")
+  }
+
   func testScreenCaptureRestartsUseSharedRelaunchCommand() throws {
     let src = try sourceFile("Sources/ScreenCaptureService.swift")
     XCTAssertTrue(src.contains("static func screenCaptureRelaunchCommand(appPath: String) -> String"))
@@ -309,5 +362,45 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     XCTAssertTrue(resetSnippet.contains("screenCaptureRelaunchCommand(appPath: bundleURL.path)"))
     XCTAssertFalse(softSnippet.contains("sleep 0.5 && open"))
     XCTAssertFalse(resetSnippet.contains("sleep 0.5 && open"))
+  }
+
+  /// Regression: first run on a new Mac restarted the app three times in 45 seconds, mid
+  /// onboarding, on permission pages that have nothing to do with screen recording
+  /// (0.12.187, macOS 15.1). Capture legitimately fails before the grant exists, the failure
+  /// tracker read that as a broken install, and the recovery path terminates and relaunches
+  /// the process. The "already recovered once" flag lives in the process it just killed, so
+  /// the fresh process did it again.
+  func testCaptureRecoveryNeverRestartsDuringOnboardingOrBeforeTheGrantIsLive() {
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.mayRestartToRecoverCapture(
+        grantedAtLaunch: false, onboardingComplete: false),
+      "a new Mac mid-onboarding must never be restarted by capture recovery")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.mayRestartToRecoverCapture(
+        grantedAtLaunch: true, onboardingComplete: false),
+      "still onboarding: the reopen prompt owns relaunch, not the recovery path")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.mayRestartToRecoverCapture(
+        grantedAtLaunch: false, onboardingComplete: true),
+      "a grant that is not live in this process cannot be repaired by restarting again")
+    XCTAssertTrue(
+      ScreenRecordingPermissionPolicy.mayRestartToRecoverCapture(
+        grantedAtLaunch: true, onboardingComplete: true),
+      "a granted, finished install may still restart to clear stale capture state")
+  }
+
+  /// The loop itself: every restart begins a process that would decide the same way again.
+  func testTheRecoveryDecisionCannotLoopAcrossRestartsWhileOnboarding() {
+    var restarts = 0
+    for _ in 0..<5 {
+      // Each iteration models a fresh process: per-session flags are back to their defaults
+      // and the grant is still not live, which is exactly the state that repeated before.
+      if ScreenRecordingPermissionPolicy.mayRestartToRecoverCapture(
+        grantedAtLaunch: false, onboardingComplete: false)
+      {
+        restarts += 1
+      }
+    }
+    XCTAssertEqual(restarts, 0, "the fix must hold on every relaunch, not just the first")
   }
 }

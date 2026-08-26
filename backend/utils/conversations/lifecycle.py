@@ -18,6 +18,7 @@ from typing import Any, Mapping
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
+from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import (
@@ -32,7 +33,8 @@ from utils.conversations.finalization_decision import (
     decide_finalization,
 )
 from utils.observability.fallback import record_fallback
-from utils.observability.journeys import record_journey_accepted
+from utils.journey_metrics_contract import bounded_client_kind
+from utils.observability.journeys import record_client_journey_accepted, record_journey_accepted
 
 logger = logging.getLogger(__name__)
 
@@ -134,10 +136,17 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
     return conversations_db.persist_processing_result_with_lifecycle(uid, conversation_data)
 
 
-def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> None:
-    """Persist an externally completed immutable import through the lifecycle owner."""
+def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
+    """Persist an externally completed immutable import through the lifecycle owner.
+
+    Create-if-absent: returns True when the conversation was created, False when it
+    already existed. Re-imports must not overwrite user edits (first import wins).
+    """
     _require_status(conversation_data, ConversationStatus.completed)
-    conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
+    # Stamp imported so selective delete can distinguish ZIP imports from source=limitless
+    # pendant/sync uploads that share the same ConversationSource.
+    conversation_data['imported'] = True
+    return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
 
 
 def transition(
@@ -584,9 +593,15 @@ def open_live_recording_session(
     if existing is None:
         return dict(binding) | {'requires_rollover': False}
 
-    conversation = conversations_db.get_conversation(uid, existing['conversation_id'])
+    conversation = conversations_db.get_conversation(
+        uid, existing['conversation_id'], read_site=FirestoreReadSite.LIFECYCLE_OPEN_LIVE_SESSION_BINDING
+    )
     if conversation is not None:
-        return dict(binding) | {'requires_rollover': False}
+        return dict(binding) | {
+            'requires_rollover': False,
+            'conversation_snapshot': conversation,
+            'conversation_snapshot_known': True,
+        }
 
     if existing['lifecycle_phase'] not in _TERMINAL_RECORDING_SESSION_PHASES:
         tombstone_recording_session(
@@ -644,9 +659,17 @@ def claim_finalization_fanout(
     return jobs_db.claim_finalization_fanout(job_id, dispatch_generation, lease_epoch)
 
 
-def complete_finalization_fanout(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
+def complete_finalization_fanout(
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+) -> bool:
     """Persist completion only after the idempotency-keyed fanout succeeds."""
-    return jobs_db.mark_finalization_fanout_completed(job_id, dispatch_generation, lease_epoch)
+    return jobs_db.mark_finalization_fanout_completed(
+        job_id,
+        dispatch_generation,
+        lease_epoch,
+    )
 
 
 def complete_fenced_finalization(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
@@ -662,6 +685,7 @@ def request_finalization(
     force_process: bool = False,
     extra_updates: Mapping[str, Any] | None = None,
     require_cloud_tasks: bool = False,
+    client_kind: object = 'unknown',
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
@@ -689,6 +713,7 @@ def request_finalization(
     # only newly-created jobs so an idempotent re-dispatch cannot inflate traffic.
     if intent.get('created'):
         record_journey_accepted('capture_finalization')
+        record_client_journey_accepted('conversation_finalization', bounded_client_kind(client_kind))
     status = intent['status']
     if intent['job_id'] is None or status in {'missing', 'no_content', 'deferred', 'completed', 'dead_letter'}:
         return dict(intent) | {'route': 'noop'}
@@ -748,4 +773,5 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
         'retryable': status == 'queued',
         'attempt_count': int(job.get('attempt_count') or 0),
         'task_retry_count': int(job.get('task_retry_count') or 0),
+        'meeting_treatment_eligible': bool(job.get('meeting_treatment_eligible', False)),
     }

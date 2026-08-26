@@ -320,7 +320,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchApps => '搜索应用...';
 
   @override
-  String get myApps => '我的应用';
+  String get myApps => '我创建的';
 
   @override
   String get installedApps => '已安装应用';
@@ -730,11 +730,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return '您的套餐将于 $date 结束。';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return '您的套餐将于 $date 续订。';
   }
 
   @override
@@ -9594,4 +9589,128 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => '太旧，无法同步 — Omi 无法接收';
+
+  @override
+  String get planSheetChooseYourPlan => '选择你的方案，解锁无限 Omi。';
+
+  @override
+  String get availableOnMacMobileWeb => '支持 Mac、手机和网页';
+
+  @override
+  String get popularBadge => '热门';
+
+  @override
+  String get worksOnDesktop => '支持桌面端';
+
+  @override
+  String get noDesktopAccess => '不支持桌面端';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months 个月 / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '免费 $count 个月',
+      one: '免费 1 个月',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi 是免费的，但免费版存在一些会影响体验的限制：';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 秒延迟（非实时）';
+
+  @override
+  String get downgradeToFreemiumAction => '降级到免费版';
+
+  @override
+  String get getFreeUnlimitedAccess => '免费获取无限访问权限';
+
+  @override
+  String get shareDataForTraining => '共享数据用于训练';
+
+  @override
+  String get yourRequestUnderReview => '你的申请正在审核中';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => '需要更新';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => '请安装最新的 Omi 应用，以便在账户迁移后继续使用。';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => '正在迁移';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage => '您的账户正在迁移。产品功能将暂停，直到迁移完成。';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage => '账户迁移回滚后处于维护状态。部分较新的数据可能被隔离。';
+
+  @override
+  String get accountCutoverOpenStore => '打开应用商店';
+
+  @override
+  String get chatScopeToday => '今天';
+
+  @override
+  String get chatScopeThisWeek => '本周';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '关于：$title';
+  }
+
+  @override
+  String get askAboutThisConversation => '询问此内容';
+
+  @override
+  String get sendRawAudioToOmi => '向 Omi 发送原始音频';
+
+  @override
+  String get sendRawAudioToOmiDescription => '关闭后不会向 Omi 发送原始音频；转写文本及云端功能所需数据仍可能发送至 Omi。';
+
+  @override
+  String get findDevice => '查找';
+
+  @override
+  String get diagnosticsShareFailed => '无法分享诊断信息，请重试。';
+
+  @override
+  String get appDisabledTitle => '此应用已被停用，无法安装。';
+
+  @override
+  String get appDisabledWebhookFailures => '其端点连续 72 小时失败，因此已停止推送。';
+
+  @override
+  String get appDisabledGeneric => '它已被 Omi 停用。';
+
+  @override
+  String get appDisabledOwnerHint => '请先修复端点——重新启用时会重新检查每个已配置的 URL。';
+
+  @override
+  String get appReEnable => '重新启用';
+
+  @override
+  String get appReEnableFailedTitle => '无法重新启用';
+
+  @override
+  String get appReEnableFailedBody => '无法重新启用此应用，请重试。';
+
+  @override
+  String appDisabledOn(String date) {
+    return '于 $date 停用。';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return '最后的错误：$error';
+  }
 }

@@ -40,6 +40,15 @@ enum DefaultsKey: String {
   case chatBridgeMode = "chatBridgeMode"
   case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
   case multiChatEnabled = "multiChatEnabled"
+  /// Opt-in: proactive notifications are also spoken out loud on delivery.
+  case speakNotificationsAloud = "speakNotificationsAloud"
+  /// Opt-out (defaults to on): the post-meeting summary share notification —
+  /// the persistent notch card offering "Copy link" / "Send to <participant>".
+  case meetingSummaryNotificationsEnabled = "meetingSummaryNotificationsEnabled"
+  /// Opt-out: when you open an app Omi integrates with but have not connected,
+  /// Omi offers the connection once. Defaults to on; the per-integration
+  /// budgets in `IntegrationNudgePolicy` are what keep that from being noise.
+  case integrationNudgesEnabled = "integrationNudgesEnabled"
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
   case hasCompletedOnboarding = "hasCompletedOnboarding"
   case onboardingStep = "onboardingStep"
@@ -50,6 +59,9 @@ enum DefaultsKey: String {
   case onboardingJustCompleted = "onboardingJustCompleted"
   case hasCompletedFileIndexing = "hasCompletedFileIndexing"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
+  case ratingPromptQuestionCount = "ratingPromptQuestionCount"
+  case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"
+  case ratingPromptDismissed = "ratingPromptDismissed"
   case screenAnalysisAutoStartFixedV2 = "screenAnalysisAutoStartFixed_v2"
   case screenAnalysisAutoStartFixedV3 = "screenAnalysisAutoStartFixed_v3"
   case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
@@ -57,17 +69,37 @@ enum DefaultsKey: String {
   case pairedDeviceName = "pairedDeviceName"
   case pairedDeviceType = "pairedDeviceType"
   case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
+  /// Client-side mirror of the server's `meeting_note_screenshots_enabled` account setting
+  /// (contract §3/§9). Absent key means enabled (default on) — see
+  /// `MeetingNoteScreenshotsFeature.isEnabled`.
+  case meetingNoteScreenshotsEnabled = "meetingNoteScreenshotsEnabled"
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
+  /// One-shot marker: the PTT-only microphone choice has been folded into the shared
+  /// `preferredMicrophoneDeviceUID`, so it is never carried over twice.
+  case shortcutPTTMicrophoneMergedIntoPreferred = "shortcut_pttMicrophoneMergedIntoPreferred"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
+  case floatingBarCachedPlan = "floatingBar_cachedPlan"
+  case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
   case desktopIsPaywalled = "desktop_isPaywalled"
+  case askOmiBarEnabled = "askOmiBarEnabled"
   case rewindDisableContentCache = "rewindDisableContentCache"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.
   case tasksCategoryOrder = "TasksCategoryOrder"
   case tasksSortOrderMigrated = "TasksSortOrderMigrated"
+  /// Whether the Suggested candidate section on the Tasks page is expanded.
+  /// Shared by the view (@AppStorage) and deep-link expand-before-scroll.
+  case tasksSuggestionsSectionExpanded = "tasksSuggestionsSectionExpanded"
   case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
+  case gmailSelectedCookiePath = "gmailSelectedCookiePath"
+  case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
+  /// Preferred summarization app for conversation summaries; locally mirrored
+  /// (the backend exposes no GET) and pushed via
+  /// `PUT /v1/users/preferences/app`. Same name mobile uses in SharedPreferences.
+  case preferredSummarizationAppId = "preferredSummarizationAppId"
+  case disableSystemAudioCapture = "disableSystemAudioCapture"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -96,12 +128,45 @@ struct ScopedDefaultsKey {
     Self(rawValue: "TasksSortOrderMigrated.owner.\(ownerID)")
   }
 
+  static func pendingCanonicalReceiptInvalidation(
+    ownerID: String,
+    keyPrefix: String = "suggested.canonicalReceipt.pendingInvalidation."
+  ) -> Self {
+    Self(rawValue: "\(keyPrefix)\(ownerID)")
+  }
+
+  static func pendingCanonicalReceiptInvalidationTimestamps(
+    ownerID: String,
+    keyPrefix: String = "suggested.canonicalReceipt.pendingInvalidation."
+  ) -> Self {
+    Self(rawValue: "\(keyPrefix)\(ownerID).timestamps")
+  }
+
+  /// Owner-scoped proactive integration-nudge history. `field` is one of the
+  /// closed set the store writes (`shownCount`, `lastShownAt`, `snoozedUntil`,
+  /// `optedOut`); `scope` is the catalog telemetry id plus the owner id, so one
+  /// person's dismissals never silence an integration for another account on
+  /// the same Mac.
+  static func integrationNudge(_ field: String, scope: String) -> Self {
+    Self(rawValue: "integrationNudge.v1.\(field).\(scope)")
+  }
+
+  /// Owner-scoped cross-integration nudge budget (last delivery, and the
+  /// delivery timestamps inside the trailing day window).
+  static func integrationNudgeBudget(_ field: String, ownerID: String) -> Self {
+    Self(rawValue: "integrationNudgeBudget.v1.\(field).\(ownerID)")
+  }
+
   static func importConnectorAvailabilityText(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
   }
 
   static func importConnectorSourceCount(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
+  }
+
+  static func taskInterruptionLedger(ownerID: String) -> Self {
+    Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
   }
 }
 
@@ -118,6 +183,13 @@ extension UserDefaults {
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
   func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: ScopedDefaultsKey) -> Bool { bool(forKey: key.rawValue) }
+  func integer(forKey key: ScopedDefaultsKey) -> Int { integer(forKey: key.rawValue) }
+  func double(forKey key: ScopedDefaultsKey) -> Double { double(forKey: key.rawValue) }
+  func array(forKey key: ScopedDefaultsKey) -> [Any]? { array(forKey: key.rawValue) }
+  func stringArray(forKey key: ScopedDefaultsKey) -> [String]? { stringArray(forKey: key.rawValue) }
+  func dictionary(forKey key: ScopedDefaultsKey) -> [String: Any]? {
+    dictionary(forKey: key.rawValue)
+  }
   func object(forKey key: ScopedDefaultsKey) -> Any? { object(forKey: key.rawValue) }
   func object(forKey key: DefaultsKey) -> Any? { object(forKey: key.rawValue) }
 

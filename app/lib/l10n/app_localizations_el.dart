@@ -325,7 +325,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get searchApps => 'Αναζήτηση εφαρμογών...';
 
   @override
-  String get myApps => 'Οι εφαρμογές μου';
+  String get myApps => 'Δημιουργήθηκε από εμένα';
 
   @override
   String get installedApps => 'Εγκατεστημένες εφαρμογές';
@@ -748,11 +748,6 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'Το πρόγραμμά σας θα ακυρωθεί στις $date.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'Το πρόγραμμά σας ανανεώνεται στις $date.';
   }
 
   @override
@@ -2144,16 +2139,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get editMemory => '✏️ Επεξεργασία μνήμης';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Καρφίτσωμα ως βάση';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Ξεκαρφίτσωμα από τη βάση';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Μνήμη βάσης';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Πάντα στο πλαίσιο';
 
   @override
   String get memoryContentHint => 'Μου αρέσει να τρώω παγωτό...';
@@ -9843,4 +9838,135 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Πολύ παλιά για συγχρονισμό — το Omi δεν μπορεί να τη δεχτεί';
+
+  @override
+  String get planSheetChooseYourPlan => 'Επίλεξε το πρόγραμμά σου για να ξεκλειδώσεις το Omi χωρίς όρια.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Διαθέσιμο σε Mac, κινητό και web';
+
+  @override
+  String get popularBadge => 'ΔΗΜΟΦΙΛΕΣ';
+
+  @override
+  String get worksOnDesktop => 'Λειτουργεί σε υπολογιστή';
+
+  @override
+  String get noDesktopAccess => 'Δεν λειτουργεί σε υπολογιστή';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months μήνες / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count μήνες δωρεάν',
+      one: '1 μήνας δωρεάν',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Το Omi είναι δωρεάν, αλλά η δωρεάν έκδοση έχει περιορισμούς που επηρεάζουν την εμπειρία σου:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Καθυστέρηση 5-7 δευτερολέπτων (όχι σε πραγματικό χρόνο)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Υποβάθμιση σε δωρεάν έκδοση';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Απόκτησε δωρεάν απεριόριστη πρόσβαση';
+
+  @override
+  String get shareDataForTraining => 'Κοινή χρήση δεδομένων για εκπαίδευση';
+
+  @override
+  String get yourRequestUnderReview => 'Το αίτημά σου εξετάζεται';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Απαιτείται ενημέρωση';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Εγκαταστήστε την πιο πρόσφατη εφαρμογή Omi για να συνεχίσετε μετά τη μετεγκατάσταση λογαριασμού.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Η μετεγκατάσταση είναι σε εξέλιξη';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Ο λογαριασμός σας μεταφέρεται. Οι λειτουργίες προϊόντος είναι σε παύση μέχρι να ολοκληρωθεί η μετεγκατάσταση.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Ο λογαριασμός σας είναι σε συντήρηση μετά από επαναφορά μετεγκατάστασης. Νεότερα δεδομένα ενδέχεται να έχουν απομονωθεί.';
+
+  @override
+  String get accountCutoverOpenStore => 'Άνοιγμα καταστήματος';
+
+  @override
+  String get chatScopeToday => 'Σήμερα';
+
+  @override
+  String get chatScopeThisWeek => 'Αυτή την εβδομάδα';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Σχετικά με: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Ρώτησε γι\' αυτό';
+
+  @override
+  String get sendRawAudioToOmi => 'Αποστολή ακατέργαστου ήχου στο Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Απενεργοποιήστε το για να μην αποστέλλεται ακατέργαστος ήχος στο Omi. Οι απομαγνητοφωνήσεις και τα δεδομένα που απαιτούν οι λειτουργίες cloud ενδέχεται να συνεχίσουν να αποστέλλονται στο Omi.';
+
+  @override
+  String get findDevice => 'Εύρεση';
+
+  @override
+  String get diagnosticsShareFailed => 'Δεν ήταν δυνατή η κοινοποίηση των διαγνωστικών. Δοκιμάστε ξανά.';
+
+  @override
+  String get appDisabledTitle => 'Αυτή η εφαρμογή είναι απενεργοποιημένη και δεν μπορεί να εγκατασταθεί.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Το endpoint της απέτυχε επί 72 ώρες συνεχώς, οπότε οι αποστολές σταμάτησαν.';
+
+  @override
+  String get appDisabledGeneric => 'Απενεργοποιήθηκε από την Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Διορθώστε πρώτα το endpoint — η επανενεργοποίηση ελέγχει ξανά κάθε ρυθμισμένο URL.';
+
+  @override
+  String get appReEnable => 'Επανενεργοποίηση';
+
+  @override
+  String get appReEnableFailedTitle => 'Η επανενεργοποίηση απέτυχε';
+
+  @override
+  String get appReEnableFailedBody => 'Δεν ήταν δυνατή η επανενεργοποίηση αυτής της εφαρμογής. Δοκιμάστε ξανά.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Απενεργοποιήθηκε στις $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Τελευταίο σφάλμα: $error.';
+  }
 }

@@ -46,7 +46,6 @@ enum StartupWarmupTaskID: Hashable {
   case chatPromptContextWarmup
   case mcpKeyWarmup
   case databaseRetry
-  case crispInitialPoll
   case agentVMProvisioning
   case conversationWarmup
   case initialFileIndexing
@@ -94,6 +93,13 @@ enum StartupWarmupPolicy {
   static let deferredWarmupDelay: TimeInterval = 2.0
   static let databaseRetryInitialDelay: TimeInterval = 1.0
   static let databaseRetryMaxDelay: TimeInterval = 30.0
+  /// Bounds `RewindDatabase.initialize()` so a wedged open/migration (e.g. a
+  /// stalled disk, an actor deadlock) can't strand the app on the "Preparing
+  /// your data…" screen forever. On timeout, startup treats init as failed —
+  /// the UI unblocks and the existing exponential-backoff retry loop takes
+  /// over. Generous relative to typical (sub-second to low-single-digit-second)
+  /// opens so it never false-trips a merely slow first-launch migration.
+  static let databaseInitTimeout: Duration = .seconds(30)
   static let mcpKeyWarmupDelay: TimeInterval = 0.5
   static let dashboardNetworkRefreshDelay: TimeInterval = 4.0
   static let initialSettingsSyncDelay: TimeInterval = 5.0
@@ -101,12 +107,10 @@ enum StartupWarmupPolicy {
   static let chatPromptContextWarmupDelay: TimeInterval = 10.0
   static let screenActivitySyncInitialDelay: TimeInterval = 10.0
   static let floatingBarPlanFetchDelay: TimeInterval = 0.0
-  static let crispInitialPollDelay: TimeInterval = 15.0
   static let agentVMProvisioningDelay: TimeInterval = 20.0
   static let proactiveAssistantsStartDelay: TimeInterval = 6.0
   static let conversationWarmupDelay: TimeInterval = 6.0
   static let transcriptionRetryRecoveryDelay: TimeInterval = 8.0
-  static let recurringTaskSchedulerInitialDelay: TimeInterval = 12.0
   static let initialFileIndexingDelay: TimeInterval = 45.0
 
   /// Remaining warmup delay, measured from a launch anchor rather than from

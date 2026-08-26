@@ -43,6 +43,7 @@ def users_service():
         "database.dev_api_key": AutoMockModule("database.dev_api_key"),
         "database.mcp_api_key": AutoMockModule("database.mcp_api_key"),
         "database.mcp_oauth": AutoMockModule("database.mcp_oauth"),
+        "services.users.agent_vm_account_cleanup": AutoMockModule("services.users.agent_vm_account_cleanup"),
         "utils": _pkg("utils"),
         "utils.cloud_tasks": AutoMockModule("utils.cloud_tasks"),
         "utils.stripe": AutoMockModule("utils.stripe"),
@@ -53,6 +54,8 @@ def users_service():
         "utils.other.endpoints": AutoMockModule("utils.other.endpoints"),
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
+        "utils.memory.memory_service": AutoMockModule("utils.memory.memory_service"),
+        "utils.memory.memory_system": AutoMockModule("utils.memory.memory_system"),
         "utils.other.storage": AutoMockModule("utils.other.storage"),
         "utils.twilio_service": AutoMockModule("utils.twilio_service"),
     }

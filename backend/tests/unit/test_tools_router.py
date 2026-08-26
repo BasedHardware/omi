@@ -111,6 +111,7 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval",
     "utils.retrieval.tools",
     "utils.retrieval.tools.calendar_tools",
+    "utils.retrieval.safety",
     "utils.retrieval.tool_services",
     "utils.retrieval.tool_services.conversations",
     "utils.retrieval.tool_services.memories",
@@ -123,7 +124,6 @@ _SYS_MODULE_NAMES = [
     "utils.memory.default_read_rollout",
     "utils.memory.memory_system",
     "utils.memory.memory_service",
-    "utils.memory.surface_routing",
     "utils.rate_limit_config",
     "routers",
     "routers.tools",
@@ -178,6 +178,7 @@ memories_db.get_memories_by_ids = MagicMock(return_value=[])
 vector_db = _stub_module("database.vector_db")
 vector_db.query_vectors = MagicMock(return_value=[])
 vector_db.find_similar_memories = MagicMock(return_value=[])
+vector_db.search_transcript_chunks = MagicMock(return_value=[])
 
 # Stub database.action_items
 action_items_db = _stub_module("database.action_items")
@@ -206,32 +207,36 @@ _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
 _stub_package("utils.memory")
 
-memory_adapter_stub = _stub_module("utils.memory.chat_memory_adapter")
-memory_adapter_stub.list_default_chat_memories_decision_text = MagicMock(
-    return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
-)
-memory_adapter_stub.search_memory_default_chat_memories_vector_decision_text = MagicMock(
-    return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
-)
-memory_adapter_stub.chat_legacy_read_authorized = MagicMock(
-    side_effect=lambda result: result.read_decision == "use_legacy_safe"
-    or (result.read_decision == "deny_memory" and result.fallback_reason == "missing_rollout_state")
-)
-read_rollout_stub = _stub_module("utils.memory.default_read_rollout")
-read_rollout_stub.MemoryReadDecision = types.SimpleNamespace(
-    USE_MEMORY="use_memory",
-    USE_LEGACY_SAFE="use_legacy_safe",
-    DENY_MEMORY="deny_memory",
-)
-
-memory_system_stub = _stub_module("utils.memory.memory_system")
-memory_system_stub.MemorySystem = types.SimpleNamespace(LEGACY="legacy", CANONICAL="canonical")
-
 memory_service_stub = _stub_module("utils.memory.memory_service")
-memory_service_stub.MemoryService = MagicMock
 
-surface_routing_stub = _stub_module("utils.memory.surface_routing")
-surface_routing_stub.pin_memory_system = MagicMock(return_value=memory_system_stub.MemorySystem.LEGACY)
+
+class FakeMemoryService:
+    """Exercise the universal service contract while keeping this router suite hermetic."""
+
+    def __init__(self, *, db_client=None):
+        self.db_client = db_client
+
+    def read(self, uid, *, limit=100, offset=0, now=None):
+        del now
+        return [FakeMemoryDB(**row) for row in memories_db.get_memories(uid, limit=limit, offset=offset)]
+
+    def search(self, uid, query, *, limit=5):
+        rows = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)
+        ids = [row["memory_id"] for row in rows]
+        scores = {row["memory_id"]: float(row.get("score", 0.0)) for row in rows}
+        hydrated = {
+            row["id"]: FakeMemoryDB(**row)
+            for row in memories_db.get_memories_by_ids(uid, ids)
+            if not row.get("is_locked", False)
+        }
+        return [
+            types.SimpleNamespace(memory=hydrated[memory_id], score=scores[memory_id])
+            for memory_id in ids
+            if memory_id in hydrated
+        ]
+
+
+memory_service_stub.MemoryService = FakeMemoryService
 boundary_stub = _stub_module("utils.retrieval.tool_result_boundaries")
 boundary_stub.preserve_chat_memory_tool_result_boundary = MagicMock(side_effect=lambda _tool_name, result: result)
 
@@ -321,6 +326,8 @@ def reset_conversation_search_stubs():
     search_mod.merge_conversation_search_ids.side_effect = _merge_conversation_search_ids
     transcript_chunks_mod.hydrate_chunk_texts.reset_mock()
     transcript_chunks_mod.hydrate_chunk_texts.side_effect = _hydrate_chunk_texts
+    vector_db.search_transcript_chunks.reset_mock()
+    vector_db.search_transcript_chunks.return_value = []
 
 
 endpoints_mod = _stub_module("utils.other.endpoints")
@@ -377,9 +384,11 @@ memories_model_mod = _stub_module("models.memories")
 class FakeMemoryDB:
     def __init__(self, **kwargs):
         self.id = kwargs.get('id', 'test-mem-id')
+        self.memory_id = kwargs.get('memory_id', self.id)
         self.content = kwargs.get('content', 'test memory')
         self.category = FakeCategory.other
         self.created_at = kwargs.get('created_at', datetime.now(timezone.utc))
+        self.is_locked = kwargs.get('is_locked', False)
 
     @staticmethod
     def get_memories_as_str(memories):
@@ -394,6 +403,10 @@ memories_model_mod.MemoryDB = FakeMemoryDB
 sys.path.insert(0, str(BACKEND_DIR))
 
 # Now load the shared service modules
+retrieval_safety = _load_module_from_file(
+    "utils.retrieval.safety",
+    BACKEND_DIR / "utils" / "retrieval" / "safety.py",
+)
 conversations_svc = _load_module_from_file(
     "utils.retrieval.tool_services.conversations",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "conversations.py",
@@ -543,6 +556,36 @@ class TestGetConversationsText:
         ]
         result = conversations_svc.get_conversations_text(uid="test-uid")
         assert "1 conversations formatted" in result
+
+    def test_source_mapping_matches_search_results(self):
+        conversation = {
+            'id': 'conv-1',
+            'transcript_segments': [],
+            'structured': types.SimpleNamespace(title='Shared title', overview='Shared overview'),
+            'created_at': datetime(2026, 8, 13, tzinfo=timezone.utc),
+        }
+        conversations_db.get_conversations.return_value = [conversation]
+        list_sources = []
+        conversations_svc.get_conversations_text(uid="test-uid", source_sink=list_sources)
+
+        vector_db.query_vectors.return_value = ['conv-1']
+        conversations_db.get_conversations_by_id.return_value = [conversation]
+        search_sources = []
+        conversations_svc.search_conversations_text(uid="test-uid", query="shared", source_sink=search_sources)
+
+        assert (
+            list_sources
+            == search_sources
+            == [
+                {
+                    'kind': 'conversation',
+                    'source_id': 'conv-1',
+                    'title': 'Shared title',
+                    'preview': 'Shared overview',
+                    'created_at': '2026-08-13T00:00:00+00:00',
+                }
+            ]
+        )
 
 
 class TestGetConversationsTextMalformedPerson:
@@ -847,9 +890,40 @@ class TestRouterEnvelope:
         assert result["result_text"] == "All good"
         assert result["is_error"] is False
 
+    def test_ok_preserves_typed_sources(self):
+        source = {
+            "kind": "memory",
+            "source_id": "memory-1",
+            "title": "Memory",
+            "preview": "A bounded preview",
+        }
+        response = router_mod.ToolResponse.model_validate(router_mod._ok("get_memories", "result", [source]))
+
+        assert response.sources == [router_mod.ToolSource(**source)]
+
     def test_ok_error(self):
-        result = router_mod._ok("test_tool", "Error: something went wrong")
+        result = router_mod._ok(
+            "test_tool",
+            "Error: something went wrong",
+            [{'kind': 'memory', 'source_id': 'memory-1'}],
+        )
         assert result["is_error"] is True
+        assert router_mod.ToolResponse.model_validate(result).sources == []
+
+    @pytest.mark.parametrize('url', ['javascript:alert(1)', 'file:///tmp/source', 'example.com/source'])
+    def test_tool_source_rejects_non_http_urls(self, url):
+        with pytest.raises(ValueError, match=r'absolute HTTP\(S\) URL'):
+            router_mod.ToolSource(kind='web', source_id='source-1', url=url)
+
+    @pytest.mark.parametrize('url', ['http://example.com/source', 'https://example.com/source'])
+    def test_tool_source_accepts_http_urls(self, url):
+        assert router_mod.ToolSource(kind='web', source_id='source-1', url=url).url == url
+
+    def test_shared_safe_isoformat_preserves_iso_and_string_values(self):
+        assert (
+            retrieval_safety.safe_isoformat(datetime(2026, 8, 13, tzinfo=timezone.utc)) == '2026-08-13T00:00:00+00:00'
+        )
+        assert retrieval_safety.safe_isoformat('raw-value') == 'raw-value'
 
 
 # ===========================================================================
@@ -1047,6 +1121,113 @@ class TestRouterEndpoints:
         body = resp.json()
         assert body["is_error"] is True
         assert "Error" in body["result_text"]
+
+    def test_search_chunks_endpoint_returns_typed_sources(self):
+        """Route wiring: /search-chunks serializes typed sources through the envelope."""
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': 1722500000, 'score': 0.9},
+        ]
+        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows: [
+            {
+                **r,
+                'text': '[Conversation on 01 Aug 2024, 08:53]\nUser: the beta shipped',
+                'conversation_title': 'Release chat',
+                'conversation_started_at': datetime(2024, 8, 1, 8, 53, tzinfo=timezone.utc),
+            }
+            for r in rows
+        ]
+        resp = self.client.post("/v1/tools/conversations/search-chunks", json={"query": "beta"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "search_conversation_chunks"
+        assert "User: the beta shipped" in body["result_text"]
+        assert body["sources"] == [
+            {
+                "kind": "conversation",
+                "source_id": "conv-a",
+                "title": "Release chat",
+                "preview": "[Conversation on 01 Aug 2024, 08:53] User: the beta shipped",
+                "created_at": "2024-08-01T08:13:20+00:00",
+                "moment_timestamp_ms": None,
+                "app_name": None,
+                "url": None,
+            }
+        ]
+
+
+# ===========================================================================
+# Tests: search-chunks typed sources (verbatim retrieval layer)
+# ===========================================================================
+class TestSearchConversationChunksSources:
+    """The chunks endpoint must emit sources shaped exactly like its siblings:
+    kind 'conversation' + PARENT conversation id (shared ref namespace, no client
+    citation-validation changes), a single-line verbatim preview, and an ISO date."""
+
+    def _call(self, query="beta release"):
+        body = router_mod.SearchChunksRequest(query=query)
+        result = router_mod.search_conversation_chunks(body, uid="test-uid")
+        # Validate through the response model so field bounds (preview <= 600,
+        # created_at <= 80) are enforced exactly as FastAPI serialization would.
+        return router_mod.ToolResponse.model_validate(result)
+
+    def _hydrate_with(self, **fields):
+        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows: [{**r, **fields} for r in rows]
+
+    def test_sources_carry_parent_conversation_id_and_dedupe_by_conversation(self):
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 2, 'created_at': 1722500000, 'score': 0.91},
+            {'conversation_id': 'conv-a', 'chunk_index': 3, 'created_at': 1722500000, 'score': 0.88},
+            {'conversation_id': 'conv-b', 'chunk_index': 0, 'created_at': 1722600000, 'score': 0.70},
+        ]
+        self._hydrate_with(text='User: verbatim evidence', conversation_title='Standup')
+        response = self._call()
+        assert not response.is_error
+        # All three excerpts render, but sources dedupe to one per conversation,
+        # best-scored chunk first.
+        assert response.result_text.count("Excerpt") == 3
+        assert [(s.kind, s.source_id) for s in response.sources] == [
+            ("conversation", "conv-a"),
+            ("conversation", "conv-b"),
+        ]
+        assert response.sources[0].title == "Standup"
+        assert response.sources[0].created_at == "2024-08-01T08:13:20+00:00"
+
+    def test_preview_is_single_line_and_capped_at_600(self):
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': 1722500000, 'score': 0.9},
+        ]
+        self._hydrate_with(text="line one\nSpeaker 2: line two\n" + ("x" * 700))
+        response = self._call()
+        preview = response.sources[0].preview
+        assert "\n" not in preview
+        assert "line one Speaker 2: line two" in preview
+        assert len(preview) == 600
+
+    def test_created_at_falls_back_to_conversation_start_when_chunk_ts_missing(self):
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': 0, 'score': 0.9},
+        ]
+        self._hydrate_with(
+            text='User: hello',
+            conversation_started_at=datetime(2026, 8, 14, 22, 0, tzinfo=timezone.utc),
+        )
+        response = self._call()
+        assert response.sources[0].created_at == "2026-08-14T22:00:00+00:00"
+
+    def test_missing_title_falls_back_without_error(self):
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': None, 'score': 0.9},
+        ]
+        self._hydrate_with(text='User: hello')
+        response = self._call()
+        assert response.sources[0].title == "Conversation"
+        assert response.sources[0].created_at is None
+
+    def test_no_results_returns_empty_sources(self):
+        vector_db.search_transcript_chunks.return_value = []
+        response = self._call()
+        assert response.sources == []
+        assert "No transcript excerpts found" in response.result_text
 
 
 # ===========================================================================

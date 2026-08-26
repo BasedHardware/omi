@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "আমার অ্যাপস",
+    "myApps": "আমার তৈরি",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -959,16 +959,6 @@
     "cancelAtPeriodEnd": "আপনার প্ল্যান {date} এ বাতিল হবে।",
     "@cancelAtPeriodEnd": {
         "description": "Cancellation message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
-    "renewsOn": "আপনার প্ল্যান {date} এ নবায়ন হয়।",
-    "@renewsOn": {
-        "description": "Renewal message",
         "placeholders": {
             "date": {
                 "type": "String",
@@ -10767,5 +10757,45 @@
     "whisperModelSizeLarge": "বড়",
     "whisperModelSizeMedium": "মাঝারি",
     "whisperModelSizeSmall": "ছোট",
-    "whisperModelSizeTiny": "অতি ছোট"
+    "whisperModelSizeTiny": "অতি ছোট",
+    "planSheetChooseYourPlan": "সীমাহীন Omi আনলক করতে আপনার প্ল্যান বেছে নিন।",
+    "availableOnMacMobileWeb": "Mac, মোবাইল এবং ওয়েবে উপলব্ধ",
+    "popularBadge": "জনপ্রিয়",
+    "worksOnDesktop": "ডেস্কটপে কাজ করে",
+    "noDesktopAccess": "ডেস্কটপে কাজ করে না",
+    "annualBillingSummary": "{months} মাস / {price}",
+    "monthsFreeBadge": "{count, plural, =1{১ মাস ফ্রি} other{{count} মাস ফ্রি}}",
+    "freemiumLimitsIntro": "Omi ফ্রি, তবে ফ্রি সংস্করণে কিছু সীমাবদ্ধতা আছে যা আপনার অভিজ্ঞতাকে প্রভাবিত করে:",
+    "downgradeLimitDelayNotRealTime": "৫-৭ সেকেন্ড বিলম্ব (রিয়েল-টাইম নয়)",
+    "downgradeToFreemiumAction": "ফ্রি সংস্করণে নেমে যান",
+    "getFreeUnlimitedAccess": "ফ্রি আনলিমিটেড অ্যাক্সেস পান",
+    "shareDataForTraining": "প্রশিক্ষণের জন্য ডেটা শেয়ার করুন",
+    "yourRequestUnderReview": "আপনার অনুরোধ পর্যালোচনাধীন",
+    "pinAsBaseline": "বেসলাইন হিসেবে পিন করুন",
+    "unpinAsBaseline": "বেসলাইন থেকে আনপিন করুন",
+    "baselineMemory": "বেসলাইন মেমরি",
+    "alwaysInContext": "সর্বদা প্রসঙ্গে",
+    "accountCutoverUpdateRequiredTitle": "अपडेट आवश्यक",
+    "accountCutoverUpdateRequiredMessage": "खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।",
+    "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
+    "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
+    "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
+    "accountCutoverOpenStore": "स्टोर खोलें",
+    "chatScopeToday": "আজ",
+    "chatScopeThisWeek": "এই সপ্তাহ",
+    "chatScopeAbout": "{title} সম্পর্কে",
+    "askAboutThisConversation": "এটি সম্পর্কে জিজ্ঞাসা করুন",
+    "sendRawAudioToOmi": "Omi-তে কাঁচা অডিও পাঠান",
+    "sendRawAudioToOmiDescription": "Omi-তে কাঁচা অডিও পাঠানো বন্ধ করতে এটি বন্ধ করুন। ট্রান্সক্রিপ্ট ও ক্লাউড ফিচারের প্রয়োজনীয় ডেটা এখনও Omi-তে পাঠানো হতে পারে।",
+    "findDevice": "খুঁজুন",
+    "diagnosticsShareFailed": "ডায়াগনস্টিকস শেয়ার করা যায়নি। আবার চেষ্টা করুন।",
+    "appDisabledTitle": "এই অ্যাপটি নিষ্ক্রিয় এবং ইনস্টল করা যাবে না।",
+    "appDisabledWebhookFailures": "এর এন্ডপয়েন্ট টানা ৭২ ঘণ্টা ব্যর্থ হয়েছে, তাই ডেলিভারি বন্ধ করা হয়েছে।",
+    "appDisabledGeneric": "এটি Omi নিষ্ক্রিয় করেছে।",
+    "appDisabledOwnerHint": "প্রথমে এন্ডপয়েন্ট ঠিক করুন — পুনরায় সক্রিয় করলে কনফিগার করা প্রতিটি URL আবার যাচাই করা হয়।",
+    "appReEnable": "পুনরায় সক্রিয় করুন",
+    "appReEnableFailedTitle": "পুনরায় সক্রিয় করা যায়নি",
+    "appReEnableFailedBody": "এই অ্যাপটি পুনরায় সক্রিয় করা যায়নি। আবার চেষ্টা করুন।",
+    "appDisabledOn": "{date} তারিখে নিষ্ক্রিয় করা হয়েছে।",
+    "appDisabledLastError": "শেষ ত্রুটি: {error}"
 }

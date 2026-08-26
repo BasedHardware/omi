@@ -49,7 +49,7 @@ def test_rollout_resolution_failure_records_shared_fallback_and_fails_closed(mon
     ]
 
 
-def test_disabled_cohort_does_not_emit_fallback(monkeypatch):
+def test_disabled_capability_does_not_emit_fallback(monkeypatch):
     events = []
     monkeypatch.setattr(eligibility, 'record_fallback', lambda **event: events.append(event))
 

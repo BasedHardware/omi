@@ -30,9 +30,21 @@ PUBLIC_SHARED_CONVERSATION_CHAT_AUTO_LANE_ID = 'omi:auto:public-shared-conversat
 LLM_GATEWAY_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_FEATURE_MODE'
 LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE'
 LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION'
+# Narrow agentic-chat route pin. Independent of FEATURE_MODE so gateway can stay
+# on for non-chat features while chat stays on direct Anthropic (or the reverse).
+LLM_CHAT_AGENT_ROUTE_ENV_VAR = 'OMI_LLM_CHAT_AGENT_ROUTE'
+CHAT_AGENT_ROUTE_DIRECT = 'direct'
+CHAT_AGENT_ROUTE_GATEWAY = 'gateway'
+_CHAT_AGENT_ROUTE_DIRECT_VALUES = frozenset({'direct', 'off', '0', 'false', 'no'})
+_CHAT_AGENT_ROUTE_GATEWAY_VALUES = frozenset({'gateway', '1', 'true', 'yes', 'luna', 'on'})
 LLM_GATEWAY_CALLER = 'backend'
 LLM_GATEWAY_USER_UID_HEADER = 'X-Omi-User-Uid'
 LLM_GATEWAY_USAGE_FEATURE_HEADER = 'X-Omi-LLM-Feature'
+LLM_GATEWAY_APP_PLATFORM_HEADER = 'X-Omi-App-Platform'
+# Closed enum, mirroring the gateway's own normalization. Client-supplied platform
+# strings are never forwarded verbatim: unknown values are dropped so accounting
+# stays aggregatable and arbitrary client text never reaches an outbound header.
+LLM_GATEWAY_APP_PLATFORMS = frozenset({'desktop', 'mobile', 'web'})
 CHAT_EXTRACTION_TIMEOUT_SECONDS = 10.0
 BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
 GATEWAY_TRANSPORT_STATUS_CODES = frozenset({502, 504})
@@ -46,6 +58,23 @@ class PublicSharedConversationChatGatewayUnavailable(Exception):
     """The gateway-only public shared-chat lane could not produce an answer."""
 
     pass
+
+
+class GatewayDirectModelSurfaceBlocked(RuntimeError):
+    """A direct-provider LLM surface ran while feature mode requires the gateway.
+
+    Callers should treat this as a typed, user-safe failure for that surface — not as an
+    unexpected crash that falls through to the generic chat canned reply.
+    """
+
+    def __init__(self, surface: str) -> None:
+        self.surface = surface
+        self.error_code = f'{surface.split(".", 1)[0]}_gateway_blocked'
+        super().__init__(
+            f'{surface} is a direct provider LLM surface and is blocked while '
+            f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway. Route it through the LLM gateway or set '
+            f'{LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR}=true for an explicitly acknowledged exception.'
+        )
 
 
 class GatewayContextChatOpenAI(ChatOpenAI):
@@ -126,17 +155,44 @@ def should_route_features_through_gateway() -> bool:
     return True
 
 
+def get_chat_agent_route() -> str:
+    """Return the effective agentic-chat route: ``direct`` or ``gateway``.
+
+    Explicit ``OMI_LLM_CHAT_AGENT_ROUTE`` wins. When unset, inherit the global
+    feature-mode switch so existing deployments keep prior behavior.
+    """
+    raw = os.getenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, '').strip().lower()
+    if raw in _CHAT_AGENT_ROUTE_DIRECT_VALUES:
+        return CHAT_AGENT_ROUTE_DIRECT
+    if raw in _CHAT_AGENT_ROUTE_GATEWAY_VALUES:
+        return CHAT_AGENT_ROUTE_GATEWAY
+    if raw:
+        raise RuntimeError(
+            f'{LLM_CHAT_AGENT_ROUTE_ENV_VAR}={raw!r} is invalid; '
+            f'expected one of {sorted(_CHAT_AGENT_ROUTE_DIRECT_VALUES | _CHAT_AGENT_ROUTE_GATEWAY_VALUES)}'
+        )
+    return CHAT_AGENT_ROUTE_GATEWAY if should_route_features_through_gateway() else CHAT_AGENT_ROUTE_DIRECT
+
+
+def should_route_chat_agent_through_gateway() -> bool:
+    """Whether managed agentic chat should use the gateway OpenAI-compatible lane.
+
+    Requires both the chat-agent route pin and global feature mode. This keeps
+    ``OMI_LLM_CHAT_AGENT_ROUTE=direct`` safe while ``FEATURE_MODE=gateway`` for
+    other features (the 2026-08 chat outage footgun class).
+    """
+    if get_chat_agent_route() != CHAT_AGENT_ROUTE_GATEWAY:
+        return False
+    return should_route_features_through_gateway()
+
+
 def raise_if_gateway_feature_mode_blocks_direct_model_surface(surface: str) -> None:
     if not should_route_features_through_gateway():
         return
     if os.getenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes'}:
         record_direct_exception_surface(surface=surface, reason='acknowledged')
         return
-    raise RuntimeError(
-        f'{surface} is a direct provider LLM surface and is blocked while '
-        f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway. Route it through the LLM gateway or set '
-        f'{LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR}=true for an explicitly acknowledged exception.'
-    )
+    raise GatewayDirectModelSurfaceBlocked(surface)
 
 
 def _is_local_or_dev_runtime() -> bool:
@@ -299,7 +355,7 @@ def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason:
     record_gateway_request_result(feature=feature, outcome=outcome, reason=reason, mode=mode)
 
 
-def _gateway_headers(*, feature: str | None = None) -> dict[str, str]:
+def _gateway_headers(*, feature: str | None = None, platform: str | None = None) -> dict[str, str]:
     headers = {
         'Content-Type': 'application/json',
         'X-Omi-Service-Caller': LLM_GATEWAY_CALLER,
@@ -307,12 +363,18 @@ def _gateway_headers(*, feature: str | None = None) -> dict[str, str]:
     service_token = get_llm_gateway_service_token()
     if service_token is not None:
         headers['Authorization'] = f'Bearer {service_token}'
-    headers.update(_gateway_usage_headers(feature=feature))
+    headers.update(_gateway_usage_headers(feature=feature, platform=platform))
     return headers
 
 
-def llm_gateway_headers(*, feature: str | None = None) -> dict[str, str]:
-    return _gateway_headers(feature=feature)
+def llm_gateway_headers(*, feature: str | None = None, platform: str | None = None) -> dict[str, str]:
+    """Gateway headers for one request.
+
+    ``platform`` is the client app platform when the caller knows it. It is
+    normalized to ``LLM_GATEWAY_APP_PLATFORMS``; an absent or unrecognized value
+    sends no header at all, so the attempt stays unattributed rather than guessed.
+    """
+    return _gateway_headers(feature=feature, platform=platform)
 
 
 def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feature: str) -> JsonDict:
@@ -467,7 +529,6 @@ def generate_image_via_gateway(
     size: str,
     quality: str,
     n: int,
-    response_format: str,
     timeout_seconds: float = 120.0,
 ) -> Mapping[str, object]:
     """Call the gateway-owned image generation surface."""
@@ -482,7 +543,6 @@ def generate_image_via_gateway(
                 'size': size,
                 'quality': quality,
                 'n': n,
-                'response_format': response_format,
             },
         )
         response.raise_for_status()
@@ -492,7 +552,7 @@ def generate_image_via_gateway(
     return cast('Mapping[str, object]', body)
 
 
-def _gateway_usage_headers(*, feature: str | None) -> dict[str, str]:
+def _gateway_usage_headers(*, feature: str | None, platform: str | None = None) -> dict[str, str]:
     context = get_current_context()
     headers: dict[str, str] = {}
     if context is not None and context.uid:
@@ -500,6 +560,9 @@ def _gateway_usage_headers(*, feature: str | None) -> dict[str, str]:
     resolved_feature = context.feature if context is not None and context.feature else feature
     if resolved_feature:
         headers[LLM_GATEWAY_USAGE_FEATURE_HEADER] = resolved_feature
+    normalized_platform = platform.strip().lower() if isinstance(platform, str) else None
+    if normalized_platform in LLM_GATEWAY_APP_PLATFORMS:
+        headers[LLM_GATEWAY_APP_PLATFORM_HEADER] = normalized_platform
     return headers
 
 

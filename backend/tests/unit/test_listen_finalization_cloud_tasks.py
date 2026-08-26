@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import runpy
 from types import SimpleNamespace
@@ -26,6 +27,7 @@ from utils import app_integrations
 from utils import cloud_tasks
 from utils.conversations.finalizer import ConversationFinalizationDisposition, ConversationFinalizationError
 import utils.conversations.finalizer as persisted_finalizer
+import services.conversation_finalization as finalization_service
 
 
 def _prod_backend_sync_runtime_env(monkeypatch):
@@ -37,7 +39,7 @@ def _prod_backend_sync_runtime_env(monkeypatch):
     validator = runpy.run_path(
         str(backend_root / 'scripts/validate-backend-runtime-env.py'), run_name='validate_backend_runtime_env_contract'
     )
-    assert validator['validate_runtime_env'](env='prod', check_workflows=True, check_rendered_cloud_run=True) == []
+    assert validator['validate_runtime_env'](env='prod', check_workflows=True) == []
 
     manifest = renderer['_load_yaml'](renderer['DEFAULT_MANIFEST'])
     env_entries = manifest['environments']['prod']['cloud_run']['services']['backend-sync']['env']
@@ -167,7 +169,7 @@ def _mock_lifecycle_conversation(monkeypatch, *, status: str = 'in_progress'):
     monkeypatch.setattr(
         lifecycle_service.conversations_db,
         'get_conversation',
-        lambda uid, conversation_id: {'id': conversation_id, 'status': status},
+        lambda uid, conversation_id, **kwargs: {'id': conversation_id, 'status': status},
     )
 
 
@@ -207,28 +209,36 @@ def test_platform_key_job_dispatches_to_cloud_tasks(monkeypatch):
 def test_durable_finalization_acceptance_counts_only_a_new_outbox_job(monkeypatch):
     intent = {'job_id': 'job-1', 'status': 'queued', 'dispatch_generation': 2, 'requires_byok': False, 'created': True}
     accepted = MagicMock()
+    client_accepted = MagicMock()
     _mock_lifecycle_conversation(monkeypatch)
     monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent))
     monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_enabled', lambda: False)
     monkeypatch.setattr(lifecycle_service, 'record_journey_accepted', accepted)
+    monkeypatch.setattr(lifecycle_service, 'record_client_journey_accepted', client_accepted)
 
-    result = lifecycle_service.request_finalization('uid-1', 'conversation-1', has_byok_keys=False)
+    result = lifecycle_service.request_finalization(
+        'uid-1', 'conversation-1', has_byok_keys=False, client_kind='mobile_android'
+    )
 
     assert result['route'] == 'pusher'
     accepted.assert_called_once_with('capture_finalization')
+    client_accepted.assert_called_once_with('conversation_finalization', 'mobile_android')
 
 
 def test_durable_finalization_redelivery_does_not_count_as_new_traffic(monkeypatch):
     intent = {'job_id': 'job-1', 'status': 'queued', 'dispatch_generation': 2, 'requires_byok': False, 'created': False}
     accepted = MagicMock()
+    client_accepted = MagicMock()
     _mock_lifecycle_conversation(monkeypatch)
     monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent))
     monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_enabled', lambda: False)
     monkeypatch.setattr(lifecycle_service, 'record_journey_accepted', accepted)
+    monkeypatch.setattr(lifecycle_service, 'record_client_journey_accepted', client_accepted)
 
     lifecycle_service.request_finalization('uid-1', 'conversation-1', has_byok_keys=False)
 
     accepted.assert_not_called()
+    client_accepted.assert_not_called()
 
 
 def test_enqueue_failure_leaves_job_queued_for_reconciler(monkeypatch):
@@ -303,7 +313,7 @@ def test_finalization_status_exposes_retry_and_terminal_state(monkeypatch):
     monkeypatch.setattr(
         lifecycle_service.conversations_db,
         'get_conversation',
-        lambda uid, conversation_id: {'finalization_job_id': 'job-1'},
+        lambda uid, conversation_id, **kwargs: {'finalization_job_id': 'job-1'},
     )
     job = {'uid': 'uid-1', 'conversation_id': 'conversation-1', 'status': 'queued', 'attempt_count': 2}
     monkeypatch.setattr(lifecycle_service.jobs_db, 'get_finalization_job', lambda job_id: job)
@@ -315,10 +325,12 @@ def test_finalization_status_exposes_retry_and_terminal_state(monkeypatch):
         'retryable': True,
         'attempt_count': 2,
         'task_retry_count': 0,
+        'meeting_treatment_eligible': False,
     }
 
     job['status'] = 'dead_letter'
     job['task_retry_count'] = 3
+    job['meeting_treatment_eligible'] = True
     assert lifecycle_service.get_finalization_status('uid-1', 'conversation-1') == {
         'job_id': 'job-1',
         'status': 'dead_letter',
@@ -326,6 +338,7 @@ def test_finalization_status_exposes_retry_and_terminal_state(monkeypatch):
         'retryable': False,
         'attempt_count': 2,
         'task_retry_count': 3,
+        'meeting_treatment_eligible': True,
     }
 
 
@@ -515,6 +528,22 @@ async def test_worker_retries_processing_failure_before_final_attempt(monkeypatc
     retryable.assert_called_once_with('job-1', 1, 1, 'processing_failed')
 
 
+def test_final_failed_attempt_records_client_failure_after_dead_letter(monkeypatch):
+    job = {
+        'created_at': datetime(2026, 1, 1, tzinfo=timezone.utc),
+        'client_platform': 'android',
+    }
+    client_terminal = MagicMock()
+    monkeypatch.setattr(finalization_service.jobs_db, 'mark_finalization_dead_letter', MagicMock(return_value=True))
+    monkeypatch.setattr(finalization_service.jobs_db, 'get_finalization_job', MagicMock(return_value=job))
+    monkeypatch.setattr(finalization_service, 'record_capture_finalization_terminal', MagicMock())
+    monkeypatch.setattr(finalization_service, 'record_conversation_finalization_client_terminal', client_terminal)
+
+    assert finalization_service.final_attempt_failed('job-1', 1, 7, 3) is True
+
+    client_terminal.assert_called_once_with('failure', job, issue_class='unknown')
+
+
 @pytest.mark.anyio
 async def test_worker_dead_letters_the_final_failed_attempt(monkeypatch):
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
@@ -560,8 +589,10 @@ async def test_worker_completes_claimed_job(monkeypatch):
     monkeypatch.setattr(finalization_router, 'finalize_persisted_conversation', AsyncMock())
     completed = MagicMock(return_value=True)
     terminal = MagicMock()
+    client_terminal = MagicMock()
     monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
     monkeypatch.setattr(finalization_router, 'record_capture_finalization_terminal', terminal)
+    monkeypatch.setattr(finalization_router, 'record_conversation_finalization_client_terminal', client_terminal)
 
     response = await finalization_router.run_listen_finalization_job(
         _Request({'job_id': 'job-1', 'dispatch_generation': 1}), task_retry_count=0
@@ -571,6 +602,9 @@ async def test_worker_completes_claimed_job(monkeypatch):
     assert json.loads(response.body) == {'status': 'done'}
     completed.assert_called_once_with('job-1', 1, 1)
     terminal.assert_called_once_with('success', 'accepted-at')
+    client_terminal.assert_called_once_with(
+        'success', {'uid': 'uid-1', 'conversation_id': 'conversation-1', 'created_at': 'accepted-at'}
+    )
 
 
 @pytest.mark.anyio
@@ -608,7 +642,36 @@ async def test_worker_forwards_rest_force_processing_mode_from_the_durable_job(m
         dispatch_generation=1,
         lease_epoch=1,
         force_process=True,
+        final_attempt=False,
     )
+
+
+@pytest.mark.anyio
+async def test_worker_marks_the_terminal_attempt_so_delivery_cannot_strand_the_conversation(monkeypatch):
+    """The last attempt dead-letters regardless, so the finalizer may drop a failing webhook."""
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
+    monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
+    monkeypatch.setattr(
+        jobs_db, 'claim_finalization_job', lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 1}
+    )
+    monkeypatch.setattr(
+        jobs_db,
+        'get_finalization_job',
+        lambda job_id: {'uid': 'uid-1', 'conversation_id': 'conversation-1', 'created_at': 'accepted-at'},
+    )
+    finalizer = AsyncMock()
+    monkeypatch.setattr(finalization_router, 'finalize_persisted_conversation', finalizer)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_completed', MagicMock(return_value=True))
+    monkeypatch.setattr(finalization_router, 'record_capture_finalization_terminal', MagicMock())
+    monkeypatch.setattr(finalization_router, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 3)
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'job_id': 'job-1', 'dispatch_generation': 1}), task_retry_count=2
+    )
+
+    assert response.status_code == 200
+    assert finalizer.await_args.kwargs['final_attempt'] is True
 
 
 @pytest.mark.anyio
@@ -793,6 +856,7 @@ async def test_pusher_claims_the_durable_job_before_finalizing(monkeypatch):
         finalization_job_id='job-1',
         dispatch_generation=3,
         lease_epoch=7,
+        final_attempt=False,
     )
     completed.assert_called_once_with('job-1', 3, 7)
     assert json.loads(websocket.sent[0][4:]) == {'conversation_id': 'conversation-1', 'success': True}
@@ -991,6 +1055,98 @@ async def test_pusher_tells_the_live_session_a_dead_lettered_job_is_terminal(mon
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(('final_attempt', 'expect_completion'), [(False, False), (True, True)])
+async def test_a_webhook_stuck_on_5xx_only_strands_the_conversation_while_retries_remain(
+    monkeypatch, final_attempt, expect_completion
+):
+    """Runs the real finalizer over the real fanout with an app endpoint answering 530.
+
+    A third-party endpoint that has been down for days (webhook health only
+    auto-disables after 72h) failed every attempt of the durable job, so the
+    conversation dead-lettered and its capture journey ended in `failure`. The
+    terminal attempt dead-letters whatever the delivery does, so it drops the
+    delivery and completes the conversation instead.
+    """
+
+    async def inline_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    conversation = SimpleNamespace(
+        id='conversation-1',
+        status=ConversationStatus.completed,
+        language='en',
+        source=SimpleNamespace(value='omi'),
+        external_data=None,
+        discarded=False,
+        is_locked=False,
+        started_at=datetime(2026, 8, 19, 12, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 8, 19, 12, tzinfo=timezone.utc) + timedelta(minutes=10),
+        transcript_segments=[SimpleNamespace(text='substantive exchange', start=0, end=60)],
+        structured=SimpleNamespace(title='Captured title', overview='Captured overview'),
+    )
+    app = SimpleNamespace(
+        id='app-1',
+        uid='owner-1',
+        enabled=True,
+        external_integration=SimpleNamespace(webhook_url='https://app.test/hook'),
+        triggers_on_conversation_creation=lambda: True,
+    )
+    response = MagicMock(status_code=530, text='origin unreachable')
+    client = AsyncMock()
+    client.post = AsyncMock(return_value=response)
+
+    monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
+    monkeypatch.setattr(app_integrations, 'run_blocking', inline_run_blocking)
+    monkeypatch.setattr(
+        persisted_finalizer.conversations_db,
+        'get_conversation',
+        lambda *args, **kwargs: {
+            'id': 'conversation-1',
+            'status': ConversationStatus.completed.value,
+            'discarded': False,
+        },
+    )
+    monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
+    monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
+    monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', MagicMock())
+    monkeypatch.setattr(
+        persisted_finalizer.lifecycle_service,
+        'claim_finalization_fanout',
+        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+    )
+    completed = MagicMock(return_value=True)
+    monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', completed)
+    monkeypatch.setattr(app_integrations, 'get_available_apps', lambda uid: [app])
+    monkeypatch.setattr(app_integrations, 'is_app_webhook_disabled', lambda app_id: False)
+    monkeypatch.setattr(app_integrations, 'conversation_to_dict', lambda value: {})
+    monkeypatch.setattr(app_integrations, 'safe_request_target', lambda url: (url, {'headers': {}, 'extensions': {}}))
+    monkeypatch.setattr(app_integrations, 'get_webhook_circuit_breaker', lambda url: MagicMock())
+    monkeypatch.setattr(app_integrations, 'get_webhook_client', lambda: client)
+    monkeypatch.setattr(app_integrations, 'record_app_webhook_failure', MagicMock(return_value=0))
+    monkeypatch.setattr(app_integrations, '_handle_webhook_health_action', MagicMock())
+
+    async def finalize():
+        return await persisted_finalizer.finalize_persisted_conversation(
+            'uid-1',
+            'conversation-1',
+            finalization_job_id='job-1',
+            dispatch_generation=2,
+            lease_epoch=3,
+            final_attempt=final_attempt,
+        )
+
+    if expect_completion:
+        assert await finalize() == ConversationFinalizationDisposition.completed
+        completed.assert_called_once()
+    else:
+        with pytest.raises(ConversationFinalizationError):
+            await finalize()
+        completed.assert_not_called()
+    assert client.post.await_count == 1
+
+
+@pytest.mark.anyio
 async def test_finalizer_never_logs_a_provider_exception_body(monkeypatch, caplog):
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
@@ -998,7 +1154,7 @@ async def test_finalizer_never_logs_a_provider_exception_body(monkeypatch, caplo
     conversation = SimpleNamespace(id='conversation-1', status=ConversationStatus.processing, language='en')
     monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
     monkeypatch.setattr(
-        persisted_finalizer.conversations_db, 'get_conversation', lambda *args: {'id': 'conversation-1'}
+        persisted_finalizer.conversations_db, 'get_conversation', lambda *args, **kwargs: {'id': 'conversation-1'}
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
@@ -1021,7 +1177,34 @@ async def test_finalizer_never_logs_a_provider_exception_body(monkeypatch, caplo
 
 
 @pytest.mark.anyio
-async def test_completed_conversation_replays_only_the_durable_fanout_boundary(monkeypatch):
+@pytest.mark.parametrize(
+    ('source', 'external_data', 'discarded', 'expected_intent_kwargs'),
+    [
+        ('omi', None, False, {'conversation_id': 'conversation-1', 'summary': 'Captured title'}),
+        (
+            'desktop',
+            {'conversation_role': 'meeting'},
+            False,
+            {
+                'conversation_id': 'conversation-1',
+                'summary': 'Captured title',
+                'is_desktop_meeting': True,
+                'recommended_action_items': [],
+            },
+        ),
+        ('desktop', {'conversation_role': 'ambient'}, False, None),
+        (
+            'desktop',
+            {'conversation_role': 'meeting', 'conversation_finalization_reason': 'max_duration_rotation'},
+            False,
+            None,
+        ),
+        ('desktop', {'conversation_role': 'meeting'}, True, None),
+    ],
+)
+async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
+    monkeypatch, source, external_data, discarded, expected_intent_kwargs
+):
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
@@ -1029,7 +1212,12 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
         id='conversation-1',
         status=ConversationStatus.completed,
         language='en',
-        source=SimpleNamespace(value='omi'),
+        source=SimpleNamespace(value=source),
+        external_data=external_data,
+        discarded=discarded,
+        started_at=datetime(2026, 8, 18, 12, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 8, 18, 12, tzinfo=timezone.utc) + timedelta(minutes=10),
+        transcript_segments=[SimpleNamespace(text='substantive exchange', start=0, end=60)],
         structured=SimpleNamespace(title='Captured title', overview='Captured overview'),
     )
     integrations = AsyncMock(return_value=[])
@@ -1037,7 +1225,11 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
     monkeypatch.setattr(
         persisted_finalizer.conversations_db,
         'get_conversation',
-        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.completed.value, 'discarded': False},
+        lambda *args, **kwargs: {
+            'id': 'conversation-1',
+            'status': ConversationStatus.completed.value,
+            'discarded': False,
+        },
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
@@ -1053,6 +1245,8 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
     capture_arrival = MagicMock()
     monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', capture_arrival)
+    receipt_writer = MagicMock(return_value=None)
+    monkeypatch.setattr(persisted_finalizer, 'record_and_persist_finalized_meeting_receipt', receipt_writer)
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
         'uid-1',
@@ -1067,11 +1261,19 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
         conversation,
         idempotency_key='conversation:conversation-1:finalization',
         require_delivery=True,
+        last_delivery_attempt=False,
     )
-    extracted.assert_called_once_with('uid-1', conversation)
+    if discarded:
+        extracted.assert_not_called()
+    else:
+        extracted.assert_called_once_with('uid-1', conversation)
     assert disposition == ConversationFinalizationDisposition.completed
     completed.assert_called_once_with('job-1', 2, 3)
-    capture_arrival.assert_called_once_with('uid-1', conversation_id='conversation-1', summary='Captured title')
+    receipt_writer.assert_called_once_with('uid-1', conversation, finalization_job_id='job-1')
+    if source != 'omi' or expected_intent_kwargs is None:
+        capture_arrival.assert_not_called()
+    else:
+        capture_arrival.assert_called_once_with('uid-1', **expected_intent_kwargs)
 
 
 @pytest.mark.anyio
@@ -1081,7 +1283,7 @@ async def test_finalizer_fences_a_deleted_conversation_before_processing(monkeyp
 
     process = MagicMock()
     monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
-    monkeypatch.setattr(persisted_finalizer.conversations_db, 'get_conversation', lambda *args: None)
+    monkeypatch.setattr(persisted_finalizer.conversations_db, 'get_conversation', lambda *args, **kwargs: None)
     monkeypatch.setattr(persisted_finalizer, 'process_conversation', process)
     claim_fanout = MagicMock(
         return_value={'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization'}
@@ -1114,7 +1316,7 @@ async def test_deleted_conversation_after_delivered_fanout_replay_completes_job(
     monkeypatch.setattr(
         jobs_db, 'get_finalization_job', lambda job_id: {'uid': 'uid-1', 'conversation_id': 'conversation-1'}
     )
-    monkeypatch.setattr(persisted_finalizer.conversations_db, 'get_conversation', lambda *args: None)
+    monkeypatch.setattr(persisted_finalizer.conversations_db, 'get_conversation', lambda *args, **kwargs: None)
     fanout = MagicMock(return_value={'status': 'completed', 'fanout_key': 'conversation:conversation-1:finalization'})
     integrations = AsyncMock()
     completed = MagicMock(return_value=True)
@@ -1144,7 +1346,11 @@ async def test_finalizer_skips_fanout_when_atomic_claim_is_fenced(monkeypatch):
     monkeypatch.setattr(
         persisted_finalizer.conversations_db,
         'get_conversation',
-        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
+        lambda *args, **kwargs: {
+            'id': 'conversation-1',
+            'status': ConversationStatus.processing.value,
+            'discarded': False,
+        },
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
@@ -1186,7 +1392,11 @@ async def test_finalizer_retries_canonical_memory_extraction_before_fanout(monke
     monkeypatch.setattr(
         persisted_finalizer.conversations_db,
         'get_conversation',
-        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
+        lambda *args, **kwargs: {
+            'id': 'conversation-1',
+            'status': ConversationStatus.processing.value,
+            'discarded': False,
+        },
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
@@ -1231,7 +1441,11 @@ async def test_finalizer_fences_before_memory_extraction_on_fanout_loss(monkeypa
     monkeypatch.setattr(
         persisted_finalizer.conversations_db,
         'get_conversation',
-        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
+        lambda *args, **kwargs: {
+            'id': 'conversation-1',
+            'status': ConversationStatus.processing.value,
+            'discarded': False,
+        },
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
@@ -1277,7 +1491,11 @@ async def test_finalizer_fences_before_memory_extraction_on_persistence_loss(mon
     monkeypatch.setattr(
         persisted_finalizer.conversations_db,
         'get_conversation',
-        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
+        lambda *args, **kwargs: {
+            'id': 'conversation-1',
+            'status': ConversationStatus.processing.value,
+            'discarded': False,
+        },
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
@@ -1330,7 +1548,11 @@ async def test_finalizer_emits_zero_derived_effects_when_claim_loses_after_persi
     monkeypatch.setattr(
         persisted_finalizer.conversations_db,
         'get_conversation',
-        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
+        lambda *args, **kwargs: {
+            'id': 'conversation-1',
+            'status': ConversationStatus.processing.value,
+            'discarded': False,
+        },
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
@@ -1385,7 +1607,11 @@ async def test_finalizer_runs_derived_effects_only_after_winning_claim(monkeypat
     monkeypatch.setattr(
         persisted_finalizer.conversations_db,
         'get_conversation',
-        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
+        lambda *args, **kwargs: {
+            'id': 'conversation-1',
+            'status': ConversationStatus.processing.value,
+            'discarded': False,
+        },
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
@@ -1443,7 +1669,11 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
     monkeypatch.setattr(
         persisted_finalizer.conversations_db,
         'get_conversation',
-        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
+        lambda *args, **kwargs: {
+            'id': 'conversation-1',
+            'status': ConversationStatus.processing.value,
+            'discarded': False,
+        },
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)

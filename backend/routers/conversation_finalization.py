@@ -16,6 +16,7 @@ from services.conversation_finalization import (
     get_listen_finalization_tasks_max_attempts_for_worker,
 )
 from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
+from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
@@ -24,7 +25,10 @@ from utils.conversations.finalizer import (
 )
 from utils.executors import db_executor, run_blocking
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
-from utils.observability.journeys import record_capture_finalization_terminal
+from utils.observability.journeys import (
+    record_capture_finalization_terminal,
+    record_conversation_finalization_client_terminal,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +133,21 @@ async def run_listen_finalization_job(
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
+        if await run_blocking(db_executor, should_skip_background_account_mutation, job['uid']):
+            # Prequeued finalization must not mutate migrating/new accounts.
+            completed = await run_blocking(
+                db_executor,
+                lifecycle_service.complete_fenced_finalization,
+                job_id,
+                dispatch_generation,
+                claimed_lease_epoch,
+            )
+            if not completed:
+                return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+            record_capture_finalization_terminal('stale', job.get('created_at'))
+            record_conversation_finalization_client_terminal('cancelled', job)
+            return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
+
         try:
             disposition = await finalize_persisted_conversation(
                 job['uid'],
@@ -137,6 +156,7 @@ async def run_listen_finalization_job(
                 dispatch_generation=dispatch_generation,
                 lease_epoch=claimed_lease_epoch,
                 force_process=bool(job.get('force_process')),
+                final_attempt=task_retry_count >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
             )
         except ConversationFinalizationError:
             terminal = await _retry_or_dead_letter(
@@ -168,8 +188,10 @@ async def run_listen_finalization_job(
         accepted_at = job.get('created_at') if job else None
         if disposition == ConversationFinalizationDisposition.fenced:
             record_capture_finalization_terminal('stale', accepted_at)
+            record_conversation_finalization_client_terminal('cancelled', job)
         else:
             record_capture_finalization_terminal('success', accepted_at)
+            record_conversation_finalization_client_terminal('success', job)
         return JSONResponse(status_code=200, content={'status': 'done'})
     except asyncio.CancelledError:
         release_lock = False

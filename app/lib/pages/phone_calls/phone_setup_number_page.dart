@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/pages/phone_calls/phone_setup_verify_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/phone_number_input.dart';
 
 class PhoneSetupNumberPage extends StatefulWidget {
   const PhoneSetupNumberPage({super.key});
@@ -36,15 +37,14 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
     super.dispose();
   }
 
-  bool get _isValid {
-    var digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
-    return digits.length >= _selectedCountry.telephoneMinLength && digits.length <= _selectedCountry.telephoneMaxLength;
-  }
+  PhoneNumberInput get _parsed => parsePhoneNumberInput(
+        raw: _phoneController.text,
+        isoCode: _selectedCountry.codeAlpha2,
+      );
 
-  String get _fullNumber {
-    var digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
-    return '+${_selectedCountry.telephoneCode}$digits';
-  }
+  bool get _isValid => _parsed.isValid;
+
+  String get _fullNumber => _parsed.e164;
 
   void _showCountryPicker() {
     showModalBottomSheet(
@@ -168,7 +168,7 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
                           hintText: context.l10n.phoneNumberHint,
                           hintStyle: TextStyle(color: Colors.grey[600]),
                         ),
-                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\s\-\(\)]'))],
+                        inputFormatters: phoneFieldInputFormatters,
                         onChanged: (_) => setState(() => _errorMessage = null),
                       ),
                     ),

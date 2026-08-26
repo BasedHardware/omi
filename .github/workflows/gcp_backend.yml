@@ -7,6 +7,10 @@ on:
         description: 'Select the environment to deploy to'
         required: true
         default: 'development'
+        type: choice
+        options:
+          - development
+          - prod
       release_sha:
         description: 'Exact main SHA with a successful Release Eligibility proof (deploy mode only)'
         required: false
@@ -137,7 +141,7 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'repair-traffic-only'
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -191,7 +195,7 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'deploy'
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: 'read'
       contents: 'read'
@@ -342,6 +346,20 @@ jobs:
           BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
         run: |
           set -euo pipefail
+          # A missing release-gate-failure label made gh issue create fail hard,
+          # so the audit issue was never filed (see #10301 / #10389). Ensure the
+          # label exists first — idempotent, so a concurrent run cannot race it.
+          # Only tolerate the explicit "already exists" case; fail loudly on
+          # any other label-creation error (permissions, rate limits, etc.).
+          label_output="$(gh label create release-gate-failure \
+              --repo "$REPO" \
+              --description "Release Eligibility gate was bypassed (break-glass audit trail)" \
+              --color "b60205" 2>&1)" || {
+            if ! grep -qi 'already exists' <<< "$label_output"; then
+              echo "::error::Failed to ensure release-gate-failure label: $label_output" >&2
+              exit 1
+            fi
+          }
           gh issue create --repo "$REPO" \
             --title "Release Eligibility bypassed for ${DEPLOY_SHA:0:10} (${DEPLOY_ENVIRONMENT})" \
             --label release-gate-failure \
@@ -365,7 +383,7 @@ jobs:
       needs.validate-production-boundary.result == 'success' &&
       needs.firestore_readiness.result == 'success' &&
       (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -387,6 +405,8 @@ jobs:
           gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
           runtime_gcp_project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          # Unset by default, which keeps the existing signing behaviour.
+          firebase_probe_signer_service_account: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
           runtime_env: ${{ vars.ENV }}
           region: ${{ env.REGION }}
           service: ${{ env.SERVICE }}

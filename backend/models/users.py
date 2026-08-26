@@ -4,6 +4,8 @@ from typing import Optional, List
 
 from pydantic import BaseModel, Field, field_validator
 
+from config.plan_catalog import LEGACY_WIRE_PLAN_VALUES, WIRE_FALLBACK_PLAN_TYPES, PlanType
+
 
 class WebhookType(str, Enum):
     audio_bytes = 'audio_bytes'
@@ -11,6 +13,21 @@ class WebhookType(str, Enum):
     realtime_transcript = 'realtime_transcript'
     memory_created = ('memory_created',)
     day_summary = 'day_summary'
+
+
+def webhook_url_from_setting(wtype: WebhookType | str, value: Optional[str]) -> str:
+    """The endpoint a stored webhook setting points at, or '' when none is configured.
+
+    audio_bytes stores '<url>,<seconds>', so clearing only the URL leaves a ',5' setting
+    that is not an empty string yet has nowhere to deliver to. Every caller deciding
+    whether a webhook is configured must read the setting through here.
+    """
+    if not value:
+        return ''
+    # WebhookType is a str enum, so this holds for the raw wire value too.
+    if wtype == WebhookType.audio_bytes:
+        value = value.split(',')[0]
+    return value.strip()
 
 
 LOCATION_CONTEXT_PURPOSE = 'chat_city_context'
@@ -64,22 +81,6 @@ class LocationContextConsentResponse(BaseModel):
     expires_at: Optional[datetime] = None
 
 
-class PlanType(str, Enum):
-    basic = 'basic'  # display "Free"
-    unlimited = 'unlimited'  # LEGACY — display "Neo"; hidden from new users
-    architect = 'architect'  # display "Architect" (desktop)
-    operator = 'operator'  # display "Operator" (desktop)
-    plus = 'plus'  # display "Plus" (mobile)
-    unlimited_v2 = 'unlimited_v2'  # display "Unlimited" (mobile); distinct from legacy `unlimited` (Neo)
-
-    @classmethod
-    def _missing_(cls, value: object):
-        # Backward compat: 'pro' was renamed to 'architect'
-        if value == 'pro':
-            return cls.architect
-        return None
-
-
 class SubscriptionStatus(str, Enum):
     active = 'active'
     inactive = 'inactive'
@@ -112,9 +113,12 @@ class ChatUsageQuota(BaseModel):
 
 
 class Subscription(BaseModel):
+    # Temporary released-client projection. The canonical enum has six values;
+    # this compatibility view is generated from catalog wire fallbacks and is
+    # removed only after every client has a lossless unknown-value decoder.
     plan: PlanType = Field(
         default=PlanType.basic,
-        json_schema_extra={"enum": ["basic", "unlimited", "architect", "operator"]},
+        json_schema_extra={"enum": list(LEGACY_WIRE_PLAN_VALUES)},
     )
     status: SubscriptionStatus = SubscriptionStatus.active
     current_period_end: Optional[int] = None
@@ -202,7 +206,16 @@ class UserSubscriptionResponse(BaseModel):
 
     @field_validator("subscription", mode="before")
     @classmethod
-    def _reject_unshipped_mobile_plan_values(cls, value: Subscription) -> Subscription:
-        if value.plan in {PlanType.plus, PlanType.unlimited_v2}:
-            raise ValueError("mobile plan IDs require a versioned app-client subscription contract")
+    def _reject_values_outside_released_wire_contract(cls, value: Subscription) -> Subscription:
+        if value.plan in WIRE_FALLBACK_PLAN_TYPES:
+            raise ValueError("plan ID requires a versioned app-client subscription contract")
         return value
+
+
+class AvailableLanguage(BaseModel):
+    code: str
+    name: str
+
+
+class AvailableLanguagesResponse(BaseModel):
+    languages: List[AvailableLanguage]

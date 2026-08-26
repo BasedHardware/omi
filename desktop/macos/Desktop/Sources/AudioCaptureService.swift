@@ -80,6 +80,9 @@ class AudioCaptureService: @unchecked Sendable {
   /// True when this service was built to pin capture to an explicit device.
   var hasOverrideDevice: Bool { overrideDeviceID != nil }
 
+  /// CoreAudio device currently opened by this service (for preferred-mic reconnect).
+  var activeDeviceID: AudioDeviceID { deviceID }
+
   /// Default initializer — opens the system default input device.
   init() {
     self.overrideDeviceID = nil

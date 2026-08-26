@@ -30,22 +30,44 @@ struct OmiMarkdown: View {
 
   let text: String
   let style: Style
+  let citations: [ChatCitationReference]
+  let onOpenCitation: ((ChatCitationReference) -> Void)?
   @Environment(\.fontScale) private var fontScale
 
-  init(text: String, sender: ChatSender) {
+  init(
+    text: String,
+    sender: ChatSender,
+    citations: [ChatCitationReference] = [],
+    onOpenCitation: ((ChatCitationReference) -> Void)? = nil
+  ) {
     self.text = text
     self.style = sender == .user ? .user : .assistant
+    self.citations = citations
+    self.onOpenCitation = onOpenCitation
   }
 
   init(text: String, style: Style) {
     self.text = text
     self.style = style
+    self.citations = []
+    self.onOpenCitation = nil
   }
 
   var body: some View {
-    OmiMarkdownContent(text: text, style: style, fontScale: fontScale)
-      .equatable()
-      .textSelection(.disabled)
+    Group {
+      if citations.isEmpty {
+        OmiMarkdownContent(text: text, style: style, fontScale: fontScale)
+          .equatable()
+      } else {
+        OmiMarkdownContent(
+          text: text,
+          style: style,
+          fontScale: fontScale,
+          citations: citations,
+          onOpenCitation: onOpenCitation)
+      }
+    }
+    .textSelection(.disabled)
   }
 
   static func containsGFMTable(_ content: String) -> Bool {
@@ -65,16 +87,27 @@ struct OmiMarkdownContent: View, Equatable {
   let style: OmiMarkdown.Style
   let fontScale: CGFloat
   let document: OmiMarkdownDocument
+  let citations: [ChatCitationReference]
+  let onOpenCitation: ((ChatCitationReference) -> Void)?
 
-  init(text: String, style: OmiMarkdown.Style, fontScale: CGFloat) {
+  init(
+    text: String,
+    style: OmiMarkdown.Style,
+    fontScale: CGFloat,
+    citations: [ChatCitationReference] = [],
+    onOpenCitation: ((ChatCitationReference) -> Void)? = nil
+  ) {
     self.text = text
     self.style = style
     self.fontScale = fontScale
     self.document = OmiMarkdownDocument(markdown: text)
+    self.citations = citations
+    self.onOpenCitation = onOpenCitation
   }
 
   nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
     lhs.text == rhs.text && lhs.style == rhs.style && lhs.fontScale == rhs.fontScale
+      && lhs.citations == rhs.citations
   }
 
   var body: some View {
@@ -91,7 +124,12 @@ struct OmiMarkdownContent: View, Equatable {
             case .codeBlock(let language, let code):
               codeBlockView(code, language: language)
             case .table(let table):
-              OmiMarkdownTableView(table: table, style: style, fontScale: fontScale)
+              OmiMarkdownTableView(
+                table: table,
+                style: style,
+                fontScale: fontScale,
+                citations: citations,
+                onOpenCitation: onOpenCitation)
             case .thematicBreak:
               thematicBreakView()
             }
@@ -104,10 +142,10 @@ struct OmiMarkdownContent: View, Equatable {
   // MARK: - Thematic Break
 
   private func thematicBreakView() -> some View {
-    let dividerColor = style == .user ? Color.white.opacity(0.34) : OmiColors.textTertiary.opacity(0.44)
-
+    // One rule on one ground: every bubble style sits on the light glass now, so the old
+    // white-on-dark divider and the faint grey one collapse into `Ink.separator`.
     return Capsule()
-      .fill(dividerColor)
+      .fill(Ink.separator)
       .frame(maxWidth: .infinity)
       .frame(height: 1)
       .padding(.vertical, OmiSpacing.sm)
@@ -123,7 +161,14 @@ struct OmiMarkdownContent: View, Equatable {
     )
 
     Group {
-      if let inlineCopy {
+      if !citations.isEmpty {
+        OmiMarkdownCitationContent(
+          text: content,
+          style: style,
+          fontScale: fontScale,
+          citations: citations,
+          onOpenCitation: onOpenCitation)
+      } else if let inlineCopy {
         OmiMarkdownInlineCopyText(
           attributed: inlineCopy.attributed,
           placeholders: inlineCopy.placeholders,
@@ -134,13 +179,9 @@ struct OmiMarkdownContent: View, Equatable {
       } else if let s = Self.styledAttributedString(
         from: processed, style: style, fontSize: fontSize, fontScale: fontScale
       ) {
-        Text(s)
-          .if_available_writingToolsNone()
+        OmiMarkdownChatText(s, fontSize: fontSize)
       } else {
-        Text(content)
-          .font(.system(size: fontSize))
-          .foregroundColor(Self.baseColor(for: style))
-          .if_available_writingToolsNone()
+        OmiMarkdownChatText(content, fontSize: fontSize, style: style)
       }
     }
   }
@@ -154,12 +195,17 @@ struct OmiMarkdownContent: View, Equatable {
 
   // MARK: - Attributed String Styling
 
-  private static func styledAttributedString(
+  static func styledAttributedString(
     from processed: String, style: OmiMarkdown.Style, fontSize: CGFloat, fontScale: CGFloat
   ) -> AttributedString? {
+    // Every surface that renders assistant text lands here — chat bubbles, the floating bar, the
+    // onboarding transcript, table cells, and both the plain and inline-copy paths — so the tilde
+    // rule is applied once, at the only point all of them share.
+    let source = OmiMarkdownTilde.escapingNonPairDelimiters(processed)
+
     guard
       var attributed = try? AttributedString(
-        markdown: processed,
+        markdown: source,
         options: .init(
           allowsExtendedAttributes: true,
           interpretedSyntax: .inlineOnlyPreservingWhitespace
@@ -169,11 +215,10 @@ struct OmiMarkdownContent: View, Equatable {
 
     let codeFontSize = round(13 * fontScale)
     let baseColor = baseColor(for: style)
-    let linkColor: Color = style == .user ? .white.opacity(0.9) : OmiColors.accent
-    let codeBgColor: Color =
-      style == .user
-      ? .white.opacity(0.15)
-      : OmiColors.backgroundTertiary
+    let linkColor: Color = Ink.accent
+    // Inline code is a chip on the glass, not a dark inset. `rowFillHover` is the emphasized wash
+    // the rest of the glass vocabulary uses for exactly this — a surface one step up from its host.
+    let codeBgColor: Color = Ink.rowFillHover
 
     attributed.font = .system(size: fontSize)
     attributed.foregroundColor = baseColor
@@ -206,7 +251,10 @@ struct OmiMarkdownContent: View, Equatable {
     return attributed
   }
 
-  fileprivate static func inlineAttributedString(
+  /// `internal` rather than `fileprivate` so a test can assert what a surface actually renders —
+  /// preprocessing, delimiter handling and styling together — instead of re-implementing the parse
+  /// options beside it and drifting from the real path.
+  static func inlineAttributedString(
     from content: String,
     style: OmiMarkdown.Style,
     fontSize: CGFloat,
@@ -238,14 +286,26 @@ struct OmiMarkdownContent: View, Equatable {
     return (attributed, masked.placeholders)
   }
 
-  fileprivate static func baseColor(for style: OmiMarkdown.Style) -> Color {
+  /// The one colour every bubble's prose is drawn in.
+  ///
+  /// All three styles now render on the light-pinned glass panel, so all three get the same answer.
+  /// The assistant bubble draws no ground at all (the glass owns it), and both user bubbles are a
+  /// `labelColor` wash *over* that glass — `ChatBubble.messageTextBubble` uses `Ink.rowFillHover`
+  /// and onboarding's user bubble uses `glassCard(emphasized:)`. There is no dark ground left in
+  /// this renderer for a light-on-dark answer to be correct on.
+  ///
+  /// It has to be the dynamic label rather than a fixed near-white or near-black. The old palette
+  /// was hardcoded dark: `textPrimary` was `#FFFFFF`, which is what made every assistant reply —
+  /// and the whole conversational onboarding — white-on-white and invisible; `.user`'s `.white` was
+  /// the same bug one bubble over. The switch stays exhaustive rather than collapsing to a bare
+  /// `return` so a future genuinely-dark surface has to state its own case.
+  /// `internal` rather than `fileprivate` so the contrast guard can call the real function instead
+  /// of restating the mapping it is supposed to be checking, and `nonisolated` because it is a pure
+  /// value on a `@MainActor` view — something to read, not to draw with.
+  nonisolated static func baseColor(for style: OmiMarkdown.Style) -> Color {
     switch style {
-    case .assistant:
-      OmiColors.textPrimary
-    case .user:
-      .white
-    case .onboardingUser:
-      OmiColors.backgroundPrimary
+    case .assistant, .user, .onboardingUser:
+      Ink.primary
     }
   }
 
@@ -253,7 +313,7 @@ struct OmiMarkdownContent: View, Equatable {
 
   /// Converts block-level elements (headers, asterisk lists) into inline-compatible
   /// form for `AttributedString(markdown:)` with `.inlineOnlyPreservingWhitespace`.
-  private static func preprocessText(_ text: String) -> String {
+  static func preprocessText(_ text: String) -> String {
     text.components(separatedBy: "\n").map { line in
       var processed = line
 
@@ -652,6 +712,64 @@ enum OmiMarkdownInlineCode {
   }
 }
 
+extension OmiMarkdownInlineCode {
+  /// Closed code spans, backtick fences included, as ranges. Everything inside one is literal text.
+  static func codeSpanRanges(in text: String) -> [Range<String.Index>] {
+    closedSpans(in: text).map(\.range)
+  }
+}
+
+/// Tilde runs, held to the GFM rule.
+///
+/// GFM strikethrough is `~~text~~`. Foundation's Markdown parser also honours a *single* `~` as a
+/// delimiter, which GFM does not — and a lone tilde is overwhelmingly ordinary text: an approximate
+/// price, an approximate duration, a home directory.
+///
+/// The reported answer was a list of ticket prices. `(~$190)` and `(~$230)` are each flanked by
+/// punctuation on both sides, so each tilde can both open and close a run: they paired with *each
+/// other*, struck out the whole sentence between them, and swallowed their own tildes on the way, so
+/// the prices lost the very character that made them approximate.
+///
+/// Escaping every tilde run that is not exactly two restores the GFM rule at the delimiter level,
+/// which is the level the defect lives at — the content is never rewritten. `~~struck~~` still
+/// strikes. A run of three or more was already literal in the underlying parser and stays that way.
+enum OmiMarkdownTilde {
+  static func escapingNonPairDelimiters(_ text: String) -> String {
+    guard text.contains("~") else { return text }
+
+    // A backslash is literal inside a code span, so escaping in there would print `\~` at the user.
+    let codeSpans = OmiMarkdownInlineCode.codeSpanRanges(in: text)
+    var result = ""
+    result.reserveCapacity(text.count)
+    var index = text.startIndex
+
+    while index < text.endIndex {
+      if let span = codeSpans.first(where: { $0.contains(index) }) {
+        result += text[index..<span.upperBound]
+        index = span.upperBound
+        continue
+      }
+
+      guard text[index] == "~" else {
+        result.append(text[index])
+        index = text.index(after: index)
+        continue
+      }
+
+      var runEnd = index
+      while runEnd < text.endIndex, text[runEnd] == "~" {
+        runEnd = text.index(after: runEnd)
+      }
+      let run = text[index..<runEnd]
+      // Exactly two is the one form GFM calls a delimiter; everything else is a character.
+      result += run.count == 2 ? String(run) : String(repeating: "\\~", count: run.count)
+      index = runEnd
+    }
+
+    return result
+  }
+}
+
 private struct OmiMarkdownInlineCopyText: View {
   let attributed: AttributedString
   let placeholders: [OmiMarkdownInlineCode.Placeholder]
@@ -664,12 +782,14 @@ private struct OmiMarkdownInlineCopyText: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
+    VStack(alignment: .leading, spacing: OmiMarkdownContent.chatLineSpacing(fontSize: fontSize)) {
       ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
         if line.isEmpty {
           Color.clear.frame(height: fontSize * 0.45)
         } else {
-          OmiMarkdownInlineFlowLayout(spacing: 0, lineSpacing: 2) {
+          OmiMarkdownInlineFlowLayout(
+            spacing: 0, lineSpacing: OmiMarkdownContent.chatLineSpacing(fontSize: fontSize)
+          ) {
             ForEach(Array(line.enumerated()), id: \.offset) { _, segment in
               switch segment {
               case .text(let value):
@@ -687,11 +807,18 @@ private struct OmiMarkdownInlineCopyText: View {
   @ViewBuilder
   private func inlineText(_ value: AttributedString) -> some View {
     Text(value)
+      .lineSpacing(OmiMarkdownContent.chatLineSpacing(fontSize: fontSize))
       .fixedSize(horizontal: false, vertical: true)
       .if_available_writingToolsNone()
   }
 }
 
+/// The one surface in this file that keeps a dark ground, and the only light-on-dark text left here.
+///
+/// It is a transient floating toast, not hosted page content — an *opaque* capsule that paints its
+/// own ground and therefore carries its own contrast wherever it lands. That is the same exemption
+/// the glass vocabulary already grants an opaque popover, and it is why this survived the light
+/// conversion while every white-on-glass bubble colour around it did not.
 private struct OmiMarkdownCopyToast: View {
   let fontScale: CGFloat
 
@@ -718,7 +845,7 @@ private struct OmiMarkdownInlineCodeCopyButton: View {
   @State private var copyGeneration = 0
 
   private var backgroundColor: Color {
-    style == .user ? .white.opacity(copied ? 0.22 : 0.15) : OmiColors.backgroundTertiary
+    copied ? Ink.hairline : Ink.rowFillHover
   }
 
   var body: some View {
@@ -736,7 +863,7 @@ private struct OmiMarkdownInlineCodeCopyButton: View {
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(
           RoundedRectangle(cornerRadius: 4)
-            .stroke(copied ? OmiColors.accent.opacity(0.7) : .clear, lineWidth: 1)
+            .stroke(copied ? Ink.accent.opacity(0.7) : .clear, lineWidth: 1)
         )
     }
     .buttonStyle(.plain)
@@ -768,7 +895,7 @@ private struct OmiMarkdownInlineCodeCopyButton: View {
   }
 }
 
-private struct OmiMarkdownInlineFlowLayout: Layout {
+struct OmiMarkdownInlineFlowLayout: Layout {
   var spacing: CGFloat
   var lineSpacing: CGFloat
 
@@ -823,6 +950,328 @@ private struct OmiMarkdownInlineFlowLayout: Layout {
       proposals
     )
   }
+}
+
+/// Citation-aware projection used only for settled assistant answers with typed provenance. The
+/// popover lives outside transcript layout, so showing a preview cannot move the scroll anchor.
+private struct OmiMarkdownCitationContent: View {
+  let text: String
+  let style: OmiMarkdown.Style
+  let fontScale: CGFloat
+  let citations: [ChatCitationReference]
+  let onOpenCitation: ((ChatCitationReference) -> Void)?
+
+  private var referencesByOrdinal: [Int: ChatCitationReference] {
+    Dictionary(citations.map { ($0.ordinal, $0) }, uniquingKeysWith: { first, _ in first })
+  }
+
+  var body: some View {
+    let fontSize = round(14 * fontScale)
+    let source = OmiMarkdownContent.preprocessText(text)
+    if let citationMask = ChatCitationMask.mask(source, references: referencesByOrdinal),
+      let interactiveMask = ChatCitationMask.maskInlineCode(in: citationMask),
+      let attributed = OmiMarkdownContent.styledAttributedString(
+        from: interactiveMask.markdown, style: style, fontSize: fontSize, fontScale: fontScale)
+    {
+      VStack(alignment: .leading, spacing: OmiMarkdownContent.chatLineSpacing(fontSize: fontSize)) {
+        ForEach(
+          Array(
+            ChatCitationMask.units(
+              in: attributed,
+              citationMarkers: citationMask.markers,
+              codePlaceholders: interactiveMask.codePlaceholders
+            ).enumerated()),
+          id: \.offset
+        ) {
+          _, line in
+          if line.isEmpty {
+            Color.clear.frame(height: fontSize * 0.45)
+          } else {
+            OmiMarkdownInlineFlowLayout(
+              spacing: 0, lineSpacing: OmiMarkdownContent.chatLineSpacing(fontSize: fontSize)
+            ) {
+              ForEach(Array(line.enumerated()), id: \.offset) { _, unit in
+                switch unit {
+                case .text(let value):
+                  Text(value)
+                    .lineSpacing(OmiMarkdownContent.chatLineSpacing(fontSize: fontSize))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .if_available_writingToolsNone()
+                case .citation(let reference):
+                  ChatCitationToken(
+                    reference: reference,
+                    fontScale: fontScale,
+                    onOpen: { onOpenCitation?($0) })
+                case .code(let value):
+                  OmiMarkdownInlineCodeCopyButton(
+                    code: value,
+                    style: style,
+                    fontScale: fontScale)
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Type-erased on purpose (#11573). `OmiMarkdownContent.body` reaches this view through
+      // `textView` and `OmiMarkdownTableView`, so naming `OmiMarkdownContent` here closes a cycle
+      // in the *static* view-type graph. SwiftUI's `View._viewListCount(inputs:)` walks that graph
+      // by type, never evaluating a body, so no value-level guard bounds it: on macOS 15 a
+      // `ScrollView`/`LazyVStack` host recursed until the main thread wrote past its stack guard
+      // page and died with SIGSEGV. `AnyView` is the terminator — it resolves its count
+      // dynamically, which cuts both cycles here and leaves the graph acyclic.
+      AnyView(OmiMarkdownContent(text: text, style: style, fontScale: fontScale))
+    }
+  }
+}
+
+enum ChatCitationMask {
+  struct Marker {
+    let placeholder: String
+    let reference: ChatCitationReference
+  }
+
+  struct Masked {
+    let markdown: String
+    let markers: [Marker]
+  }
+
+  struct InteractiveMask {
+    let markdown: String
+    let codePlaceholders: [OmiMarkdownInlineCode.Placeholder]
+  }
+
+  enum Unit {
+    case text(AttributedString)
+    case citation(ChatCitationReference)
+    case code(String)
+  }
+
+  static func mask(_ text: String, references: [Int: ChatCitationReference]) -> Masked? {
+    guard !references.isEmpty else { return nil }
+    var markdown = ""
+    var markers = [Marker]()
+    var cursor = text.startIndex
+
+    for match in ChatCitationMarkup.markerMatches(
+      in: text, pattern: ChatCitationMarkup.numericMarkerOrMarkdownLinkPattern)
+    {
+      guard let reference = references[match.ordinal] else { continue }
+      markdown += text[cursor..<match.range.lowerBound]
+      var placeholder = "omiCitationPlaceholder\(markers.count)"
+      while text.contains(placeholder) { placeholder.append("x") }
+      markdown += placeholder
+      markers.append(Marker(placeholder: placeholder, reference: reference))
+      cursor = match.range.upperBound
+    }
+    guard !markers.isEmpty else { return nil }
+    markdown += text[cursor...]
+    return Masked(markdown: markdown, markers: markers)
+  }
+
+  static func maskInlineCode(in citationMask: Masked) -> InteractiveMask? {
+    guard let codeMask = OmiMarkdownInlineCode.maskedMarkdown(citationMask.markdown) else {
+      return InteractiveMask(markdown: citationMask.markdown, codePlaceholders: [])
+    }
+    return InteractiveMask(
+      markdown: codeMask.markdown,
+      codePlaceholders: codeMask.placeholders)
+  }
+
+  static func units(
+    in attributed: AttributedString,
+    citationMarkers: [Marker],
+    codePlaceholders: [OmiMarkdownInlineCode.Placeholder]
+  ) -> [[Unit]] {
+    enum PlaceholderUnit {
+      case citation(ChatCitationReference)
+      case code(String)
+    }
+
+    var lines: [[Unit]] = [[]]
+    let rendered = String(attributed.characters)
+    var renderedStart = rendered.startIndex
+    var attributedStart = attributed.startIndex
+
+    let placeholders: [(marker: String, unit: PlaceholderUnit)] =
+      citationMarkers.map { ($0.placeholder, .citation($0.reference)) }
+      + codePlaceholders.map { ($0.marker, .code($0.code)) }
+
+    let orderedPlaceholders = placeholders.compactMap {
+      placeholder -> (
+        marker: String, unit: PlaceholderUnit, range: Range<String.Index>
+      )? in
+      guard let range = rendered.range(of: placeholder.marker) else { return nil }
+      return (placeholder.marker, placeholder.unit, range)
+    }.sorted { $0.range.lowerBound < $1.range.lowerBound }
+
+    func appendText(_ range: Range<AttributedString.Index>) {
+      var segmentStart = range.lowerBound
+      var cursor = range.lowerBound
+      while cursor < range.upperBound {
+        let character = attributed.characters[cursor]
+        let next = attributed.index(afterCharacter: cursor)
+        if character == "\n" {
+          if segmentStart < cursor { appendWords(segmentStart..<cursor) }
+          lines.append([])
+          segmentStart = next
+        } else if character.isWhitespace {
+          appendWords(segmentStart..<next)
+          segmentStart = next
+        }
+        cursor = next
+      }
+      if segmentStart < range.upperBound { appendWords(segmentStart..<range.upperBound) }
+    }
+
+    func appendWords(_ range: Range<AttributedString.Index>) {
+      guard range.lowerBound < range.upperBound else { return }
+      lines[lines.count - 1].append(.text(AttributedString(attributed[range])))
+    }
+
+    for placeholder in orderedPlaceholders {
+      let markerRange = placeholder.range
+      guard markerRange.lowerBound >= renderedStart else { continue }
+      let lowerOffset = rendered.distance(from: rendered.startIndex, to: markerRange.lowerBound)
+      let upperOffset = rendered.distance(from: rendered.startIndex, to: markerRange.upperBound)
+      let lower = attributed.index(attributed.startIndex, offsetByCharacters: lowerOffset)
+      let upper = attributed.index(attributed.startIndex, offsetByCharacters: upperOffset)
+      appendText(attributedStart..<lower)
+      switch placeholder.unit {
+      case .citation(let reference):
+        lines[lines.count - 1].append(.citation(reference))
+      case .code(let value):
+        lines[lines.count - 1].append(.code(value))
+      }
+      attributedStart = upper
+      renderedStart = markerRange.upperBound
+    }
+    appendText(attributedStart..<attributed.endIndex)
+    return lines
+  }
+}
+
+private struct ChatCitationToken: View {
+  let reference: ChatCitationReference
+  let fontScale: CGFloat
+  let onOpen: (ChatCitationReference) -> Void
+
+  @State private var isHovering = false
+  @State private var isPreviewHovering = false
+  @State private var isPreviewPresented = false
+  @State private var hoverGeneration = 0
+  @FocusState private var isFocused: Bool
+
+  var body: some View {
+    Button {
+      guard reference.canOpen else { return }
+      isPreviewPresented = false
+      onOpen(reference)
+    } label: {
+      Text("[\(reference.ordinal)]")
+        .font(.system(size: round(11 * fontScale), weight: .semibold, design: .rounded))
+        .foregroundStyle(reference.canOpen ? Ink.accent : Ink.tertiary)
+        .padding(.horizontal, 3)
+        .padding(.vertical, 2)
+        .background(isHovering || isFocused ? Ink.rowFillHover : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .disabled(!reference.canOpen)
+    .focused($isFocused)
+    .onHover { hovering in
+      isHovering = hovering
+      hoverGeneration += 1
+      let generation = hoverGeneration
+      if hovering {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+          guard isHovering, generation == hoverGeneration else { return }
+          isPreviewPresented = true
+        }
+      } else {
+        schedulePreviewDismiss(generation: generation)
+      }
+    }
+    .onChange(of: isFocused) { _, focused in
+      if focused { isPreviewPresented = true } else if !isHovering { isPreviewPresented = false }
+    }
+    .popover(isPresented: $isPreviewPresented, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+      ChatCitationPreview(
+        reference: reference,
+        fontScale: fontScale,
+        onOpen: {
+          isPreviewPresented = false
+          onOpen(reference)
+        }
+      )
+      .onHover { hovering in
+        isPreviewHovering = hovering
+        hoverGeneration += 1
+        if !hovering {
+          schedulePreviewDismiss(generation: hoverGeneration)
+        }
+      }
+    }
+    .accessibilityLabel("Source \(reference.ordinal): \(reference.displayTitle)")
+    .accessibilityHint(reference.canOpen ? "Open this source" : "This source is unavailable")
+    .accessibilityIdentifier("query-shell-citation-\(reference.ordinal)")
+    .help("Source \(reference.ordinal): \(reference.displayTitle)")
+  }
+
+  private func schedulePreviewDismiss(generation: Int) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+      guard !isHovering, !isPreviewHovering, generation == hoverGeneration, !isFocused else { return }
+      isPreviewPresented = false
+    }
+  }
+}
+
+private struct ChatCitationPreview: View {
+  let reference: ChatCitationReference
+  let fontScale: CGFloat
+  let onOpen: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      Label(reference.kind.title, systemImage: reference.kind.systemImage)
+        .font(.system(size: round(11 * fontScale), weight: .semibold))
+        .foregroundStyle(Ink.secondary)
+      Text(reference.displayTitle)
+        .font(.system(size: round(14 * fontScale), weight: .semibold))
+        .foregroundStyle(Ink.primary)
+        .lineLimit(2)
+      Text(reference.displayPreview)
+        .font(.system(size: round(12 * fontScale)))
+        .foregroundStyle(Ink.secondary)
+        .lineLimit(4)
+      if let metadata = [reference.appName, reference.createdAt]
+        .compactMap({ $0?.trimmingCharacters(in: .whitespacesAndNewlines) })
+        .filter({ !$0.isEmpty }).joined(separator: " · ").nilIfEmpty
+      {
+        Text(metadata)
+          .font(.system(size: round(10 * fontScale)))
+          .foregroundStyle(Ink.tertiary)
+      }
+      if reference.canOpen {
+        Button(action: onOpen) {
+          Label("Open \(reference.kind.title)", systemImage: "arrow.up.right")
+            .font(.system(size: round(11 * fontScale), weight: .semibold))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Ink.accent)
+        .accessibilityHint("Open the cited source")
+      }
+    }
+    .padding(OmiSpacing.md)
+    .frame(width: 330, alignment: .leading)
+    .accessibilityElement(children: .contain)
+  }
+}
+
+extension String {
+  fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 private enum OmiMarkdownClipboard {
@@ -985,13 +1434,17 @@ private struct OmiMarkdownTableView: View {
   let table: OmiMarkdownTable
   let style: OmiMarkdown.Style
   let fontScale: CGFloat
+  let citations: [ChatCitationReference]
+  let onOpenCitation: ((ChatCitationReference) -> Void)?
 
   private var allRows: [[String]] {
     [table.header] + table.rows
   }
 
+  /// The grid itself. This was a white hairline in *both* branches — legible only because the page
+  /// behind it was near-black, and an invisible white-on-white grid the moment the panel went light.
   private var borderColor: Color {
-    style == .user ? .white.opacity(0.18) : .white.opacity(0.14)
+    Ink.separator
   }
 
   var body: some View {
@@ -1042,7 +1495,14 @@ private struct OmiMarkdownTableView: View {
     let metrics = columnMetrics(column, alignment: columnAlignment)
 
     Group {
-      if let inlineCopy = OmiMarkdownContent.inlineCopyContent(
+      if !citations.isEmpty {
+        OmiMarkdownCitationContent(
+          text: content,
+          style: style,
+          fontScale: fontScale,
+          citations: citations,
+          onOpenCitation: onOpenCitation)
+      } else if let inlineCopy = OmiMarkdownContent.inlineCopyContent(
         from: content,
         style: style,
         fontSize: fontSize,
@@ -1056,11 +1516,9 @@ private struct OmiMarkdownTableView: View {
           fontScale: fontScale
         )
       } else if let styled {
-        Text(styled)
+        OmiMarkdownChatText(styled, fontSize: fontSize)
       } else {
-        Text(content)
-          .font(.system(size: fontSize))
-          .foregroundColor(OmiMarkdownContent.baseColor(for: style))
+        OmiMarkdownChatText(content, fontSize: fontSize, style: style)
       }
     }
     .fontWeight(row == 0 ? .semibold : .regular)
@@ -1077,19 +1535,13 @@ private struct OmiMarkdownTableView: View {
     .if_available_writingToolsNone()
   }
 
+  /// Header, then zebra banding, in the glass washes — one ladder for every bubble style, because
+  /// they all sit on the same light ground now.
   private func rowBackground(_ row: Int) -> Color {
-    if style == .user {
-      if row == 0 {
-        return .white.opacity(0.13)
-      }
-      return row.isMultiple(of: 2) ? .white.opacity(0.07) : .white.opacity(0.035)
-    }
     if row == 0 {
-      return OmiColors.backgroundTertiary
+      return Ink.rowFillHover
     }
-    return row.isMultiple(of: 2)
-      ? OmiColors.backgroundTertiary.opacity(0.72)
-      : OmiColors.backgroundSecondary.opacity(0.92)
+    return row.isMultiple(of: 2) ? Ink.rowFill : .clear
   }
 
   private func columnMetrics(
@@ -1120,7 +1572,7 @@ private struct OmiMarkdownCodeBlockView: View {
   @State private var copyGeneration = 0
 
   private var backgroundColor: Color {
-    style == .user ? .white.opacity(0.15) : OmiColors.backgroundTertiary
+    Ink.rowFillHover
   }
 
   var body: some View {
@@ -1129,12 +1581,12 @@ private struct OmiMarkdownCodeBlockView: View {
         if let language {
           Text(language)
             .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(style == .user ? .white.opacity(0.7) : OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         Spacer(minLength: 0)
         Image(systemName: copied ? "checkmark" : "doc.on.doc")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(copied ? .green : (style == .user ? .white.opacity(0.7) : OmiColors.textTertiary))
+          .foregroundColor(copied ? Ink.listeningGreen : Ink.secondary)
           .frame(width: round(16 * fontScale), height: round(16 * fontScale))
       }
 

@@ -1,3 +1,0 @@
-{
-  "change": "Added a SwiftUI and AppKit runtime-debugging playbook covering authority and identity mapping, first-impossible-transition tracing, native-boundary reproduction, mounted regression tests, and named-bundle verification"
-}

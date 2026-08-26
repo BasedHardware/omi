@@ -28,6 +28,9 @@
     <uses-permission
         android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30" />
+    <!-- while-in-use is enough for conversation GPS: capture runs in the
+         visible activity, and the periodic refresh uses FOREGROUND_SERVICE_LOCATION.
+         Do not add ACCESS_BACKGROUND_LOCATION (Play Store prominent-disclosure). -->
     <uses-permission
         android:name="android.permission.ACCESS_FINE_LOCATION" />
 
@@ -75,6 +78,7 @@
     <!-- Add android:stopWithTask option only when necessary. -->
     <application
         android:name=".MyApp"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:requestLegacyExternalStorage="true"
@@ -167,13 +171,16 @@
                 <data
                     android:host="h.omi.me"
                     android:scheme="https"
-                    android:pathPattern="/tasks/.*" />
+                    android:path="/wrapped" />
             </intent-filter>
-            <intent-filter>
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="omi" />
+                <data
+                    android:host="h.omi.me"
+                    android:scheme="https"
+                    android:pathPattern="/tasks/.*" />
             </intent-filter>
         </activity>
 

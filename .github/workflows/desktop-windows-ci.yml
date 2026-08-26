@@ -94,6 +94,13 @@ jobs:
   build-linux:
     name: Linux package · helper smoke
     runs-on: ubuntu-latest
+    # A successful run finishes in ~10 minutes; 20 gives headroom while still
+    # failing fast instead of riding out the 6h GitHub Actions job ceiling.
+    # This job has hung for the full 6h on multiple unrelated PRs and on
+    # main (apt's mirror lookup in "Install Linux runtime dependencies"
+    # stalls with no output and no built-in timeout) -- a pre-existing,
+    # recurring infra flake, not specific to any one change.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -105,13 +112,33 @@ jobs:
           cache: pnpm
           cache-dependency-path: desktop/windows/pnpm-lock.yaml
       - name: Install Linux runtime dependencies
+        # Bound apt's network calls explicitly: a stalled mirror connection
+        # (observed against the azure.archive.ubuntu.com mirror) otherwise
+        # hangs with no output and no built-in timeout, burning the full 6h
+        # job ceiling instead of failing fast. DEBIAN_FRONTEND=noninteractive
+        # avoids any possibility of a debconf prompt blocking on stdin.
+        timeout-minutes: 5
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
       - name: Provision .env
         run: cp .env.example .env
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        # Electron's postinstall downloads a release archive. Retry only this
+        # idempotent install boundary so a transient CDN socket reset does not
+        # discard the otherwise healthy package/helper smoke run.
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
       - name: Build Linux packages
         run: pnpm run build:linux
       - name: Verify Debian package contents
@@ -121,6 +148,7 @@ jobs:
           dpkg-deb -c dist/*.deb | grep -F 'resources/linux-ocr-helper/omi-ocr-helper'
       - name: Launch unpacked app on X11
         run: |
+          # shellcheck disable=SC2016
           xvfb-run -a bash -euo pipefail -c '
             dist/linux-unpacked/omi-windows --no-sandbox &
             app_pid=$!

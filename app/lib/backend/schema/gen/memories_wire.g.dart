@@ -83,7 +83,9 @@ class GeneratedMemoryDB {
   final String id;
   final DateTime? invalidAt;
   final bool isBaseline;
+  final bool isDismissed;
   final bool isLocked;
+  final bool isRead;
   final bool kgExtracted;
   final String? layer;
   final bool manuallyAdded;
@@ -124,7 +126,9 @@ class GeneratedMemoryDB {
     required this.id,
     this.invalidAt,
     this.isBaseline = false,
+    this.isDismissed = false,
     this.isLocked = false,
+    this.isRead = false,
     this.kgExtracted = false,
     required this.layer,
     this.manuallyAdded = false,
@@ -167,7 +171,9 @@ class GeneratedMemoryDB {
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       invalidAt: _readFieldValue<DateTime>(_readField(json, const ["invalid_at"]), "invalid_at", _readDateTime, requiredField: false, nullable: true),
       isBaseline: _required(_readFieldValue<bool>(_readField(json, const ["is_baseline"]), "is_baseline", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_baseline"),
+      isDismissed: _required(_readFieldValue<bool>(_readField(json, const ["is_dismissed"]), "is_dismissed", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_dismissed"),
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
+      isRead: _required(_readFieldValue<bool>(_readField(json, const ["is_read"]), "is_read", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_read"),
       kgExtracted: _required(_readFieldValue<bool>(_readField(json, const ["kg_extracted"]), "kg_extracted", _readBool, requiredField: false, nullable: false, defaultValue: false), "kg_extracted"),
       layer: _readFieldValue<String>(_readField(json, const ["layer"]), "layer", _readString, requiredField: true, nullable: true),
       manuallyAdded: _required(_readFieldValue<bool>(_readField(json, const ["manually_added"]), "manually_added", _readBool, requiredField: false, nullable: false, defaultValue: false), "manually_added"),
@@ -211,7 +217,9 @@ class GeneratedMemoryDB {
       'id': id,
       'invalid_at': invalidAt?.toUtc().toIso8601String(),
       'is_baseline': isBaseline,
+      'is_dismissed': isDismissed,
       'is_locked': isLocked,
+      'is_read': isRead,
       'kg_extracted': kgExtracted,
       'layer': layer,
       'manually_added': manuallyAdded,

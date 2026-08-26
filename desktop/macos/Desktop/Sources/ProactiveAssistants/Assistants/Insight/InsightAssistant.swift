@@ -19,12 +19,12 @@ actor InsightAssistant: ProactiveAssistant {
   var isEnabled: Bool {
     get async {
       await MainActor.run {
-        // Gate the Gemini screen analysis on notifications: if this assistant's
-        // notifications are off (the default), don't spend a Gemini call analyzing
-        // screenshots. Proactive assistants only run when notifications are enabled;
-        // re-enabling notifications in Settings resumes analysis.
-        InsightAssistantSettings.shared.isEnabled
-          && InsightAssistantSettings.shared.notificationsEnabled
+        // Analysis eligibility is independent from delivery preference. A user can keep
+        // Advice analysis on while opting out of interruptions; the latter is recorded as a
+        // delivery suppression after an advice item is generated. The context-buckets
+        // engine owns this lane when enabled, so the legacy assistant becomes inactive.
+        !ContextBucketsFeature.isEnabled
+          && InsightAssistantSettings.shared.isEnabled
       }
     }
   }
@@ -76,7 +76,10 @@ actor InsightAssistant: ProactiveAssistant {
 
   init(apiKey: String? = nil) throws {
     self.geminiClient = try GeminiClient(
-      apiKey: apiKey, model: ModelQoS.Gemini.insight, fallbackModel: "gemini-2.5-flash")
+      apiKey: apiKey,
+      model: ModelQoS.Gemini.insight,
+      fallbackModel: ModelQoS.Gemini.lightweight,
+      workload: .extraction)
 
     let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
     self.frameSignal = stream
@@ -244,6 +247,22 @@ actor InsightAssistant: ProactiveAssistant {
 
     log("Insight: [\(confidencePercent)% conf.] \"\(extractedInsight.insight)\"")
 
+    // Allocate the opaque join key at the point the model has produced a qualifying advice
+    // item. Every path below must resolve this generated item to exactly one delivery outcome.
+    let deliveryIdentity = InsightAssistantTelemetry.DeliveryIdentity()
+    let ownerStillCurrent = await MainActor.run { () -> Bool in
+      // Keep the owner check and generated event on the same actor turn. An
+      // account switch can otherwise land between the check above and this
+      // closure, attributing stale advice to the new account.
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
+      AnalyticsManager.shared.insightGenerated(
+        category: extractedInsight.category.rawValue,
+        deliveryID: deliveryIdentity.deliveryID
+      )
+      return true
+    }
+    guard ownerStillCurrent else { return }
+
     // Add to previous insights (keep last N for context)
     previousInsights.insert(extractedInsight, at: 0)
     if previousInsights.count > maxPreviousInsights {
@@ -259,7 +278,10 @@ actor InsightAssistant: ProactiveAssistant {
       windowTitle: windowTitle,
       ownerID: ownerID
     )
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+      await emitDeliveryOutcome(for: deliveryIdentity, outcome: .suppressed, reason: .staleOwner)
+      return
+    }
 
     // Sync to backend and update local record with backendId
     if let backendMemory = await syncInsightToBackend(
@@ -268,11 +290,17 @@ actor InsightAssistant: ProactiveAssistant {
       windowTitle: windowTitle,
       ownerID: ownerID)
     {
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+        await emitDeliveryOutcome(for: deliveryIdentity, outcome: .suppressed, reason: .staleOwner)
+        return
+      }
       if let recordId = extractionRecord?.id {
         do {
           try await MemoryStorage.shared.markSynced(id: recordId, serverMemory: backendMemory)
-          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+            await emitDeliveryOutcome(for: deliveryIdentity, outcome: .suppressed, reason: .staleOwner)
+            return
+          }
         } catch {
           logError("Insight: Failed to update sync status", error: error)
         }
@@ -284,30 +312,39 @@ actor InsightAssistant: ProactiveAssistant {
       guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
       InsightStorage.shared.addInsight(adviceResult)
     }
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-
-    // Track insight generated
-    await MainActor.run {
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-      AnalyticsManager.shared.insightGenerated(category: extractedInsight.category.rawValue)
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+      await emitDeliveryOutcome(for: deliveryIdentity, outcome: .suppressed, reason: .staleOwner)
+      return
     }
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
-    // Send notification if enabled
+    // Delivery preference gates interruptions only; analysis and persistence above still run.
     let notificationsEnabled = await MainActor.run {
       InsightAssistantSettings.shared.notificationsEnabled
     }
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+      await emitDeliveryOutcome(for: deliveryIdentity, outcome: .suppressed, reason: .staleOwner)
+      return
+    }
     if notificationsEnabled {
       await sendInsightNotification(
         ownerID: ownerID,
         insight: extractedInsight,
         result: adviceResult,
         windowTitle: windowTitle,
-        screenshotData: screenshotData
+        screenshotData: screenshotData,
+        deliveryID: deliveryIdentity.deliveryID
+      )
+    } else {
+      await emitDeliveryOutcome(
+        for: deliveryIdentity,
+        outcome: .suppressed,
+        reason: .assistantNotificationsDisabled
       )
     }
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+      await emitDeliveryOutcome(for: deliveryIdentity, outcome: .suppressed, reason: .staleOwner)
+      return
+    }
 
     // Send event to Flutter
     sendEvent(
@@ -414,7 +451,8 @@ actor InsightAssistant: ProactiveAssistant {
     insight: ExtractedInsight,
     result: InsightExtractionResult,
     windowTitle: String?,
-    screenshotData: Data? = nil
+    screenshotData: Data? = nil,
+    deliveryID: UUID
   ) async {
     let message = insight.headline ?? insight.insight
     let context = FloatingBarNotificationContext(
@@ -435,7 +473,24 @@ actor InsightAssistant: ProactiveAssistant {
         message: message,
         assistantId: identifier,
         context: context,
+        insightDeliveryID: deliveryID,
         screenshotData: screenshotData
+      )
+    }
+  }
+
+  private func emitDeliveryOutcome(
+    for identity: InsightAssistantTelemetry.DeliveryIdentity,
+    outcome: InsightAssistantTelemetry.Outcome,
+    reason: InsightAssistantTelemetry.Reason,
+    surface: InsightAssistantTelemetry.Surface? = nil
+  ) async {
+    await MainActor.run {
+      AnalyticsManager.shared.insightAssistantDeliveryOutcome(
+        outcome,
+        reason: reason,
+        deliveryID: identity.deliveryID,
+        surface: surface
       )
     }
   }
@@ -689,7 +744,18 @@ actor InsightAssistant: ProactiveAssistant {
         let query = toolCall.arguments["query"] as? String ?? ""
         sqlCount += 1
         log("Insight: P1 execute_sql iter \(iteration): \(query)")
-        let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
+        let privacyEnabled = await MainActor.run { ContextBucketsFeature.isEnabled }
+        let excluded = await MainActor.run { RewindSettings.shared.excludedApps }
+        var sqlArguments: [String: Any] = ["query": query]
+        if privacyEnabled {
+          sqlArguments = [
+            "query": InsightSQLPrivacy.filtered(query, excludedApps: excluded),
+            "read_only": true,
+          ]
+        }
+        let sqlToolCall = ToolCall(
+          name: "execute_sql",
+          arguments: sqlArguments, thoughtSignature: nil)
         let resultStr = await ChatToolExecutor.execute(sqlToolCall)
         let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
         log("Insight: P1 sql result (\(resultStr.count) chars): \(truncated)")
@@ -853,7 +919,18 @@ actor InsightAssistant: ProactiveAssistant {
         let query = toolCall.arguments["query"] as? String ?? ""
         sqlCount += 1
         log("Insight: P2 execute_sql iter \(p2Iteration): \(query)")
-        let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
+        let privacyEnabled = await MainActor.run { ContextBucketsFeature.isEnabled }
+        let excluded = await MainActor.run { RewindSettings.shared.excludedApps }
+        var sqlArguments: [String: Any] = ["query": query]
+        if privacyEnabled {
+          sqlArguments = [
+            "query": InsightSQLPrivacy.filtered(query, excludedApps: excluded),
+            "read_only": true,
+          ]
+        }
+        let sqlToolCall = ToolCall(
+          name: "execute_sql",
+          arguments: sqlArguments, thoughtSignature: nil)
         let resultStr = await ChatToolExecutor.execute(sqlToolCall)
         let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
         log("Insight: P2 sql result (\(resultStr.count) chars): \(truncated)")

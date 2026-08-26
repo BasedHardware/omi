@@ -153,3 +153,49 @@ describe('C1 regression — DST/TZ offset shift must not false-delete valid file
     ).toEqual([]) // fix: no false deletion
   })
 })
+
+// The grace window is the only thing standing between the sweep and a file the
+// capture path is still inserting a row for, and this function's output is fed
+// straight to `unlink`. Every case above sits a full second or more clear of
+// the boundary on one side or the other, so flipping the comparison by one step
+// changed nothing the suite could see; a mutation audit confirmed it.
+//
+// Ages are written as literals rather than derived from ORPHAN_GRACE_MS: a
+// fixture built from the constant moves with it, and then the assertion pins
+// nothing.
+describe('selectOrphanFiles at the grace boundary', () => {
+  const args = (f: SweepFile) => ({
+    files: [f],
+    dbImagePaths: new Set<string>(),
+    nowMs: NOW,
+    graceMs: 60_000
+  })
+
+  it('deletes an orphan aged exactly the grace window', () => {
+    // `>=`: at exactly the window the file is old enough to go.
+    const f = file(NOW - 60_000)
+    expect(selectOrphanFiles(args(f))).toEqual([f.fullPath])
+  })
+
+  it('keeps an orphan one millisecond younger than the window', () => {
+    const f = file(NOW - 59_999)
+    expect(selectOrphanFiles(args(f))).toEqual([])
+  })
+
+  it('pins the grace window itself, which the two cases above cannot', () => {
+    // Sixty seconds is the same order as the gap between writing a frame and
+    // inserting its row; shortening it is how the sweep starts racing capture.
+    expect(ORPHAN_GRACE_MS).toBe(60_000)
+  })
+
+  it('uses the NEWER of filename and mtime at the boundary too', () => {
+    // The conservative rule: an old name with a fresh mtime is young. Pinned at
+    // the boundary because that is where "whichever is newer" can silently
+    // become "whichever is older" without any other case noticing.
+    const oldNameFreshMtime = file(NOW - 10 * 60_000, NOW - 59_999)
+    expect(selectOrphanFiles(args(oldNameFreshMtime))).toEqual([])
+
+    const oldNameOldMtime = file(NOW - 10 * 60_000, NOW - 60_000)
+    expect(selectOrphanFiles(args(oldNameOldMtime))).toEqual([oldNameOldMtime.fullPath])
+  })
+})

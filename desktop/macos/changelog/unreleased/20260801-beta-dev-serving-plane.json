@@ -1,3 +1,0 @@
-{
-  "change": "Omi Beta now uses the development Python and desktop backend endpoints while preserving the production Firebase account and Firestore data plane"
-}

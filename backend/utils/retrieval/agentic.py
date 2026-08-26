@@ -21,6 +21,8 @@ from langchain_core.callbacks import BaseCallbackHandler
 agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('agent_config', default=None)
 
 from models.app import App
+from utils.journey_metrics_contract import ClientKind
+from utils.observability.journeys import ClientJourneyAttempt
 from models.chat import Message, ChatSession, PageContext
 from utils.retrieval.tools import (
     get_conversations_tool,
@@ -52,6 +54,7 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
+from utils.retrieval.chat_scope import build_chat_scope
 from utils.retrieval.safety import (
     AgentSafetyGuard,
     SafetyGuardError,
@@ -60,6 +63,7 @@ from utils.retrieval.safety import (
     should_retry_provider_error,
     INPUT_TOO_LONG_MESSAGE,
 )
+from utils.retrieval.web_search_gate import SERVER_WEB_SEARCH_NAME, WEB_SEARCH_TOOL, request_tools_after_private_taint
 from utils.observability.fallback import record_fallback
 from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, get_model, num_tokens_from_string
@@ -76,10 +80,10 @@ from utils.observability.langsmith import is_langsmith_enabled
 import logging
 
 try:
-    from utils.llm.gateway_client import should_route_features_through_gateway
+    from utils.llm.gateway_client import should_route_chat_agent_through_gateway
 except ImportError:
 
-    def should_route_features_through_gateway() -> bool:
+    def should_route_chat_agent_through_gateway() -> bool:
         return False
 
 
@@ -105,7 +109,14 @@ def _configured_chat_provider() -> str:
     """Resolve the self-hosted chat provider at the request boundary."""
     provider = os.getenv(CHAT_PROVIDER_ENV_VAR, 'anthropic').strip().lower()
     if provider not in SUPPORTED_CHAT_PROVIDERS:
-        logger.warning('Unsupported %s=%s; falling back to anthropic', CHAT_PROVIDER_ENV_VAR, provider)
+        record_fallback(
+            component='other',
+            from_mode=provider,
+            to_mode='anthropic',
+            reason='config_incomplete',
+            outcome='recovered',
+            log=logger,
+        )
         return 'anthropic'
     return provider
 
@@ -175,9 +186,12 @@ def _positive_int_from_env(name: str, default: int) -> int:
     return attempts
 
 
-# The first event must arrive before the client/proxy deadline. Afterwards a
+# Setup (timezone / prompt / app tools) has its own budget so multi-second Firestore
+# work cannot silently consume the post-setup first-stream-event (TTFT) window.
+# After setup, the first event must arrive before the client/proxy deadline; afterwards a
 # heartbeat keeps a known-long tool call observable while the total deadline
 # still prevents an agent task from running without bound.
+AGENT_STREAM_SETUP_TIMEOUT_SECONDS = _positive_timeout_from_env('AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 25.0)
 AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS = _positive_timeout_from_env('AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 25.0)
 AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS = _positive_timeout_from_env('AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS', 20.0)
 AGENT_STREAM_MAX_DURATION_SECONDS = _positive_timeout_from_env('AGENT_STREAM_MAX_DURATION_SECONDS', 150.0)
@@ -194,8 +208,14 @@ AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS = _positive_timeout_from_env(
     'AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS', 1.0
 )
 AGENT_STREAM_PROGRESS_HEARTBEAT = 'Still working…'
+AGENT_STREAM_SETUP_PROGRESS = 'Preparing response…'
 AGENT_STREAM_TIMEOUT_MESSAGE = 'The response took too long. Please try again.'
 AGENT_STREAM_FAILURE_MESSAGE = 'Unable to complete the response. Please try again.'
+# File chat still uses direct OpenAI Assistants/vision while gateway feature mode is on;
+# until that surface is migrated, fail with a typed user-safe copy instead of the generic canned reply.
+FILE_CHAT_GATEWAY_BLOCKED_MESSAGE = (
+    "File chat isn't available right now. Try again without attachments, or try again later."
+)
 # Delivered when a provider safety classifier declines the turn. Retrying the same prompt would
 # be declined again, so this says the request cannot be answered rather than inviting a retry.
 AGENT_REFUSAL_MESSAGE = "I can't help with that one. Try asking me something else."
@@ -387,13 +407,6 @@ TOOL_SEARCH_TOOL = {
     "name": "tool_search_tool_regex",
 }
 
-# Web search tool — Anthropic's built-in server-side web search (replaces Perplexity)
-WEB_SEARCH_TOOL = {
-    "type": "web_search_20260209",
-    "name": "web_search",
-    "max_uses": 5,
-}
-
 
 def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
     """Convert all tools and build name->object registry.
@@ -456,13 +469,43 @@ def _convert_anthropic_tools_to_openai(tool_schemas: list[dict]) -> list[dict]:
     return openai_tools
 
 
+_MEMORY_RETRIEVAL_TOOLS = frozenset({'get_memories_tool', 'search_memories_tool'})
+
+
+def _finish_memory_retrieval(attempt: ClientJourneyAttempt, result: str) -> None:
+    normalized = result.strip().lower()
+    if not normalized or normalized.startswith('no memories found'):
+        attempt.degrade('empty_answer')
+    elif normalized.startswith('error'):
+        attempt.fail('dependency_unavailable')
+    else:
+        attempt.succeed()
+
+
 @_traceable(name="chat.tool_execution", run_type="tool")
 async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, configurable: dict) -> str:
     """Execute a LangChain tool by name, injecting RunnableConfig."""
     tool_obj = registry[tool_name]
     config = RunnableConfig(configurable=configurable)
-    result = await tool_obj.ainvoke(tool_input, config=config)
+    client_kind = configurable.get('client_kind')
+    attempt = (
+        ClientJourneyAttempt('memory_retrieval', client_kind)
+        if tool_name in _MEMORY_RETRIEVAL_TOOLS and client_kind is not None
+        else None
+    )
+    try:
+        result = await tool_obj.ainvoke(tool_input, config=config)
+    except asyncio.CancelledError:
+        if attempt is not None:
+            attempt.cancel()
+        raise
+    except Exception:
+        if attempt is not None:
+            attempt.fail('dependency_unavailable')
+        raise
     result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))
+    if attempt is not None:
+        _finish_memory_retrieval(attempt, result)
     return result
 
 
@@ -661,8 +704,16 @@ async def _run_anthropic_agent_stream(
     producer_started_at = asyncio.get_running_loop().time()
     loop_iteration = 0
 
+    # Re-decide the server-side web_search offer inside the loop. The taint
+    # only appears after tool results are appended; see web_search_gate.py.
+    server_web_search_withheld = False
+
     while True:
         loop_iteration += 1
+
+        request_tools, server_web_search_withheld = request_tools_after_private_taint(
+            tool_schemas, messages, withheld=server_web_search_withheld
+        )
 
         attempts_made = 0
         retried_reason: Optional[str] = None
@@ -677,7 +728,7 @@ async def _run_anthropic_agent_stream(
                     model=ANTHROPIC_AGENT_MODEL,
                     system=system_blocks,
                     messages=messages,
-                    tools=tool_schemas,
+                    tools=request_tools,
                     max_tokens=8192,
                     # Anthropic moves this breakpoint to the last cacheable message
                     # block on every request. That incrementally caches both the
@@ -1186,12 +1237,16 @@ async def execute_agentic_chat_stream(
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
     platform: Optional[str] = None,
+    client_kind: Optional[ClientKind] = None,
     current_datetime_block: Optional[str] = None,
     tz: Optional[str] = None,
+    setup_deadline_at: Optional[float] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
     Yields formatted chunks with "data: " or "think: " prefixes.
+    ``setup_deadline_at`` is an absolute loop-clock deadline shared with the
+    chat router so metadata + prompt/tool load use one setup budget.
     """
     # Guard against oversized input before any setup or model call. An extremely long message (or
     # a long history) would exceed the chat model's context window; the Anthropic call then raises
@@ -1209,20 +1264,27 @@ async def execute_agentic_chat_stream(
         yield None
         return
 
-    first_event_deadline = asyncio.get_running_loop().time() + AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS
+    if callback_data is not None:
+        callback_data.setdefault('route', 'agentic')
+
+    # Setup and post-setup TTFT use separate clocks so multi-second prompt/tool
+    # loading cannot silently consume the first-stream-event window.
     gateway_feature_mode = False
     direct_openai_mode = False
     try:
         # Resolve the user's timezone once and reuse it for both the system prompt and the
         # injected datetime block, avoiding a duplicate notification_db lookup per request.
         # These helpers perform Firestore and LangSmith I/O before the producer task exists,
-        # so they share the first-event deadline instead of leaving the SSE body silent.
-        async with asyncio.timeout(AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS):
+        # so they use the remaining shared setup budget instead of a second full window.
+        if setup_deadline_at is None:
+            setup_deadline_at = asyncio.get_running_loop().time() + AGENT_STREAM_SETUP_TIMEOUT_SECONDS
+        setup_remaining = setup_deadline_at - asyncio.get_running_loop().time()
+        if setup_remaining <= 0:
+            raise asyncio.TimeoutError()
+        async with asyncio.timeout(setup_remaining):
             direct_openai_mode = _configured_chat_provider() == 'openai'
-            # Anthropic BYOK is an explicit direct-provider choice. It must not
-            # enter the managed OpenAI-compatible lane, whose route override
-            # would otherwise attach an Anthropic key to a Luna/OpenAI route.
-            gateway_feature_mode = should_route_features_through_gateway() and not bool(get_byok_key('anthropic'))
+            # BYOK Anthropic and CHAT_AGENT_ROUTE=direct stay off the managed OpenAI lane.
+            gateway_feature_mode = should_route_chat_agent_through_gateway() and not bool(get_byok_key('anthropic'))
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             system_prompt = await run_blocking(
@@ -1250,21 +1312,39 @@ async def execute_agentic_chat_stream(
             except Exception as error:
                 logger.error('Error loading app tools error_type=%s', type(error).__name__)
     except asyncio.TimeoutError:
-        logger.warning('Agent stream timed out before the producer started uid=%s', uid)
+        logger.warning(
+            'Agent stream timed out before the producer started uid=%s reason=setup_timeout route=agentic', uid
+        )
         if callback_data is not None:
             callback_data['error'] = 'setup_timeout'
+            # Persist the typed timeout through the normal done: contract so the
+            # router does not overwrite it with the generic canned fallback.
+            callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
         yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
+        yield None
         return
     except asyncio.CancelledError:
         raise
     except Exception as error:
-        logger.error('Agent stream setup failed uid=%s error_type=%s', uid, type(error).__name__)
+        logger.error(
+            'Agent stream setup failed uid=%s reason=setup_failure route=agentic error_type=%s',
+            uid,
+            type(error).__name__,
+        )
         if callback_data is not None:
             callback_data['error'] = type(error).__name__
+            callback_data['answer'] = AGENT_STREAM_FAILURE_MESSAGE
         yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
+        yield None
         return
 
     openai_compatible_mode = direct_openai_mode or gateway_feature_mode
+
+    # Emit a client-visible progress event immediately after setup so the SSE
+    # body is never silent while waiting for the first model token. This also
+    # starts the post-setup first-event clock with a fresh budget.
+    first_event_deadline = asyncio.get_running_loop().time() + AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS
+    yield f'think: {AGENT_STREAM_SETUP_PROGRESS}'
 
     # Append app tool awareness to the system prompt. Anthropic discovers deferred app tools
     # through its server-side search tool; OpenAI-compatible providers receive those tools
@@ -1338,6 +1418,8 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # Generate run_id for LangSmith tracing
     langsmith_run_id = str(uuid.uuid4())
 
+    chat_scope = build_chat_scope(context)
+
     # Config for tools to access via RunnableConfig
     configurable = {
         "user_id": uid,
@@ -1345,7 +1427,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         "conversations_collected": conversations_collected,
         "safety_guard": safety_guard,
         "chat_session_id": chat_session.id if chat_session else None,
+        "client_kind": client_kind,
         "tools": core_tools + app_tools,
+        "chat_scope": chat_scope,
     }
 
     # Store config in context variable for tools that use agent_config_context
@@ -1424,7 +1508,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
             callback_data['chart_data'] = chart_data_from_config
         return True
 
-    # Stream from callback queue
+    # Stream from callback queue. Setup already emitted a think: progress event for the
+    # client, but the first-event clock below still bounds silence from the producer
+    # (post-setup TTFT) separately from that setup progress.
     try:
         started_at = asyncio.get_running_loop().time()
         received_first_event = False
@@ -1477,27 +1563,39 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
             logger.info(f"Collected {len(callback_data['memories_found'])} conversations for citation")
 
     except asyncio.TimeoutError:
-        logger.warning('Agent stream reached its bounded deadline uid=%s', uid)
+        logger.warning('Agent stream reached its bounded deadline uid=%s reason=idle_timeout route=agentic', uid)
         await cancel_stream_task(task)
         if callback_data is not None:
             callback_data['error'] = 'idle_timeout'
         if keep_streamed_answer():
             yield None
             return
+        if callback_data is not None:
+            # Persist the typed timeout so the router emits one coherent done: frame
+            # instead of a second generic canned sorry bubble.
+            callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
         yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
+        yield None
         return
     except asyncio.CancelledError:
         await cancel_stream_task(task)
         raise
     except Exception as error:
-        logger.error('Agent stream failed uid=%s error_type=%s', uid, type(error).__name__)
+        logger.error(
+            'Agent stream failed uid=%s reason=stream_failure route=agentic error_type=%s',
+            uid,
+            type(error).__name__,
+        )
         await cancel_stream_task(task)
         if callback_data is not None:
             callback_data['error'] = type(error).__name__
         if keep_streamed_answer():
             yield None
             return
+        if callback_data is not None:
+            callback_data['answer'] = AGENT_STREAM_FAILURE_MESSAGE
         yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
+        yield None
         return
     finally:
         if not task.done():

@@ -15,12 +15,18 @@ from utils.llm import clients, gateway_shadow, gateway_serving
 from utils.llm import providers
 from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, GatewayContextChatOpenAI, get_llm_gateway_base_url
 from utils.llm.gateway_client import (
+    LLM_CHAT_AGENT_ROUTE_ENV_VAR,
     LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR,
     LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR,
+    LLM_GATEWAY_APP_PLATFORM_HEADER,
     LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_URL_ENV_VAR,
+    GatewayDirectModelSurfaceBlocked,
     feature_auto_lane_id,
+    get_chat_agent_route,
+    llm_gateway_headers,
     raise_if_gateway_feature_mode_blocks_direct_model_surface,
+    should_route_chat_agent_through_gateway,
     should_route_features_through_gateway,
 )
 from utils.llm.clients import get_llm_gateway_chat_structured
@@ -379,8 +385,10 @@ def test_gateway_feature_mode_blocks_direct_exception_surfaces(monkeypatch):
 
     try:
         raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files')
-    except RuntimeError as exc:
+    except GatewayDirectModelSurfaceBlocked as exc:
         assert 'file_chat.openai_files' in str(exc)
+        assert exc.error_code == 'file_chat_gateway_blocked'
+        assert exc.surface == 'file_chat.openai_files'
     else:
         raise AssertionError('expected direct model surface to be blocked')
 
@@ -406,7 +414,13 @@ async def test_app_icon_generation_always_uses_gateway(monkeypatch):
     monkeypatch.setattr(app_generator, 'generate_image_via_gateway', gateway)
 
     assert await app_generator.generate_app_icon('Name', 'Description', 'other') == b'icon'
-    assert captured['model'] == 'dall-e-3'
+    # The images API rejects `response_format` (400 unknown_parameter) and no longer serves
+    # dall-e-3 (400 invalid_value), which made every app-icon generation a 500. Ask for a model
+    # and size/quality pair the gateway rate card prices, and let it return base64 by default.
+    assert captured['model'] == 'gpt-image-1'
+    assert captured['quality'] == 'medium'
+    assert captured['size'] == '1024x1024'
+    assert 'response_format' not in captured
 
 
 @pytest.mark.asyncio
@@ -433,6 +447,48 @@ def test_perplexity_gateway_response_preserves_top_level_citations():
     assert 'https://example.com/source' in formatted
 
 
+def test_chat_agent_route_direct_while_feature_mode_gateway(monkeypatch):
+    """Chat can stay direct while other features use the gateway."""
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'direct')
+    monkeypatch.delenv('K_SERVICE', raising=False)
+    monkeypatch.delenv('KUBERNETES_SERVICE_HOST', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+
+    assert should_route_features_through_gateway() is True
+    assert get_chat_agent_route() == 'direct'
+    assert should_route_chat_agent_through_gateway() is False
+
+
+def test_chat_agent_route_gateway_requires_feature_mode(monkeypatch):
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'gateway')
+    monkeypatch.delenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, raising=False)
+    monkeypatch.delenv('K_SERVICE', raising=False)
+
+    assert get_chat_agent_route() == 'gateway'
+    assert should_route_chat_agent_through_gateway() is False
+
+
+def test_chat_agent_route_gateway_with_feature_mode(monkeypatch):
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'luna')  # alias
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv('K_SERVICE', raising=False)
+
+    assert get_chat_agent_route() == 'gateway'
+    assert should_route_chat_agent_through_gateway() is True
+
+
+def test_chat_agent_route_invalid_raises(monkeypatch):
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'not-a-route')
+    try:
+        get_chat_agent_route()
+    except RuntimeError as exc:
+        assert LLM_CHAT_AGENT_ROUTE_ENV_VAR in str(exc)
+    else:
+        raise AssertionError('expected invalid chat agent route to raise')
+
+
 def _load_perplexity_tools():
     module_path = Path(__file__).parents[2] / 'utils' / 'retrieval' / 'tools' / 'perplexity_tools.py'
     spec = importlib.util.spec_from_file_location('perplexity_tools_under_test', module_path)
@@ -444,3 +500,25 @@ def _load_perplexity_tools():
 
 async def _async_return(value):
     return value
+
+
+def test_llm_gateway_headers_sends_app_platform_when_known() -> None:
+    headers = llm_gateway_headers(feature='chat_agent', platform=' Desktop ')
+
+    assert headers[LLM_GATEWAY_APP_PLATFORM_HEADER] == 'desktop'
+    assert headers['X-Omi-LLM-Feature'] == 'chat_agent'
+    for platform in ('mobile', 'web'):
+        assert llm_gateway_headers(feature='chat_agent', platform=platform)[LLM_GATEWAY_APP_PLATFORM_HEADER] == platform
+
+
+def test_llm_gateway_headers_omits_app_platform_when_unknown() -> None:
+    """Callers that do not know the platform must not send a guessed value."""
+    assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent')
+    assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent', platform=None)
+    assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent', platform='   ')
+
+
+def test_llm_gateway_headers_never_forward_client_supplied_junk_platform() -> None:
+    """A client-controlled header value must not reach an outbound header verbatim."""
+    for junk in ('nintendo-switch', 'desktop\nX-Injected: 1', 'デスクトップ', 'desktop; drop table'):
+        assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent', platform=junk)

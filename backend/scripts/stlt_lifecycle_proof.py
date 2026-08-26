@@ -5,7 +5,7 @@
 Dry-run is the default. ``--apply`` requires explicit ``--uid``, ``--project``,
 and ``--confirm-data-plane``, then:
 
-1. optionally repairs only the *user* control doc (never global read gate)
+1. lazily provisions canonical apply integrity state
 2. creates one synthetic ST marker
 3. runs required processing for that memory id only
 4. applies one item-scoped promote decision (does not drain the user's queue)
@@ -32,7 +32,6 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 DEFAULT_PROJECT = "based-hardware"
-DEFAULT_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 MAINTENANCE_ENABLED_ENV = "MEMORY_CANONICAL_MAINTENANCE_ENABLED"
 CONSOLIDATION_ENABLED_ENV = "MEMORY_CANONICAL_CONSOLIDATION_ENABLED"
 BATCH_CAP_ENV = "MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP"
@@ -67,19 +66,14 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--uid",
-        default=DEFAULT_UID,
-        help="Target UID (dry-run default is dogfood; --apply requires --confirm-data-plane)",
+        required=True,
+        help="Target UID (required; --apply also requires --confirm-data-plane)",
     )
     p.add_argument("--apply", action="store_true", help="Perform writes (default: dry-run)")
     p.add_argument(
         "--confirm-data-plane",
         action="store_true",
         help="Required with --apply: acknowledge writes to --project/--uid",
-    )
-    p.add_argument(
-        "--ensure-user-control",
-        action="store_true",
-        help="With --apply, merge only users/{uid}/memory_control/state at stage=write if not write-ready",
     )
     p.add_argument(
         "--allow-direct-llm",
@@ -142,22 +136,6 @@ def _control_write_ready(db_client: Any, uid: str) -> tuple[bool, str]:
     return False, str(decision.reason)
 
 
-def _ensure_user_control_only(db_client: Any, *, uid: str) -> list[str]:
-    """Merge only the per-user control doc; never touch global read/write gates."""
-    from database.memory_collections import MemoryCollections
-    from scripts.enroll_canonical_memory_user import build_user_control_state
-    from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
-
-    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
-    if trusted.read_error_reason is not None or trusted.account_generation is None:
-        raise RuntimeError(f"trusted_generation_unavailable:{trusted.read_error_reason or 'missing'}")
-    generation = int(trusted.account_generation)
-    path = MemoryCollections(uid=uid).memory_control_state
-    payload = build_user_control_state(uid=uid, stage="write", account_generation=generation)
-    db_client.document(path).set(payload, merge=True)
-    return [path]
-
-
 def _create_marker(db_client: Any, *, uid: str, marker: str) -> str:
     from models.memories import MemoryDB
     from utils.memory.memory_service import MemoryService
@@ -166,9 +144,8 @@ def _create_marker(db_client: Any, *, uid: str, marker: str) -> str:
     now = datetime.now(timezone.utc)
     mid = str(uuid.uuid4())
     content = (
-        f"{marker}: David prefers progressive Omi canonical-memory cutover: "
-        "dark deploy, then David canary, then staff ring, then budgeted stage-all. "
-        "He rejects all-users GA in one flip."
+        f"{marker}: Synthetic proof memory for a progressive canonical-memory cutover: "
+        "dark deploy, approved canary, staff ring, then budgeted stage-all."
     )
     row = MemoryDB(
         id=mid,
@@ -349,52 +326,25 @@ def run_proof(args: argparse.Namespace) -> ProofResult:
     ready, reason = _control_write_ready(db_client, args.uid)
     notes.append(f"control_before={reason}")
     if not ready:
-        if args.ensure_user_control:
-            try:
-                written = _ensure_user_control_only(db_client, uid=args.uid)
-                notes.append(f"ensured_user_control={written[0]}")
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"ensure_user_control:{_safe_error(exc)}")
-                return ProofResult(
-                    ok=False,
-                    mode="apply",
-                    project=args.project,
-                    uid=args.uid,
-                    marker=marker,
-                    memory_id="",
-                    tier_before=None,
-                    processing_before=None,
-                    tier_after=None,
-                    processing_after=None,
-                    status_after=None,
-                    run_id=run_id,
-                    batch_cap=batch_cap,
-                    gateway_mode=gateway_mode,
-                    notes=notes,
-                    errors=errors,
-                )
-            ready, reason = _control_write_ready(db_client, args.uid)
-            notes.append(f"control_after_ensure={reason}")
-        if not ready:
-            errors.append(f"canonical_write_not_ready:{reason}")
-            return ProofResult(
-                ok=False,
-                mode="apply",
-                project=args.project,
-                uid=args.uid,
-                marker=marker,
-                memory_id="",
-                tier_before=None,
-                processing_before=None,
-                tier_after=None,
-                processing_after=None,
-                status_after=None,
-                run_id=run_id,
-                batch_cap=batch_cap,
-                gateway_mode=gateway_mode,
-                notes=notes,
-                errors=errors,
-            )
+        errors.append(f"canonical_write_not_ready:{reason}")
+        return ProofResult(
+            ok=False,
+            mode="apply",
+            project=args.project,
+            uid=args.uid,
+            marker=marker,
+            memory_id="",
+            tier_before=None,
+            processing_before=None,
+            tier_after=None,
+            processing_after=None,
+            status_after=None,
+            run_id=run_id,
+            batch_cap=batch_cap,
+            gateway_mode=gateway_mode,
+            notes=notes,
+            errors=errors,
+        )
 
     memory_id = ""
     tier_before = processing_before = tier_after = processing_after = status_after = None

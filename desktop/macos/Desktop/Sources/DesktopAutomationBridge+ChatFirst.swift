@@ -13,6 +13,27 @@ struct DesktopAutomationNavigationRequest: Codable {
   let waitForVisibility: Bool?
 }
 
+/// The single handoff from the HTTP bridge into the mounted SwiftUI shell. Keeping activation in the
+/// same value as the route prevents a cursor-free request from silently defaulting back to foreground
+/// activation when it crosses NotificationCenter.
+enum DesktopAutomationNavigationDelivery {
+  static func resolvesActivation(explicit: Bool?) -> Bool {
+    explicit ?? false
+  }
+
+  static func userInfo(
+    for payload: DesktopAutomationNavigationRequest,
+    activateApp: Bool
+  ) -> [String: Any] {
+    [
+      "target": payload.target,
+      "settingsSection": payload.settingsSection as Any,
+      "highlightedSettingId": payload.highlightedSettingId as Any,
+      "activateApp": activateApp,
+    ]
+  }
+}
+
 /// Selects whether `/navigate` measures command acknowledgement or waits for
 /// the destination view to mount. The default remains the historical mounted
 /// visibility contract; responsiveness probes explicitly opt into the faster
@@ -102,13 +123,11 @@ extension DesktopAutomationBridge {
 
   private func legacyAutomationDestinationTitle(named target: String) -> String? {
     switch target.lowercased().replacingOccurrences(of: "-", with: "_") {
-    case "dashboard", "home": return "Home"
+    // Home is the chat surface, so "chat" and "home" name the same destination.
+    case "dashboard", "home", "chat": return "Home"
     case "conversations": return "Conversations"
-    case "chat": return "Chat"
     case "memories": return "Memories"
     case "tasks": return "Tasks"
-    case "focus": return "Focus"
-    case "insight": return "Insights"
     case "rewind": return "Rewind"
     case "apps", "integrations": return "Apps"
     case "settings": return "Settings"

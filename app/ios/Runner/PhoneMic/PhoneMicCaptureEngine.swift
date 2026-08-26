@@ -79,6 +79,11 @@ final class PhoneMicCaptureEngine {
         try engine.start()
     }
 
+    /// True while CoreAudio reports the owned engine is running. Used by the
+    /// controller to detect silent engine death (#4706) without tearing down
+    /// a healthy capture on every foreground.
+    var isRunning: Bool { engine.isRunning }
+
     func teardown() {
         if tapInstalled {
             engine.inputNode.removeTap(onBus: 0)

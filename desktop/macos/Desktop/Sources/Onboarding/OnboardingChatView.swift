@@ -130,9 +130,30 @@ struct OnboardingChatView: View {
   // Permission help notification state — shows a floating bar hint if user struggles
   @State private var permissionHelpShown: Set<String> = []
   @State private var permissionHelpTimer: DispatchWorkItem? = nil
+  @State private var permissionCheckTick = 0
 
-  // Timer to periodically check permission status
+  // Timer to periodically check permission status.
+  //
+  // The tick is 1 s because the screen-recording and microphone checks are local TCC
+  // lookups and the step's UI should flip promptly when the user grants one. The other
+  // three are NOT cheap and are deliberately not run every tick — see
+  // `privilegedProbeTickInterval`.
   let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+  /// Run the expensive probes every Nth tick instead of every tick.
+  ///
+  /// Per invocation, `checkAccessibilityPermission` makes up to five
+  /// `AXUIElementCopyAttributeValue` round trips into other processes,
+  /// `checkAutomationPermission` does an `AEDeterminePermissionToAutomateTarget`
+  /// lookup against System Events, and `checkFullDiskAccess` reads a TCC-protected
+  /// directory — three separate authorization subsystems. At 1 Hz for the whole life
+  /// of this view that is thousands of privileged checks per onboarding session, every
+  /// one of them a denied access that tccd logs while the user has not granted yet.
+  /// It is the same shape as the capture defect in
+  /// `docs/screencapture-consent-reprompt.md`: a privileged check on a tight timer.
+  /// 5 s is well inside human reaction time for a Settings toggle, and the instant
+  /// signals already exist anyway — the `com.apple.accessibility.api` observer and the
+  /// app-activation refresh both fire on the real grant edge.
+  private static let privilegedProbeTickInterval = 5
 
   var body: some View {
     VStack(spacing: 0) {
@@ -142,14 +163,14 @@ struct OnboardingChatView: View {
           Image(nsImage: logoImage)
             .resizable()
             .renderingMode(.template)
-            .foregroundColor(.white)
+            .foregroundColor(Ink.primary)
             .scaledToFit()
             .frame(width: 52, height: 18)
             .accessibilityLabel("omi")
         } else {
           Text("omi")
             .font(.system(size: 18, weight: .semibold))
-            .foregroundColor(.white)
+            .foregroundColor(Ink.primary)
         }
 
         Spacer()
@@ -157,15 +178,14 @@ struct OnboardingChatView: View {
         Button(action: { showSkipConfirmation = true }) {
           Text("Skip")
             .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.vertical, OmiSpacing.lg)
 
-      Divider()
-        .background(OmiColors.backgroundTertiary)
+      GlassSeparator()
 
       // Chat messages
       ScrollViewReader { proxy in
@@ -236,7 +256,7 @@ struct OnboardingChatView: View {
               if !quickReplyQuestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(quickReplyQuestion)
                   .font(.system(size: 14, weight: .medium))
-                  .foregroundColor(OmiColors.textPrimary)
+                  .foregroundColor(Ink.primary)
                   .frame(maxWidth: .infinity, alignment: .leading)
                   .padding(.leading, OmiSpacing.page)
               }
@@ -256,19 +276,12 @@ struct OnboardingChatView: View {
                   }) {
                     Text(option)
                       .font(.system(size: 13, weight: .medium))
-                      .foregroundColor(isGrantButton(option) ? OmiColors.backgroundPrimary : OmiColors.accent)
+                      .foregroundColor(isGrantButton(option) ? Ink.surface : Ink.primary)
                       .padding(.horizontal, OmiSpacing.lg)
                       .padding(.vertical, OmiSpacing.sm)
-                      .background(
-                        isGrantButton(option)
-                          ? OmiColors.accent
-                          : OmiColors.accent.opacity(0.1)
-                      )
-                      .cornerRadius(OmiChrome.sectionRadius)
-                      .overlay(
-                        RoundedRectangle(cornerRadius: OmiChrome.sectionRadius)
-                          .stroke(OmiColors.accent.opacity(0.3), lineWidth: 1)
-                      )
+                      .background(Capsule(style: .continuous).fill(isGrantButton(option) ? Ink.primary : Ink.rowFill))
+                      .overlay(Capsule(style: .continuous).strokeBorder(Ink.hairline, lineWidth: 1))
+                      .contentShape(Capsule(style: .continuous))
                   }
                   .buttonStyle(.plain)
                   .disabled(isGrantingPermission)
@@ -279,8 +292,6 @@ struct OnboardingChatView: View {
               .id("quick-replies")
             }
 
-            // Retry "Open System Settings" button — shown when a permission grant
-            // is pending but System Settings didn't open (or user closed it)
             if let pending = pendingPermissionType,
               quickReplyOptions.isEmpty && !chatProvider.isSending
             {
@@ -288,7 +299,8 @@ struct OnboardingChatView: View {
                 switch pending {
                 case "screen_recording": return !appState.hasScreenRecordingPermission
                 case "microphone": return !appState.hasMicrophonePermission
-                case "accessibility": return !appState.hasAccessibilityPermission
+                case "notifications": return !appState.hasNotificationPermission
+                case "accessibility": return !appState.hasAccessibilityPermission || appState.isAccessibilityBroken
                 case "automation": return !appState.hasAutomationPermission
                 case "full_disk_access": return !appState.hasFullDiskAccess
                 default: return false
@@ -299,27 +311,23 @@ struct OnboardingChatView: View {
                   .frame(maxWidth: .infinity, alignment: .leading)
                   .padding(.leading, OmiSpacing.page)
 
-                Button(action: {
-                  openSettingsForPermission(pending)
-                }) {
-                  HStack(spacing: OmiSpacing.xs) {
-                    Image(systemName: "gear")
-                      .font(.system(size: 12))
-                    Text("Open \(permissionLabel(pending)) Settings")
-                      .font(.system(size: 13, weight: .medium))
+                HStack(spacing: OmiSpacing.md) {
+                  Button("Open \(permissionLabel(pending)) Settings") { openSettingsForPermission(pending) }
+                    .buttonStyle(InkButtonStyle(kind: .primary))
+                  Button("Skip for now") {
+                    guard pendingPermissionType == pending else { return }
+                    pendingPermissionType = nil
+                    permissionHelpTimer?.cancel()
+                    permissionHelpTimer = nil
+                    PermissionDragGuidance.dismiss()
+                    Task { await chatProvider.sendMessage("Skip") }
                   }
-                  .foregroundColor(OmiColors.backgroundPrimary)
-                  .padding(.horizontal, OmiSpacing.lg)
-                  .padding(.vertical, OmiSpacing.sm)
-                  .background(OmiColors.accent)
-                  .cornerRadius(OmiChrome.sectionRadius)
+                  .buttonStyle(InkButtonStyle(kind: .secondary))
                 }
-                .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, OmiSpacing.page)
               }
             }
-
             // "Continue" button — shown only after AI calls complete_onboarding
             // and no pending questions or permissions remain.
             if onboardingCompleted && !chatProvider.isSending && quickReplyOptions.isEmpty
@@ -330,11 +338,10 @@ struct OnboardingChatView: View {
               }) {
                 Text("Continue")
                   .font(.system(size: 15, weight: .semibold))
-                  .foregroundColor(OmiColors.backgroundPrimary)
+                  .foregroundColor(Ink.surface)
                   .frame(maxWidth: 220)
                   .padding(.vertical, OmiSpacing.md)
-                  .background(OmiColors.accent)
-                  .cornerRadius(OmiChrome.smallControlRadius)
+                  .background(Capsule(style: .continuous).fill(Ink.primary))
               }
               .buttonStyle(.plain).keyboardShortcut(.defaultAction)
               .padding(.top, OmiSpacing.md)
@@ -389,7 +396,7 @@ struct OnboardingChatView: View {
         )
         .textFieldStyle(.plain)
         .font(.system(size: 14))
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .focused($isInputFocused)
         .padding(OmiSpacing.md)
         .lineLimit(1...3)
@@ -397,8 +404,7 @@ struct OnboardingChatView: View {
           sendMessage()
         }
         .frame(maxWidth: .infinity)
-        .background(OmiColors.backgroundSecondary)
-        .cornerRadius(OmiChrome.sectionRadius)
+        .glassField()
 
         if chatProvider.isSending
           && inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -407,7 +413,7 @@ struct OnboardingChatView: View {
           Button(action: stopAgent) {
             Image(systemName: chatProvider.isStopping ? "ellipsis.circle" : "stop.circle.fill")
               .font(.system(size: 32))
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(Ink.primary)
           }
           .buttonStyle(.plain)
           .disabled(chatProvider.isStopping)
@@ -415,7 +421,7 @@ struct OnboardingChatView: View {
           Button(action: sendMessage) {
             Image(systemName: "arrow.up.circle.fill")
               .font(.system(size: 32))
-              .foregroundColor(canSend ? OmiColors.accent : OmiColors.textTertiary)
+              .foregroundColor(canSend ? Ink.primary : Ink.secondary)
           }
           .buttonStyle(.plain)
           .disabled(!canSend)
@@ -433,8 +439,11 @@ struct OnboardingChatView: View {
       ChatDraftStore.shared.setText(text, for: .onboardingMain)
     }
     .onReceive(permissionCheckTimer) { _ in
+      // Cheap every tick: both are local TCC lookups with no cross-process traffic.
       appState.checkScreenRecordingPermission()
       appState.checkMicrophonePermission()
+      permissionCheckTick &+= 1
+      guard permissionCheckTick % Self.privilegedProbeTickInterval == 0 else { return }
       appState.checkAccessibilityPermission()
       appState.checkAutomationPermission()
       appState.checkFullDiskAccess()
@@ -503,7 +512,7 @@ struct OnboardingChatView: View {
         .scaledToFit()
         .frame(width: 20, height: 20)
         .frame(width: 32, height: 32)
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFill)
         .clipShape(Circle())
     }
   }
@@ -520,18 +529,24 @@ struct OnboardingChatView: View {
     }
   }
 
-  /// Open System Settings to the correct pane for a permission type
   private func openSettingsForPermission(_ type: String) {
-    if type == "screen_recording" {
+    if type == "notifications" {
+      appState.openNotificationPreferences()
+      return
+    }
+    switch type {
+    case "screen_recording":
       ScreenCaptureService.openScreenRecordingPreferences()
       return
+    case "accessibility":
+      appState.openAccessibilityPreferences()
+      return
+    default: break
     }
     let urlString: String? = {
       switch type {
       case "microphone":
         return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-      case "accessibility":
-        return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
       case "automation":
         return "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
       case "full_disk_access":
@@ -540,12 +555,10 @@ struct OnboardingChatView: View {
         return nil
       }
     }()
-    if let urlString, let url = URL(string: urlString) {
-      NSWorkspace.shared.open(url)
-      // Full Disk Access uses the same drag-to-grant mechanic as Screen Recording.
-      if type == "full_disk_access" {
-        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
-      }
+    guard let urlString, let url = URL(string: urlString) else { return }
+    NSWorkspace.shared.open(url)
+    if type == "full_disk_access" {
+      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
     }
   }
 
@@ -1237,7 +1250,7 @@ struct OnboardingChatView: View {
 
     // Send to Gemini
     do {
-      let gemini = try GeminiClient()
+      let gemini = try GeminiClient(workload: .interactive)
       let prompt =
         "The user needs to grant \(permLabel) permission to the Omi app. Look at the screenshot. Tell them exactly where to click in ONE short sentence, max 15 words."
       let systemPrompt =
@@ -1725,18 +1738,18 @@ struct GmailInsightsCard: View {
           } else {
             Image(systemName: "envelope.open.fill")
               .font(.system(size: 12))
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(Ink.primary)
           }
 
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(isRunning ? "Reading your emails..." : "Email Insights")
               .font(.system(size: 13, weight: .semibold))
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             if !text.isEmpty {
               Text(String(text.prefix(100)).replacingOccurrences(of: "\n", with: " "))
                 .font(.system(size: 12))
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .lineLimit(2)
             }
           }
@@ -1746,7 +1759,7 @@ struct GmailInsightsCard: View {
           if !text.isEmpty {
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
               .font(.system(size: 10))
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
         .padding(.horizontal, OmiSpacing.md)
@@ -1755,7 +1768,7 @@ struct GmailInsightsCard: View {
       .buttonStyle(.plain)
 
       if isExpanded && !text.isEmpty {
-        Divider()
+        GlassSeparator()
           .padding(.horizontal, OmiSpacing.sm)
 
         ScrollView {
@@ -1766,12 +1779,8 @@ struct GmailInsightsCard: View {
         .frame(maxHeight: 300)
       }
     }
-    .background(OmiColors.backgroundTertiary.opacity(0.5))
-    .cornerRadius(OmiChrome.smallControlRadius)
-    .overlay(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .stroke(OmiColors.accent.opacity(0.2), lineWidth: 1)
-    )
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous))
+    .glassCard()
   }
 }
 
@@ -1799,18 +1808,18 @@ struct CalendarInsightsCard: View {
           } else {
             Image(systemName: "calendar.badge.checkmark")
               .font(.system(size: 12))
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(Ink.primary)
           }
 
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(isRunning ? "Reading your calendar..." : "Calendar Insights")
               .font(.system(size: 13, weight: .semibold))
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             if !text.isEmpty {
               Text(String(text.prefix(100)).replacingOccurrences(of: "\n", with: " "))
                 .font(.system(size: 12))
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .lineLimit(2)
             }
           }
@@ -1820,7 +1829,7 @@ struct CalendarInsightsCard: View {
           if !text.isEmpty {
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
               .font(.system(size: 10))
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
         .padding(.horizontal, OmiSpacing.md)
@@ -1829,7 +1838,7 @@ struct CalendarInsightsCard: View {
       .buttonStyle(.plain)
 
       if isExpanded && !text.isEmpty {
-        Divider()
+        GlassSeparator()
           .padding(.horizontal, OmiSpacing.sm)
 
         ScrollView {
@@ -1840,12 +1849,8 @@ struct CalendarInsightsCard: View {
         .frame(maxHeight: 300)
       }
     }
-    .background(OmiColors.backgroundTertiary.opacity(0.5))
-    .cornerRadius(OmiChrome.smallControlRadius)
-    .overlay(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .stroke(OmiColors.accent.opacity(0.2), lineWidth: 1)
-    )
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous))
+    .glassCard()
   }
 }
 
@@ -1872,7 +1877,8 @@ struct OnboardingChatBubble: View {
         return false
       case .discoveryCard:
         return true
-      case .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink:
+      case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
+        .citation:
         return false
       case .agentSpawn, .agentCompletion:
         return true
@@ -1893,7 +1899,7 @@ struct OnboardingChatBubble: View {
               .scaledToFit()
               .frame(width: 20, height: 20)
               .frame(width: 32, height: 32)
-              .background(OmiColors.backgroundTertiary)
+              .background(Ink.rowFill)
               .clipShape(Circle())
           }
         }
@@ -1906,8 +1912,7 @@ struct OnboardingChatBubble: View {
                 OmiMarkdown(text: message.text, style: .assistant)
                   .padding(.horizontal, OmiSpacing.md)
                   .padding(.vertical, OmiSpacing.sm)
-                  .background(OmiColors.backgroundSecondary)
-                  .cornerRadius(OmiChrome.controlRadius)
+                  .glassCard()
               }
             } else {
               // Use the full message text (which streams continuously) for a single bubble.
@@ -1918,8 +1923,7 @@ struct OnboardingChatBubble: View {
                 OmiMarkdown(text: allText, style: .assistant)
                   .padding(.horizontal, OmiSpacing.md)
                   .padding(.vertical, OmiSpacing.sm)
-                  .background(OmiColors.backgroundSecondary)
-                  .cornerRadius(OmiChrome.controlRadius)
+                  .glassCard()
               }
 
               ForEach(message.contentBlocks) { block in
@@ -1946,8 +1950,7 @@ struct OnboardingChatBubble: View {
               OmiMarkdown(text: message.text, style: .onboardingUser)
                 .padding(.horizontal, OmiSpacing.md)
                 .padding(.vertical, OmiSpacing.sm)
-                .background(OmiColors.accent)
-                .cornerRadius(OmiChrome.controlRadius)
+                .glassCard(emphasized: true)
             }
           }
         }
@@ -1956,9 +1959,9 @@ struct OnboardingChatBubble: View {
           // User avatar
           Image(systemName: "person.fill")
             .font(.system(size: 14))
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 32, height: 32)
-            .background(OmiColors.backgroundTertiary)
+            .background(Ink.rowFill)
             .clipShape(Circle())
         }
       }
@@ -1988,12 +1991,12 @@ struct OnboardingToolIndicator: View {
         } else {
           Image(systemName: "checkmark.circle.fill")
             .font(.system(size: 10))
-            .foregroundColor(.green)
+            .foregroundColor(Ink.listeningGreen)
         }
 
         Text(displayText)
           .font(.system(size: 12))
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
 
       // Show permission guide image automatically for scan_files and request_permission
@@ -2084,7 +2087,7 @@ struct OnboardingPermissionImage: View {
           .cornerRadius(OmiChrome.smallControlRadius)
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
+              .stroke(Ink.separator, lineWidth: 1)
           )
       } else if let url = Bundle.resourceBundle.url(
         forResource: info.name, withExtension: info.ext),
@@ -2097,7 +2100,7 @@ struct OnboardingPermissionImage: View {
           .cornerRadius(OmiChrome.smallControlRadius)
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
+              .stroke(Ink.separator, lineWidth: 1)
           )
       }
     }
@@ -2130,18 +2133,18 @@ struct ExplorationProfileCard: View {
           } else {
             Image(systemName: "doc.text.magnifyingglass")
               .font(.system(size: 12))
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(Ink.primary)
           }
 
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(isRunning ? "Learning about you..." : "Your Digital Profile")
               .font(.system(size: 13, weight: .semibold))
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             if !text.isEmpty {
               Text(String(text.prefix(100)).replacingOccurrences(of: "\n", with: " "))
                 .font(.system(size: 12))
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .lineLimit(2)
             }
           }
@@ -2151,7 +2154,7 @@ struct ExplorationProfileCard: View {
           if !text.isEmpty {
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
               .font(.system(size: 10))
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
         .padding(.horizontal, OmiSpacing.md)
@@ -2161,7 +2164,7 @@ struct ExplorationProfileCard: View {
 
       // Expanded content
       if isExpanded && !text.isEmpty {
-        Divider()
+        GlassSeparator()
           .padding(.horizontal, OmiSpacing.sm)
 
         ScrollView {
@@ -2172,11 +2175,7 @@ struct ExplorationProfileCard: View {
         .frame(maxHeight: 300)
       }
     }
-    .background(OmiColors.backgroundTertiary.opacity(0.5))
-    .cornerRadius(OmiChrome.smallControlRadius)
-    .overlay(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .stroke(OmiColors.accent.opacity(0.2), lineWidth: 1)
-    )
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous))
+    .glassCard()
   }
 }

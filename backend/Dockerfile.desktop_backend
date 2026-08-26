@@ -17,9 +17,12 @@ FROM ${PYTHON_BASE_IMAGE}
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Patch OS packages in this layer (#7136). No extra apt packages in the final image.
+RUN apt-get update && apt-get -y dist-upgrade && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/ .
 
 EXPOSE 8080
 
-CMD ["uvicorn", "desktop_backend:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop"]
+CMD ["uvicorn", "desktop_backend:create_app", "--factory", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop"]

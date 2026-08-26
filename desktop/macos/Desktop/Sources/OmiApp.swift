@@ -99,11 +99,14 @@ struct OMIApp: App {
 
   static let launchMode = LaunchMode.fromCommandLine()
 
-  private var windowTitle: String {
-    Self.windowTitle(
+  /// The shell window's title for *this* build. Static because `ShellSummon` identifies the shell by
+  /// exact title — several auxiliary windows also begin with "Omi", and dressing one of those as the
+  /// summonable shell would float and auto-hide it.
+  static var currentWindowTitle: String {
+    windowTitle(
       displayName: AppBuild.displayName,
       version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
-      launchMode: Self.launchMode,
+      launchMode: launchMode,
       isNonProduction: AppBuild.isNonProduction)
   }
 
@@ -114,16 +117,18 @@ struct OMIApp: App {
     return version.isEmpty ? title : "\(title) v\(version)"
   }
 
-  /// Window size based on launch mode
+  /// Size the shell first comes up at. The summoned shell is a panel you call over your work, not an
+  /// app you switch to, so it matches `ShellSummonPlacement.defaultSize` rather than the old
+  /// managed-window 1200×800. Rewind mode is still a window and keeps its own.
   private var defaultWindowSize: CGSize {
-    Self.launchMode == .rewind ? CGSize(width: 1000, height: 700) : CGSize(width: 1200, height: 800)
+    Self.launchMode == .rewind ? CGSize(width: 1000, height: 700) : ShellSummonPlacement.defaultSize
   }
 
   var body: some Scene {
     let _ = Self.registerOpenMainWindowHandler(openWindow)
 
     // Main desktop window - same view for both modes, sidebar hidden in rewind mode
-    return Window(windowTitle, id: "main") {
+    return Window(Self.currentWindowTitle, id: "main") {
       DesktopHomeView()
         .environmentObject(appState)
         .withFontScaling()
@@ -132,7 +137,7 @@ struct OMIApp: App {
           log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
         }
     }
-    .windowStyle(.titleBar)
+    .windowStyle(.hiddenTitleBar)  // fullSizeContentView: the top bar occupies the title-bar band.
     .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
     .commands {
       CommandGroup(after: .textFormatting) {
@@ -265,12 +270,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   private var appLifecycleMaintenanceTask: Task<Void, Never>?
   private var didScheduleInitialSettingsSync = false
   private var initialSettingsSyncTask: Task<Void, Never>?
-
   func applicationWillFinishLaunching(_ notification: Notification) {
     // Publish the live delegate instance for callers that can't rely on
     // `NSApp.delegate as? AppDelegate` (nil under SwiftUI's delegate adaptor).
     AppDelegate.shared = self
-    if AuthStorageCanary.isRequested { return }
+    if AuthStorageCanary.isRequested || UserNotificationCallbackBridge.isSignedSmokeRequested() { return }
+    OmiFontRegistration.registerAll()
     // Single-instance guard: a second live copy of the same bundle id + launch mode
     // would race the first against the shared Rewind SQLite DB
     // (~/Library/Application Support/Omi/…) and the bundle-id UserDefaults domain,
@@ -307,10 +312,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     BundleEnvironment.loadIfNeeded()
 
     DesktopAutomationBridge.shared.startIfNeeded()
+    DesktopAutomationWindowPresentation.installIfNeeded()
     LocalAgentAPIServer.shared.startIfNeeded()
     publishNamedBundleRuntimeManifest()
 
     runStartupSystemMaintenance()
+    pruneExpiredAgentToolOutputs()
+    // A Quick Look panel that was open when the app was force-quit or crashed left full-resolution
+    // screenshots in the temp directory, and its close handler never ran. This is the first moment
+    // anything of ours can take them off disk.
+    ScreenFrameQuickLook.purgeStaleScratch()
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
@@ -333,10 +344,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       }
     }
 
-    // Proactive notifications are now OFF by default for everyone. Run the one-time
-    // migration before any assistant can fire, so existing users are flipped to Off
-    // once (they can re-enable in Settings).
-    NotificationService.migrateToOffByDefaultIfNeeded()
+    // Proactive notifications are back ON by default at Balanced (focus/insight
+    // categories only). Run the one-time migration before any assistant can fire;
+    // turning notifications off again in Settings sticks.
+    NotificationService.migrateToBalancedDefaultIfNeeded()
 
     // Force macOS to use the correct app icon (bypasses icon cache).
     // Apply squircle mask with proper margins because NSApp.applicationIconImage
@@ -369,6 +380,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Initialize NotificationService early to set up UNUserNotificationCenterDelegate
     // This ensures notifications display properly when app is in foreground
     _ = NotificationService.shared
+    // Observe meeting completions app-wide so the action-item banner also fires
+    // while the main window is closed or backgrounded.
+    MeetingActionItemBannerService.shared.activate()
+    NotificationSettingsSyncCoordinator.shared.start()
     // Notification registration repair is deliberately user-triggered from
     // Settings. Launch must not restart usernoted/NotificationCenter or alter
     // notification registration as a passive side effect.
@@ -512,7 +527,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Route completed background-agent results into live voice sessions.
     AgentCompletionVoiceDelivery.shared.start()
 
+    Task { await ContextWorkstreamReconciler.shared.start() }
+
     scheduleAppLifecycleMaintenance()
+
+    // Offer an integration when the user opens an app Omi can connect to.
+    //
+    // Deliberately outside the signed-in branch below: at launch, auth is often
+    // still being restored, so that branch is skipped for exactly the users who
+    // are signed in — the observer would then never be installed for the life of
+    // the process. The policy checks sign-in at decision time instead, and the
+    // coordinator re-scopes its history on `runtimeOwnerDidChange`.
+    IntegrationNudgeCoordinator.shared.start()
 
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
@@ -550,13 +576,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     migrateAppName()
 
     updateOnboardingLifecyclePolicy(reason: "launch")
+    // `queue: nil` + explicit hop, never `queue: .main`: synchronous main-queue delivery makes
+    // every background `UserDefaults.set` wait on the main thread, which deadlocked the app when
+    // an auth commit held the session fence while posting and the main thread wanted that fence
+    // (frozen sign-in screen, #11374).
     userDefaultsObserver = NotificationCenter.default.addObserver(
       forName: UserDefaults.didChangeNotification,
       object: nil,
-      queue: .main
+      queue: nil
     ) { [weak self] _ in
-      MainActor.assumeIsolated {
-        self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated {
+          self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+        }
       }
     }
 
@@ -604,32 +636,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     startSentryHeartbeat()
     startForegroundTracking()
 
-    // Apply initial main-window policy after SwiftUI has created the window.
+    // Dress and place the shell once SwiftUI has created it. `ShellSummon` owns both from here on:
+    // transparent, buttonless, summoned or anchored, and remembered per display.
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-      log("AppDelegate: Checking windows after 0.2s delay, count=\(NSApp.windows.count)")
-      let shouldSuppressMainWindow = restoreMainWindowAfterUpdateRelaunch == false
-      if !shouldSuppressMainWindow {
+      guard let window = ShellSummon.shellWindow() else {
+        log("AppDelegate: WARNING - shell window not found after launch")
+        return
+      }
+      ShellSummon.applyPresentation(to: window)
+      if restoreMainWindowAfterUpdateRelaunch == false {
+        window.orderOut(nil)
+        log("AppDelegate: Shell suppressed after background update relaunch")
+      } else if DesktopAutomationWindowPresentation.currentMode != .normal {
+        DesktopAutomationWindowPresentation.applyLaunchMode(to: window)
+        log(
+          "AppDelegate: Shell launched in \(DesktopAutomationWindowPresentation.currentMode.rawValue) automation presentation"
+        )
+      } else {
         NSApp.activate()
-      }
-      var foundOmiWindow = false
-      for window in NSApp.windows {
-        log("AppDelegate: Window title='\(window.title)', isVisible=\(window.isVisible)")
-        if Self.isMainOmiWindow(window) {
-          foundOmiWindow = true
-          window.appearance = NSAppearance(named: .darkAqua)
-          // Ensure fullscreen always creates a dedicated Space
-          window.collectionBehavior.insert(.fullScreenPrimary)
-          if shouldSuppressMainWindow {
-            window.orderOut(nil)
-            log("AppDelegate: Main window suppressed after background update relaunch")
-          } else {
-            window.makeKeyAndOrderFront(nil)
-            log("AppDelegate: Main window shown on launch")
-          }
-        }
-      }
-      if !foundOmiWindow {
-        log("AppDelegate: WARNING - 'Omi' window not found!")
+        ShellSummon.summon(alwaysPlace: true)
+        log("AppDelegate: Shell summoned on launch")
       }
     }
 
@@ -743,6 +769,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     }
   }
 
+  /// Expire leftover agent `tool-output` JSON so existing installs reclaim disk
+  /// on the next launch, without waiting for a chat that starts the Node runtime.
+  private func pruneExpiredAgentToolOutputs() {
+    let artifactsDirectory = URL(
+      fileURLWithPath: AgentRuntimeProcess.defaultArtifactsDirectory())
+    DispatchQueue.global(qos: .utility).async {
+      let deleted = AgentArtifactRetention.pruneExpiredToolOutputs(in: artifactsDirectory)
+      if deleted > 0 {
+        log("AppDelegate: pruned \(deleted) expired agent tool-output files")
+      }
+    }
+  }
+
   /// Set up global keyboard shortcuts
   private func setupGlobalHotkeys() {
     // Handler for Ctrl+Option+R -> Open Rewind
@@ -765,15 +804,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
         log("AppDelegate: [HOTKEY] Rewind hotkey MATCHED (Ctrl+Option+R)")
         DispatchQueue.main.async {
           log("AppDelegate: [HOTKEY] Activating app and posting notification")
-          // Bring app to front
+          // Bring app to front and summon the shell onto the display the cursor is on.
+          DesktopAutomationWindowPresentation.revealForUser()
           NSApp.activate()
-          // Find and show main window
-          for window in NSApp.windows {
-            if window.title.hasPrefix("Omi") {
-              window.makeKeyAndOrderFront(nil)
-              break
-            }
-          }
+          ShellSummon.summon()
           // Post notification to navigate to Rewind
           NotificationCenter.default.post(name: .navigateToRewind, object: nil)
           log("AppDelegate: [HOTKEY] Posted navigateToRewind notification")
@@ -919,7 +953,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     let audioRecordingView = makeToggleItemView(
       title: "Audio Recording",
       iconName: "mic.fill",
-      isOn: !paywalled && AssistantSettings.shared.transcriptionEnabled,
+      isOn: !paywalled && AssistantSettings.shared.audioRecordingMode != .off,
       action: #selector(audioRecordingToggled(_:))
     )
     audioRecordingItem.view = audioRecordingView
@@ -1050,9 +1084,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   }
 
   /// Bring the main Omi window to the front, creating it if needed. Shared by
-  /// the menu-bar "Open Omi" item, the global Open Omi (formerly Ask Omi)
-  /// shortcut, and the floating bar's "Continue in Omi" affordance.
+  /// the menu-bar "Open Omi" item, the auth callback, and the floating bar's
+  /// "Continue in Omi" affordance. The Dock callback summons directly, while
+  /// the global Open Omi shortcut uses `toggleMainAppWindow()` so it can also
+  /// dismiss the shell.
   @MainActor func openMainAppWindow() {
+    DesktopAutomationWindowPresentation.revealForUser()
     // Capture this BEFORE any activate call mutates AppKit's notion of frontmost.
     let alreadyFrontmost = NSWorkspace.shared.frontmostApplication == NSRunningApplication.current
     NSApp.activate(ignoringOtherApps: true)
@@ -1080,26 +1117,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     }
   }
 
-  @MainActor private func revealMainWindowIfAvailable() -> Bool {
-    for window in NSApp.windows {
-      let isRealAppWindow = window.frame.width > 300 && window.frame.height > 200
-      let isMenuBarPopover = window.title.hasPrefix("Item-")
-      if isRealAppWindow && !isMenuBarPopover {
-        // A summon can come from any Space/desktop, so pull the window to whichever
-        // desktop is active as the app activates (openMainAppWindow triggers a real
-        // LaunchServices activation). Also un-minimize and nudge it on-screen if it
-        // drifted off a disconnected display.
-        window.collectionBehavior.insert(.moveToActiveSpace)
-        if window.isMiniaturized { window.deminiaturize(nil) }
-        if let screen = NSScreen.main, !screen.visibleFrame.intersects(window.frame) {
-          window.center()
-        }
-        window.makeKeyAndOrderFront(nil)
-        window.appearance = NSAppearance(named: .darkAqua)
-        return true
-      }
+  /// Toggle the main shell for the global Open Omi shortcut. Other entry points intentionally use
+  /// `openMainAppWindow()` (or direct summon for the Dock) because menu-bar, Dock, Continue-in-Omi,
+  /// and auth flows are open/focus actions even when the shell is already visible.
+  @MainActor func toggleMainAppWindow() -> ShellSummon.ToggleAction {
+    if DesktopAutomationWindowPresentation.revealForUser() {
+      openMainAppWindow()
+      return .summon
     }
-    return false
+    let action = ShellSummon.toggleAction(for: ShellSummon.shellWindow(), presentation: ShellSummon.presentation())
+    switch action {
+    case .summon:
+      openMainAppWindow()
+    case .dismiss:
+      ShellSummon.dismiss()
+    }
+    return action
+  }
+
+  /// A summon can come from any Space and any display, and can outlive the launch pass that dressed
+  /// the window, so `ShellSummon` re-dresses it, pulls it to the active Space, un-minimises it, and
+  /// lands it on the display under the cursor. `false` means SwiftUI has not built the window yet —
+  /// the caller's signal to ask the scene for one and try again.
+  @MainActor private func revealMainWindowIfAvailable() -> Bool {
+    ShellSummon.summon()
   }
 
   @MainActor @objc private func checkForUpdates() {
@@ -1219,7 +1260,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     screenCaptureSwitch?.state =
       (!paywalled && ProactiveAssistantsPlugin.shared.isMonitoring) ? .on : .off
     audioRecordingSwitch?.state =
-      (!paywalled && AssistantSettings.shared.transcriptionEnabled) ? .on : .off
+      (!paywalled && AssistantSettings.shared.audioRecordingMode != .off) ? .on : .off
   }
 
   func menuDidClose(_ menu: NSMenu) {
@@ -1241,8 +1282,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    let shouldTerminate = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-    if shouldTerminate {
+    let isSuspendedForPermissionPrompt = ShellSummon.isSuspendedForPermissionPrompt
+    let shouldTerminate = ShellSummon.shouldTerminateAfterLastWindowClosed(
+      hasCompletedOnboarding: UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding.rawValue),
+      isSuspendedForPermissionPrompt: isSuspendedForPermissionPrompt)
+    if isSuspendedForPermissionPrompt {
+      log("AppDelegate: Last window closed for a permission prompt — staying alive to receive the answer")
+    } else if shouldTerminate {
       log(
         "AppDelegate: Last onboarding window closed — terminating instead of keeping a background menu bar process"
       )
@@ -1251,17 +1297,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-    // Always try to show the main Omi window when dock icon is clicked
-    for window in sender.windows where window.title.hasPrefix("Omi") {
-      if window.isMiniaturized {
-        window.deminiaturize(nil)
-      }
-      window.makeKeyAndOrderFront(nil)
-      sender.activate(ignoringOtherApps: true)
-      log("AppDelegate: Restored Omi window from dock click (wasVisible=\(flag))")
-      return false
-    }
-    return true
+    // The Dock icon is the guaranteed way back to a shell that puts itself away whenever you click
+    // off it — the reason `LSUIElement` stays false. Route it through the same summon as the hotkey.
+    DesktopAutomationWindowPresentation.revealForUser()
+    guard MainActor.assumeIsolated({ ShellSummon.summon() }) else { return true }
+    sender.activate(ignoringOtherApps: true)
+    log("AppDelegate: Summoned the shell from a dock click (wasVisible=\(flag))")
+    return false
   }
 
   /// Publish only token-free local diagnostics for a running named dev bundle.
@@ -1334,8 +1376,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Stop transcription retry service
     TranscriptionRetryService.shared.stop()
 
-    // Stop recurring task scheduler
-    RecurringTaskScheduler.shared.stop()
+    Task { await ContextWorkstreamReconciler.shared.stop() }
 
     // Finalize the active Rewind MP4 chunk while the app is still alive.
     // AVAssetWriter files are not readable until finishWriting writes the trailer.
@@ -1561,6 +1602,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   }
 
   func applicationDidBecomeActive(_ notification: Notification) {
+    MainActor.assumeIsolated { ShellSummon.restoreOnActivationIfNeeded() }
     guard didScheduleInitialSettingsSync else {
       scheduleInitialSettingsSync()
       return

@@ -15,6 +15,7 @@ enum AgentErrorCode: String, CaseIterable, Sendable {
   case connectionFailed = "connection_failed"
   case payloadTooLarge = "payload_too_large"
   case runtimeCrashed = "runtime_crashed"
+  case runtimeInstallIncomplete = "runtime_install_incomplete"
   case toolSchemaRejected = "tool_schema_rejected"
   case providerRateLimited = "provider_rate_limited"
   case providerOverloaded = "provider_overloaded"
@@ -22,6 +23,7 @@ enum AgentErrorCode: String, CaseIterable, Sendable {
   case credentialLeakSuspected = "credential_leak_suspected"
   case planLimitReached = "plan_limit_reached"
   case agentModeUnavailable = "agent_mode_unavailable"
+  case upstreamProviderFailed = "upstream_provider_failed"
   case userInterrupted = "user_interrupted"
   case unknown
 }
@@ -33,6 +35,26 @@ struct ClassifiedAgentError: Equatable, Sendable {
 }
 
 enum AgentErrorClassifier {
+  /// Single copy for an install whose agent runtime payload is incomplete.
+  /// Owned here because this classifier is also the round-trip target: surfaces
+  /// re-classify already-classified messages, so the phrase in the copy has to
+  /// be the same phrase the rule matches.
+  static let runtimeInstallIncompleteMessage =
+    "Omi's local AI runtime is not installed correctly, so chat can't start. "
+    + "Reinstall or update Omi to repair it."
+
+  /// Worker recycle rewrites `userMessage` to "send again" while leaving the
+  /// provider's 402 on `technicalMessage`. Classify both or the billing rule
+  /// never fires and the transcript falls through to the unclassified marker.
+  static func classify(_ failure: AgentRuntimeFailure) -> ClassifiedAgentError {
+    classify(
+      [failure.technicalMessage, failure.userMessage]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n")
+    )
+  }
+
   // ponytail: ordered substring rules over the observed error corpus; a rule
   // table beats ML until the corpus outgrows it. First match wins.
   static func classify(_ rawMessage: String) -> ClassifiedAgentError {
@@ -72,6 +94,65 @@ enum AgentErrorClassifier {
         retryable: false)
     }
 
+    // A bundle that shipped without its agent runtime payload fails identically
+    // on every turn, so "the AI engine restarted, try again" is the wrong copy —
+    // that phrasing produced retry loops against a permanently broken install.
+    // Matched before the generic "process exited" rule below, which pi-mono's
+    // own rejection string (`pi-mono process exited (code 1)`) would otherwise
+    // claim. Also recognizes this classifier's own output so surfaces that
+    // re-classify an already-classified message stay on the same code.
+    if lower.contains("local ai runtime is not installed correctly")
+      || lower.contains("extension path does not exist")
+      || lower.contains("failed to load extension")
+      || (lower.contains("unknown provider") && lower.contains("omi"))
+    {
+      return ClassifiedAgentError(
+        code: .runtimeInstallIncomplete,
+        userMessage: runtimeInstallIncompleteMessage,
+        retryable: false)
+    }
+
+    // Omi's own desktop chat backend reports every upstream failure as the
+    // fixed string "Upstream provider error" with code 502, delivered as an SSE
+    // error frame inside an HTTP 200 body. The corpus had no rule for it, so it
+    // fell through to `unknown` and the transcript showed the generic "Omi
+    // couldn't answer this one" — which is what users saw for ~19 hours during
+    // the 2026-08-20 gateway-parameter outage, with nothing on screen
+    // indicating the failure was ours rather than their message.
+    //
+    // Retryable: the backend emits this for transient gateway conditions
+    // (circuit open, transport failure, upstream timeout) as well as hard
+    // rejections, and it does not distinguish them on the wire. Resending is
+    // worth one attempt.
+    if lower.contains("upstream provider error") {
+      return ClassifiedAgentError(
+        code: .upstreamProviderFailed,
+        userMessage:
+          "Omi's AI service didn't respond. This is on our side, not your message. "
+          + "Try again in a moment.",
+        retryable: true)
+    }
+
+    // The Omi-account proxy answers an exhausted billing lane with a bare 402
+    // and no body, so the raw transport string ("HTTP 402 status code (no
+    // body)") fell through to `unknown` and was shown verbatim — and, worse,
+    // marked retryable, which is the retry storm this classifier exists to
+    // prevent. Payment Required is never fixed by resending the same message.
+    // Matched on status shape rather than a bare `402` so a token count or cost
+    // that happens to contain those digits cannot claim this rule.
+    if lower.contains("payment required")
+      || lower.range(of: #"\bhttp[\s/]*402\b"#, options: .regularExpression) != nil
+      || lower.range(
+        of: #"\b(?:402\s+status|status(?:\s+code)?\s*[:=]?\s*402)\b"#,
+        options: .regularExpression) != nil
+    {
+      return ClassifiedAgentError(
+        code: .providerBillingExhausted,
+        userMessage:
+          "Omi's AI service declined this request for billing reasons. "
+          + "Check Settings → Plan and Usage; resending the same message won't help.",
+        retryable: false)
+    }
     if lower.contains("credit balance is too low") {
       return ClassifiedAgentError(
         code: .providerBillingExhausted,

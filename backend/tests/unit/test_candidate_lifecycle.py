@@ -43,8 +43,6 @@ def fake_db(monkeypatch):
 
     monkeypatch.setattr(candidates_db, 'db', database)
     monkeypatch.setattr(candidates_db.firestore, 'transactional', transactional)
-    # candidates.py gates writes on is_canonical_memory_user, not workflow_mode.
-    monkeypatch.setattr(candidates_db, 'is_canonical_memory_user', lambda uid: uid == 'user-1')
     candidate_service.clear_workstream_candidate_resolver()
     candidate_service.task_links.clear_workstream_goal_resolver()
     candidate_service.task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
@@ -76,6 +74,37 @@ def create_record(fake_db, **overrides):
         account_generation=3,
         now=datetime(2026, 7, 9, tzinfo=timezone.utc),
     )
+
+
+def test_staged_compatibility_score_is_pending_only(fake_db):
+    proposal = task_create_proposal(
+        source_surface='legacy_staged',
+        evidence_refs=[{'kind': 'external', 'id': 'legacy-staged-row-1', 'scope': 'canonical'}],
+    )
+    candidate = candidates_db.create_candidate(
+        'user-1',
+        proposal,
+        idempotency_key='legacy-staged:row-1',
+        account_generation=3,
+    )
+
+    updated = candidates_db.update_candidate_compatibility_score(
+        'user-1',
+        candidate.candidate_id,
+        relevance_score=42,
+        account_generation=3,
+    )
+    assert updated.compatibility is not None
+    assert updated.compatibility.relevance_score == 42
+
+    candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
+    with pytest.raises(candidates_db.CandidateConflictError, match='not an active staged-task'):
+        candidates_db.update_candidate_compatibility_score(
+            'user-1',
+            candidate.candidate_id,
+            relevance_score=99,
+            account_generation=3,
+        )
 
 
 def evidence_refs(start, stop):
@@ -315,6 +344,24 @@ def test_exact_pending_task_creates_coalesce_across_sources_and_alias_each_reque
         idempotency_key='screen:request-2',
         account_generation=3,
     )
+    weaker = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(
+            task_change={
+                'description': 'Send the budget',
+                'owner': 'user',
+                'due_at': due_utc,
+                'due_confidence': 0.4,
+                'priority': 'low',
+            },
+            capture_confidence=0.5,
+            ownership_confidence=0.5,
+            evidence_refs=evidence_refs(2, 3),
+            source_surface='agent',
+        ),
+        idempotency_key='agent:request-3',
+        account_generation=3,
+    )
     replay = candidates_db.create_candidate(
         'user-1',
         first_proposal,
@@ -327,10 +374,22 @@ def test_exact_pending_task_creates_coalesce_across_sources_and_alias_each_reque
     assert second.capture_confidence == 0.96
     assert replay.capture_confidence == 0.96
     assert second.ownership_confidence == 0.98
+    assert second.task_change is not None
+    assert second.task_change.due_confidence == 1
+    assert second.task_change.priority is not None
+    assert second.task_change.priority.value == 'high'
+    assert weaker.task_change is not None
+    assert weaker.task_change.due_confidence == 1
+    assert weaker.task_change.priority is not None
+    assert weaker.task_change.priority.value == 'high'
+    assert replay.task_change is not None
+    assert replay.task_change.due_confidence == 1
+    assert replay.task_change.priority is not None
+    assert replay.task_change.priority.value == 'high'
     assert [evidence.id for evidence in second.evidence_refs] == ['conversation-0', 'conversation-1']
-    assert [evidence.id for evidence in replay.evidence_refs] == ['conversation-0', 'conversation-1']
+    assert [evidence.id for evidence in replay.evidence_refs] == ['conversation-0', 'conversation-1', 'conversation-2']
     assert len(candidate_paths(fake_db)) == 1
-    assert len(alias_paths(fake_db)) == 2
+    assert len(alias_paths(fake_db)) == 3
     assert len(pending_claim_paths(fake_db)) == 1
 
 
@@ -348,7 +407,7 @@ def test_fresh_high_confidence_capture_replaces_stale_low_confidence_pending_cla
         account_generation=3,
         now=captured_at,
     )
-    refreshed_at = captured_at + candidates_db.PENDING_CANDIDATE_REUSE_WINDOW + timedelta(days=1)
+    refreshed_at = captured_at + candidates_db.SUGGESTION_TTL + timedelta(days=1)
     fresh = candidates_db.create_candidate(
         'user-1',
         task_create_proposal(
@@ -377,6 +436,63 @@ def test_fresh_high_confidence_capture_replaces_stale_low_confidence_pending_cla
     assert len(alias_paths(fake_db)) == 2
     claim = fake_db.rows[pending_claim_paths(fake_db)[0]]
     assert claim['candidate_id'] == fresh.candidate_id
+
+
+def test_a_lapsed_pending_claim_is_not_reused_for_a_later_capture(fake_db):
+    """A suggestion the user never saw must not swallow the next one.
+
+    A pending Candidate stops being readable once its two-day window closes, so
+    merging a fresh capture into a lapsed one stores a proposal the Suggested
+    surface will never show — the shape INV-TASK-2 forbids.
+    """
+    captured_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    lapsed = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(evidence_refs=evidence_refs(0, 1)),
+        idempotency_key='capture:first-mention',
+        account_generation=3,
+        now=captured_at,
+    )
+    heard_again_at = captured_at + candidates_db.SUGGESTION_TTL + timedelta(hours=1)
+    reproposed = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(evidence_refs=evidence_refs(1, 2), source_surface='screen'),
+        idempotency_key='capture:second-mention',
+        account_generation=3,
+        now=heard_again_at,
+    )
+
+    assert candidates_db.candidate_has_lapsed(lapsed, now=heard_again_at)
+    assert reproposed.candidate_id != lapsed.candidate_id
+    assert not candidates_db.candidate_has_lapsed(reproposed, now=heard_again_at)
+    assert reproposed.created_at == heard_again_at
+    assert reproposed.expires_at == heard_again_at + candidates_db.SUGGESTION_TTL
+    assert len(candidate_paths(fake_db)) == 2
+    claim = fake_db.rows[pending_claim_paths(fake_db)[0]]
+    assert claim['candidate_id'] == reproposed.candidate_id
+
+
+def test_a_live_pending_claim_is_still_reused_within_its_window(fake_db):
+    captured_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    first = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(evidence_refs=evidence_refs(0, 1)),
+        idempotency_key='capture:first-mention',
+        account_generation=3,
+        now=captured_at,
+    )
+    heard_again_at = captured_at + candidates_db.SUGGESTION_TTL - timedelta(hours=1)
+    merged = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(evidence_refs=evidence_refs(1, 2), source_surface='screen'),
+        idempotency_key='capture:second-mention',
+        account_generation=3,
+        now=heard_again_at,
+    )
+
+    assert merged.candidate_id == first.candidate_id
+    assert [evidence.id for evidence in merged.evidence_refs] == ['conversation-0', 'conversation-1']
+    assert len(candidate_paths(fake_db)) == 1
 
 
 def test_pending_candidate_evidence_union_is_stable_deduplicated_and_capped(fake_db):
@@ -470,6 +586,12 @@ def test_accepted_active_task_coalesces_exact_cross_source_capture_until_work_cl
     receipt = candidates_db.resolve_task_candidate('user-1', first.candidate_id, account_generation=3)
     task_path = ('users', 'user-1', 'action_items', receipt.task_id)
     second_proposal = task_create_proposal(
+        task_change={
+            'description': 'Send the budget',
+            'owner': 'user',
+            'due_confidence': 1,
+            'priority': 'high',
+        },
         capture_confidence=0.99,
         source_surface='screen',
         evidence_refs=[{'kind': 'local_screen', 'id': 'screen-2', 'scope': 'device_local', 'device_id': 'macos_2'}],
@@ -493,6 +615,37 @@ def test_accepted_active_task_coalesces_exact_cross_source_capture_until_work_cl
         'screen-2',
     }
     assert fake_db.rows[task_path]['capture_confidence'] == 0.99
+    assert second.task_change is not None
+    assert second.task_change.due_confidence == 1
+    assert second.task_change.priority is not None
+    assert second.task_change.priority.value == 'high'
+    assert fake_db.rows[task_path]['due_confidence'] == 1
+    assert fake_db.rows[task_path]['priority'] == 'high'
+
+    weaker = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(
+            task_change={
+                'description': 'Send the budget',
+                'owner': 'user',
+                'due_confidence': 0.3,
+                'priority': 'low',
+            },
+            capture_confidence=0.5,
+            ownership_confidence=0.5,
+            source_surface='agent',
+            evidence_refs=evidence_refs(3, 4),
+        ),
+        idempotency_key='agent:weaker',
+        account_generation=3,
+    )
+
+    assert weaker.task_change is not None
+    assert weaker.task_change.due_confidence == 1
+    assert weaker.task_change.priority is not None
+    assert weaker.task_change.priority.value == 'high'
+    assert fake_db.rows[task_path]['due_confidence'] == 1
+    assert fake_db.rows[task_path]['priority'] == 'high'
 
     fake_db.rows[task_path].update(status='completed', completed=True)
     recurrence = candidates_db.create_candidate(
@@ -827,30 +980,11 @@ def test_expired_legacy_promotion_claim_gets_new_owner(fake_db):
         )
 
 
-@pytest.mark.parametrize('cohort', ['in', 'out'])
-def test_authoritative_control_blocks_candidate_writes_in_nonvisible_modes(fake_db, cohort):
-    if cohort == 'out':
-        # candidates.py gates writes on canonical cohort membership.
-        fake_db.rows[('users', 'user-1', 'task_intelligence_control', 'state')]['workflow_mode'] = 'off'
-        # Override the fixture's cohort patch to exclude user-1.
-        import database.candidates as _candidates_db
-
-        original_check = _candidates_db.is_canonical_memory_user
-        import database.candidates as candidates_module
-
-        candidates_module.is_canonical_memory_user = lambda uid: False
-
-        try:
-            with pytest.raises(candidates_db.CandidateConflictError):
-                create_record(fake_db)
-        finally:
-            candidates_module.is_canonical_memory_user = original_check
-
-        assert not [path for path in fake_db.rows if 'candidates' in path]
-    else:
-        # Canonical users are never blocked by the retired workflow_mode field.
-        record = create_record(fake_db)
-        assert record.candidate_id is not None
+@pytest.mark.parametrize('workflow_mode', ['off', 'shadow', 'write', 'read'])
+def test_candidate_writes_are_universal_and_ignore_retired_workflow_mode(fake_db, workflow_mode):
+    fake_db.rows[('users', 'user-1', 'task_intelligence_control', 'state')]['workflow_mode'] = workflow_mode
+    record = create_record(fake_db)
+    assert record.candidate_id is not None
 
 
 def test_generation_rollover_fences_acceptance_inside_transaction(fake_db):
@@ -1157,6 +1291,36 @@ def test_integration_outbox_rejects_completion_from_an_expired_lease(fake_db):
         succeeded=True,
     )
     assert fake_db.rows[outbox_path]['status'] == 'completed'
+
+
+@pytest.mark.parametrize('stored_expires_at', [True, False])
+def test_the_stored_document_answers_the_deadline_exactly_like_the_record(fake_db, stored_expires_at):
+    """The raw-document twin exists so readers that never parse a record can still
+    ask the deadline question. It has to answer identically, or a Candidate is live
+    on one surface and gone on another."""
+
+    record = create_record(fake_db)
+    path = candidate_paths(fake_db)[0]
+    stored = deepcopy(fake_db.rows[path])
+    if not stored_expires_at:
+        # The backlog that predates the deadline carries no `expires_at`; both
+        # readers must derive the same one from creation.
+        stored.pop('expires_at')
+        record = record.model_copy(update={'expires_at': None})
+
+    deadline = record.created_at + candidates_db.SUGGESTION_TTL
+    for now in (deadline - timedelta(seconds=1), deadline, deadline + timedelta(days=30)):
+        assert candidates_db.stored_candidate_has_lapsed(stored, now=now) == candidates_db.candidate_has_lapsed(
+            record, now=now
+        ), now
+
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    resolved = candidates_db.get_candidate('user-1', record.candidate_id)
+    resolved_stored = deepcopy(fake_db.rows[path])
+    far_future = deadline + timedelta(days=365)
+    assert resolved is not None and resolved.status != CandidateStatus.pending
+    assert candidates_db.stored_candidate_has_lapsed(resolved_stored, now=far_future) is False
+    assert candidates_db.candidate_has_lapsed(resolved, now=far_future) is False
 
 
 def test_candidate_queries_have_required_firestore_composite_indexes():

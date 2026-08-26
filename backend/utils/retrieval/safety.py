@@ -12,6 +12,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def safe_isoformat(value: Any) -> Optional[str]:
+    """Return a bounded ISO-like timestamp suitable for untrusted tool-source metadata."""
+    if value is None:
+        return None
+    isoformat = getattr(value, 'isoformat', None)
+    formatted = isoformat() if callable(isoformat) else value
+    return str(formatted)[:80]
+
+
 class SafetyGuardError(Exception):
     """Raised when a safety limit is exceeded."""
 

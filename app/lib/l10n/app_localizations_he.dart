@@ -321,7 +321,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get searchApps => 'חפש אפליקציות...';
 
   @override
-  String get myApps => 'האפליקציות שלי';
+  String get myApps => 'נוצר על ידי';
 
   @override
   String get installedApps => 'אפליקציות מותקנות';
@@ -739,11 +739,6 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'התוכנית שלך תבוטל ב-$date.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'התוכנית שלך מתחדשת ב-$date.';
   }
 
   @override
@@ -2110,16 +2105,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get editMemory => '✏️ עריכת זכרון';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'הצמדה כבסיס';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'ביטול הצמדה מהבסיס';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'זיכרון בסיס';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'תמיד בהקשר';
 
   @override
   String get memoryContentHint => 'אני אוהב לאכול גלידה...';
@@ -9699,4 +9694,130 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'ישן מדי לסנכרון — Omi לא יכול לקבל אותו';
+
+  @override
+  String get planSheetChooseYourPlan => 'בחרו תוכנית כדי לפתוח את Omi ללא הגבלה.';
+
+  @override
+  String get availableOnMacMobileWeb => 'זמין ב-Mac, בנייד ובאינטרנט';
+
+  @override
+  String get popularBadge => 'פופולרי';
+
+  @override
+  String get worksOnDesktop => 'עובד במחשב';
+
+  @override
+  String get noDesktopAccess => 'לא עובד במחשב';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months חודשים / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count חודשים חינם',
+      one: 'חודש אחד חינם',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi בחינם, אבל לגרסה החינמית יש מגבלות שמשפיעות על החוויה שלכם:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'עיכוב של 5-7 שניות (לא בזמן אמת)';
+
+  @override
+  String get downgradeToFreemiumAction => 'מעבר לגרסה החינמית';
+
+  @override
+  String get getFreeUnlimitedAccess => 'קבלו גישה בלתי מוגבלת בחינם';
+
+  @override
+  String get shareDataForTraining => 'שיתוף נתונים לאימון';
+
+  @override
+  String get yourRequestUnderReview => 'הבקשה שלכם בבדיקה';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'נדרש עדכון';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => 'התקינו את אפליקציית Omi העדכנית כדי להמשיך לאחר העברת החשבון.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'העברה בתהליך';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage => 'החשבון שלכם בהעברה. תכונות המוצר מושהות עד לסיום ההעברה.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'החשבון שלכם בתחזוקה לאחר ביטול העברה. ייתכן שנתונים חדשים יותר נותרו מבודדים.';
+
+  @override
+  String get accountCutoverOpenStore => 'פתחו חנות';
+
+  @override
+  String get chatScopeToday => 'היום';
+
+  @override
+  String get chatScopeThisWeek => 'השבוע הזה';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'אודות: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'שאל על זה';
+
+  @override
+  String get sendRawAudioToOmi => 'שליחת שמע גולמי ל-Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'כבו כדי למנוע שליחת שמע גולמי ל-Omi. תמלילים ונתונים הדרושים לתכונות הענן עדיין עשויים להישלח ל-Omi.';
+
+  @override
+  String get findDevice => 'איתור';
+
+  @override
+  String get diagnosticsShareFailed => 'לא ניתן היה לשתף את האבחון. נסה שוב.';
+
+  @override
+  String get appDisabledTitle => 'האפליקציה הזו מושבתת ולא ניתן להתקין אותה.';
+
+  @override
+  String get appDisabledWebhookFailures => 'נקודת הקצה שלה נכשלה 72 שעות ברציפות, ולכן המשלוחים הופסקו.';
+
+  @override
+  String get appDisabledGeneric => 'היא הושבתה על ידי Omi.';
+
+  @override
+  String get appDisabledOwnerHint => 'תקן קודם את נקודת הקצה — הפעלה מחדש בודקת שוב כל כתובת URL מוגדרת.';
+
+  @override
+  String get appReEnable => 'הפעל מחדש';
+
+  @override
+  String get appReEnableFailedTitle => 'ההפעלה מחדש נכשלה';
+
+  @override
+  String get appReEnableFailedBody => 'לא ניתן היה להפעיל מחדש את האפליקציה הזו. נסה שוב.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'הושבתה בתאריך $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'השגיאה האחרונה: $error';
+  }
 }

@@ -323,7 +323,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get searchApps => 'Apps zoeken...';
 
   @override
-  String get myApps => 'Mijn apps';
+  String get myApps => 'Door mij gemaakt';
 
   @override
   String get installedApps => 'Geïnstalleerde apps';
@@ -745,11 +745,6 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'Je abonnement wordt geannuleerd op $date.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'Je abonnement wordt verlengd op $date.';
   }
 
   @override
@@ -2133,16 +2128,16 @@ class AppLocalizationsNl extends AppLocalizations {
   String get editMemory => '✏️ Geheugen bewerken';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Vastzetten als basis';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Losmaken van basis';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Basisherinnering';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Altijd in context';
 
   @override
   String get memoryContentHint => 'Ik hou van ijs eten...';
@@ -9801,4 +9796,134 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Te oud om te synchroniseren — Omi kan deze niet accepteren';
+
+  @override
+  String get planSheetChooseYourPlan => 'Kies je abonnement om onbeperkt Omi te ontgrendelen.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Beschikbaar op Mac, mobiel en web';
+
+  @override
+  String get popularBadge => 'POPULAIR';
+
+  @override
+  String get worksOnDesktop => 'Werkt op desktop';
+
+  @override
+  String get noDesktopAccess => 'Werkt niet op desktop';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months maanden / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count maanden gratis',
+      one: '1 maand gratis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi is gratis, maar de gratis versie heeft beperkingen die je ervaring beïnvloeden:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 seconden vertraging (niet realtime)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Overstappen naar de gratis versie';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Krijg gratis onbeperkte toegang';
+
+  @override
+  String get shareDataForTraining => 'Gegevens delen voor training';
+
+  @override
+  String get yourRequestUnderReview => 'Je aanvraag wordt beoordeeld';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Update vereist';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Installeer de nieuwste Omi-app om door te gaan na de accountmigratie.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migratie bezig';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Je account wordt gemigreerd. Productfuncties zijn gepauzeerd tot de migratie klaar is.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Je account is in onderhoud na een migratie-rollback. Nieuwere data kan geïsoleerd zijn.';
+
+  @override
+  String get accountCutoverOpenStore => 'Store openen';
+
+  @override
+  String get chatScopeToday => 'Vandaag';
+
+  @override
+  String get chatScopeThisWeek => 'Deze week';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Over: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Hiernaar vragen';
+
+  @override
+  String get sendRawAudioToOmi => 'Onbewerkte audio naar Omi sturen';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Schakel uit om te voorkomen dat onbewerkte audio naar Omi wordt gestuurd. Transcripties en gegevens die cloudfuncties nodig hebben, kunnen nog steeds naar Omi worden gestuurd.';
+
+  @override
+  String get findDevice => 'Zoeken';
+
+  @override
+  String get diagnosticsShareFailed => 'Kon de diagnostiek niet delen. Probeer het opnieuw.';
+
+  @override
+  String get appDisabledTitle => 'Deze app is uitgeschakeld en kan niet worden geïnstalleerd.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Het endpoint faalde 72 uur achter elkaar, daarom is de bezorging gestopt.';
+
+  @override
+  String get appDisabledGeneric => 'De app is door Omi uitgeschakeld.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Repareer eerst het endpoint — bij het opnieuw inschakelen wordt elke ingestelde URL opnieuw gecontroleerd.';
+
+  @override
+  String get appReEnable => 'Opnieuw inschakelen';
+
+  @override
+  String get appReEnableFailedTitle => 'Opnieuw inschakelen mislukt';
+
+  @override
+  String get appReEnableFailedBody => 'Deze app kon niet opnieuw worden ingeschakeld. Probeer het opnieuw.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Uitgeschakeld op $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Laatste fout: $error.';
+  }
 }

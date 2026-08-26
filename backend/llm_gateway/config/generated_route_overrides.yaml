@@ -4,9 +4,11 @@ generated_route_overrides:
   - feature: app_generator
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: medium}
+  # Function tools on /v1/chat/completions require reasoning_effort=none for gpt-5.6-luna
+  # (OpenAI rejects tools + medium/high effort on that surface).
   - feature: chat_agent
     primary: {provider: openai, model: gpt-5.6-luna}
-    provider_options: {reasoning_effort: medium}
+    provider_options: {reasoning_effort: none}
   - feature: chat_extraction
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
@@ -40,6 +42,12 @@ generated_route_overrides:
   - feature: daily_summary_simple
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}
+  - feature: desktop_proactive_extraction
+    primary: {provider: openai, model: gpt-5-nano}
+    provider_options: {reasoning_effort: minimal}
+  - feature: desktop_proactive_reasoning
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: low}
   - feature: external_structure
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
@@ -67,6 +75,18 @@ generated_route_overrides:
   - feature: memory_conflict
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
+  - feature: memory_conflict_flex
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: low}
+    request_timeout_ms: 900000
+  - feature: memory_l2_flex
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: medium}
+    request_timeout_ms: 900000
+  - feature: x_memory_extraction_flex
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: low}
+    request_timeout_ms: 900000
   - feature: memory_l1
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
@@ -97,3 +117,6 @@ generated_route_overrides:
   - feature: what_matters_now
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
+  - feature: wake_word_adjudication
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: high}

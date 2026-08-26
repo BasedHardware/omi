@@ -107,6 +107,173 @@
         "title": "AcceptSharedTasksRequest",
         "type": "object"
       },
+      "AccountCutoverCheckpointPhase": {
+        "description": "Forward-migration checkpoint phases (legacy-side seam only).",
+        "enum": [
+          "not_started",
+          "inventory",
+          "offline_queue_fenced",
+          "exporting",
+          "importing",
+          "verifying",
+          "cutover_ready",
+          "completed",
+          "failed",
+          "paused"
+        ],
+        "title": "AccountCutoverCheckpointPhase",
+        "type": "string"
+      },
+      "AccountCutoverClientAction": {
+        "description": "Fail-closed client surface before product traffic.",
+        "enum": [
+          "none",
+          "force_upgrade",
+          "migration_maintenance"
+        ],
+        "title": "AccountCutoverClientAction",
+        "type": "string"
+      },
+      "AccountCutoverControl": {
+        "additionalProperties": false,
+        "description": "Authenticated bootstrap/control projection for bridge clients.",
+        "properties": {
+          "account_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "api_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Api Generation",
+            "type": "integer"
+          },
+          "auth_bootstrap_reachable": {
+            "default": true,
+            "title": "Auth Bootstrap Reachable",
+            "type": "boolean"
+          },
+          "client_action": {
+            "$ref": "#/components/schemas/AccountCutoverClientAction",
+            "default": "none"
+          },
+          "legacy_writes_allowed": {
+            "default": true,
+            "title": "Legacy Writes Allowed",
+            "type": "boolean"
+          },
+          "migration": {
+            "$ref": "#/components/schemas/AccountCutoverManifestSummary"
+          },
+          "minimum_supported_builds": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PlatformMinimumBuild"
+            },
+            "title": "Minimum Supported Builds",
+            "type": "array"
+          },
+          "offline_queue_instruction": {
+            "$ref": "#/components/schemas/OfflineQueueInstruction",
+            "default": "none"
+          },
+          "product_traffic_allowed": {
+            "default": true,
+            "title": "Product Traffic Allowed",
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AccountCutoverState",
+            "default": "legacy"
+          },
+          "stranded_new_data": {
+            "default": false,
+            "title": "Stranded New Data",
+            "type": "boolean"
+          },
+          "ui_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Ui Generation",
+            "type": "integer"
+          }
+        },
+        "title": "AccountCutoverControl",
+        "type": "object"
+      },
+      "AccountCutoverManifestSummary": {
+        "additionalProperties": false,
+        "description": "Opaque forward-migration manifest identity without user content.",
+        "properties": {
+          "checkpoint_phase": {
+            "$ref": "#/components/schemas/AccountCutoverCheckpointPhase",
+            "default": "not_started"
+          },
+          "checkpoint_token": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Token"
+          },
+          "destination_backend_bound": {
+            "default": false,
+            "title": "Destination Backend Bound",
+            "type": "boolean"
+          },
+          "manifest_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Id"
+          },
+          "schema_version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "stranded_new_data": {
+            "default": false,
+            "title": "Stranded New Data",
+            "type": "boolean"
+          }
+        },
+        "title": "AccountCutoverManifestSummary",
+        "type": "object"
+      },
+      "AccountCutoverState": {
+        "description": "Legal whole-account cutover states.\n\n``rolled_back_stranded`` records that the account returned to the legacy\ndata plane after ``new`` while acknowledging that new-backend writes may\nremain stranded and are not automatically reconciled.",
+        "enum": [
+          "legacy",
+          "migrating",
+          "new",
+          "rolled_back_stranded"
+        ],
+        "title": "AccountCutoverState",
+        "type": "string"
+      },
       "Action": {
         "properties": {
           "action": {
@@ -213,6 +380,18 @@
             "description": "True only when the commitment names a concrete deliverable or outcome",
             "title": "Concrete Deliverable"
           },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One line explaining why or how the item matters",
+            "title": "Context"
+          },
           "conversation_id": {
             "anyOf": [
               {
@@ -256,6 +435,34 @@
             "description": "When the action item is due",
             "title": "Due At"
           },
+          "due_certainty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirmed",
+                  "tentative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether the due date was confirmed or only discussed tentatively",
+            "title": "Due Certainty"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The person's name when the owner is known",
+            "title": "Owner Name"
+          },
           "ownership_confidence": {
             "anyOf": [
               {
@@ -268,6 +475,13 @@
               }
             ],
             "title": "Ownership Confidence"
+          },
+          "source_segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Segment Ids",
+            "type": "array"
           },
           "target_task_id": {
             "anyOf": [
@@ -518,6 +732,17 @@
       },
       "ActionItemIdsResponse": {
         "properties": {
+          "completed_scope": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed Scope"
+          },
           "ids": {
             "items": {
               "type": "string"
@@ -1054,6 +1279,7 @@
         "type": "object"
       },
       "ActionItemsResponse": {
+        "description": "List envelope; ``truncated`` is set only when the request's list-read\nbudget ended the aggregate scan early (#11831) — such pages may not be a\ncomplete prefix, so ``has_more`` is forced true as well.",
         "properties": {
           "action_items": {
             "items": {
@@ -1065,6 +1291,11 @@
           "has_more": {
             "default": false,
             "title": "Has More",
+            "type": "boolean"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
             "type": "boolean"
           }
         },
@@ -1214,30 +1445,6 @@
         "title": "AdviceResponse",
         "type": "object"
       },
-      "AgentKeepaliveResponse": {
-        "properties": {
-          "ok": {
-            "title": "Ok",
-            "type": "boolean"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          }
-        },
-        "required": [
-          "ok"
-        ],
-        "title": "AgentKeepaliveResponse",
-        "type": "object"
-      },
       "AgentToolSchema": {
         "properties": {
           "description": {
@@ -1276,30 +1483,6 @@
           "tools"
         ],
         "title": "AgentToolsResponse",
-        "type": "object"
-      },
-      "AgentVmInfo": {
-        "properties": {
-          "has_vm": {
-            "title": "Has Vm",
-            "type": "boolean"
-          },
-          "status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Status"
-          }
-        },
-        "required": [
-          "has_vm"
-        ],
-        "title": "AgentVmInfo",
         "type": "object"
       },
       "Announcement": {
@@ -1514,6 +1697,28 @@
             ],
             "default": false,
             "title": "Disabled"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At"
+          },
+          "disabled_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Error"
           },
           "disabled_reason": {
             "anyOf": [
@@ -2009,6 +2214,28 @@
             ],
             "default": false,
             "title": "Disabled"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At"
+          },
+          "disabled_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Error"
           },
           "disabled_reason": {
             "anyOf": [
@@ -3881,6 +4108,16 @@
               }
             ],
             "title": "Update Channel"
+          },
+          "web_search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebSearchAssistantSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "AssistantSettingsResponse",
@@ -4097,6 +4334,40 @@
           "url"
         ],
         "title": "AuthStep",
+        "type": "object"
+      },
+      "AvailableLanguage": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "AvailableLanguage",
+        "type": "object"
+      },
+      "AvailableLanguagesResponse": {
+        "properties": {
+          "languages": {
+            "items": {
+              "$ref": "#/components/schemas/AvailableLanguage"
+            },
+            "title": "Languages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "languages"
+        ],
+        "title": "AvailableLanguagesResponse",
         "type": "object"
       },
       "AvailablePlansResponse": {
@@ -4936,6 +5207,49 @@
         "title": "CandidateAction",
         "type": "string"
       },
+      "CandidateCompatibilityMetadata": {
+        "additionalProperties": false,
+        "description": "Released-client annotations retained outside the canonical task payload.\n\nStaged-task clients historically supplied these fields for presentation and\nordering. They are carried on the Candidate envelope so the compatibility\nprojection remains lossless without weakening the strict task contract.",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "relevance_score": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance Score"
+          }
+        },
+        "title": "CandidateCompatibilityMetadata",
+        "type": "object"
+      },
       "CandidateCreate": {
         "description": "Strict request union; each wire arm contains only fields valid for that action.",
         "discriminator": {
@@ -5297,6 +5611,16 @@
             "title": "Capture Confidence",
             "type": "number"
           },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5309,6 +5633,18 @@
             "minItems": 1,
             "title": "Evidence Refs",
             "type": "array"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
           },
           "goal_id": {
             "anyOf": [
@@ -6251,6 +6587,97 @@
         "title": "ColdStartSequenceTerminalReceipt",
         "type": "object"
       },
+      "ConnectorSynthesisRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "existing_memories": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Existing Memories",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "calendar",
+              "gmail",
+              "notes"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "items"
+        ],
+        "title": "ConnectorSynthesisRequest",
+        "type": "object"
+      },
+      "ConnectorSynthesisResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "profile": {
+            "default": "",
+            "title": "Profile",
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorSynthesisTask"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memories",
+          "tasks"
+        ],
+        "title": "ConnectorSynthesisResponse",
+        "type": "object"
+      },
+      "ConnectorSynthesisTask": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "due_at": {
+            "default": "",
+            "title": "Due At",
+            "type": "string"
+          },
+          "priority": {
+            "default": "medium",
+            "title": "Priority",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "ConnectorSynthesisTask",
+        "type": "object"
+      },
       "ContextMatchSignal": {
         "enum": [
           "app",
@@ -6519,6 +6946,11 @@
             "title": "Id",
             "type": "string"
           },
+          "imported": {
+            "default": false,
+            "title": "Imported",
+            "type": "boolean"
+          },
           "is_locked": {
             "default": false,
             "title": "Is Locked",
@@ -6534,6 +6966,44 @@
               }
             ],
             "title": "Language"
+          },
+          "meeting_dedup_speech_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Dedup Speech S"
+          },
+          "meeting_duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Duration S"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
+          "meeting_treatment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Treatment Reason"
           },
           "photos": {
             "default": [],
@@ -6577,6 +7047,11 @@
               }
             ],
             "title": "Processing Memory Id"
+          },
+          "screenshot_sharing_enabled": {
+            "default": true,
+            "title": "Screenshot Sharing Enabled",
+            "type": "boolean"
           },
           "source": {
             "anyOf": [
@@ -6659,6 +7134,11 @@
               }
             ],
             "title": "Updated At"
+          },
+          "uses_custom_stt": {
+            "default": false,
+            "title": "Uses Custom Stt",
+            "type": "boolean"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
@@ -6959,6 +7439,11 @@
             "title": "Id",
             "type": "string"
           },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -6982,6 +7467,11 @@
           "job_id": {
             "title": "Job Id",
             "type": "string"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
           },
           "retryable": {
             "title": "Retryable",
@@ -7009,6 +7499,74 @@
           "task_retry_count"
         ],
         "title": "ConversationFinalizationStatusResponse",
+        "type": "object"
+      },
+      "ConversationLinkActionItemSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "ConversationLinkActionItemSpec",
+        "type": "object"
+      },
+      "ConversationLinkSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "recommended_action_items": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationLinkActionItemSpec"
+            },
+            "maxItems": 8,
+            "title": "Recommended Action Items",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "const": "conversationLink",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "conversation_id",
+          "summary"
+        ],
+        "title": "ConversationLinkSpec",
         "type": "object"
       },
       "ConversationMutationResponse": {
@@ -7098,6 +7656,534 @@
         "title": "ConversationRecordingResponse",
         "type": "object"
       },
+      "ConversationScreenFrame": {
+        "properties": {
+          "caption": {
+            "maxLength": 160,
+            "title": "Caption",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "content_url": {
+            "title": "Content Url",
+            "type": "string"
+          },
+          "focal_region": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NormalizedRect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ground": {
+            "$ref": "#/components/schemas/ScreenFrameGround"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Labels",
+            "type": "array"
+          },
+          "rank": {
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Rank",
+            "type": "integer"
+          },
+          "role": {
+            "enum": [
+              "banner",
+              "strip"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "source_badge": {
+            "anyOf": [
+              {
+                "enum": [
+                  "code",
+                  "browser",
+                  "document",
+                  "slides",
+                  "product"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Badge"
+          },
+          "thumbnail_url": {
+            "title": "Thumbnail Url",
+            "type": "string"
+          },
+          "url_expires_at": {
+            "format": "date-time",
+            "title": "Url Expires At",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "captured_at",
+          "role",
+          "rank",
+          "caption",
+          "labels",
+          "width",
+          "height",
+          "content_url",
+          "thumbnail_url",
+          "url_expires_at",
+          "ground"
+        ],
+        "title": "ConversationScreenFrame",
+        "type": "object"
+      },
+      "ConversationScreenFrameSet": {
+        "properties": {
+          "adjudicated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adjudicated At"
+          },
+          "banner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationScreenFrame"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "strip": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationScreenFrame"
+            },
+            "maxItems": 6,
+            "title": "Strip",
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "ConversationScreenFrameSet",
+        "type": "object"
+      },
+      "ConversationSearchItem": {
+        "description": "Search hit: base conversation fields plus optional transcript match evidence.",
+        "properties": {
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "apps_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AppResult"
+            },
+            "title": "Apps Results",
+            "type": "array"
+          },
+          "audio_files": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AudioFile"
+            },
+            "title": "Audio Files",
+            "type": "array"
+          },
+          "calendar_event": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarEventLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Twilio call SID for phone call conversations",
+            "title": "Call Id"
+          },
+          "client_device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Device Id"
+          },
+          "client_platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Platform"
+          },
+          "conversation_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationAudio"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_protection_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Protection Level"
+          },
+          "deferred": {
+            "default": false,
+            "title": "Deferred",
+            "type": "boolean"
+          },
+          "discarded": {
+            "default": false,
+            "title": "Discarded",
+            "type": "boolean"
+          },
+          "external_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Data"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ID of the folder this conversation belongs to",
+            "title": "Folder Id"
+          },
+          "geolocation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Geolocation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "imported": {
+            "default": false,
+            "title": "Imported",
+            "type": "boolean"
+          },
+          "is_locked": {
+            "default": false,
+            "title": "Is Locked",
+            "type": "boolean"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "match_snippets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptMatchSnippet"
+            },
+            "title": "Match Snippets",
+            "type": "array"
+          },
+          "meeting_dedup_speech_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Dedup Speech S"
+          },
+          "meeting_duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Duration S"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
+          "meeting_treatment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Treatment Reason"
+          },
+          "photos": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConversationPhoto"
+            },
+            "title": "Photos",
+            "type": "array"
+          },
+          "plugins_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PluginResult"
+            },
+            "title": "Plugins Results",
+            "type": "array"
+          },
+          "private_cloud_sync_enabled": {
+            "default": false,
+            "title": "Private Cloud Sync Enabled",
+            "type": "boolean"
+          },
+          "processing_conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Conversation Id"
+          },
+          "processing_memory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Memory Id"
+          },
+          "screenshot_sharing_enabled": {
+            "default": true,
+            "title": "Screenshot Sharing Enabled",
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationSource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "omi"
+          },
+          "starred": {
+            "default": false,
+            "title": "Starred",
+            "type": "boolean"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "completed"
+          },
+          "structured": {
+            "$ref": "#/components/schemas/Structured"
+          },
+          "suggested_summarization_apps": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested Summarization Apps",
+            "type": "array"
+          },
+          "transcript_segments": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegment"
+            },
+            "title": "Transcript Segments",
+            "type": "array"
+          },
+          "transcript_segments_compressed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Transcript Segments Compressed"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "uses_custom_stt": {
+            "default": false,
+            "title": "Uses Custom Stt",
+            "type": "boolean"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/ConversationVisibility",
+            "default": "private"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "structured"
+        ],
+        "title": "ConversationSearchItem",
+        "type": "object"
+      },
       "ConversationSource": {
         "enum": [
           "friend",
@@ -7180,6 +8266,39 @@
           "summary"
         ],
         "title": "ConversationTestPromptResponse",
+        "type": "object"
+      },
+      "ConversationTopicRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "transcript": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Transcript",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcript"
+        ],
+        "title": "ConversationTopicRequest",
+        "type": "object"
+      },
+      "ConversationTopicResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "emoji": {
+            "default": "",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "ConversationTopicResponse",
         "type": "object"
       },
       "ConversationVisibility": {
@@ -7415,6 +8534,35 @@
             ],
             "description": "Stable client-generated session ID. When provided, retries return the same conversation ID.",
             "title": "Client Session Id"
+          },
+          "conversation_finalization_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user_stop",
+                  "finish_and_continue",
+                  "meeting_started",
+                  "meeting_ended",
+                  "max_duration_rotation",
+                  "crash_recovery",
+                  "retry"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Finalization Reason"
+          },
+          "conversation_role": {
+            "default": "ambient",
+            "enum": [
+              "ambient",
+              "meeting"
+            ],
+            "title": "Conversation Role",
+            "type": "string"
           },
           "finished_at": {
             "anyOf": [
@@ -10207,6 +11355,18 @@
             ],
             "title": "Device Id"
           },
+          "end_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Seconds"
+          },
           "excerpt_hash": {
             "anyOf": [
               {
@@ -10231,6 +11391,35 @@
           },
           "scope": {
             "$ref": "#/components/schemas/EvidenceScope"
+          },
+          "start_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Seconds"
+          },
+          "transcript_segment_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Segment Ids"
           },
           "version": {
             "anyOf": [
@@ -10463,6 +11652,116 @@
         ],
         "title": "ExternalIntegrationConversationSource",
         "type": "string"
+      },
+      "ExtractKnowledgeGraphRequest": {
+        "properties": {
+          "include_existing": {
+            "default": false,
+            "title": "Include Existing",
+            "type": "boolean"
+          },
+          "text": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "user_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Name"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ExtractKnowledgeGraphRequest",
+        "type": "object"
+      },
+      "ExtractKnowledgeGraphResponse": {
+        "properties": {
+          "edges": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "title": "ExtractKnowledgeGraphResponse",
+        "type": "object"
+      },
+      "ExtractMemoryLogRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "existing_memories": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Existing Memories",
+            "type": "array"
+          },
+          "text": {
+            "maxLength": 40000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "text_source": {
+            "default": "memory_log",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Text Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ExtractMemoryLogRequest",
+        "type": "object"
+      },
+      "ExtractMemoryLogResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "profile": {
+            "default": "",
+            "title": "Profile",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memories"
+        ],
+        "title": "ExtractMemoryLogResponse",
+        "type": "object"
       },
       "FairUseDailyGenerationsBudgetResponse": {
         "properties": {
@@ -11208,6 +12507,14 @@
               }
             ],
             "title": "Language"
+          },
+          "match_snippets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/routers__mcp__TranscriptMatchSnippet"
+            },
+            "title": "Match Snippets",
+            "type": "array"
           },
           "started_at": {
             "anyOf": [
@@ -12451,6 +13758,17 @@
             ],
             "title": "Conversations Created"
           },
+          "conversations_skipped": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversations Skipped"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -12792,6 +14110,181 @@
           "edges"
         ],
         "title": "KnowledgeGraphResponse",
+        "type": "object"
+      },
+      "LegacyMaterializePromptsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "intents": {
+            "items": {
+              "$ref": "#/components/schemas/LegacyProactiveIntent"
+            },
+            "title": "Intents",
+            "type": "array"
+          }
+        },
+        "title": "LegacyMaterializePromptsResponse",
+        "type": "object"
+      },
+      "LegacyProactiveIntent": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "captureLink": "#/components/schemas/CaptureLinkSpec",
+                  "goalLink": "#/components/schemas/GoalLinkSpec",
+                  "memoryLink": "#/components/schemas/MemoryLinkSpec",
+                  "questionCard": "#/components/schemas/QuestionCardSpec",
+                  "taskCard": "#/components/schemas/TaskCardSpec"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/QuestionCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/TaskCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/GoalLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/CaptureLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/MemoryLinkSpec"
+                }
+              ]
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "cold_start_sequence_terminal_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal Receipt Id"
+          },
+          "cold_start_sequence_terminal_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "abandoned"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal State"
+          },
+          "continuity_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Continuity Key",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "delivery_state": {
+            "default": "ready",
+            "enum": [
+              "ready",
+              "pending_kernel_receipt",
+              "delivered"
+            ],
+            "title": "Delivery State",
+            "type": "string"
+          },
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "materialization_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialization Receipt Id"
+          },
+          "source": {
+            "enum": [
+              "daily_opener",
+              "capture_arrival",
+              "deferral_reraise",
+              "agent_judgment",
+              "cold_start_rich",
+              "cold_start_sparse"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatFirstSubject"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "intent_id",
+          "continuity_key",
+          "account_generation",
+          "source",
+          "blocks",
+          "created_at"
+        ],
+        "title": "LegacyProactiveIntent",
         "type": "object"
       },
       "LinkCalendarEventRequest": {
@@ -14037,9 +15530,19 @@
             "title": "Is Baseline",
             "type": "boolean"
           },
+          "is_dismissed": {
+            "default": false,
+            "title": "Is Dismissed",
+            "type": "boolean"
+          },
           "is_locked": {
             "default": false,
             "title": "Is Locked",
+            "type": "boolean"
+          },
+          "is_read": {
+            "default": false,
+            "title": "Is Read",
             "type": "boolean"
           },
           "kg_extracted": {
@@ -14303,6 +15806,36 @@
         "title": "MemoryMutationResponse",
         "type": "object"
       },
+      "MemoryReadStatusRequest": {
+        "additionalProperties": false,
+        "description": "Durable UI read/dismiss mutation for a single memory.",
+        "properties": {
+          "is_dismissed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Dismissed"
+          },
+          "is_read": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Read"
+          }
+        },
+        "title": "MemoryReadStatusRequest",
+        "type": "object"
+      },
       "MemoryReviewItemResponse": {
         "additionalProperties": true,
         "properties": {
@@ -14503,6 +16036,15 @@
               }
             ],
             "title": "Client Message Id"
+          },
+          "content_blocks": {
+            "description": "Structured chat content blocks. New rows store these directly; legacy rows are projected from metadata.content_blocks.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Content Blocks",
+            "type": "array"
           },
           "created_at": {
             "format": "date-time",
@@ -14942,6 +16484,35 @@
         "title": "NormalizedContextSnapshot",
         "type": "object"
       },
+      "NormalizedRect": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "number"
+          },
+          "width": {
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "NormalizedRect",
+        "type": "object"
+      },
       "NotificationSettingsResponse": {
         "properties": {
           "enabled": {
@@ -14974,6 +16545,16 @@
         ],
         "title": "OAuthUrlResponse",
         "type": "object"
+      },
+      "OfflineQueueInstruction": {
+        "description": "Server instruction for legacy offline/outbox queues on clients.\n\n``drain`` is only legal before the migration fence (legacy plane still\nwritable). ``quarantine`` applies once the account enters ``migrating``.",
+        "enum": [
+          "none",
+          "drain",
+          "quarantine"
+        ],
+        "title": "OfflineQueueInstruction",
+        "type": "string"
       },
       "OnboardingStateResponse": {
         "properties": {
@@ -15402,8 +16983,19 @@
         "type": "object"
       },
       "PageContext": {
-        "description": "Page context for chat - indicates what the user is currently viewing.",
+        "description": "Page context for chat - indicates what the user is currently viewing.\n\nWhen ``type`` is ``conversation`` with an ``id``, and/or ``start_date`` /\n``end_date`` are set, retrieval tools hard-scope to that conversation and/or\ntimeframe (#4515). Dates must include a timezone offset\n(YYYY-MM-DDTHH:MM:SS+HH:MM).",
         "properties": {
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
           "id": {
             "anyOf": [
               {
@@ -15414,6 +17006,17 @@
               }
             ],
             "title": "Id"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
           },
           "title": {
             "anyOf": [
@@ -16034,6 +17637,28 @@
         "title": "PlanType",
         "type": "string"
       },
+      "PlatformMinimumBuild": {
+        "additionalProperties": false,
+        "properties": {
+          "minimum_supported_build": {
+            "minimum": 0.0,
+            "title": "Minimum Supported Build",
+            "type": "integer"
+          },
+          "platform": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Platform",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "minimum_supported_build"
+        ],
+        "title": "PlatformMinimumBuild",
+        "type": "object"
+      },
       "PluginResult": {
         "properties": {
           "content": {
@@ -16120,6 +17745,7 @@
               "discriminator": {
                 "mapping": {
                   "captureLink": "#/components/schemas/CaptureLinkSpec",
+                  "conversationLink": "#/components/schemas/ConversationLinkSpec",
                   "goalLink": "#/components/schemas/GoalLinkSpec",
                   "memoryLink": "#/components/schemas/MemoryLinkSpec",
                   "questionCard": "#/components/schemas/QuestionCardSpec",
@@ -16139,6 +17765,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/CaptureLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/ConversationLinkSpec"
                 },
                 {
                   "$ref": "#/components/schemas/MemoryLinkSpec"
@@ -16806,10 +18435,16 @@
             "type": "integer"
           },
           "cost_usd": {
-            "default": 0.0,
-            "minimum": 0.0,
-            "title": "Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
           },
           "input_tokens": {
             "default": 0,
@@ -16831,6 +18466,50 @@
           }
         },
         "title": "RecordLlmUsageBucketRequest",
+        "type": "object"
+      },
+      "ReferralClaimRequest": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ReferralClaimRequest",
+        "type": "object"
+      },
+      "ReferralClaimResponse": {
+        "properties": {
+          "claimed": {
+            "title": "Claimed",
+            "type": "boolean"
+          },
+          "trial_days": {
+            "title": "Trial Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "claimed",
+          "trial_days"
+        ],
+        "title": "ReferralClaimResponse",
+        "type": "object"
+      },
+      "ReferralLinkResponse": {
+        "properties": {
+          "referral_url": {
+            "title": "Referral Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "referral_url"
+        ],
+        "title": "ReferralLinkResponse",
         "type": "object"
       },
       "ReorderFoldersRequest": {
@@ -16931,6 +18610,15 @@
               }
             ],
             "title": "Client Message Id"
+          },
+          "content_blocks": {
+            "description": "Structured chat content blocks. New rows store these directly; legacy rows are projected from metadata.content_blocks.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Content Blocks",
+            "type": "array"
           },
           "created_at": {
             "format": "date-time",
@@ -17306,6 +18994,369 @@
         "title": "SavePayPalPaymentDetailsRequest",
         "type": "object"
       },
+      "ScreenActivityAppSummary": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "window_titles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Window Titles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "ScreenActivityAppSummary",
+        "type": "object"
+      },
+      "ScreenActivityRow": {
+        "properties": {
+          "appName": {
+            "default": "",
+            "title": "Appname",
+            "type": "string"
+          },
+          "clientDeviceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clientdeviceid"
+          },
+          "deviceName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Devicename"
+          },
+          "embedding": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "ocrText": {
+            "default": "",
+            "title": "Ocrtext",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "windowTitle": {
+            "default": "",
+            "title": "Windowtitle",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "timestamp"
+        ],
+        "title": "ScreenActivityRow",
+        "type": "object"
+      },
+      "ScreenActivitySummaryResponse": {
+        "properties": {
+          "apps": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ScreenActivityAppSummary"
+            },
+            "title": "Apps",
+            "type": "object"
+          },
+          "total_screenshots": {
+            "title": "Total Screenshots",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "apps",
+          "total_screenshots"
+        ],
+        "title": "ScreenActivitySummaryResponse",
+        "type": "object"
+      },
+      "ScreenActivitySyncRequest": {
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenActivityRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rows"
+        ],
+        "title": "ScreenActivitySyncRequest",
+        "type": "object"
+      },
+      "ScreenFrameAdjudicationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenFrameCandidateIn"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "purpose": {
+            "const": "meeting_note_v1",
+            "title": "Purpose",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/ScreenFrameSubjectIn"
+          }
+        },
+        "required": [
+          "schema_version",
+          "attempt_id",
+          "purpose",
+          "subject",
+          "candidates"
+        ],
+        "title": "ScreenFrameAdjudicationRequest",
+        "type": "object"
+      },
+      "ScreenFrameAdjudicationResponse": {
+        "properties": {
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "frame_set": {
+            "$ref": "#/components/schemas/ConversationScreenFrameSet"
+          },
+          "outcome": {
+            "enum": [
+              "committed",
+              "no_approved_frames"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt_id",
+          "outcome",
+          "frame_set"
+        ],
+        "title": "ScreenFrameAdjudicationResponse",
+        "type": "object"
+      },
+      "ScreenFrameCandidateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes_base64": {
+            "title": "Bytes Base64",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "client_frame_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Client Frame Id",
+            "type": "string"
+          },
+          "declared_height": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Declared Height",
+            "type": "integer"
+          },
+          "declared_width": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Declared Width",
+            "type": "integer"
+          },
+          "mime_type": {
+            "enum": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "sha256_base64": {
+            "maxLength": 44,
+            "minLength": 44,
+            "title": "Sha256 Base64",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_frame_id",
+          "captured_at",
+          "mime_type",
+          "declared_width",
+          "declared_height",
+          "sha256_base64",
+          "bytes_base64"
+        ],
+        "title": "ScreenFrameCandidateIn",
+        "type": "object"
+      },
+      "ScreenFrameGround": {
+        "additionalProperties": false,
+        "description": "Gradient stops derived from the canonical bytes at approval time.\n\nBoth clients render the banner from these; neither samples pixels. A\nsigned cross-origin URL cannot be read back from a canvas (no guaranteed\nCORS headers), and two independent extractions (Swift on macOS, JS on\nweb) would drift from each other anyway. Extracted once, server-side,\nfrom the canonical JPEG — see utils/screen_frames/palette.py, a port of\ndesktop/macos/Desktop/Sources/MeetingScreenshots/MeetingBannerPalette.swift.",
+        "properties": {
+          "is_neutral": {
+            "title": "Is Neutral",
+            "type": "boolean"
+          },
+          "stops": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Stops",
+            "type": "array"
+          }
+        },
+        "required": [
+          "stops",
+          "is_neutral"
+        ],
+        "title": "ScreenFrameGround",
+        "type": "object"
+      },
+      "ScreenFrameSettings": {
+        "additionalProperties": false,
+        "description": "The account-level setting gating screen-frame egress admission\n(contract §6, setting_key=\"meeting_note_screenshots_enabled\"). Shared and\nauthoritative across every device — desktop, web, a reinstall — because\nit protects the user from themselves (accidentally leaving the feature\non), not third parties from the user; the privacy judge is what protects\npeople appearing in frames. It does not need to be tamper-proof, only\nconsistent, so it is a plain user-profile field, not a signed claim.",
+        "properties": {
+          "meeting_note_screenshots_enabled": {
+            "title": "Meeting Note Screenshots Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "meeting_note_screenshots_enabled"
+        ],
+        "title": "ScreenFrameSettings",
+        "type": "object"
+      },
+      "ScreenFrameSettingsUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "meeting_note_screenshots_enabled": {
+            "title": "Meeting Note Screenshots Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "meeting_note_screenshots_enabled"
+        ],
+        "title": "ScreenFrameSettingsUpdateRequest",
+        "type": "object"
+      },
+      "ScreenFrameSharingUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "ScreenFrameSharingUpdateRequest",
+        "type": "object"
+      },
+      "ScreenFrameSubjectIn": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "conversation",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "ScreenFrameSubjectIn",
+        "type": "object"
+      },
       "SearchConversationsResponse": {
         "properties": {
           "current_page": {
@@ -17314,7 +19365,7 @@
           },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/Conversation"
+              "$ref": "#/components/schemas/ConversationSearchItem"
             },
             "title": "Items",
             "type": "array"
@@ -17533,6 +19584,34 @@
         "title": "SearchedMemory",
         "type": "object"
       },
+      "Section": {
+        "properties": {
+          "body_markdown": {
+            "description": "Free-form markdown containing the section details",
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "heading": {
+            "description": "A descriptive heading chosen for this conversation",
+            "title": "Heading",
+            "type": "string"
+          },
+          "source_segment_ids": {
+            "description": "Transcript segment IDs that directly support this section",
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Segment Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "heading",
+          "body_markdown"
+        ],
+        "title": "Section",
+        "type": "object"
+      },
       "SendMessageRequest": {
         "properties": {
           "context": {
@@ -17569,6 +19648,40 @@
           "text"
         ],
         "title": "SendMessageRequest",
+        "type": "object"
+      },
+      "SendShareEmailRequest": {
+        "properties": {
+          "recipient_emails": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Recipient Emails",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipient_emails"
+        ],
+        "title": "SendShareEmailRequest",
+        "type": "object"
+      },
+      "SendShareEmailResponse": {
+        "properties": {
+          "sent_to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sent To",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sent_to"
+        ],
+        "title": "SendShareEmailResponse",
         "type": "object"
       },
       "SetConversationActionItemsStateRequest": {
@@ -17706,6 +19819,46 @@
           "token"
         ],
         "title": "ShareChatMessagesResponse",
+        "type": "object"
+      },
+      "ShareRecipient": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "ShareRecipient",
+        "type": "object"
+      },
+      "ShareRecipientsResponse": {
+        "properties": {
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/ShareRecipient"
+            },
+            "title": "Recipients",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipients"
+        ],
+        "title": "ShareRecipientsResponse",
         "type": "object"
       },
       "ShareTasksRequest": {
@@ -18048,6 +20201,11 @@
             "title": "Id",
             "type": "string"
           },
+          "imported": {
+            "default": false,
+            "title": "Imported",
+            "type": "boolean"
+          },
           "is_locked": {
             "default": false,
             "title": "Is Locked",
@@ -18063,6 +20221,44 @@
               }
             ],
             "title": "Language"
+          },
+          "meeting_dedup_speech_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Dedup Speech S"
+          },
+          "meeting_duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Duration S"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
+          "meeting_treatment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Treatment Reason"
           },
           "people": {
             "default": [],
@@ -18114,6 +20310,11 @@
               }
             ],
             "title": "Processing Memory Id"
+          },
+          "screenshot_sharing_enabled": {
+            "default": true,
+            "title": "Screenshot Sharing Enabled",
+            "type": "boolean"
           },
           "source": {
             "anyOf": [
@@ -18196,6 +20397,11 @@
               }
             ],
             "title": "Updated At"
+          },
+          "uses_custom_stt": {
+            "default": false,
+            "title": "Uses Custom Stt",
+            "type": "boolean"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
@@ -18398,6 +20604,14 @@
               }
             ],
             "title": "Language"
+          },
+          "match_snippets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/routers__mcp__TranscriptMatchSnippet"
+            },
+            "title": "Match Snippets",
+            "type": "array"
           },
           "started_at": {
             "anyOf": [
@@ -18647,6 +20861,40 @@
         "title": "SpeechProfileResponse",
         "type": "object"
       },
+      "SpeechProfileStatusResponse": {
+        "properties": {
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "has_profile": {
+            "title": "Has Profile",
+            "type": "boolean"
+          },
+          "sample_count": {
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "has_profile",
+          "duration_seconds",
+          "sample_count"
+        ],
+        "title": "SpeechProfileStatusResponse",
+        "type": "object"
+      },
       "SpeechProfileUploadResponse": {
         "properties": {
           "url": {
@@ -18881,6 +21129,14 @@
             "description": "A brief overview of the conversation, highlighting the key details from it",
             "title": "Overview",
             "type": "string"
+          },
+          "sections": {
+            "description": "Detailed, free-form note sections in the model-chosen structure",
+            "items": {
+              "$ref": "#/components/schemas/Section"
+            },
+            "title": "Sections",
+            "type": "array"
           },
           "title": {
             "default": "",
@@ -19454,6 +21710,88 @@
         "title": "SyncRequestValidationErrorResponse",
         "type": "object"
       },
+      "SynthesizeAIUserProfileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "conversations": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Conversations",
+            "type": "array"
+          },
+          "goals": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Goals",
+            "type": "array"
+          },
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Memories",
+            "type": "array"
+          },
+          "messages": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Messages",
+            "type": "array"
+          },
+          "past_profiles": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Past Profiles",
+            "type": "array"
+          },
+          "tasks": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "title": "SynthesizeAIUserProfileRequest",
+        "type": "object"
+      },
+      "SynthesizeAIUserProfileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data_sources_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Data Sources Used",
+            "type": "array"
+          },
+          "item_count": {
+            "title": "Item Count",
+            "type": "integer"
+          },
+          "profile_text": {
+            "title": "Profile Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_text",
+          "data_sources_used",
+          "item_count"
+        ],
+        "title": "SynthesizeAIUserProfileResponse",
+        "type": "object"
+      },
       "Targeting": {
         "description": "Controls who sees the announcement",
         "properties": {
@@ -19651,6 +21989,16 @@
             "minimum": 0.0,
             "title": "Capture Confidence",
             "type": "number"
+          },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "evidence_refs": {
             "items": {
@@ -19910,6 +22258,16 @@
             "title": "Capture Confidence",
             "type": "number"
           },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -20000,6 +22358,16 @@
             "minimum": 0.0,
             "title": "Capture Confidence",
             "type": "number"
+          },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "evidence_refs": {
             "items": {
@@ -20586,6 +22954,16 @@
             "title": "Capture Confidence",
             "type": "number"
           },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -20677,6 +23055,16 @@
             "title": "Capture Confidence",
             "type": "number"
           },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -20761,7 +23149,7 @@
       },
       "TaskWorkflowControl": {
         "additionalProperties": false,
-        "description": "Persisted workflow metadata plus the derived Chat-first capability.\n\n``workflow_mode`` remains readable for legacy records and operational\nhistory. It is not an entitlement. ``chat_first_ui`` is derived only from\nthe canonical-memory selector; persistence excludes it so clients cannot\nturn a sampled response into later authority.",
+        "description": "Persisted workflow metadata plus the derived Chat-first capability.\n\n``workflow_mode`` remains readable for legacy records and operational\nhistory. It is not an entitlement. ``chat_first_ui`` is derived from the\nuniversal task decision; persistence excludes it so clients cannot turn a\nsampled response into later authority.",
         "properties": {
           "account_generation": {
             "default": 0,
@@ -20885,6 +23273,86 @@
           "opted_in"
         ],
         "title": "TrainingDataOptInResponse",
+        "type": "object"
+      },
+      "TranscriptMatchSnippet": {
+        "description": "Grep-style transcript hit returned on conversation search for seek-to-moment UX.",
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "end_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          },
+          "segment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Id"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TranscriptMatchSnippet",
         "type": "object"
       },
       "TranscriptSegment": {
@@ -21692,6 +24160,16 @@
               }
             ],
             "title": "Update Channel"
+          },
+          "web_search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebSearchAssistantSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "UpdateAssistantSettingsRequest",
@@ -22835,6 +25313,23 @@
         "title": "VoiceMessageTranscriptionResponse",
         "type": "object"
       },
+      "WebSearchAssistantSettings": {
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          }
+        },
+        "title": "WebSearchAssistantSettings",
+        "type": "object"
+      },
       "WebhookType": {
         "enum": [
           "audio_bytes",
@@ -23069,6 +25564,16 @@
             "minimum": 0.0,
             "title": "Capture Confidence",
             "type": "number"
+          },
+          "compatibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateCompatibilityMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "evidence_refs": {
             "items": {
@@ -23490,6 +25995,134 @@
         "title": "WrappedStatusResponse",
         "type": "object"
       },
+      "routers__focus_sessions__ScreenActivityRow": {
+        "additionalProperties": true,
+        "description": "One captured screen-activity row. The desktop app owns the write shape and\nadds fields over time, so unknown keys pass through rather than being dropped.",
+        "properties": {
+          "appName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appname"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          },
+          "windowTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Windowtitle"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "ScreenActivityRow",
+        "type": "object"
+      },
+      "routers__mcp__TranscriptMatchSnippet": {
+        "description": "Grep-style transcript evidence for MCP search hits (#6621).",
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "end_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          },
+          "segment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Id"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TranscriptMatchSnippet",
+        "type": "object"
+      },
       "routers__memories__BatchMemoriesRequest": {
         "properties": {
           "memories": {
@@ -23630,9 +26263,103 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/account/cutover/control": {
+      "get": {
+        "description": "Stable authenticated bootstrap projection for bridge clients.\n\nAlways reachable for signed-in users, including while product traffic is\nfenced for migrating / force-upgrade / stranded states. Does not migrate\nany account; absent documents project as legacy. Malformed authoritative\ndocuments fail closed.",
+        "operationId": "get_account_cutover_control_v1_account_cutover_control_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountCutoverControl"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Account Cutover Control",
+        "tags": [
+          "account-cutover"
+        ]
+      }
+    },
     "/v1/action-items": {
       "get": {
-        "description": "Get action items for the current user.",
+        "description": "Get action items for the current user.\n\nLarge accounts can outrun the request budget; such reads return the honest\npartial page with ``truncated=true``, ``has_more=true``, and the\n``X-Omi-List-Truncated: true`` header instead of a bare middleware 504\n(#11831).",
         "operationId": "get_action_items_v1_action_items_get",
         "parameters": [
           {
@@ -24289,9 +27016,27 @@
     },
     "/v1/action-items/ids": {
       "get": {
-        "description": "Return all of the user's action-item IDs (IDs only, no field reads).\n\nA lightweight way for a client to reconcile which tasks it has without paging the full\nlist. Declared before /v1/action-items/{action_item_id} so the static path is not\ncaptured as an action item id.",
+        "description": "Return the user's action-item IDs (lightweight reconciliation).\n\nWithout ``completed``: returns every ID with no field reads — the cheapest\nway for a client to know which tasks it has without paging the full list.\n\nWith ``completed``: returns only non-deleted IDs in the requested bucket. The\n``completed`` bucket is filtered server-side; only documents in that bucket are\nstreamed (a two-field ``completed``, ``deleted`` projection), and the ``deleted``\nexclusion is still applied in Python since Firestore equality filters would drop\nundeleted rows that have no ``deleted`` field.\n\nDeclared before /v1/action-items/{action_item_id} so the static path is not\ncaptured as an action item id.",
         "operationId": "list_action_item_ids_v1_action_items_ids_get",
         "parameters": [
+          {
+            "description": "When present, return only non-deleted IDs in this completion bucket",
+            "in": "query",
+            "name": "completed",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "When present, return only non-deleted IDs in this completion bucket",
+              "title": "Completed"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -24457,7 +27202,6 @@
     },
     "/v1/action-items/restore-legacy-conversation-items": {
       "post": {
-        "description": "Safely restore rows moved by the now-retired desktop migration.",
         "operationId": "restore_legacy_conversation_items_v1_action_items_restore_legacy_conversation_items_post",
         "parameters": [
           {
@@ -25345,81 +28089,6 @@
         "summary": "Execute Tool"
       }
     },
-    "/v1/agent/keepalive": {
-      "post": {
-        "description": "Ping the VM's /ping endpoint to reset its idle auto-stop timer.",
-        "operationId": "keepalive_v1_agent_keepalive_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentKeepaliveResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Keepalive"
-      }
-    },
     "/v1/agent/tools": {
       "get": {
         "description": "Return all available tool definitions for a user.",
@@ -25493,156 +28162,6 @@
           }
         ],
         "summary": "List Tools"
-      }
-    },
-    "/v1/agent/vm-ensure": {
-      "post": {
-        "description": "Queue a fenced reconciliation when the persisted VM is unavailable.",
-        "operationId": "ensure_vm_v1_agent_vm_ensure_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentVmInfo"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Ensure Vm"
-      }
-    },
-    "/v1/agent/vm-status": {
-      "get": {
-        "description": "Return the user's agent VM info from Firestore.",
-        "operationId": "get_vm_status_v1_agent_vm_status_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentVmInfo"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Get Vm Status"
       }
     },
     "/v1/announcements": {
@@ -26666,19 +29185,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -26754,19 +29273,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -31541,7 +34060,7 @@
     },
     "/v1/chat/materialize-prompts": {
       "post": {
-        "description": "Fetch ready intents and accept kernel receipts; never writes a Chat row.",
+        "description": "Preserve the released block union; new receipt types remain pending for v2 clients.",
         "operationId": "materialize_prompts_v1_chat_materialize_prompts_post",
         "parameters": [
           {
@@ -31596,7 +34115,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MaterializePromptsResponse"
+                  "$ref": "#/components/schemas/LegacyMaterializePromptsResponse"
                 }
               }
             },
@@ -31621,15 +34140,103 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Materialize Prompts",
+        "summary": "Materialize Prompts V1",
         "tags": [
           "chat-first"
         ]
       }
     },
+    "/v1/connectors/synthesize": {
+      "post": {
+        "description": "Return-only calendar/gmail/notes synthesis through the managed memories feature.\n\nDoes not write Firestore. Desktop connector importers call this instead of building\ntheir own prompts and inventing memories via Anthropic Haiku chat completions, then\npersist through the normal memory/task write APIs.",
+        "operationId": "synthesize_connector_data_v1_connectors_synthesize_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectorSynthesisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorSynthesisResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Synthesize Connector Data",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
     "/v1/conversations": {
       "get": {
-        "description": "List responses may omit detail-only fields such as transcript_segments. Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript.",
+        "description": "List responses may omit detail-only fields such as transcript_segments. Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript. Large accounts can outrun the request budget; such responses return a partial newest-first array with the X-Omi-List-Truncated: true header instead of a 504 (#11831).",
         "operationId": "get_conversations_v1_conversations_get",
         "parameters": [
           {
@@ -32390,6 +34997,94 @@
           }
         ],
         "summary": "Search Conversations Endpoint",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/topic": {
+      "post": {
+        "description": "Return-only emoji + short title through the managed conv_structure feature.\n\nDoes not write Firestore. Desktop clients call this for the fast provisional title\non a just-saved conversation instead of inventing one via Anthropic Haiku chat\ncompletions; full backend processing still overwrites it later.",
+        "operationId": "generate_conversation_topic_endpoint_v1_conversations_topic_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationTopicRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationTopicResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Generate Conversation Topic Endpoint",
         "tags": [
           "conversations"
         ]
@@ -34230,8 +36925,20 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "description": "The selected app cannot summarize conversations"
+          },
           "401": {
             "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "description": "The selected app is not available to this user"
+          },
+          "404": {
+            "description": "The conversation or selected app does not exist"
+          },
+          "409": {
+            "description": "The selected app is disabled or not enabled by this user"
           },
           "422": {
             "content": {
@@ -34252,6 +36959,379 @@
         "summary": "Reprocess Conversation",
         "tags": [
           "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/screenshot-sharing": {
+      "patch": {
+        "operationId": "update_conversation_screenshot_sharing_v1_conversations__conversation_id__screenshot_sharing_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenFrameSharingUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Conversation Screenshot Sharing",
+        "tags": [
+          "screen_frames"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/screenshots": {
+      "delete": {
+        "operationId": "delete_all_conversation_screenshots_v1_conversations__conversation_id__screenshots_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Delete All Conversation Screenshots",
+        "tags": [
+          "screen_frames"
+        ]
+      },
+      "get": {
+        "operationId": "get_conversation_screenshots_v1_conversations__conversation_id__screenshots_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Screenshots",
+        "tags": [
+          "screen_frames"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/screenshots/{frame_id}": {
+      "delete": {
+        "operationId": "delete_conversation_screenshot_v1_conversations__conversation_id__screenshots__frame_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "frame_id",
+            "required": true,
+            "schema": {
+              "title": "Frame Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Delete Conversation Screenshot",
+        "tags": [
+          "screen_frames"
         ]
       }
     },
@@ -34587,6 +37667,193 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/share-email": {
+      "post": {
+        "description": "Send the meeting summary to the addresses the owner chose.\n\nThe card lets the owner type a recipient, so the address is theirs to pick\nrather than something we detected; detection only prefills the field. What\nkeeps this from being an open relay is unchanged: the sender must own the\nconversation, the mail carries only that conversation's own summary and\nshare link with the owner as reply-to, the request schema caps how many\naddresses one send may carry, and a per-owner daily quota bounds the total.\nSending\nmakes the conversation link-visible first (same contract as copying the\nshare link) so the emailed link resolves.",
+        "operationId": "send_conversation_share_email_v1_conversations__conversation_id__share_email_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendShareEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendShareEmailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Send Conversation Share Email",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/share-recipients": {
+      "get": {
+        "description": "Who the meeting summary could be sent to: calendar-detected participants minus the owner.",
+        "operationId": "get_conversation_share_recipients_v1_conversations__conversation_id__share_recipients_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareRecipientsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Share Recipients",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/shared": {
       "get": {
         "operationId": "get_shared_conversation_by_id_v1_conversations__conversation_id__shared_get",
@@ -34630,6 +37897,60 @@
         "summary": "Get Shared Conversation By Id",
         "tags": [
           "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/shared/screenshots": {
+      "get": {
+        "description": "Public, unauthenticated. Returns an empty set unless the conversation\nis currently shareable AND screenshot_sharing_enabled is true — never a\n404, so this route cannot be used to probe whether a conversation_id\nexists (contract §1/§9, and matches the existing\nGET /v1/conversations/{id}/shared 404-avoidance pattern for public\nconversation lookups... except this one specifically must not leak\nexistence via status code, so it always returns 200).",
+        "operationId": "get_shared_conversation_screenshots_v1_conversations__conversation_id__shared_screenshots_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Shared Conversation Screenshots",
+        "tags": [
+          "screen_frames"
         ]
       }
     },
@@ -36846,7 +40167,7 @@
     },
     "/v1/dev/user/memories/vector/search": {
       "get": {
-        "description": "Search developer-readable default memory memory through hydrated vector candidates.\n\nThis narrow developer API vector endpoint fails closed unless the authenticated\nDeveloper API app/key has a verified memories.read scope, a persisted app/key\ndefault-read grant, and the server-owned rollout state enables developer_api\nmemory default-memory reads. Vector hits are hydrated from authoritative\n`users/{uid}/memory_items` before returning results, so stale Short-term and\nArchive remain unavailable by default.",
+        "description": "Search developer-readable default memory memory through hydrated vector candidates.\n\nThis narrow developer API vector endpoint fails closed unless the authenticated\nDeveloper API app/key has a verified memories.read scope and a persisted app/key\ndefault-read grant. Vector hits are hydrated through the universal repository\nagainst authoritative\n`users/{uid}/memory_items` before returning results, so stale Short-term and\nArchive remain unavailable by default.",
         "operationId": "search_memories_vector_v1_dev_user_memories_vector_search_get",
         "parameters": [
           {
@@ -38376,7 +41697,7 @@
     },
     "/v1/goals/canonical/list": {
       "get": {
-        "description": "List goals for enrolled canonical-memory task-system clients only.",
+        "description": "List goals through the generation-fenced universal task system.",
         "operationId": "get_canonical_goals_v1_goals_canonical_list_get",
         "parameters": [
           {
@@ -38473,19 +41794,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -41157,6 +44478,94 @@
         ]
       }
     },
+    "/v1/knowledge-graph/extract": {
+      "post": {
+        "description": "Return-only KG extraction through the managed knowledge_graph feature (OpenRouter Luna).\n\nDoes not write Firestore. Desktop onboarding/file-index should call this instead of\ninventing nodes/edges via chat_agent, then persist locally via save_knowledge_graph.\n\n``strict_parse`` is on at this HTTP boundary so a malformed model response fails\nclosed (502) instead of returning 200 with an empty graph, which a client cannot\ntell apart from a genuine \"no entities\" answer.",
+        "operationId": "extract_knowledge_graph_v1_knowledge_graph_extract_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractKnowledgeGraphRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractKnowledgeGraphResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Extract Knowledge Graph",
+        "tags": [
+          "knowledge_graph"
+        ]
+      }
+    },
     "/v1/knowledge-graph/rebuild": {
       "post": {
         "operationId": "rebuild_graph_v1_knowledge_graph_rebuild_post",
@@ -42953,7 +46362,7 @@
         ]
       },
       "get": {
-        "description": "SSE endpoint for server-initiated messages (optional).\n\nClients can GET this endpoint to listen for server-initiated notifications.\nThis is optional per the MCP spec and mainly used for long-polling scenarios.",
+        "description": "GET on the Streamable HTTP endpoint: this server offers no server-initiated stream.\n\nThe two header parameters are accepted and ignored: released app-client OpenAPI\ncontracts describe them on this operation, and removing them reads as a breaking\nrequest-shape change to the compatibility checker.\n\nPer the MCP Streamable HTTP transport spec (2025-03-26), a server that does not\noffer server-initiated messages MUST return 405 Method Not Allowed for GET, and\nclients MUST NOT treat that as an error.\n\nThis used to return an infinite keepalive-ping SSE stream that carried no protocol\ndata (this transport is stateless; nothing is ever pushed, and the deprecated\nHTTP+SSE transport's required ``endpoint`` event was never sent). Every connected\nMCP client parked one such stream for the full Cloud Run request timeout (3600s),\nwhich exhausted the service's concurrency slots while CPU sat idle and drove\ntool-call tail latency to minutes (\"no available instance\" aborts). Do not\nreintroduce a long-lived GET stream here without accounting for that capacity.",
         "operationId": "mcp_sse_get_v1_mcp_sse_get",
         "parameters": [
           {
@@ -43166,6 +46575,94 @@
         "summary": "Mcp Sse Info",
         "tags": [
           "mcp"
+        ]
+      }
+    },
+    "/v1/memories/extract": {
+      "post": {
+        "description": "Return-only memory-log extraction through the managed memories feature (OpenRouter Luna).\n\nDoes not write Firestore. Desktop onboarding/import should call this instead of inventing\nmemories via Anthropic Haiku chat completions, then persist via the normal memory write APIs.",
+        "operationId": "extract_memory_log_v1_memories_extract_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractMemoryLogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractMemoryLogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Extract Memory Log",
+        "tags": [
+          "memories"
         ]
       }
     },
@@ -44514,6 +48011,567 @@
         "summary": "Twiml Voice Webhook",
         "tags": [
           "phone-calls"
+        ]
+      }
+    },
+    "/v1/screen-activity": {
+      "get": {
+        "description": "List the user's captured screen-activity rows, optionally filtered to a single day and/or app.\n\nThe rows are captured by the desktop app and only ever read back internally (MCP); this\nexposes them to the user's own first-party client. A bad date is rejected with 422.",
+        "operationId": "list_screen_activity_v1_screen_activity_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "app_filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "App Filter"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/routers__focus_sessions__ScreenActivityRow"
+                  },
+                  "title": "Response List Screen Activity V1 Screen Activity Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "List Screen Activity",
+        "tags": [
+          "screen-activity"
+        ]
+      }
+    },
+    "/v1/screen-activity/summary": {
+      "get": {
+        "description": "Aggregated per-app screen-activity summary (screenshots per app, first/last seen).\n\nThe desktop app captures screen-activity but it was only ever read back internally (MCP);\nthis exposes the aggregated view to the user's own first-party client. A bad date is 422.",
+        "operationId": "screen_activity_summary_v1_screen_activity_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenActivitySummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Screen Activity Summary",
+        "tags": [
+          "screen-activity"
+        ]
+      }
+    },
+    "/v1/screen-activity/sync": {
+      "post": {
+        "operationId": "sync_screen_activity_v1_screen_activity_sync_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenActivitySyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Sync Screen Activity V1 Screen Activity Sync Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Sync Screen Activity"
+      }
+    },
+    "/v1/screen-frame-egress/adjudications": {
+      "post": {
+        "operationId": "adjudicate_screen_frames_v1_screen_frame_egress_adjudications_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenFrameAdjudicationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenFrameAdjudicationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Adjudicate Screen Frames",
+        "tags": [
+          "screen_frames"
+        ]
+      }
+    },
+    "/v1/screen-frame-egress/settings": {
+      "get": {
+        "description": "Account-level, shared across every device (desktop, web, a\nreinstall) — this is the setting the adjudication route's admission\ncheck reads (contract §6). It protects the user from themselves, not\nthird parties from the user (the privacy judge does that), so it lives\nas a plain user-profile field rather than a signed claim.",
+        "operationId": "get_screen_frame_settings_v1_screen_frame_egress_settings_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenFrameSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Screen Frame Settings",
+        "tags": [
+          "screen_frames"
+        ]
+      },
+      "patch": {
+        "operationId": "update_screen_frame_settings_v1_screen_frame_egress_settings_patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenFrameSettingsUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenFrameSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Screen Frame Settings",
+        "tags": [
+          "screen_frames"
         ]
       }
     },
@@ -47149,6 +51207,94 @@
         ]
       }
     },
+    "/v1/users/ai-profile/synthesize": {
+      "post": {
+        "description": "Return-only two-stage AI user profile synthesis through the managed memories feature.\n\nDoes not write Firestore. Desktop clients send their formatted source lines plus up to\nfive past profiles (oldest first) instead of carrying the prompts and calling Anthropic\nHaiku themselves, then persist through PATCH /v1/users/ai-profile.",
+        "operationId": "synthesize_ai_profile_v1_users_ai_profile_synthesize_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SynthesizeAIUserProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SynthesizeAIUserProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Synthesize Ai Profile",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/v1/users/analytics/chat_message": {
       "post": {
         "description": "Submit feedback rating for a chat message.\n\nArgs:\n    message_id: ID of the message being rated\n    value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)\n    reason: Optional reason for thumbs down. Valid values:\n        - 'too_verbose': Response was too long or wordy\n        - 'incorrect_or_hallucination': Response contained incorrect information\n        - 'not_helpful_or_irrelevant': Response didn't address the question\n        - 'didnt_follow_instructions': Response didn't follow user instructions\n        - 'other': Other reason",
@@ -47595,6 +51741,84 @@
         ]
       }
     },
+    "/v1/users/available-languages": {
+      "get": {
+        "description": "Primary-language options for the picker, in render order.",
+        "operationId": "get_available_languages_v1_users_available_languages_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailableLanguagesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Available Languages",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
     "/v1/users/daily-summaries": {
       "get": {
         "description": "Get list of daily summaries for the authenticated user.\nReturns summaries in reverse chronological order.",
@@ -47890,19 +52114,19 @@
           },
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -48231,19 +52455,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -50016,6 +54240,170 @@
         "summary": "Get User Paywall Status",
         "tags": [
           "users"
+        ]
+      }
+    },
+    "/v1/users/me/referral": {
+      "get": {
+        "operationId": "get_referral_link_v1_users_me_referral_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Referral Link",
+        "tags": [
+          "referrals"
+        ]
+      }
+    },
+    "/v1/users/me/referral/claim": {
+      "post": {
+        "operationId": "claim_referral_v1_users_me_referral_claim_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralClaimResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Claim Referral",
+        "tags": [
+          "referrals"
         ]
       }
     },
@@ -54701,6 +59089,93 @@
         ]
       }
     },
+    "/v2/chat/materialize-prompts": {
+      "post": {
+        "operationId": "materialize_prompts_v2_chat_materialize_prompts_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterializePromptsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterializePromptsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Materialize Prompts",
+        "tags": [
+          "chat-first"
+        ]
+      }
+    },
     "/v2/files": {
       "post": {
         "operationId": "upload_file_chat_v2_files_post",
@@ -55117,6 +59592,22 @@
             }
           },
           {
+            "in": "query",
+            "name": "chat_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chat Session Id"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -55221,6 +59712,45 @@
                 }
               ],
               "title": "App Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chat_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chat Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
             }
           },
           {
@@ -55332,6 +59862,22 @@
                 }
               ],
               "title": "App Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chat_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chat Session Id"
             }
           },
           {
@@ -56354,6 +60900,22 @@
         "operationId": "delete_memories_v3_memories_delete",
         "parameters": [
           {
+            "description": "Delete all memories or only default-access Short-term and Long-term memories.",
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "Delete all memories or only default-access Short-term and Long-term memories.",
+              "enum": [
+                "all",
+                "default"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -56426,6 +60988,7 @@
         ]
       },
       "get": {
+        "description": "List memories, newest first, as a bare JSON array.\n\nLarge accounts can outrun the request budget; such reads return an honest\npartial array with the ``X-Omi-List-Truncated: true`` header and no\n``X-Omi-Memory-Next-Cursor`` instead of a bare middleware 504 (#11831).",
         "operationId": "get_memories_v3_memories_get",
         "parameters": [
           {
@@ -56462,6 +61025,18 @@
                 }
               ],
               "title": "Cursor"
+            }
+          },
+          {
+            "description": "When true, include Archive-tier memories that are otherwise excluded from default reads.",
+            "in": "query",
+            "name": "include_archive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "When true, include Archive-tier memories that are otherwise excluded from default reads.",
+              "title": "Include Archive",
+              "type": "boolean"
             }
           },
           {
@@ -57330,7 +61905,7 @@
     },
     "/v3/memories/{memory_id}/baseline": {
       "patch": {
-        "description": "Toggle the baseline flag for a memory.\n\nBaseline memories are always injected first into the AI context window.\nNot supported for canonical-path users: MemoryItem has no is_baseline field,\nso writing to the legacy store would silently have no effect for canonical readers.\nCanonical users receive 503 explicitly rather than a silent wrong-store write.",
+        "description": "Preserve the released baseline flag through universal memory authority.",
         "operationId": "update_memory_baseline_v3_memories__memory_id__baseline_patch",
         "parameters": [
           {
@@ -57422,6 +61997,106 @@
           }
         ],
         "summary": "Update Memory Baseline",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/v3/memories/{memory_id}/read": {
+      "patch": {
+        "description": "Persist durable insight/memory read and dismiss state for desktop clients.",
+        "operationId": "update_memory_read_status_v3_memories__memory_id__read_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryReadStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryDB"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Memory Read Status",
         "tags": [
           "memories"
         ]
@@ -57926,6 +62601,84 @@
           }
         ],
         "summary": "Get Extra Speech Profile Samples",
+        "tags": [
+          "v3"
+        ]
+      }
+    },
+    "/v3/speech-profile/status": {
+      "get": {
+        "description": "Consolidated speech-profile status for the settings UI.\n\nFolds together data split across GET /v3/speech-profile (existence), GET\n/v4/speech-profile (url), and GET /v3/speech-profile/expand (extra sample\nrecordings), plus the cached duration written on upload.",
+        "operationId": "get_speech_profile_status_v3_speech_profile_status_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeechProfileStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Speech Profile Status",
         "tags": [
           "v3"
         ]

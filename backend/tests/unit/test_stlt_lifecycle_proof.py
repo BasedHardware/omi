@@ -33,7 +33,7 @@ def mod(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 
 def test_default_project_is_based_hardware(mod: Any) -> None:
-    args = mod._parse_args([])
+    args = mod._parse_args(["--uid", "uid-test"])
     assert args.project == "based-hardware"
     assert args.apply is False
 

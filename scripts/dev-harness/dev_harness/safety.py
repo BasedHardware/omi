@@ -8,11 +8,11 @@ It does not start emulators or desktop apps.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
 import signal
-import socket
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -111,7 +111,16 @@ _STRIPPED_ENV_PREFIXES = (
     "SERVICE_ACCOUNT",
     "FIREBASE_ADMIN",
 )
-_LOCAL_BACKEND_SECRET_KEYS = {"ENCRYPTION_SECRET", "ADMIN_KEY", "TYPESENSE_API_KEY", "FIREBASE_API_KEY"}
+_LOCAL_BACKEND_SECRET_KEYS = {
+    "ENCRYPTION_SECRET",
+    "ADMIN_KEY",
+    "TYPESENSE_API_KEY",
+    "FIREBASE_API_KEY",
+    # Harness-local HMAC key for internal screen-frame approval tokens. Matches
+    # _PROVIDER_SECRET_RE on "SECRET" but is not a provider credential, so offline
+    # mode must pass it through rather than refuse it.
+    "SCREEN_FRAME_SIGNING_SECRET",
+}
 _OFFLINE_PROVIDER_PLACEHOLDERS = {
     "OPENAI_API_KEY": "sk-omi-local-harness-offline-not-real",
     "DEEPGRAM_API_KEY": "omi-local-harness-offline-deepgram-not-real",
@@ -122,8 +131,6 @@ _PROVIDER_SECRET_RE = re.compile(
     r"(API_KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|DEEPGRAM|OPENAI|ANTHROPIC|GROQ|ELEVENLABS)", re.IGNORECASE
 )
 _LOOPBACK_NAMES = {"localhost"}
-_LOOPBACK_V4_PREFIX = "127."
-_LOOPBACK_V6 = {"::1", "0:0:0:0:0:0:0:1"}
 _DANGEROUS_NAMES = {"", ".", ".."}
 
 
@@ -180,20 +187,59 @@ def _host_from_emulator_value(value: str) -> str:
 
 def is_loopback_host(value: str) -> bool:
     host = _host_from_emulator_value(value)
-    if host in _LOOPBACK_NAMES or host in _LOOPBACK_V6:
-        return True
-    if host.startswith(_LOOPBACK_V4_PREFIX):
+    if host in _LOOPBACK_NAMES:
         return True
     try:
-        ip = socket.inet_pton(socket.AF_INET6, host)
-    except OSError:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
         return False
-    return ip == socket.inet_pton(socket.AF_INET6, "::1")
 
 
 def validate_loopback_emulator_host(value: str, *, name: str = "emulator") -> str:
     if not is_loopback_host(value):
         raise SafetyError(f"{name} host must point to loopback, got {value!r}")
+    return value.strip()
+
+
+# Private ranges a LAN- or tailnet-reachable dev harness may bind to. Distinct
+# from the loopback-only guard above, which protects a different boundary: the
+# backend's own connection to its co-located emulators, which must never leave
+# loopback regardless of this setting. RFC 1918 covers ordinary LAN addresses;
+# 100.64.0.0/10 (RFC 6598 carrier-grade NAT) covers Tailscale, whose tailnet
+# addresses fall in that range and are the documented way a physical device
+# reaches this harness (see #11730/#11652).
+_PRIVATE_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+)
+
+
+def is_private_dev_host(value: str) -> bool:
+    """True for loopback or a non-public (LAN/CGNAT) address, never a public one."""
+
+    if is_loopback_host(value):
+        return True
+    host = _host_from_emulator_value(value)
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(addr in network for network in _PRIVATE_NETWORKS)
+
+
+def validate_dev_bind_host(value: str, *, name: str = "dev bind host") -> str:
+    """Fail closed unless the requested bind host is loopback or a private range.
+
+    Distinct from ``validate_loopback_emulator_host``: this guards what the
+    harness's own HTTP services and Firebase emulators may bind to when a
+    developer opts into LAN/tailnet reachability, never a publicly routable
+    address.
+    """
+
+    if not is_private_dev_host(value):
+        raise SafetyError(f"{name} must be loopback or a private (LAN/CGNAT) address, got {value!r}")
     return value.strip()
 
 
@@ -516,6 +562,52 @@ def is_descendant_of(pid: int, ancestor_pid: int) -> bool:
             return False
         current = parent
     return current == ancestor
+
+
+def descendant_pids(ancestor_pid: int) -> tuple[int, ...]:
+    """Snapshot the live descendants of a supervised PID before it is signalled.
+
+    Emulator CLIs spawn their heavyweight children detached (`firebase
+    emulators:start` gives the Firestore JVM its own session), so a process
+    group signal never reaches them. Once the supervisor dies the survivors are
+    reparented to init and the tree is unrecoverable, so teardown has to capture
+    it first.
+    """
+
+    ancestor = int(ancestor_pid)
+    if ancestor <= 1:
+        return ()
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid=,ppid="],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return ()
+    if result.returncode != 0:
+        return ()
+    children: dict[int, list[int]] = {}
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 2:
+            continue
+        try:
+            pid, parent = int(fields[0]), int(fields[1])
+        except ValueError:
+            continue
+        children.setdefault(parent, []).append(pid)
+    found: set[int] = set()
+    queue = list(children.get(ancestor, ()))
+    while queue:
+        pid = queue.pop()
+        if pid in found or pid == ancestor:
+            continue
+        found.add(pid)
+        queue.extend(children.get(pid, ()))
+    return tuple(sorted(found))
 
 
 def validate_owned_pid(pid: int, *, process_manifest: Path, service: str | None = None) -> dict[str, object]:

@@ -63,6 +63,13 @@ ones, or `register(name:summary:params:handler:)` from a view model for screen-s
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
 the resulting state snapshot.
 
+The typed `omi-harness` keeps bridge and visual runs in the action-controlled
+`quiet` presentation and restores the prior mode in teardown. AX snapshots and
+semantic `press` actions remain quiet and cursor-free. An explicit coordinate
+`click` temporarily requests `interactive` with activation in the bottom-right
+corner, then returns to `quiet` in a `finally` path. Older bundles that do not
+expose `set_automation_ui_presentation` continue with a recorded warning.
+
 For a background-agent/voice regression, use the read-only cross-surface probe after
 the child run reaches a terminal state:
 ```bash
@@ -177,11 +184,11 @@ the read-only `defaults read` in `auth-06`.
 The HTTP fault harness (§2c) can't stall the **agent** stream — that's a node/stdio
 bridge, not HTTP. Two non-prod bridge actions freeze it so the chat stall path can be
 exercised end-to-end (CHAT-02): a slow/stalled annotation at 8s/20s (`StallDetector`),
-and ChatProvider's **180s send watchdog** which force-releases `isSending` and surfaces
+and ChatProvider's **60s send watchdog** which force-releases `isSending` and surfaces
 "Response took too long. Try again." (recoverable — the next send works).
 
 - `suspend_agent_stream` — SIGSTOP the agent process so it emits no events; `durationMs`
-  (default `190000`, just past the 180s watchdog; capped at `300000`) auto-resumes it, so
+  (default `70000`, just past the 60s watchdog; capped at `300000`) auto-resumes it, so
   a forgotten resume can never wedge the agent.
 - `resume_agent_stream` — SIGCONT immediately (early clear).
 
@@ -192,10 +199,10 @@ cd desktop/macos
 # 1. start a chat turn so a send is in flight
 ./scripts/omi-ctl action ask query="write a long detailed answer" &
 sleep 2
-# 2. freeze the agent stream past the 180s watchdog
-./scripts/omi-ctl action suspend_agent_stream durationMs=190000
-# 3. within <=180s the send watchdog fires: assert the error + that sending is released
-sleep 185
+# 2. freeze the agent stream past the 60s watchdog
+./scripts/omi-ctl action suspend_agent_stream durationMs=70000
+# 3. within <=60s the send watchdog fires: assert the error + that sending is released
+sleep 65
 ./scripts/omi-ctl action main_chat_snapshot | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("error:", d.get("has_error"), d.get("error_message")); print("is_sending:", d.get("is_sending"))'
 #   expect has_error=true / "Response took too long…" and is_sending=false (recoverable)
 # 4. resume + prove recovery with a fresh turn
@@ -432,9 +439,10 @@ agent-swift snapshot -i --json                       # see what's on screen
 ### Screen Map (v0.12.119+ redesign)
 ```
 Main Window — Top Navigation Bar (use `click` for all nav buttons)
-├── Home (DesktopHomeView.swift) — chat + insights + status banners
-│   ├── Chat input area (embedded, no separate Chat tab)
-│   ├── Insight cards (screen recording, tasks, observations)
+├── Home (DesktopHomeView.swift) — query bar + results panel + status banners
+│   ├── Query bar (embedded chat; ⏎ searches, ⌘⏎ asks — no separate Chat tab)
+│   ├── Results panel header — `Filter ›`, `Brain Map ›`, `Chat ›`, and the
+│   │   All / Conversations / Memories / Rewind chips over one merged spine
 │   └── Capture/Listening status (top-right)
 ├── Memory — 3 sub-tabs
 │   ├── Memories — search, filter (This device / All), memory list
@@ -515,7 +523,7 @@ Reference flows in `desktop/macos/e2e/flows/*.yaml` describe the app's key user 
 | Flow | Covers | Steps | Notes |
 |------|--------|-------|-------|
 | `flows/navigation.yaml` | Top nav bar, Home, Memory, Tasks, Apps, Settings | 8 | Core nav smoke — top nav buttons + gear icon + Rewind via View menu |
-| `flows/home.yaml` | Home tab, embedded chat, insights, status banners | 5 | Chat input, insight cards, Capture/Listening status |
+| `flows/home.yaml` | Home tab, embedded chat, panel header controls, status banners | 5 | Chat input, `Brain Map ›` into the hub, Capture/Listening status |
 | `flows/memories.yaml` | Memory tab — Memories, Conversations, Brain Map sub-tabs | 6 | Sub-tab switching, search, conversation list, brain map render |
 | `flows/tasks.yaml` | Tasks tab — search, Today/No Deadline sections | 5 | Task list, keyboard toolbar, task interactions |
 | `flows/apps-marketplace.yaml` | Apps tab — Imports, Exports, search, filters | 5 | Category filter, Installed view, Create App |
@@ -525,7 +533,7 @@ Reference flows in `desktop/macos/e2e/flows/*.yaml` describe the app's key user 
 | `flows/language.yaml` | Settings → Transcription language config | 5 | Language mode toggle, voice assistant languages |
 | `flows/screen-recording-permission.yaml` | Rewind permission flow | 7 | Grant Permission button, Capture status |
 | `flows/audio-recording.yaml` | Audio capture, mic source, transcription | 7 | Start/Stop Recording, BT/mic selection |
-| `flows/refer-external.yaml` | Refer a Friend | 3 | Profile → affiliate URL |
+| `flows/refer-external.yaml` | Refer a Friend | 3 | Top bar + Settings → copy unique link |
 | `flows/recording-finalization.yaml` | Recording lifecycle | 7 | Transcription storage, conversation detail |
 
 When you modify a Swift file, check if any flow's `covers:` includes it. That flow describes the user journey your change affects.

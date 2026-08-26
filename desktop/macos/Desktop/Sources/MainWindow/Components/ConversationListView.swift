@@ -109,11 +109,11 @@ struct ConversationListView: View {
     VStack(spacing: OmiSpacing.lg) {
       ProgressView()
         .scaleEffect(1.2)
-        .tint(OmiColors.accent)
+        .tint(Ink.secondary)
 
       Text("Loading conversations...")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -122,24 +122,24 @@ struct ConversationListView: View {
     VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "exclamationmark.triangle")
         .scaledFont(size: OmiType.hero)
-        .foregroundColor(OmiColors.warning)
+        .foregroundColor(PageGlass.warning)
 
       Text("Failed to load conversations")
         .scaledFont(size: OmiType.subheading, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Text("Check your connection and try again.")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
 
       Button(action: onRefresh) {
         Text("Try Again")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .padding(.horizontal, OmiSpacing.xl)
           .padding(.vertical, OmiSpacing.sm)
-          .omiControlSurface(fill: OmiColors.userBubble, radius: OmiChrome.chipRadius)
+          .glassChip(isActive: true)
       }
       .buttonStyle(.plain)
     }
@@ -151,15 +151,15 @@ struct ConversationListView: View {
     VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "bubble.left.and.bubble.right")
         .scaledFont(size: 48)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Text("No Conversations")
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Text("Start recording to capture your first conversation")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -174,7 +174,7 @@ struct ConversationListView: View {
         case .header(let key, let isFirst):
           Text(key)
             .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .padding(.top, isFirst ? 0 : OmiSpacing.lg)
             .padding(.bottom, OmiSpacing.xs)
         case .conversation(let conversation):
@@ -207,6 +207,7 @@ struct ConversationListView: View {
         .refreshable {
           onRefresh()
         }
+        .glassScrollFade()
       }
     }
   }
@@ -225,6 +226,6 @@ struct ConversationListView: View {
       appState: AppState()
     )
     .frame(width: 400, height: 600)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.surface)
   }
 #endif

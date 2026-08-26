@@ -74,7 +74,7 @@ Future<List<ServerConversation>> getConversations({
 // succeeded. An empty `items` with `ok == false` means the fetch failed
 // (no response / non-200, e.g. auth token not ready right after a cold
 // start) — which callers must NOT treat as "the user has no conversations".
-Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
+Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversationsResult({
   int limit = 50,
   int offset = 0,
   List<ConversationStatus> statuses = const [],
@@ -102,7 +102,7 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
   }
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return (items: <ServerConversation>[], ok: false);
+  if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
@@ -110,10 +110,10 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
         .map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>))
         .toList();
     Logger.debug('getConversations length: ${memories.length}');
-    return (items: memories, ok: true);
+    return (items: memories, ok: true, truncated: isOmiListTruncated(response));
   }
   Logger.debug('getConversations error ${response.statusCode}');
-  return (items: <ServerConversation>[], ok: false);
+  return (items: <ServerConversation>[], ok: false, truncated: false);
 }
 
 Future<ServerConversation?> reProcessConversationServer(String conversationId, {String? appId}) async {
@@ -232,21 +232,31 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
-Future<ServerConversation?> getConversationById(String conversationId) async {
+Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return null;
+  if (response == null) return (item: null, ok: false);
   if (response.statusCode == 200) {
-    return ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return (item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>), ok: true);
   } else if (response.statusCode == 402) {
-    Logger.debug('Unlimited Plan Required for conversation: $conversationId');
-    return null;
+    // Locked conversations are still returned by the list endpoint as a
+    // redacted completed row, but their detail endpoint intentionally returns
+    // 402. Treat that response as an authoritative terminal result for
+    // lifecycle reconciliation so a stale Processing card is cleared.
+    Logger.debug('Conversation is locked/redacted: $conversationId');
+    return (item: null, ok: true);
+  } else if (response.statusCode == 404) {
+    return (item: null, ok: true);
   }
-  return null;
+  return (item: null, ok: false);
+}
+
+Future<ServerConversation?> getConversationById(String conversationId) async {
+  return (await getConversationByIdResult(conversationId)).item;
 }
 
 Future<bool> updateConversationTitle(String conversationId, String title) async {
@@ -673,11 +683,20 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
   }
 }
 
+/// Serialize a local calendar-day bound for conversation search.
+///
+/// Local [DateTime] values have no offset in [DateTime.toIso8601String], and
+/// `search_conversations_endpoint` parses naive datetimes in the server TZ.
+/// Convert to UTC first, matching the conversation-list date filter.
+String serializeConversationSearchDateBound(DateTime date) => date.toUtc().toIso8601String();
+
 Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   String query, {
   int? page,
   int? limit,
   bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
   String? speakerId,
 }) async {
   Logger.debug(Env.apiBaseUrl);
@@ -690,13 +709,17 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
       'page': page ?? 1,
       'per_page': limit ?? 10,
       'include_discarded': includeDiscarded,
+      if (startDate != null) 'start_date': serializeConversationSearchDateBound(startDate),
+      if (endDate != null) 'end_date': serializeConversationSearchDateBound(endDate),
       if (speakerId != null) 'speaker_id': speakerId,
     }),
   );
   if (response == null) return (<ServerConversation>[], 0, 0);
   if (response.statusCode == 200) {
     final data = wire.GeneratedSearchConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    final convos = data.items.map((conversation) => ServerConversation.fromGenerated(conversation)).toList();
+    // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
+    // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
+    final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
     return (convos, data.currentPage, data.totalPages);
   }
   return (<ServerConversation>[], 0, 0);

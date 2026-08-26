@@ -1,8 +1,8 @@
 import Foundation
 
 /// Service that re-ranks staged tasks by relevance to the user's profile,
-/// goals, and task engagement history. Runs every hour, sends ALL staged tasks
-/// to Gemini and receives back ONLY the tasks that need re-ranking.
+/// goals, and task engagement history. Runs every hour and sends a bounded,
+/// rotating window of staged tasks to Gemini.
 /// Scores are persisted to SQLite staged_tasks table, then synced to backend.
 actor TaskPrioritizationService {
   static let shared = TaskPrioritizationService()
@@ -14,22 +14,34 @@ actor TaskPrioritizationService {
 
   // Persisted to UserDefaults so they survive app restarts
   private static let fullRunKey = "TaskPrioritize.lastFullRunTime"
+  private static let fullAttemptKey = "TaskPrioritize.lastFullAttemptTime"
+  private static let batchCursorKey = "TaskPrioritize.nextBatchStartIndex"
 
   private var lastFullRunTime: Date? {
     didSet { UserDefaults.standard.set(lastFullRunTime, forKey: Self.fullRunKey) }
   }
 
+  private var lastFullAttemptTime: Date? {
+    didSet { UserDefaults.standard.set(lastFullAttemptTime, forKey: Self.fullAttemptKey) }
+  }
+
+  private var nextBatchStartIndex: Int {
+    didSet { UserDefaults.standard.set(nextBatchStartIndex, forKey: Self.batchCursorKey) }
+  }
+
   // Configuration
-  private let fullRescoreInterval: TimeInterval = 3600  // 1 hour
   private let startupDelaySeconds: TimeInterval = 90
   private let checkIntervalSeconds: TimeInterval = 300  // Check every 5 minutes
   private let minimumTaskCount = 2
+  private let runPolicy = TaskPrioritizationRunPolicy.production
 
   private var geminiClientInitAttempted = false
 
   private init() {
     // Restore persisted timestamps
     self.lastFullRunTime = UserDefaults.standard.object(forKey: Self.fullRunKey) as? Date
+    self.lastFullAttemptTime = UserDefaults.standard.object(forKey: Self.fullAttemptKey) as? Date
+    self.nextBatchStartIndex = UserDefaults.standard.integer(forKey: Self.batchCursorKey)
     // Don't eagerly init GeminiClient — API key may not be available yet
 
     if let last = self.lastFullRunTime {
@@ -37,6 +49,11 @@ actor TaskPrioritizationService {
       log("TaskPrioritize: Last full rescore was \(hoursAgo)h ago")
     } else {
       log("TaskPrioritize: No previous full rescore recorded")
+    }
+
+    if let lastAttempt = self.lastFullAttemptTime {
+      let minutesAgo = Int(Date().timeIntervalSince(lastAttempt) / 60)
+      log("TaskPrioritize: Last rescore attempt was \(minutesAgo)m ago")
     }
   }
 
@@ -46,7 +63,7 @@ actor TaskPrioritizationService {
     guard APIKeyService.keysAvailable || !geminiClientInitAttempted else { return nil }
     geminiClientInitAttempted = true
     do {
-      let client = try GeminiClient()
+      let client = try GeminiClient(model: ModelQoS.Gemini.lightweight, workload: .maintenance)
       geminiClient = client
       return client
     } catch {
@@ -66,11 +83,11 @@ actor TaskPrioritizationService {
     timer = Task { [weak self] in
       guard let self else { return }
       // Startup delay
-      try? await Task.sleep(nanoseconds: UInt64(90 * 1_000_000_000))
+      try? await Task.sleep(nanoseconds: UInt64(startupDelaySeconds * 1_000_000_000))
 
       while !Task.isCancelled {
         await self.checkAndRescore()
-        try? await Task.sleep(nanoseconds: UInt64(300 * 1_000_000_000))
+        try? await Task.sleep(nanoseconds: UInt64(checkIntervalSeconds * 1_000_000_000))
       }
     }
   }
@@ -95,9 +112,11 @@ actor TaskPrioritizationService {
     // Regenerate AI user profile if >24h old (runs daily)
     await regenerateProfileIfNeeded()
 
-    let now = Date()
-    let timeSinceFull = lastFullRunTime.map { now.timeIntervalSince($0) } ?? .infinity
-    if timeSinceFull >= fullRescoreInterval {
+    if runPolicy.shouldStartScheduledRun(
+      now: Date(),
+      lastSuccessfulRun: lastFullRunTime,
+      lastAttempt: lastFullAttemptTime
+    ) {
       await runFullRescore()
     }
   }
@@ -120,9 +139,11 @@ actor TaskPrioritizationService {
     await runFullRescore()
   }
 
-  // MARK: - Full Rescore (Hourly)
+  // MARK: - Bounded Rescore (Hourly)
 
-  /// Send ALL staged tasks to Gemini, get back only the ones that need re-ranking
+  /// Send a bounded, rotating window of staged tasks to Gemini, and get back only
+  /// the ones that need re-ranking. A persisted attempt time prevents a failed
+  /// model response from being retried by every five-minute scheduler check.
   private func runFullRescore() async {
     guard await legacyRankingEnabled() else {
       log("TaskPrioritize: Canonical or unresolved mode; staged ranking skipped")
@@ -140,7 +161,8 @@ actor TaskPrioritizationService {
     isScoringInProgress = true
     defer { isScoringInProgress = false }
 
-    log("TaskPrioritize: [FULL] Starting hourly rescore of staged tasks")
+    lastFullAttemptTime = Date()
+    log("TaskPrioritize: [FULL] Starting bounded hourly rescore of staged tasks")
 
     // Get ALL staged tasks (not action_items)
     let allTasks: [TaskActionItem]
@@ -155,6 +177,7 @@ actor TaskPrioritizationService {
 
     guard allTasks.count >= minimumTaskCount else {
       log("TaskPrioritize: [FULL] Only \(allTasks.count) staged tasks, skipping")
+      nextBatchStartIndex = 0
       lastFullRunTime = Date()
       return
     }
@@ -169,18 +192,16 @@ actor TaskPrioritizationService {
       return scoreA < scoreB
     }
 
-    // Build task list for the prompt with current positions
-    let taskLines = sortedTasks.enumerated().map { (index, task) -> String in
-      var parts = ["\(index + 1). [id:\(task.id)] \(task.description)"]
-      if let priority = task.priority {
-        parts.append("[\(priority)]")
-      }
-      if let due = task.dueAt {
-        let formatter = ISO8601DateFormatter()
-        parts.append("[due: \(formatter.string(from: due))]")
-      }
-      return parts.joined(separator: " ")
-    }.joined(separator: "\n")
+    let taskWindow = runPolicy.window(from: sortedTasks, startingAt: nextBatchStartIndex)
+    guard !taskWindow.items.isEmpty else {
+      log("TaskPrioritize: [FULL] No tasks selected for bounded rescore")
+      return
+    }
+
+    let positionedTasks = taskWindow.items.enumerated().map { offset, task in
+      PositionedTask(position: taskWindow.startIndex + offset + 1, task: task)
+    }
+    let requestBatches = runPolicy.requestBatches(from: positionedTasks)
 
     // Build context sections
     var contextParts: [String] = []
@@ -206,26 +227,6 @@ actor TaskPrioritizationService {
     }
 
     let contextSection = contextParts.isEmpty ? "" : contextParts.joined(separator: "\n\n") + "\n\n"
-
-    let prompt = """
-      Review the user's staged task list (ranked 1 = most important, \(sortedTasks.count) = least important).
-
-      Identify tasks that are MISRANKED — tasks whose current position doesn't match their actual importance.
-      Only return tasks that need to move. Do NOT return tasks that are already well-positioned.
-
-      Consider:
-      1. Alignment with the user's goals and current priorities
-      2. Time urgency (due date proximity)
-      3. Actionability — specific tasks rank higher than vague ones
-      4. Real-world importance (financial, health, commitments to others)
-      5. Most AI-extracted tasks are noise — push vague/irrelevant tasks down
-
-      \(contextSection)CURRENT TASK RANKING (1 = most important):
-      \(taskLines)
-
-      Return ONLY the tasks that need re-ranking, with their new position numbers.
-      New positions should be relative to the current list size (1 to \(sortedTasks.count)).
-      """
 
     let systemPrompt = """
       You are a task prioritization assistant. You review a ranked task list and identify \
@@ -254,49 +255,98 @@ actor TaskPrioritizationService {
       required: ["reranked_tasks", "reasoning"]
     )
 
-    log("TaskPrioritize: [FULL] Sending \(sortedTasks.count) staged tasks to Gemini")
-
-    let responseText: String
-    do {
-      responseText = try await client.sendRequest(
-        prompt: prompt,
-        systemPrompt: systemPrompt,
-        responseSchema: responseSchema
-      )
-    } catch {
-      log("TaskPrioritize: [FULL] Gemini request failed: \(error)")
-      return
-    }
-
-    let truncated = responseText.prefix(500)
     log(
-      "TaskPrioritize: [FULL] Gemini response (\(responseText.count) chars): \(truncated)\(responseText.count > 500 ? "..." : "")"
+      "TaskPrioritize: [FULL] Scoring positions \(taskWindow.startIndex + 1)-\(taskWindow.endIndex) "
+        + "of \(sortedTasks.count) in \(requestBatches.count) bounded request(s)"
     )
 
-    guard let data = responseText.data(using: .utf8) else {
-      log("TaskPrioritize: [FULL] Failed to convert response to data")
-      return
-    }
+    var validReranks: [ReRankingResponse.ReRankedTask] = []
+    for (batchIndex, batch) in requestBatches.enumerated() {
+      let taskLines = batch.map { positioned -> String in
+        let task = positioned.task
+        var parts = ["\(positioned.position). [id:\(task.id)] \(task.description)"]
+        if let priority = task.priority {
+          parts.append("[\(priority)]")
+        }
+        if let due = task.dueAt {
+          let formatter = ISO8601DateFormatter()
+          parts.append("[due: \(formatter.string(from: due))]")
+        }
+        return parts.joined(separator: " ")
+      }.joined(separator: "\n")
 
-    let result: ReRankingResponse
-    do {
-      result = try JSONDecoder().decode(ReRankingResponse.self, from: data)
-    } catch {
-      log("TaskPrioritize: [FULL] Failed to parse re-ranking response: \(error)")
-      return
-    }
+      let prompt = """
+        Review this window of the user's staged task ranking. The complete ranking has \
+        \(sortedTasks.count) tasks (1 = most important), and this request contains global \
+        positions \(batch.first?.position ?? 0)-\(batch.last?.position ?? 0).
 
-    log("TaskPrioritize: [FULL] Gemini returned \(result.rerankedTasks.count) tasks to re-rank")
-    if !result.reasoning.isEmpty {
-      log("TaskPrioritize: [FULL] Reasoning: \(result.reasoning.prefix(300))")
-    }
+        Identify tasks in THIS WINDOW that are MISRANKED — tasks whose current position \
+        doesn't match their actual importance. Only return tasks that need to move. Do not \
+        return tasks that are already well-positioned, and never return a task not shown below.
 
-    // Validate: only keep task IDs that exist in our list
-    let validIds = Set(allTasks.map { $0.id })
-    let validReranks = result.rerankedTasks.filter { validIds.contains($0.taskId) }
+        Consider:
+        1. Alignment with the user's goals and current priorities
+        2. Time urgency (due date proximity)
+        3. Actionability — specific tasks rank higher than vague ones
+        4. Real-world importance (financial, health, commitments to others)
+        5. Most AI-extracted tasks are noise — push vague/irrelevant tasks down
 
-    if validReranks.count != result.rerankedTasks.count {
-      log("TaskPrioritize: [FULL] Filtered out \(result.rerankedTasks.count - validReranks.count) invalid task IDs")
+        \(contextSection)CURRENT TASK RANKING WINDOW (global positions):
+        \(taskLines)
+
+        Return ONLY tasks from this window that need re-ranking, with their new GLOBAL position \
+        numbers. New positions are relative to the complete list (1 to \(sortedTasks.count)). \
+        Return no more than \(runPolicy.maxTasksPerRequest) tasks.
+        """
+
+      let responseText: String
+      do {
+        responseText = try await client.sendRequest(
+          prompt: prompt,
+          systemPrompt: systemPrompt,
+          responseSchema: responseSchema
+        )
+      } catch {
+        log("TaskPrioritize: [FULL] Gemini request \(batchIndex + 1) failed: \(error)")
+        return
+      }
+
+      let truncated = responseText.prefix(500)
+      log(
+        "TaskPrioritize: [FULL] Gemini response \(batchIndex + 1) (\(responseText.count) chars): "
+          + "\(truncated)\(responseText.count > 500 ? "..." : "")"
+      )
+
+      guard let data = responseText.data(using: .utf8) else {
+        log("TaskPrioritize: [FULL] Failed to convert response \(batchIndex + 1) to data")
+        return
+      }
+
+      let result: ReRankingResponse
+      do {
+        result = try JSONDecoder().decode(ReRankingResponse.self, from: data)
+      } catch {
+        log("TaskPrioritize: [FULL] Failed to parse re-ranking response \(batchIndex + 1): \(error)")
+        return
+      }
+
+      log(
+        "TaskPrioritize: [FULL] Gemini returned \(result.rerankedTasks.count) tasks to re-rank "
+          + "from request \(batchIndex + 1)"
+      )
+      if !result.reasoning.isEmpty {
+        log("TaskPrioritize: [FULL] Reasoning \(batchIndex + 1): \(result.reasoning.prefix(300))")
+      }
+
+      let validIds = Set(batch.map { $0.task.id })
+      let batchReranks = result.rerankedTasks.filter { validIds.contains($0.taskId) }
+      if batchReranks.count != result.rerankedTasks.count {
+        log(
+          "TaskPrioritize: [FULL] Filtered out "
+            + "\(result.rerankedTasks.count - batchReranks.count) invalid task IDs from request \(batchIndex + 1)"
+        )
+      }
+      validReranks.append(contentsOf: batchReranks)
     }
 
     if !validReranks.isEmpty {
@@ -314,11 +364,13 @@ actor TaskPrioritizationService {
         log("TaskPrioritize: [FULL] Applied selective re-ranking for \(validReranks.count) staged tasks")
       } catch {
         log("TaskPrioritize: [FULL] Failed to apply re-ranking: \(error)")
+        return
       }
     } else {
       log("TaskPrioritize: [FULL] No tasks need re-ranking, current order is good")
     }
 
+    nextBatchStartIndex = taskWindow.nextStartIndex
     lastFullRunTime = Date()
 
     // Sync all staged scores to backend
@@ -389,6 +441,72 @@ actor TaskPrioritizationService {
 
     return "TASKS THE USER HAS COMPLETED (for reference — do NOT rank these):\n\(lines)"
   }
+}
+
+// MARK: - Run Bounds
+
+struct TaskPrioritizationRunPolicy: Sendable {
+  struct Window<Element> {
+    let items: [Element]
+    let startIndex: Int
+    let endIndex: Int
+    let nextStartIndex: Int
+  }
+
+  static let production = TaskPrioritizationRunPolicy(
+    successfulRunInterval: 3600,
+    failedAttemptBackoff: 3600,
+    maxTasksPerRequest: 100,
+    maxRequestsPerRun: 2
+  )
+
+  let successfulRunInterval: TimeInterval
+  let failedAttemptBackoff: TimeInterval
+  let maxTasksPerRequest: Int
+  let maxRequestsPerRun: Int
+
+  var maxTasksPerRun: Int { maxTasksPerRequest * maxRequestsPerRun }
+
+  func shouldStartScheduledRun(
+    now: Date,
+    lastSuccessfulRun: Date?,
+    lastAttempt: Date?
+  ) -> Bool {
+    let successIntervalElapsed =
+      lastSuccessfulRun.map { now.timeIntervalSince($0) >= successfulRunInterval } ?? true
+    let attemptBackoffElapsed =
+      lastAttempt.map { now.timeIntervalSince($0) >= failedAttemptBackoff } ?? true
+    return successIntervalElapsed && attemptBackoffElapsed
+  }
+
+  func window<Element>(from items: [Element], startingAt persistedStartIndex: Int) -> Window<Element> {
+    guard !items.isEmpty else {
+      return Window(items: [], startIndex: 0, endIndex: 0, nextStartIndex: 0)
+    }
+
+    let startIndex = items.indices.contains(persistedStartIndex) ? persistedStartIndex : 0
+    let endIndex = min(startIndex + maxTasksPerRun, items.count)
+    let nextStartIndex = endIndex == items.count ? 0 : endIndex
+    return Window(
+      items: Array(items[startIndex..<endIndex]),
+      startIndex: startIndex,
+      endIndex: endIndex,
+      nextStartIndex: nextStartIndex
+    )
+  }
+
+  func requestBatches<Element>(from items: [Element]) -> [[Element]] {
+    guard !items.isEmpty else { return [] }
+    return stride(from: 0, to: items.count, by: maxTasksPerRequest).map { startIndex in
+      let endIndex = min(startIndex + maxTasksPerRequest, items.count)
+      return Array(items[startIndex..<endIndex])
+    }
+  }
+}
+
+private struct PositionedTask {
+  let position: Int
+  let task: TaskActionItem
 }
 
 // MARK: - Response Models

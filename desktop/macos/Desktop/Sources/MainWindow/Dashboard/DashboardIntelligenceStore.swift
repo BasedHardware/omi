@@ -43,6 +43,17 @@ final class TaskNavigationRequestStore {
   private(set) var pendingTarget: Target?
   private(set) var pendingTask: TaskActionItem?
   private(set) var pendingCandidate: OmiAPI.CandidateRecord?
+  private var runtimeOwnerObserver: NSObjectProtocol?
+
+  init() {
+    runtimeOwnerObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in self?.clear() }
+    }
+  }
 
   func request(task: TaskActionItem) {
     pendingTarget = .task(task.id)
@@ -274,8 +285,10 @@ final class DashboardIntelligenceStore: ObservableObject {
     pendingFeedback = outboxStore.load(ownerID: ownerScope.ownerID)
     pendingFeedback.removeAll { $0.accountGeneration != control.accountGeneration }
     outboxStore.save(pendingFeedback, ownerID: ownerScope.ownerID)
-    await retryPendingFeedback(ownerScope: ownerScope, loadToken: loadToken)
-    guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+    if AccountCutoverOfflineUploadAdmission.allowsUpload() {
+      await retryPendingFeedback(ownerScope: ownerScope, loadToken: loadToken)
+      guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+    }
     do {
       let projection = try await client.getWhatMattersNow(deviceID: deviceID())
       guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
@@ -283,7 +296,7 @@ final class DashboardIntelligenceStore: ObservableObject {
       emitPresentedInterventions(recommendations)
     } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
       guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
-      // Canonical-read users outside the intelligence cohort retain calm
+      // Users without the intelligence capability retain calm
       // dashboard behavior while canonical Goals remain available.
       recommendations = []
     } catch {
@@ -337,7 +350,7 @@ final class DashboardIntelligenceStore: ObservableObject {
     let opened = await recommendationActionHandler(recommendation)
     guard requireCurrentOwner(ownerScope) else { return false }
     if opened {
-      TaskContextSubjectMatcher.shared.bindRecentContext(
+      await ContextSubjectBindingService.shared.bindRecentContext(
         to: TaskContextSubject(
           kind: recommendation.subjectKind,
           id: recommendation.subjectID,
@@ -387,7 +400,10 @@ final class DashboardIntelligenceStore: ObservableObject {
     do {
       let task = try await client.getActionItem(id: taskID)
       guard requireCurrentOwner(ownerScope) else { return nil }
-      guard task.id == taskID else {
+      // The detail response is the freshest word on retirement, and it projects
+      // it through canonical lifecycle status — a recommendation minted before
+      // the task was cancelled/superseded/deleted must not open it as live.
+      guard task.id == taskID, !task.isRetired else {
         error = "This task is no longer available."
         return nil
       }
@@ -634,6 +650,7 @@ final class DashboardIntelligenceStore: ObservableObject {
     var succeeded = Set<String>()
     for entry in outboxStore.load(ownerID: ownerScope.ownerID) {
       guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+      guard AccountCutoverOfflineUploadAdmission.allowsUpload() else { return }
       do {
         _ = try await client.recordTaskFeedback(
           entry.request, idempotencyKey: entry.idempotencyKey,

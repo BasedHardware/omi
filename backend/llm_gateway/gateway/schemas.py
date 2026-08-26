@@ -145,6 +145,7 @@ class GeneratedRouteOverride(StrictBaseModel):
     feature: str = Field(min_length=1)
     primary: ProviderRef
     provider_options: dict[str, Any] = Field(default_factory=dict)
+    request_timeout_ms: int | None = Field(default=None, gt=0, le=900_000)
 
 
 class TimeoutPolicy(StrictBaseModel):

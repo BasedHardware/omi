@@ -20,7 +20,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:omi/widgets/photo_viewer_page.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/transcript.dart';
 
 class ConversationCapturingPage extends StatefulWidget {
@@ -247,10 +247,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                     )
                                   : provider.photos.isNotEmpty
                                       ? _buildChronologicalTimeline(
-                                          provider,
-                                          transcriptSessionId,
-                                          transcriptScrollState,
-                                        )
+                                          provider, transcriptSessionId, transcriptScrollState)
                                       : getTranscriptWidget(
                                           false,
                                           provider.segments,
@@ -404,11 +401,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   /// Builds a chronological timeline interleaving photo groups and transcript segments.
-  Widget _buildChronologicalTimeline(
-    CaptureProvider provider,
-    String sessionId,
-    TranscriptScrollState scrollState,
-  ) {
+  Widget _buildChronologicalTimeline(CaptureProvider provider, String sessionId, TranscriptScrollState scrollState) {
     final photos = List<ConversationPhoto>.from(provider.photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final segments = provider.segments;
 
@@ -590,7 +583,18 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   void _openPhotoViewer(List<ConversationPhoto> allPhotos, int index) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => PhotoViewerPage(photos: allPhotos, initialIndex: index >= 0 ? index : 0),
+        builder: (context) => MediaViewerPage(
+          items: allPhotos
+              .map((photo) => MediaViewerItem(
+                    base64: photo.base64,
+                    heroTag: photo.id,
+                    showCaptionStrip: true,
+                    caption: photo.description,
+                    discarded: photo.discarded,
+                  ))
+              .toList(),
+          initialIndex: index >= 0 ? index : 0,
+        ),
       ),
     );
   }

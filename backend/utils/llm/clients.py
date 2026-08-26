@@ -77,6 +77,7 @@ try:
         CHAT_STRUCTURED_AUTO_LANE_ID,
         feature_auto_lane_id,
         raise_if_gateway_feature_mode_blocks_direct_model_surface,
+        should_route_chat_agent_through_gateway,
         should_route_features_through_gateway,
     )
 except ImportError as exc:
@@ -90,6 +91,9 @@ except ImportError as exc:
         return f"omi:auto:{feature.replace('_', '-')}"
 
     def should_route_features_through_gateway() -> bool:
+        return False
+
+    def should_route_chat_agent_through_gateway() -> bool:
         return False
 
     def raise_if_gateway_feature_mode_blocks_direct_model_surface(_surface: str) -> None:
@@ -200,7 +204,11 @@ class _AnthropicClientProxy:
 
     def _resolve(self) -> anthropic.AsyncAnthropic:
         byok = get_byok_key('anthropic')
-        if should_route_features_through_gateway():
+        # Only pin Anthropic Messages through the gateway when agentic chat is
+        # itself on the gateway route. FEATURE_MODE alone must not force the
+        # Anthropic Messages client onto omi:auto:chat-agent (surface mismatch
+        # with the Luna/OpenAI lane).
+        if should_route_chat_agent_through_gateway():
             return get_gateway_anthropic_client(byok_api_key=byok)
         if byok:
             return _cached_anthropic(byok)
@@ -451,6 +459,7 @@ def get_llm(
     cache_key: Optional[str] = None,
     prompt_cache_options: Optional[dict[str, str]] = None,
     request_timeout: float | None = None,
+    max_retries: int | None = None,
 ) -> BaseChatModel:
     """Get the LLM client for a feature based on the active Model QoS profile.
 
@@ -517,14 +526,20 @@ def get_llm(
             else get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
         )
     elif gateway_feature_mode:
-        gateway_options = {"request_timeout": request_timeout} if request_timeout is not None else None
+        gateway_options = {}
+        if request_timeout is not None:
+            gateway_options["request_timeout"] = request_timeout
+        if max_retries is not None:
+            gateway_options["max_retries"] = max_retries
         result = get_or_create_omi_gateway_llm(
-            feature_auto_lane_id(feature), streaming, gateway_options, feature=feature
+            feature_auto_lane_id(feature), streaming, gateway_options or None, feature=feature
         )
     else:
         route_options = get_route_options(feature, model, provider)
         if request_timeout is not None:
             route_options = {**route_options, "request_timeout": request_timeout}
+        if max_retries is not None:
+            route_options = {**route_options, "max_retries": max_retries}
         result = get_default_client(model, provider, streaming, route_options)
 
     result = maybe_wrap_dev_gateway_shadow(
@@ -538,17 +553,12 @@ def get_llm(
     cache_params: Dict[str, Any] = {}
     if cache_key and supports_prompt_cache(model):
         cache_params['prompt_cache_key'] = cache_key
-    # prompt_cache_options is accepted but not sent. The field is a contract
-    # between this caller and the gateway, and the two deploy from separate
-    # pipelines, so the gateway can be running a build that predates it and
-    # rejects the request outright. Sending it broke conversation structuring
-    # for every request that routed through the gateway.
-    #
-    # Restore the send once a gateway carrying the field in its forwarded
-    # parameters is deployed. It travels in extra_body when it returns: the
-    # client validates named arguments before building the request, so a
-    # version that predates the field raises in process instead of reaching the
-    # gateway at all.
+    if prompt_cache_options and model.startswith('gpt-5.6'):
+        # This is a provider request field, not a ChatOpenAI constructor field.
+        # extra_body lets the OpenAI client merge it into the wire payload. It
+        # must be sent even without a cache key: explicit mode with no
+        # breakpoint is how unique prompts opt out of billable cache writes.
+        cache_params['extra_body'] = {'prompt_cache_options': prompt_cache_options}
     if cache_params:
         return result.bind(**cache_params)
     return result

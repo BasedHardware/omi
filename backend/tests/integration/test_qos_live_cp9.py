@@ -250,9 +250,13 @@ class TestP6_StructuredOutput:
         assert _STRUCTURED_OUTPUT_FEATURES == {
             'chat_extraction',
             'proactive_notification',
+            'desktop_proactive_extraction',
+            'desktop_proactive_reasoning',
             'conv_app_select',
             'external_structure',
+            'translation',
             'trends',
+            'what_matters_now',
         }
 
 

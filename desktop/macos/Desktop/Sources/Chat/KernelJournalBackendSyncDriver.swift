@@ -108,6 +108,7 @@ actor KernelJournalBackendSyncDriver {
     let sender: String
     let appId: String?
     let sessionId: String?
+    let contentBlocksJSON: String?
     let metadata: String?
     let messageSource: String
 
@@ -150,6 +151,14 @@ actor KernelJournalBackendSyncDriver {
       self.sender = sender
       self.appId = payload["appId"] as? String
       self.sessionId = payload["sessionId"] as? String
+      if payload["contentBlocks"] == nil || payload["contentBlocks"] is NSNull {
+        contentBlocksJSON = nil
+      } else {
+        guard let blocks = payload["contentBlocks"] as? [[String: Any]],
+          JSONSerialization.isValidJSONObject(blocks)
+        else { return nil }
+        contentBlocksJSON = KernelJournalBackendSyncDriver.jsonArrayString(blocks)
+      }
       self.metadata = payload["metadata"] as? String
       self.messageSource = messageSource
     }
@@ -303,11 +312,17 @@ actor KernelJournalBackendSyncDriver {
 
   private enum SyncError: Error, Equatable {
     case ownerChanged
+    case accountCutoverOfflineQueueBlocked
   }
 
   nonisolated static func boundedErrorCode(for error: Error) -> String {
-    if let error = error as? SyncError, error == .ownerChanged {
-      return "backend_sync_owner_changed"
+    if let error = error as? SyncError {
+      switch error {
+      case .ownerChanged:
+        return "backend_sync_owner_changed"
+      case .accountCutoverOfflineQueueBlocked:
+        return "backend_sync_cutover_blocked"
+      }
     }
     if let authError = error as? AuthError, case .userChangedDuringRequest = authError {
       return "backend_sync_owner_changed"
@@ -324,8 +339,13 @@ actor KernelJournalBackendSyncDriver {
   }
 
   nonisolated static func boundedDeleteErrorCode(for error: Error) -> String {
-    if let error = error as? SyncError, error == .ownerChanged {
-      return "backend_sync_owner_changed"
+    if let error = error as? SyncError {
+      switch error {
+      case .ownerChanged:
+        return "backend_sync_owner_changed"
+      case .accountCutoverOfflineQueueBlocked:
+        return "backend_sync_cutover_blocked"
+      }
     }
     if let authError = error as? AuthError, case .userChangedDuringRequest = authError {
       return "backend_sync_owner_changed"
@@ -342,8 +362,13 @@ actor KernelJournalBackendSyncDriver {
   }
 
   nonisolated static func boundedReconcileErrorCode(for error: Error) -> String {
-    if let error = error as? SyncError, error == .ownerChanged {
-      return "backend_sync_owner_changed"
+    if let error = error as? SyncError {
+      switch error {
+      case .ownerChanged:
+        return "backend_sync_owner_changed"
+      case .accountCutoverOfflineQueueBlocked:
+        return "backend_sync_cutover_blocked"
+      }
     }
     if let authError = error as? AuthError, case .userChangedDuringRequest = authError {
       return "backend_sync_owner_changed"
@@ -361,6 +386,9 @@ actor KernelJournalBackendSyncDriver {
     guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerId else {
       throw SyncError.ownerChanged
     }
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      throw SyncError.accountCutoverOfflineQueueBlocked
+    }
     await conversationBarrier.beginSync(conversationId: request.conversationId)
     let response: SaveMessageResponse
     do {
@@ -369,6 +397,7 @@ actor KernelJournalBackendSyncDriver {
         sender: request.sender,
         appId: request.appId,
         sessionId: request.sessionId,
+        contentBlocksJSON: request.contentBlocksJSON,
         metadata: request.metadata,
         clientMessageId: request.turnId,
         messageSource: request.messageSource,
@@ -389,6 +418,9 @@ actor KernelJournalBackendSyncDriver {
   func delete(_ request: DeleteRequest) async throws {
     guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerId else {
       throw SyncError.ownerChanged
+    }
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      throw SyncError.accountCutoverOfflineQueueBlocked
     }
     await conversationBarrier.beginDelete(conversationId: request.conversationId)
     guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerId else {
@@ -433,6 +465,10 @@ actor KernelJournalBackendSyncDriver {
     guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerId else {
       throw SyncError.ownerChanged
     }
+    // Reconcile is product-plane traffic; keep it behind the same fence as journal sync.
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      throw SyncError.accountCutoverOfflineQueueBlocked
+    }
     let page: DesktopMessageReconcilePage
     switch request.targetKind {
     case .messages:
@@ -471,7 +507,7 @@ actor KernelJournalBackendSyncDriver {
       canonicalTurnId: row.clientMessageId.flatMap { $0.isEmpty ? nil : $0 },
       role: row.sender == "ai" || row.sender == "assistant" ? "assistant" : "user",
       content: row.text,
-      contentBlocksJSON: metadata.contentBlocksJSON,
+      contentBlocksJSON: row.contentBlocksJSON ?? metadata.contentBlocksJSON,
       resourcesJSON: metadata.resourcesJSON,
       metadataJSON: row.metadata ?? "{}",
       createdAtMs: Int(row.createdAt.timeIntervalSince1970 * 1_000)

@@ -320,7 +320,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get searchApps => '앱 검색...';
 
   @override
-  String get myApps => '내 앱';
+  String get myApps => '내가 만듦';
 
   @override
   String get installedApps => '설치된 앱';
@@ -730,11 +730,6 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return '플랜이 $date에 취소됩니다.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return '플랜이 $date에 갱신됩니다.';
   }
 
   @override
@@ -2089,16 +2084,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get editMemory => '✏️ 메모리 편집';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => '기준으로 고정';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => '기준에서 고정 해제';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => '기준 메모리';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => '항상 컨텍스트에 포함';
 
   @override
   String get memoryContentHint => '아이스크림 먹는 걸 좋아해요...';
@@ -9613,4 +9608,129 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => '너무 오래되어 동기화할 수 없습니다 — Omi가 받을 수 없습니다';
+
+  @override
+  String get planSheetChooseYourPlan => '플랜을 선택하고 무제한 Omi를 잠금 해제하세요.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, 모바일, 웹에서 사용 가능';
+
+  @override
+  String get popularBadge => '인기';
+
+  @override
+  String get worksOnDesktop => '데스크톱에서 사용 가능';
+
+  @override
+  String get noDesktopAccess => '데스크톱에서 사용 불가';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months개월 / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count개월 무료',
+      one: '1개월 무료',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi는 무료이지만, 무료 버전에는 사용 경험에 영향을 주는 제한이 있습니다:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5~7초 지연 (실시간 아님)';
+
+  @override
+  String get downgradeToFreemiumAction => '무료 버전으로 변경';
+
+  @override
+  String get getFreeUnlimitedAccess => '무제한 액세스를 무료로 받기';
+
+  @override
+  String get shareDataForTraining => '학습을 위한 데이터 공유';
+
+  @override
+  String get yourRequestUnderReview => '요청을 검토 중입니다';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => '업데이트가 필요합니다';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => '계정 마이그레이션 이후에도 계속하려면 최신 Omi 앱을 설치하세요.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => '마이그레이션 진행 중';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage => '계정을 마이그레이션하는 중입니다. 마이그레이션이 끝날 때까지 제품 기능이 일시 중지됩니다.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage => '마이그레이션 롤백 후 계정이 유지보수 상태입니다. 일부 최신 데이터가 고립될 수 있습니다.';
+
+  @override
+  String get accountCutoverOpenStore => '스토어 열기';
+
+  @override
+  String get chatScopeToday => '오늘';
+
+  @override
+  String get chatScopeThisWeek => '이번 주';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title에 대해';
+  }
+
+  @override
+  String get askAboutThisConversation => '이에 대해 질문';
+
+  @override
+  String get sendRawAudioToOmi => '원본 오디오를 Omi로 보내기';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      '끄면 원본 오디오가 Omi로 전송되지 않습니다. 텍스트 변환 결과와 클라우드 기능에 필요한 데이터는 계속 Omi로 전송될 수 있습니다.';
+
+  @override
+  String get findDevice => '찾기';
+
+  @override
+  String get diagnosticsShareFailed => '진단 정보를 공유하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get appDisabledTitle => '이 앱은 비활성화되어 설치할 수 없습니다.';
+
+  @override
+  String get appDisabledWebhookFailures => '엔드포인트가 72시간 연속으로 실패하여 전송이 중단되었습니다.';
+
+  @override
+  String get appDisabledGeneric => 'Omi에 의해 비활성화되었습니다.';
+
+  @override
+  String get appDisabledOwnerHint => '먼저 엔드포인트를 수정하세요. 다시 활성화하면 설정된 모든 URL을 다시 확인합니다.';
+
+  @override
+  String get appReEnable => '다시 활성화';
+
+  @override
+  String get appReEnableFailedTitle => '다시 활성화할 수 없음';
+
+  @override
+  String get appReEnableFailedBody => '이 앱을 다시 활성화하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date에 비활성화되었습니다.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return '마지막 오류: $error';
+  }
 }

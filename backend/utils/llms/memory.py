@@ -1,14 +1,34 @@
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 
-import database.memories as memories_db
+from cachetools import TTLCache
+
 from database._client import db as firestore_db
 from database.auth import get_user_name
 from models.memories import Memory, MemoryDB
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Prompt context is a bounded default-visible intake — never a full account export.
+PROMPT_MEMORY_LIMIT = 1000
+
+_PROMPT_DATA_CACHE_MAX_SIZE = 1024
+_PROMPT_DATA_CACHE_TTL_SECONDS = 30
+_prompt_data_cache: TTLCache[str, Tuple[Optional[str], List[MemoryDB], List[MemoryDB], List[MemoryDB]]] = TTLCache(
+    maxsize=_PROMPT_DATA_CACHE_MAX_SIZE, ttl=_PROMPT_DATA_CACHE_TTL_SECONDS
+)
+_prompt_data_cache_lock = threading.Lock()
+
+
+def clear_prompt_data_cache(uid: Optional[str] = None) -> None:
+    """Drop cached prompt context for one user (or all users when uid is None)."""
+    with _prompt_data_cache_lock:
+        if uid is None:
+            _prompt_data_cache.clear()
+        else:
+            _prompt_data_cache.pop(uid, None)
 
 
 def get_prompt_memories(uid: str) -> Tuple[Any, str]:
@@ -58,24 +78,43 @@ def safe_create_memory(memory_data: Dict[str, Any]) -> MemoryDB:
         raise
 
 
-def get_prompt_data(uid: str) -> Tuple[Optional[str], List[MemoryDB], List[MemoryDB], List[MemoryDB]]:
-    # TODO: cache this
-    if resolve_memory_system(uid, db_client=firestore_db) == MemorySystem.CANONICAL:
-        existing_memories = [
-            memory.model_dump(mode='python')
-            for memory in MemoryService(db_client=firestore_db).read(uid, limit=1000)
-            if not getattr(memory, 'is_locked', False)
-        ]
-    else:
-        existing_memories = [m for m in memories_db.get_memories(uid, limit=1000) if not m.get('is_locked')]
+def _is_prompt_visible(memory: MemoryDB) -> bool:
+    """Rejected, pending-review, locked, and invalidated rows stay out of prompts."""
+    if memory.is_locked:
+        return False
+    if memory.user_review is False:
+        return False
+    if memory.invalid_at is not None:
+        return False
+    return True
+
+
+def get_prompt_data(
+    uid: str,
+) -> Tuple[Optional[str], List[MemoryDB], List[MemoryDB], List[MemoryDB]]:
+    with _prompt_data_cache_lock:
+        cached = _prompt_data_cache.get(uid)
+    if cached is not None:
+        user_name, baseline, user_made, generated = cached
+        return user_name, list(baseline), list(user_made), list(generated)
+
+    # Use the default-visible list surface (processed, non-archive) with a hard
+    # page cap. Account export is intentionally not used for prompt intake.
+    existing_memories = MemoryService(db_client=firestore_db).read(
+        uid,
+        limit=PROMPT_MEMORY_LIMIT,
+        offset=0,
+        include_pending_processing=False,
+    )
 
     baseline: List[MemoryDB] = []
     user_made: List[MemoryDB] = []
     generated: List[MemoryDB] = []
 
-    for memory in existing_memories:
+    for memory_obj in existing_memories:
         try:
-            memory_obj = safe_create_memory(memory)
+            if not _is_prompt_visible(memory_obj):
+                continue
             if memory_obj.is_baseline:
                 baseline.append(memory_obj)
             elif memory_obj.manually_added:
@@ -83,7 +122,10 @@ def get_prompt_data(uid: str) -> Tuple[Optional[str], List[MemoryDB], List[Memor
             else:
                 generated.append(memory_obj)
         except Exception as e:
-            logger.error(f'Error creating memory from memory: {e}')
+            logger.error(f"Error routing memory into prompt buckets: {e}")
 
     user_name = get_user_name(uid)
-    return user_name, baseline, user_made, generated
+    result = (user_name, baseline, user_made, generated)
+    with _prompt_data_cache_lock:
+        _prompt_data_cache[uid] = result
+    return result

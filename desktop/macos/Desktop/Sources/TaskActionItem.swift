@@ -21,8 +21,11 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   let metadata: String?
   /// Classification category: personal, work, feature, bug, code, research, communication, finance, health, other
   let category: String?
-  /// Soft-delete: true if this task has been deleted by AI dedup
-  let deleted: Bool?
+  /// Legacy soft-delete marker from older task responses.
+  ///
+  /// Keep the wire field private so lifecycle decisions cannot accidentally
+  /// ignore canonical `status`. Callers must use `isRetired` instead.
+  private var legacyDeleted: Bool?
   /// Who deleted: "user", "ai_dedup"
   let deletedBy: String?
   /// When the task was soft-deleted
@@ -79,11 +82,36 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     return true
   }
 
+  /// Accept receipts expose the canonical `task_id`; local rows key `id` to the
+  /// backend action-item id. Completing a just-accepted Suggested task must
+  /// match either.
+  func matchesTaskIdentifier(_ identifier: String) -> Bool {
+    id == identifier || taskId == identifier
+  }
+
   /// Server list/detail responses project soft retirement through canonical
   /// lifecycle status and may omit the legacy `deleted` field. Keep that
   /// projection here so every local cache and surface applies the same rule.
   var isRetired: Bool {
-    deleted == true || taskStatus == "cancelled" || taskStatus == "superseded"
+    legacyDeleted == true || taskStatus == "cancelled" || taskStatus == "superseded"
+  }
+
+  /// This row as the retired lane already knows it to be.
+  ///
+  /// `isRetired` re-derives retirement from fields the server may not send:
+  /// the doc comment above says list responses can omit legacy `deleted` and
+  /// project retirement through canonical lifecycle status, and that status
+  /// vocabulary is open — anything outside `cancelled`/`superseded` reads as
+  /// live. A row fetched from the deleted lane is retired because of *where it
+  /// came from*, so the lane states it rather than asking the projection to
+  /// guess. Without this, a retired row round-trips into the local cache with
+  /// `deleted = false` and comes back as a live task on any machine whose
+  /// cache was built from that lane.
+  func retired() -> TaskActionItem {
+    guard !isRetired else { return self }
+    var copy = self
+    copy.legacyDeleted = true
+    return copy
   }
 
   /// Custom Equatable: compares only display-relevant fields.
@@ -92,7 +120,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   static func == (lhs: TaskActionItem, rhs: TaskActionItem) -> Bool {
     lhs.id == rhs.id && lhs.description == rhs.description && lhs.completed == rhs.completed
       && lhs.createdAt == rhs.createdAt && lhs.dueAt == rhs.dueAt && lhs.source == rhs.source
-      && lhs.priority == rhs.priority && lhs.category == rhs.category && lhs.deleted == rhs.deleted
+      && lhs.priority == rhs.priority && lhs.category == rhs.category
+      && lhs.legacyDeleted == rhs.legacyDeleted
       && lhs.deletedBy == rhs.deletedBy && lhs.goalId == rhs.goalId
       && lhs.recurrenceRule == rhs.recurrenceRule
       && lhs.taskId == rhs.taskId && lhs.taskStatus == rhs.taskStatus
@@ -101,7 +130,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   }
 
   enum CodingKeys: String, CodingKey {
-    case id, description, completed, source, priority, metadata, category, deleted
+    case id, description, completed, source, priority, metadata, category
+    case legacyDeleted = "deleted"
     case createdAt = "created_at"
     case updatedAt = "updated_at"
     case dueAt = "due_at"
@@ -183,7 +213,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     self.priority = priority
     self.metadata = metadata
     self.category = category
-    self.deleted = deleted
+    self.legacyDeleted = deleted
     self.deletedBy = deletedBy
     self.deletedAt = deletedAt
     self.deletedReason = deletedReason
@@ -244,7 +274,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     priority = try wire?.priority?.rawValue ?? container.decodeIfPresent(String.self, forKey: .priority)
     metadata = try container.decodeIfPresent(String.self, forKey: .metadata)
     category = try container.decodeIfPresent(String.self, forKey: .category)
-    deleted = try container.decodeIfPresent(Bool.self, forKey: .deleted)
+    legacyDeleted = try container.decodeIfPresent(Bool.self, forKey: .legacyDeleted)
     deletedBy = try container.decodeIfPresent(String.self, forKey: .deletedBy)
     deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
     deletedReason = try container.decodeIfPresent(String.self, forKey: .deletedReason)
@@ -279,6 +309,22 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
 
   /// Categories that trigger Claude agent execution
   static let agentCategories: Set<String> = ["feature", "bug", "code"]
+
+  /// Sources written by AI capture pipelines: desktop screen extraction
+  /// ("screenshot"), backend conversation extraction ("conversation"), voice
+  /// extraction ("transcription:omi" / "transcription:desktop"), and AI
+  /// suggestions ("ai_suggested"). A whitelist, not "anything non-manual" —
+  /// user-driven sources like "recurring" spawns, imports, and legacy nil/
+  /// "legacy" rows must stay in the normal due-date categories.
+  static let aiCaptureSources: Set<String> = ["screenshot", "conversation", "ai_suggested"]
+
+  /// An AI-captured task. Used to keep leftover extractor rows out of
+  /// proactive-nudge grounding; they are ordinary due-date tasks on Tasks.
+  var isPendingSuggestion: Bool {
+    guard !completed, !isRetired else { return false }
+    guard let source else { return false }
+    return Self.aiCaptureSources.contains(source) || source.hasPrefix("transcription")
+  }
 
   /// Get tags array from metadata or fall back to single category
   var tags: [String] {

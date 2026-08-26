@@ -22,7 +22,7 @@ import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
 import httpx
@@ -30,14 +30,15 @@ import httpx
 from database import redis_db
 from database import users as users_db
 from database import x_posts as x_posts_db
-from database import memories as memories_db
 from database._client import db
-from database.vector_db import upsert_memory_vectors_batch, upsert_x_post_vectors_batch
+from database.vector_db import upsert_x_post_vectors_batch
 from models.memories import MemoryDB
+from models.memory_contracts import MemoryExtractionError
 from utils.llm.memories import extract_memories_from_text
-from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import MemorySystem
+from utils.memory.promotion_flex import PromotionFlexDeferred, PromotionFlexRunRouter
+from utils.observability.fallback import record_fallback
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
@@ -327,7 +328,13 @@ async def fetch_bookmarks(token: str, x_user_id: str) -> List[Dict]:
 # ----------------------------------------------------------------------------
 
 
-def _extract_and_index(uid: str, posts: List[Dict]) -> int:
+def _extract_and_index(
+    uid: str,
+    posts: List[Dict],
+    *,
+    llm: Optional[Any] = None,
+    result_guard: Optional[Callable[[], None]] = None,
+) -> int:
     """Run memory extraction over the given posts (grouped into chunks) and
     vector-index the resulting memories. Returns memories created."""
     if not posts:
@@ -351,7 +358,39 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
 
     total = 0
     for chunk, post_ids in chunks:
-        extracted = extract_memories_from_text(uid, chunk, 'twitter_tweets')
+        try:
+            if llm is None:
+                extracted = extract_memories_from_text(uid, chunk, 'twitter_tweets')
+            else:
+                extracted = extract_memories_from_text(
+                    uid,
+                    chunk,
+                    'twitter_tweets',
+                    strict=True,
+                    llm=llm,
+                )
+        except MemoryExtractionError as exc:
+            # A provider 5xx on this chunk means the extractor never produced a
+            # batch — not "this chunk has no memories". Do not acknowledge the
+            # raw posts (they stay pending and the next sync replays this chunk),
+            # and keep extracting the remaining chunks so one provider blip does
+            # not starve the batches behind it in the same cycle.
+            logger.warning(
+                'x_connector: chunk skipped provider_5xx uid=%s posts=%d extractor=%s',
+                uid,
+                len(post_ids),
+                exc.extractor,
+            )
+            record_fallback(
+                component='other',
+                from_mode='x_memory_extraction',
+                to_mode='chunk_deferred',
+                reason='provider_5xx',
+                outcome='degraded',
+            )
+            continue
+        if result_guard is not None:
+            result_guard()
         if extracted:
             source_id = f"{INTEGRATION_KEY}:{hashlib.sha256('|'.join(post_ids).encode('utf-8')).hexdigest()[:24]}"
             memory_dbs: List[MemoryDB] = []
@@ -372,25 +411,15 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
                 # (and cleanly removable on disconnect / re-import).
                 mdb.app_id = INTEGRATION_KEY
                 memory_dbs.append(mdb)
-            # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
-            if resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
-                memory_service = MemoryService(db_client=db)
-                for mdb in memory_dbs:
-                    memory_service.write(uid, mdb.model_dump())
-            else:
-                memories_db.save_memories(uid, [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs])
-                upsert_memory_vectors_batch(
-                    uid,
-                    [
-                        {
-                            'memory_id': m.id,
-                            'content': m.content,
-                            'category': m.category.value,
-                            'subject_entity_id': m.subject_entity_id,
-                        }
-                        for m in memory_dbs
-                    ],
-                )
+            MemoryService(db_client=db).create_external_memory_batch(
+                uid,
+                memory_dbs,
+                memory_system=MemorySystem.CANONICAL,
+                consumer='x_connector',
+                operation='x_memory_extract',
+                upsert_vectors=False,
+                require_canonical_promotion=True,
+            )
             capture_memory_write(
                 principal_id=uid,
                 source="twitter_x_connector",
@@ -411,7 +440,7 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
 # ----------------------------------------------------------------------------
 
 
-async def sync_x_for_user(uid: str) -> Dict:
+async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRunRouter] = None) -> Dict:
     """Pull new X posts, store raw, extract memories. Returns a summary dict."""
     sync_context = IntegrationTelemetryContext(integration_name=X, operation='sync_posts', uid=uid)
     emit_sync_attempted(sync_context)
@@ -514,7 +543,28 @@ async def sync_x_for_user(uid: str) -> Dict:
                 await run_blocking(db_executor, upsert_x_post_vectors_batch, uid, items_to_index[i : i + 100])
             except Exception as e:
                 logger.warning(f'x_connector: failed to index x_posts chunk[{i}:{i+100}] for uid={uid}: {e}')
-        memories_created = await run_blocking(db_executor, _extract_and_index, uid, pending_posts)
+        extraction_llm = (
+            background_flex.llm_for_uid(
+                uid,
+                standard_feature='memories',
+                flex_feature='x_memory_extraction_flex',
+                workload='x_memory_extraction',
+            )
+            if background_flex is not None
+            else None
+        )
+        if extraction_llm is None:
+            # Flag-off and manual/OAuth callers retain the exact legacy call.
+            memories_created = await run_blocking(db_executor, _extract_and_index, uid, pending_posts)
+        else:
+            memories_created = await run_blocking(
+                db_executor,
+                _extract_and_index,
+                uid,
+                pending_posts,
+                llm=extraction_llm,
+                result_guard=background_flex.assert_result_current if background_flex else None,
+            )
         post_count = await run_blocking(db_executor, x_posts_db.count_x_posts, uid)
 
         await run_blocking(
@@ -530,6 +580,13 @@ async def sync_x_for_user(uid: str) -> Dict:
                 'syncing': False,
             },
         )
+    except PromotionFlexDeferred:
+        try:
+            await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
+        except Exception as cleanup_error:
+            logger.warning(f'x_connector: failed to clear syncing after Flex deferral for uid={uid}: {cleanup_error}')
+        logger.info('x_connector: scheduled Flex extraction deferred uid=%s', uid)
+        raise
     except Exception as e:
         try:
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
@@ -585,7 +642,7 @@ def should_run_x_sync_job() -> bool:
     return datetime.now(timezone.utc).hour % SYNC_JOB_INTERVAL_HOURS == 0
 
 
-async def run_x_sync_job() -> Dict:
+async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
     """Incrementally sync every connected X user. Errors are isolated per user;
     a slow/failed account never blocks the others."""
     try:
@@ -594,14 +651,17 @@ async def run_x_sync_job() -> Dict:
         logger.error(f'x_connector: sync job could not list users: {e}')
         return {'users': 0, 'synced': 0, 'new_posts': 0}
 
+    background_flex = PromotionFlexRunRouter(db_client=db, started_at=job_started_at)
     synced = 0
     new_posts = 0
     for uid in uids:
         try:
-            result = await sync_x_for_user(uid)
+            result = await sync_x_for_user(uid, background_flex=background_flex)
             if result.get('success'):
                 synced += 1
                 new_posts += int(result.get('new_posts', 0))
+        except PromotionFlexDeferred:
+            logger.info('x_connector: scheduled Flex extraction deferred uid=%s', uid)
         except Exception as e:
             logger.warning(f'x_connector: sync job failed for uid={uid}: {e}')
         await asyncio.sleep(_SYNC_JOB_USER_SPACING_SEC)

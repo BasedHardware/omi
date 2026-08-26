@@ -2,18 +2,16 @@
   "schema_version": 1,
   "id": "FC-qualification-swift-cache-promisor-clone",
   "violated_contract": "Trusted qualification must materialize an exact candidate-SHA source tree for the Swift cache even when the Actions/worktree checkout is a partial or promisor clone whose local no-hardlinks clone cannot fetch missing objects.",
-  "canonical_prevention": "Prefer local no-hardlinks clone of the source repository; on materialization failure, fetch the exact candidate SHA from the source's origin URL into a fresh checkout and verify HEAD matches the candidate before publishing the cache entry.",
+  "canonical_prevention": "The dedicated qualification lane is removed. Reintroduction is rejected by the desktop release-process guards.",
   "canonical_prevention_artifact": [
-    "desktop/macos/scripts/qualification-swift-cache.sh",
-    "desktop/macos/tests/test-qualification-swift-cache.sh"
+    ".github/scripts/check-release-process-guards.py"
   ],
   "evidence_prs": [
     10811
   ],
   "scope_hints": [
-    "desktop/macos/scripts/qualification-swift-cache.sh",
-    "desktop/macos/scripts/qualify-desktop-beta.sh",
-    ".github/workflows/desktop_qualify_beta.yml"
+    ".github/scripts/check-release-process-guards.py",
+    ".github/workflows/desktop_auto_release.yml"
   ],
   "status": "open"
 }

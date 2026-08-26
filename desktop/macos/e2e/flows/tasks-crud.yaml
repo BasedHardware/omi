@@ -6,9 +6,11 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/TaskSortOrderPlanner.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemModels.swift
   - desktop/macos/Desktop/Sources/Services/LocalMutationAuthorization.swift
   - desktop/macos/Desktop/Sources/Stores/APIClient+Tasks.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  - desktop/macos/Desktop/Sources/TaskActionItem.swift
 preconditions:
   - automation_bridge_ready
 

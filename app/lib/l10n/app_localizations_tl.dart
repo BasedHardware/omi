@@ -323,7 +323,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get searchApps => 'Maghanap ng mga app...';
 
   @override
-  String get myApps => 'Aking Mga App';
+  String get myApps => 'Likha ko';
 
   @override
   String get installedApps => 'Naka-install na Mga App';
@@ -747,11 +747,6 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'Ang iyong plan ay macancel sa $date.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'Ang iyong plan ay magre-renew sa $date.';
   }
 
   @override
@@ -2140,16 +2135,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String get editMemory => '✏️ I-edit ang Alaala';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'I-pin bilang baseline';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Alisin sa baseline';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Baseline na memorya';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Palaging nasa konteksto';
 
   @override
   String get memoryContentHint => 'Gusto ko na kumain ng ice cream...';
@@ -9864,4 +9859,135 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Masyadong luma para i-sync — hindi ito matatanggap ng Omi';
+
+  @override
+  String get planSheetChooseYourPlan => 'Piliin ang iyong plano para ma-unlock ang walang limitasyong Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Available sa Mac, mobile, at web';
+
+  @override
+  String get popularBadge => 'SIKAT';
+
+  @override
+  String get worksOnDesktop => 'Gumagana sa desktop';
+
+  @override
+  String get noDesktopAccess => 'Hindi gumagana sa desktop';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months buwan / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count buwang libre',
+      one: '1 buwang libre',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Libre ang Omi, pero may mga limitasyon ang libreng bersyon na nakakaapekto sa iyong karanasan:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 segundong delay (hindi real-time)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Lumipat sa libreng bersyon';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Kumuha ng libreng walang limitasyong access';
+
+  @override
+  String get shareDataForTraining => 'Magbahagi ng data para sa training';
+
+  @override
+  String get yourRequestUnderReview => 'Sinusuri ang iyong kahilingan';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Pembaruan diperlukan';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Instal aplikasi Omi terbaru untuk melanjutkan setelah migrasi akun.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migrasi sedang berlangsung';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.';
+
+  @override
+  String get accountCutoverOpenStore => 'Buka toko';
+
+  @override
+  String get chatScopeToday => 'Ngayon';
+
+  @override
+  String get chatScopeThisWeek => 'Ngayong linggo';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Tungkol sa: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Itanong tungkol dito';
+
+  @override
+  String get sendRawAudioToOmi => 'Ipadala ang raw na audio sa Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'I-off para hindi maipadala ang raw na audio sa Omi. Maaari pa ring ipadala sa Omi ang mga transcript at data na kailangan ng mga cloud feature.';
+
+  @override
+  String get findDevice => 'Hanapin';
+
+  @override
+  String get diagnosticsShareFailed => 'Hindi maibahagi ang diagnostics. Pakisubukan ulit.';
+
+  @override
+  String get appDisabledTitle => 'Naka-disable ang app na ito at hindi ito mai-install.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Nabigo ang endpoint nito nang 72 oras na sunod-sunod, kaya itinigil ang mga paghahatid.';
+
+  @override
+  String get appDisabledGeneric => 'I-nadisable ito ng Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Ayusin muna ang endpoint — sinusuri muli ng pag-enable ang bawat naka-configure na URL.';
+
+  @override
+  String get appReEnable => 'I-enable muli';
+
+  @override
+  String get appReEnableFailedTitle => 'Hindi ma-enable muli';
+
+  @override
+  String get appReEnableFailedBody => 'Hindi ma-enable muli ang app na ito. Pakisubukan ulit.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Na-disable noong $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Huling error: $error.';
+  }
 }

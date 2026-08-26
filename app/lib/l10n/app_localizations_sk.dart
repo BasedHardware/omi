@@ -323,7 +323,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get searchApps => 'Hľadať aplikácie...';
 
   @override
-  String get myApps => 'Moje aplikácie';
+  String get myApps => 'Vytvorené mnou';
 
   @override
   String get installedApps => 'Nainštalované aplikácie';
@@ -746,11 +746,6 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'Váš plán bude zrušený $date.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'Váš plán sa obnoví $date.';
   }
 
   @override
@@ -2132,16 +2127,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get editMemory => '✏️ Upraviť pamäť';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Pripnúť ako základ';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Odopnúť zo základu';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Základná pamäť';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Vždy v kontexte';
 
   @override
   String get memoryContentHint => 'Rád jem zmrzlinu...';
@@ -9766,4 +9761,135 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Príliš staré na synchronizáciu — Omi ho nemôže prijať';
+
+  @override
+  String get planSheetChooseYourPlan => 'Vyberte si plán a odomknite neobmedzené Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Dostupné na Macu, mobile a webe';
+
+  @override
+  String get popularBadge => 'OBĽÚBENÉ';
+
+  @override
+  String get worksOnDesktop => 'Funguje na počítači';
+
+  @override
+  String get noDesktopAccess => 'Nefunguje na počítači';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mesiacov / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mesiacov zadarmo',
+      many: '$count mesiaca zadarmo',
+      few: '$count mesiace zadarmo',
+      one: '$count mesiac zadarmo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi je zadarmo, ale bezplatná verzia má obmedzenia, ktoré ovplyvňujú váš zážitok:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Oneskorenie 5–7 sekúnd (nie v reálnom čase)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Prejsť na bezplatnú verziu';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Získajte neobmedzený prístup zadarmo';
+
+  @override
+  String get shareDataForTraining => 'Zdieľať údaje na trénovanie';
+
+  @override
+  String get yourRequestUnderReview => 'Vaša žiadosť sa posudzuje';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Je vyžadována aktualizace';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Probíhá migrace';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.';
+
+  @override
+  String get accountCutoverOpenStore => 'Otevřít obchod';
+
+  @override
+  String get chatScopeToday => 'Dnes';
+
+  @override
+  String get chatScopeThisWeek => 'Tento týždeň';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'O: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Opýtať sa na to';
+
+  @override
+  String get sendRawAudioToOmi => 'Odosielať nespracovaný zvuk do Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Vypnutím zabránite odosielaniu nespracovaného zvuku do Omi. Prepisy a údaje potrebné pre cloudové funkcie sa môžu naďalej odosielať do Omi.';
+
+  @override
+  String get findDevice => 'Nájsť';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiku sa nepodarilo zdieľať. Skús to znova.';
+
+  @override
+  String get appDisabledTitle => 'Táto aplikácia je vypnutá a nedá sa nainštalovať.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Jej endpoint zlyhával 72 hodín v kuse, preto bolo doručovanie zastavené.';
+
+  @override
+  String get appDisabledGeneric => 'Vypla ju Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Najskôr oprav endpoint — pri opätovnom zapnutí sa znovu overí každá nastavená URL.';
+
+  @override
+  String get appReEnable => 'Znovu zapnúť';
+
+  @override
+  String get appReEnableFailedTitle => 'Nepodarilo sa znovu zapnúť';
+
+  @override
+  String get appReEnableFailedBody => 'Túto aplikáciu sa nepodarilo znovu zapnúť. Skús to znova.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Vypnuté $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Posledná chyba: $error.';
+  }
 }

@@ -11,7 +11,9 @@ import { rankMemories } from './memoryRank'
 import { getMemoryCache, setMemoryCache } from './localAgentMemoryCache'
 import type { Memory } from '../hooks/useMemories'
 
-const AGENT_MODEL = 'claude-haiku-4-5-20251001'
+// Single-shot structured completions, not chat turns — the managed structured
+// lane (backend routers/desktop_chat.py _managed_lane_id).
+const AGENT_MODEL = 'omi-structured'
 const MAX_ITERS = 2 // capped tight: each iter is a full non-streaming LLM call
 const AGENT_CALL_TIMEOUT_MS = 2_500 // per-iteration LLM timeout
 // Hard cap on how long the chat WAITS for question-specific enrichment before

@@ -322,7 +322,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get searchApps => 'Iskanje aplikacij...';
 
   @override
-  String get myApps => 'Moje aplikacije';
+  String get myApps => 'Ustvarjeno od mene';
 
   @override
   String get installedApps => 'Nameščene aplikacije';
@@ -742,11 +742,6 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'Vaš načrt bo preklican na $date.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'Vaš načrt se obnavlja na $date.';
   }
 
   @override
@@ -2128,16 +2123,16 @@ class AppLocalizationsSl extends AppLocalizations {
   String get editMemory => '✏️ Uredi spomin';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Pripni kot osnovo';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Odpni z osnove';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Osnovni spomin';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Vedno v kontekstu';
 
   @override
   String get memoryContentHint => 'Rad imam jesti sladoled...';
@@ -9802,4 +9797,137 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Prestaro za sinhronizacijo — Omi ga ne more sprejeti';
+
+  @override
+  String get planSheetChooseYourPlan => 'Izberite svoj paket in odklenite neomejeni Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Na voljo na Macu, mobilnem in spletu';
+
+  @override
+  String get popularBadge => 'PRILJUBLJENO';
+
+  @override
+  String get worksOnDesktop => 'Deluje na računalniku';
+
+  @override
+  String get noDesktopAccess => 'Ne deluje na računalniku';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mesecev / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mesecev brezplačno',
+      few: '$count mesece brezplačno',
+      two: '$count meseca brezplačno',
+      one: '$count mesec brezplačno',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi je brezplačen, vendar ima brezplačna različica omejitve, ki vplivajo na vašo izkušnjo:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Zamik 5–7 sekund (ne v realnem času)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Preklopi na brezplačno različico';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Pridobite brezplačen neomejen dostop';
+
+  @override
+  String get shareDataForTraining => 'Deli podatke za učenje';
+
+  @override
+  String get yourRequestUnderReview => 'Vaša zahteva je v pregledu';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Je vyžadována aktualizace';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Probíhá migrace';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.';
+
+  @override
+  String get accountCutoverOpenStore => 'Otevřít obchod';
+
+  @override
+  String get chatScopeToday => 'Danes';
+
+  @override
+  String get chatScopeThisWeek => 'Ta teden';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'O: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Vprašaj o tem';
+
+  @override
+  String get sendRawAudioToOmi => 'Pošiljaj neobdelan zvok v Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Izklopite, da preprečite pošiljanje neobdelanega zvoka v Omi. Prepisi in podatki, potrebni za funkcije v oblaku, se lahko še vedno pošiljajo v Omi.';
+
+  @override
+  String get findDevice => 'Poišči';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostike ni bilo mogoče deliti. Poskusi znova.';
+
+  @override
+  String get appDisabledTitle => 'Ta aplikacija je onemogočena in je ni mogoče namestiti.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Njena končna točka je odpovedovala 72 ur zapored, zato je bila dostava ustavljena.';
+
+  @override
+  String get appDisabledGeneric => 'Onemogočila jo je Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Najprej popravi končno točko — ponovna omogočitev znova preveri vsak nastavljen URL.';
+
+  @override
+  String get appReEnable => 'Znova omogoči';
+
+  @override
+  String get appReEnableFailedTitle => 'Ponovna omogočitev ni uspela';
+
+  @override
+  String get appReEnableFailedBody => 'Te aplikacije ni bilo mogoče znova omogočiti. Poskusi znova.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Onemogočeno $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Zadnja napaka: $error.';
+  }
 }

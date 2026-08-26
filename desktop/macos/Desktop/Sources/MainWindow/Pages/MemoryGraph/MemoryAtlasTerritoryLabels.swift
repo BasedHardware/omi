@@ -52,13 +52,13 @@ struct MemoryAtlasNeighbourhoodCaption: View {
         Text(caption.uppercased())
           .scaledFont(size: 9, weight: .semibold)
           .tracking(0.8)
-          .foregroundColor(isHovered ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .foregroundColor(isHovered ? Ink.primary : Ink.secondary)
           .lineLimit(1)
           .truncationMode(.tail)
 
         Image(systemName: "scope")
           .scaledFont(size: 8, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .opacity(isHovered ? 1 : 0)
           .frame(width: isHovered ? 9 : 0)
       }
@@ -71,9 +71,9 @@ struct MemoryAtlasNeighbourhoodCaption: View {
       // and the dots underneath would read through the letters.
       .background(
         Capsule()
-          .fill(OmiColors.backgroundPrimary.opacity(isHovered ? 0.92 : 0.66))
+          .fill(Ink.surface.opacity(isHovered ? 0.92 : 0.66))
           .overlay(
-            Capsule().stroke(OmiColors.border.opacity(isHovered ? 0.4 : 0.14), lineWidth: 1))
+            Capsule().stroke(Ink.separator.opacity(isHovered ? 0.4 : 0.14), lineWidth: 1))
       )
       .contentShape(Capsule())
     }
@@ -289,6 +289,17 @@ enum MemoryAtlasNeighbourhoodLabels {
   ) -> CGFloat? {
     let departure = min(zoom, neighbourhoodZoom) * 0.85
     return departure > minimumZoom ? departure : nil
+  }
+
+  /// Zoom-out floor after Escape (or inspector close) has sent the camera
+  /// home while the neighbourhood is still the next layer on the stack.
+  ///
+  /// The original threshold sits above zoom 1, so a selection-clear that
+  /// resets the viewport would otherwise also end the island. Rebinding from
+  /// the overview camera keeps that layer for the next Escape; a later
+  /// pinch below this floor can still leave.
+  static func overviewDepartureZoom(neighbourhoodZoom: CGFloat, minimumZoom: CGFloat) -> CGFloat? {
+    departureZoom(enteredAt: 1, neighbourhoodZoom: neighbourhoodZoom, minimumZoom: minimumZoom)
   }
 
   /// Places on the island where its whole name would sit on land, nearest the

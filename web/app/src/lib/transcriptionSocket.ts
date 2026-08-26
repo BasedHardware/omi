@@ -17,10 +17,14 @@ export interface TranscriptSegment {
 export interface TranscriptionSocketOptions {
   language?: string;
   sampleRate?: number;
+  /** Stable UUID so /v4/web/listen creates its own conversation (#5388). */
+  clientConversationId?: string;
   onSegment: (segment: TranscriptSegment) => void;
   onError: (error: string) => void;
   onConnected: () => void;
   onDisconnected: () => void;
+  /** Authoritative conversation id from conversation_session events. */
+  onConversationSession?: (conversationId: string) => void;
 }
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected';
@@ -145,6 +149,10 @@ export class TranscriptionSocket {
         source: 'web',
         include_speech_profile: 'true',
       });
+      // Own a conversation independent of an active pendant session (#5388).
+      if (this.options.clientConversationId) {
+        params.set('client_conversation_id', this.options.clientConversationId);
+      }
 
       // Store token for first-message auth
       this.pendingToken = token;
@@ -321,6 +329,12 @@ export class TranscriptionSocket {
             this.options.onError('Authentication failed');
             this.ws?.close(1000, 'Auth failed');
           }
+        } else if (
+          data.type === 'conversation_session' &&
+          typeof data.conversation_id === 'string' &&
+          data.status === 'in_progress'
+        ) {
+          this.options.onConversationSession?.(data.conversation_id);
         }
         // Handle other event messages (silently ignore for now)
       }

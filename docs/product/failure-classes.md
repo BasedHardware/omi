@@ -13,7 +13,7 @@ covers it and runs in the `failure-class-cli-tests` manifest lane.
 | `violated_contract` | yes | The contract an instance of this class breaks. |
 | `canonical_prevention` | yes | Prose: the shape of the fix that removes the class. |
 | `canonical_prevention_artifact` | no | Repository-relative paths to the **reusable guard surface** — a checker, shared fixture, or behavioral contract test. Every listed path must exist; a rename that orphans one fails validation. |
-| `evidence_prs` | yes | Merged PRs that evidence the class. |
+| `evidence_prs` | yes | Merged PRs that evidence the class. May be `[]` — a class added alongside its first fix has no merged PR to cite, and the adding commit is recoverable evidence. |
 | `scope_hints` | no | Advisory globs; never used to classify a change. |
 | `status` | yes | `open` or `dormant`. |
 | `dormant_since` | dormant only | ISO-8601 timestamp of the dormant transition. |
@@ -21,6 +21,26 @@ covers it and runs in the `failure-class-cli-tests` manifest lane.
 `canonical_prevention` says what should stop recurrence; `canonical_prevention_artifact`
 says where that guard actually lives. A class with prose but no artifact has an intention,
 not a guard — which is what the ratchet below measures.
+
+## Declaring a class
+
+Write exactly one of these lines in the PR body. The value is a single token; the
+alternatives below are alternatives, not a pipe-separated field:
+
+```
+Failure-Class: FC-<lower-kebab-slug>
+Failure-Class: new
+Failure-Class: none
+```
+
+`scripts/failure-class prepare` lists the classes whose advisory `scope_hints` overlap
+the change's paths, which is a display narrowing and not a classification — the author
+still chooses. `--all-candidates` lists the whole registry.
+
+`Failure-Class: new` means this change adds exactly one definition file, alongside the
+fix. It may not modify or remove any other definition; those transitions belong in a
+registry-only PR. A new definition's `evidence_prs` may be empty, because the PR that
+would be its evidence has no number until it is opened.
 
 ## Guard-artifact ratchet
 

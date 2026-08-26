@@ -150,7 +150,8 @@ make_signed_smoke_fixture() {
     "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-x64/lib" \
     "$app/Contents/Resources/agent/node_modules/@img/sharp-libvips-darwin-arm64/lib" \
     "$app/Contents/Resources/agent/node_modules/@img/sharp-libvips-darwin-x64/lib" \
-    "$app/Contents/Resources/pi-mono-extension" \
+    "$app/Contents/Resources/agent/dist/runtime" \
+    "$app/Contents/Resources/pi-mono-extension/node_modules/@omi/placeholder" \
     "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources"
   cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -177,8 +178,16 @@ PLIST
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/MacOS/Omi Computer"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
   chmod +x "$app/Contents/MacOS/Omi Computer" "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+  # The runtime payload pi-mono loads after the bridge script. Non-empty on
+  # purpose: a zero-byte entry point cannot answer a turn either.
+  printf 'runtime\n' > "$app/Contents/Resources/agent/dist/index.js"
+  printf 'manifest\n' > "$app/Contents/Resources/agent/dist/runtime/omi-tool-manifest.js"
+  printf '{}\n' > "$app/Contents/Resources/agent/package.json"
+  printf 'extension\n' > "$app/Contents/Resources/pi-mono-extension/index.ts"
+  printf '{}\n' > "$app/Contents/Resources/pi-mono-extension/package.json"
+  printf '{}\n' > "$app/Contents/Resources/pi-mono-extension/node_modules/@omi/placeholder/package.json"
+  printf '{}\n' > "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-arm64/package.json"
   touch \
-    "$app/Contents/Resources/agent/src/runtime/omi-tool-manifest.ts" \
     "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-arm64/lib/sharp-darwin-arm64.node" \
     "$app/Contents/Resources/agent/node_modules/@img/sharp-darwin-x64/lib/sharp-darwin-x64.node" \
     "$app/Contents/Resources/agent/node_modules/@img/sharp-libvips-darwin-arm64/lib/libvips-cpp.42.dylib" \
@@ -325,6 +334,35 @@ if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$wrong_firebase_beta" \
 fi
 grep -q "Firebase project must be based-hardware" /tmp/omi-smoke-beta-wrong-firebase.err \
   || fail "Firebase project rejection should be explicit"
+
+# A signed artifact whose pi-mono-extension is present but empty passed the old
+# directory-exists check and still failed every chat turn (pi-mono exits 1 on
+# `Unknown provider "omi"`). The release lane must reject it before publication.
+mkdir -p "$tmp_root/hollow-runtime"
+hollow_runtime_app="$tmp_root/hollow-runtime/Omi.app"
+cp -R "$canonical_dmg_app" "$hollow_runtime_app"
+rm -f "$hollow_runtime_app/Contents/Resources/pi-mono-extension/index.ts"
+if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$hollow_runtime_app" \
+  "$SMOKE" --app "$hollow_runtime_app" --tag v0.12.34+12034-macos \
+  >/tmp/omi-smoke-hollow-runtime.out 2>/tmp/omi-smoke-hollow-runtime.err; then
+  fail "smoke must reject an artifact whose agent runtime payload is incomplete"
+fi
+grep -q "agent runtime payload incomplete" /tmp/omi-smoke-hollow-runtime.err \
+  || fail "incomplete runtime payload rejection should name the contract"
+grep -q "pi-mono-extension/index.ts" /tmp/omi-smoke-hollow-runtime.err \
+  || fail "incomplete runtime payload rejection should name the missing component"
+
+mkdir -p "$tmp_root/missing-tool-manifest"
+missing_tool_manifest_app="$tmp_root/missing-tool-manifest/Omi.app"
+cp -R "$canonical_dmg_app" "$missing_tool_manifest_app"
+rm -f "$missing_tool_manifest_app/Contents/Resources/agent/dist/runtime/omi-tool-manifest.js"
+if PATH="$mock_bin:$PATH" OMI_TEST_DMG_APP_SOURCE="$missing_tool_manifest_app" \
+  "$SMOKE" --app "$missing_tool_manifest_app" --tag v0.12.34+12034-macos \
+  >/tmp/omi-smoke-missing-tool-manifest.out 2>/tmp/omi-smoke-missing-tool-manifest.err; then
+  fail "smoke must reject an artifact whose compiled agent tool manifest is missing"
+fi
+grep -q "agent/dist/runtime/omi-tool-manifest.js" /tmp/omi-smoke-missing-tool-manifest.err \
+  || fail "compiled tool manifest rejection should name the missing component"
 
 # Regression (v0.12.91 build failure): macOS mktemp creates the LITERAL template
 # file when characters follow the final XXXXXX, so the second smoke invocation

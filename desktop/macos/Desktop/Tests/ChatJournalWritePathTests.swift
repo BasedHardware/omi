@@ -224,21 +224,15 @@ final class ChatJournalWritePathTests: XCTestCase {
     XCTAssertEqual(provider.messages.count, 1)
 
     // The query-completion handler attaches local-only state the journal never
-    // persists: model/token/cost metadata, a user rating, a screenshot.
+    // persists: turn metadata, a user rating, a screenshot.
     let index = try XCTUnwrap(provider.messages.firstIndex { $0.id == "assistant-1" })
     provider.messages[index].metadata = MessageMetadata(
-      model: "claude-sonnet",
-      inputTokens: 100,
-      outputTokens: 42,
-      cacheReadTokens: nil,
-      cacheWriteTokens: nil,
-      costUsd: 0.0123,
-      systemPrompt: nil,
       hasScreenshot: false,
       screenshotSizeBytes: nil,
       toolNames: ["execute_sql"],
       sqlRowsReturned: 7,
-      sqlQueryCount: 2
+      sqlQueryCount: 2,
+      adapterId: "pi-mono"
     )
     provider.messages[index].rating = 1
     let screenshot = Data([0x0A, 0x0B, 0x0C])
@@ -254,8 +248,7 @@ final class ChatJournalWritePathTests: XCTestCase {
     XCTAssertEqual(refreshed.text, "Final answer")
 
     // ...but the local-only fields must survive the wholesale row replace.
-    XCTAssertEqual(refreshed.metadata?.model, "claude-sonnet")
-    XCTAssertEqual(refreshed.metadata?.outputTokens, 42)
+    XCTAssertEqual(refreshed.metadata?.adapterId, "pi-mono")
     XCTAssertEqual(refreshed.metadata?.sqlRowsReturned, 7)
     XCTAssertEqual(refreshed.rating, 1)
     XCTAssertEqual(refreshed.notificationScreenshot, screenshot)
@@ -274,6 +267,82 @@ final class ChatJournalWritePathTests: XCTestCase {
     let carried = ChatProvider.carryingLocalOnlyFields(
       ChatMessage(id: "m", text: "new", sender: .ai), from: existing)
     XCTAssertEqual(carried.rating, -1, "A nil projected rating falls back to the local value")
+  }
+
+  func testProjectionCarryingHelperKeepsBoundCitationsAcrossKindOnlyJournalEcho() {
+    let bound = ChatCitationReference(
+      ordinal: 8001, kind: .memory, sourceID: "m1", preview: "Brain map is empty")
+    var existing = ChatMessage(
+      id: "m",
+      text: "The brain map is empty [8001]",
+      sender: .ai,
+      contentBlocks: [
+        .text(id: "t", text: "The brain map is empty [8001]"),
+        .citation(id: "citation-8001-m1", reference: bound),
+      ])
+    existing.rating = 1
+    let projected = ChatMessage(
+      id: "m",
+      text: "The brain map is empty [memory]",
+      sender: .ai,
+      contentBlocks: [.text(id: "t", text: "The brain map is empty [memory]")])
+
+    let merged = ChatProvider.carryingLocalOnlyFields(projected, from: existing)
+    XCTAssertEqual(merged.text, existing.text)
+    XCTAssertEqual(merged.inlineCitationReferences, [bound])
+    XCTAssertEqual(merged.rating, 1)
+  }
+
+  func testProjectionCarryingHelperKeepsBoundCitationsWhenCommentaryStillHasKindOnly() {
+    let bound = ChatCitationReference(
+      ordinal: 8001, kind: .memory, sourceID: "m1", preview: "You filmed the launch")
+    var existing = ChatMessage(
+      id: "m",
+      text: "Looking that up [memory]\n\nYou filmed the launch [8001]",
+      sender: .ai,
+      contentBlocks: [
+        .text(id: "commentary", text: "Looking that up [memory]"),
+        .toolCall(id: "tool", name: "execute_sql", status: .completed),
+        .text(id: "answer", text: "You filmed the launch [8001]"),
+        .citation(id: "citation-8001-m1", reference: bound),
+      ])
+    existing.rating = 1
+    let projected = ChatMessage(
+      id: "m",
+      text: "Looking that up [memory]\n\nYou filmed the launch [memory]",
+      sender: .ai,
+      contentBlocks: [
+        .text(id: "commentary", text: "Looking that up [memory]"),
+        .toolCall(id: "tool", name: "execute_sql", status: .completed),
+        .text(id: "answer", text: "You filmed the launch [memory]"),
+      ])
+
+    let merged = ChatProvider.carryingLocalOnlyFields(projected, from: existing)
+    XCTAssertEqual(merged.text, existing.text)
+    XCTAssertEqual(merged.inlineCitationReferences, [bound])
+    XCTAssertEqual(merged.visibleAnswerText, "You filmed the launch [8001]")
+    XCTAssertEqual(merged.rating, 1)
+  }
+
+  func testAcceptedTerminalContentUsesVisibleAnswerNotCommentaryConcatenation() {
+    let message = ChatMessage(
+      id: "turn-commentary",
+      text: "Let me look that up.\n\nYou filmed the launch video.",
+      sender: .ai,
+      contentBlocks: [
+        .text(id: "commentary", text: "Let me look that up."),
+        .toolCall(id: "tool", name: "execute_sql", status: .completed),
+        .text(id: "answer", text: "You filmed the launch video."),
+      ])
+    let accepted = message.visibleAnswerText
+    XCTAssertEqual(accepted, "You filmed the launch video.")
+    let blocks = KernelTurnProjection.acceptedTerminalContentBlocks(
+      message: message, acceptedContent: accepted)
+    guard case .text(_, let text) = blocks.first else {
+      return XCTFail("Terminal payload must start with the visible answer")
+    }
+    XCTAssertEqual(text, "You filmed the launch video.")
+    XCTAssertFalse(text.contains("Let me look that up"))
   }
 
   // MARK: - Helpers

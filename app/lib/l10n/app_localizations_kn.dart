@@ -324,7 +324,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get searchApps => 'ಅಪ್ಲಿಕೇಶನ ಹುಡುಕಿ...';
 
   @override
-  String get myApps => 'ನನ್ನ ಅಪ್ಲಿಕೇಶನ';
+  String get myApps => 'ನಾನು ರಚಿಸಿದವು';
 
   @override
   String get installedApps => 'ಅನುಸ್ಥಾಪಿತ ಅಪ್ಲಿಕೇಶನ';
@@ -744,11 +744,6 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'ನಿಮ್ಮ ಯೋಜನೆ $date ರಲ್ಲಿ ರದ್ದುಗೊಳ್ಳುತ್ತದೆ.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'ನಿಮ್ಮ ಯೋಜನೆ $date ರಲ್ಲಿ ನವೀಕರಣ ಮಾಡುತ್ತದೆ.';
   }
 
   @override
@@ -2132,16 +2127,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String get editMemory => '✏️ ಸ್ಮೃತಿ ಸಂಪಾದಿಸಿ';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'ಆಧಾರವಾಗಿ ಪಿನ್ ಮಾಡಿ';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'ಆಧಾರದಿಂದ ಅನ್‌ಪಿನ್ ಮಾಡಿ';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'ಆಧಾರ ಸ್ಮೃತಿ';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'ಯಾವಾಗಲೂ ಸಂದರ್ಭದಲ್ಲಿ';
 
   @override
   String get memoryContentHint => 'ನಾನು ಐಸ್ ಕ್ರೀಮ್ ತಿನ್ನಲು ಪ್ರೀತಿ ಮಾಡುತ್ತೇನೆ...';
@@ -9806,4 +9801,134 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'ಸಿಂಕ್ ಮಾಡಲು ತುಂಬಾ ಹಳೆಯದು — Omi ಅದನ್ನು ಸ್ವೀಕರಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ';
+
+  @override
+  String get planSheetChooseYourPlan => 'ಅಮಿತ Omi ಅನ್‌ಲಾಕ್ ಮಾಡಲು ನಿಮ್ಮ ಯೋಜನೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, ಮೊಬೈಲ್ ಮತ್ತು ವೆಬ್‌ನಲ್ಲಿ ಲಭ್ಯ';
+
+  @override
+  String get popularBadge => 'ಜನಪ್ರಿಯ';
+
+  @override
+  String get worksOnDesktop => 'ಡೆಸ್ಕ್‌ಟಾಪ್‌ನಲ್ಲಿ ಕೆಲಸ ಮಾಡುತ್ತದೆ';
+
+  @override
+  String get noDesktopAccess => 'ಡೆಸ್ಕ್‌ಟಾಪ್‌ನಲ್ಲಿ ಕೆಲಸ ಮಾಡುವುದಿಲ್ಲ';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months ತಿಂಗಳು / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ತಿಂಗಳು ಉಚಿತ',
+      one: '1 ತಿಂಗಳು ಉಚಿತ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi ಉಚಿತ, ಆದರೆ ಉಚಿತ ಆವೃತ್ತಿಯಲ್ಲಿ ನಿಮ್ಮ ಅನುಭವದ ಮೇಲೆ ಪರಿಣಾಮ ಬೀರುವ ಮಿತಿಗಳಿವೆ:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 ಸೆಕೆಂಡ್ ವಿಳಂಬ (ನೈಜ ಸಮಯವಲ್ಲ)';
+
+  @override
+  String get downgradeToFreemiumAction => 'ಉಚಿತ ಆವೃತ್ತಿಗೆ ಬದಲಿಸಿ';
+
+  @override
+  String get getFreeUnlimitedAccess => 'ಉಚಿತ ಅಮಿತ ಪ್ರವೇಶ ಪಡೆಯಿರಿ';
+
+  @override
+  String get shareDataForTraining => 'ತರಬೇತಿಗಾಗಿ ಡೇಟಾ ಹಂಚಿಕೊಳ್ಳಿ';
+
+  @override
+  String get yourRequestUnderReview => 'ನಿಮ್ಮ ವಿನಂತಿ ಪರಿಶೀಲನೆಯಲ್ಲಿದೆ';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'अपडेट आवश्यक';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'माइग्रेशन जारी है';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।';
+
+  @override
+  String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String get chatScopeToday => 'ಇಂದು';
+
+  @override
+  String get chatScopeThisWeek => 'ಈ ವಾರ';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title ಕುರಿತು';
+  }
+
+  @override
+  String get askAboutThisConversation => 'ಇದರ ಕುರಿತು ಕೇಳಿ';
+
+  @override
+  String get sendRawAudioToOmi => 'Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸಿ';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸುವುದನ್ನು ತಡೆಯಲು ಇದನ್ನು ಆಫ್ ಮಾಡಿ. ಪ್ರತಿಲಿಪಿಗಳು ಮತ್ತು ಕ್ಲೌಡ್ ವೈಶಿಷ್ಟ್ಯಗಳಿಗೆ ಅಗತ್ಯವಾದ ಡೇಟಾವನ್ನು ಇನ್ನೂ Omi ಗೆ ಕಳುಹಿಸಬಹುದು.';
+
+  @override
+  String get findDevice => 'ಹುಡುಕಿ';
+
+  @override
+  String get diagnosticsShareFailed => 'ಡಯಾಗ್ನೋಸ್ಟಿಕ್ಸ್ ಹಂಚಿಕೊಳ್ಳಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get appDisabledTitle => 'ಈ ಆ್ಯಪ್ ನಿಷ್ಕ್ರಿಯಗೊಂಡಿದೆ ಮತ್ತು ಅನುಸ್ಥಾಪಿಸಲಾಗುವುದಿಲ್ಲ.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'ಇದರ ಎಂಡ್‌ಪಾಯಿಂಟ್ ಸತತ 72 ಗಂಟೆಗಳ ಕಾಲ ವಿಫಲವಾಯಿತು, ಆದ್ದರಿಂದ ರವಾನೆಗಳನ್ನು ನಿಲ್ಲಿಸಲಾಯಿತು.';
+
+  @override
+  String get appDisabledGeneric => 'ಇದನ್ನು Omi ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿತು.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'ಮೊದಲು ಎಂಡ್‌ಪಾಯಿಂಟ್ ಸರಿಪಡಿಸಿ — ಮರು-ಸಕ್ರಿಯಗೊಳಿಸುವಾಗ ಕಾನ್ಫಿಗರ್ ಮಾಡಿದ ಪ್ರತಿ URL ಅನ್ನು ಮತ್ತೆ ಪರಿಶೀಲಿಸಲಾಗುತ್ತದೆ.';
+
+  @override
+  String get appReEnable => 'ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಿ';
+
+  @override
+  String get appReEnableFailedTitle => 'ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get appReEnableFailedBody => 'ಈ ಆ್ಯಪ್ ಅನ್ನು ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date ರಂದು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'ಕೊನೆಯ ದೋಷ: $error';
+  }
 }

@@ -157,6 +157,11 @@ actor GmailReaderService {
     if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
+    // Snapshot the selection once for the whole read: readRecentEmails runs
+    // several Python fetches (query + label feeds + date windows) and each
+    // must use the same profile, or a mid-read picker change would merge two
+    // accounts' mail into one import.
+    let selectedCookiePath = GmailSelectionStore.selectedCookiePath
     let emails: [GmailEmail]
     if let days = Self.parseNewerThanDays(query), days > 20 {
       let queryEmails = try fetchGmailViaAtomFeedSingle(
@@ -164,12 +169,14 @@ actor GmailReaderService {
         query: query,
         feedPath: nil,
         allowBootstrap: false,
-        userInitiated: userInitiated
+        userInitiated: userInitiated,
+        selectedCookiePath: selectedCookiePath
       )
       let labelEmails = try fetchGmailViaLabelFeeds(
         maxResults: maxResults,
         query: query,
-        userInitiated: userInitiated
+        userInitiated: userInitiated,
+        selectedCookiePath: selectedCookiePath
       )
       var merged: [String: GmailEmail] = [:]
       for email in queryEmails + labelEmails {
@@ -186,7 +193,8 @@ actor GmailReaderService {
       emails = try fetchGmailViaAtomFeedSingle(
         maxResults: maxResults,
         query: query,
-        userInitiated: userInitiated
+        userInitiated: userInitiated,
+        selectedCookiePath: selectedCookiePath
       )
     }
     return emails.sorted { $0.date > $1.date }
@@ -197,12 +205,14 @@ actor GmailReaderService {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
     do {
+      let selectedCookiePath = GmailSelectionStore.selectedCookiePath
       _ = try fetchGmailViaAtomFeedSingle(
         maxResults: 1,
         query: "newer_than:1d",
         feedPath: "atom/inbox",
         allowBootstrap: false,
-        userInitiated: userInitiated
+        userInitiated: userInitiated,
+        selectedCookiePath: selectedCookiePath
       )
       return .connected(verifiedAt: Date())
     } catch let error as GmailReaderError {
@@ -220,13 +230,14 @@ actor GmailReaderService {
   }
 
   /// Synthesize profile memories and tasks from a batch of emails.
-  /// Uses an LLM call to extract ~10 memories and 2-3 tasks.
+  /// The prompt and the model live in the backend behind POST /v1/connectors/synthesize;
+  /// this only formats the metadata rows and persists what comes back.
   func synthesizeFromEmails(emails: [GmailEmail]) async -> (
     memories: Int, tasks: Int, profileSummary: String
   ) {
     guard !emails.isEmpty else { return (0, 0, "") }
 
-    // Format emails compactly for the LLM
+    // Format emails compactly for the backend
     var emailLines: [String] = []
     let dateFormatter = DateFormatter()
     dateFormatter.dateFormat = "MMM d"
@@ -237,34 +248,6 @@ actor GmailReaderService {
         ?? email.from
       emailLines.append("[\(date)] From: \(sender) | Subject: \(email.subject) | \(email.snippet)")
     }
-    let emailText = emailLines.joined(separator: "\n")
-
-    let synthesisPrompt = """
-      Analyze these \(emails.count) recent emails and extract profile information about the user.
-
-      EMAILS:
-      \(emailText)
-
-      Respond ONLY with valid JSON (no markdown, no code fences, no backticks):
-      {
-        "memories": [
-          "factual statement about the user based on email patterns"
-        ],
-        "tasks": [
-          {"description": "actionable follow-up item", "priority": "high"}
-        ],
-        "profile": "2-3 sentence summary of who this user is"
-      }
-
-      RULES:
-      - Extract exactly 10 memories (facts about their role, company, projects, relationships, interests, tools, communication patterns). Memories should be generalized — no raw email content.
-      - Extract 0-3 tasks. A task is a SPECIFIC thing the user personally still owes: a reply they haven't sent, a promise they made, a message that bounced, a deadline addressed to them. Name the real person/subject in the description ("Reply to Daniel about the Thursday demo"), not a generic "follow up".
-      - Only real, still-open loops. EXCLUDE: newsletters and marketing, automated/no-reply/notification mail, receipts, and the user's OWN mass or templated outbound (identical messages sent to many people are a campaign, not a task). If a thread already has a later reply from the user, it is handled — skip it.
-      - Prefer 0 tasks over a weak one. An empty tasks array is correct when nothing is genuinely owed.
-      - Task priorities: "high", "medium", or "low"
-      - Profile should summarize professional identity and key interests in 2-3 sentences
-      - Output ONLY the JSON object, nothing else
-      """
 
     // Retry the synthesis on transient failure instead of silently dropping the import.
     let maxAttempts = 2
@@ -276,44 +259,14 @@ actor GmailReaderService {
           throw NSError(
             domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
         }
-        let result = try await AgentClient.run(
-          surface: .service("gmail_reader"),
-          prompt: synthesisPrompt,
-          model: ModelQoS.Claude.synthesis,
-          systemPrompt:
-            "You are a profile extraction assistant. Output ONLY valid JSON. No markdown, no code fences, no explanation.",
-          onTextDelta: { @Sendable _ in },
-          onToolCall: { @Sendable _, _, _ in return "" },
-          onToolActivity: { @Sendable _, _, _, _ in }
+        let synthesis = try await APIClient.shared.synthesizeConnectorItems(
+          source: "gmail",
+          items: emailLines
         )
 
-        var responseText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        log("GmailReaderService: Synthesis response length: \(responseText.count) chars")
-
-        // Strip markdown code fences if present (```json ... ``` or ``` ... ```)
-        if responseText.hasPrefix("```") {
-          // Remove opening fence (```json or ```)
-          if let firstNewline = responseText.firstIndex(of: "\n") {
-            responseText = String(responseText[responseText.index(after: firstNewline)...])
-          }
-          // Remove closing fence
-          if responseText.hasSuffix("```") {
-            responseText = String(responseText.dropLast(3)).trimmingCharacters(
-              in: .whitespacesAndNewlines)
-          }
-        }
-
-        // Parse the JSON response
-        guard let jsonData = responseText.data(using: .utf8),
-          let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-        else {
-          log("GmailReaderService: Failed to parse synthesis response: \(responseText.prefix(500))")
-          return (0, 0, "")
-        }
-
-        let memoryStrings = parsed["memories"] as? [String] ?? []
-        let taskDicts = parsed["tasks"] as? [[String: Any]] ?? []
-        let profileSummary = parsed["profile"] as? String ?? ""
+        let memoryStrings = synthesis.memories
+        let taskDicts = synthesis.tasks
+        let profileSummary = synthesis.profile
 
         log("GmailReaderService: Parsed \(memoryStrings.count) memories, \(taskDicts.count) tasks")
 
@@ -343,8 +296,9 @@ actor GmailReaderService {
         // Save tasks
         var tasksSaved = 0
         for taskDict in taskDicts {
-          guard let description = taskDict["description"] as? String else { continue }
-          let priority = taskDict["priority"] as? String ?? "medium"
+          let description = taskDict.description
+          guard !description.isEmpty else { continue }
+          let priority = taskDict.priority.isEmpty ? "medium" : taskDict.priority
           let task = await TasksStore.shared.createTask(
             description: description,
             dueAt: nil,
@@ -428,17 +382,20 @@ actor GmailReaderService {
     query: String = "newer_than:1d",
     feedPath: String? = nil,
     allowBootstrap: Bool? = nil,
-    userInitiated: Bool = false
+    userInitiated: Bool = false,
+    selectedCookiePath: String? = nil
   ) throws
     -> [GmailEmail]
   {
     let shouldUseBootstrapPage =
       allowBootstrap ?? (feedPath == nil && Self.parseNewerThanDays(query) != nil)
 
-    let browserConfigs = BrowserGoogleSession.configsForPython(
-      logPrefix: "GmailReaderService",
-      userInitiated: userInitiated
-    )
+    let browserConfigs = GmailSelectionStore.filter(
+      BrowserGoogleSession.configsForPython(
+        logPrefix: "GmailReaderService",
+        userInitiated: userInitiated
+      ),
+      selectedCookiePath: selectedCookiePath)
 
     guard !browserConfigs.isEmpty else {
       throw GmailReaderError.noBrowserFound
@@ -788,7 +745,8 @@ actor GmailReaderService {
   private func fetchGmailViaLabelFeeds(
     maxResults: Int,
     query: String,
-    userInitiated: Bool = false
+    userInitiated: Bool = false,
+    selectedCookiePath: String? = nil
   ) throws -> [GmailEmail] {
     guard maxResults > 0 else { return [] }
 
@@ -815,7 +773,8 @@ actor GmailReaderService {
         query: query,
         feedPath: feedPath,
         allowBootstrap: false,
-        userInitiated: userInitiated
+        userInitiated: userInitiated,
+        selectedCookiePath: selectedCookiePath
       )
       for email in feedEmails {
         let existing = merged[email.id]

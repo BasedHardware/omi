@@ -30,14 +30,14 @@ fi
 "$PYTHON_BIN" -m pip install -q -r backend/requirements.txt
 echo "Backend Python dependencies installed"
 
-hook=".git/hooks/pre-commit"
-if [ ! -f "$hook" ]; then
-  ln -s -f ../../scripts/pre-commit "$hook"
-  echo "Installed pre-commit hook"
-else
-  echo "Pre-commit hook already present"
-fi
+# scripts/install-git-hooks.sh owns hook installation. A linked worktree's
+# `.git` is a file holding a gitdir pointer, so a literal `.git/hooks` path does
+# not exist there; the installer resolves the shared hook directory with
+# `git rev-parse --git-path hooks` and installs dispatchers rather than symlinks
+# into a directory every worktree shares.
+bash scripts/install-git-hooks.sh
 
 echo ""
 echo "Next: add your four API keys to backend/.env.local-dev, then run:"
-echo "  make dev-desktop"
+echo "  make dev-up        # start the harness for mobile/iOS testing"
+echo "  make dev-desktop   # start the harness and the desktop app"

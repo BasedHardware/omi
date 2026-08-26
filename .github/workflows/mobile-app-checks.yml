@@ -45,6 +45,9 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Match repo-checks.yml so dependency resolution cannot drift when
+          # the stable channel advances beyond the repository's lockfile.
+          flutter-version: 3.44.5
           cache: true
 
       # flutter-action already caches the SDK and ~/.pub-cache. build_runner's
@@ -106,6 +109,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.44.5
           cache: true
 
       - name: Cache build_runner state
@@ -126,8 +130,8 @@ jobs:
       - name: Prepare Flutter dev compile inputs
         working-directory: app
         run: |
-          cp setup/prebuilt/firebase_options.dart lib/firebase_options_dev.dart
-          cp setup/prebuilt/firebase_options.dart lib/firebase_options_prod.dart
+          cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
+          cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
           {
             echo "API_BASE_URL="
             echo "USE_WEB_AUTH=true"
@@ -243,6 +247,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.44.5
           cache: true
 
       - name: Cache build_runner state
@@ -262,10 +267,10 @@ jobs:
         working-directory: app
         run: |
           mkdir -p android/app/src/dev/ android/app/src/prod/
-          cp setup/prebuilt/firebase_options.dart lib/firebase_options_dev.dart
-          cp setup/prebuilt/firebase_options.dart lib/firebase_options_prod.dart
-          cp setup/prebuilt/google-services.json android/app/src/dev/
-          cp setup/prebuilt/google-services.json android/app/src/prod/
+          cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
+          cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
+          cp setup/prebuilt/google-services-local.json android/app/src/dev/google-services.json
+          cp setup/prebuilt/google-services-local.json android/app/src/prod/google-services.json
           cp setup/prebuilt/key.properties android/key.properties
           {
             echo "API_BASE_URL="

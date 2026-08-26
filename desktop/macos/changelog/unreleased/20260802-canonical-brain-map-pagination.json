@@ -1,3 +1,0 @@
-{
-  "change": "Improved Brain Map loading to securely include the complete server graph across bounded pages while remaining compatible with older backends"
-}

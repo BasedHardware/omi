@@ -7,27 +7,64 @@ import WebKit
 extension SettingsContentView {
   var gmailReaderSubsection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      // Email account selection
+      settingsCard(settingId: "advanced.gmail.account") {
+        HStack(spacing: OmiSpacing.lg) {
+          Image(systemName: "person.crop.circle.badge.checkmark")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.secondary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Email account")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+
+            Text(gmailAccountSummary)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+          }
+
+          Spacer()
+
+          Button(action: {
+            Task { await probeGmailAccounts() }
+          }) {
+            if isProbingGmailAccounts {
+              ProgressView()
+                .scaleEffect(0.7)
+                .frame(width: 70, height: 22)
+            } else {
+              Text("Choose…")
+                .scaledFont(size: OmiType.body, weight: .medium)
+            }
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .disabled(isProbingGmailAccounts)
+        }
+      }
+
       // Read Gmail button
       settingsCard(settingId: "advanced.gmail.read") {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "envelope.badge")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 24, height: 24)
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Read Gmail")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             if let lastFetched = gmailLastFetched {
               Text("Last read \(lastFetched, formatter: relativeDateFormatter)")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             } else {
               Text("Reads recent emails using browser cookies — no OAuth needed")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
           }
 
@@ -55,10 +92,10 @@ extension SettingsContentView {
         settingsCard(settingId: "advanced.gmail.error") {
           HStack(spacing: OmiSpacing.md) {
             Image(systemName: "exclamationmark.triangle.fill")
-              .foregroundColor(.orange)
+              .foregroundColor(SettingsInk.notice)
             Text(error)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(3)
             Spacer()
           }
@@ -70,10 +107,10 @@ extension SettingsContentView {
         settingsCard(settingId: "advanced.gmail.saved") {
           HStack(spacing: OmiSpacing.md) {
             Image(systemName: "checkmark.circle.fill")
-              .foregroundColor(.green)
+              .foregroundColor(Ink.listeningGreen)
             Text("\(gmailMemoriesSaved) emails saved as memories")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
             Spacer()
           }
         }
@@ -87,18 +124,18 @@ extension SettingsContentView {
               VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text(email.subject)
                   .scaledFont(size: OmiType.body, weight: .medium)
-                  .foregroundColor(OmiColors.textPrimary)
+                  .foregroundColor(Ink.primary)
                   .lineLimit(1)
 
                 Text(email.from)
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .foregroundColor(Ink.secondary)
                   .lineLimit(1)
 
                 if !email.snippet.isEmpty {
                   Text(email.snippet)
                     .scaledFont(size: OmiType.caption)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(Ink.secondary)
                     .lineLimit(2)
                 }
               }
@@ -107,9 +144,59 @@ extension SettingsContentView {
         }
       }
     }
+    .sheet(isPresented: $showingGmailAccountPicker) {
+      GmailAccountPickerView(
+        accounts: gmailAccounts,
+        selectedCookiePath: GmailSelectionStore.selectedCookiePath,
+        hasMadeChoice: GmailSelectionStore.hasMadeChoice,
+        onSelect: { cookiePath, label in
+          selectGmailAccount(cookiePath, label: label)
+        },
+        onCancel: { showingGmailAccountPicker = false }
+      )
+    }
+  }
+
+  var gmailAccountSummary: String {
+    let label = GmailSelectionStore.selectedAccountLabel
+    return label.isEmpty ? "Automatic — first readable browser account" : label
+  }
+
+  func probeGmailAccounts() async {
+    guard !isProbingGmailAccounts else { return }
+    isProbingGmailAccounts = true
+    defer { isProbingGmailAccounts = false }
+    do {
+      let accounts = try await GmailAccountProbe.availableAccounts()
+      guard !accounts.isEmpty else {
+        gmailReadError = "No readable Gmail accounts found."
+        return
+      }
+      gmailAccounts = accounts
+      showingGmailAccountPicker = true
+    } catch {
+      // Surface the failure instead of silently treating every probe error as
+      // an empty success: this is the sole Settings entry point for changing
+      // the account.
+      gmailReadError = UserFacingErrorPresentation.message(
+        for: error, while: .integration("Gmail"))
+    }
+  }
+
+  func selectGmailAccount(_ cookiePath: String?, label: String) {
+    GmailSelectionStore.persist(cookiePath: cookiePath, label: label)
+    showingGmailAccountPicker = false
+    gmailReadGeneration += 1
+    // The previous account's read results no longer describe the newly
+    // selected profile; reset them so the page cannot label one account while
+    // showing another's emails.
+    gmailEmails = []
+    gmailLastFetched = nil
+    gmailMemoriesSaved = 0
   }
 
   func readGmail() async {
+    let readGeneration = gmailReadGeneration
     isReadingGmail = true
     gmailReadError = nil
     gmailMemoriesSaved = 0
@@ -119,6 +206,10 @@ extension SettingsContentView {
         maxResults: 50,
         userInitiated: true
       )
+      guard readGeneration == gmailReadGeneration else {
+        isReadingGmail = false
+        return
+      }
       gmailEmails = emails
       gmailLastFetched = Date()
       viewModel.markIntegrationSynced()
@@ -126,6 +217,11 @@ extension SettingsContentView {
       if !emails.isEmpty {
         isSavingGmailMemories = true
         let result = await GmailReaderService.shared.saveAsMemories(emails: emails)
+        guard readGeneration == gmailReadGeneration else {
+          isSavingGmailMemories = false
+          isReadingGmail = false
+          return
+        }
         gmailMemoriesSaved = result.saved
         isSavingGmailMemories = false
       }
@@ -144,20 +240,20 @@ extension SettingsContentView {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "calendar.badge.clock")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 24, height: 24)
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Sync Calendar")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
             if let lastSynced = calendarLastSynced {
               Text("Last synced \(lastSynced, formatter: relativeDateFormatter)")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             } else {
               Text("Reads Google Calendar using browser cookies — no OAuth needed")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
           }
           Spacer()
@@ -177,8 +273,8 @@ extension SettingsContentView {
       if let error = calendarSyncError {
         settingsCard(settingId: "advanced.calendar.error") {
           HStack(spacing: OmiSpacing.md) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
-            Text(error).scaledFont(size: OmiType.body).foregroundColor(OmiColors.textSecondary).lineLimit(3)
+            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(SettingsInk.notice)
+            Text(error).scaledFont(size: OmiType.body).foregroundColor(Ink.secondary).lineLimit(3)
             Spacer()
           }
         }
@@ -186,11 +282,11 @@ extension SettingsContentView {
       if calendarMemoriesCreated > 0 || calendarTasksCreated > 0 {
         settingsCard(settingId: "advanced.calendar.saved") {
           HStack(spacing: OmiSpacing.md) {
-            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundColor(Ink.listeningGreen)
             Text(
               "\(calendarMemoriesCreated) memories and \(calendarTasksCreated) tasks created from \(calendarEvents.count) events"
             )
-            .scaledFont(size: OmiType.body).foregroundColor(OmiColors.textSecondary)
+            .scaledFont(size: OmiType.body).foregroundColor(Ink.secondary)
             Spacer()
           }
         }
@@ -201,14 +297,14 @@ extension SettingsContentView {
             settingsCard(settingId: "advanced.calendar.event.\(event.id)") {
               VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text(event.summary).scaledFont(size: OmiType.body, weight: .medium).foregroundColor(
-                  OmiColors.textPrimary
+                  Ink.primary
                 ).lineLimit(1)
-                Text(event.startTime).scaledFont(size: OmiType.caption).foregroundColor(OmiColors.textSecondary)
+                Text(event.startTime).scaledFont(size: OmiType.caption).foregroundColor(Ink.secondary)
                   .lineLimit(1)
                 if !event.attendees.isEmpty {
                   Text("With: \(event.attendees.prefix(3).joined(separator: ", "))").scaledFont(
                     size: 12
-                  ).foregroundColor(OmiColors.textTertiary).lineLimit(1)
+                  ).foregroundColor(Ink.secondary).lineLimit(1)
                 }
               }
             }

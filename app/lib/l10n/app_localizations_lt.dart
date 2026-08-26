@@ -322,7 +322,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get searchApps => 'Ieškoti programų...';
 
   @override
-  String get myApps => 'Mano programėlės';
+  String get myApps => 'Sukurta manęs';
 
   @override
   String get installedApps => 'Įdiegtos programėlės';
@@ -744,11 +744,6 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'Jūsų planas bus atšauktas $date.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'Jūsų planas bus atnaujintas $date.';
   }
 
   @override
@@ -2127,16 +2122,16 @@ class AppLocalizationsLt extends AppLocalizations {
   String get editMemory => '✏️ Redaguoti atminimą';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Prisegti kaip pagrindą';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Atsegti nuo pagrindo';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Pagrindinė atmintis';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Visada kontekste';
 
   @override
   String get memoryContentHint => 'Mėgstu valgyti ledus...';
@@ -9791,4 +9786,137 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Per senas sinchronizuoti — „Omi“ negali jo priimti';
+
+  @override
+  String get planSheetChooseYourPlan => 'Pasirinkite planą ir atrakinkite neribotą Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Pasiekiama Mac, mobiliajame ir žiniatinklyje';
+
+  @override
+  String get popularBadge => 'POPULIARU';
+
+  @override
+  String get worksOnDesktop => 'Veikia kompiuteryje';
+
+  @override
+  String get noDesktopAccess => 'Neveikia kompiuteryje';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mėn. / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mėnesių nemokamai',
+      many: '$count mėnesio nemokamai',
+      few: '$count mėnesiai nemokamai',
+      one: '$count mėnuo nemokamai',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi yra nemokamas, tačiau nemokama versija turi apribojimų, kurie veikia jūsų patirtį:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 sekundžių delsa (ne realiuoju laiku)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Pereiti prie nemokamos versijos';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Gaukite nemokamą neribotą prieigą';
+
+  @override
+  String get shareDataForTraining => 'Dalytis duomenimis mokymui';
+
+  @override
+  String get yourRequestUnderReview => 'Jūsų užklausa nagrinėjama';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Wymagana aktualizacja';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Zainstaluj najnowszą aplikację Omi, aby kontynuować po migracji konta.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Trwa migracja';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Twoje konto jest migrowane. Funkcje produktu są wstrzymane do końca migracji.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Twoje konto jest w trybie konserwacji po cofnięciu migracji. Nowsze dane mogą zostać odizolowane.';
+
+  @override
+  String get accountCutoverOpenStore => 'Otwórz sklep';
+
+  @override
+  String get chatScopeToday => 'Šiandien';
+
+  @override
+  String get chatScopeThisWeek => 'Šią savaitę';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Apie: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Paklausti apie tai';
+
+  @override
+  String get sendRawAudioToOmi => 'Siųsti neapdorotą garsą į Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Išjunkite, kad neapdorotas garsas nebūtų siunčiamas į Omi. Transkripcijos ir debesies funkcijoms reikalingi duomenys vis tiek gali būti siunčiami į Omi.';
+
+  @override
+  String get findDevice => 'Rasti';
+
+  @override
+  String get diagnosticsShareFailed => 'Nepavyko bendrinti diagnostikos. Bandykite dar kartą.';
+
+  @override
+  String get appDisabledTitle => 'Ši programėlė išjungta ir jos įdiegti negalima.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Jos galinis taškas nepavyko 72 valandas iš eilės, todėl pristatymai buvo sustabdyti.';
+
+  @override
+  String get appDisabledGeneric => 'Ją išjungė „Omi“.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Pirmiausia pataisykite galinį tašką — įjungiant iš naujo kiekvienas sukonfigūruotas URL tikrinamas dar kartą.';
+
+  @override
+  String get appReEnable => 'Įjungti iš naujo';
+
+  @override
+  String get appReEnableFailedTitle => 'Nepavyko įjungti iš naujo';
+
+  @override
+  String get appReEnableFailedBody => 'Šios programėlės nepavyko įjungti iš naujo. Bandykite dar kartą.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Išjungta $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Paskutinė klaida: $error.';
+  }
 }

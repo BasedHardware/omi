@@ -1,10 +1,10 @@
 """Canonical action-item contracts and legacy compatibility projections."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from models.task_intelligence import StableId
 
@@ -52,6 +52,9 @@ class EvidenceRef(BaseModel):
     scope: EvidenceScope
     device_id: Optional[StableId] = None
     excerpt_hash: Optional[str] = Field(default=None, pattern=r'^[a-f0-9]{64}$')
+    transcript_segment_ids: Optional[list[StableId]] = None
+    start_seconds: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    end_seconds: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
 
     @model_validator(mode='after')
     def validate_scope(self):
@@ -61,6 +64,8 @@ class EvidenceRef(BaseModel):
             raise ValueError('canonical evidence cannot carry device_id')
         if self.kind == EvidenceKind.local_screen and self.scope != EvidenceScope.device_local:
             raise ValueError('local_screen evidence must be device_local')
+        if self.start_seconds is not None and self.end_seconds is not None and self.end_seconds < self.start_seconds:
+            raise ValueError('end_seconds must be greater than or equal to start_seconds')
         return self
 
 
@@ -102,7 +107,11 @@ class CanonicalTaskCreate(BaseModel):
         return self
 
     def storage_payload(self) -> dict[str, Any]:
-        return self.model_dump(mode='python', exclude_none=True)
+        payload = self.model_dump(mode='python', exclude_none=True)
+        payload['provenance'] = [
+            ref.model_dump(mode='python', exclude_none=True, exclude_defaults=True) for ref in self.provenance
+        ]
+        return payload
 
 
 class CanonicalTaskUpdate(BaseModel):
@@ -144,6 +153,10 @@ class CanonicalTaskUpdate(BaseModel):
 
     def storage_payload(self) -> dict[str, Any]:
         payload = self.model_dump(mode='python', exclude_unset=True)
+        if self.provenance is not None:
+            payload['provenance'] = [
+                ref.model_dump(mode='python', exclude_none=True, exclude_defaults=True) for ref in self.provenance
+            ]
         return {
             key: value
             for key, value in payload.items()
@@ -224,10 +237,28 @@ class ActionItemResponse(BaseModel):
         data.setdefault('provenance', [])
         return data
 
+    @field_validator('due_at', 'created_at', 'updated_at', 'completed_at', 'export_date', mode='after')
+    @classmethod
+    def _naive_timestamps_are_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
+        # Firestore timestamps are UTC; a naive one leaking through serializes
+        # without an offset, which Dart/JS decode as LOCAL wall time and Swift's
+        # ISO8601 decoder rejects outright. Stamp UTC so every emitted timestamp
+        # carries an explicit offset (contracts/parity/README.md). utcoffset()
+        # rather than tzinfo: a tzinfo whose utcoffset() returns None is still
+        # semantically naive and would serialize offsetless all the same.
+        if value is not None and value.utcoffset() is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
 
 class ActionItemsResponse(BaseModel):
+    """List envelope; ``truncated`` is set only when the request's list-read
+    budget ended the aggregate scan early (#11831) — such pages may not be a
+    complete prefix, so ``has_more`` is forced true as well."""
+
     action_items: list[ActionItemResponse]
     has_more: bool = False
+    truncated: bool = False
 
 
 class ActionItemsSearchResponse(BaseModel):

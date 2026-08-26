@@ -642,7 +642,7 @@ function ChatContent() {
       }`}
     >
       <Link
-        href="https://www.omi.me/products/omi-dev-kit-2?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_chat"
+        href="https://www.omi.me/?ref=personas&utm_source=personas.omi.me&utm_campaign=personas_chat"
         target="_blank"
         rel="noopener noreferrer"
         className="relative block h-[200px] w-[220px] overflow-hidden rounded-2xl bg-black shadow-2xl"

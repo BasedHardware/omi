@@ -8,15 +8,16 @@ enum ChatContentBlockCodec {
 
   static func encode(_ blocks: [ChatContentBlock]) -> String? {
     guard !blocks.isEmpty else { return nil }
-    let encoded = blocks.map(persistenceDictionary(for:))
-    guard let data = try? JSONSerialization.data(withJSONObject: encoded),
+    let encoded = encodeArray(blocks)
+    guard !encoded.isEmpty,
+      let data = try? JSONSerialization.data(withJSONObject: encoded),
       let json = String(data: data, encoding: .utf8)
     else { return nil }
     return json
   }
 
   static func encodeArray(_ blocks: [ChatContentBlock]) -> [[String: Any]] {
-    blocks.map(persistenceDictionary(for:))
+    blocks.map(persistenceDictionary(for:)).filter { JSONSerialization.isValidJSONObject($0) }
   }
 
   /// Stable, in-process representation used to compare every persisted
@@ -116,11 +117,49 @@ enum ChatContentBlockCodec {
         }
         blocks.append(
           .captureLink(
-            id: id, conversationId: conversationId, momentTimestampMs: dict["momentTimestampMs"] as? Int,
+            id: id, conversationId: conversationId,
+            momentTimestampMs: ChatJSONScalar.int(dict["momentTimestampMs"]),
             summary: summary))
+      case "conversationLink":
+        guard let conversationId = dict["conversationId"] as? String, let summary = dict["summary"] as? String else {
+          continue
+        }
+        let recommendedActionItems = (dict["recommendedActionItems"] as? [[String: Any]] ?? []).compactMap {
+          item -> ConversationLinkActionItem? in
+          guard let description = item["description"] as? String,
+            !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          else { return nil }
+          return ConversationLinkActionItem(description: description, taskID: item["taskId"] as? String)
+        }
+        blocks.append(
+          .conversationLink(
+            id: id,
+            conversationId: conversationId,
+            summary: summary,
+            recommendedActionItems: recommendedActionItems))
       case "memoryLink":
         guard let memoryId = dict["memoryId"] as? String, let summary = dict["summary"] as? String else { continue }
         blocks.append(.memoryLink(id: id, memoryId: memoryId, summary: summary))
+      case "citation":
+        guard let ordinal = ChatJSONScalar.int(dict["ordinal"]),
+          let kindValue = dict["kind"] as? String,
+          let kind = ChatCitationReference.Kind(rawValue: kindValue),
+          let sourceID = (dict["sourceId"] as? String) ?? (dict["source_id"] as? String)
+        else { continue }
+        blocks.append(
+          .citation(
+            id: id,
+            reference: ChatCitationReference(
+              ordinal: ordinal,
+              kind: kind,
+              sourceID: sourceID,
+              title: dict["title"] as? String ?? "",
+              preview: dict["preview"] as? String ?? "",
+              momentTimestampMs: ChatJSONScalar.int(dict["momentTimestampMs"])
+                ?? ChatJSONScalar.int(dict["moment_timestamp_ms"]),
+              createdAt: dict["createdAt"] as? String ?? dict["created_at"] as? String,
+              appName: dict["appName"] as? String ?? dict["app_name"] as? String,
+              url: (dict["url"] as? String).flatMap(URL.init(string:)))))
       case "agentSpawn":
         guard let sessionId = dict["sessionId"] as? String,
           !sessionId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -200,6 +239,29 @@ enum ChatContentBlockCodec {
     return decode(array)
   }
 
+  static func mergingCitationBackup(
+    _ blocks: [ChatContentBlock],
+    backup: [ChatContentBlock]
+  ) -> [ChatContentBlock] {
+    var seen = Set(
+      blocks.compactMap { block -> Int? in
+        guard case .citation(_, let reference) = block else { return nil }
+        return reference.ordinal
+      })
+    let recovered = backup.filter { block in
+      guard case .citation(_, let reference) = block else { return false }
+      return seen.insert(reference.ordinal).inserted
+    }
+    return recovered.isEmpty ? blocks : blocks + recovered
+  }
+
+  static func citationBlocks(in blocks: [ChatContentBlock]) -> [ChatContentBlock] {
+    blocks.filter { block in
+      if case .citation = block { return true }
+      return false
+    }
+  }
+
   private static func persistenceDictionary(for block: ChatContentBlock) -> [String: Any] {
     switch block {
     case .text(let id, let text):
@@ -252,8 +314,35 @@ enum ChatContentBlockCodec {
       var dict: [String: Any] = ["type": "captureLink", "id": id, "conversationId": conversationId, "summary": summary]
       if let momentTimestampMs { dict["momentTimestampMs"] = momentTimestampMs }
       return dict
+    case .conversationLink(let id, let conversationId, let summary, let recommendedActionItems):
+      var dict: [String: Any] = [
+        "type": "conversationLink", "id": id, "conversationId": conversationId, "summary": summary,
+      ]
+      if !recommendedActionItems.isEmpty {
+        dict["recommendedActionItems"] = recommendedActionItems.map { item in
+          var encoded: [String: Any] = ["description": item.description]
+          if let taskID = item.taskID { encoded["taskId"] = taskID }
+          return encoded
+        }
+      }
+      return dict
     case .memoryLink(let id, let memoryId, let summary):
       return ["type": "memoryLink", "id": id, "memoryId": memoryId, "summary": summary]
+    case .citation(let id, let reference):
+      var dict: [String: Any] = [
+        "type": "citation",
+        "id": id,
+        "ordinal": reference.ordinal,
+        "kind": reference.kind.rawValue,
+        "sourceId": reference.sourceID,
+        "title": reference.title,
+        "preview": reference.preview,
+      ]
+      if let value = reference.momentTimestampMs { dict["momentTimestampMs"] = value }
+      if let value = reference.createdAt { dict["createdAt"] = value }
+      if let value = reference.appName { dict["appName"] = value }
+      if let value = reference.url { dict["url"] = value.absoluteString }
+      return dict
     case .agentSpawn(
       let id, let pillId, let sessionId, let runId, let title, let objective, let provider
     ):
@@ -284,5 +373,15 @@ enum ChatContentBlockCodec {
       if let runId { dict["runId"] = runId }
       return dict
     }
+  }
+}
+
+enum ChatJSONScalar {
+  static func int(_ value: Any?) -> Int? {
+    if let value = value as? Int { return value }
+    if let value = value as? Int64 { return Int(value) }
+    if let value = value as? NSNumber { return value.intValue }
+    if let value = value as? String { return Int(value.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    return nil
   }
 }

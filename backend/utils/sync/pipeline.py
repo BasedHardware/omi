@@ -29,6 +29,7 @@ from pydub import AudioSegment
 from database import conversations as conversations_db
 from database import users as users_db
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
+from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
     RUN_LOCK_HEARTBEAT_SECONDS,
     RUN_LOCK_RENEWAL_SAFETY_SECONDS,
@@ -64,14 +65,22 @@ from database.sync_ledger import (
     release_sync_content_claim_after_job_retired,
     release_sync_content_claim,
 )
-from models.conversation import CreateConversation
+from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
 from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
 from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.process_conversation import process_conversation
-from utils.executors import db_executor, run_blocking, start_background_task, storage_executor, sync_executor
+from utils.executors import (
+    db_executor,
+    postprocess_executor,
+    run_blocking,
+    start_background_task,
+    storage_executor,
+    submit_with_context,
+    sync_executor,
+)
 from utils.fair_use import (
     FAIR_USE_ENABLED,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
@@ -117,6 +126,8 @@ from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_w
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
+from utils.sync.merge_audio import store_partial_merge_survivor_audio
+from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -759,6 +770,13 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
         del aseg
 
 
+def _run_conversation_created_webhook(uid: str, conversation: Conversation) -> None:
+    """Load the webhook surface only in the post-processing worker that uses it."""
+    from utils.webhooks import conversation_created_webhook
+
+    asyncio.run(conversation_created_webhook(uid, conversation))
+
+
 def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
     """
     Reprocess a conversation after new segments have been added.
@@ -774,7 +792,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
 
-    process_conversation(
+    was_discarded = conversation.discarded
+    processed_conversation = process_conversation(
         uid=uid,
         language_code=language or 'en',
         conversation=conversation,
@@ -782,6 +801,15 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         is_reprocess=True,
         persistence_observer=_require_current_conversation_persistence,
     )
+
+    # Limitless uploads commonly begin as a short discarded fragment and only
+    # become a real conversation after later WAL segments are merged. The
+    # initial discarded pass is not a useful creation event, while the generic
+    # reprocess path deliberately suppresses webhooks. Emit exactly at the
+    # discarded -> visible transition so pendant conversations reach developer
+    # integrations without duplicating events on ordinary later reprocessing.
+    if conversation.source == ConversationSource.limitless and was_discarded and not processed_conversation.discarded:
+        submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
 
@@ -1132,7 +1160,9 @@ def process_segment(
         # When a target conversation is specified (auto-sync from live capture),
         # attach segments to it directly instead of searching by timestamp.
         if target_conversation_id:
-            closest_memory = conversations_db.get_conversation(uid, target_conversation_id)
+            closest_memory = conversations_db.get_conversation(
+                uid, target_conversation_id, read_site=FirestoreReadSite.SYNC_PIPELINE_TARGET_CONVERSATION
+            )
             if not conversations_db.eligible_merge_target(closest_memory):
                 logger.warning(
                     f'Target conversation {target_conversation_id} not found or deleted, falling back to timestamp lookup'
@@ -1173,24 +1203,20 @@ def process_segment(
             for segment in closest_memory['transcript_segments']:
                 segment['timestamp'] = closest_memory['started_at'].timestamp() + segment['start']
 
-            # Deduplicate: skip new segments whose timestamp range already exists in the conversation
-            # (protects against retry after partial failure returning 207)
-            existing_timestamps = {
-                (round(s['timestamp'], 2), round(s['timestamp'] + (s['end'] - s['start']), 2))
-                for s in closest_memory['transcript_segments']
-            }
-            deduped_segments = []
-            for seg in transcript_segments:
-                seg_key = (round(seg['timestamp'], 2), round(seg['timestamp'] + (seg['end'] - seg['start']), 2))
-                if seg_key not in existing_timestamps:
-                    deduped_segments.append(seg)
+            incoming_count = len(transcript_segments)
+            # Deduplicate before append. Exact absolute ranges cover 207 retries;
+            # text+slop covers live+offline / clock-offset duplicates (#4769).
+            deduped_segments = dedupe_segments_for_merge(
+                closest_memory['started_at'].timestamp(),
+                closest_memory['transcript_segments'],
+                transcript_segments,
+            )
+            dropped_for_dedupe = incoming_count - len(deduped_segments)
             if not deduped_segments:
                 logger.info(f'All segments already exist in conversation {closest_memory["id"]}, skipping merge')
                 with lock:
                     response['updated_memories'].add(closest_memory['id'])
-                # No chunk upload here: this segment is a duplicate (retry or overlap with an
-                # existing/realtime conversation), so its audio is already represented — uploading
-                # again would double the audio in the merge.
+                # No chunk upload: duplicate of existing/realtime audio.
                 _set_deferred_segment_outcome(
                     deferred_outcome,
                     outcome=TranscriptionOutcome.SUCCESS,
@@ -1207,6 +1233,21 @@ def process_segment(
                         retryable=False,
                     )
                 return True
+
+            # Private-cloud audio before conversation-relative rewrite so partial
+            # survivors still have chunk-relative start/end (#4769 David CR).
+            if private_cloud_sync_enabled:
+                if dropped_for_dedupe == 0:
+                    _store_sync_audio_chunk(uid, closest_memory['id'], timestamp, audio_bytes, data_protection_level)
+                else:
+                    store_partial_merge_survivor_audio(
+                        uid=uid,
+                        conversation_id=closest_memory['id'],
+                        file_timestamp=timestamp,
+                        audio_bytes=audio_bytes,
+                        data_protection_level=data_protection_level,
+                        survivors=deduped_segments,
+                    )
 
             # merge and sort segments by start timestamp
             segments = closest_memory['transcript_segments'] + deduped_segments
@@ -1235,11 +1276,6 @@ def process_segment(
             # save with updated finished_at
             with lock:
                 response['updated_memories'].add(closest_memory['id'])
-            # Store the chunk before saving segments so "segment present ⇒ chunk present"
-            # holds — a retry that dedup-skips this segment won't leave its audio missing.
-            # Deterministic chunk path makes the upload overwrite-safe.
-            if private_cloud_sync_enabled:
-                _store_sync_audio_chunk(uid, closest_memory['id'], timestamp, audio_bytes, data_protection_level)
             update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
 
             # Lock existing conversation if credits exhausted

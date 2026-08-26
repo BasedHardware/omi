@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/connectivity_service.dart';
@@ -19,9 +20,7 @@ enum WalStatusFilter { pending, synced, corrupted }
 
 enum WalDisplayFilter { all, pending, synced }
 
-List<SyncedConversationPointer> sortSyncedConversationPointers(
-  Iterable<SyncedConversationPointer> pointers,
-) {
+List<SyncedConversationPointer> sortSyncedConversationPointers(Iterable<SyncedConversationPointer> pointers) {
   final sorted = List<SyncedConversationPointer>.from(pointers);
   sorted.sort((a, b) {
     final aDate = a.conversation.startedAt ?? a.conversation.createdAt;
@@ -32,6 +31,12 @@ List<SyncedConversationPointer> sortSyncedConversationPointers(
 }
 
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
+  /// Machine-readable error state consumed by sync surfaces, which own the
+  /// localized copy. Providers must not embed user-facing English in state.
+  static const pendingUploadErrorCode = 'sync_pending_upload';
+
+  static bool isPendingUploadError(String? message) => message == pendingUploadErrorCode;
+
   // Services
   final AudioPlayerUtils _audioPlayerUtils = AudioPlayerUtils.instance;
   final IWalService? _walServiceOverride;
@@ -214,10 +219,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// exhausted), the file is unreadable, or the server permanently refused it
   /// for being too old. Surfaced explicitly so a failure is never mistaken for
   /// a recording that simply hasn't synced yet.
-  int get needsAttentionWalsCount => _countWhere((s) =>
-      s == WalSyncDisplayState.failed ||
-      s == WalSyncDisplayState.corrupted ||
-      s == WalSyncDisplayState.outsideRecoveryWindow);
+  int get needsAttentionWalsCount => _countWhere(
+        (s) =>
+            s == WalSyncDisplayState.failed ||
+            s == WalSyncDisplayState.corrupted ||
+            s == WalSyncDisplayState.outsideRecoveryWindow,
+      );
 
   int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
 
@@ -555,8 +562,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       failedWal: wal,
     );
     // A 202 leaves the WAL `uploaded` — wake the single owner so reconcile
-    // is scheduled (do not poke SyncReconciler here).
-    if (result != null && _startBackgroundSync) {
+    // is scheduled (do not poke SyncReconciler here). Soft-retry failures wake
+    // from _performSync itself; do not double-wake here.
+    if (result != null &&
+        result.localUploadFailures == 0 &&
+        result.localUploadPermanentFailures == 0 &&
+        _startBackgroundSync) {
       unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
     }
   }
@@ -612,11 +623,42 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         _updateSyncState(_syncState.toCompleted(conversations: []));
       }
 
-      if ((result?.localUploadFailures ?? 0) > 0) {
-        _updateSyncState(_syncState.toError(message: 'Upload failed. Check your connection and try again'));
+      // Client-side upload aborts (leave/background mid-multipart, #4587) leave
+      // WALs as `miss`. Soft-retry only when failures are transient; permanent
+      // server refusals (400/413) still surface SyncStatus.error.
+      final permanentFailures = result?.localUploadPermanentFailures ?? 0;
+      final localFailures = result?.localUploadFailures ?? 0;
+      if (permanentFailures > 0) {
+        final hint = result?.localUploadPermanentError;
+        final errorMessage = _formatSyncError(
+          hint != null ? Exception(hint) : Exception('Upload failed unexpectedly'),
+          failedWal,
+        );
+        DebugLogManager.logWarning('SyncProvider: $context had $permanentFailures permanent local upload failure(s)');
+        _updateSyncState(_syncState.toError(message: errorMessage, failedWal: failedWal));
+      } else if (localFailures > 0) {
+        DebugLogManager.logWarning(
+          'SyncProvider: $context had $localFailures transient local upload failure(s); re-arming recovery',
+        );
+        _updateSyncState(_syncState.toIdle());
+        // Coordinator drains use rethrowOnError and schedule their own cooldown
+        // via RecordingTransferCoordinator._runPass — do not double-wake here.
+        if (_startBackgroundSync && !rethrowOnError) {
+          unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
+        }
       }
       return result;
     } catch (e) {
+      if (isTransientNetworkError(e)) {
+        DebugLogManager.logWarning('SyncProvider: $context hit transient network error; re-arming recovery: $e');
+        _updateSyncState(_syncState.toIdle());
+        // Wake only for direct/manual calls; coordinator owns retry scheduling.
+        if (_startBackgroundSync && !rethrowOnError) {
+          unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
+        }
+        if (rethrowOnError) rethrow;
+        return null;
+      }
       final errorMessage = _formatSyncError(e, failedWal);
       Logger.debug('SyncProvider: Error in $context: $errorMessage');
       DebugLogManager.logError(e, null, 'SyncProvider: $context failed: $errorMessage', {
@@ -645,7 +687,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } else if (baseMessage.toLowerCase().contains('temporarily unavailable')) {
       baseMessage = 'Server is temporarily unavailable. Try again later';
     } else if (baseMessage.toLowerCase().contains('upload failed')) {
-      baseMessage = 'Upload failed. Check your connection and try again';
+      // Keep state locale-neutral; the sync pages resolve this code through
+      // AppLocalizations at render time.
+      return pendingUploadErrorCode;
     }
 
     if (wal != null) {

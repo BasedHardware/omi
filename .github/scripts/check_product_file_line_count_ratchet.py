@@ -1,62 +1,41 @@
 #!/usr/bin/env python3
-"""Freeze growth of oversized product-source files.
+"""Reject unapproved growth of oversized product-source files.
 
-This diff-scoped ratchet covers Swift and Rust under ``desktop/macos/`` and
-Python under ``backend/``. Files at or above 1,500 lines are pinned to their
-checked-in count. Smaller files remain free to evolve, but cannot cross the
-threshold without an explicit, reviewable baseline raise.
+The target branch is the ratchet. For every changed Swift, Rust, or backend
+Python source, this check compares ``--base`` with the synthetic merge of
+``--base`` and ``--head``.
+Reductions therefore become the next ceiling automatically after merge, and
+unrelated pull requests never edit a shared line-count ledger.
 
-Baselines are stored in deterministic, ownership-scoped JSON shards.  The
-checker routes each source path with ``baseline_shard_relative``; there is no
-mutable index file, so unrelated product areas do not contend on one shared
-ledger.  Each shard keeps its file caps and raise justifications together.
+Exceptional growth must be declared precisely in pull-request metadata:
 
-After a split, run this checker with ``--update-baseline`` to remove or lower
-the affected entry automatically; that mode never raises a limit. Intentional
-raises are exceptional: edit the owning shard in the same diff as the source
-and add a single-line ``raise_justifications`` entry for the path.
+``Line-Count-Exception: path | BASE -> CURRENT | reason``
+
+The path and both counts must match the actual diff. Stale, duplicate, unused,
+or malformed declarations fail closed.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import os
+import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
 
 THRESHOLD = 1500
-
-# Git exports these when running inside hooks (pre-push, pre-receive, update).
-# When the checker shells out with an explicit cwd=, inherited values would
-# redirect the subprocess at the parent repository. Drop them so discovery is
-# driven by the working directory the caller chose.
-_GIT_ENV_SCRUB = {
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_QUARANTINE_PATH",
-    "GIT_INDEX_FILE",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-    "GIT_PREFIX",
-}
-
-
-def _clean_git_env() -> dict[str, str]:
-    return {key: value for key, value in os.environ.items() if key not in _GIT_ENV_SCRUB}
-
-
-LEGACY_BASELINE_RELATIVE = ".github/scripts/product_file_line_count_ratchet_baseline.json"
-BASELINE_DIRECTORY_RELATIVE = ".github/scripts/product_file_line_count_ratchet_baseline"
-RETIRED_BASELINE_SHARDS = {
-    f"{BASELINE_DIRECTORY_RELATIVE}/desktop-rust.json",
-}
+EXCEPTION_PREFIX = "Line-Count-Exception:"
+EXCEPTION_RE = re.compile(
+    r"^Line-Count-Exception:\s*(?P<path>[^|]+?)\s*\|\s*"
+    r"(?P<base>\d+)\s*->\s*(?P<current>\d+)\s*\|\s*(?P<reason>\S.*)$"
+)
 DESKTOP_ROOT = "desktop/macos/"
 BACKEND_ROOT = "backend/"
 VENDORED_PARTS = {
     ".git",
+    ".build",
     ".venv",
     "venv",
     "vendor",
@@ -69,6 +48,20 @@ VENDORED_PARTS = {
     "target",
 }
 TEST_PARTS = {"test", "tests", "Tests"}
+@dataclass(frozen=True)
+class LineCountException:
+    path: str
+    base_count: int
+    current_count: int
+    reason: str
+    line_number: int
+
+
+def clean_git_env() -> dict[str, str]:
+    # Hooks and nested Git commands may export repository-specific variables beyond the familiar
+    # GIT_DIR/GIT_WORK_TREE pair (for example GIT_COMMON_DIR or GIT_INDEX_FILE). None are inputs to
+    # this check, so drop the entire Git namespace before operating on the explicit ``cwd`` repo.
+    return {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
 
 
 def repo_root(explicit: str | None) -> Path:
@@ -76,9 +69,10 @@ def repo_root(explicit: str | None) -> Path:
 
 
 def is_product_source(relative: str) -> bool:
-    """Return whether a repository-relative path belongs to the guarded scope."""
     path = PurePosixPath(relative)
     parts = path.parts
+    if path.is_absolute() or not parts or any(part in {".", ".."} for part in parts):
+        return False
     if any(part in VENDORED_PARTS or part == "Generated" for part in parts):
         return False
     if any(part in TEST_PARTS for part in parts):
@@ -93,138 +87,74 @@ def is_product_source(relative: str) -> bool:
     return False
 
 
-def line_count(path: Path) -> int:
-    source = path.read_text(encoding="utf-8")
+def line_count_text(source: str) -> int:
     return source.count("\n") + (0 if not source or source.endswith("\n") else 1)
 
 
-def baseline_shard_relative(relative: str) -> str:
-    """Return the deterministic shard owning an eligible product-source path.
-
-    Routing is deliberately code-defined instead of recorded in a mutable
-    manifest.  A source's immediate stable subsystem therefore determines its
-    shard, while unrelated subsystems cannot create a shared metadata conflict.
-    """
-    if not is_product_source(relative):
-        raise ValueError(f"cannot select a baseline shard for unsupported source path: {relative!r}")
-
-    parts = PurePosixPath(relative).parts
-    if relative.startswith(BACKEND_ROOT):
-        group = parts[1] if len(parts) > 2 and parts[1] in {"database", "routers", "utils"} else "other"
-        return f"{BASELINE_DIRECTORY_RELATIVE}/backend-{group}.json"
+def source_count(root: Path, relative: str) -> int | None:
+    path = root / relative
+    return line_count_text(path.read_text(encoding="utf-8")) if path.is_file() else None
 
 
-    sources_prefix = ("desktop", "macos", "Desktop", "Sources")
-    if parts[:4] != sources_prefix:
-        return f"{BASELINE_DIRECTORY_RELATIVE}/desktop-other.json"
-    subsystem = parts[4] if len(parts) > 5 else "root"
-    return f"{BASELINE_DIRECTORY_RELATIVE}/desktop-swift-{subsystem.lower()}.json"
+def verify_commit(root: Path, ref: str, label: str) -> None:
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+        cwd=root,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        env=clean_git_env(),
+    )
+    if result.returncode:
+        raise ValueError(f"cannot resolve {label} commit {ref!r}: {result.stderr.strip()}")
 
 
-def empty_baseline() -> dict[str, Any]:
-    return {"threshold": THRESHOLD, "files": {}, "raise_justifications": {}}
+def synthetic_merge_tree(root: Path, base: str, head: str) -> str:
+    result = subprocess.run(
+        ["git", "merge-tree", "--write-tree", base, head],
+        cwd=root,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        env=clean_git_env(),
+    )
+    if result.returncode:
+        details = (result.stderr or result.stdout).strip()
+        raise ValueError(f"cannot measure the synthetic merge of {head} into {base}: {details}")
+    tree = result.stdout.splitlines()[0].strip() if result.stdout else ""
+    if not re.fullmatch(r"[0-9a-fA-F]{40,64}", tree):
+        raise ValueError(f"git merge-tree returned an invalid tree id for {head} and {base}")
+    return tree
 
 
-def validate_baseline(value: Any, shard_relative: str | None = None) -> dict[str, Any]:
-    if not isinstance(value, dict) or set(value) != {"files", "raise_justifications", "threshold"}:
-        raise ValueError("baseline must contain exactly files, raise_justifications, and threshold")
-    if value["threshold"] != THRESHOLD:
-        raise ValueError(f"baseline threshold must be {THRESHOLD}")
-    files = value["files"]
-    justifications = value["raise_justifications"]
-    if not isinstance(files, dict) or not isinstance(justifications, dict):
-        raise ValueError("baseline files and raise_justifications must be objects")
-    for relative, count in files.items():
-        if not isinstance(relative, str) or not is_product_source(relative):
-            raise ValueError(f"baseline contains unsupported source path: {relative!r}")
-        if shard_relative is not None and baseline_shard_relative(relative) != shard_relative:
-            raise ValueError(
-                f"baseline path {relative!r} belongs in {baseline_shard_relative(relative)}, not {shard_relative}"
-            )
-        if not isinstance(count, int) or isinstance(count, bool) or count < THRESHOLD:
-            raise ValueError(f"baseline count for {relative} must be an integer at least {THRESHOLD}")
-    for relative, justification in justifications.items():
-        if relative not in files:
-            raise ValueError(f"raise justification without a baseline entry: {relative}")
-        if not isinstance(justification, str) or not justification.strip() or "\n" in justification:
-            raise ValueError(f"raise justification for {relative} must be one non-empty line")
-    return value
-
-
-def baseline_directory(root: Path) -> Path:
-    return root / BASELINE_DIRECTORY_RELATIVE
-
-
-def baseline_path(root: Path) -> Path:
-    """Return the retired legacy path for migration diagnostics only."""
-    return root / LEGACY_BASELINE_RELATIVE
-
-
-def load_baseline_file(path: Path, shard_relative: str | None = None) -> dict[str, Any]:
-    try:
-        return validate_baseline(json.loads(path.read_text(encoding="utf-8")), shard_relative)
-    except (OSError, json.JSONDecodeError, ValueError) as error:
-        raise ValueError(f"invalid line-count ratchet baseline {path}: {error}") from error
-
-
-def _expected_shard(shard_relative: str) -> str | None:
-    """Keep merge-base-only retired shards valid while their removal is reviewed."""
-    return None if shard_relative in RETIRED_BASELINE_SHARDS else shard_relative
-
-
-def load_baseline_shards(root: Path) -> dict[str, dict[str, Any]]:
-    """Load sharded baselines, falling back to the monolith only for migration."""
-    directory = baseline_directory(root)
-    if directory.is_dir():
-        paths = sorted(path for path in directory.glob("*.json") if path.is_file())
-        if not paths:
-            raise ValueError(f"no baseline shards found under {BASELINE_DIRECTORY_RELATIVE}")
-        return {
-            path.relative_to(root).as_posix(): load_baseline_file(
-                path, _expected_shard(path.relative_to(root).as_posix())
-            )
-            for path in paths
-        }
-
-    legacy = baseline_path(root)
-    if legacy.is_file():
-        return {LEGACY_BASELINE_RELATIVE: load_baseline_file(legacy)}
-    raise ValueError(f"no baseline shards found under {BASELINE_DIRECTORY_RELATIVE} and legacy baseline is absent")
-
-
-def aggregate_baseline_shards(shards: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Validate and merge shards into the checker-facing baseline shape."""
-    aggregate = empty_baseline()
-    for shard_relative, shard in sorted(shards.items()):
-        expected = None if shard_relative == LEGACY_BASELINE_RELATIVE else _expected_shard(shard_relative)
-        validate_baseline(shard, expected)
-        for relative, count in shard["files"].items():
-            if relative in aggregate["files"]:
-                raise ValueError(f"duplicate baseline entry for {relative} across shards")
-            aggregate["files"][relative] = count
-        for relative, justification in shard["raise_justifications"].items():
-            if relative in aggregate["raise_justifications"]:
-                raise ValueError(f"duplicate raise justification for {relative} across shards")
-            aggregate["raise_justifications"][relative] = justification
-    return validate_baseline(aggregate)
-
-
-def load_baseline(root: Path) -> dict[str, Any]:
-    return aggregate_baseline_shards(load_baseline_shards(root))
-
-
-def serialize_baseline(baseline: dict[str, Any], shard_relative: str | None = None) -> str:
-    validate_baseline(baseline, shard_relative)
-    return json.dumps(baseline, indent=2, sort_keys=True) + "\n"
-
-
-def write_baseline_shards(root: Path, shards: dict[str, dict[str, Any]], paths: set[str]) -> None:
-    """Rewrite only explicitly named shard paths using canonical JSON."""
-    for shard_relative in sorted(paths):
-        shard = shards[shard_relative]
-        path = root / shard_relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(serialize_baseline(shard, shard_relative), encoding="utf-8")
+def source_count_at_ref(root: Path, ref: str, relative: str) -> int | None:
+    exists = subprocess.run(
+        ["git", "cat-file", "-e", f"{ref}:{relative}"],
+        cwd=root,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=clean_git_env(),
+    )
+    if exists.returncode:
+        return None
+    result = subprocess.run(
+        ["git", "show", f"{ref}:{relative}"],
+        cwd=root,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        env=clean_git_env(),
+    )
+    if result.returncode:
+        raise ValueError(f"cannot read {relative} at {ref}: {result.stderr.strip()}")
+    return line_count_text(result.stdout)
 
 
 def read_changed_files(path: Path) -> set[str]:
@@ -235,232 +165,117 @@ def changed_product_sources(changed: set[str]) -> list[str]:
     return sorted(relative for relative in changed if is_product_source(relative))
 
 
-def source_count(root: Path, relative: str) -> int | None:
-    path = root / relative
-    return line_count(path) if path.is_file() else None
-
-
-def check_changed_sources(
-    root: Path, baseline: dict[str, Any], changed: set[str]
-) -> tuple[list[str], dict[str, int | None]]:
-    """Return growth failures and the safe downward updates they require."""
+def parse_exceptions(body: str) -> tuple[dict[str, LineCountException], list[str]]:
+    exceptions: dict[str, LineCountException] = {}
     failures: list[str] = []
-    downward: dict[str, int | None] = {}
-    for relative in changed_product_sources(changed):
-        current = source_count(root, relative)
-        recorded = baseline["files"].get(relative)
-        owner = baseline_shard_relative(relative)
-        if current is None:
-            if recorded is not None:
-                downward[relative] = None
+    for line_number, raw_line in enumerate(body.splitlines(), start=1):
+        if not raw_line.lstrip().startswith(EXCEPTION_PREFIX):
             continue
-        if current < THRESHOLD:
-            if recorded is not None:
-                downward[relative] = None
+        match = EXCEPTION_RE.fullmatch(raw_line.strip())
+        if match is None:
+            failures.append(
+                f"PR body line {line_number}: malformed {EXCEPTION_PREFIX} declaration; expected "
+                "'Line-Count-Exception: path | BASE -> CURRENT | reason'"
+            )
             continue
-        if recorded is None:
-            failures.append(
-                f"{relative}: {current} lines has no baseline entry. Split the file, or add its exact count "
-                f"and a one-line raise_justifications entry to {owner} in this PR."
-            )
-        elif current > recorded:
-            failures.append(
-                f"{relative}: grew from baseline {recorded} to {current} lines. Split the file, or raise its "
-                f"exact baseline with a one-line justification in {owner}."
-            )
-        elif current < recorded:
-            downward[relative] = current
-    return failures, downward
+        relative = match.group("path").strip()
+        reason = match.group("reason").strip()
+        if not is_product_source(relative):
+            failures.append(f"PR body line {line_number}: unsupported product source path {relative!r}")
+            continue
+        if len(reason) < 12 or len(reason) > 500:
+            failures.append(f"PR body line {line_number}: exception reason must be 12-500 characters")
+            continue
+        if relative in exceptions:
+            failures.append(f"PR body line {line_number}: duplicate exception for {relative}")
+            continue
+        exceptions[relative] = LineCountException(
+            path=relative,
+            base_count=int(match.group("base")),
+            current_count=int(match.group("current")),
+            reason=reason,
+            line_number=line_number,
+        )
+    return exceptions, failures
 
 
-def baseline_transition_errors(
-    root: Path, previous: dict[str, Any] | None, current: dict[str, Any], changed: set[str]
+def requires_exception(base_count: int | None, current_count: int | None) -> bool:
+    if current_count is None or current_count < THRESHOLD:
+        return False
+    return current_count > (base_count or 0)
+
+
+def evaluate_changes(
+    root: Path,
+    base: str,
+    changed: set[str],
+    exceptions: dict[str, LineCountException],
+    *,
+    candidate_ref: str | None = None,
 ) -> list[str]:
-    """Ensure explicit raises and baseline removals remain tied to source changes."""
-    if previous is None:
-        return []
-
     failures: list[str] = []
-    old_files = previous["files"]
-    new_files = current["files"]
-    for relative, new_count in new_files.items():
-        old_count = old_files.get(relative)
-        if old_count is not None and new_count <= old_count:
+    used: set[str] = set()
+    for relative in changed_product_sources(changed):
+        current = (
+            source_count_at_ref(root, candidate_ref, relative)
+            if candidate_ref is not None
+            else source_count(root, relative)
+        )
+        base_value = source_count_at_ref(root, base, relative)
+        if not requires_exception(base_value, current):
             continue
-        actual = source_count(root, relative)
+        expected_base = base_value or 0
+        exception = exceptions.get(relative)
+        if exception is None:
+            failures.append(
+                f"{relative}: grew from {expected_base} to {current} lines against {base}. Split the file, or add "
+                f"'Line-Count-Exception: {relative} | {expected_base} -> {current} | reason' to the PR body."
+            )
+            continue
+        used.add(relative)
+        if exception.base_count != expected_base or exception.current_count != current:
+            failures.append(
+                f"PR body line {exception.line_number}: {relative} declares "
+                f"{exception.base_count} -> {exception.current_count}, but the diff is {expected_base} -> {current}"
+            )
+
+    for relative, exception in exceptions.items():
+        if relative in used:
+            continue
         if relative not in changed:
-            failures.append(f"{relative}: a baseline raise must include the source file in the PR diff")
-        if actual != new_count:
-            failures.append(
-                f"{relative}: raised baseline {new_count} must exactly match the changed source count {actual}"
-            )
-        if relative not in current["raise_justifications"]:
-            failures.append(f"{relative}: a baseline raise requires a one-line raise_justifications entry")
-
-    for relative, old_count in old_files.items():
-        new_count = new_files.get(relative)
-        if new_count is not None and new_count >= old_count:
+            failures.append(f"PR body line {exception.line_number}: unused exception for unchanged source {relative}")
             continue
-        actual = source_count(root, relative)
-        if relative not in changed and actual is not None:
-            failures.append(f"{relative}: lowering or removing a baseline requires the source file in the PR diff")
-        if new_count is None:
-            if actual is not None and actual >= THRESHOLD:
-                failures.append(f"{relative}: cannot remove the baseline while the source remains oversized")
-        elif actual != new_count:
-            failures.append(
-                f"{relative}: lowered baseline {new_count} must exactly match the changed source count {actual}"
-            )
+        current = (
+            source_count_at_ref(root, candidate_ref, relative)
+            if candidate_ref is not None
+            else source_count(root, relative)
+        )
+        base_value = source_count_at_ref(root, base, relative)
+        failures.append(
+            f"PR body line {exception.line_number}: unused exception for {relative}; current/base counts "
+            f"{current}/{base_value or 0} do not require approval"
+        )
     return failures
-
-
-def baseline_at_ref(root: Path, ref: str) -> dict[str, Any] | None:
-    """Load either the sharded or legacy baseline from a historical git ref."""
-    # Drop inherited git-hook environment so the subprocess resolves the
-    # repository from cwd=root rather than the enclosing parent repository.
-    env = _clean_git_env()
-    listing = subprocess.run(
-        ["git", "ls-tree", "-r", "--name-only", ref, "--", BASELINE_DIRECTORY_RELATIVE],
-        cwd=root,
-        capture_output=True,
-        encoding="utf-8",
-        check=False,
-        env=env,
-    )
-    if listing.returncode:
-        raise ValueError(f"unable to inspect ratchet baseline at {ref}: {listing.stderr.strip()}")
-    shard_paths = [
-        line
-        for line in listing.stdout.splitlines()
-        if line.startswith(f"{BASELINE_DIRECTORY_RELATIVE}/") and line.endswith(".json")
-    ]
-    if shard_paths:
-        shards: dict[str, dict[str, Any]] = {}
-        for shard_relative in sorted(shard_paths):
-            result = subprocess.run(
-                ["git", "show", f"{ref}:{shard_relative}"],
-                cwd=root,
-                capture_output=True,
-                encoding="utf-8",
-                check=False,
-                env=env,
-            )
-            if result.returncode:
-                raise ValueError(f"unable to read baseline shard {shard_relative} at {ref}")
-            try:
-                shards[shard_relative] = validate_baseline(
-                    json.loads(result.stdout), _expected_shard(shard_relative)
-                )
-            except (json.JSONDecodeError, ValueError) as error:
-                raise ValueError(f"invalid baseline shard {shard_relative} at {ref}: {error}") from error
-        return aggregate_baseline_shards(shards)
-
-    result = subprocess.run(
-        ["git", "show", f"{ref}:{LEGACY_BASELINE_RELATIVE}"],
-        cwd=root,
-        capture_output=True,
-        encoding="utf-8",
-        check=False,
-        env=env,
-    )
-    if result.returncode:
-        return None
-    try:
-        return validate_baseline(json.loads(result.stdout))
-    except (json.JSONDecodeError, ValueError) as error:
-        raise ValueError(f"invalid legacy baseline at {ref}: {error}") from error
-
-
-def update_downward(root: Path, baseline: dict[str, Any], changed: set[str]) -> tuple[dict[str, Any], list[str]]:
-    """Return a baseline with only safe decreases/removals applied."""
-    updated = {
-        "threshold": THRESHOLD,
-        "files": dict(baseline["files"]),
-        "raise_justifications": dict(baseline["raise_justifications"]),
-    }
-    failures, downward = check_changed_sources(root, baseline, changed)
-    if failures:
-        return updated, failures
-    for relative, count in downward.items():
-        if count is None:
-            updated["files"].pop(relative, None)
-            updated["raise_justifications"].pop(relative, None)
-        else:
-            updated["files"][relative] = count
-    return updated, []
-
-
-def update_downward_shards(
-    root: Path, shards: dict[str, dict[str, Any]], changed: set[str]
-) -> tuple[dict[str, dict[str, Any]], set[str], list[str]]:
-    """Apply reductions only to the owning shard(s), never the aggregate ledger."""
-    if LEGACY_BASELINE_RELATIVE in shards:
-        raise ValueError("cannot update the retired legacy baseline; migrate to sharded baselines first")
-    aggregate = aggregate_baseline_shards(shards)
-    failures, downward = check_changed_sources(root, aggregate, changed)
-    if failures:
-        return shards, set(), failures
-
-    updated = {
-        shard_relative: {
-            "threshold": shard["threshold"],
-            "files": dict(shard["files"]),
-            "raise_justifications": dict(shard["raise_justifications"]),
-        }
-        for shard_relative, shard in shards.items()
-    }
-    touched: set[str] = set()
-    for relative, count in downward.items():
-        shard_relative = baseline_shard_relative(relative)
-        shard = updated[shard_relative]
-        if count is None:
-            shard["files"].pop(relative, None)
-            shard["raise_justifications"].pop(relative, None)
-        else:
-            shard["files"][relative] = count
-        touched.add(shard_relative)
-    return updated, touched, []
-
-
-def initial_baseline(root: Path) -> dict[str, Any]:
-    files: dict[str, int] = {}
-    for prefix in (BACKEND_ROOT, DESKTOP_ROOT):
-        for path in (root / prefix).rglob("*"):
-            if not path.is_file():
-                continue
-            relative = path.relative_to(root).as_posix()
-            if is_product_source(relative):
-                count = line_count(path)
-                if count >= THRESHOLD:
-                    files[relative] = count
-    return {"threshold": THRESHOLD, "files": files, "raise_justifications": {}}
-
-
-def shard_baseline(baseline: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Split a valid aggregate baseline into deterministic ownership shards."""
-    validate_baseline(baseline)
-    shards: dict[str, dict[str, Any]] = {}
-    for relative, count in baseline["files"].items():
-        shard_relative = baseline_shard_relative(relative)
-        shard = shards.setdefault(shard_relative, empty_baseline())
-        shard["files"][relative] = count
-        if relative in baseline["raise_justifications"]:
-            shard["raise_justifications"][relative] = baseline["raise_justifications"][relative]
-    return {shard_relative: validate_baseline(shard, shard_relative) for shard_relative, shard in shards.items()}
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", help="Repository root (default: inferred from this script)")
-    parser.add_argument("--changed-files", type=Path, help="Newline-delimited repository-relative changed paths")
-    parser.add_argument("--base", help="Git ref used to validate explicit baseline raises")
+    parser.add_argument("--changed-files", type=Path, required=True)
     parser.add_argument(
-        "--bootstrap", action="store_true", help="Create initial sharded snapshots when no baseline exists"
+        "--base",
+        required=True,
+        help="Current target-branch commit used as the line-count ceiling",
     )
     parser.add_argument(
-        "--update-baseline",
-        action="store_true",
-        help="Rewrite only owning shards for downward changes; never raises a count",
+        "--head",
+        required=True,
+        help="Candidate commit merged with --base before source lines are counted",
+    )
+    parser.add_argument(
+        "--pr-body-file",
+        type=Path,
+        help="PR body containing exact Line-Count-Exception entries",
     )
     return parser.parse_args()
 
@@ -468,68 +283,31 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     root = repo_root(args.root)
-    directory = baseline_directory(root)
-    legacy = baseline_path(root)
-    if args.bootstrap:
-        if args.changed_files or args.update_baseline or directory.exists() or legacy.exists():
-            print(
-                "FAIL: --bootstrap requires no existing baseline and cannot be combined with other modes",
-                file=sys.stderr,
-            )
-            return 2
-        shards = shard_baseline(initial_baseline(root))
-        write_baseline_shards(root, shards, set(shards))
-        print(f"Wrote {len(shards)} sharded oversized-file snapshots under {BASELINE_DIRECTORY_RELATIVE}.")
-        return 0
-    if not args.changed_files:
-        print("FAIL: --changed-files is required outside --bootstrap mode", file=sys.stderr)
-        return 2
-
     try:
+        verify_commit(root, args.base, "base")
+        verify_commit(root, args.head, "head")
+        candidate_tree = synthetic_merge_tree(root, args.base, args.head)
         changed = read_changed_files(args.changed_files)
-        shards = load_baseline_shards(root)
-        baseline = aggregate_baseline_shards(shards)
-    except (OSError, ValueError) as error:
-        print(f"FAIL: {error}", file=sys.stderr)
-        return 2
-
-    if args.update_baseline:
-        try:
-            updated, touched, failures = update_downward_shards(root, shards, changed)
-        except ValueError as error:
-            print(f"FAIL: {error}", file=sys.stderr)
-            return 2
-        if failures:
-            print("FAIL: refusing to raise the line-count baseline", file=sys.stderr)
-            print("\n".join(f"- {failure}" for failure in failures), file=sys.stderr)
-            return 1
-        if not touched:
-            print("OK: no oversized-file baseline reduction is needed.")
-            return 0
-        write_baseline_shards(root, updated, touched)
-        names = ", ".join(sorted(touched))
-        print(f"Updated {names} downward; stage the owning shard(s) with the source split.")
-        return 0
-
-    try:
-        previous = baseline_at_ref(root, args.base) if args.base else None
-        failures = baseline_transition_errors(root, previous, baseline, changed)
-    except ValueError as error:
-        print(f"FAIL: {error}", file=sys.stderr)
-        return 2
-    growth_failures, downward = check_changed_sources(root, baseline, changed)
-    failures.extend(growth_failures)
-    if downward:
-        files = ", ".join(sorted(downward))
-        owners = ", ".join(sorted({baseline_shard_relative(relative) for relative in downward}))
-        failures.append(
-            f"owning baseline shard(s) must ratchet down for {files}; run this checker with --update-baseline and stage {owners}"
+        body = args.pr_body_file.read_text(encoding="utf-8") if args.pr_body_file else ""
+        exceptions, failures = parse_exceptions(body)
+        failures.extend(
+            evaluate_changes(
+                root,
+                args.base,
+                changed,
+                exceptions,
+                candidate_ref=candidate_tree,
+            )
         )
+    except (OSError, UnicodeError, ValueError) as error:
+        print(f"FAIL: {error}", file=sys.stderr)
+        return 2
     if failures:
         print("FAIL: product file line-count ratchet", file=sys.stderr)
         print("\n".join(f"- {failure}" for failure in failures), file=sys.stderr)
         return 1
-    print(f"OK: no line-count increase across {len(changed_product_sources(changed))} changed product source file(s).")
+    count = len(changed_product_sources(changed))
+    print(f"OK: no unapproved line-count increase across {count} changed product source file(s).")
     return 0
 
 

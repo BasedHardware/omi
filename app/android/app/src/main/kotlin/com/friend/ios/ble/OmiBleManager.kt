@@ -165,9 +165,25 @@ class OmiBleManager private constructor(private val application: Application) {
         }
     }
 
+    private val adapterStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+            val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+            mainHandler.post {
+                flutterApi?.onBluetoothStateChanged(bluetoothStateFrom(state)) {}
+            }
+        }
+    }
+
     init {
         Log.i(TAG, "OmiBleManager initialized")
         application.registerReceiver(bondStateReceiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+        ContextCompat.registerReceiver(
+            application,
+            adapterStateReceiver,
+            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     // ── Scanning ──
@@ -468,7 +484,11 @@ class OmiBleManager private constructor(private val application: Application) {
 
     fun getBluetoothState(): String {
         val adapter = bluetoothAdapter ?: return "unsupported"
-        return when (adapter.state) {
+        return bluetoothStateFrom(adapter.state)
+    }
+
+    private fun bluetoothStateFrom(state: Int): String {
+        return when (state) {
             BluetoothAdapter.STATE_ON -> "on"
             BluetoothAdapter.STATE_OFF -> "off"
             BluetoothAdapter.STATE_TURNING_ON -> "resetting"

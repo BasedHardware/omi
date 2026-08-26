@@ -59,6 +59,7 @@ def _make_chat_client():
     graph.execute_graph_chat = MagicMock()
     graph.execute_persona_chat_stream = MagicMock()
 
+    sys.modules.pop('utils.chat_session_target', None)
     sys.modules.pop('routers.chat', None)
     module = harness.load_real_module('routers.chat', BACKEND_DIR / 'routers' / 'chat.py')
 
@@ -123,16 +124,83 @@ def test_v2_messages_quota_exceeded_reply_does_not_record_quota_question():
         _cleanup(saved)
 
 
+def test_v2_messages_fails_closed_when_quota_accounting_write_fails():
+    """A Firestore/outage failure recording the Free-plan counter must not start the LLM,
+    must not persist the human turn (retry would otherwise orphan copies), and must emit an
+    SSE ``done:`` frame mobile can render — not a bare HTTP 503."""
+    client, module, saved = _make_chat_client()
+    try:
+        stream_calls = {'n': 0}
+
+        async def tracking_stream(*args, **kwargs):
+            stream_calls['n'] += 1
+            kwargs['callback_data']['answer'] = 'should not run'
+            yield ''
+
+        module.execute_chat_stream = tracking_stream
+        module.llm_usage_db.record_chat_quota_question.side_effect = RuntimeError('firestore unavailable')
+
+        response = client.post(
+            '/v2/messages',
+            json={'text': 'hello', 'file_ids': []},
+            headers={'X-App-Platform': 'ios'},
+        )
+
+        assert response.status_code == 200
+        assert 'done: ' in response.text
+        assert stream_calls['n'] == 0
+        module.llm_executor.submit.assert_not_called()
+        module.chat_db.add_message.assert_not_called()
+        module.chat_db.add_message_to_chat_session.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
 def test_v2_messages_records_success_when_the_terminal_sse_frame_is_yielded():
     client, module, saved = _make_chat_client()
     try:
-        response = client.post('/v2/messages', json={'text': 'hello', 'file_ids': []})
+        response = client.post(
+            '/v2/messages',
+            json={'text': 'hello', 'file_ids': []},
+            headers={'X-App-Platform': 'ios'},
+        )
 
         assert response.status_code == 200
         assert 'done: ' in response.text
         assert len(module.JourneyAttempt.instances) == 1
         assert module.JourneyAttempt.instances[0].journey == 'chat_response'
         assert module.JourneyAttempt.instances[0].outcomes == ['success']
+        assert len(module.ClientJourneyAttempt.instances) == 1
+        attempt = module.ClientJourneyAttempt.instances[0]
+        assert (attempt.journey, attempt.client_kind, attempt.outcome) == ('mobile_chat', 'mobile_ios', 'success')
+        assert attempt.issue_class is None
+    finally:
+        _cleanup(saved)
+
+
+def test_v2_messages_records_post_2xx_error_frame_as_mobile_chat_failure():
+    client, module, saved = _make_chat_client()
+    try:
+
+        async def in_band_failure(*_args, **kwargs):
+            kwargs['callback_data']['error'] = 'upstream_failure'
+            kwargs['callback_data']['answer'] = 'Unable to complete the response. Please try again.'
+            yield 'error: Unable to complete the response. Please try again.'
+            yield None
+
+        module.execute_chat_stream = in_band_failure
+        response = client.post(
+            '/v2/messages',
+            json={'text': 'hello', 'file_ids': []},
+            headers={'X-App-Platform': 'android'},
+        )
+
+        assert response.status_code == 200
+        assert 'error: Unable to complete the response.' in response.text
+        assert 'done: ' in response.text
+        attempt = module.ClientJourneyAttempt.instances[0]
+        assert (attempt.journey, attempt.client_kind, attempt.outcome) == ('mobile_chat', 'mobile_android', 'failure')
+        assert attempt.issue_class == 'provider_error'
     finally:
         _cleanup(saved)
 

@@ -12,28 +12,37 @@ class GeneratedPatchField<T> {
 
 class GeneratedEvidenceRef {
   final String? deviceId;
+  final double? endSeconds;
   final String? excerptHash;
   final String id;
   final String kind;
   final String scope;
+  final double? startSeconds;
+  final List<String>? transcriptSegmentIds;
   final String? version;
 
   const GeneratedEvidenceRef({
     this.deviceId,
+    this.endSeconds,
     this.excerptHash,
     required this.id,
     required this.kind,
     required this.scope,
+    this.startSeconds,
+    this.transcriptSegmentIds,
     this.version,
   });
 
   factory GeneratedEvidenceRef.fromJson(Map<String, dynamic> json) {
     return GeneratedEvidenceRef(
       deviceId: _readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString, requiredField: false, nullable: true),
+      endSeconds: _readFieldValue<double>(_readField(json, const ["end_seconds"]), "end_seconds", _readDouble, requiredField: false, nullable: true),
       excerptHash: _readFieldValue<String>(_readField(json, const ["excerpt_hash"]), "excerpt_hash", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
       scope: _required(_readFieldValue<String>(_readField(json, const ["scope"]), "scope", _readString, requiredField: true, nullable: false), "scope"),
+      startSeconds: _readFieldValue<double>(_readField(json, const ["start_seconds"]), "start_seconds", _readDouble, requiredField: false, nullable: true),
+      transcriptSegmentIds: _readFieldValue<List<String>>(_readField(json, const ["transcript_segment_ids"]), "transcript_segment_ids", _readStringList, requiredField: false, nullable: true),
       version: _readFieldValue<String>(_readField(json, const ["version"]), "version", _readString, requiredField: false, nullable: true),
     );
   }
@@ -41,10 +50,13 @@ class GeneratedEvidenceRef {
   Map<String, dynamic> toJson() {
     return {
       'device_id': deviceId,
+      'end_seconds': endSeconds,
       'excerpt_hash': excerptHash,
       'id': id,
       'kind': kind,
       'scope': scope,
+      'start_seconds': startSeconds,
+      'transcript_segment_ids': transcriptSegmentIds,
       'version': version,
     };
   }
@@ -419,16 +431,19 @@ class GeneratedActionItemUpdateRequest {
 class GeneratedActionItemsResponse {
   final List<GeneratedActionItemResponse> actionItems;
   final bool hasMore;
+  final bool truncated;
 
   const GeneratedActionItemsResponse({
     required this.actionItems,
     this.hasMore = false,
+    this.truncated = false,
   });
 
   factory GeneratedActionItemsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedActionItemsResponse(
       actionItems: _required(_readFieldValue<List<GeneratedActionItemResponse>>(_readField(json, const ["action_items"]), "action_items", (value) => _readObjectList(value, GeneratedActionItemResponse.fromJson), requiredField: true, nullable: false), "action_items"),
       hasMore: _required(_readFieldValue<bool>(_readField(json, const ["has_more"]), "has_more", _readBool, requiredField: false, nullable: false, defaultValue: false), "has_more"),
+      truncated: _required(_readFieldValue<bool>(_readField(json, const ["truncated"]), "truncated", _readBool, requiredField: false, nullable: false, defaultValue: false), "truncated"),
     );
   }
 
@@ -436,6 +451,7 @@ class GeneratedActionItemsResponse {
     return {
       'action_items': actionItems.map((value) => value.toJson()).toList(),
       'has_more': hasMore,
+      'truncated': truncated,
     };
   }
 }

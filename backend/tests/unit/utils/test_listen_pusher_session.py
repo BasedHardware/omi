@@ -5,6 +5,7 @@ import struct
 import pytest
 
 from utils.listen_pusher_session import (
+    FINALIZATION_IN_FLIGHT_ERROR,
     TARGET_SAMPLE_RATE,
     ListenPusherSession,
     ListenPusherSessionConfig,
@@ -58,6 +59,13 @@ def error_response_201(conversation_id: str, terminal: bool = False):
     return struct.pack("<I", 201) + payload
 
 
+def in_flight_response_201(conversation_id: str):
+    payload = json.dumps(
+        {"conversation_id": conversation_id, "error": FINALIZATION_IN_FLIGHT_ERROR, "terminal": False}
+    ).encode("utf-8")
+    return struct.pack("<I", 201) + payload
+
+
 def fenced_response_201(conversation_id: str):
     payload = json.dumps({"conversation_id": conversation_id, "fenced": True}).encode("utf-8")
     return struct.pack("<I", 201) + payload
@@ -76,6 +84,7 @@ def make_session(
     config_overrides=None,
     deps_overrides=None,
     connect_calls=None,
+    client_kind_calls=None,
 ):
     active_ref = active_ref if active_ref is not None else {"active": True}
     config_values = {
@@ -93,9 +102,11 @@ def make_session(
     if config_overrides:
         config_values.update(config_overrides)
 
-    async def connect_to_pusher(uid, sample_rate, retries=5, is_active=None):
+    async def connect_to_pusher(uid, sample_rate, retries=5, is_active=None, client_kind='unknown'):
         if connect_calls is not None:
             connect_calls.append((uid, sample_rate, retries, is_active))
+        if client_kind_calls is not None:
+            client_kind_calls.append(client_kind)
         return ws or FakePusherWebSocket()
 
     async def wait_for_event(event, timeout):
@@ -376,6 +387,28 @@ async def test_incoming_finalization_error_keeps_request_for_bounded_retry():
 
 
 @pytest.mark.anyio
+async def test_in_flight_finalization_lease_does_not_consume_the_retry_burst():
+    # `job_leased` means a concurrent dispatch of the same job is finalizing
+    # normally. Treating it as a failure re-requested it immediately, and each
+    # rejection re-armed the next one, so the whole burst burned in under a
+    # second and left a genuine later failure with no attempts.
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[in_flight_response_201("conv-1")])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    await session.pusher_receive()
+
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 1
+    pending = session.pending_conversation_requests['conv-1']
+    assert pending['retries'] == 0
+    assert pending['sent_at'] == session.deps.now()
+
+
+@pytest.mark.anyio
 async def test_incoming_terminal_finalization_error_stops_retrying():
     active_ref = {"active": True}
     ws = FakePusherWebSocket(incoming=[error_response_201("conv-1", terminal=True)])
@@ -441,3 +474,32 @@ async def test_close_cancels_reconnect_flushes_buffers_and_closes_socket():
     assert session.reconnect_task is None
     assert [frame_type(frame) for frame in ws.sent] == [103, 101, 102]
     assert ws.closed_codes == [1001]
+
+
+@pytest.mark.anyio
+async def test_pusher_connection_carries_the_bounded_client_kind():
+    """The pusher session is the only place that knows which client opened it.
+
+    Without this the pusher-side journey counters cannot tell an iOS outage from
+    a healthy Android population, which is the aggregation that let a 19-hour
+    desktop chat outage hide behind a larger healthy client.
+    """
+    client_kind_calls = []
+    session = make_session(
+        config_overrides={"client_kind": "mobile_ios"},
+        client_kind_calls=client_kind_calls,
+    )
+
+    await session.connect()
+
+    assert client_kind_calls == ["mobile_ios"]
+
+
+@pytest.mark.anyio
+async def test_pusher_connection_defaults_to_unknown_rather_than_guessing():
+    client_kind_calls = []
+    session = make_session(client_kind_calls=client_kind_calls)
+
+    await session.connect()
+
+    assert client_kind_calls == ["unknown"]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish an immutable lightweight macOS candidate tag from exact live main."""
+"""Publish an immutable timestamped macOS candidate from a merged release source."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$")
-SOURCE_IDENTITY_SCHEMA = "desktop-release-planner-source-identity/v2"
+SOURCE_IDENTITY_SCHEMA = "desktop-release-planner-source-identity/v3"
 SECRET_PATTERNS = (
     re.compile(r"(?i)(authorization:\s*bearer\s+)\S+"),
     re.compile(r"(?i)(bearer\s+)\S+"),
@@ -70,9 +70,7 @@ def run_gh_json(args: list[str], payload: dict[str, object] | None = None) -> di
     return decoded
 
 
-def run_git(
-    args: list[str], *, stdin: str | None = None, environment: dict[str, str] | None = None
-) -> str:
+def run_git(args: list[str], *, stdin: str | None = None, environment: dict[str, str] | None = None) -> str:
     """Run the native Git transport without exposing credentials in failures."""
     if environment is None:
         environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
@@ -101,8 +99,8 @@ def validate_inputs(repository: str, release_tag: str, candidate_sha: str) -> No
         raise ValueError("candidate_sha must be a 40-character lowercase SHA")
 
 
-def validate_planner_evidence(*, evidence: str, release_tag: str, candidate_sha: str) -> None:
-    """Bind the separately retained planner artifact to this exact lightweight tag."""
+def validate_planner_evidence(*, evidence: str, release_tag: str, candidate_sha: str) -> str:
+    """Bind the separately retained planner artifact to this exact candidate tag."""
     try:
         decoded = json.loads(evidence)
     except json.JSONDecodeError as error:
@@ -114,33 +112,32 @@ def validate_planner_evidence(*, evidence: str, release_tag: str, candidate_sha:
         "schema": SOURCE_IDENTITY_SCHEMA,
         "release_tag": release_tag,
         "candidate_source_sha": candidate_sha,
-        "origin_main_sha": candidate_sha,
     }
     for field, value in expected.items():
         if decoded.get(field) != value:
             raise ValueError(f"planner source identity evidence {field} does not bind this candidate")
+    origin_main_sha = decoded.get("origin_main_sha")
+    if not isinstance(origin_main_sha, str) or not SHA_RE.fullmatch(origin_main_sha):
+        raise ValueError("planner source identity evidence origin_main_sha must be an exact commit SHA")
+    return origin_main_sha
 
 
-def create_local_lightweight_tag(*, release_tag: str, candidate_sha: str) -> None:
-    """Create a direct commit tag; it is not a candidate until pushed."""
-    # No --annotate/--message flag: Codemagic's native tag trigger requires a
-    # lightweight ref, while source provenance is retained as a workflow artifact.
-    run_git(["tag", release_tag, candidate_sha])
+def create_local_candidate_tag(*, release_tag: str, candidate_sha: str) -> None:
+    """Create a timestamped immutable tag; it is not a candidate until pushed."""
+    run_git(["tag", "--annotate", "--message", f"Omi Desktop candidate {release_tag}", release_tag, candidate_sha])
 
 
-def live_main_sha(repository: str) -> str:
-    response = run_gh_json(["api", "--method", "GET", f"repos/{repository}/git/ref/heads/main"])
-    target = response.get("object")
-    if not isinstance(target, dict):
-        raise ValueError("GitHub did not return the live main ref target")
-    sha = target.get("sha")
-    if not isinstance(sha, str) or not SHA_RE.fullmatch(sha):
-        raise ValueError("GitHub did not return the live main commit SHA")
-    return sha
+def require_candidate_merged_on_main(repository: str, candidate_sha: str) -> None:
+    """Use GitHub's authoritative comparison so later main merges are valid."""
+    response = run_gh_json(["api", "--method", "GET", f"repos/{repository}/compare/{candidate_sha}...main"])
+    merge_base = response.get("merge_base_commit")
+    merge_base_sha = merge_base.get("sha") if isinstance(merge_base, dict) else None
+    if merge_base_sha != candidate_sha:
+        raise ValueError("candidate source is not reachable from current GitHub main; tag was not pushed")
 
 
 def publish_immutable_tag_ref(release_tag: str) -> None:
-    """Publish through Git's tag push so Codemagic sees its native tag trigger."""
+    """Publish the immutable ref before the workflow dispatches its exact-tag build."""
     tag_ref = f"refs/tags/{release_tag}"
     # No force refspec: an existing remote candidate makes Git fail rather
     # than rewriting immutable tag evidence or retrying a stale candidate.
@@ -156,15 +153,13 @@ def publish_candidate_tag(
 ) -> None:
     validate_inputs(repository, release_tag, candidate_sha)
     validate_planner_evidence(evidence=evidence, release_tag=release_tag, candidate_sha=candidate_sha)
+    # Main may advance after planning. That is safe because the exact green
+    # candidate remains immutable and later macOS changes belong to the next
+    # hourly train. A candidate that is not merged on main still fails closed.
+    require_candidate_merged_on_main(repository, candidate_sha)
     # A local tag is not a candidate. It becomes one only through the native
     # Git tag push below, which is the provider-visible Codemagic boundary.
-    create_local_lightweight_tag(release_tag=release_tag, candidate_sha=candidate_sha)
-    observed_main_sha = live_main_sha(repository)
-    if observed_main_sha != candidate_sha:
-        raise ValueError(
-            "GitHub main moved before candidate publication; "
-            f"expected {candidate_sha}, observed {observed_main_sha}; tag was not pushed"
-        )
+    create_local_candidate_tag(release_tag=release_tag, candidate_sha=candidate_sha)
     publish_immutable_tag_ref(release_tag)
 
 

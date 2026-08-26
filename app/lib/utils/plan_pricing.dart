@@ -1,19 +1,16 @@
 import 'package:collection/collection.dart';
 
-/// "N Months Free" for a tier's annual card, derived from the tier's own prices.
+/// Months saved by a tier's annual price, derived from the tier's own prices.
 ///
 /// Discounts differ per tier — legacy Neo saves 2 months while Plus and
 /// Unlimited save 3 — so this must never be hardcoded. [plans] is the raw
 /// available-plans payload for a single tier, containing its `month` and `year`
 /// entries with a Stripe `unit_amount`.
 ///
-/// Returns null when either price is missing or the annual plan isn't actually
-/// cheaper, so the caller simply renders no badge.
-String? annualSaveTag(List<Map<String, dynamic>> plans) {
-  final monthsFree = _annualMonthsFree(plans);
-  if (monthsFree == null) return null;
-  return monthsFree == 1 ? '1 Month Free' : '$monthsFree Months Free';
-}
+/// Returns the count rather than a label so the caller localizes it; null when
+/// either price is missing or the annual plan isn't actually cheaper, so the
+/// caller simply renders no badge.
+int? annualMonthsFree(List<Map<String, dynamic>> plans) => _annualMonthsFree(plans);
 
 /// Whole-percent discount of a tier's annual price vs paying monthly for a year.
 ///
@@ -53,4 +50,29 @@ int? _annualMonthsFree(List<Map<String, dynamic>> plans) {
   final yearlyAmount = (yearly?['unit_amount'] as num?)?.toDouble();
   if (monthlyAmount == null || yearlyAmount == null || monthlyAmount <= 0) return null;
   return (monthlyAmount, yearlyAmount);
+}
+
+/// Whether the mobile plans sheet should show Continue / Upgrade.
+///
+/// Locked (docs/agents/plan-catalog.md) — do not restore `!isOnAnnualPlan`:
+/// that hid Continue for every annual subscriber and blocked Plus → Unlimited.
+/// Hide only when the user is already on the selected tier's annual price.
+/// Desktop-entitled plans are manage-only on this sheet: same-tier
+/// monthly→annual is still a management action; switching onto Plus /
+/// Unlimited / Neo is not.
+bool shouldShowPlanContinueButton({
+  required bool isOnAnnualPlan,
+  required bool hasScheduledUpgrade,
+  required bool isCancelled,
+  required bool plansLoaded,
+  String? selectedTierId,
+  String? currentTierId,
+  bool currentGrantsDesktop = false,
+}) {
+  if (!plansLoaded || isCancelled || hasScheduledUpgrade) return false;
+  if (currentGrantsDesktop && selectedTierId != null && currentTierId != null && selectedTierId != currentTierId) {
+    return false;
+  }
+  if (isOnAnnualPlan && (selectedTierId == null || selectedTierId == currentTierId)) return false;
+  return true;
 }

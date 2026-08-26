@@ -17,8 +17,9 @@ Endpoints:
 """
 
 import logging
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field, field_validator
@@ -26,6 +27,7 @@ from pydantic import BaseModel, Field, field_validator
 import database.vector_db as vector_db
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.conversations.transcript_chunks import hydrate_chunk_texts
+from utils.retrieval.safety import safe_isoformat
 from utils.retrieval.tool_services.conversations import get_conversations_text, search_conversations_text
 from utils.retrieval.tool_services.memories import get_memories_text, search_memories_text
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
@@ -44,14 +46,42 @@ router = APIRouter()
 # --------------- response envelope ---------------
 
 
+class ToolSource(BaseModel):
+    kind: str = Field(max_length=32)
+    source_id: str = Field(max_length=512)
+    title: str = Field(default='', max_length=160)
+    preview: str = Field(default='', max_length=600)
+    created_at: Optional[str] = Field(default=None, max_length=80)
+    moment_timestamp_ms: Optional[int] = None
+    app_name: Optional[str] = Field(default=None, max_length=80)
+    url: Optional[str] = Field(default=None, max_length=2048)
+
+    @field_validator('url')
+    @classmethod
+    def require_http_url(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        parsed = urlsplit(value)
+        if parsed.scheme.lower() not in {'http', 'https'} or not parsed.netloc:
+            raise ValueError('url must be an absolute HTTP(S) URL')
+        return value
+
+
 class ToolResponse(BaseModel):
     tool_name: str
     result_text: str
     is_error: bool = False
+    sources: list[ToolSource] = Field(default_factory=list)
 
 
-def _ok(tool_name: str, text: str) -> dict:
-    return {"tool_name": tool_name, "result_text": text, "is_error": text.startswith("Error")}
+def _ok(tool_name: str, text: str, sources: Optional[list[dict]] = None) -> dict:
+    is_error = text.startswith("Error")
+    return {
+        "tool_name": tool_name,
+        "result_text": text,
+        "is_error": is_error,
+        "sources": [] if is_error else (sources or []),
+    }
 
 
 # --------------- request models ---------------
@@ -110,6 +140,7 @@ def get_conversations(
     include_transcript: bool = Query(default=True),
     uid: str = Depends(get_current_user_uid),
 ):
+    sources: list[dict] = []
     result = get_conversations_text(
         uid=uid,
         start_date=start_date,
@@ -117,8 +148,9 @@ def get_conversations(
         limit=limit,
         offset=offset,
         include_transcript=include_transcript,
+        source_sink=sources,
     )
-    return _ok("get_conversations", result)
+    return _ok("get_conversations", result, sources)
 
 
 @router.post("/v1/tools/conversations/search", response_model=ToolResponse)
@@ -126,6 +158,7 @@ def search_conversations(
     body: SearchConversationsRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
 ):
+    sources: list[dict] = []
     result = search_conversations_text(
         uid=uid,
         query=body.query,
@@ -133,13 +166,36 @@ def search_conversations(
         end_date=body.end_date,
         limit=body.limit,
         include_transcript=body.include_transcript,
+        source_sink=sources,
     )
-    return _ok("search_conversations", result)
+    return _ok("search_conversations", result, sources)
 
 
 class SearchChunksRequest(BaseModel):
     query: str = Field(description="Semantic search query")
     limit: int = Field(default=20, ge=1, le=30)
+
+
+def _transcript_chunk_source(row: dict[str, Any]) -> dict[str, Any]:
+    """Typed source for one hydrated chunk row, shaped exactly like the sibling
+    conversation sources (`_append_conversation_source`): kind 'conversation' with
+    the PARENT conversation id, so chunk citations share the summary results' ref
+    namespace and no client citation validation changes. The preview is the
+    verbatim excerpt flattened to one line — it is quoted into client prompts, so
+    it must not be able to forge line-oriented prompt structure."""
+    created_at: Optional[str] = None
+    ts = row.get('created_at')
+    if isinstance(ts, (int, float)) and ts > 0:
+        created_at = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+    else:
+        created_at = safe_isoformat(row.get('conversation_started_at'))
+    return {
+        'kind': 'conversation',
+        'source_id': str(row['conversation_id']),
+        'title': str(row.get('conversation_title') or 'Conversation')[:160],
+        'preview': ' '.join(str(row.get('text') or '').split())[:600],
+        'created_at': created_at,
+    }
 
 
 @router.post("/v1/tools/conversations/search-chunks", response_model=ToolResponse)
@@ -151,16 +207,25 @@ def search_conversation_chunks(
 
     Complements /conversations/search, which matches against conversation summaries:
     summaries drop specifics (exact dates, names, numbers), so detail questions need
-    this verbatim layer. Returns chunks newest-relevant with their conversation date.
+    this verbatim layer. Returns chunks newest-relevant with their conversation date,
+    plus typed sources (one per parent conversation, best chunk first) so clients can
+    cite verbatim evidence the same way they cite summary results.
     """
     rows = vector_db.search_transcript_chunks(uid, body.query, limit=body.limit)
     rows = hydrate_chunk_texts(uid, rows)
     if not rows:
         return _ok("search_conversation_chunks", f"No transcript excerpts found matching '{body.query}'.")
     parts = []
+    sources: list[dict] = []
+    seen_conversation_ids: set[str] = set()
     for i, r in enumerate(rows, 1):
         parts.append(f"Excerpt {i} (relevance: {r['score']:.2f}):\n{r['text']}")
-    return _ok("search_conversation_chunks", "\n\n".join(parts))
+        conversation_id = r.get('conversation_id')
+        if not conversation_id or conversation_id in seen_conversation_ids:
+            continue
+        seen_conversation_ids.add(conversation_id)
+        sources.append(_transcript_chunk_source(r))
+    return _ok("search_conversation_chunks", "\n\n".join(parts), sources)
 
 
 # --------------- memory endpoints ---------------
@@ -174,15 +239,20 @@ def get_memories(
     end_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     uid: str = Depends(get_current_user_uid),
 ):
+    sources: list[dict] = []
     result = get_memories_text(
         uid=uid,
         limit=limit,
         offset=offset,
         start_date=start_date,
         end_date=end_date,
+        source_sink=sources,
     )
-    result = preserve_chat_memory_tool_result_boundary('get_memories_tool', result)
-    return _ok("get_memories", result)
+    bounded_result = preserve_chat_memory_tool_result_boundary('get_memories_tool', result)
+    if bounded_result != result:
+        sources = []
+    result = bounded_result
+    return _ok("get_memories", result, sources)
 
 
 @router.post("/v1/tools/memories/search", response_model=ToolResponse)
@@ -190,13 +260,18 @@ def search_memories(
     body: SearchMemoriesRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
 ):
+    sources: list[dict] = []
     result = search_memories_text(
         uid=uid,
         query=body.query,
         limit=body.limit,
+        source_sink=sources,
     )
-    result = preserve_chat_memory_tool_result_boundary('search_memories_tool', result)
-    return _ok("search_memories", result)
+    bounded_result = preserve_chat_memory_tool_result_boundary('search_memories_tool', result)
+    if bounded_result != result:
+        sources = []
+    result = bounded_result
+    return _ok("search_memories", result, sources)
 
 
 # --------------- action item endpoints ---------------
@@ -214,6 +289,7 @@ def get_action_items(
     due_end_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     uid: str = Depends(get_current_user_uid),
 ):
+    sources: list[dict] = []
     result = get_action_items_text(
         uid=uid,
         limit=limit,
@@ -224,8 +300,9 @@ def get_action_items(
         end_date=end_date,
         due_start_date=due_start_date,
         due_end_date=due_end_date,
+        source_sink=sources,
     )
-    return _ok("get_action_items", result)
+    return _ok("get_action_items", result, sources)
 
 
 @router.post("/v1/tools/action-items", response_model=ToolResponse)

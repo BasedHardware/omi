@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
+import { useRouter } from '@tschk/moonshine-next/navigation';
+import dynamic from '@tschk/moonshine-next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -29,7 +29,18 @@ import { EditableTitle } from './EditableTitle';
 import { SpeakerTagSheet } from './SpeakerTagSheet';
 import { ManagePeopleModal } from './ManagePeopleModal';
 import { AudioPlayer, AudioPlayerRef } from './AudioPlayer';
+import { ConversationScreenFrameBanner } from './ConversationScreenFrameBanner';
+import { ConversationScreenFrameCarousel } from './ConversationScreenFrameCarousel';
+import { ScreenFrameLightbox } from './ScreenFrameLightbox';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { usePeople } from '@/hooks/usePeople';
+import { useScreenFrames } from '@/hooks/useScreenFrames';
+import {
+  BANNER_LIGHTBOX_INDEX,
+  buildLightboxFrames,
+  resolveIndexAfterRemoval,
+  stripFrameLightboxIndex,
+} from '@/lib/screenFrames';
 import {
   precacheConversationAudio,
   getConversationAudioUrls,
@@ -226,7 +237,7 @@ function SummaryTab({
               >
                 {category && (
                   <div className="mb-3">
-                    <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+                    <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-white/[0.08] text-text-primary capitalize">
                       {category}
                     </span>
                   </div>
@@ -251,7 +262,7 @@ function SummaryTab({
                 >
                   <button
                     onClick={() => setIsExpanded(!isExpanded)}
-                    className="flex items-center gap-1 text-sm text-purple-primary hover:text-purple-400 transition-colors"
+                    className="flex items-center gap-1 text-sm text-text-primary hover:text-text-secondary transition-colors"
                   >
                     {isExpanded ? (
                       <>
@@ -284,7 +295,7 @@ function SummaryTab({
         <div>
           {category && (
             <div className="mb-3">
-              <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+              <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-white/[0.08] text-text-primary capitalize">
                 {category}
               </span>
             </div>
@@ -298,7 +309,7 @@ function SummaryTab({
         {/* Section Header with Generate Button */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-purple-primary" />
+            <Sparkles className="w-4 h-4 text-text-primary" />
             <h3 className="text-sm font-medium text-text-primary">Summary Templates</h3>
           </div>
           <GenerateSummaryButton
@@ -438,6 +449,77 @@ export function ConversationDetailPanel({
   const router = useRouter();
   const { people } = usePeople();
 
+  // Meeting-note screenshots: banner + carousel + lightbox state.
+  const screenFrames = useScreenFrames(conversationId);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [pendingFrameDelete, setPendingFrameDelete] = useState<
+    { kind: 'frame'; frameId: string } | { kind: 'all' } | null
+  >(null);
+  const [deletingFrameId, setDeletingFrameId] = useState<string | null>(null);
+  const [deletingAllFrames, setDeletingAllFrames] = useState(false);
+
+  // The lightbox steps through the banner (if any) plus the strip, in that
+  // order, as one list — see `@/lib/screenFrames` for why the banner isn't a
+  // disjoint sequence from the strip.
+  const lightboxFrames = buildLightboxFrames(screenFrames.frameSet);
+
+  // If that combined list shrinks (a delete just landed) while the lightbox
+  // is open, clamp its index into the new bounds or close it if nothing is
+  // left. Never guess *which* frame that lands on beyond clamping — see
+  // `@/lib/screenFrames` for why banner/strip promotion stays server-owned.
+  useEffect(() => {
+    const newLength = lightboxFrames.length;
+    setLightboxIndex((current) =>
+      current === null ? null : resolveIndexAfterRemoval(current, newLength),
+    );
+  }, [lightboxFrames.length]);
+
+  const openScreenFrameLightboxForStripIndex = useCallback(
+    (stripIndex: number) => {
+      setLightboxIndex(stripFrameLightboxIndex(screenFrames.frameSet, stripIndex));
+    },
+    [screenFrames.frameSet],
+  );
+
+  const openScreenFrameLightboxForBanner = useCallback(() => {
+    setLightboxIndex(BANNER_LIGHTBOX_INDEX);
+  }, []);
+
+  const closeScreenFrameLightbox = useCallback(() => {
+    setLightboxIndex(null);
+  }, []);
+
+  const requestDeleteScreenFrame = useCallback((frameId: string) => {
+    setPendingFrameDelete({ kind: 'frame', frameId });
+  }, []);
+
+  const requestDeleteAllScreenFrames = useCallback(() => {
+    setPendingFrameDelete({ kind: 'all' });
+  }, []);
+
+  const confirmPendingFrameDelete = useCallback(async () => {
+    const pending = pendingFrameDelete;
+    if (!pending) return;
+    setPendingFrameDelete(null);
+
+    if (pending.kind === 'frame') {
+      setDeletingFrameId(pending.frameId);
+      try {
+        await screenFrames.deleteFrame(pending.frameId);
+      } finally {
+        setDeletingFrameId(null);
+      }
+    } else {
+      setDeletingAllFrames(true);
+      try {
+        await screenFrames.deleteAll();
+        setLightboxIndex(null);
+      } finally {
+        setDeletingAllFrames(false);
+      }
+    }
+  }, [pendingFrameDelete, screenFrames]);
+
   // Refs holding the *currently displayed* conversation id and object, so async
   // completions (segment saves, reprocess) can (a) build optimistic updates from
   // the latest state and (b) bail out if the user switched conversations while a
@@ -459,6 +541,10 @@ export function ConversationDetailPanel({
     setTranscriptEdited(false);
     setIsReprocessing(false);
     setReprocessFailed(false);
+    setLightboxIndex(null);
+    setPendingFrameDelete(null);
+    setDeletingFrameId(null);
+    setDeletingAllFrames(false);
   }, [conversationId]);
 
   const isSavingSegments = saveBatch.total > saveBatch.done;
@@ -842,6 +928,22 @@ export function ConversationDetailPanel({
         </div>
       </div>
 
+      {/* Screenshot banner — renders nothing (and this wrapper isn't mounted)
+          when there's no approved banner frame, leaving the header above as
+          the only header treatment. */}
+      {screenFrames.frameSet?.banner && (
+        <div className="flex-shrink-0 px-4 pt-4 lg:px-6 lg:pt-6">
+          <ConversationScreenFrameBanner
+            frame={screenFrames.frameSet.banner}
+            title={structured.title || 'Untitled Conversation'}
+            dateLabel={
+              conversation.started_at ? formatDate(conversation.started_at) : undefined
+            }
+            onClick={openScreenFrameLightboxForBanner}
+          />
+        </div>
+      )}
+
       {/* Tabs */}
       {enabledTabs.length > 0 && (
         <div className="flex-shrink-0 px-4 lg:px-6 py-3 border-b border-bg-tertiary">
@@ -854,7 +956,7 @@ export function ConversationDetailPanel({
                   'flex items-center gap-2 px-3 py-2 rounded-lg',
                   'text-sm font-medium transition-all duration-150',
                   activeTab === tab.id
-                    ? 'bg-purple-primary text-white'
+                    ? 'bg-text-primary text-bg-primary'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
                 )}
               >
@@ -887,15 +989,25 @@ export function ConversationDetailPanel({
             transition={{ duration: 0.15 }}
           >
             {activeTab === 'summary' && structured.overview && (
-              <SummaryTab
-                overview={structured.overview}
-                category={structured.category}
-                conversationId={conversationId}
-                appResults={conversation.apps_results || []}
-                suggestedAppIds={conversation.suggested_summarization_apps || []}
-                onGenerateComplete={onConversationUpdate}
-                geolocation={geolocation}
-              />
+              <>
+                <SummaryTab
+                  overview={structured.overview}
+                  category={structured.category}
+                  conversationId={conversationId}
+                  appResults={conversation.apps_results || []}
+                  suggestedAppIds={conversation.suggested_summarization_apps || []}
+                  onGenerateComplete={onConversationUpdate}
+                  geolocation={geolocation}
+                />
+                <ConversationScreenFrameCarousel
+                  frames={screenFrames.frameSet?.strip ?? []}
+                  onFrameClick={openScreenFrameLightboxForStripIndex}
+                  onRequestDeleteFrame={requestDeleteScreenFrame}
+                  onRequestDeleteAll={requestDeleteAllScreenFrames}
+                  deletingFrameId={deletingFrameId}
+                  className="mt-6"
+                />
+              </>
             )}
 
             {activeTab === 'actions' && hasActionItems && (
@@ -917,7 +1029,7 @@ export function ConversationDetailPanel({
                 {/* Loading state while fetching signed URLs */}
                 {audioAvailable && fetchedAudioFiles.length === 0 && (
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50 text-text-tertiary text-sm">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-purple-primary/50">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-text-primary/90">
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     </div>
                     <span>Loading audio...</span>
@@ -1039,6 +1151,48 @@ export function ConversationDetailPanel({
             setShowTagSheet(true);
           }
         }}
+      />
+
+      {/* Screenshot lightbox — steps through the banner (if any) plus the
+          strip as one ordered list; see `openScreenFrameLightboxForBanner`
+          / `openScreenFrameLightboxForStripIndex` above. */}
+      <ScreenFrameLightbox
+        open={lightboxIndex !== null}
+        frames={lightboxFrames}
+        index={lightboxIndex ?? 0}
+        onIndexChange={setLightboxIndex}
+        onClose={closeScreenFrameLightbox}
+        onRequestDeleteFrame={requestDeleteScreenFrame}
+        deletingFrameId={deletingFrameId}
+      />
+
+      {/* Screenshot delete confirmation — shared by the carousel's hover-X
+          and the lightbox's delete button. A modal confirm (rather than the
+          inline two-step reveal used for conversation delete in
+          ConversationActionsMenu) because the trigger is a ~24px hover
+          affordance on a 128px-wide thumbnail with no room for inline
+          "Delete this? [Cancel] [Delete]" text. */}
+      <ConfirmDialog
+        open={pendingFrameDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingFrameDelete(null);
+        }}
+        title={
+          pendingFrameDelete?.kind === 'all'
+            ? 'Delete all screenshots?'
+            : 'Delete screenshot?'
+        }
+        description={
+          pendingFrameDelete?.kind === 'all'
+            ? "This removes every screenshot from this conversation. This can't be undone."
+            : "This screenshot will be permanently removed. This can't be undone."
+        }
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => {
+          void confirmPendingFrameDelete();
+        }}
+        isLoading={deletingAllFrames}
       />
     </div>
   );

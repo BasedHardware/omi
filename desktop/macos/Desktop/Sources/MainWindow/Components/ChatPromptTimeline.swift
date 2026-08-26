@@ -17,7 +17,22 @@ enum ChatPromptTimelineMetrics {
   static let hoveredWidth: CGFloat = 26
   static let markHeight: CGFloat = 2
 
-  static let restOpacity: Double = 0.18
+  /// A mark nobody is pointing at is a **hairline**, and this is the alpha that makes that literal
+  /// rather than aspirational.
+  ///
+  /// The rail's ink is `Ink.primary`, which on the light-pinned panel is near-black. At the 0.18
+  /// this was tuned to on the dark palette — where the same alpha of a near-*white* ink barely lifts
+  /// off the surface — a resting mark composites nearly twice as dark as `Ink.separator`, the token
+  /// this app draws actual rules with. A hundred of those down the gutter is not a hairline: it is a
+  /// dashed second scrollbar beside the real one, which is the exact thing the file's own doc
+  /// comment says the rail must never become.
+  ///
+  /// So it is pinned to the app's rule weight instead of picked by eye — `separatorColor` is 0.098
+  /// alpha in both appearances, and `ChatPromptTimelineTests` asserts a resting mark is no heavier
+  /// than that. The reach still reads, and it reads *more*: the step from rest to proximity is now
+  /// five-fold rather than under three-fold, so the marks the cursor lifts separate further from the
+  /// ones it does not.
+  static let restOpacity: Double = 0.098
   static let proximityOpacity: Double = 0.5
   static let hoveredOpacity: Double = 0.95
   /// The mark being read is lit, not sized. Growing it would mean the rail
@@ -102,8 +117,10 @@ enum ChatPromptTimelineMetrics {
     return restOpacity + (proximityOpacity - restOpacity) * Double(min(max(proximity, 0), 1))
   }
 
+  /// The rail's ink. `Ink.primary` and not white: on a light-pinned panel a white
+  /// rail is invisible, and this is a mark on the surface rather than a light on it.
   static func markColor(isActive _: Bool) -> Color {
-    .white
+    Ink.primary
   }
 
   /// The mark the cursor is on, or nil in the gaps between them.
@@ -146,7 +163,7 @@ struct ChatPromptTimeline: View {
   let trailingInset: CGFloat
 
   @State private var cursorY: CGFloat?
-  @State private var hoveredIndex: Int?
+  @State private var hoveredMarkID: String?
   @State private var previewHeight: CGFloat = 0
 
   /// `hoveredIndex` seeds the hover the rail would otherwise only reach through
@@ -165,7 +182,9 @@ struct ChatPromptTimeline: View {
     self.gutter = gutter
     self.onSelect = onSelect
     self.trailingInset = trailingInset
-    _hoveredIndex = State(initialValue: hoveredIndex)
+    _hoveredMarkID = State(
+      initialValue: hoveredIndex.flatMap { marks.indices.contains($0) ? marks[$0].id : nil }
+    )
   }
 
   var body: some View {
@@ -182,7 +201,7 @@ struct ChatPromptTimeline: View {
 
         ForEach(Array(marks.enumerated()), id: \.element.id) { index, mark in
           let position = positions.indices.contains(index) ? positions[index] : 0
-          markView(mark, at: position, index: index)
+          markView(mark, at: position)
         }
       }
       // The card is an overlay, never a sibling. A 236pt card inside the stack
@@ -198,13 +217,20 @@ struct ChatPromptTimeline: View {
         case .active(let location):
           OmiMotion.withGated(ChatPromptTimelineMetrics.proximityAnimation) {
             cursorY = location.y
-            hoveredIndex = ChatPromptTimelineMetrics.index(nearest: location.y, positions: positions)
+            hoveredMarkID = Self.markID(nearest: location.y, marks: marks, positions: positions)
           }
         case .ended:
           OmiMotion.withGated(ChatPromptTimelineMetrics.exitAnimation) {
             cursorY = nil
-            hoveredIndex = nil
+            hoveredMarkID = nil
           }
+        }
+      }
+      .onChange(of: marks.map(\.id)) { _, ids in
+        if let cursorY {
+          hoveredMarkID = Self.markID(nearest: cursorY, marks: marks, positions: positions)
+        } else if let hoveredMarkID, !ids.contains(hoveredMarkID) {
+          self.hoveredMarkID = nil
         }
       }
       .onTapGesture { location in
@@ -221,9 +247,18 @@ struct ChatPromptTimeline: View {
     .accessibilityHidden(true)
   }
 
+  private static func markID(nearest y: CGFloat, marks: [ChatPromptMark], positions: [CGFloat])
+    -> String?
+  {
+    guard let index = ChatPromptTimelineMetrics.index(nearest: y, positions: positions),
+      marks.indices.contains(index)
+    else { return nil }
+    return marks[index].id
+  }
+
   @ViewBuilder
-  private func markView(_ mark: ChatPromptMark, at position: CGFloat, index: Int) -> some View {
-    let isHovered = hoveredIndex == index
+  private func markView(_ mark: ChatPromptMark, at position: CGFloat) -> some View {
+    let isHovered = hoveredMarkID == mark.id
     let isActive = activeMarkID == mark.id
     let proximity =
       cursorY.map { ChatPromptTimelineMetrics.proximity(distance: abs($0 - position)) } ?? 0
@@ -247,7 +282,8 @@ struct ChatPromptTimeline: View {
 
   @ViewBuilder
   private func preview(positions: [CGFloat], railHeight: CGFloat) -> some View {
-    if let index = hoveredIndex, marks.indices.contains(index),
+    if let hoveredMarkID, let index = marks.firstIndex(where: { $0.id == hoveredMarkID }),
+      marks.indices.contains(index),
       positions.indices.contains(index)
     {
       VStack(alignment: .trailing, spacing: OmiSpacing.hairline) {
@@ -275,13 +311,9 @@ struct ChatPromptTimeline: View {
 /// Mounts the timeline over a transcript, and decides whether it belongs there
 /// at all.
 ///
-/// The rail is only ever drawn in space the transcript is not using: a surface
-/// whose column spans the whole width has no gutter, so it gets no rail and
-/// needs no flag saying so. That keeps the narrow panels — the task chat, the
-/// agent sheet — free of a rail jammed against their text, and hands one to any
-/// surface that later caps its column. The rail is a visual overlay only; the
-/// native scroll indicator remains hidden so its width cannot participate in a
-/// transcript layout feedback loop.
+/// The rail is a visual overlay on the trailing edge: hairline marks, a hover
+/// preview, no reserved column. The native scroll indicator stays `.never` so
+/// its width cannot participate in a transcript layout feedback loop.
 struct ChatPromptTimelineOverlay: View {
   @ObservedObject var geometry: ChatTranscriptGeometry
   var trailingInset: CGFloat = ChatComposerLayout.pageMargin
@@ -336,12 +368,14 @@ struct ChatPromptTimelineOverlay: View {
 
 /// What a mark is: the question, and how omi started answering it.
 ///
-/// Built as a floating panel rather than a filled rectangle. A solid dark fill
-/// on this canvas *is* the canvas — the first version was a near-black card on a
-/// near-black surface and read as a hole rather than as something on top. The
-/// blur plus a hairline edge and a real shadow is what macOS itself uses to say
-/// "this is in front", and it stays legible over a bubble as well as over bare
-/// background.
+/// Built as a floating panel rather than a filled rectangle. A fill the colour of
+/// the canvas *is* the canvas — the first version was a near-black card on a
+/// near-black surface and read as a hole rather than as something on top.
+///
+/// On glass it is the app's one real floating surface (`glassFloatingBar`): the
+/// `.hudWindow` material blurring the *desktop*, the ambient shadow, the faint
+/// edge. Deliberately **not** SwiftUI's `.ultraThinMaterial`, which is
+/// within-window vibrancy and would frost the transcript underneath instead.
 private struct ChatPromptPreviewCard: View {
   let mark: ChatPromptMark
 
@@ -353,13 +387,13 @@ private struct ChatPromptPreviewCard: View {
     VStack(alignment: .leading, spacing: 3) {
       Text(mark.prompt)
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .lineLimit(1)
 
       if !mark.reply.isEmpty {
         Text(mark.reply)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(2)
           .lineSpacing(1)
       }
@@ -368,12 +402,7 @@ private struct ChatPromptPreviewCard: View {
     .padding(.horizontal, 11)
     .padding(.vertical, 9)
     .frame(width: ChatPromptTimelineMetrics.previewWidth, alignment: .leading)
-    .background(shape.fill(.ultraThinMaterial))
-    // The material alone samples too dark over a black canvas; the wash lifts it
-    // clear of whatever it happens to be covering.
-    .background(shape.fill(Color.white.opacity(0.07)))
-    .overlay(shape.stroke(Color.white.opacity(0.13), lineWidth: 1))
-    .shadow(color: .black.opacity(0.55), radius: 16, y: 6)
+    .glassFloatingBar(cornerRadius: 10)
     .fixedSize(horizontal: false, vertical: true)
   }
 }

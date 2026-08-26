@@ -14,8 +14,17 @@ pub const BATTERY_LEVEL_UUID: &str = "00002a19-0000-1000-8000-00805f9b34fb";
 
 pub const PACKET_HEADER_BYTES: usize = 3;
 pub const PCM_SAMPLE_RATE_HZ: u32 = 16_000;
+/// Decode buffer bound for `opus_decode`, not the wire frame size (160 or 320 samples).
 pub const OPUS_FRAME_SAMPLES: usize = 960;
 pub const PCM_CHANNELS: u8 = 1;
+
+/// First byte of the audio codec characteristic. See `sdks/device/PROTOCOL.md`.
+pub const CODEC_PCM16: u8 = 0;
+pub const CODEC_PCM8: u8 = 1;
+/// 160-sample frames @ 100 fps (DevKit firmware).
+pub const CODEC_OPUS: u8 = 20;
+/// 320-sample frames @ 50 fps (Omi CV1 firmware).
+pub const CODEC_OPUS_FS320: u8 = 21;
 
 /// Strip the 3-byte Omi audio packet header.
 pub fn strip_packet_header(packet: &[u8]) -> &[u8] {
@@ -97,6 +106,15 @@ mod tests {
     fn strips_header() {
         assert!(strip_packet_header(&[1, 2]).is_empty());
         assert_eq!(strip_packet_header(&[0, 0, 0, 9, 8]), &[9, 8]);
+    }
+
+    // Codec IDs are firmware-coupled: 20 is DevKit, 21 is Omi CV1 (opusFS320).
+    #[test]
+    fn codec_ids() {
+        assert_eq!(CODEC_PCM16, 0);
+        assert_eq!(CODEC_PCM8, 1);
+        assert_eq!(CODEC_OPUS, 20);
+        assert_eq!(CODEC_OPUS_FS320, 21);
     }
 
     #[test]

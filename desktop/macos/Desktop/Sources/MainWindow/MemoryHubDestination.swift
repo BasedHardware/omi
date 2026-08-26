@@ -3,11 +3,17 @@ import CoreGraphics
 /// Destinations available from the Memory navigation menu.
 enum MemoryHubDestination: Int, CaseIterable, Identifiable {
   static let storageKey = "memoryHubDestination"
-  static let dropdownDestinations: [MemoryHubDestination] = [.conversations, .brainMap]
 
+  /// `allCases` is storage identity, not reading order: the raw values are persisted, so this list
+  /// starts at `memories` — where the stored default lands — rather than where the user's row
+  /// starts. The order the four pages are *presented* in belongs to the control that presents them,
+  /// `ActivityDestinationChip`.
   case memories
   case conversations
   case brainMap
+  /// The chronological spine that used to be Home's landing surface — everything captured, in the
+  /// order it happened. Home now lands in the chat; the timeline lives here.
+  case activity
 
   enum Presentation: Equatable {
     case standaloneConversations
@@ -21,6 +27,7 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .memories: return "Memories"
     case .conversations: return "Conversations"
     case .brainMap: return "Brain Map"
+    case .activity: return "Brain"
     }
   }
 
@@ -29,6 +36,7 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .memories: return "brain.head.profile"
     case .conversations: return "text.bubble"
     case .brainMap: return "point.3.connected.trianglepath.dotted"
+    case .activity: return "clock.arrow.circlepath"
     }
   }
 
@@ -70,57 +78,6 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
   }
 }
 
-/// Deterministic interaction state for the Memory dropdown.
-///
-/// The anchor and menu report hover independently so the pointer can cross the
-/// small visual gap without dismissing the menu. Delayed transitions carry a
-/// generation token so stale hover work cannot reopen or close the dropdown.
-struct MemoryDropdownInteractionState: Equatable {
-  enum HoverRegion {
-    case anchor
-    case dropdown
-  }
-
-  struct PendingPresentation: Equatable {
-    let generation: Int
-    let isPresented: Bool
-  }
-
-  private(set) var generation = 0
-  private(set) var isPresented = false
-  private var isAnchorHovered = false
-  private var isDropdownHovered = false
-
-  mutating func hoverChanged(
-    _ isHovering: Bool,
-    in region: HoverRegion
-  ) -> PendingPresentation? {
-    generation += 1
-    switch region {
-    case .anchor: isAnchorHovered = isHovering
-    case .dropdown: isDropdownHovered = isHovering
-    }
-
-    let shouldPresent = isAnchorHovered || isDropdownHovered
-    guard shouldPresent != isPresented else { return nil }
-    return PendingPresentation(generation: generation, isPresented: shouldPresent)
-  }
-
-  @discardableResult
-  mutating func apply(_ pendingPresentation: PendingPresentation) -> Bool {
-    guard generation == pendingPresentation.generation else { return false }
-    isPresented = pendingPresentation.isPresented
-    return true
-  }
-
-  mutating func dismiss() {
-    generation += 1
-    isPresented = false
-    isAnchorHovered = false
-    isDropdownHovered = false
-  }
-}
-
 /// Shared readable-width contract for Memory surfaces.
 ///
 /// Lists stay as calm and scannable as Tasks. A conversation expands only when
@@ -140,5 +97,20 @@ enum MemoryHubLayoutPolicy {
     if memoryDetailOpen { return true }
     guard let conversationID else { return false }
     return transcriptDrawerOpen && conversationID == presentedConversationID
+  }
+}
+
+/// How a hub selection is applied, per shell.
+///
+/// The chat-first shell keeps a typed route beside the persisted hub destination, so selecting a hub
+/// view has to move both or the shell renders one view while claiming to be on another — which is the
+/// state that made Brain Map unreachable from its Conversations route.
+enum MemoryHubSelectionPolicy {
+  /// The chat-first route that must be selected for a hub destination.
+  ///
+  /// `Conversations` has its own route (it carries capture-archive focus); the other two are the
+  /// Memory route, which is where `MemoryHubPage` lives.
+  static func chatFirstRoute(for destination: MemoryHubDestination) -> ChatFirstRoute {
+    destination == .conversations ? .conversations : .memories
   }
 }

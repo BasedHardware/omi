@@ -299,7 +299,10 @@ final class ChatErrorStateTests: XCTestCase {
     let source = try sourceFile("Providers/ChatProvider.swift")
     XCTAssertTrue(source.contains("onAccepted: (@MainActor () -> Void)? = nil"))
     XCTAssertTrue(source.contains("onAccepted?()"))
-    XCTAssertTrue(source.contains("self.draftRevision == submittedRevision"))
+    // Static tripwire. The revision now lives on `composerDraft` (the draft is no
+    // longer published on the provider); the guard it pins is unchanged, and
+    // `ChatComposerDraftTests` covers the revision semantics behaviorally.
+    XCTAssertTrue(source.contains("self.composerDraft.revision == submittedRevision"))
     XCTAssertTrue(source.contains("self.draftText == text\n        else { return }"))
     XCTAssertFalse(source.contains("draftText = trimmedText"))
   }

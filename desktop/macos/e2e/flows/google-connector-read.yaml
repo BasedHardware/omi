@@ -11,7 +11,7 @@ covers:
   - desktop/macos/Desktop/Sources/BrowserGoogleSession.swift
   - desktop/macos/Desktop/Sources/GmailReaderService.swift
   - desktop/macos/Desktop/Sources/CalendarReaderService.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Integrations.swift
+  - desktop/macos/Desktop/Sources/Integrations/GmailAccountSelection.swift
 preconditions:
   - automation_bridge_ready
 

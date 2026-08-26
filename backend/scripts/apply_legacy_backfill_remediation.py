@@ -36,16 +36,6 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Required with --apply; archive stays available only through explicit archive access",
     )
-    parser.add_argument(
-        "--allow-admin-override",
-        action="store_true",
-        help="Bypass CANONICAL_MEMORY_USERS gate (requires --i-understand-uid-not-whitelisted)",
-    )
-    parser.add_argument(
-        "--i-understand-uid-not-whitelisted",
-        action="store_true",
-        help="Confirm uid may be outside CANONICAL_MEMORY_USERS (required with --allow-admin-override)",
-    )
     parser.add_argument("--operator-context", default=None, help="Operator identity for audit logs")
     return parser
 
@@ -62,8 +52,6 @@ def main(argv: list[str] | None = None) -> int:
         args.uid,
         expected_archive_count=args.expected_archive_count,
         dry_run=not args.apply,
-        allow_admin_override=args.allow_admin_override,
-        acknowledge_non_canonical_uid=args.i_understand_uid_not_whitelisted,
         operator_context=args.operator_context or getpass.getuser(),
     )
     print(json.dumps(asdict(report), default=str, indent=2, sort_keys=True))
@@ -74,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
             report.kg_invalidation_failures,
         )
     )
-    return 1 if report.cohort_gated or report.errors or derived_sync_failed else 0
+    return 1 if report.errors or derived_sync_failed else 0
 
 
 if __name__ == "__main__":

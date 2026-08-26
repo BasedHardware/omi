@@ -798,7 +798,7 @@ abstract class AppLocalizations {
   /// Filter button for user's own apps
   ///
   /// In en, this message translates to:
-  /// **'My Apps'**
+  /// **'Created by me'**
   String get myApps;
 
   /// Filter button for installed apps
@@ -1616,12 +1616,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your plan will cancel on {date}.'**
   String cancelAtPeriodEnd(String date);
-
-  /// Renewal message
-  ///
-  /// In en, this message translates to:
-  /// **'Your plan renews on {date}.'**
-  String renewsOn(String date);
 
   /// Basic plan name
   ///
@@ -18224,6 +18218,222 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Too old to sync — Omi can\'t accept it'**
   String get syncStatusTooOld;
+
+  /// Plans sheet subtitle prompting a free user to pick a paid plan
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your plan to unlock unlimited Omi.'**
+  String get planSheetChooseYourPlan;
+
+  /// Plans sheet highlight: which platforms Omi runs on
+  ///
+  /// In en, this message translates to:
+  /// **'Available on Mac, mobile, and web'**
+  String get availableOnMacMobileWeb;
+
+  /// Badge shown on the most popular plan card
+  ///
+  /// In en, this message translates to:
+  /// **'POPULAR'**
+  String get popularBadge;
+
+  /// Plan card row: this tier includes the desktop app
+  ///
+  /// In en, this message translates to:
+  /// **'Works on Desktop'**
+  String get worksOnDesktop;
+
+  /// Plan card row: this tier does not include the desktop app
+  ///
+  /// In en, this message translates to:
+  /// **'Doesn\'t work on Desktop'**
+  String get noDesktopAccess;
+
+  /// Annual plan card subtitle showing the billing term and total price
+  ///
+  /// In en, this message translates to:
+  /// **'{months} months / {price}'**
+  String annualBillingSummary(int months, String price);
+
+  /// Badge on an annual plan card showing how many months the annual price saves
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 Month Free} other{{count} Months Free}}'**
+  String monthsFreeBadge(int count);
+
+  /// Intro line above the list of free-tier limitations
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is free, but freemium has limits that affect your experience:'**
+  String get freemiumLimitsIntro;
+
+  /// Free-tier limitation: transcription is delayed rather than live
+  ///
+  /// In en, this message translates to:
+  /// **'5-7 second delay (not real-time)'**
+  String get downgradeLimitDelayNotRealTime;
+
+  /// Button that moves the user from a paid plan to the free tier
+  ///
+  /// In en, this message translates to:
+  /// **'Downgrade to Freemium'**
+  String get downgradeToFreemiumAction;
+
+  /// Title of the training-data opt-in card offering free unlimited access
+  ///
+  /// In en, this message translates to:
+  /// **'Get Free Unlimited Access'**
+  String get getFreeUnlimitedAccess;
+
+  /// Subtitle of the training-data opt-in card
+  ///
+  /// In en, this message translates to:
+  /// **'Share data for training'**
+  String get shareDataForTraining;
+
+  /// Subtitle shown while a training-data access request is pending
+  ///
+  /// In en, this message translates to:
+  /// **'Your request is under review'**
+  String get yourRequestUnderReview;
+
+  /// Title for account cutover force-upgrade blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Update Required'**
+  String get accountCutoverUpdateRequiredTitle;
+
+  /// Body for account cutover force-upgrade blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Install the latest Omi app to continue after account migration.'**
+  String get accountCutoverUpdateRequiredMessage;
+
+  /// Title for account cutover migration-maintenance blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Migration in Progress'**
+  String get accountCutoverMigrationInProgressTitle;
+
+  /// Body for account cutover migration-maintenance blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is migrating. Product features are paused until migration finishes.'**
+  String get accountCutoverMigrationInProgressMessage;
+
+  /// Body when cutover rollback stranded newer data
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is in maintenance after a migration rollback. Some newer data may be stranded.'**
+  String get accountCutoverMigrationRollbackMessage;
+
+  /// Button that opens the app store for a required cutover upgrade
+  ///
+  /// In en, this message translates to:
+  /// **'Open store'**
+  String get accountCutoverOpenStore;
+
+  /// Chat timeframe scope chip for today
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get chatScopeToday;
+
+  /// Chat timeframe scope chip for this week
+  ///
+  /// In en, this message translates to:
+  /// **'This week'**
+  String get chatScopeThisWeek;
+
+  /// Chat scope chip when asking about a specific conversation
+  ///
+  /// In en, this message translates to:
+  /// **'About: {title}'**
+  String chatScopeAbout(String title);
+
+  /// Tooltip for Ask button on conversation detail
+  ///
+  /// In en, this message translates to:
+  /// **'Ask about this'**
+  String get askAboutThisConversation;
+
+  /// Toggle label controlling whether Custom STT raw audio is also sent to Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Send raw audio to Omi'**
+  String get sendRawAudioToOmi;
+
+  /// Explains that disabling raw audio forwarding preserves transcript-based cloud features
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.'**
+  String get sendRawAudioToOmiDescription;
+
+  /// Action that makes a nearby connected Omi pendant vibrate so the user can locate it
+  ///
+  /// In en, this message translates to:
+  /// **'Find'**
+  String get findDevice;
+
+  /// Snackbar shown when exporting device diagnostics to the share sheet fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t share diagnostics. Please try again.'**
+  String get diagnosticsShareFailed;
+
+  /// Heading of the notice shown on an app the backend has automatically disabled
+  ///
+  /// In en, this message translates to:
+  /// **'This app is disabled and cannot be installed.'**
+  String get appDisabledTitle;
+
+  /// Explains that an app was auto-disabled because its webhook endpoint kept failing
+  ///
+  /// In en, this message translates to:
+  /// **'Its endpoint failed for 72 hours in a row, so deliveries were stopped.'**
+  String get appDisabledWebhookFailures;
+
+  /// Explains that an app was disabled for a reason other than webhook failures
+  ///
+  /// In en, this message translates to:
+  /// **'It was disabled by Omi.'**
+  String get appDisabledGeneric;
+
+  /// Hint telling the app owner to repair their endpoint before re-enabling the app
+  ///
+  /// In en, this message translates to:
+  /// **'Fix the endpoint first — re-enabling re-checks every configured URL.'**
+  String get appDisabledOwnerHint;
+
+  /// Button that clears the disabled flag on an app the owner has repaired
+  ///
+  /// In en, this message translates to:
+  /// **'Re-enable'**
+  String get appReEnable;
+
+  /// Title of the dialog shown when re-enabling a disabled app is rejected
+  ///
+  /// In en, this message translates to:
+  /// **'Could not re-enable'**
+  String get appReEnableFailedTitle;
+
+  /// Body of the dialog shown when re-enabling fails and the server gave no reason
+  ///
+  /// In en, this message translates to:
+  /// **'This app could not be re-enabled. Please try again.'**
+  String get appReEnableFailedBody;
+
+  /// States the date an app was automatically disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled on {date}.'**
+  String appDisabledOn(String date);
+
+  /// States the last error recorded from the app's endpoint before it was disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Last error: {error}.'**
+  String appDisabledLastError(String error);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -46,7 +46,12 @@ struct ChatComposerFade: View {
 extension View {
   /// Lightweight composer chrome shared by regular and Notch chat.
   /// Keeping the inset equal on every edge avoids the heavy bezel effect.
-  func chatComposerShell(fill: Color = OmiColors.backgroundSecondary.opacity(0.82)) -> some View {
+  ///
+  /// The stroke is `Ink.separator` — a *dynamic* system colour, which is what lets one modifier
+  /// serve two grounds. The main window's composer sits on the light-pinned glass and the Notch's
+  /// sits on `NotchGlass.fill` in a `.vibrantDark` view, and a separator resolves correctly in each.
+  /// The fixed hairline it replaced only ever suited the dark one.
+  func chatComposerShell(fill: Color = Ink.rowFill) -> some View {
     padding(ChatComposerLayout.shellInset)
       .background(
         RoundedRectangle(cornerRadius: ChatComposerLayout.shellRadius, style: .continuous)
@@ -54,7 +59,7 @@ extension View {
       )
       .overlay {
         RoundedRectangle(cornerRadius: ChatComposerLayout.shellRadius, style: .continuous)
-          .stroke(OmiColors.border.opacity(0.16), lineWidth: 1)
+          .stroke(Ink.separator, lineWidth: 1)
       }
   }
 }
@@ -76,6 +81,9 @@ struct ChatInputView: View {
   var onAttachmentsAdded: (([URL]) -> Void)? = nil
   /// Called when the user removes a staged attachment chip.
   var onAttachmentRemoved: ((String) -> Void)? = nil
+  /// Shows the push-to-talk mic button. Clicking it drives the same
+  /// `PushToTalkManager` turn the keyboard shortcut does.
+  var showsPushToTalk: Bool = true
 
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @Environment(\.fontScale) private var fontScale
@@ -108,12 +116,16 @@ struct ChatInputView: View {
           Button(action: pickFiles) {
             Image(systemName: "paperclip")
               .scaledFont(size: OmiType.heading, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .frame(width: 32, height: 32)
           }
           .buttonStyle(.plain)
           .help("Attach files")
           .disabled(currentAttachments.count >= kMaxChatAttachments)
+        }
+
+        if showsPushToTalk {
+          PushToTalkMicButton()
         }
 
         // Input field with floating toggle
@@ -136,7 +148,7 @@ struct ChatInputView: View {
               if inputText.isEmpty && !hasMarkedText {
                 Text(placeholder)
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
                   .padding(.horizontal, inputPaddingH)
                   .padding(.vertical, inputPaddingV)
                   .allowsHitTesting(false)
@@ -146,7 +158,7 @@ struct ChatInputView: View {
               OmiTextEditor(
                 text: $inputText,
                 fontSize: round(14 * fontScale),
-                textColor: NSColor(OmiColors.textPrimary),
+                textColor: Ink.nsPrimaryOnGlass,
                 textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
                 onSubmit: handleSubmit,
                 onMarkedTextChange: { hasMarkedText = $0 }
@@ -154,7 +166,9 @@ struct ChatInputView: View {
             }
             .frame(maxHeight: 200)
             .clipped()
-            .background(OmiColors.backgroundTertiary)
+            // The well is one step up from the shell it sits in, so the two stay distinguishable
+            // without either painting an opaque ground over the glass.
+            .background(Ink.rowFillHover)
             .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
 
           // Floating Ask/Act toggle (top-right, inside the input area)
@@ -183,14 +197,14 @@ struct ChatInputView: View {
           Button(action: handleSubmit) {
             Image(systemName: "arrow.up.circle.fill")
               .scaledFont(size: 24)
-              .foregroundColor(canSend ? OmiColors.accent : OmiColors.textQuaternary)
+              .foregroundColor(canSend ? Ink.accent : Ink.secondary)
           }
           .buttonStyle(.plain)
           .disabled(!canSend)
         }
       }
     }
-    .chatComposerShell(fill: OmiColors.backgroundSecondary.opacity(isDropTargeted ? 0.96 : 0.82))
+    .chatComposerShell(fill: isDropTargeted ? Ink.rowFillHover : Ink.rowFill)
     .overlay {
       RoundedRectangle(cornerRadius: ChatComposerLayout.shellRadius, style: .continuous)
         .stroke(dropStrokeColor, lineWidth: isDropTargeted ? 1.5 : 0)
@@ -232,7 +246,7 @@ struct ChatInputView: View {
   }
 
   private var dropStrokeColor: Color {
-    isDropTargeted ? OmiColors.accent.opacity(0.6) : OmiColors.border.opacity(0.2)
+    isDropTargeted ? Ink.accent.opacity(0.6) : Ink.separator
   }
 
   private func handleSubmit() {
@@ -360,12 +374,12 @@ private struct AttachmentChip: View {
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(attachment.fileName)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .lineLimit(1)
               .truncationMode(.middle)
             Text(attachment.mimeType)
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
           }
           .frame(maxWidth: 160, alignment: .leading)
@@ -373,7 +387,7 @@ private struct AttachmentChip: View {
       }
       .padding(.horizontal, attachment.isImage ? 0 : OmiSpacing.sm)
       .padding(.vertical, attachment.isImage ? 0 : OmiSpacing.xs)
-      .background(OmiColors.backgroundTertiary.opacity(attachment.isImage ? 0 : 0.9))
+      .background(attachment.isImage ? Color.clear : Ink.rowFillHover)
       .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous))
       .overlay(alignment: .bottom) {
         if case .failed = attachment.state {
@@ -429,10 +443,10 @@ private struct AttachmentChip: View {
     } else {
       ZStack {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(OmiColors.backgroundQuaternary.opacity(0.7))
+          .fill(Ink.rowFillHover)
         Image(systemName: documentIcon)
           .scaledFont(size: OmiType.heading)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
       .frame(width: 44, height: 44)
     }
@@ -478,18 +492,23 @@ struct ChatModeToggle: View {
       modeButton(for: .ask, label: "Ask")
       modeButton(for: .act, label: "Act")
     }
-    .background(OmiColors.backgroundQuaternary.opacity(0.7))
+    // A track with a raised pill on it, the way a real segmented control reads. The dark version
+    // inverted that — a near-black pill under white type — which on glass was a slab.
+    .background(Ink.rowFill)
     .clipShape(RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous))
   }
 
   private func modeButton(for targetMode: ChatMode, label: String) -> some View {
-    Button(action: { mode = targetMode }) {
+    let isSelected = mode == targetMode
+    return Button(action: { mode = targetMode }) {
       Text(label)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(mode == targetMode ? .white : OmiColors.textTertiary)
+        .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.xxs)
-        .background(mode == targetMode ? OmiColors.userBubble : Color.clear)
+        // `surface` and not another wash: the selected segment has to lift off the track, and
+        // stacking a third wash on two others is a difference nobody can see.
+        .background(isSelected ? Ink.surface : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous))
     }
     .buttonStyle(.plain)

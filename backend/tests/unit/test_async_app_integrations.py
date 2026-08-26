@@ -150,6 +150,7 @@ sys.modules["database.redis_db"].set_proactive_noti_sent_at = MagicMock()
 sys.modules["database.redis_db"].get_proactive_noti_sent_at_ttl = MagicMock(return_value=0)
 sys.modules["database.redis_db"].incr_daily_notification_count = MagicMock()
 sys.modules["database.redis_db"].get_daily_notification_count = MagicMock(return_value=0)
+sys.modules["database.redis_db"].publish_proactive_message = MagicMock()
 sys.modules["database.vector_db"].query_vectors_by_metadata = MagicMock(return_value=[])
 sys.modules["database.apps"].record_app_usage = MagicMock()
 sys.modules["database.apps"].get_app_by_id_db = MagicMock(return_value=None)
@@ -168,6 +169,13 @@ sys.modules["database.webhook_health"].disable_app_in_firestore = MagicMock()
 sys.modules["database.webhook_health"].record_dev_webhook_failure = MagicMock(return_value=False)
 sys.modules["database.webhook_health"].record_dev_webhook_success = MagicMock()
 sys.modules["database.webhook_health"]._DEV_FAILURE_THRESHOLD = 100
+# Graduated-response action codes; mirror database.webhook_health. utils.app_integrations
+# imports these by name, so the stub has to carry them or the module fails to import.
+sys.modules["database.webhook_health"].ACTION_NONE = 0
+sys.modules["database.webhook_health"].ACTION_WARN_DAY1 = 1
+sys.modules["database.webhook_health"].ACTION_WARN_DAY2 = 2
+sys.modules["database.webhook_health"].ACTION_DISABLE = 3
+sys.modules["database.webhook_health"].ACTION_REDIRECT_NOT_FOLLOWED = 4
 
 _utils_pkg = sys.modules.get("utils")
 if _utils_pkg is None:
@@ -297,38 +305,54 @@ class TestDurableExternalIntegrationFanout:
     async def test_finalization_delivery_sends_the_durable_idempotency_key(self):
         app = _make_app('app-1', 'https://app.test/hook')
         app.triggers_on_conversation_creation.return_value = True
-        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        conversation = types.SimpleNamespace(
+            id='conversation-1', discarded=False, is_locked=False, source=None, client_platform='ios'
+        )
         response = MagicMock(status_code=200)
         response.json.return_value = {}
         client = AsyncMock()
         client.post = AsyncMock(return_value=response)
+        attempt = MagicMock()
 
         with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
             app_integrations, 'get_webhook_client', return_value=client
-        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}):
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), patch.object(
+            app_integrations, 'ClientJourneyAttempt', return_value=attempt
+        ) as journey_factory:
             await app_integrations.trigger_external_integrations(
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
             )
 
         assert client.post.call_args.kwargs['headers'] == {'X-Omi-Idempotency-Key': 'fanout-1'}
+        journey_factory.assert_called_once_with('app_webhook_delivery', 'mobile_ios')
+        attempt.succeed.assert_called_once_with()
+        attempt.fail.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_finalization_delivery_failure_remains_retryable(self):
         app = _make_app('app-1', 'https://app.test/hook')
         app.triggers_on_conversation_creation.return_value = True
-        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        conversation = types.SimpleNamespace(
+            id='conversation-1', discarded=False, is_locked=False, source=None, client_platform='ios'
+        )
         response = MagicMock(status_code=503, text='unavailable')
         client = AsyncMock()
         client.post = AsyncMock(return_value=response)
+        attempt = MagicMock()
 
         with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
             app_integrations, 'get_webhook_client', return_value=client
-        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), pytest.raises(
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), patch.object(
+            app_integrations, 'ClientJourneyAttempt', return_value=attempt
+        ), pytest.raises(
             app_integrations.ExternalIntegrationFanoutError
         ):
             await app_integrations.trigger_external_integrations(
                 'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
             )
+
+        attempt.fail.assert_called_once_with('upstream_rejected')
+        attempt.succeed.assert_not_called()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize('status_code', [400, 401, 404])
@@ -350,6 +374,43 @@ class TestDurableExternalIntegrationFanout:
 
         assert messages == []
         assert client.post.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_retryable_delivery_failure_is_dropped_on_the_last_attempt(self):
+        """A webhook stuck on 5xx must not dead-letter the user's conversation.
+
+        Webhook health only auto-disables an endpoint after 72h, and the
+        terminal attempt dead-letters the job whatever this delivery does, so
+        keeping it retryable only costs the conversation its fanout.
+        """
+        app = _make_app('app-1', 'https://app.test/hook')
+        app.triggers_on_conversation_creation.return_value = True
+        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        response = MagicMock(status_code=530, text='origin unreachable')
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=response)
+
+        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
+            app_integrations, 'get_webhook_client', return_value=client
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), patch.object(
+            app_integrations, 'record_fallback'
+        ) as fallback:
+            messages = await app_integrations.trigger_external_integrations(
+                'uid-1',
+                conversation,
+                idempotency_key='fanout-1',
+                require_delivery=True,
+                last_delivery_attempt=True,
+            )
+
+        assert messages == []
+        assert fallback.call_args.kwargs == {
+            'component': 'webhook',
+            'from_mode': 'durable_delivery',
+            'to_mode': 'dropped',
+            'reason': 'provider_5xx',
+            'outcome': 'exhausted',
+        }
 
 
 class TestSSRFConfigRejection:

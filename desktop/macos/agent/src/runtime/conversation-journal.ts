@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { structuredTurnFallbackText } from "./content-block-fallback.js";
 import { conversationTurnFromRow } from "./conversation-turns.js";
 import { generateAgentId } from "./sqlite-store.js";
 import type {
@@ -284,6 +285,7 @@ export interface BackendTurnPayload {
   sender: "human" | "ai";
   appId: string | null;
   sessionId: string | null;
+  contentBlocks: ConversationContentBlock[];
   metadata: string | null;
   messageSource: "desktop_chat" | "realtime_voice";
 }
@@ -585,13 +587,8 @@ function retirePendingColdStartQuestionForUnrelatedUserTurn(
   nowMs: number,
 ): void {
   if (input.role !== "user" || input.surfaceKind !== "main_chat") return;
-  const tail = store.getOptionalRow(
-    `SELECT turn_id FROM conversation_turns
-     WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
-    [input.conversationId],
-  );
-  if (!tail) return;
-  const parent = requireJournalTurn(store, input.conversationId, String(tail.turn_id));
+  const parent = canonicalConversationTail(store, input.conversationId);
+  if (!parent) return;
   if (parent.role !== "assistant" || parent.status !== "completed") return;
   const questionIndex = parent.contentBlocks.findIndex((block) => (
     block.type === "questionCard"
@@ -951,13 +948,8 @@ export function recordQuestionInteractionReply(
       return emptyQuestionInteractionReceipt();
     }
 
-    const tailRow = store.getOptionalRow(
-      `SELECT turn_id FROM conversation_turns
-       WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
-      [conversationId],
-    );
-    if (!tailRow) return emptyQuestionInteractionReceipt();
-    const parent = requireJournalTurn(store, conversationId, String(tailRow.turn_id));
+    const parent = canonicalConversationTail(store, conversationId);
+    if (!parent) return emptyQuestionInteractionReceipt();
     if (parent.role !== "assistant" || parent.status !== "completed") {
       return emptyQuestionInteractionReceipt();
     }
@@ -1661,12 +1653,8 @@ function appendNextColdStartSequenceQuestion(
   const descriptor = localColdStartSequenceDescriptor(metadata.coldStartSequence);
   const continuityKey = typeof metadata.continuityKey === "string" ? metadata.continuityKey : null;
   if (!descriptor || !continuityKey) return;
-  const tail = store.getOptionalRow(
-    `SELECT turn_id FROM conversation_turns
-     WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
-    [terminalized.conversationId],
-  );
-  if (!tail || String(tail.turn_id) !== terminalized.turnId) return;
+  const tail = canonicalConversationTail(store, terminalized.conversationId);
+  if (!tail || tail.turnId !== terminalized.turnId) return;
   if (!selectedColdStartParentMatchesContinuation(store, ownerId, terminalized, descriptor, continuityKey)) return;
 
   if (descriptor.step === 3) {
@@ -3610,13 +3598,8 @@ function materializationTailState(
   store: AgentStore,
   conversationId: string,
 ): { unansweredQuestion: boolean; streaming: boolean } {
-  const tail = store.getOptionalRow(
-    `SELECT turn_id FROM conversation_turns
-     WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
-    [conversationId],
-  );
-  if (!tail) return { unansweredQuestion: false, streaming: false };
-  const turn = requireJournalTurn(store, conversationId, String(tail.turn_id));
+  const turn = canonicalConversationTail(store, conversationId);
+  if (!turn) return { unansweredQuestion: false, streaming: false };
   const assistant = turn.role === "assistant";
   return {
     unansweredQuestion: assistant
@@ -3628,6 +3611,32 @@ function materializationTailState(
       )),
     streaming: assistant && (turn.status === "pending" || turn.status === "streaming"),
   };
+}
+
+/**
+ * Return the user-visible conversation tail by immutable creation order.
+ *
+ * `turn_seq` is a journal revision cursor: backend acknowledgements and other
+ * in-place mutations advance it even though the turn did not move in the
+ * conversation. Question actionability must therefore follow `created_at_ms`,
+ * the immutable conversation-order key, or a late ACK for an older response
+ * can make a newer question appear stale to the kernel while it remains the
+ * visible tail in Chat.
+ *
+ * When two turns share `created_at_ms`, prefer the higher `turn_seq` so a
+ * lexicographically larger older `turn_id` cannot beat the later append.
+ */
+function canonicalConversationTail(
+  store: AgentStore,
+  conversationId: string,
+): ConversationTurn | null {
+  const row = store.getOptionalRow(
+    `SELECT turn_id FROM conversation_turns
+     WHERE conversation_id = ?
+     ORDER BY created_at_ms DESC, turn_seq DESC, turn_id DESC LIMIT 1`,
+    [conversationId],
+  );
+  return row ? requireJournalTurn(store, conversationId, String(row.turn_id)) : null;
 }
 
 /**
@@ -3716,6 +3725,30 @@ function chatFirstIntentBlocks(
           conversationId: nonEmptyString(block.conversation_id, "chat-first capture ID"),
           ...(momentTimestampMs === undefined ? {} : { momentTimestampMs }),
           summary: nonEmptyString(block.summary, "chat-first capture summary"),
+        };
+      }
+      case "conversationLink": {
+        const recommendedActionItems = block.recommended_action_items === undefined
+          ? []
+          : arrayValue(block.recommended_action_items, "chat-first recommended action items").map((rawItem) => {
+            const item = recordValue(rawItem, "chat-first recommended action item");
+            const taskId = item.task_id === undefined || item.task_id === null
+              ? undefined
+              : nonEmptyString(item.task_id, "chat-first recommended action item task ID");
+            return {
+              description: nonEmptyString(
+                item.description,
+                "chat-first recommended action item description",
+              ),
+              ...(taskId === undefined ? {} : { taskId }),
+            };
+          });
+        return {
+          type,
+          id,
+          conversationId: nonEmptyString(block.conversation_id, "chat-first conversation ID"),
+          summary: nonEmptyString(block.summary, "chat-first conversation summary"),
+          recommendedActionItems,
         };
       }
       default:
@@ -3873,7 +3906,18 @@ function boundedOutboxError(errorCode?: string): string {
 
 function validateContentBlocks(blocks: readonly ConversationContentBlock[]): ConversationContentBlock[] {
   const ids = new Set<string>();
-  return blocks.map((block) => {
+  return blocks.map((rawBlock) => {
+    // Persisted cards from before action-item recommendations omit this key.
+    // Normalize that legacy shape here while keeping it required for every new
+    // TypeScript producer through ConversationContentBlock.
+    const block: ConversationContentBlock = rawBlock.type === "conversationLink"
+      ? {
+          ...rawBlock,
+          recommendedActionItems: Array.isArray(rawBlock.recommendedActionItems)
+            ? rawBlock.recommendedActionItems
+            : [],
+        }
+      : rawBlock;
     const id = nonEmpty(block.id, "content block id");
     nonEmpty(block.type, "content block type");
     if (ids.has(id)) throw new Error(`Duplicate content block ID ${id}`);
@@ -3924,6 +3968,20 @@ function validateContentBlocks(blocks: readonly ConversationContentBlock[]): Con
       if (block.summary.length === 0 || block.summary.length > 200) throw new Error("Capture summary is out of bounds");
       if (block.momentTimestampMs !== undefined && (!Number.isSafeInteger(block.momentTimestampMs) || block.momentTimestampMs < 0)) {
         throw new Error("Capture moment timestamp is invalid");
+      }
+    } else if (block.type === "conversationLink") {
+      nonEmpty(block.conversationId, "conversation ID");
+      if (block.summary.length === 0 || block.summary.length > 200) {
+        throw new Error("Conversation summary is out of bounds");
+      }
+      if (block.recommendedActionItems.length > 8) {
+        throw new Error("Conversation recommended action item count is out of bounds");
+      }
+      for (const item of block.recommendedActionItems) {
+        if (item.description.length === 0 || item.description.length > 300) {
+          throw new Error("Conversation recommended action item description is out of bounds");
+        }
+        if (item.taskId !== undefined) nonEmpty(item.taskId, "recommended action item task ID");
       }
     }
     return structuredClone(block);
@@ -4064,8 +4122,7 @@ function journalTurnPayloadHash(value: Record<string, unknown>): string {
 
 function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
   const metadata = parseObjectJson(turn.metadataJson) as Record<string, unknown>;
-  const isChatFirstMaterialization = typeof metadata.chatFirstIntentId === "string"
-    && metadata.chatFirstIntentId.length > 0;
+  const { content_blocks: _legacyContentBlocks, ...messageMetadata } = metadata;
   // Rewind evidence is a device-local journal resource. The backend receives
   // enough metadata to preserve the card, but never the user's absolute local
   // filesystem path. Same-device reconciliation keeps the authoritative local
@@ -4078,18 +4135,15 @@ function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
     return pathless;
   });
   const backendMetadata = {
-    ...metadata,
-    ...(turn.contentBlocks.length > 0 ? { content_blocks: turn.contentBlocks } : {}),
+    ...messageMetadata,
     ...(backendResources.length > 0 ? { resources: backendResources } : {}),
   };
   const projectedText = turn.content.trim()
     ? turn.content
-    : isChatFirstMaterialization
-      ? ""
     : turn.role === "assistant"
       && turn.status === "completed"
       && (turn.contentBlocks.length > 0 || turn.resources.length > 0)
-      ? "Done."
+      ? structuredTurnFallbackText(turn.contentBlocks, backendResources)
       : "";
   return {
     turnId: turn.turnId,
@@ -4099,6 +4153,7 @@ function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
     sender: turn.role === "user" ? "human" : "ai",
     appId: typeof metadata.appId === "string" ? metadata.appId : null,
     sessionId: typeof metadata.sessionId === "string" ? metadata.sessionId : null,
+    contentBlocks: turn.contentBlocks,
     metadata: Object.keys(backendMetadata).length === 0 ? null : stableJson(backendMetadata),
     messageSource: turn.origin === "realtime_voice" ? "realtime_voice" : "desktop_chat",
   };
@@ -4114,18 +4169,6 @@ function boundedJournalRevision(revision: number): number {
 function backendTombstoneCode(turn: ConversationTurn): string | null {
   const payload = backendTurnPayload(turn);
   if (payload.text.trim()) return null;
-  const metadata = parseObjectJson(turn.metadataJson) as Record<string, unknown>;
-  if (
-    turn.role === "assistant"
-    && turn.status === "completed"
-    && typeof metadata.chatFirstIntentId === "string"
-    && metadata.chatFirstIntentId.length > 0
-    && turn.contentBlocks.length > 0
-  ) {
-    // The canonical structured blocks are the content. This must still use
-    // the normal reconciliation outbox, just without fabricating "Done.".
-    return null;
-  }
   if (turn.status === "failed") return "empty_failed_turn_cancelled";
   if (turn.status === "completed") return "empty_completed_turn_cancelled";
   return null;

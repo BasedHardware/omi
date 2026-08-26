@@ -1,10 +1,15 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { defaultArtifactRoot, OmiArtifactStorage } from "../src/runtime/artifact-storage.js";
+import {
+  defaultArtifactRoot,
+  OmiArtifactStorage,
+  TOOL_OUTPUT_DIRECTORY_NAME,
+  TOOL_OUTPUT_RETENTION_MS,
+} from "../src/runtime/artifact-storage.js";
 
 describe("OmiArtifactStorage", () => {
   it("imports emitted file artifacts into the managed artifact root", () => {
@@ -152,5 +157,48 @@ describe("OmiArtifactStorage", () => {
     } as NodeJS.ProcessEnv);
 
     expect(root).toBe("/Users/me/Library/Application Support/Omi/Artifacts/com.omi.omi-test");
+  });
+
+  it("deletes expired tool-output dumps and keeps fresh dumps plus user-facing run artifacts", () => {
+    const temp = mkdtempSync(join(tmpdir(), "omi-artifacts-"));
+    const root = join(temp, "Artifacts");
+    const storage = new OmiArtifactStorage({ rootDir: root });
+    const nowMs = 1_800_000_000_000;
+    const staleMs = (nowMs - TOOL_OUTPUT_RETENTION_MS - 60_000) / 1000;
+    const freshMs = (nowMs - 60_000) / 1000;
+    const boundaryMs = (nowMs - TOOL_OUTPUT_RETENTION_MS) / 1000;
+
+    const stalePath = join(root, TOOL_OUTPUT_DIRECTORY_NAME, "owner", "session-old", "list_agent_sessions-stale.json");
+    const freshPath = join(root, TOOL_OUTPUT_DIRECTORY_NAME, "owner", "session-new", "list_agent_sessions-fresh.json");
+    const boundaryPath = join(root, TOOL_OUTPUT_DIRECTORY_NAME, "owner", "session-boundary", "list_agent_sessions-boundary.json");
+    mkdirSync(join(stalePath, ".."), { recursive: true });
+    mkdirSync(join(freshPath, ".."), { recursive: true });
+    mkdirSync(join(boundaryPath, ".."), { recursive: true });
+    writeFileSync(stalePath, "{\"sessions\":[]}\n");
+    writeFileSync(freshPath, "{\"sessions\":[]}\n");
+    writeFileSync(boundaryPath, "{\"sessions\":[]}\n");
+    utimesSync(stalePath, staleMs, staleMs);
+    utimesSync(freshPath, freshMs, freshMs);
+    utimesSync(boundaryPath, boundaryMs, boundaryMs);
+
+    const scope = {
+      ownerId: "owner-1",
+      sessionId: "session-1",
+      runId: "run-1",
+      attemptId: "attempt-1",
+    };
+    const deliveredPath = join(storage.prepareRunDirectory(scope), "answer.md");
+    writeFileSync(deliveredPath, "# keep me");
+    utimesSync(deliveredPath, staleMs, staleMs);
+
+    const pruned = storage.pruneExpiredToolOutputs({ nowMs });
+
+    expect(pruned.deletedFiles).toBe(1);
+    expect(pruned.freedBytes).toBeGreaterThan(0);
+    expect(existsSync(stalePath)).toBe(false);
+    expect(existsSync(join(root, TOOL_OUTPUT_DIRECTORY_NAME, "owner", "session-old"))).toBe(false);
+    expect(existsSync(freshPath)).toBe(true);
+    expect(existsSync(boundaryPath)).toBe(true);
+    expect(readFileSync(deliveredPath, "utf8")).toBe("# keep me");
   });
 });

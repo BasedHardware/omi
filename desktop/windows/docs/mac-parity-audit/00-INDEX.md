@@ -7,6 +7,15 @@
 > **Scope of the baseline.** Windows has already shipped Phases 0–6 (tray lifecycle, hidden-capture-window + AudioWorklet + VAD, conversation sync, top-edge bar + orb, meeting detection, realtime voice, OAuth, backend chat). Those are **not** reported as gaps. BLE/wearables (Phase 7) and the ACP coding-agent runtime are known-absent.
 >
 > **Shared backend caveat.** Both apps call the same Python backend and desktop Rust backend, so some "Mac features" are backend-driven and already reachable from Windows — several already have generated API clients with **zero callers** (see *Quick Wins*). Local-only-to-Mac features (proactive assistants, on-device embeddings/VAD, CoreBluetooth) are flagged as such.
+>
+> **Baseline date.** Files `01`–`13` and the sequencing plan (`14`) were **fully redone on
+> 2026-08-22**, re-verified against current source rather than the earlier 2026-08-20 snapshot
+> that the first pass of this audit and plan had been built from (that snapshot had gone stale:
+> several "absent" items had actually shipped in the weeks before it was written). This redo also
+> **reconciles explicitly** with the other execution-planning docs already living in this
+> directory — `PARALLEL-PLAN.md`, `track2-execution-plan.md`, `TRACK4-PLAN.md`, and
+> `WIRING-AUDIT.md` — crediting what they show as already shipped and scoping `01`–`14` to what
+> those docs leave open, rather than re-deriving their territory.
 
 **~200 distinct items documented across 13 areas.** Detail lives in the per-area files below; this index is the map + the cross-cutting synthesis.
 
@@ -16,153 +25,148 @@
 
 | # | File | Area | Items | Headline |
 |---|------|------|:---:|----------|
-| 01 | [`01-proactive-focus-insight.md`](01-proactive-focus-insight.md) | Proactive engine — Focus & Insight | 16 | The entire screen-context proactive framework (attention judging, glow overlay, daily score, backend-synced insights) is absent |
-| 02 | [`02-proactive-tasks-goals.md`](02-proactive-tasks-goals.md) | Tasks & Goals AI engine | 20 | Screen-based task extraction, per-task "Investigate" chat, autonomous task-agents, auto daily goal generation — all absent |
-| 03 | [`03-memory-persona-profile.md`](03-memory-persona-profile.md) | Memory extraction, Persona, AI profile | 11 | Continuous AI memory extraction, AI User Profile, Persona/AI-clone, semantic embeddings — absent |
-| 04 | [`04-chat-agent-runtime.md`](04-chat-agent-runtime.md) | Chat + ACP agent runtime | ~24 | Full coding-agent runtime (Claude/Hermes/OpenClaw over ACP), kernel, agent pills, control plane — absent (feat/win-agents PRs port a slice) |
-| 05 | [`05-rewind.md`](05-rewind.md) | Rewind depth delta | 17 | Video-chunk storage, OCR **embeddings/semantic search**, a **built-but-unreachable search UI**, action items — missing |
-| 06 | [`06-floating-bar-ask-ptt.md`](06-floating-bar-ask-ptt.md) | Floating bar / Ask AI / PTT | 17 | TTS read-aloud, image screen-context, vocabulary boosting, language ID, usage limiter — missing from the bar |
-| 07 | [`07-realtime-voice.md`](07-realtime-voice.md) | Realtime voice depth | 10 | In-session tool-calling (voice-as-router), warm-hub PTT, voice-turns-in-history, auto model select — missing |
-| 08 | [`08-bluetooth-wearables.md`](08-bluetooth-wearables.md) | Bluetooth / wearables | 17 | Entire BLE stack absent (Phase 7 deferred): 7 device types, codecs, GATT, audio pipeline |
-| 09 | [`09-wal-sync-offline.md`](09-wal-sync-offline.md) | WAL / offline / storage sync | 7 | Offline audio buffering + `/v2/sync-local-files` reconciliation absent (prereq is BLE); one realtime-STT resilience note |
-| 10 | [`10-onboarding.md`](10-onboarding.md) | Onboarding intelligence | 26 | Web research, data-source reading + AI synthesis, file-scan entity extraction, exports/MCP setup — missing |
-| 11 | [`11-fileindex-knowledge-graph.md`](11-fileindex-knowledge-graph.md) | File index / KG / memory graph | 10 | Onboarding LLM entity extraction, **BrainGraph interactivity built but hardcoded off**, incremental scan — missing |
-| 12 | [`12-app-shell-pages-system.md`](12-app-shell-pages-system.md) | App shell / pages / system | 13 | LiveNotes (auto meeting-minutes), speaker naming, Apps marketplace, Permissions/Help pages — missing |
-| 13 | [`13-ui-components-visual.md`](13-ui-components-visual.md) | UI components & visual layer | 18 | Tool-call/agent cards, markdown tables, typing indicator, citation cards, glow effects — missing |
+| 01 | [`01-proactive-focus-insight.md`](01-proactive-focus-insight.md) | Proactive engine — Focus & Insight | 16 | The coordinator + Focus + Insight all shipped **2026-07-14–19**, weeks before the stale audit; remaining gaps are narrow — no Focus dashboard page, no prompt/confidence-editor UI, Insight history is **local-only** (no cross-device sync) |
+| 02 | [`02-proactive-tasks-goals.md`](02-proactive-tasks-goals.md) | Tasks & Goals AI engine | 20 | Screen-based task extraction, the promotion pipeline, auto goal generation, and goal insight/celebration all shipped; still absent: per-task **"Investigate" chat**, task-row **"Execute"**, staged-task semantic dedup, and a task-prioritization ranking job |
+| 03 | [`03-memory-persona-profile.md`](03-memory-persona-profile.md) | Memory extraction, Persona, AI profile | 11 | Continuous memory extraction, the **AI User Profile**, embeddings, and connector imports all shipped; **Persona/AI-clone remains fully absent and backend-blocked**; extraction settings UI and cross-device sync are the real remaining gaps |
+| 04 | [`04-chat-agent-runtime.md`](04-chat-agent-runtime.md) | Chat + ACP agent runtime | ~24 | The full ACP kernel, control plane, and agent-pill UX **already shipped 2026-07-11–29** (the old "absent, no PR yet" verdict was wrong the day it was written); remaining gaps are tool-call/thinking/discovery-card rendering, a disabled local-context enrichment step, and screen context still text-only |
+| 05 | [`05-rewind.md`](05-rewind.md) | Rewind depth delta | 17 | Semantic search, FTS5, the search UI, date navigation, OCR bounding boxes, and DB-corruption recovery **all shipped and exceed the old claims**; genuinely still weaker: raw-JPEG storage (video chunking is a parked decision), a thin playback transport, no continuous observation log |
+| 06 | [`06-floating-bar-ask-ptt.md`](06-floating-bar-ask-ptt.md) | Floating bar / Ask AI / PTT | 17 | TTS read-aloud, the usage limiter, vocabulary boosting, language-ID feed-forward, system-audio mute, and the about-user card all shipped; screen context is **still OCR text only**, and rating/share-link, bar-specific drag-drop, and a second shortcut remain missing |
+| 07 | [`07-realtime-voice.md`](07-realtime-voice.md) | Realtime voice depth | 10 | The warm-hub PTT session, in-session tool-calling, rich system instructions, and kernel-recorded voice turns all shipped; the model still **can't see pixels mid-turn**, and cross-provider failover / BYOK realtime remain unbuilt |
+| 08 | [`08-bluetooth-wearables.md`](08-bluetooth-wearables.md) | Bluetooth / wearables | 17 | Entire BLE stack still absent (Phase 7 deferred) — **no Windows-side change**; this rewrite mainly corrects a stale Mac reference (a session/reliability-layer rewrite the old audit missed) |
+| 09 | [`09-wal-sync-offline.md`](09-wal-sync-offline.md) | WAL / offline / storage sync | 7 | WAL/storage-sync/WiFi-sync remain fully absent, blocked on BLE; but Windows' own continuous-mic realtime-STT path already got **reconnect+resume+silence-keepalive** — only the screen-session/meeting-audio lanes and crash-mid-recording durability are still open |
+| 10 | [`10-onboarding.md`](10-onboarding.md) | Onboarding intelligence | 26 | The **Data Sources step** and ChatGPT/Claude memory-log import both shipped; **enrichment synthesis** and web research remain the largest gaps, and the Auto-created Tasks closing screen **regressed into dead code** |
+| 11 | [`11-fileindex-knowledge-graph.md`](11-fileindex-knowledge-graph.md) | File index / KG / memory graph | 10 | Incremental scanning, the full-screen interactive 3D graph viewer, and local LLM entity-extraction (KG synthesis) all shipped; periodic re-scan is still absent, and the chat local-context enrichment pre-step remains deliberately disabled |
+| 12 | [`12-app-shell-pages-system.md`](12-app-shell-pages-system.md) | App shell / pages / system | 13 | The redesigned **Home Hub**, Imports/Exports connector hub, **LiveNotes**, post-hoc speaker naming, and trial/paywall gating all shipped; **live** speaker naming, a Permissions repair page, and Help/Crisp support remain absent |
+| 13 | [`13-ui-components-visual.md`](13-ui-components-visual.md) | UI components & visual layer | 18 | Glow overlay, goal celebration, chat-session history, agent-pill status, font scale, and Mica window vibrancy all shipped; tool-call/thinking/discovery-card rendering and GFM markdown tables remain the largest visual gaps |
 
 ---
 
 ## Executive summary — the shape of the gap
 
-The Windows app has faithfully ported the **capture-and-sync core** (audio in, transcription, conversations, meeting detection, a bar+orb, basic chat). What it is missing is almost entirely the **intelligence and agentic layer that sits on top of that core** — the things that make the Mac app feel proactive and alive rather than a recorder with a chat box. Five clusters dominate:
+The 2026-08-20 audit's framing — "the whole intelligence and agentic layer is missing" — was wrong the day it was written. A five-week porting wave (**2026-07-11 through 2026-07-29**) had already shipped the proactive-assistant coordinator and all four assistants (Focus/Insight/Memory/Task/Goal), the full ACP coding-agent kernel + control plane + agent-pill UX, Rewind's semantic-search stack, the warm-hub voice/PTT architecture, LiveNotes, post-hoc speaker naming, trial/paywall gating, and most of the Home Hub / Imports-Exports connector surface — all of it *before* that audit's own stated date. Windows is not "a recorder with a chat box bolted on top of a capture core" any more; it has the same layered intelligence architecture Mac does, running end to end. What remains falls into three genuinely different buckets:
 
-1. **The proactive-assistant framework (largest single gap).** Mac has a generalized `AssistantCoordinator` that runs Focus, Insight, Memory, and Task assistants on a shared context-detection + orchestration + notification-throttling substrate (files 01, 02, 03). Windows has *none* of this framework — it has one ad-hoc insight toast and a dumb time-tracker. Everything downstream (attention judging, screen→memory extraction, screen→task extraction, daily score, glow overlay) is absent because the framework underneath is absent. **This is the highest-leverage architectural gap: one framework unlocks four features.**
+1. **Depth and polish on shipped subsystems (the majority of what's left).** Almost every area file's remaining gaps are narrow and specific rather than architectural: a Focus dashboard page with no UI reading an already-tested data layer (file 01), a disabled `localAgent.ts` enrichment step that works but blew its own latency budget (files 04, 11), a voice tool catalog missing three named tools (file 07), Rewind's playback transport and keyboard scrubbing (file 05), and chat's `toolCall`/`thinking`/`discoveryCard` block types with no renderer even though `agentSpawn`/`agentCompletion` already render (files 04, 13). None of these need new frameworks — they need wiring, UI, or tuning on top of infrastructure that already exists.
 
-2. **The AI "understanding of the user."** A daily-regenerated **AI User Profile** (file 03) grounds task prioritization, goal generation, and chat. **Persona/AI-clone**, **semantic embeddings** (Mac uses Gemini 3072-dim cosine; Windows has only lexical token-overlap ranking), and the local **`<about_user>` chat card** are all absent. Notably, the AI-profile and goal-advice **backend endpoints already exist in Windows' generated API client with zero callers** (see Quick Wins).
+2. **A handful of genuinely large, still-open capability gaps.** **Onboarding's enrichment synthesis** — the LLM call that would merge file-scan + email + calendar + memory-log signal into one profile summary, a compact knowledge-graph entity list, and goal suggestions — is the single largest remaining gap in the whole audit (files 10, 11); the per-source extraction it would consume already exists, but nothing stitches it together the way Mac's "connective tissue" moment does. Alongside it: **web research** in onboarding (file 10), a **per-task "Investigate" chat** and task-row **"Execute"** that would wire the already-shipped agent kernel to a specific task (file 02), **live speaker naming** during an active recording (files 12, 13), and **in-turn vision** for both chat and voice — the model still only ever gets OCR text, never pixels (files 04, 06, 07).
 
-3. **The coding-agent runtime (file 04).** Delegate a task to Claude Code / Hermes / OpenClaw over ACP, streamed into chat as live "agent pills," with a kernel (sessions/runs/artifacts), a desktop control plane, and a multi-provider picker + Claude OAuth. Entirely absent on Windows. **The `feat/win-agents-1..4` PR stack (issue #9302) ports the adapter core (PR #9304) but not the kernel, control plane, pill UX, or settings/OAuth** — so it's a starting slice, not the whole subsystem.
-
-4. **Depth deltas on features Windows already has.** Rewind (file 05): Windows stores raw per-frame JPEGs (no video chunking → a storage-scalability problem), does keyword `LIKE` search instead of **OCR-embedding semantic search**, and its **unified search bar is built but dead-code-gated and unreachable**. Voice/PTT (06, 07): no in-session tool-calling, no TTS read-aloud, no vocabulary boosting or language ID, no system-audio ducking. Onboarding (10): Windows has the steps but none of the *intelligence* (web research, data-source synthesis, file entity extraction). Chat/UI (13): plain bubbles vs tool-call/agent/discovery cards, no markdown tables, no typing indicator.
-
-5. **Hardware + offline (files 08, 09).** The entire BLE/wearable stack (7 device types, codecs, GATT, the WAL offline-buffering + `/v2/sync-local-files` reconciliation that rides on it) is absent because Phase 7 was explicitly deferred. This is a large, self-contained subsystem with a clean macOS-framework → WinRT-BLE porting story.
+3. **Hardware + offline, and one backend-blocked feature — unchanged, deliberately deferred.** The entire BLE/wearable stack (7 device types, codecs, GATT, the WAL offline-buffering that rides on it) remains absent because Phase 7 is explicitly deferred (files 08, 09) — nothing shipped here because nothing was expected to. **Persona/AI-clone** (file 03) is the one feature that can't be built as Windows client work today regardless of priority: the backend has no persona routes at all.
 
 ---
 
 ## Consolidated top gaps by theme (cross-area)
 
-Value = impact on the Windows product (H/M/L). "PR" = touched by the `feat/win-agents` stack.
+Value = impact on the Windows product (H/M/L). Tables below list only what's **still genuinely open** per the freshly rewritten files 01–13 — items that shipped between 2026-07-11 and 2026-07-29 (the large majority of what the 2026-08-20 pass called "absent") have been removed; each area file's own "Changed since the 2026-08-20 audit" section has the full shipped inventory if that history is needed.
 
-### A. Proactive-assistant framework — *entirely absent; one framework unlocks many features*
+### A. Proactive-assistant framework — *shipped; remaining gaps are dashboards, tunability, and cross-device sync*
 | Gap | Area | Value |
 |---|---|:---:|
-| Pluggable `AssistantCoordinator` (context-switch detection, backpressure, orchestration policy, notification throttling) | 01 | H (enabler) |
-| Focus assistant — per-screenshot Gemini attention judging (focused/distracted) + coaching nudges + session history/score | 01 | H |
-| Insight assistant depth — two-phase SQL-investigation + vision confirmation, **backend-synced as searchable memory**, history/browse UI | 01 | H |
-| Focus **glow overlay** (click-through layered window, green/red animated border) | 01 / 13 | M |
-| Screen-based **AI task extraction** (whitelisted apps → Gemini tool-loop → tasks) | 02 | H |
-| Continuous **AI memory extraction** (screen → Gemini → confidence-gated memory, ~10 min cadence, dedup) | 03 | H |
+| Focus dashboard/history page — data layer (`focus/persist.ts`, `focus/stats.ts`) is written and unit-tested, no IPC or page reads it | 01 | M |
+| Insight prompt-editor + confidence-slider UI; Focus exclusion-list/cooldown Settings UI (data model ready, no write path) | 01 | S (quick win) |
+| Insight history is local-only — Mac's equivalent syncs cross-device via the backend memories API | 01 | M |
+| Memory extraction interval/confidence/excluded-apps Settings UI + prompt editor (master toggle already exists) | 03 | M |
+| Bidirectional assistant-settings sync (server round-trip, not just cross-window local broadcast) | 01 / 03 | L |
+| Memory read/dismiss flags + wire the already-built "this device only" filter to a UI toggle | 03 | S |
 
-### B. AI understanding of the user — *several are backend-ready quick wins*
+### B. AI understanding of the user — *mostly closed; Persona is the one hard remainder*
 | Gap | Area | Value |
 |---|---|:---:|
-| **AI User Profile** (daily 2-stage synthesis of memories+tasks+goals+convos into a grounding "about the user" doc) — *endpoints exist, zero callers* | 03 | H (quick win) |
-| **Persona / AI-clone** (public persona from public memories, chat-able by others, moderation) | 03 | M |
-| **Semantic embeddings** (Gemini 3072-dim cosine over tasks/memories) vs Windows' lexical-only ranker | 03 | M |
-| Local **`<about_user>` chat context card** (name + top memories + task counts, no network) | 03 / 06 | M |
-| **Auto daily goal generation** + stale-goal cleanup (full-context, dedup vs existing/abandoned) | 02 | H |
-| Goal **advice/insight** ("what to do this week") — *endpoint exists and is richer than Mac's, unused* | 02 | M (quick win) |
+| **Persona / AI-clone** — confirmed still fully absent, and **backend-blocked**: no persona routes exist even in the generated OpenAPI client | 03 | M (parked) |
+| Onboarding-exploration chat transcript → seed-profile path (Mac-only, no Windows equivalent) | 03 | L |
+| Gmail "session" (cookie-replay) connector reads mail but isn't wired to the same memory-synthesis path the OAuth lane already uses | 03 | L |
+| Home widget (`QuickGoalsWidget.tsx`) still calls the thin `GET /v1/goals/suggest` with no preview, while the Goals page's own "Suggest" got a richer generate→preview→create flow — the two entry points now visibly diverge | 02 | M |
 
-### C. Coding-agent / ACP runtime — *feat/win-agents ports a slice*
-| Gap | Area | Value | PR |
-|---|---|:---:|:---:|
-| ACP coding-agent client (spawn Claude/Hermes/OpenClaw over JSON-RPC stdio) | 04 | H | ✅ #9304 |
-| Adapter registry / selection + worker pool | 04 | H | ✅ #9304 |
-| Kernel (sessions/runs/attempts/turns/artifacts, SQLite store) | 04 | H | ❌ |
-| Agent control plane (list/inspect/cancel/spawn/send, desktop awareness, intent router, tool-policy engine) | 04 | H | ❌ |
-| Floating-bar **agent pills** (background-agent delegation + status polling + follow-up) | 04 | H | ❌ |
-| Multi-provider chat picker + **Claude OAuth** (Keychain → needs DPAPI on Win) | 04 | H | ⚠️ adapters only |
-| Structured content blocks (tool-call / thinking / discovery / agent cards) | 04 / 13 | H | ❌ |
-| Chat attachments, resources/artifacts, stall detection, error taxonomy | 04 | M | ⚠️ partial |
-
-### D. Rewind depth — *Windows has Rewind, but shallower*
+### C. Coding-agent / ACP runtime — *kernel, control plane, and pills shipped; rendering and a few policy calls remain*
 | Gap | Area | Value |
 |---|---|:---:|
-| **Search UI reachability** — unified search bar fully built but dead-code-gated/unreachable | 05 | H (quick win) |
-| **OCR embedding / semantic search** (vs keyword `LIKE` only) | 05 | H |
-| Video-chunk storage (H.265) vs raw per-frame JPEGs — *storage-scalability, not just a feature* | 05 | H |
-| OCR bounding boxes / on-image match highlight (schema gap) | 05 | M |
-| Action-item + observation extraction from screen | 05 | H |
-| Battery/power-aware capture cadence; date navigation (browse any day); FTS5 vs LIKE; DB corruption recovery | 05 | M |
+| `toolCall` / `thinking` / `discoveryCard` content-block renderers — types are published, only `agentSpawn`/`agentCompletion` render | 04 / 13 | H |
+| Chat resource/artifact card rendering (open/reveal) — kernel-side artifact machinery is real and used, no chat-surface consumer | 04 | M |
+| Stall-detection banner (running→slow→stalled) — only a coarse 180s hard watchdog exists today | 04 | M |
+| `localAgent.ts`'s agentic `execute_sql` pre-step remains disabled (`ENRICH_ENABLED = false`) — built and tested, but exceeded its latency budget | 04 / 11 | M |
+| `screenContext.ts` still sends OCR text only, never an image, into chat turns | 04 / 06 | H |
+| Persistent default-chat-backend picker vs. today's per-message mention-detection — an open product-design question, not a bug | 04 | M (decision-gated) |
+| Voice tool catalog gap: `ask_higher_model`, `create_calendar_event`, `point_click` have no Windows-serviceable executor | 07 | M |
+| Cross-provider failover on a classified live auth/quota error; client-direct BYOK realtime connection | 07 | M |
 
-### E. Voice / PTT depth
+### D. Rewind depth — *semantic search and the search UI are done; transport and storage-format remain*
 | Gap | Area | Value |
 |---|---|:---:|
-| **In-session tool-calling** (voice-as-router: ~20 tools — tasks, memories, search, spawn_agent, calendar, screenshot, point_click) | 07 | H |
-| Warm-hub **system-wide PTT** (global hotkey, per-provider barge-in, idle/wake reconnect) vs button-only page-bound session | 07 | H |
-| Voice turns recorded into shared **chat/kernel history** (incl. barge-in partials) | 07 | H |
-| In-turn **screen/vision** context + point_click during voice | 07 | H |
-| **TTS read-aloud** of AI replies + barge-in (bar flow) | 06 | H |
-| PTT **vocabulary boosting** (screen OCR + recent activity → STT correction) | 06 | H |
-| PTT **spoken-language auto-detection** (on-device Parakeet v3 + NLLanguageRecognizer) | 06 | M |
-| **System-audio mute/duck** during capture (echo prevention) | 06 / 07 | M |
-| Auto "Auto" model selection (daily benchmark pick); rich per-session system instructions | 07 | M |
+| Video-chunk (H.265) storage vs. raw per-frame JPEGs — a storage-scalability concern, but **already a parked decision** (keep JPEGs, revisit later), not scheduled | 05 | H (parked) |
+| Full playback transport (skip-to-start/end, step-frame, speed menu) — a page-level Play/Pause now exists, the richer transport doesn't | 05 / 13 | M |
+| Keyboard navigation: arrow-key frame stepping, scroll-to-scrub — `Ctrl/Cmd+F` and Escape now work, these two don't | 05 / 13 | M |
+| Screen-observations continuous log (a row per analysis pass, not just per successful extraction) | 05 | M |
+| Transcription/live-notes panel on the Rewind page itself (LiveNotes shipped on Conversations, not here) | 05 | M |
+| Search-bar polish (app-filter menu, quick-date chips) and filmstrip hover-choreography | 13 | S |
 
-### F. Chat & UI richness
+### E. Voice / PTT depth — *warm-hub, tool-calling, and turn history are done; vision and failover remain*
 | Gap | Area | Value |
 |---|---|:---:|
-| **Chat sessions sidebar** — multi-thread history (date-grouped, starred, searchable, renamable); Windows is single-thread with no session data layer | 13 | H |
-| Tool-call / agent-activity / discovery cards | 13 / 04 | H |
-| **Markdown tables** (Mac full GFM; Windows minimal parser degrades to plain text) | 13 | H |
-| Full-screen Rewind **timeline player** (play/pause/step/speed/seek transport) vs image-pane + lightbox | 13 / 05 | M |
-| Typing indicator (rotating comet-ring); citation cards; speaker color-coding in chat | 13 | M |
-| Rating (thumbs) + share-link; message metadata popover; chat avatars; long-message truncation | 06 / 13 | M |
+| **In-turn screen/vision context for voice** (pixels, not just a text/OCR tool call) — the largest remaining realtime-voice gap | 07 | L |
+| Cross-provider failover on a live auth/quota error; client-direct BYOK realtime | 07 | M |
+| Voice tool-catalog gaps (see row C above) | 07 | M |
+| Rating (thumbs) + share-link on chat responses; bar-specific file-attachment drag-drop (exists on the Home Ask bar already) | 06 | S |
+| Two independent global shortcuts for Ask AI vs. PTT (infra for a second accelerator already exists); live cross-monitor cursor-follow | 06 | S / XS |
+| Deterministic post-STT transcript corrector — a documented, deliberate deferral, not an oversight | 06 | S (backlog) |
 
-### G. Onboarding intelligence — *steps exist, intelligence doesn't*
+### F. Chat & UI richness — *agent cards, sessions, and font scale shipped; tool transparency and tables remain*
 | Gap | Area | Value |
 |---|---|:---:|
-| **Web research** (search user by name/email/org → enrich profile) | 10 | H |
-| **Data Sources** step (Gmail/Calendar/Apple Notes read + AI synthesis) | 10 | H |
-| Enrichment synthesis (LLM merges all sources → profile + KG entities + goal ideas) | 10 | H |
-| File-scan **entity extraction** (projects/tech/folders, not just app names) | 10 / 11 | H |
-| Exports step (Notion/Obsidian/ChatGPT/Claude/Gemini + agent MCP setup); memory-log import; multi-language select | 10 | M |
+| `toolCall` / `thinking` / `discoveryCard` cards (see row C) | 04 / 13 | H |
+| **Markdown GFM tables** — renderer still degrades tables to plain text | 13 | S |
+| Live speaker color-coding on the two live-recording surfaces (the full color/avatar system already exists for saved conversations) | 12 / 13 | S |
+| Citation-card renderer — citations are plumbed end-to-end from the SSE stream; no component reads `ChatMsg.citations` | 04 / 13 | S (quick win) |
+| Provider logo mark on agent pills (assets already exist, feed the Connections panel instead); typing indicator on the default main-chat surface still literal `'…'` (the 8-dot ring exists, scoped to the bar only) | 13 | XS (quick wins) |
 
-### H. App shell & pages
+### G. Onboarding intelligence — *Data Sources + memory-log import shipped; enrichment synthesis is the largest gap in the whole audit*
 | Gap | Area | Value |
 |---|---|:---:|
-| **LiveNotes** — AI auto meeting-minutes during recording (word-threshold Gemini generation, live panel) | 12 | H |
-| **Speaker naming** (live + post-hoc, person picker/create/retro-tag) | 12 | H |
-| **Apps marketplace** — Imports hub (7 connectors) + Exports/MCP hub | 12 | H |
-| Settings section inventory (Mac 11 + fuzzy search vs Windows 6 tabs; missing Notifications/Shortcuts/Plan&Usage/About/Transcription) | 12 | H |
-| Redesigned Home (stat ribbon, connect-data tray); Permissions repair page; Help/Crisp support; spatial overlay | 12 | M |
+| **Enrichment synthesis** — merge file-scan + email + calendar + memory-log signal into one profile summary, a compact KG entity list, and goal suggestions | 10 / 11 | H |
+| **Web research** (search the user by name/email/org to enrich their profile) — confirmed still fully absent | 10 | H |
+| Move (or duplicate) the already-built local semantic entity-extraction job into onboarding's own timing, and surface its narrative result to the user | 11 | M |
+| Data Sources step polish (live per-source scan progress, a surfaced profile-summary sentence, KG integration nodes on connect) | 10 | M |
+| Surface the Exports step inside onboarding (the underlying capability already exists elsewhere in the app) | 10 | S |
+| Language multi-select; an Accessibility-equivalent permission step; voice/Ask demo waiting for a real AI round trip | 10 | S |
+| **Regression:** the Auto-created Tasks closing screen is now unreachable dead code (Goal became the terminal step 2026-07-23) — needs a product decision (restore or delete) | 10 | XS |
 
-### I. Bluetooth / wearables + offline (Phase 7 deferred — entire subsystem)
+### H. App shell & pages — *Home Hub, connectors, LiveNotes, and paywall shipped; live naming and repair flows remain*
 | Gap | Area | Value |
 |---|---|:---:|
-| CoreBluetooth scan/discovery + GATT UUID registry + transport abstraction (→ WinRT BLE) | 08 | H |
+| **Live speaker naming** during an active recording (post-hoc naming shipped faithfully; this half is still absent) | 12 / 13 | M |
+| Permissions repair page (Grant/Reset/Fix flow) — real registry-backed detection exists with no repair UI wired to it | 12 | M |
+| Help / Crisp support chat — a parked vendor decision, not a build gap | 12 | M |
+| Daily/weekly score gauge + recent-conversations widget on the now-default Home Hub | 12 | S |
+| Referral program UI — a brand-new Mac feature (2026-08-20/21); needs a product decision before scheduling | 12 | S (decision-gated) |
+| Dedicated Floating Bar + Permissions Settings sections; settings-search scroll-to-highlight | 12 | S |
+
+### I. Bluetooth / wearables + offline (Phase 7 deferred — entire subsystem, no change)
+| Gap | Area | Value |
+|---|---|:---:|
+| CoreBluetooth-equivalent scan/discovery + GATT UUID registry + transport abstraction (→ WinRT BLE) | 08 | H |
 | 7 device connections (Omi/OpenGlass, Friend, Bee, Fieldy, Limitless, PLAUD, Frame-stub) | 08 | H/M |
 | BLE audio pipeline (frame reassembly, Opus/AAC/µ-law/LC3 decode) | 08 | H |
-| **WAL offline audio buffering** + `/v2/sync-local-files` upload/reconciliation; BLE SD-card storage sync; WiFi sync | 09 | H/M |
+| **WAL offline audio buffering** + `/v2/sync-local-files` upload/reconciliation; BLE SD-card storage sync; WiFi sync — blocked on BLE | 09 | H/M |
+| App-crash-mid-recording segment durability, and reconnect resilience for the screen-session/meeting-audio capture lanes — **not BLE-shaped, doesn't need Phase 7**, but still open on Windows' own realtime-STT path | 09 | M |
 
-### J. File index / knowledge graph
+### J. File index / knowledge graph — *scanning and the KG viewer/synthesis engine shipped; two narrow gaps remain*
 | Gap | Area | Value |
 |---|---|:---:|
-| Onboarding **LLM file-exploration → entity extraction** (execute_sql + save_knowledge_graph → 15–40 node graph) | 11 | H |
-| **Memory-graph interactivity** — BrainGraph has OrbitControls built in but every call site hardcodes `interactive={false}`; no standalone viewer | 11 | M (quick win) |
-| Chat local-context enrichment — macOS-faithful agentic pre-step **fully implemented in `localAgent.ts` but turned OFF** ("Floor-only mode") | 11 | M (quick win) |
-| Incremental/auto re-scan (3h diff-based) vs once-at-onboarding; richer scan-policy exclusions (21 dirs vs 4) | 11 | M |
+| Periodic (not just one-shot) background file-index re-scan — a session left open across a working day never refreshes | 11 | M |
+| Chat local-context enrichment pre-step remains disabled (see row C) | 04 / 11 | M |
 
 ---
 
 ## Quick wins — already built, just unwired or disabled
 
-These need *connection*, not construction — flagged repeatedly across the audit:
+These need *connection*, not construction. (Two items from the earlier pass of this index no longer belong here: the **Rewind unified search bar** was never actually dead-code-gated — it works today via a persistent search bar, `Ctrl/Cmd+F`, and Escape — and **BrainGraph interactivity** is not a bug to fix — the full-screen `/knowledge-graph` viewer is already fully interactive; only the two small preview cards on Memories/Onboarding are non-interactive **by design**, matching a tradeoff Mac itself made when it dropped its own inline-preview surface entirely on 2026-07-22.)
 
-- **AI User Profile** — backend `get/update_ai_profile` endpoints are in Windows' generated OpenAPI client with **zero callers** (file 03).
-- **Goal advice** — `GET /v1/goals/{id}/advice` exists, is **richer than Mac's local version**, and is unused by any Windows UI (file 02).
-- **Goal suggestion richness** — same `GET /v1/goals/suggest` endpoint Windows already calls, but fed only ~20 truncated memories vs Mac's full context (file 02).
-- **Rewind unified search bar** — fully implemented in the renderer but **dead-code-gated and unreachable** (file 05).
-- **BrainGraph interactivity** — `OrbitControls` drag/rotate/zoom already built into `BrainGraph.tsx`; every call site passes `interactive={false}` (file 11).
-- **Chat local-context enrichment** — the macOS-faithful `execute_sql` agentic pre-step is fully present in `localAgent.ts` but explicitly disabled ("Flip to true to restore the macOS-faithful agentic pre-step") (file 11).
+- **Focus exclusion list/cooldown** and **Insight prompt/confidence editor** — both settings models already exist and are read by the gate logic; neither has a write path or UI (file 01).
+- **Memory extraction settings** (interval/confidence/excluded apps) — three real settings, zero UI reading or writing them (file 03).
+- **`pttMuteSystemAudio`, `doubleTapForLock`, and the typed-reply voice-answer preference** — all three preferences are wired end to end into working mechanisms; none has a Settings checkbox yet (files 06, 07).
+- **Memory-log paste-in profile summary** — the backend's `/v1/memories/extract` already returns a synthesized `profile` sentence; the client computes and discards it (file 10).
+- **Citation-card renderer** — citations are plumbed end-to-end from the SSE stream into `ChatMsg.citations`; no component renders them (files 04, 13).
+- **Agent-pill provider logo** — the tinted Hermes/OpenClaw logo assets already exist (feeding the Connections panel); the pill itself still shows a generic Bot icon (file 13).
+- **Typing indicator on the default chat surface** — the real 8-dot `OmiThinkingSpinner` component exists and is used on the bar overlay; the main-window surface still falls through to a literal `'…'` string because it's scoped to the wrong `variant` (file 13).
+- **Promotion notification** — the staged-task→action-item pipeline is fully built and deliberately silent; `assistants/core/notify.ts` is a drop-in delivery path for a "task added" toast (file 02).
+- **`AutoCreatedTasksStep.tsx`** — still compiles and passes its own test, but has been unreachable dead code since a 2026-07-23 commit made Goal the terminal onboarding step; needs a product decision (restore the import, or delete the file) rather than more building (file 10).
 
 ## Windows-ahead — do NOT regress these when porting
 
@@ -170,17 +174,30 @@ The Windows app is *better* than Mac in a few places; a naive port would be a do
 
 - **PTT waveform** — Windows' adaptive noise-floor gate + 60fps rAF easing is arguably ahead of Mac's static boost curve (files 06, 13).
 - **Local KG** — Windows' KG schema (summary/source/aliases/sourceRefs) + off-thread worker + coalescing write-queue is **more sophisticated** than Mac's (file 11).
+- **Focus glow overlay** — a single continuous click-through ring with live target-tracking (it follows a moving/resizing window and dismisses on minimize) is *more* capable than Mac's one-shot four-window edge workaround, which doesn't track a moving target at all (file 01).
+- **Rewind DB-corruption recovery** — Windows' salvage engine covers *every* table with per-row isolation, where Mac's `.recover`-based approach salvages only the `screenshots` table and discards the rest (file 05).
+- **Goal-suggestion preview flow** — the Goals page's "Suggest" button now does generate→preview→create; Mac blind-creates with no review step (file 02).
 - **One-shot UI-automation planner** (`actionPlanner.ts` + native approval dialog) — a real Windows-only capability with no Mac equivalent (file 04).
 - **Markdown link safety** — Windows restricts clickable links to http(s)/mailto as a deliberate prompt-injection defense over OCR'd screen content (file 13).
-- **Conversation-record sync resilience** — Windows' `outbox.ts` CAS+dedupe is solid (file 09).
+- **Conversation-record sync resilience** — Windows' `outbox.ts` CAS+dedupe is solid, and the continuous-mic realtime-STT lane now has reconnect+resume+silence-keepalive that's arguably as rigorous as Mac's WAL reconciler for that lane (file 09).
+- **Onboarding step transitions** — an animated fade+slide per step vs. Mac's hard, unanimated cut (file 13).
 - **Tray per-state icon set** (3 states) vs Mac's single static icon (file 13).
-- **Design tokens** — Windows' `tailwind.config.ts` already remaps `purple.*` → translucent white (INV-UI-1 compliant); any Mac component leaning on `OmiColors.purplePrimary` needs a **conscious** remap, not a literal color port (file 13).
+- **Windows-exclusive additions with no Mac equivalent at all** — one-shot Obsidian/plain-Markdown/Notion memory export, and a real paid-app purchase flow in the Apps marketplace (file 12).
+- **Design tokens** — Windows' palette is neutral by default (`--accent` is white), with purple surviving only as a scoped, documented, product-approved exception (`lib/macPalette.ts`, governed by a binding "Track 4 ruling") rather than an accidental leak; any Mac component leaning on `OmiColors.purplePrimary` still needs a **conscious** remap, not a literal color port (file 13).
 
 ## Caveats & follow-ups (honest limits of this pass)
 
-- **Rewind search reachability, `localAgent` disable, BrainGraph `interactive` flag** — verified in code as of this audit; confirm they haven't been re-wired before treating as quick wins.
-- **Citation metadata** — whether the Windows backend even sends citations to the client is a backend-contract question the UI audit couldn't resolve (files 04, 13).
-- **Trial/paywall on Windows** — API types are generated but unused; may be a deliberate product decision (Windows unmetered), not a build gap — confirm before treating as a gap (file 12).
-- **UI file 13** left 5 Mac visual files not fully read (CitationCardView, SpeakerBubbleView, AudioLevelWaveformView, Glow*Window mechanics, SpatialOverlayRenderGeometry) — listed in its "Follow-up needed" section; the highest-value items were covered directly.
-- **`OMI_BYOK_*` plumbing** in the agent runtime appears unconsumed — possibly not-yet-wired or dead (file 04).
-- This audit does **not** rank, sequence, or estimate. That is the next session's job (Fable 5 planning).
+- **Resolved by this pass, no longer open questions:** whether the Windows backend sends citations to the client (it does — confirmed plumbed end-to-end, just unrendered, file 13); whether trial/paywall gating is a deliberate product decision or a gap (it's neither — it's already fully built and shipped, file 12); whether Rewind search, `localAgent`'s enrichment flag, and BrainGraph's `interactive` prop needed re-checking for silent re-wiring (they were re-checked directly against current source this pass, not assumed — see Quick Wins above for the corrected framing on the latter two).
+- **The default chat engine's flip to the kernel-routed `pi_mono` path** intersects a `PARALLEL-PLAN.md` decision gate with explicit required safeguards (fallback telemetry, a continuity-guard test, staged rollout). This pass confirmed the flip happened but did **not** verify those safeguards actually landed first — a real risk worth a cheap check before treating that gate as closed (file 04).
+- **Two Mac-side citation questions this pass couldn't resolve:** whether Windows' 12-bundle desktop-tool-policy count (vs. Mac's cited 11) reflects a genuine platform difference or a stale Mac count; and whether Windows' fourth external coding-agent adapter (Codex) means Mac gained Codex support too since its reference snapshot, or Windows built support for a provider Mac doesn't have (file 04).
+- **The `BUILD_PLAN.md` citation for the Phase-7/BLE deferral decision is unverifiable** — no file by that name exists anywhere in this repo's git history. The deferral conclusion itself still checks out (independently corroborated by three other audit files), but that specific pointer should not be trusted at face value (file 09).
+- **An unresolved backend-contract discrepancy**: whether production actually honors `client_session_id` for `/v1/conversations/from-segments` idempotency — two conflicting claims exist with no way to re-verify from the client side (file 09).
+- **Mac's Brain Map may already be a different surface for some accounts.** A server-gated "Canonical Memory Atlas" (cluster/territory-based, under active Mac development through 2026-08-16) replaces the legacy SceneKit force-directed graph this audit compares against once an account's `canonicalLifecycleExposed` flag is set — this audit evaluated only the legacy path and did not assess the canonical atlas at all (file 11).
+- **Two Windows-only pages may have no Mac counterpart to be "behind":** the standalone Insights history page and the Agents settings tab. Flagging for confirmation with whichever future pass owns those areas, not scored as a gap either direction (file 12).
+- **`glow_overlay_enabled`** (a generated API field) is still never read by the Windows renderer even though the glow feature itself works — either it's gated some other way this pass didn't find, or the field is Mac-only (file 13).
+- **UI file 13** left 5 Mac visual files not fully read (CitationCardView, SpeakerBubbleView, AudioLevelWaveformView, Glow*Window mechanics, SpatialOverlayRenderGeometry) — the highest-value items were covered directly regardless.
+- This audit does **not** rank, sequence, or estimate — beyond what `14-sequencing-plan.md` (below) already derives from it.
+
+## Sequencing & effort plan
+
+[`14-sequencing-plan.md`](14-sequencing-plan.md) is a from-scratch rewrite of the sequencing work, built directly from files `01`–`13` above and explicitly reconciled against the other planning docs already in this directory (`PARALLEL-PLAN.md`, `track2-execution-plan.md`, `TRACK4-PLAN.md`, `WIRING-AUDIT.md`) rather than re-deriving their territory. It orders the work into **Wave 0** (days of pure settings/UI wiring onto already-built capabilities — the Quick Wins above), **Waves 1–3** (the residual, still-open slice of the chat/agent-runtime, voice/PTT, and Rewind/shell work those other planning docs already scoped in detail — most of each has shipped), **Wave 4** (proactive-assistant dashboards and cross-device sync), **Wave 5** (Tasks/Goals depth, including task-chat and "Execute," which can start immediately since the agent kernel they need is already merged), **Wave 6** (onboarding intelligence — the single largest remaining capability gap), **Wave 7** (app-shell/settings polish), and two explicitly non-schedulable waves: **Wave 8** (Persona, parked on backend work) and **Wave 9** (BLE/wearables + offline WAL, deferred until product un-defers Phase 7). Each item is sized XS–XL and traced back to its finding in files 01–13.

@@ -1,3 +1,4 @@
+import AppKit
 import OmiTheme
 import SwiftUI
 
@@ -34,10 +35,14 @@ struct QuestionCardView: View {
   private var validOptions: [Option] { options.compactMap(Option.init) }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      Label("Question", systemImage: "questionmark.circle")
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundStyle(Ink.secondary)
+
       Text(text)
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
 
       // A completed question remains useful transcript context, but its
@@ -51,14 +56,10 @@ struct QuestionCardView: View {
             } label: {
               Text(option.label)
                 .scaledFont(size: OmiType.caption, weight: .medium)
-                .foregroundStyle(OmiColors.textSecondary)
+                .foregroundStyle(Ink.secondary)
                 .padding(.horizontal, OmiSpacing.md)
                 .padding(.vertical, OmiSpacing.sm)
-                .omiControlSurface(
-                  fill: OmiColors.backgroundPrimary.opacity(0.7),
-                  radius: OmiChrome.chipRadius,
-                  stroke: OmiColors.border.opacity(0.65)
-                )
+                .glassChip()
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Send suggestion: \(option.label)")
@@ -67,15 +68,14 @@ struct QuestionCardView: View {
         }
       }
     }
-    .padding(OmiSpacing.md)
-    .frame(maxWidth: 560, alignment: .leading)
-    .omiPanel(
-      fill: OmiColors.backgroundTertiary.opacity(0.88),
-      radius: OmiChrome.sectionRadius,
-      stroke: OmiColors.border.opacity(0.55),
-      shadowOpacity: 0.05,
-      shadowRadius: 5,
-      shadowY: 2
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Ink.rowFill)
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+        .stroke(Ink.glassEdge, lineWidth: 1)
     )
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("chat-first-question-\(questionID)")
@@ -102,6 +102,7 @@ struct TaskCardView: View {
   @State private var isToggling = false
   @State private var showCompletionAcknowledgement = false
   @State private var hydrationFinished = false
+  @State private var retainedCompletedTask: TaskActionItem?
 
   init(taskID: String, tasksStore: TasksStore, navigation: ChatFirstShellNavigation) {
     self.taskID = taskID
@@ -109,8 +110,23 @@ struct TaskCardView: View {
     self.navigation = navigation
   }
 
+  private var liveTask: TaskActionItem? {
+    tasksStore.tasks.first { $0.id == taskID && !$0.isRetired }
+  }
+
+  private var isExplicitlyRetired: Bool {
+    (tasksStore.tasks + tasksStore.deletedTasks).contains { $0.id == taskID && $0.isRetired }
+  }
+
   private var task: TaskActionItem? {
-    tasksStore.tasks.first { $0.id == taskID && $0.deleted != true }
+    ChatFirstTaskCardPresentation.displayTask(
+      liveTask: liveTask,
+      retainedCompletedTask: retainedCompletedTask?.id == taskID ? retainedCompletedTask : nil
+    )
+  }
+
+  private var hydrationKey: String {
+    "\(taskID):\(liveTask == nil)"
   }
 
   var body: some View {
@@ -118,6 +134,7 @@ struct TaskCardView: View {
       if let task {
         card(task)
           .onAppear {
+            retainCompletedTaskIfNeeded(liveTask)
             AnalyticsManager.shared.chatFirst(
               .richBlock(kind: .taskCard, outcome: .rendered, action: .none)
             )
@@ -134,80 +151,109 @@ struct TaskCardView: View {
       }
     }
     .accessibilityIdentifier("chat-first-task-\(taskID)")
-    .task(id: taskID) {
-      guard task == nil else {
+    .onChange(of: liveTask) { _, updatedTask in
+      retainCompletedTaskIfNeeded(updatedTask)
+    }
+    .onChange(of: isExplicitlyRetired) { _, retired in
+      if retired {
+        retainedCompletedTask = nil
+      }
+    }
+    .task(id: hydrationKey) {
+      guard liveTask == nil else {
         hydrationFinished = true
         return
       }
-      _ = await tasksStore.resolveCanonicalTask(id: taskID)
+      if retainedCompletedTask == nil {
+        hydrationFinished = false
+      }
+      let resolvedTask = await tasksStore.resolveCanonicalTask(id: taskID)
+      retainCompletedTaskIfNeeded(resolvedTask)
+      if resolvedTask == nil {
+        retainedCompletedTask = nil
+      }
       hydrationFinished = true
     }
   }
 
   @ViewBuilder
   private func card(_ task: TaskActionItem) -> some View {
-    HStack(alignment: .top, spacing: OmiSpacing.md) {
-      Button {
-        toggle(task)
-      } label: {
-        ZStack {
-          Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
-            .scaledFont(size: OmiType.subheading, weight: .medium)
-            .foregroundStyle(task.completed ? OmiColors.success : OmiColors.textTertiary)
-
-          if showCompletionAcknowledgement {
-            Image(systemName: "checkmark")
-              .scaledFont(size: OmiType.caption, weight: .bold)
-              .foregroundStyle(OmiColors.success)
-              .transition(.scale.combined(with: .opacity))
-          }
-        }
-        .frame(width: 24, height: 24)
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(spacing: OmiSpacing.xs) {
+        Label("Task", systemImage: "checklist")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundStyle(Ink.secondary)
       }
-      .buttonStyle(.plain)
-      .disabled(isToggling)
-      .accessibilityLabel(task.completed ? "Mark \(task.description) incomplete" : "Mark \(task.description) complete")
-      .accessibilityIdentifier("chat-first-task-\(taskID)-toggle")
 
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        Text(task.description)
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundStyle(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
-          .strikethrough(task.completed, color: OmiColors.textTertiary)
-          .fixedSize(horizontal: false, vertical: true)
+      HStack(alignment: .center, spacing: OmiSpacing.md) {
+        Button {
+          toggle(task)
+        } label: {
+          ZStack {
+            Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundStyle(task.completed ? Ink.listeningGreen : Ink.secondary)
 
-        HStack(spacing: OmiSpacing.xs) {
-          if let goalID = task.goalId, !goalID.isEmpty {
-            ChatFirstDestinationBadge(
-              title: "Goal",
-              systemImage: "target",
-              accessibilityID: "chat-first-task-\(taskID)-goal-\(goalID)"
-            ) {
-              navigation.open(focus: .goal(id: goalID))
+            if showCompletionAcknowledgement {
+              Image(systemName: "checkmark")
+                .scaledFont(size: OmiType.caption, weight: .bold)
+                .foregroundStyle(Ink.listeningGreen)
+                .transition(.scale.combined(with: .opacity))
             }
           }
-          if let conversationID = ChatFirstCaptureLinkPolicy.captureID(for: task) {
-            ChatFirstDestinationBadge(
-              title: "Capture",
-              systemImage: "waveform",
-              accessibilityID: "chat-first-task-\(taskID)-capture-\(conversationID)"
-            ) {
-              navigation.open(focus: .capture(id: conversationID, momentTs: nil))
+          .frame(width: 24, height: 24)
+        }
+        .buttonStyle(.plain)
+        .disabled(isToggling)
+        .accessibilityLabel(
+          task.completed ? "Mark \(task.description) incomplete" : "Mark \(task.description) complete"
+        )
+        .accessibilityIdentifier("chat-first-task-\(taskID)-toggle")
+
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          Text(task.description)
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundStyle(task.completed ? Ink.secondary : Ink.primary)
+            .strikethrough(task.completed, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+          HStack(spacing: OmiSpacing.xs) {
+            if let goalID = task.goalId, !goalID.isEmpty {
+              ChatFirstDestinationBadge(
+                title: "Goal",
+                systemImage: "target",
+                accessibilityID: "chat-first-task-\(taskID)-goal-\(goalID)"
+              ) {
+                navigation.open(focus: .goal(id: goalID))
+              }
+            }
+            if let conversationID = ChatFirstCaptureLinkPolicy.captureID(for: task) {
+              ChatFirstDestinationBadge(
+                title: "Capture",
+                systemImage: "waveform",
+                accessibilityID: "chat-first-task-\(taskID)-capture-\(conversationID)"
+              ) {
+                navigation.open(focus: .capture(id: conversationID, momentTs: nil))
+              }
             }
           }
         }
       }
     }
-    .padding(OmiSpacing.md)
-    .frame(maxWidth: 560, alignment: .leading)
-    .omiPanel(
-      fill: OmiColors.backgroundTertiary.opacity(0.88),
-      radius: OmiChrome.sectionRadius,
-      stroke: OmiColors.border.opacity(0.55),
-      shadowOpacity: 0.05,
-      shadowRadius: 5,
-      shadowY: 2
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Ink.rowFill)
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+        .stroke(Ink.glassEdge, lineWidth: 1)
     )
+  }
+
+  private func retainCompletedTaskIfNeeded(_ task: TaskActionItem?) {
+    guard let task else { return }
+    retainedCompletedTask = task.completed && !task.isRetired ? task : nil
   }
 
   private func toggle(_ task: TaskActionItem) {
@@ -257,6 +303,22 @@ struct TaskCardView: View {
         }
       }
     }
+  }
+}
+
+enum ChatFirstTaskCardPresentation {
+  static func displayTask(
+    liveTask: TaskActionItem?,
+    retainedCompletedTask: TaskActionItem?
+  ) -> TaskActionItem? {
+    if let liveTask {
+      return liveTask.isRetired ? nil : liveTask
+    }
+    guard let retainedCompletedTask,
+      retainedCompletedTask.completed,
+      !retainedCompletedTask.isRetired
+    else { return nil }
+    return retainedCompletedTask
   }
 }
 
@@ -387,6 +449,197 @@ struct CaptureLinkView: View {
   }
 }
 
+struct ConversationLinkView: View {
+  let conversationID: String
+  let summary: String
+  let recommendedActionItems: [ConversationLinkActionItem]
+  let navigation: ChatFirstShellNavigation
+
+  @State private var isOpening = false
+  @State private var isUnavailable = false
+  @State private var isCopyingLink = false
+  @State private var shareLinkFeedback: ConversationShareLinkFeedback?
+  @State private var shareLinkFeedbackGeneration = 0
+  @State private var shareRecipients: [ConversationShareRecipient] = []
+  @State private var isSendingSummary = false
+  @State private var summarySendStatus: (message: String, success: Bool)?
+
+  private var sendSummaryTitle: String? {
+    guard let first = shareRecipients.first else { return nil }
+    let extra = shareRecipients.count - 1
+    return extra > 0 ? "Send to \(first.shortLabel) +\(extra)" : "Send to \(first.shortLabel)"
+  }
+
+  private var statusLine: (message: String, systemImage: String, color: Color)? {
+    if let summarySendStatus {
+      return (
+        summarySendStatus.message,
+        summarySendStatus.success ? "checkmark" : "exclamationmark.triangle",
+        summarySendStatus.success ? Ink.listeningGreen : Ink.errorRed
+      )
+    }
+    if let shareLinkFeedback {
+      return (
+        shareLinkFeedback.message,
+        shareLinkFeedback.systemImage,
+        shareLinkFeedback == .copied ? Ink.listeningGreen : Ink.errorRed
+      )
+    }
+    return nil
+  }
+
+  var body: some View {
+    Group {
+      if isUnavailable {
+        ChatFirstUnavailableBlockView(entityName: "Conversation")
+      } else {
+        ChatFirstLinkBlockView(
+          eyebrow: "Meeting notes ready",
+          systemImage: "text.document",
+          summary: summary,
+          actionTitle: "Open conversation",
+          isOpening: isOpening,
+          accessibilityID: "chat-first-conversation-\(conversationID)-open",
+          action: { openConversation() },
+          recommendedActionItems: recommendedActionItems,
+          recommendedActionItemAction: { item in
+            guard let taskID = item.taskID else { return }
+            navigation.open(focus: .task(id: taskID))
+          },
+          secondaryActionTitle: "Copy share link",
+          secondaryActionSystemImage: "link",
+          isSecondaryBusy: isCopyingLink,
+          secondaryAccessibilityID: "chat-first-conversation-\(conversationID)-copy-link",
+          secondaryHelp: "Copy share link — anyone with the link can view",
+          secondaryAction: { copyShareLink() },
+          tertiaryActionTitle: sendSummaryTitle,
+          tertiaryActionSystemImage: "paperplane",
+          isTertiaryBusy: isSendingSummary,
+          tertiaryAccessibilityID: "chat-first-conversation-\(conversationID)-send-summary",
+          tertiaryHelp: shareRecipients.first.map { "Email the summary to \($0.email)" },
+          tertiaryAction: { sendSummary() },
+          statusMessage: statusLine?.message,
+          statusSystemImage: statusLine?.systemImage,
+          statusColor: statusLine?.color ?? Ink.secondary
+        )
+      }
+    }
+    .onAppear {
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(kind: .conversationLink, outcome: .rendered, action: .none)
+      )
+    }
+    .task {
+      // Calendar-detected participants make the one-click "Send to …" chip
+      // appear; no detection (or a fetch failure) just means no chip.
+      shareRecipients =
+        (try? await APIClient.shared.getConversationShareRecipients(id: conversationID)) ?? []
+    }
+  }
+
+  /// One-click email of the summary to the calendar-detected participants.
+  /// The backend validates recipients and flips visibility to shared, so this
+  /// discloses the audience in the confirmation just like copying the link.
+  private func sendSummary() {
+    guard !isSendingSummary, !shareRecipients.isEmpty else { return }
+    isSendingSummary = true
+    Task { @MainActor in
+      defer { isSendingSummary = false }
+      do {
+        let sent = try await APIClient.shared.sendConversationSummaryEmail(
+          id: conversationID,
+          recipientEmails: shareRecipients.map(\.email)
+        )
+        summarySendStatus = (
+          "Summary sent to \(sent.joined(separator: ", ")) — anyone with the link can view", true
+        )
+      } catch {
+        summarySendStatus = ("Couldn't send the summary — try again", false)
+      }
+    }
+  }
+
+  /// Copies a public share link for the conversation. Minting the link flips
+  /// the conversation's visibility to shared, so the confirmation discloses
+  /// the audience. A failure here never touches `isUnavailable` — copy
+  /// problems must not block "Open conversation".
+  private func copyShareLink() {
+    guard !isCopyingLink else { return }
+    isCopyingLink = true
+    Task { @MainActor in
+      defer { isCopyingLink = false }
+      let feedback = await ConversationShareLinkAction.run(
+        mintLink: { try await APIClient.shared.getConversationShareLink(id: conversationID) },
+        copyToPasteboard: { link in
+          NSPasteboard.general.clearContents()
+          return NSPasteboard.general.setString(link, forType: .string)
+        }
+      )
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(
+          kind: .conversationLink,
+          outcome: feedback == .copied ? .acted : .rejected,
+          action: .copyLink
+        )
+      )
+      shareLinkFeedback = feedback
+      shareLinkFeedbackGeneration += 1
+      let generation = shareLinkFeedbackGeneration
+      DispatchQueue.main.asyncAfter(deadline: .now() + ConversationShareLinkFeedback.displaySeconds) {
+        guard shareLinkFeedbackGeneration == generation else { return }
+        shareLinkFeedback = nil
+      }
+    }
+  }
+
+  private func openConversation() {
+    guard !isOpening else { return }
+    isOpening = true
+    let resolutionGeneration = navigation.beginConversationLinkResolution()
+    Task { @MainActor in
+      defer { isOpening = false }
+      do {
+        let conversation = try await APIClient.shared.getConversation(id: conversationID)
+        guard
+          let conversation = ChatFirstConversationLinkPolicy.validatedConversation(
+            conversation,
+            requestedID: conversationID
+          )
+        else {
+          throw URLError(.cannotParseResponse)
+        }
+        guard
+          navigation.completeConversationLinkResolution(
+            conversation: conversation,
+            generation: resolutionGeneration)
+        else { return }
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .conversationLink, outcome: .acted, action: .open)
+        )
+      } catch {
+        isUnavailable = true
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .conversationLink, outcome: .stalePlaceholder, action: .open)
+        )
+      }
+    }
+  }
+}
+
+/// The detail fetch is authoritative for a conversation link. Keep a small
+/// pure policy around the ID check so malformed or mismatched responses take
+/// the same unavailable path as a failed request instead of opening a nearby
+/// paginated row.
+enum ChatFirstConversationLinkPolicy {
+  static func validatedConversation(
+    _ conversation: ServerConversation?,
+    requestedID: String
+  ) -> ServerConversation? {
+    guard let conversation, conversation.id == requestedID else { return nil }
+    return conversation
+  }
+}
+
 struct MemoryLinkView: View {
   let memoryID: String
   let summary: String
@@ -422,57 +675,177 @@ private struct ChatFirstLinkBlockView: View {
   let isOpening: Bool
   let accessibilityID: String
   let action: () -> Void
+  var recommendedActionItems: [ConversationLinkActionItem] = []
+  var recommendedActionItemAction: ((ConversationLinkActionItem) -> Void)? = nil
+  // Optional secondary chip rendered beside the primary destination chip
+  // (e.g. "Copy share link" beside "Open conversation"). The transient
+  // status renders on its own caption line under the chips so a long
+  // confirmation never stretches or clips the chip row.
+  var secondaryActionTitle: String? = nil
+  var secondaryActionSystemImage: String = "link"
+  var isSecondaryBusy: Bool = false
+  var secondaryAccessibilityID: String = ""
+  var secondaryHelp: String? = nil
+  var secondaryAction: (() -> Void)? = nil
+  // Optional tertiary chip (e.g. "Send to Sarah" beside "Copy share link"),
+  // same chrome and busy semantics as the secondary chip.
+  var tertiaryActionTitle: String? = nil
+  var tertiaryActionSystemImage: String = "paperplane"
+  var isTertiaryBusy: Bool = false
+  var tertiaryAccessibilityID: String = ""
+  var tertiaryHelp: String? = nil
+  var tertiaryAction: (() -> Void)? = nil
+  var statusMessage: String? = nil
+  var statusSystemImage: String? = nil
+  var statusColor: Color = Ink.secondary
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Label(eyebrow, systemImage: systemImage)
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
 
       Text(summary)
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
 
-      Button(action: action) {
-        HStack(spacing: OmiSpacing.xs) {
-          if isOpening {
-            ProgressView()
-              .controlSize(.small)
+      if !recommendedActionItems.isEmpty {
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          Text("Recommended next steps")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundStyle(Ink.secondary)
+
+          ForEach(recommendedActionItems.indices, id: \.self) { index in
+            recommendedActionItemRow(recommendedActionItems[index])
           }
-          Text(actionTitle)
-          Image(systemName: "arrow.up.right")
         }
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundStyle(OmiColors.textPrimary)
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.xs)
-        .omiControlSurface(
-          fill: OmiColors.backgroundPrimary.opacity(0.72),
-          radius: OmiChrome.chipRadius,
-          stroke: OmiColors.border.opacity(0.7)
-        )
+      }
+
+      HStack(spacing: OmiSpacing.sm) {
+        Button(action: action) {
+          HStack(spacing: OmiSpacing.xs) {
+            if isOpening {
+              ProgressView()
+                .controlSize(.small)
+            }
+            Text(actionTitle)
+            Image(systemName: "arrow.up.right")
+          }
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundStyle(Ink.primary)
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.xs)
+          .glassChip()
+        }
+        .buttonStyle(.plain)
+        .disabled(isOpening)
+        .accessibilityLabel(actionTitle)
+        .accessibilityIdentifier(accessibilityID)
+
+        if let secondaryActionTitle, let secondaryAction {
+          Button(action: secondaryAction) {
+            HStack(spacing: OmiSpacing.xs) {
+              if isSecondaryBusy {
+                ProgressView()
+                  .controlSize(.small)
+              }
+              Text(secondaryActionTitle)
+              Image(systemName: secondaryActionSystemImage)
+            }
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundStyle(Ink.primary)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xs)
+            .glassChip()
+          }
+          .buttonStyle(.plain)
+          .disabled(isSecondaryBusy)
+          .help(secondaryHelp ?? secondaryActionTitle)
+          .accessibilityLabel(secondaryHelp ?? secondaryActionTitle)
+          .accessibilityIdentifier(secondaryAccessibilityID)
+        }
+
+        if let tertiaryActionTitle, let tertiaryAction {
+          Button(action: tertiaryAction) {
+            HStack(spacing: OmiSpacing.xs) {
+              if isTertiaryBusy {
+                ProgressView()
+                  .controlSize(.small)
+              }
+              Text(tertiaryActionTitle)
+              Image(systemName: tertiaryActionSystemImage)
+            }
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundStyle(Ink.primary)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xs)
+            .glassChip()
+          }
+          .buttonStyle(.plain)
+          .disabled(isTertiaryBusy)
+          .help(tertiaryHelp ?? tertiaryActionTitle)
+          .accessibilityLabel(tertiaryHelp ?? tertiaryActionTitle)
+          .accessibilityIdentifier(tertiaryAccessibilityID)
+        }
+      }
+
+      if let statusMessage {
+        Label(statusMessage, systemImage: statusSystemImage ?? "checkmark")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundStyle(statusColor)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Ink.rowFill)
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+        .stroke(Ink.glassEdge, lineWidth: 1)
+    )
+  }
+
+  @ViewBuilder
+  private func recommendedActionItemRow(_ item: ConversationLinkActionItem) -> some View {
+    if item.taskID != nil, let recommendedActionItemAction {
+      Button {
+        recommendedActionItemAction(item)
+      } label: {
+        recommendedActionItemLabel(item, showsOpenIndicator: true)
       }
       .buttonStyle(.plain)
-      .disabled(isOpening)
-      .accessibilityLabel(actionTitle)
-      .accessibilityIdentifier(accessibilityID)
+      .accessibilityLabel("Open task: \(item.description)")
+    } else {
+      recommendedActionItemLabel(item, showsOpenIndicator: false)
     }
-    .padding(OmiSpacing.md)
-    .frame(maxWidth: 560, alignment: .leading)
-    .omiPanel(
-      fill: OmiColors.backgroundTertiary.opacity(0.88),
-      radius: OmiChrome.sectionRadius,
-      stroke: OmiColors.border.opacity(0.55),
-      shadowOpacity: 0.05,
-      shadowRadius: 5,
-      shadowY: 2
-    )
+  }
+
+  private func recommendedActionItemLabel(
+    _ item: ConversationLinkActionItem,
+    showsOpenIndicator: Bool
+  ) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.xs) {
+      Image(systemName: "circle")
+        .scaledFont(size: OmiType.micro, weight: .medium)
+        .foregroundStyle(Ink.secondary)
+      Text(item.description)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundStyle(Ink.primary)
+        .fixedSize(horizontal: false, vertical: true)
+      if showsOpenIndicator {
+        Image(systemName: "chevron.right")
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .foregroundStyle(Ink.secondary)
+      }
+    }
   }
 }
 
 /// A compact typed destination control shared by rich Chat cards and the
-/// cohort-only Tasks page. Its closure is intentionally the only navigation
+/// universal Tasks page. Its closure is intentionally the only navigation
 /// surface: callers supply typed shell focus rather than model text or URLs.
 struct ChatFirstDestinationBadge: View {
   let title: String
@@ -484,14 +857,10 @@ struct ChatFirstDestinationBadge: View {
     Button(action: action) {
       Label(title, systemImage: systemImage)
         .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.xxs)
-        .omiControlSurface(
-          fill: OmiColors.backgroundPrimary.opacity(0.68),
-          radius: OmiChrome.chipRadius,
-          stroke: OmiColors.border.opacity(0.65)
-        )
+        .glassChip()
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Open \(title)")
@@ -505,16 +874,15 @@ struct ChatFirstUnavailableBlockView: View {
   var body: some View {
     Label("\(entityName) is no longer available", systemImage: "exclamationmark.circle")
       .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundStyle(OmiColors.textTertiary)
-      .padding(OmiSpacing.md)
-      .frame(maxWidth: 560, alignment: .leading)
-      .omiPanel(
-        fill: OmiColors.backgroundTertiary.opacity(0.7),
-        radius: OmiChrome.sectionRadius,
-        stroke: OmiColors.border.opacity(0.45),
-        shadowOpacity: 0,
-        shadowRadius: 0,
-        shadowY: 0
+      .foregroundStyle(Ink.secondary)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(Ink.rowFill)
+      .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+          .stroke(Ink.glassEdge, lineWidth: 1)
       )
       .accessibilityLabel("\(entityName) is no longer available")
       .accessibilityIdentifier("chat-first-\(entityName.lowercased())-unavailable")
@@ -530,17 +898,16 @@ private struct ChatFirstLoadingBlockView: View {
         .controlSize(.small)
       Text("Loading \(entityName.lowercased())")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundStyle(OmiColors.textTertiary)
+        .foregroundStyle(Ink.secondary)
     }
-    .padding(OmiSpacing.md)
-    .frame(maxWidth: 560, alignment: .leading)
-    .omiPanel(
-      fill: OmiColors.backgroundTertiary.opacity(0.7),
-      radius: OmiChrome.sectionRadius,
-      stroke: OmiColors.border.opacity(0.45),
-      shadowOpacity: 0,
-      shadowRadius: 0,
-      shadowY: 0
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Ink.rowFill)
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+        .stroke(Ink.glassEdge, lineWidth: 1)
     )
     .accessibilityLabel("Loading \(entityName.lowercased())")
     .accessibilityIdentifier("chat-first-\(entityName.lowercased())-loading")

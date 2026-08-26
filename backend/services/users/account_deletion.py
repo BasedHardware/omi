@@ -1,22 +1,17 @@
 from __future__ import annotations
 
 import logging
-import os
-
 import time
 from typing import Any, Callable, Literal, TypedDict, cast
 
 from database import vector_db
+from database import _client as database_client
 from database.dev_api_key import delete_dev_key, get_dev_keys_for_user
 from database.mcp_api_key import delete_mcp_key, get_mcp_keys_for_user
 from database.mcp_oauth import delete_user_oauth_credentials
-import google.auth
-import google.auth.transport.requests
-import httpx
 from database import users as users_db
 from database.action_items import get_action_item_ids
 from database.conversations import get_conversation_ids
-from database.memories import get_memory_ids
 from database.screen_activity import get_screen_activity_ids
 from database.vector_db import (
     delete_action_item_vectors_batch,
@@ -31,9 +26,12 @@ from utils.executors import cleanup_executor, submit_with_context
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import delete_canonical_memory_maintenance_registry_entry
 from utils.other.storage import delete_all_conversation_recordings
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
+from services.users.agent_vm_account_cleanup import delete_agent_vm_for_account
 
 logger = logging.getLogger(__name__)
 
@@ -54,57 +52,16 @@ ACCOUNT_DELETION_WIPE_COMPLETED = 'Account Deletion Wipe Completed'
 ACCOUNT_DELETION_WIPE_FAILED = 'Account Deletion Wipe Failed'
 
 
-def _gce_project_id() -> str | None:
-    return (
-        os.getenv('GCE_PROJECT_ID')
-        or os.getenv('GOOGLE_CLOUD_PROJECT')
-        or os.getenv('FIREBASE_PROJECT_ID')
-        or os.getenv('GCP_PROJECT_ID')
-    )
+def _historical_memory_ids(uid: str) -> list[str]:
+    """Enumerate historical provider identities through the universal owner."""
+
+    return MemoryService().list_historical_memory_ids(uid)
 
 
-def delete_agent_vm_for_account(uid: str) -> None:
-    """Delete the owner VM before the Firestore pointer becomes unreachable.
+def _delete_memory_maintenance_registry(uid: str) -> None:
+    """Remove the content-free global inventory marker during account wipe."""
 
-    Provisioning rechecks the durable deletion marker before and after GCE
-    creation, so a create already in flight either loses before insert or
-    deletes its late-created instance here/on its post-create fence.
-    """
-    vm = users_db.get_agent_vm(uid) or users_db.get_late_agent_vm_cleanup(uid)
-    if not isinstance(vm, dict) or not vm.get('vmName'):
-        return
-    project = _gce_project_id()
-    if not project:
-        raise RuntimeError('GCE project is not configured for account-deletion VM cleanup')
-    vm_name = str(vm['vmName'])
-    zone = str(vm.get('zone') or 'us-central1-a')
-    credentials, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])
-    credentials.refresh(google.auth.transport.requests.Request())
-    headers = {'Authorization': f'Bearer {credentials.token}'}
-    instance_url = f'https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}'
-    with httpx.Client(timeout=180) as client:
-        response = client.delete(instance_url, headers=headers)
-        if response.status_code == 404:
-            users_db.clear_late_agent_vm_cleanup(uid, vm_name)
-            return
-        response.raise_for_status()
-        operation = response.json().get('name')
-        if not operation:
-            return
-        operation_url = (
-            f'https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/operations/{operation}'
-        )
-        for _ in range(36):
-            status_response = client.get(operation_url, headers=headers)
-            status_response.raise_for_status()
-            result = status_response.json()
-            if result.get('status') == 'DONE':
-                if result.get('error'):
-                    raise RuntimeError(f'GCE Agent VM deletion failed: {result["error"]}')
-                users_db.clear_late_agent_vm_cleanup(uid, vm_name)
-                return
-            time.sleep(5)
-    raise RuntimeError('GCE Agent VM deletion timed out')
+    delete_canonical_memory_maintenance_registry_entry(uid, db_client=database_client.db)
 
 
 def delete_account_credentials(uid: str) -> None:
@@ -165,7 +122,11 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         logger.error(f'delete_account purge transcript chunk vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
-        memory_ids = get_memory_ids(uid)
+        # The service owns the historical physical-ID inventory. Canonical
+        # provider identities are purged by the canonical derived-data closure
+        # below, while the recursive Firestore wipe removes items, overrides,
+        # evidence, journals, and task sidecars under users/{uid}.
+        memory_ids = _historical_memory_ids(uid)
         if memory_ids:
             require_vector_index('memory_vectors')
             deleted = delete_memory_vectors_batch(uid, memory_ids)
@@ -320,6 +281,8 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         wipe_result = users_db.delete_user_data(uid)
         if wipe_result.get('status') != 'ok':
             raise RuntimeError('authoritative Firestore user-data wipe did not complete')
+        current_operation = 'memory_maintenance_registry'
+        _delete_memory_maintenance_registry(uid)
         logger.info('delete_account background wipe complete')
     except Exception as e:
         logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
@@ -422,7 +385,14 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
             return
         canceled = stripe_utils.cancel_subscription(subscription_id)
         if not canceled:
-            raise RuntimeError('stripe cancel returned no subscription')
+            # The billing step owns a goal state — the subscription no longer bills — not a
+            # particular API call. Stripe rejects `cancel_at_period_end` on an already-canceled
+            # subscription, so without this the wipe fails forever and the account is never
+            # deleted even though billing is already where it must be. Asking Stripe for the
+            # status keeps this closed: anything but a terminal status is still a real failure.
+            if not stripe_utils.is_subscription_terminal(subscription_id):
+                raise RuntimeError('stripe cancel returned no subscription')
+            logger.info('delete_account billing cancellation satisfied by an already-canceled subscription')
     except Exception as e:
         raw_error = str(e)
         sanitized_error = sanitize(raw_error)

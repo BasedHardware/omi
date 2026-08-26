@@ -73,6 +73,7 @@ def make_database_client_stub() -> ModuleType:
     client_mod.db = MagicMock()
     client_mod.delete_collection_recursive = MagicMock()
     client_mod.get_firestore_client = lambda: client_mod.db
+    client_mod.get_customer_firestore_client = lambda: client_mod.db
 
     def _document_id_from_seed(seed: str) -> str:
         seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
@@ -131,12 +132,55 @@ def install_canonical_write_runtime_stubs() -> list[str]:
     return touched
 
 
+# `from ._client import db` binds the Firestore handle into the importing module's
+# own namespace at import time, so replacing sys.modules["database._client"] later
+# cannot reach an already-imported copy. Any test that re-imports code calling into
+# these must drop them first or it silently runs against a live client that retries
+# with backoff.
+CLIENT_BINDING_DATABASE_MODULES = (
+    "database.notifications",
+    "database.conversations",
+    "database.redis_db",
+    "database.users",
+    "database.memories",
+    "database.action_items",
+    "database.tasks",
+)
+
+
+def drop_client_binding_modules(names: Sequence[str] = CLIENT_BINDING_DATABASE_MODULES) -> None:
+    """Evict modules that captured a live client at import time.
+
+    Call before install_*_stubs() so the stub install actually takes effect. Pair
+    with snapshot_sys_modules()/restore_sys_modules() on the same names.
+    """
+    for name in names:
+        module = sys.modules.pop(name, None)
+        if module is None or "." not in name:
+            continue
+        parent_name, child_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is module:
+            delattr(parent, child_name)
+
+
 def install_ws_i_heavy_import_stubs() -> list[str]:
     """Install heavy-import stubs used by WS-I process_conversation / memories router tests."""
     touched: list[str] = []
 
     def _set(name: str, module: ModuleType) -> None:
         sys.modules[name] = module
+        # Rebinding sys.modules alone is not enough. `import database.notifications
+        # as notification_db` resolves through getattr(database, "notifications")
+        # and only falls back to sys.modules on AttributeError, so a parent package
+        # still holding the real submodule hands it straight back and the stub never
+        # takes effect. restore_sys_modules() already unwinds the parent attribute on
+        # teardown; this is the matching half on the way in.
+        if "." in name:
+            parent_name, child_name = name.rsplit(".", 1)
+            parent = sys.modules.get(parent_name)
+            if isinstance(parent, ModuleType):
+                setattr(parent, child_name, module)
         touched.append(name)
 
     firebase_admin = types.ModuleType("firebase_admin")
@@ -148,9 +192,13 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     langchain_core.output_parsers.PydanticOutputParser = MagicMock()
     langchain_core.prompts = types.ModuleType("langchain_core.prompts")
     langchain_core.prompts.ChatPromptTemplate = MagicMock()
+    langchain_core.messages = types.ModuleType("langchain_core.messages")
+    langchain_core.messages.HumanMessage = MagicMock()
+    langchain_core.messages.SystemMessage = MagicMock()
     _set("langchain_core", langchain_core)
     _set("langchain_core.output_parsers", langchain_core.output_parsers)
     _set("langchain_core.prompts", langchain_core.prompts)
+    _set("langchain_core.messages", langchain_core.messages)
 
     langchain_core.callbacks = types.ModuleType("langchain_core.callbacks")
     langchain_core.callbacks.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
@@ -284,6 +332,9 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
         "utils.conversations.transcript_chunks",
         "utils.retrieval.tools.memory_tools",
     ):
+        # Deliberately does not displace an already-imported real module: several
+        # callers depend on the real one being kept. A caller that needs the stub to
+        # win must drop the real module first -- see drop_client_binding_modules().
         if name not in sys.modules:
             _set(name, AutoMockModule(name))
 
@@ -295,6 +346,7 @@ WS_I_HEAVY_STUB_MODULE_NAMES = (
     "langchain_core",
     "langchain_core.output_parsers",
     "langchain_core.prompts",
+    "langchain_core.messages",
     "langchain_core.callbacks",
     "langchain_core.runnables",
     "utils.llm.usage_tracker",
@@ -420,6 +472,7 @@ def install_ws_j_heavy_import_stubs() -> list[str]:
         "utils.conversations.factory",
         "utils.conversations.process_conversation",
         "utils.conversations.search",
+        "utils.conversations.mcp_transcript_search",
         "utils.conversations.calendar_linking",
         "utils.speaker_identification",
         "utils.app_integrations",
@@ -799,14 +852,18 @@ def install_memory_product_router_stubs(
 ) -> list[str]:
     sys.modules["fastapi"] = fastapi_stub
     sys.modules["database._client"] = MagicMock()
-    vector_db_stub = types.ModuleType("database.vector_db")
+    memories_stub = AutoMockModule("database.memories")
+    memories_stub.get_memories = MagicMock(return_value=[])
+    sys.modules["database.memories"] = memories_stub
+    vector_db_stub = AutoMockModule("database.vector_db")
     vector_db_stub.query_memory_vector_candidates = MagicMock(return_value=[])
     sys.modules["database.vector_db"] = vector_db_stub
     sys.modules["utils.other.endpoints"] = auth_stub
     database_pkg = sys.modules.get("database")
     if isinstance(database_pkg, ModuleType):
+        setattr(database_pkg, "memories", memories_stub)
         setattr(database_pkg, "vector_db", vector_db_stub)
-    return ["fastapi", "database._client", "database.vector_db", "utils.other.endpoints"]
+    return ["fastapi", "database._client", "database.memories", "database.vector_db", "utils.other.endpoints"]
 
 
 _NON_ACTIVE_ROUTES_FIRESTORE_STUBBED = False

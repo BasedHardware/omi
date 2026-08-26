@@ -7,6 +7,11 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
+# Unbounded `apt-get` against the hosted-runner Azure mirror can stall with no
+# output until the job ceiling. The hermetic gauntlets must keep Acquire
+# retries/timeouts on both update and install, plus a step-level timeout.
+_BOUNDED_APT_GET = 'sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10'
+
 
 def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> None:
     workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
@@ -14,7 +19,9 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     contracts = json.loads((_REPO_ROOT / 'backend' / 'testing' / 'workflow_contracts.json').read_text(encoding='utf-8'))
 
     assert '  listen-pusher-stack-gauntlet:' in workflow
-    job = workflow.split('  listen-pusher-stack-gauntlet:\n', 1)[1]
+    job = workflow.split('  listen-pusher-stack-gauntlet:\n', 1)[1].split('\n  sync-cloud-tasks-stack-gauntlet:\n', 1)[
+        0
+    ]
 
     assert 'timeout-minutes: 20' in job
     assert 'uses: actions/setup-python@v6' in job
@@ -28,7 +35,9 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert 'for attempt in 1 2 3' in job
     assert 'uses: actions/setup-java@v5' in job
     assert "java-version: '21'" in job
-    assert 'sudo apt-get install --yes redis-server' in job
+    assert f'{_BOUNDED_APT_GET} update' in job
+    assert f'{_BOUNDED_APT_GET} install --yes redis-server' in job
+    assert 'timeout-minutes: 5' in job
     assert 'npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"' in job
     assert 'name: Show listen gauntlet process diagnostics on failure' in job
     assert 'if: failure()' in job
@@ -91,7 +100,11 @@ def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
 
     assert '  scope:\n' in workflow
     scope = workflow.split('  scope:\n', 1)[1].split('\n  hermetic-e2e:\n', 1)[0]
-    assert 'github.event.pull_request.base.sha' in scope
+    # The PR base is resolved live against the checkout (origin/<base-ref>) rather
+    # than the event-payload base.sha, which can be stale for a queued run
+    # (FC-stale-event-payload-diff-base, #10785).
+    assert 'github.event.pull_request.base.sha' not in scope
+    assert 'PR_BASE_REF: origin/${{ github.base_ref }}' in scope
     assert 'github.event.merge_group.base_sha' in scope
     assert 'git diff --name-only "$base_sha"...HEAD' in scope
     assert "^(backend/|package\\.json$|package-lock\\.json$|\\.github/workflows/backend-hermetic-e2e\\.yml$)" in scope
@@ -126,3 +139,11 @@ def test_hermetic_e2e_tokenizer_warmup_is_cached_and_bounded() -> None:
     assert "key: tiktoken-${{ runner.os }}-${{ hashFiles('backend/pylock.toml') }}" in job
     assert job.count('TIKTOKEN_CACHE_DIR: ${{ runner.temp }}/tiktoken-cache') == 2
     assert 'python backend/scripts/prewarm_tiktoken_cache.py' in job
+
+
+def test_hermetic_gauntlet_redis_apt_installs_are_bounded() -> None:
+    workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
+
+    assert workflow.count(f'{_BOUNDED_APT_GET} update') == 3
+    assert workflow.count(f'{_BOUNDED_APT_GET} install --yes redis-server') == 3
+    assert 'sudo apt-get install --yes redis-server' not in workflow

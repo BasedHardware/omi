@@ -3,6 +3,15 @@ import XCTest
 @testable import Omi_Computer
 
 final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
+  /// Maximum (5) pairs a 10 s re-flush with the 10 s suggestion dwell so a nudge can land
+  /// seconds after a switch; every other level keeps the 60 s cadence.
+  func testDistributionFallbackIsTenSecondsOnlyAtMaximumLevel() {
+    XCTAssertEqual(ProactiveAssistantOrchestrationPolicy.distributionFallbackInterval(frequencyLevel: 5), 10)
+    XCTAssertEqual(ProactiveAssistantOrchestrationPolicy.distributionFallbackInterval(frequencyLevel: 4), 60)
+    XCTAssertEqual(ProactiveAssistantOrchestrationPolicy.distributionFallbackInterval(frequencyLevel: 3), 60)
+    XCTAssertEqual(ProactiveAssistantOrchestrationPolicy.distributionFallbackInterval(frequencyLevel: 0), 60)
+  }
+
   func testUnavailableTargetResetsEngineFailuresWithoutHidingCaptureHealth() {
     var failures = ScreenCaptureFailureTracker()
 
@@ -567,6 +576,10 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
     XCTAssertEqual(
       PreviewSimilarityThresholdPolicy.threshold(
         bundleID: "com.tinyspeck.slackmacgap", appName: "Slack"),
+      0.92)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.tdesktop.Telegram", appName: "Telegram"),
       0.92)
     XCTAssertEqual(
       PreviewSimilarityThresholdPolicy.threshold(

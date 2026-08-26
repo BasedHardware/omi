@@ -8,6 +8,7 @@ import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/services/account_cutover/account_cutover_blocking_gate.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -39,22 +40,28 @@ class _MobileAppState extends State<MobileApp> {
           return const OnboardingWrapper(forceAuthPage: true);
         }
         if (authProvider.isSignedIn()) {
-          // Returning users who haven't yet given consent under the new
-          // model must see the consent screen before any AI processing
-          // begins, even if the server says they completed onboarding
-          // previously. OnboardingWrapper renders the consent step in
-          // that case and routes them straight to home after Continue.
-          if (!SharedPreferencesUtil().aiConsentGiven) {
-            return const OnboardingWrapper();
-          }
-          if (SharedPreferencesUtil().onboardingCompleted) {
-            if (!SharedPreferencesUtil().permissionsCompleted) {
-              return const _PermissionsGate();
-            }
-            return const HomePageWrapper();
-          } else {
-            return const OnboardingWrapper();
-          }
+          // Cutover gate sits above onboarding and home so completed-onboarding
+          // navigator replacements cannot bypass enforcement, and product
+          // widgets are not constructed while blocked.
+          return AccountCutoverBlockingGate(
+            productBuilder: (context) {
+              // Returning users who haven't yet given consent under the new
+              // model must see the consent screen before any AI processing
+              // begins, even if the server says they completed onboarding
+              // previously. OnboardingWrapper renders the consent step in
+              // that case and routes them straight to home after Continue.
+              if (!SharedPreferencesUtil().aiConsentGiven) {
+                return const OnboardingWrapper();
+              }
+              if (SharedPreferencesUtil().onboardingCompleted) {
+                if (!SharedPreferencesUtil().permissionsCompleted) {
+                  return const _PermissionsGate();
+                }
+                return const HomePageWrapper();
+              }
+              return const OnboardingWrapper();
+            },
+          );
         } else {
           return const DeviceSelectionPage();
         }

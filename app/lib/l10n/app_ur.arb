@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "میری ایپلیکیشنز",
+    "myApps": "میری بنائی ہوئی",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -959,16 +959,6 @@
     "cancelAtPeriodEnd": "آپ کا منصوبہ {date} پر منسوخ ہو جائے گا۔",
     "@cancelAtPeriodEnd": {
         "description": "Cancellation message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
-    "renewsOn": "آپ کا منصوبہ {date} پر تجدید ہو گا۔",
-    "@renewsOn": {
-        "description": "Renewal message",
         "placeholders": {
             "date": {
                 "type": "String",
@@ -10767,5 +10757,45 @@
     "whisperModelSizeLarge": "بڑا",
     "whisperModelSizeMedium": "درمیانہ",
     "whisperModelSizeSmall": "چھوٹا",
-    "whisperModelSizeTiny": "بہت چھوٹا"
+    "whisperModelSizeTiny": "بہت چھوٹا",
+    "planSheetChooseYourPlan": "لامحدود Omi کھولنے کے لیے اپنا پلان منتخب کریں۔",
+    "availableOnMacMobileWeb": "Mac، موبائل اور ویب پر دستیاب",
+    "popularBadge": "مقبول",
+    "worksOnDesktop": "ڈیسک ٹاپ پر کام کرتا ہے",
+    "noDesktopAccess": "ڈیسک ٹاپ پر کام نہیں کرتا",
+    "annualBillingSummary": "{months} ماہ / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 ماہ مفت} other{{count} ماہ مفت}}",
+    "freemiumLimitsIntro": "Omi مفت ہے، لیکن مفت ورژن میں ایسی حدود ہیں جو آپ کے تجربے پر اثر ڈالتی ہیں:",
+    "downgradeLimitDelayNotRealTime": "5-7 سیکنڈ کی تاخیر (ریئل ٹائم نہیں)",
+    "downgradeToFreemiumAction": "مفت ورژن پر جائیں",
+    "getFreeUnlimitedAccess": "مفت لامحدود رسائی حاصل کریں",
+    "shareDataForTraining": "تربیت کے لیے ڈیٹا شیئر کریں",
+    "yourRequestUnderReview": "آپ کی درخواست زیرِ غور ہے",
+    "pinAsBaseline": "بنیاد کے طور پر پن کریں",
+    "unpinAsBaseline": "بنیاد سے ان پن کریں",
+    "baselineMemory": "بنیادی یادداشت",
+    "alwaysInContext": "ہمیشہ سیاق میں",
+    "accountCutoverUpdateRequiredTitle": "التحديث مطلوب",
+    "accountCutoverUpdateRequiredMessage": "ثبّت أحدث تطبيق Omi للمتابعة بعد ترحيل الحساب.",
+    "accountCutoverMigrationInProgressTitle": "الترحيل قيد التقدم",
+    "accountCutoverMigrationInProgressMessage": "حسابك قيد الترحيل. ميزات المنتج متوقفة مؤقتًا حتى انتهاء الترحيل.",
+    "accountCutoverMigrationRollbackMessage": "حسابك قيد الصيانة بعد التراجع عن الترحيل. قد تُعزل بعض البيانات الأحدث.",
+    "accountCutoverOpenStore": "فتح المتجر",
+    "chatScopeToday": "آج",
+    "chatScopeThisWeek": "اس ہفتے",
+    "chatScopeAbout": "{title} کے بارے میں",
+    "askAboutThisConversation": "اس کے بارے میں پوچھیں",
+    "sendRawAudioToOmi": "خام آڈیو Omi کو بھیجیں",
+    "sendRawAudioToOmiDescription": "خام آڈیو کو Omi بھیجے جانے سے روکنے کے لیے اسے بند کریں۔ ٹرانسکرپٹس اور کلاؤڈ فیچرز کے لیے درکار ڈیٹا اب بھی Omi کو بھیجا جا سکتا ہے۔",
+    "findDevice": "تلاش کریں",
+    "diagnosticsShareFailed": "تشخیصی معلومات شیئر نہیں کی جا سکیں۔ براہ کرم دوبارہ کوشش کریں۔",
+    "appDisabledTitle": "یہ ایپ غیر فعال ہے اور اسے انسٹال نہیں کیا جا سکتا۔",
+    "appDisabledWebhookFailures": "اس کا اینڈ پوائنٹ مسلسل 72 گھنٹے ناکام رہا، اس لیے ترسیل روک دی گئی۔",
+    "appDisabledGeneric": "اسے Omi نے غیر فعال کیا تھا۔",
+    "appDisabledOwnerHint": "پہلے اینڈ پوائنٹ درست کریں — دوبارہ فعال کرنے پر ہر ترتیب شدہ URL دوبارہ جانچا جاتا ہے۔",
+    "appReEnable": "دوبارہ فعال کریں",
+    "appReEnableFailedTitle": "دوبارہ فعال نہیں ہو سکا",
+    "appReEnableFailedBody": "اس ایپ کو دوبارہ فعال نہیں کیا جا سکا۔ براہ کرم دوبارہ کوشش کریں۔",
+    "appDisabledOn": "{date} کو غیر فعال کیا گیا۔",
+    "appDisabledLastError": "آخری خرابی: {error}"
 }

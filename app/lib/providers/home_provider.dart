@@ -1,4 +1,6 @@
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/speech_profile.dart';
@@ -27,8 +29,9 @@ class HomeProvider extends ChangeNotifier {
   String userPrimaryLanguage = SharedPreferencesUtil().userPrimaryLanguage;
   bool hasSetPrimaryLanguage = SharedPreferencesUtil().hasSetPrimaryLanguage;
 
-  // Available languages ordered by popularity
-  final Map<String, String> availableLanguages = {
+  /// Offline floor for the served list. Not dead code — a first run with no
+  /// network shows this.
+  static const Map<String, String> _bundledLanguages = {
     // Top languages first
     'English': 'en',
     'English (US)': 'en-US',
@@ -101,6 +104,47 @@ class HomeProvider extends ChangeNotifier {
     'Urdu': 'ur',
     'Vietnamese': 'vi',
   };
+
+  Map<String, String>? _serverLanguages;
+
+  Map<String, String> get availableLanguages => _serverLanguages ?? _bundledLanguages;
+
+  /// Cached list first so the UI never waits, then the server's. A failed fetch
+  /// leaves whatever the picker already had.
+  Future<void> loadAvailableLanguages({Future<Map<String, String>?> Function()? fetch}) async {
+    final cached = SharedPreferencesUtil().cachedAvailableLanguages;
+    if (cached.isNotEmpty) {
+      final restored = _decodeLanguages(cached);
+      if (restored != null) {
+        _serverLanguages = restored;
+        notifyListeners();
+      }
+    }
+
+    final generation = _sessionGeneration;
+    Map<String, String>? fetched;
+    try {
+      fetched = await (fetch ?? getAvailableLanguages)();
+    } catch (e) {
+      Logger.debug('Error loading available languages: $e');
+      return;
+    }
+    if (fetched == null || fetched.isEmpty || generation != _sessionGeneration) return;
+
+    SharedPreferencesUtil().cachedAvailableLanguages = jsonEncode(fetched);
+    _serverLanguages = fetched;
+    notifyListeners();
+  }
+
+  static Map<String, String>? _decodeLanguages(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map || decoded.isEmpty) return null;
+      return {for (final entry in decoded.entries) entry.key as String: entry.value as String};
+    } catch (_) {
+      return null;
+    }
+  }
 
   HomeProvider() {
     chatFieldFocusNode.addListener(_onFocusChange);
@@ -195,6 +239,17 @@ class HomeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Loads the picker options, then runs primary-language setup — but only if
+  /// the session survived the request. setupUserPrimaryLanguage captures the
+  /// generation when it starts, which is too late to notice a sign-out that
+  /// happened while the options were still loading.
+  Future<void> loadLanguagesThenSetupPrimary({Future<Map<String, String>?> Function()? fetch}) async {
+    final generation = _sessionGeneration;
+    await loadAvailableLanguages(fetch: fetch);
+    if (generation != _sessionGeneration) return;
+    await setupUserPrimaryLanguage();
+  }
+
   Future<void> setupUserPrimaryLanguage() async {
     if (SharedPreferencesUtil().hasSetPrimaryLanguage && SharedPreferencesUtil().userPrimaryLanguage.isNotEmpty) {
       return;
@@ -264,7 +319,14 @@ class HomeProvider extends ChangeNotifier {
   }
 
   String getLanguageName(String code) {
-    return availableLanguages.entries.firstWhere((element) => element.value == code).key;
+    // A stored code can outlive the list that offered it.
+    for (final entry in availableLanguages.entries) {
+      if (entry.value == code) return entry.key;
+    }
+    for (final entry in _bundledLanguages.entries) {
+      if (entry.value == code) return entry.key;
+    }
+    return code;
   }
 
   Future setUserPeople() async {

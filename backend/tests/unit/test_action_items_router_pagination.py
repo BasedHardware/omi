@@ -1,6 +1,6 @@
 """Router pagination uses one database call with a one-row lookahead."""
 
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
 
@@ -52,6 +52,7 @@ def test_page_uses_one_row_lookahead(rows, expected_ids, expected_has_more):
         due_end_date=None,
         limit=3,
         offset=7,
+        budget=ANY,
     )
     assert [item.id for item in response['action_items']] == expected_ids
     assert response['has_more'] is expected_has_more

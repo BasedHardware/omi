@@ -321,7 +321,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get searchApps => 'Etsi sovelluksia...';
 
   @override
-  String get myApps => 'Omat sovellukset';
+  String get myApps => 'Minun luomani';
 
   @override
   String get installedApps => 'Asennetut sovellukset';
@@ -741,11 +741,6 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'Pakettisi peruuntuu $date.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'Pakettisi uusiutuu $date.';
   }
 
   @override
@@ -2125,16 +2120,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String get editMemory => '✏️ Muokkaa muistia';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Kiinnitä perustaksi';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Irrota perustasta';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Perusmuisti';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Aina kontekstissa';
 
   @override
   String get memoryContentHint => 'Pidän jäätelön syömisestä...';
@@ -9775,4 +9770,134 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Liian vanha synkronoitavaksi — Omi ei voi hyväksyä sitä';
+
+  @override
+  String get planSheetChooseYourPlan => 'Valitse tilauksesi ja avaa rajaton Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Saatavilla Macilla, mobiilissa ja verkossa';
+
+  @override
+  String get popularBadge => 'SUOSITTU';
+
+  @override
+  String get worksOnDesktop => 'Toimii tietokoneella';
+
+  @override
+  String get noDesktopAccess => 'Ei toimi tietokoneella';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months kuukautta / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kuukautta ilmaiseksi',
+      one: '1 kuukausi ilmaiseksi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi on ilmainen, mutta ilmaisversiossa on rajoituksia, jotka vaikuttavat kokemukseesi:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 sekunnin viive (ei reaaliaikainen)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Vaihda ilmaisversioon';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Hanki ilmainen rajaton käyttöoikeus';
+
+  @override
+  String get shareDataForTraining => 'Jaa dataa koulutukseen';
+
+  @override
+  String get yourRequestUnderReview => 'Pyyntösi on käsittelyssä';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Päivitys vaaditaan';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => 'Asenna uusin Omi-sovellus jatkaaksesi tilin siirron jälkeen.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Siirto käynnissä';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.';
+
+  @override
+  String get accountCutoverOpenStore => 'Avaa kauppa';
+
+  @override
+  String get chatScopeToday => 'Tänään';
+
+  @override
+  String get chatScopeThisWeek => 'Tällä viikolla';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Aihe: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Kysy tästä';
+
+  @override
+  String get sendRawAudioToOmi => 'Lähetä käsittelemätön ääni Omille';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Poista käytöstä, jotta käsittelemätöntä ääntä ei lähetetä Omille. Litterointeja ja pilviominaisuuksien tarvitsemia tietoja voidaan silti lähettää Omille.';
+
+  @override
+  String get findDevice => 'Etsi';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiikan jakaminen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get appDisabledTitle => 'Tämä sovellus on poistettu käytöstä eikä sitä voi asentaa.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Sen päätepiste epäonnistui 72 tuntia peräkkäin, joten toimitukset pysäytettiin.';
+
+  @override
+  String get appDisabledGeneric => 'Omi poisti sen käytöstä.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Korjaa ensin päätepiste — käyttöönotto tarkistaa jokaisen määritetyn URL-osoitteen uudelleen.';
+
+  @override
+  String get appReEnable => 'Ota uudelleen käyttöön';
+
+  @override
+  String get appReEnableFailedTitle => 'Käyttöönotto epäonnistui';
+
+  @override
+  String get appReEnableFailedBody => 'Tätä sovellusta ei voitu ottaa uudelleen käyttöön. Yritä uudelleen.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Poistettu käytöstä $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Viimeisin virhe: $error.';
+  }
 }

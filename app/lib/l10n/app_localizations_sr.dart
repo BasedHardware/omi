@@ -322,7 +322,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get searchApps => 'Претражи апликације...';
 
   @override
-  String get myApps => 'Моје апликације';
+  String get myApps => 'Направљено од мене';
 
   @override
   String get installedApps => 'Инсталиране апликације';
@@ -742,11 +742,6 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'Твој план ће бити отказан $date.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'Твој план се обнавља $date.';
   }
 
   @override
@@ -2127,16 +2122,16 @@ class AppLocalizationsSr extends AppLocalizations {
   String get editMemory => '✏️ Уреди сећање';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Закачи као основу';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Откачи са основе';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Основна меморија';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Увек у контексту';
 
   @override
   String get memoryContentHint => 'Волим да једем сладолед...';
@@ -9788,4 +9783,136 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Превише стара за синхронизацију — Omi не може да је прихвати';
+
+  @override
+  String get planSheetChooseYourPlan => 'Изаберите свој план да откључате неограничени Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Доступно на Mac-у, мобилном и вебу';
+
+  @override
+  String get popularBadge => 'ПОПУЛАРНО';
+
+  @override
+  String get worksOnDesktop => 'Ради на рачунару';
+
+  @override
+  String get noDesktopAccess => 'Не ради на рачунару';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months месеци / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count месеци бесплатно',
+      few: '$count месеца бесплатно',
+      one: '$count месец бесплатно',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi је бесплатан, али бесплатна верзија има ограничења која утичу на ваше искуство:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Кашњење од 5-7 секунди (није у реалном времену)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Пређите на бесплатну верзију';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Остварите бесплатан неограничен приступ';
+
+  @override
+  String get shareDataForTraining => 'Делите податке за обуку';
+
+  @override
+  String get yourRequestUnderReview => 'Ваш захтев је на прегледу';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Je vyžadována aktualizace';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Probíhá migrace';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.';
+
+  @override
+  String get accountCutoverOpenStore => 'Otevřít obchod';
+
+  @override
+  String get chatScopeToday => 'Данас';
+
+  @override
+  String get chatScopeThisWeek => 'Ове недеље';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'О: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Питај о овоме';
+
+  @override
+  String get sendRawAudioToOmi => 'Шаљи необрађени звук у Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Искључите да бисте спречили слање необрађеног звука у Omi. Транскрипти и подаци потребни за функције у облаку и даље се могу слати у Omi.';
+
+  @override
+  String get findDevice => 'Пронађи';
+
+  @override
+  String get diagnosticsShareFailed => 'Dijagnostiku nije bilo moguće podeliti. Pokušaj ponovo.';
+
+  @override
+  String get appDisabledTitle => 'Ova aplikacija je onemogućena i ne može da se instalira.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Njena krajnja tačka nije radila 72 sata zaredom, pa je isporuka zaustavljena.';
+
+  @override
+  String get appDisabledGeneric => 'Onemogućila ju je Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Prvo popravi krajnju tačku — ponovno omogućavanje iznova proverava svaki podešeni URL.';
+
+  @override
+  String get appReEnable => 'Ponovo omogući';
+
+  @override
+  String get appReEnableFailedTitle => 'Ponovno omogućavanje nije uspelo';
+
+  @override
+  String get appReEnableFailedBody => 'Ovu aplikaciju nije bilo moguće ponovo omogućiti. Pokušaj ponovo.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Onemogućeno $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Poslednja greška: $error.';
+  }
 }

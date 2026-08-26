@@ -610,6 +610,7 @@ final class APIClientRoutingTests: XCTestCase {
   override func tearDown() {
     unsetenv("OMI_PYTHON_API_URL")
     unsetenv("OMI_DESKTOP_API_URL")
+    unsetenv("OMI_AUTH_API_URL")
     URLCapture.reset()
     super.tearDown()
   }
@@ -812,6 +813,16 @@ final class APIClientRoutingTests: XCTestCase {
       label: "getUserSubscription")
   }
 
+  func testGetReferralLinkRoutesToAuthAuthority() async {
+    setenv("OMI_AUTH_API_URL", "http://auth-test:9003", 1)
+    let client = await makeTestClient()
+    _ = try? await client.getReferralLink() as ReferralLinkResponse
+    assertRoutes(
+      URLCapture.capturedRequests, host: "auth-test", port: 9003,
+      pathContains: "v1/users/me/referral", method: "GET",
+      label: "getReferralLink")
+  }
+
   // MARK: - Routing behavior: Rust-routed endpoints (customBaseURL: rustBackendURL)
 
   // -- Config/API keys (GET → Rust) --
@@ -887,6 +898,62 @@ final class APIClientRoutingTests: XCTestCase {
       URLCapture.capturedRequests, host: "python-test", port: 9001,
       pathContains: "v1/staged-tasks/st-1", method: "DELETE",
       label: "deleteStagedTask")
+  }
+
+  func testBatchDeleteActionItemsRoutesToPythonWithEverySelectedID() async throws {
+    URLCapture.setResponse(
+      statusCode: 200,
+      body: Data("{\"status\":\"Ok\",\"deleted_count\":2,\"deleted_ids\":[\"task-1\",\"task-2\"]}".utf8)
+    )
+    let client = await makeTestClient()
+
+    try await client.batchDeleteActionItems(ids: ["task-1", "task-2"])
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "python-test", port: 9001,
+      pathContains: "v1/action-items/batch-delete", method: "POST",
+      label: "batchDeleteActionItems")
+    let body = requests.first?.body.flatMap {
+      try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+    }
+    XCTAssertEqual(body?["ids"] as? [String], ["task-1", "task-2"])
+  }
+
+  func testActionItemIdsScopesSelectionToCurrentCompletionBucket() async throws {
+    URLCapture.setResponse(
+      statusCode: 200,
+      body: Data("{\"ids\":[\"task-1\"],\"completed_scope\":true}".utf8)
+    )
+    let client = await makeTestClient()
+
+    let ids = try await client.getActionItemIds(completed: true)
+
+    XCTAssertEqual(ids, ["task-1"])
+    XCTAssertTrue(URLCapture.capturedRequests.first?.url.query?.contains("completed=true") == true)
+  }
+
+  func testScopedActionItemIdsRejectsLegacyUnscopedResponse() async {
+    URLCapture.setResponse(statusCode: 200, body: Data("{\"ids\":[\"todo-1\",\"done-1\"]}".utf8))
+    let client = await makeTestClient()
+
+    do {
+      _ = try await client.getActionItemIds(completed: false)
+      XCTFail("Expected a legacy unscoped response to fail closed")
+    } catch APIError.invalidResponse {
+      // Expected: the previous backend ignores `completed` and returns every ID.
+    } catch {
+      XCTFail("Expected invalidResponse, got \(error)")
+    }
+  }
+
+  func testUnscopedActionItemIdsAcceptsLegacyResponse() async throws {
+    URLCapture.setResponse(statusCode: 200, body: Data("{\"ids\":[\"task-1\"]}".utf8))
+    let client = await makeTestClient()
+
+    let ids = try await client.getActionItemIds()
+
+    XCTAssertEqual(ids, ["task-1"])
   }
 
   // -- Chat sessions (GET, POST, DELETE → Python, migrated from Rust) --

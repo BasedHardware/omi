@@ -324,13 +324,41 @@ async def test_returns_none_after_all_none_retries_exhausted():
     assert len(sleep_calls) == 2  # slept between retries
 
 
-def test_self_hosted_deepgram_options_never_enable_keepalive():
-    """The retained self-hosted socket must not create a keepalive thread (#5870)."""
-    from utils.stt.streaming import _self_hosted_deepgram_options
+def test_deepgram_options_never_enable_keepalive():
+    """No Deepgram socket may create a keepalive thread (#5870)."""
+    from utils.stt.streaming import DEEPGRAM_CLOUD_ENDPOINT, _deepgram_options
 
-    opts = _self_hosted_deepgram_options('https://dg.example.test')
-    assert 'keepalive' not in opts.options
-    assert opts.url == 'https://dg.example.test'
+    for endpoint in ('https://dg.example.test', DEEPGRAM_CLOUD_ENDPOINT):
+        opts = _deepgram_options(endpoint)
+        assert 'keepalive' not in opts.options
+        assert opts.url == endpoint
+
+
+def test_byok_client_leaves_managed_credential_intact(monkeypatch):
+    """A BYOK request must not repoint the process-wide client at the user's key.
+
+    DeepgramClient.__init__ calls config.set_apikey(), so any options object
+    shared between the managed and BYOK clients carries whichever key was set
+    last. In prod that stranded a canary replica on a stale BYOK key: every
+    live session it served answered HTTP 401 for six hours.
+    """
+    import utils.stt.streaming as streaming
+
+    monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'managed-key')
+    monkeypatch.setattr(streaming, 'deepgram', None)
+    monkeypatch.setattr(streaming, '_managed_deepgram_ready', False)
+    monkeypatch.setattr(streaming, 'get_byok_key', lambda _provider: None)
+
+    managed = streaming._deepgram_client_for_request()
+    assert managed._config.api_key == 'managed-key'
+
+    monkeypatch.setattr(streaming, 'get_byok_key', lambda _provider: 'byok-key')
+    assert streaming._deepgram_client_for_request()._config.api_key == 'byok-key'
+
+    assert managed._config.api_key == 'managed-key'
+    monkeypatch.setattr(streaming, 'get_byok_key', lambda _provider: None)
+    assert streaming._deepgram_client_for_request()._config.api_key == 'managed-key'
 
 
 @pytest.mark.asyncio

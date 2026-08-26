@@ -323,7 +323,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get searchApps => 'Søk apper...';
 
   @override
-  String get myApps => 'Mine apper';
+  String get myApps => 'Laget av meg';
 
   @override
   String get installedApps => 'Installerte apper';
@@ -744,11 +744,6 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'Abonnementet ditt vil kanselleres $date.';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'Abonnementet ditt fornyes $date.';
   }
 
   @override
@@ -2125,16 +2120,16 @@ class AppLocalizationsNo extends AppLocalizations {
   String get editMemory => '✏️ Rediger minne';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Fest som grunnlag';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Løsne fra grunnlag';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Grunnlagsminne';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Alltid i kontekst';
 
   @override
   String get memoryContentHint => 'Jeg liker å spise iskrem...';
@@ -9773,4 +9768,133 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'For gammel til å synkroniseres — Omi kan ikke ta imot den';
+
+  @override
+  String get planSheetChooseYourPlan => 'Velg abonnementet ditt for å låse opp ubegrenset Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Tilgjengelig på Mac, mobil og nett';
+
+  @override
+  String get popularBadge => 'POPULÆR';
+
+  @override
+  String get worksOnDesktop => 'Fungerer på datamaskin';
+
+  @override
+  String get noDesktopAccess => 'Fungerer ikke på datamaskin';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months måneder / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count måneder gratis',
+      one: '1 måned gratis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi er gratis, men gratisversjonen har begrensninger som påvirker opplevelsen din:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 sekunders forsinkelse (ikke sanntid)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Bytt til gratisversjonen';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Få gratis ubegrenset tilgang';
+
+  @override
+  String get shareDataForTraining => 'Del data til trening';
+
+  @override
+  String get yourRequestUnderReview => 'Forespørselen din er til vurdering';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Uppdatering krävs';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Installera den senaste Omi-appen för att fortsätta efter kontomigreringen.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migrering pågår';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Ditt konto migreras. Produktfunktioner pausas tills migreringen är klar.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Ditt konto är under underhåll efter en migreringsåterställning. Nyare data kan vara isolerad.';
+
+  @override
+  String get accountCutoverOpenStore => 'Öppna butik';
+
+  @override
+  String get chatScopeToday => 'I dag';
+
+  @override
+  String get chatScopeThisWeek => 'Denne uken';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Om: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Spør om dette';
+
+  @override
+  String get sendRawAudioToOmi => 'Send rå lyd til Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Slå av for å hindre at rå lyd sendes til Omi. Transkripsjoner og data som skyfunksjoner trenger, kan fortsatt bli sendt til Omi.';
+
+  @override
+  String get findDevice => 'Finn';
+
+  @override
+  String get diagnosticsShareFailed => 'Kunne ikke dele diagnostikken. Prøv igjen.';
+
+  @override
+  String get appDisabledTitle => 'Denne appen er deaktivert og kan ikke installeres.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Endepunktet feilet 72 timer på rad, så leveringene ble stoppet.';
+
+  @override
+  String get appDisabledGeneric => 'Den ble deaktivert av Omi.';
+
+  @override
+  String get appDisabledOwnerHint => 'Fiks endepunktet først — reaktivering sjekker hver konfigurerte URL på nytt.';
+
+  @override
+  String get appReEnable => 'Reaktiver';
+
+  @override
+  String get appReEnableFailedTitle => 'Kunne ikke reaktivere';
+
+  @override
+  String get appReEnableFailedBody => 'Denne appen kunne ikke reaktiveres. Prøv igjen.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Deaktivert $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Siste feil: $error.';
+  }
 }

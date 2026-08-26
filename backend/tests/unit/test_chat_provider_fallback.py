@@ -14,11 +14,18 @@ import utils.retrieval.agentic as agentic  # noqa: E402
 
 
 def test_configured_chat_provider_reads_current_environment(monkeypatch):
+    fallback = {}
+    monkeypatch.setattr(agentic, 'record_fallback', lambda **kwargs: fallback.update(kwargs))
+
     monkeypatch.setenv(agentic.CHAT_PROVIDER_ENV_VAR, ' OPENAI ')
     assert agentic._configured_chat_provider() == 'openai'
 
     monkeypatch.setenv(agentic.CHAT_PROVIDER_ENV_VAR, 'unsupported')
     assert agentic._configured_chat_provider() == 'anthropic'
+    assert fallback['from_mode'] == 'unsupported'
+    assert fallback['to_mode'] == 'anthropic'
+    assert fallback['reason'] == 'config_incomplete'
+    assert fallback['outcome'] == 'recovered'
 
 
 @pytest.mark.parametrize(
@@ -69,7 +76,7 @@ async def test_openai_compatible_modes_use_current_supervised_runner(
     monkeypatch.setattr(agentic, 'CORE_TOOLS', (fake_tool,))
     monkeypatch.setattr(agentic, 'fit_within_budget', lambda value, *_args: (value, False))
     monkeypatch.setattr(agentic, '_configured_chat_provider', lambda: provider)
-    monkeypatch.setattr(agentic, 'should_route_features_through_gateway', lambda: gateway_enabled)
+    monkeypatch.setattr(agentic, 'should_route_chat_agent_through_gateway', lambda: gateway_enabled)
     monkeypatch.setattr(agentic, 'get_byok_key', lambda _provider: None)
     monkeypatch.setattr(agentic, 'run_blocking', fake_run_blocking)
     monkeypatch.setattr(agentic, 'get_mobile_city', fake_mobile_city)
@@ -87,7 +94,7 @@ async def test_openai_compatible_modes_use_current_supervised_runner(
         )
     ]
 
-    assert chunks == [None]
+    assert chunks == [f'think: {agentic.AGENT_STREAM_SETUP_PROGRESS}', None]
     assert invoked['model_feature'] == expected_model_feature
     assert invoked['system_prompt'].startswith('SYSTEM')
     assert invoked['messages'][-1]['content'].startswith('NOW\n\n')

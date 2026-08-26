@@ -1,5 +1,9 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import pytest
+
+import database.memories as memories_db
 from config.memory_rollout import MemoryRolloutMode
 from models.memory_search_gateway import SearchMode
 from models.product_memory import MemoryTier
@@ -25,6 +29,14 @@ from utils.memory.default_read_rollout import MemoryReadDecision, read_default_r
 _CHAT_QUOTE_TEXT = 'User likes safe chat memory reads.'
 
 
+@pytest.fixture(autouse=True)
+def _empty_historical_store(monkeypatch):
+    """Canonical chat fixtures declare no historical rows unless a test opts in."""
+    monkeypatch.setattr(memories_db, 'get_memories', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'list_memory_updated_or_created_index', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'get_memories_by_ids', lambda *args, **kwargs: [])
+
+
 def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captured_at=None, content=None, **overrides):
     return memory_item(
         memory_id,
@@ -41,18 +53,16 @@ def _enabled_rollout_doc(uid='u1'):
     return enabled_rollout_doc(uid, grant_consumer='omi_chat')
 
 
-def test_chat_memory_tool_wires_memory_adapter_before_legacy_vector_search():
+def test_chat_memory_tool_uses_universal_memory_service_without_legacy_vector_search():
     memory_tools_py = Path(__file__).resolve().parents[2] / 'utils' / 'retrieval' / 'tools' / 'memory_tools.py'
     contents = memory_tools_py.read_text(encoding='utf-8')
-    rollout_call = 'search_memory_default_chat_memories_vector_decision_text('
     legacy_call = 'vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)'
-    assert rollout_call in contents
-    assert legacy_call in contents
-    assert contents.index(rollout_call) < contents.index(legacy_call)
-    assert 'if default_memories is not None:' not in contents
-    # The legacy-fallback decision is centralized in chat_legacy_read_authorized (#10736),
-    # which allows USE_LEGACY_SAFE plus the un-enrolled missing_rollout_state cohort.
-    assert 'if not chat_legacy_read_authorized(default_memories):' in contents
+    assert 'MemoryService(db_client=firestore_db).search(' in contents
+    assert 'limit=limit' in contents
+    assert 'candidate_limit=' in contents
+    assert legacy_call not in contents
+    assert 'chat_legacy_read_authorized' not in contents
+    assert 'read_default_read_rollout' not in contents
 
 
 def test_chat_rollout_reader_supports_omi_chat_grant_without_reading_memory_items():
@@ -67,18 +77,18 @@ def test_chat_rollout_reader_supports_omi_chat_grant_without_reading_memory_item
     assert decision.consumer == 'omi_chat'
 
 
-def test_chat_rollout_reader_fails_closed_without_memory_item_reads_for_missing_malformed_or_grantless_state():
+def test_chat_memory_control_defaults_missing_state_and_fails_closed_for_malformed_or_denied_grants():
     missing = _FirestoreFake()
-    assert read_default_read_rollout(uid='u1', db_client=missing, consumer='omi_chat').memory_default_enabled is False
+    assert read_default_read_rollout(uid='u1', db_client=missing, consumer='omi_chat').memory_default_enabled is True
     assert missing.collection_paths == []
-    malformed = _FirestoreFake(
-        {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}}
-    )
+    malformed = _FirestoreFake({'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'grants': []}})
     malformed_decision = read_default_read_rollout(uid='u1', db_client=malformed, consumer='omi_chat')
     assert malformed_decision.memory_default_enabled is False
     assert malformed_decision.app_has_default_memory_grant is False
     assert malformed.collection_paths == []
-    no_grant = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'omi_chat': {}}}})
+    no_grant = _FirestoreFake(
+        {'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'omi_chat': {'default_memory': False}}}}
+    )
     no_grant_decision = read_default_read_rollout(uid='u1', db_client=no_grant, consumer='omi_chat')
     assert no_grant_decision.rollout_capabilities.memory_reads_enabled is True
     assert no_grant_decision.app_has_default_memory_grant is False
@@ -86,7 +96,7 @@ def test_chat_rollout_reader_fails_closed_without_memory_item_reads_for_missing_
     assert no_grant.collection_paths == []
 
 
-def test_chat_default_memory_adapter_uses_product_search_and_excludes_stale_short_term_and_archive():
+def test_chat_default_memory_adapter_keeps_expired_unadjudicated_short_term_and_excludes_archive():
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -106,10 +116,10 @@ def test_chat_default_memory_adapter_uses_product_search_and_excludes_stale_shor
     assert db_client.document_get_paths == ['users/u1/memory_control/state']
     assert db_client.collection_paths == ['users/u1/memory_items']
     assert result is not None
-    assert result.startswith("Found 2 memory default memories matching 'coffee':")
+    assert result.startswith("Found 3 memory default memories matching 'coffee':")
     assert 'content_quoted="coffee fresh short term"' in result
     assert 'content_quoted="coffee long term"' in result
-    assert 'coffee stale short term' not in result
+    assert 'content_quoted="coffee stale short term"' in result
     assert 'coffee archive memory' not in result
     assert 'archive_default_visible=False' in result
 
@@ -149,7 +159,7 @@ def test_chat_default_memory_adapter_collapses_short_term_alias_to_long_term_sur
     assert 'coffee Project Beacon duplicate alias' not in result
 
 
-def test_chat_default_memory_adapter_returns_none_when_rollout_or_grant_disabled_without_firestore_read():
+def test_chat_default_memory_adapter_ignores_retired_mode_and_honors_explicit_grant_denial():
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     disabled_db = _FirestoreFake(
@@ -160,19 +170,20 @@ def test_chat_default_memory_adapter_returns_none_when_rollout_or_grant_disabled
     )
     grantless_db = _FirestoreFake(
         {
-            'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'omi_chat': {}}},
+            'users/u1/memory_control/state': _enabled_rollout_doc()
+            | {'grants': {'omi_chat': {'default_memory': False}}},
             f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term),
         }
     )
     assert (
         search_memory_default_chat_memories_text(uid='u1', query='coffee', limit=10, db_client=disabled_db, now=now)
-        is None
+        is not None
     )
     assert (
         search_memory_default_chat_memories_text(uid='u1', query='coffee', limit=10, db_client=grantless_db, now=now)
         is None
     )
-    assert disabled_db.collection_paths == []
+    assert disabled_db.collection_paths == ['users/u1/memory_items']
     assert grantless_db.collection_paths == []
 
 
@@ -224,11 +235,12 @@ def test_chat_vector_adapter_uses_hydrated_vector_search_and_preserves_ranking_w
         'users/u1/memory_items/fresh-short-term',
     ]
     assert result is not None
-    assert result.startswith("Found 2 memory vector memories matching 'coffee':")
+    assert result.startswith("Found 3 memory vector memories matching 'coffee':")
+    assert result.index('coffee stale short term') < result.index('coffee long term')
     assert result.index('coffee long term') < result.index('coffee fresh short term')
+    assert 'content_quoted="coffee stale short term" (relevance: 0.99, tier: short_term' in result
     assert 'content_quoted="coffee long term" (relevance: 0.92, tier: long_term' in result
     assert 'content_quoted="coffee fresh short term" (relevance: 0.80, tier: short_term' in result
-    assert 'coffee stale short term' not in result
     assert 'coffee archive memory' not in result
     assert 'archive_default_visible=False' in result
 
@@ -296,7 +308,7 @@ def test_chat_vector_adapter_quotes_untrusted_content_with_relevance_and_source_
     assert len(quoted) <= 290
 
 
-def test_chat_vector_adapter_returns_none_without_rollout_or_grant_before_vector_or_memory_item_reads():
+def test_chat_vector_adapter_ignores_retired_mode_and_honors_explicit_grant_denial():
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     disabled_db = _FirestoreFake(
@@ -307,7 +319,8 @@ def test_chat_vector_adapter_returns_none_without_rollout_or_grant_before_vector
     )
     grantless_db = _FirestoreFake(
         {
-            'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'omi_chat': {}}},
+            'users/u1/memory_control/state': _enabled_rollout_doc()
+            | {'grants': {'omi_chat': {'default_memory': False}}},
             f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term),
         }
     )
@@ -321,7 +334,7 @@ def test_chat_vector_adapter_returns_none_without_rollout_or_grant_before_vector
         search_memory_default_chat_memories_vector_text(
             uid='u1', query='coffee', limit=10, db_client=disabled_db, vector_query=fake_vector_query
         )
-        is None
+        is not None
     )
     assert (
         search_memory_default_chat_memories_vector_text(
@@ -329,12 +342,12 @@ def test_chat_vector_adapter_returns_none_without_rollout_or_grant_before_vector
         )
         is None
     )
-    assert vector_calls == []
+    assert len(vector_calls) == 1
     assert disabled_db.collection_paths == []
     assert grantless_db.collection_paths == []
 
 
-def test_chat_vector_decision_adapter_classifies_enabled_denied_and_legacy_safe_without_unsafe_reads():
+def test_chat_vector_decision_adapter_classifies_enabled_and_explicitly_denied_without_unsafe_reads():
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     enabled_docs = {
@@ -342,7 +355,7 @@ def test_chat_vector_decision_adapter_classifies_enabled_denied_and_legacy_safe_
         f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term),
     }
     disabled_docs = {
-        'users/u1/memory_control/state': _enabled_rollout_doc() | {'mode': MemoryRolloutMode.off.value},
+        'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'omi_chat': {'default_memory': False}}},
         f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term),
     }
     vector_calls = []
@@ -367,24 +380,10 @@ def test_chat_vector_decision_adapter_classifies_enabled_denied_and_legacy_safe_
     )
     assert denied.read_decision == MemoryReadDecision.DENY_MEMORY
     assert denied.should_use_legacy_fallback is False
-    assert denied.fallback_reason == 'memory_reads_disabled'
+    assert denied.fallback_reason == 'missing_chat_default_memory_grant'
     assert denied.text == 'No memories available for this request.'
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
     assert denied_db.collection_paths == []
-    legacy_safe_db = _FirestoreFake(disabled_docs)
-    legacy_safe = search_memory_default_chat_memories_vector_decision_text(
-        uid='u1',
-        query='coffee',
-        limit=10,
-        db_client=legacy_safe_db,
-        vector_query=fake_vector_query,
-        allow_legacy_safe_fallback=True,
-    )
-    assert legacy_safe.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
-    assert legacy_safe.should_use_legacy_fallback is True
-    assert legacy_safe.text is None
-    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
-    assert legacy_safe_db.collection_paths == []
 
 
 def test_chat_get_memories_memory_list_decision_matches_search_denied_empty_and_boundary_semantics():

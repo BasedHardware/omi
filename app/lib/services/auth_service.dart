@@ -84,6 +84,7 @@ class AuthService {
 
   AuthService._internal()
       : _tokenGateway = _FirebaseAuthTokenGateway(),
+        _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
         _refreshDelay = _defaultRefreshDelay,
         _recordTelemetry = _recordProductionTelemetry,
         _telemetryContextProvider = _productionTelemetryContext;
@@ -92,14 +93,28 @@ class AuthService {
   AuthService.forTesting({
     required AuthTokenGateway tokenGateway,
     AuthRefreshDelay? refreshDelay,
+    Duration? refreshAttemptTimeout,
     AuthTelemetryRecorder? recordTelemetry,
     AuthTelemetryContextProvider? telemetryContextProvider,
   })  : _tokenGateway = tokenGateway,
+        _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
         _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
         _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
         _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
 
   static const int _maxRefreshAttempts = 3;
+
+  /// Per-attempt ceiling on the Firebase forced token refresh.
+  ///
+  /// `forceRefresh()` can hang indefinitely rather than fail: measured on
+  /// iPhone 17 Pro / iOS 27.0 against a Firebase Auth emulator on a non-loopback
+  /// host, it never returned at all. Because `shared.dart` refreshes on the way
+  /// into *every* authenticated request, an unbounded stall here silently freezes
+  /// all backend traffic app-wide — no error, no timeout, nothing to report.
+  ///
+  /// A timed-out attempt is reported as a transient failure, which the retry loop
+  /// below and every existing caller already handle.
+  static const Duration _defaultRefreshAttemptTimeout = Duration(seconds: 8);
   static const List<Duration> _refreshRetryDelays = [Duration(milliseconds: 200), Duration(milliseconds: 500)];
   static const Set<String> _terminalTokenErrorCodes = {
     'invalid-user-token',
@@ -111,6 +126,7 @@ class AuthService {
   static Future<void> _defaultRefreshDelay(Duration duration) => Future<void>.delayed(duration);
 
   final AuthTokenGateway _tokenGateway;
+  final Duration _refreshAttemptTimeout;
   final AuthRefreshDelay _refreshDelay;
   final AuthTelemetryRecorder _recordTelemetry;
   final AuthTelemetryContextProvider _telemetryContextProvider;
@@ -366,7 +382,7 @@ class AuthService {
 
   Future<AuthTokenResult> _refreshIdTokenOnce(int generation, String expectedUid) async {
     try {
-      final refreshed = await _tokenGateway.forceRefresh();
+      final refreshed = await _tokenGateway.forceRefresh().timeout(_refreshAttemptTimeout);
       if (generation != _sessionGeneration || _tokenGateway.currentUser?.uid != expectedUid) {
         return const AuthTokenMissingUser();
       }
@@ -395,6 +411,12 @@ class AuthService {
       }
       _sessionExpired = false;
       return AuthTokenSuccess(token: token, expirationTime: refreshed?.expirationTime);
+    } on TimeoutException {
+      if (generation != _sessionGeneration) return const AuthTokenMissingUser();
+      Logger.debug('refreshIdToken: forceRefresh timed out after $_refreshAttemptTimeout');
+      // Distinct class so a stalled refresh is distinguishable in telemetry from
+      // one that actually failed — they have very different causes.
+      return const AuthTokenTransientFailure(failureClass: 'refresh_timeout');
     } on FirebaseAuthException catch (e) {
       if (generation != _sessionGeneration) return const AuthTokenMissingUser();
       Logger.debug('refreshIdToken: FirebaseAuthException: ${e.code}');
@@ -460,11 +482,12 @@ class AuthService {
       final state = _generateState();
       final codeVerifier = _generateCodeVerifier();
       final codeChallenge = _codeChallengeForVerifier(codeVerifier);
-      const redirectUri = 'omi://auth/callback';
+      final redirectUri = Env.authRedirectUri;
+      final callbackScheme = Env.authCallbackScheme;
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
         queryParameters: {
           'provider': provider,
           'redirect_uri': redirectUri,
@@ -485,7 +508,7 @@ class AuthService {
       linkSubscription = appLinks.uriLinkStream.listen(
         (Uri uri) {
           Logger.debug('Received callback URI via app_links: $uri');
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
             if (!completer.isCompleted) {
               linkSubscription.cancel();
               completer.complete(uri.toString());
@@ -507,7 +530,7 @@ class AuthService {
           final urlString = call.arguments as String;
           Logger.debug('Received callback URI via method channel: $urlString');
           final uri = Uri.parse(urlString);
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
             if (!completer.isCompleted) {
               linkSubscription.cancel();
               _deepLinkChannel.setMethodCallHandler(null);
@@ -578,7 +601,7 @@ class AuthService {
       final useCustomToken = Env.useAuthCustomToken;
 
       final response = await http.post(
-        Uri.parse('${Env.apiBaseUrl}v1/auth/token'),
+        Uri.parse('${Env.authApiBaseUrl}v1/auth/token'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
           'grant_type': 'authorization_code',
@@ -815,11 +838,12 @@ class AuthService {
       final state = _generateState();
       final codeVerifier = _generateCodeVerifier();
       final codeChallenge = _codeChallengeForVerifier(codeVerifier);
-      const redirectUri = 'omi://auth/callback';
+      final redirectUri = Env.authRedirectUri;
+      final callbackScheme = Env.authCallbackScheme;
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
         queryParameters: {
           'provider': provider,
           'redirect_uri': redirectUri,
@@ -845,7 +869,7 @@ class AuthService {
       linkSubscription = appLinks.uriLinkStream.listen(
         (Uri uri) {
           Logger.debug('Received callback URI: $uri');
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
             linkSubscription.cancel();
             completer.complete(uri.toString());
           }

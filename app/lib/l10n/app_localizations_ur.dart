@@ -322,7 +322,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get searchApps => 'ایپلیکیشنز تلاش کریں...';
 
   @override
-  String get myApps => 'میری ایپلیکیشنز';
+  String get myApps => 'میری بنائی ہوئی';
 
   @override
   String get installedApps => 'انسٹال شدہ ایپلیکیشنز';
@@ -744,11 +744,6 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String cancelAtPeriodEnd(String date) {
     return 'آپ کا منصوبہ $date پر منسوخ ہو جائے گا۔';
-  }
-
-  @override
-  String renewsOn(String date) {
-    return 'آپ کا منصوبہ $date پر تجدید ہو گا۔';
   }
 
   @override
@@ -2126,16 +2121,16 @@ class AppLocalizationsUr extends AppLocalizations {
   String get editMemory => '✏️ یاد میں ترمیم کریں';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'بنیاد کے طور پر پن کریں';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'بنیاد سے ان پن کریں';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'بنیادی یادداشت';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'ہمیشہ سیاق میں';
 
   @override
   String get memoryContentHint => 'مجھے آئس کریم کھانا پسند ہے...';
@@ -9788,4 +9783,132 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'ہم آہنگ کرنے کے لیے بہت پرانا — Omi اسے قبول نہیں کر سکتا';
+
+  @override
+  String get planSheetChooseYourPlan => 'لامحدود Omi کھولنے کے لیے اپنا پلان منتخب کریں۔';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac، موبائل اور ویب پر دستیاب';
+
+  @override
+  String get popularBadge => 'مقبول';
+
+  @override
+  String get worksOnDesktop => 'ڈیسک ٹاپ پر کام کرتا ہے';
+
+  @override
+  String get noDesktopAccess => 'ڈیسک ٹاپ پر کام نہیں کرتا';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months ماہ / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ماہ مفت',
+      one: '1 ماہ مفت',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi مفت ہے، لیکن مفت ورژن میں ایسی حدود ہیں جو آپ کے تجربے پر اثر ڈالتی ہیں:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 سیکنڈ کی تاخیر (ریئل ٹائم نہیں)';
+
+  @override
+  String get downgradeToFreemiumAction => 'مفت ورژن پر جائیں';
+
+  @override
+  String get getFreeUnlimitedAccess => 'مفت لامحدود رسائی حاصل کریں';
+
+  @override
+  String get shareDataForTraining => 'تربیت کے لیے ڈیٹا شیئر کریں';
+
+  @override
+  String get yourRequestUnderReview => 'آپ کی درخواست زیرِ غور ہے';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'التحديث مطلوب';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => 'ثبّت أحدث تطبيق Omi للمتابعة بعد ترحيل الحساب.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'الترحيل قيد التقدم';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'حسابك قيد الترحيل. ميزات المنتج متوقفة مؤقتًا حتى انتهاء الترحيل.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'حسابك قيد الصيانة بعد التراجع عن الترحيل. قد تُعزل بعض البيانات الأحدث.';
+
+  @override
+  String get accountCutoverOpenStore => 'فتح المتجر';
+
+  @override
+  String get chatScopeToday => 'آج';
+
+  @override
+  String get chatScopeThisWeek => 'اس ہفتے';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title کے بارے میں';
+  }
+
+  @override
+  String get askAboutThisConversation => 'اس کے بارے میں پوچھیں';
+
+  @override
+  String get sendRawAudioToOmi => 'خام آڈیو Omi کو بھیجیں';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'خام آڈیو کو Omi بھیجے جانے سے روکنے کے لیے اسے بند کریں۔ ٹرانسکرپٹس اور کلاؤڈ فیچرز کے لیے درکار ڈیٹا اب بھی Omi کو بھیجا جا سکتا ہے۔';
+
+  @override
+  String get findDevice => 'تلاش کریں';
+
+  @override
+  String get diagnosticsShareFailed => 'تشخیصی معلومات شیئر نہیں کی جا سکیں۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String get appDisabledTitle => 'یہ ایپ غیر فعال ہے اور اسے انسٹال نہیں کیا جا سکتا۔';
+
+  @override
+  String get appDisabledWebhookFailures => 'اس کا اینڈ پوائنٹ مسلسل 72 گھنٹے ناکام رہا، اس لیے ترسیل روک دی گئی۔';
+
+  @override
+  String get appDisabledGeneric => 'اسے Omi نے غیر فعال کیا تھا۔';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'پہلے اینڈ پوائنٹ درست کریں — دوبارہ فعال کرنے پر ہر ترتیب شدہ URL دوبارہ جانچا جاتا ہے۔';
+
+  @override
+  String get appReEnable => 'دوبارہ فعال کریں';
+
+  @override
+  String get appReEnableFailedTitle => 'دوبارہ فعال نہیں ہو سکا';
+
+  @override
+  String get appReEnableFailedBody => 'اس ایپ کو دوبارہ فعال نہیں کیا جا سکا۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date کو غیر فعال کیا گیا۔';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'آخری خرابی: $error';
+  }
 }

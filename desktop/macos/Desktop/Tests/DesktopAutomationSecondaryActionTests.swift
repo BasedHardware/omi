@@ -222,6 +222,25 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertTrue(body.contains("cloud_sync"))
   }
 
+  func testNotificationBridgeRetiresActivePeriodContract() throws {
+    let source = try bridgeSource()
+    for retiredSurface in [
+      "set_notification_active_period",
+      "notification_active_period_start_minute",
+      "notification_active_period_end_minute",
+      "active_period_start",
+      "active_period_end",
+    ] {
+      XCTAssertFalse(source.contains(retiredSurface), "retired notification surface remains: \(retiredSurface)")
+    }
+
+    let snapshotBody = try actionBody(named: "settings_notifications_snapshot", in: source)
+    for key in ["enabled", "frequency", "frequency_label", "has_permission", "banners_disabled"] {
+      XCTAssertTrue(snapshotBody.contains("\"\(key)\""))
+    }
+    XCTAssertTrue(snapshotBody.contains("\"schema\""))
+  }
+
   func testSubscriptionSnapshotReadsBillingAPI() throws {
     let source = try bridgeSource()
     let body = try actionBody(named: "subscription_snapshot", in: source)
@@ -427,11 +446,24 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
   }
 
   private func bridgeSource() throws -> String {
-    let url = URL(fileURLWithPath: #filePath)
+    // Every DesktopAutomationBridge*.swift, not just the base file. The registry is
+    // split across extensions to satisfy a line-count ratchet, so reading only the
+    // base file makes this contract fail the moment an action is relocated -- which
+    // is what happened when the notification actions moved to
+    // DesktopAutomationBridge+Notifications.swift. Globbing keeps the contract about
+    // "is this action registered" rather than "is it registered in one exact file".
+    let sourcesDir = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/DesktopAutomationBridge.swift")
-    return try String(contentsOf: url, encoding: .utf8)
+      .appendingPathComponent("Sources")
+    let names = try FileManager.default.contentsOfDirectory(atPath: sourcesDir.path)
+      .filter { $0.hasPrefix("DesktopAutomationBridge") && $0.hasSuffix(".swift") }
+      .sorted()
+    XCTAssertFalse(names.isEmpty, "expected at least one DesktopAutomationBridge source")
+    return
+      try names
+      .map { try String(contentsOf: sourcesDir.appendingPathComponent($0), encoding: .utf8) }
+      .joined(separator: "\n")
   }
 
   private func actionBody(named action: String, in source: String) throws -> String {
