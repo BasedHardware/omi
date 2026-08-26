@@ -66,6 +66,8 @@ describe('parseRewindNaturalSearch', () => {
   it('removes temporal possessives from the normalized query', () => {
     expect(parseRewindNaturalSearch("today's meetings", NOW).query).toBe('meetings')
     expect(parseRewindNaturalSearch('yesterday’s invoice', NOW).query).toBe('invoice')
+    expect(parseRewindNaturalSearch("this morning's meeting", NOW).query).toBe('meeting')
+    expect(parseRewindNaturalSearch('this afternoon’s notes', NOW).query).toBe('notes')
   })
 
   it('keeps meaningful words that resemble question boilerplate', () => {

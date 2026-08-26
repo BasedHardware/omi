@@ -88,7 +88,7 @@ const TIME_PHRASES: Array<{ pattern: RegExp; range: (now: Date) => [Date, Date] 
 ]
 
 const TIME_WORDS =
-  /\b(?:yesterday\s+(?:morning|afternoon|evening)|yesterday|today)(?:['’]s)?\b|\bthis\s+(?:morning|afternoon|evening)\b/gi
+  /\b(?:yesterday\s+(?:morning|afternoon|evening)|yesterday|today|this\s+(?:morning|afternoon|evening))(?:['’]s)?\b/gi
 const QUESTION_PREFIX =
   /^\s*(?:what(?:'s|’s)?\s+on\s+my\s+screen|what\s+(?:was|were)\s+on\s+my\s+screen|what\s+(?:did|do)\s+i\s+do|what\s+(?:was|were)\s+i\s+(?:doing|working\s+on)|what\s+(?:happened|happens))\b\s*/i
 
