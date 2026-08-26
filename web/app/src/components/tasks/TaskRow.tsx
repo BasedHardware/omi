@@ -355,6 +355,7 @@ export function TaskRow({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.1 }}
+            onDoubleClick={(e) => e.stopPropagation()}
             className="flex items-center gap-0.5 flex-shrink-0"
           >
             <button
