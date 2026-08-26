@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.221",
+      "date": "2026-08-26",
+      "changes": [
+        "On-device transcription now ends a window when you stop talking instead of on a fixed 10-second boundary, so what you say is transcribed about a second later"
+      ]
+    },
+    {
       "version": "0.12.220",
       "date": "2026-08-26",
       "changes": [
