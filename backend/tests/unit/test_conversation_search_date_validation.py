@@ -69,6 +69,11 @@ _stubs = [
     *sorted(package_submodule_stubs('utils.conversations', include_package=False)),
     'utils.executors',
     'utils.product_telemetry',
+    # routers.conversations imports emit_posthog_event from here at module scope.
+    # utils is an _AutoMockModule package in this file, so the real submodule is
+    # not importable and the name has to be stubbed like the rest -- without it
+    # collection fails with ModuleNotFoundError before any test runs.
+    'utils.integration_telemetry',
     'utils.llm.conversation_processing',
     'utils.speaker_identification',
     'utils.app_integrations',
