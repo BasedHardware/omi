@@ -64,7 +64,7 @@ enum WindowCaptureStreamPolicy {
 ///
 /// Concurrency contract — read this before editing:
 /// - Every mutation of `stream` / `sink` / `streamWindowID` / `streamConfigSize` runs
-///   inside `withStreamLock`. Actor isolation alone is NOT enough: all of these
+///   while holding the stream lock. Actor isolation alone is NOT enough: all of these
 ///   operations `await` non-Sendable ScreenCaptureKit calls, and an actor is reentrant
 ///   across `await`, so a second request would otherwise interleave with a half-built
 ///   stream (two live streams = a leak and a second TCC authorization).
@@ -95,7 +95,7 @@ actor WindowCaptureStreamEngine {
   /// 2 fps ceiling: the capture tick polls at 1 Hz and SCK only pushes on content
   /// change anyway, so this bounds cost without starving a dwell double-capture.
   private static let minimumFrameInterval = CMTime(value: 1, timescale: 2)
-  /// Poll interval for `withStreamLock`. Configuration ops finish in tens of ms and
+  /// Poll interval for `acquireStreamLock`. Configuration ops finish in tens of ms and
   /// requesters arrive at ~1 Hz, so this is a handful of wakeups at worst.
   private static let lockPollNs: UInt64 = 20_000_000
   /// Hard bound on waiting for the stream lock. Without it, a `startCapture()` that
@@ -182,7 +182,7 @@ actor WindowCaptureStreamEngine {
   /// stream, do nothing, and let the stream be born *after* the machine locked —
   /// leaving the OS screen-recording indicator lit over a locked screen.
   func suspend(reason: String) async {
-    _ = await withStreamLock { () async -> Void in
+    await withStreamLock {
       guard self.stream != nil else { return }
       log("WindowCaptureStreamEngine: suspending capture stream (\(reason))")
       await self.teardownStreamLocked(reason: reason)
@@ -195,21 +195,35 @@ actor WindowCaptureStreamEngine {
   /// `while` loop observing `false` and the assignment of `true` there is NO suspension
   /// point, so on the actor's serial executor the test-and-set is atomic. Do not
   /// introduce an `await` between them.
-  /// Returns `nil` if the lock could not be acquired within `lockAcquireTimeoutNs`.
-  private func withStreamLock<T>(_ body: () async -> T) async -> T? {
+  /// Returns `false` if the lock could not be acquired within `lockAcquireTimeoutNs`.
+  private func acquireStreamLock() async -> Bool {
     let deadline = DispatchTime.now().uptimeNanoseconds &+ Self.lockAcquireTimeoutNs
     while isMutatingStream {
       guard DispatchTime.now().uptimeNanoseconds < deadline else {
         log(
           "WindowCaptureStreamEngine: stream lock held past \(Self.lockAcquireTimeoutNs / 1_000_000_000)s — abandoning this request"
         )
-        return nil
+        return false
       }
       try? await Task.sleep(nanoseconds: Self.lockPollNs)
     }
     isMutatingStream = true
-    defer { isMutatingStream = false }
-    return await body()
+    return true
+  }
+
+  private func releaseStreamLock() {
+    isMutatingStream = false
+  }
+
+  /// Run `body` under the stream lock. Returns `false` if the lock timed out and `body`
+  /// never ran. Holders that need to return a non-Sendable value take the lock directly
+  /// with `acquireStreamLock` instead — see `configureStream`.
+  @discardableResult
+  private func withStreamLock(_ body: () async -> Void) async -> Bool {
+    guard await acquireStreamLock() else { return false }
+    defer { releaseStreamLock() }
+    await body()
+    return true
   }
 
   // MARK: - Stream lifecycle
@@ -221,66 +235,70 @@ actor WindowCaptureStreamEngine {
   }
 
   private func configureStream(window: SCWindow, configSize: CGSize) async -> ConfigureOutcome {
-    let outcome = await withStreamLock { () async -> ConfigureOutcome in
-      // A stream the OS already stopped must not be reused; classify its stop error so a
-      // consent decline surfaces without paying another startCapture authorization.
-      if let stopError = self.sink?.takeStopError() {
-        await self.teardownStreamLocked(
-          reason: "stream stopped by OS: \(stopError.localizedDescription)")
-        if ScreenCaptureService.classifyCaptureError(stopError) == .permissionDeclined {
-          return .declined
-        }
-      }
+    // Takes the lock directly rather than through `withStreamLock`: this is the only
+    // holder that returns a non-Sendable value (`CaptureFrameSink`), and handing one
+    // out of a closure makes it cross an isolation boundary the pinned CI toolchain
+    // rejects. `defer` keeps the release leak-proof across every exit below.
+    guard await acquireStreamLock() else { return .failed }
+    defer { releaseStreamLock() }
 
-      do {
-        switch WindowCaptureStreamPolicy.action(
-          runningWindowID: self.streamWindowID,
-          runningConfigSize: self.streamConfigSize,
-          requestedWindowID: window.windowID,
-          requestedConfigSize: configSize)
-        {
-        case .startStream:
-          try await self.startStreamLocked(window: window, configSize: configSize)
-        case .updateFilter:
-          guard let stream = self.stream, let sink = self.sink else { return .failed }
-          // Privacy: beginRetarget stops the sink accepting ANY frame, and the stream
-          // keeps producing old-window frames until the filter change lands. Tagging
-          // them with the new window ID (what an expect(windowID:) up front would do)
-          // is exactly how a caller ends up holding a screenshot of the window the user
-          // just switched away from — possibly a Rewind-excluded one.
-          sink.beginRetarget()
-          try await stream.updateContentFilter(
-            SCContentFilter(desktopIndependentWindow: window))
-          if self.streamConfigSize != configSize {
-            try await stream.updateConfiguration(self.makeConfiguration(size: configSize))
-          }
-          sink.endRetarget(windowID: window.windowID)
-          self.streamWindowID = window.windowID
-          self.streamConfigSize = configSize
-        case .updateConfiguration:
-          guard let stream = self.stream, let sink = self.sink else { return .failed }
-          // Same window, new size: the cached frame has the wrong dimensions and
-          // in-flight frames still carry the old ones, so drop both.
-          sink.beginRetarget()
-          try await stream.updateConfiguration(self.makeConfiguration(size: configSize))
-          sink.endRetarget(windowID: window.windowID)
-          self.streamConfigSize = configSize
-        case .reuseStream:
-          break
-        }
-      } catch {
-        log(
-          "WindowCaptureStreamEngine: stream (re)configuration failed: \(error.localizedDescription)"
-        )
-        await self.teardownStreamLocked(reason: "configuration error")
-        return ScreenCaptureService.classifyCaptureError(error) == .permissionDeclined
-          ? .declined : .failed
+    // A stream the OS already stopped must not be reused; classify its stop error so a
+    // consent decline surfaces without paying another startCapture authorization.
+    if let stopError = self.sink?.takeStopError() {
+      await self.teardownStreamLocked(
+        reason: "stream stopped by OS: \(stopError.localizedDescription)")
+      if ScreenCaptureService.classifyCaptureError(stopError) == .permissionDeclined {
+        return .declined
       }
-
-      guard let sink = self.sink else { return .failed }
-      return .ready(sink)
     }
-    return outcome ?? .failed
+
+    do {
+      switch WindowCaptureStreamPolicy.action(
+        runningWindowID: self.streamWindowID,
+        runningConfigSize: self.streamConfigSize,
+        requestedWindowID: window.windowID,
+        requestedConfigSize: configSize)
+      {
+      case .startStream:
+        try await self.startStreamLocked(window: window, configSize: configSize)
+      case .updateFilter:
+        guard let stream = self.stream, let sink = self.sink else { return .failed }
+        // Privacy: beginRetarget stops the sink accepting ANY frame, and the stream
+        // keeps producing old-window frames until the filter change lands. Tagging
+        // them with the new window ID (what an expect(windowID:) up front would do)
+        // is exactly how a caller ends up holding a screenshot of the window the user
+        // just switched away from — possibly a Rewind-excluded one.
+        sink.beginRetarget()
+        try await stream.updateContentFilter(
+          SCContentFilter(desktopIndependentWindow: window))
+        if self.streamConfigSize != configSize {
+          try await stream.updateConfiguration(self.makeConfiguration(size: configSize))
+        }
+        sink.endRetarget(windowID: window.windowID)
+        self.streamWindowID = window.windowID
+        self.streamConfigSize = configSize
+      case .updateConfiguration:
+        guard let stream = self.stream, let sink = self.sink else { return .failed }
+        // Same window, new size: the cached frame has the wrong dimensions and
+        // in-flight frames still carry the old ones, so drop both.
+        sink.beginRetarget()
+        try await stream.updateConfiguration(self.makeConfiguration(size: configSize))
+        sink.endRetarget(windowID: window.windowID)
+        self.streamConfigSize = configSize
+      case .reuseStream:
+        break
+      }
+    } catch {
+      log(
+        "WindowCaptureStreamEngine: stream (re)configuration failed: \(error.localizedDescription)"
+      )
+      await self.teardownStreamLocked(reason: "configuration error")
+      return ScreenCaptureService.classifyCaptureError(error) == .permissionDeclined
+        ? .declined : .failed
+    }
+
+    guard let sink = self.sink else { return .failed }
+    return .ready(sink)
   }
 
   private func startStreamLocked(window: SCWindow, configSize: CGSize) async throws {
@@ -335,7 +353,7 @@ actor WindowCaptureStreamEngine {
   /// Without the identity check, a slow failure path could tear down a healthy stream
   /// that was rebuilt while it was suspended.
   private func teardownIfCurrent(sink candidate: CaptureFrameSink, reason: String) async {
-    _ = await withStreamLock { () async -> Void in
+    await withStreamLock {
       guard self.sink === candidate else { return }
       await self.teardownStreamLocked(reason: reason)
     }
@@ -365,7 +383,7 @@ actor WindowCaptureStreamEngine {
   }
 
   private func suspendIfIdle() async {
-    _ = await withStreamLock { () async -> Void in
+    await withStreamLock {
       guard self.stream != nil else { return }
       guard
         WindowCaptureStreamPolicy.shouldSuspendForIdle(
@@ -434,8 +452,16 @@ final class CaptureFrameSink: NSObject, SCStreamOutput, SCStreamDelegate, @unche
   var hasParkedWaiter: Bool { lock.withLock { waiter != nil } }
   private var stopError: Error?
 
-  /// Shared CIContext for CVPixelBuffer → CGImage. Cheap at ≤2 fps.
-  private static let ciContext = CIContext(options: [.cacheIntermediates: false])
+  /// CIContext for CVPixelBuffer → CGImage. Cheap at ≤2 fps.
+  ///
+  /// Deliberately an instance property, not a `static`. As a `static` it is global
+  /// mutable state whose legality depends on whether the SDK in hand declares
+  /// `CIContext` as `Sendable` — and the SDKs disagree: without `nonisolated(unsafe)`
+  /// the pinned CI toolchain rejects it, with it a newer toolchain rejects it as
+  /// unnecessary. No spelling satisfies both. Per-instance, the question never arises
+  /// (this class is already `@unchecked Sendable`), and the cost is one context per
+  /// stream — a lifetime this engine exists to make long.
+  private let ciContext = CIContext(options: [.cacheIntermediates: false])
 
   /// Stop accepting frames and drop what is cached. Call BEFORE an
   /// `updateContentFilter` / `updateConfiguration` await.
@@ -545,7 +571,7 @@ final class CaptureFrameSink: NSObject, SCStreamOutput, SCStreamDelegate, @unche
     guard lock.withLock({ acceptingWindowID != nil }) else { return }
     guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
     let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-    guard let cgImage = Self.ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
+    guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
     deliver(cgImage)
   }
 
