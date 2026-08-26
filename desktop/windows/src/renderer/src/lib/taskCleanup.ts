@@ -21,11 +21,19 @@ export interface CleanupSampleItem {
   strategy: string
 }
 
+export interface CleanupCandidateMeta {
+  id: string
+  strategy: string
+  description: string
+}
+
 export interface CleanupPreviewResult {
   session_id: string
   total_candidates: number
   breakdown: Record<string, number>
   sample: CleanupSampleItem[]
+  candidate_ids: string[]
+  candidate_meta: CleanupCandidateMeta[]
   expires_in_seconds: number
 }
 
@@ -39,17 +47,19 @@ const PREVIEW_TIMEOUT_MS = 180_000
 export async function taskCleanupPreview(
   params: CleanupPreviewParams
 ): Promise<CleanupPreviewResult> {
-  const r = await omiApi.post<CleanupPreviewResult>(
-    '/v1/action-items/cleanup/preview',
-    params,
-    { timeout: PREVIEW_TIMEOUT_MS }
-  )
+  const r = await omiApi.post<CleanupPreviewResult>('/v1/action-items/cleanup/preview', params, {
+    timeout: PREVIEW_TIMEOUT_MS
+  })
   return r.data
 }
 
-export async function taskCleanupExecute(sessionId: string): Promise<CleanupExecuteResult> {
+export async function taskCleanupExecute(
+  sessionId: string,
+  excludedIds: string[] = []
+): Promise<CleanupExecuteResult> {
   const r = await omiApi.post<CleanupExecuteResult>('/v1/action-items/cleanup/execute', {
-    session_id: sessionId
+    session_id: sessionId,
+    excluded_ids: excludedIds
   })
   return r.data
 }

@@ -80,6 +80,17 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
   const [selected, setSelected] = useState<Set<CleanupStrategy>>(new Set(DEFAULT_STRATEGIES))
   const [preview, setPreview] = useState<CleanupPreviewResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Candidate IDs the user has unchecked in the review list — kept out of deletion.
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set())
+
+  const toggleCandidate = (id: string): void => {
+    setExcludedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const toggleStrategy = (s: CleanupStrategy): void => {
     setSelected((prev) => {
@@ -103,6 +114,7 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
         overdue_days: 30
       })
       setPreview(result)
+      setExcludedIds(new Set())
       setPhase('preview')
     } catch (e) {
       setError(apiDetail(e))
@@ -114,7 +126,7 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
     if (!preview) return
     setPhase('deleting')
     try {
-      const result = await taskCleanupExecute(preview.session_id)
+      const result = await taskCleanupExecute(preview.session_id, [...excludedIds])
       const n = result.deleted_count
       toast(`Deleted ${n.toLocaleString()} task${n === 1 ? '' : 's'}`, { tone: 'success' })
       void window.omi.tasksReconcile()
@@ -125,6 +137,7 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
         toast('Session expired — please analyze again', { tone: 'warn' })
         setPhase('config')
         setPreview(null)
+        setExcludedIds(new Set())
       } else {
         toast('Delete failed', { tone: 'error', body: apiDetail(e) })
         setPhase('preview')
@@ -139,10 +152,12 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
       setPhase('config')
       setPreview(null)
       setError(null)
+      setExcludedIds(new Set())
     }, 300)
   }
 
   const isDeleting = phase === 'deleting'
+  const remainingCount = preview ? preview.total_candidates - excludedIds.size : 0
 
   const footer =
     phase === 'config' ? (
@@ -164,6 +179,7 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
           onClick={() => {
             setPhase('config')
             setPreview(null)
+            setExcludedIds(new Set())
           }}
           className="btn-ghost"
         >
@@ -171,11 +187,11 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
         </button>
         <button
           onClick={execute}
-          disabled={preview.total_candidates === 0}
+          disabled={remainingCount === 0}
           className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40"
         >
-          Delete {preview.total_candidates.toLocaleString()} task
-          {preview.total_candidates === 1 ? '' : 's'}
+          Delete {remainingCount.toLocaleString()} task
+          {remainingCount === 1 ? '' : 's'}
         </button>
       </>
     ) : phase === 'deleting' ? (
@@ -270,7 +286,8 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
               <span className="font-semibold text-white">
                 {preview.total_candidates.toLocaleString()}
               </span>{' '}
-              task{preview.total_candidates === 1 ? '' : 's'} to remove.
+              task{preview.total_candidates === 1 ? '' : 's'} matching your criteria. Review the
+              list below and uncheck anything you want to keep.
             </p>
           ) : (
             <p className="text-white/60">
@@ -285,28 +302,51 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
                 .filter(([, n]) => n > 0)
                 .map(([strategy, count]) => (
                   <div key={strategy} className="flex items-center justify-between py-0.5">
-                    <span className="text-white/55">
-                      {STRATEGY_LABEL[strategy] ?? strategy}
-                    </span>
+                    <span className="text-white/55">{STRATEGY_LABEL[strategy] ?? strategy}</span>
                     <span className="tabular-nums text-white/90">{count.toLocaleString()}</span>
                   </div>
                 ))}
             </div>
           )}
 
-          {/* Sample */}
-          {preview.sample.length > 0 && (
+          {/* Review candidates — uncheck any task to keep it */}
+          {preview.candidate_meta.length > 0 && (
             <div>
-              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-white/35">
-                Samples
-              </p>
-              <ul className="glass-subtle max-h-40 space-y-0.5 overflow-y-auto rounded-lg px-4 py-3 text-sm text-white/55">
-                {preview.sample.map((item, i) => (
-                  <li key={i} className="flex items-baseline gap-2">
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className="text-xs font-medium uppercase tracking-wide text-white/35">
+                  Review ({remainingCount.toLocaleString()} of{' '}
+                  {preview.candidate_meta.length.toLocaleString()} selected)
+                </p>
+                <div className="flex gap-2 text-xs text-white/45">
+                  <button onClick={() => setExcludedIds(new Set())} className="hover:text-white/80">
+                    Select all
+                  </button>
+                  <span className="text-white/20">·</span>
+                  <button
+                    onClick={() => setExcludedIds(new Set(preview.candidate_meta.map((c) => c.id)))}
+                    className="hover:text-white/80"
+                  >
+                    Deselect all
+                  </button>
+                </div>
+              </div>
+              <ul className="glass-subtle max-h-64 space-y-0.5 overflow-y-auto rounded-lg px-4 py-3 text-sm text-white/55">
+                {preview.candidate_meta.map((item) => (
+                  <li key={item.id} className="flex items-baseline gap-2">
+                    <input
+                      type="checkbox"
+                      checked={!excludedIds.has(item.id)}
+                      onChange={() => toggleCandidate(item.id)}
+                      className="mt-0.5 shrink-0 accent-[color:var(--accent)]"
+                    />
                     <span className="shrink-0 rounded bg-white/10 px-1 py-px text-xs text-white/35">
                       {STRATEGY_LABEL[item.strategy] ?? item.strategy}
                     </span>
-                    <span className="truncate">{item.description}</span>
+                    <span
+                      className={`truncate ${excludedIds.has(item.id) ? 'text-white/30 line-through' : ''}`}
+                    >
+                      {item.description}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -314,8 +354,8 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
           )}
 
           <p className="text-xs text-white/30">
-            Deletion is permanent. Session expires in{' '}
-            {Math.round(preview.expires_in_seconds / 60)} min — confirm before then.
+            Deletion is permanent. Session expires in {Math.round(preview.expires_in_seconds / 60)}{' '}
+            min — confirm before then.
           </p>
         </div>
       )}

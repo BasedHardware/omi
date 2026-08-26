@@ -68,7 +68,7 @@ describe('taskCleanupPreview', () => {
 })
 
 describe('taskCleanupExecute', () => {
-  it('posts the session_id to the execute endpoint and returns response data', async () => {
+  it('posts the session_id and an empty exclusion list by default', async () => {
     postSpy.mockResolvedValue({ data: { deleted_count: 42 } })
 
     const result = await taskCleanupExecute('my-session-id')
@@ -77,7 +77,16 @@ describe('taskCleanupExecute', () => {
     expect(postSpy).toHaveBeenCalledTimes(1)
     const [url, body] = postSpy.mock.calls[0] as [string, unknown]
     expect(url).toBe('/v1/action-items/cleanup/execute')
-    expect(body).toEqual({ session_id: 'my-session-id' })
+    expect(body).toEqual({ session_id: 'my-session-id', excluded_ids: [] })
+  })
+
+  it('forwards excluded_ids so unchecked candidates survive deletion', async () => {
+    postSpy.mockResolvedValue({ data: { deleted_count: 1 } })
+
+    await taskCleanupExecute('my-session-id', ['t1', 't2'])
+
+    const [, body] = postSpy.mock.calls[0] as [string, unknown]
+    expect(body).toEqual({ session_id: 'my-session-id', excluded_ids: ['t1', 't2'] })
   })
 
   it('does not pass a custom timeout (fast operation)', async () => {
