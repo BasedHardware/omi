@@ -37,12 +37,18 @@ def _install_common(monkeypatch, conversation, completed: list[str]) -> None:
         "resolve_authorized_first_open_plan",
         lambda **_kwargs: SimpleNamespace(defer_derived_work=True),
     )
-    monkeypatch.setattr(processing, "update_goal_progress", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        processing,
+        "update_goal_progress",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("automatic goal updates are not part of the JIT featureset")
+        ),
+    )
     monkeypatch.setattr(processing, "trigger_conversation_apps", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(processing, "conversation_apps_opt_in_only", lambda: False)
 
 
-def test_retry_skips_effects_with_durable_completion_receipts(monkeypatch) -> None:
+def test_retry_skips_completed_effects_and_ignores_legacy_goal_rows(monkeypatch) -> None:
     conversation = _conversation(folder_id="folder")
     completed: list[str] = []
     _install_common(monkeypatch, conversation, completed)
@@ -67,7 +73,8 @@ def test_retry_skips_effects_with_durable_completion_receipts(monkeypatch) -> No
         "lease",
     )
 
-    assert completed == ["goal_progress", "app_fanout"]
+    # The legacy pending goal_progress row is ignored, never executed.
+    assert completed == ["app_fanout"]
 
 
 def test_retry_repairs_folder_count_after_folder_id_persisted(monkeypatch) -> None:
@@ -88,7 +95,7 @@ def test_retry_repairs_folder_count_after_folder_id_persisted(monkeypatch) -> No
     )
 
     assert counts == ["folder"]
-    assert completed == ["folder_assignment", "goal_progress", "app_fanout"]
+    assert completed == ["folder_assignment", "app_fanout"]
 
 
 def test_kill_flip_during_folder_effect_blocks_commit_and_suffix(monkeypatch) -> None:
@@ -137,40 +144,23 @@ def test_first_open_never_initializes_folder_documents(monkeypatch) -> None:
 
     processing.run_first_open_derived_work("owner", {"id": "conversation", "jit_first_open": {"effects": {}}}, "lease")
 
-    assert completed == ["folder_assignment", "goal_progress", "app_fanout"]
+    assert completed == ["folder_assignment", "app_fanout"]
 
 
-def test_kill_flip_after_goal_llm_blocks_goal_commit(monkeypatch) -> None:
-    conversation = _conversation()
+def test_worker_never_runs_goal_progress(monkeypatch) -> None:
+    """Goals change only through explicit user action for JIT conversations.
+
+    The common stub raises on any ``update_goal_progress`` call; a fully
+    pending obligation must therefore complete without touching goals.
+    """
+
+    conversation = _conversation(folder_id="folder")
     completed: list[str] = []
     _install_common(monkeypatch, conversation, completed)
-    decisions = iter([True, False])
-    monkeypatch.setattr(
-        processing,
-        "resolve_authorized_first_open_plan",
-        lambda **_kwargs: SimpleNamespace(defer_derived_work=next(decisions)),
-    )
 
-    def goal_work(*_args, **kwargs):
-        kwargs["effect_authorizer"]()
-        raise AssertionError("fresh kill authority must interrupt before the goal write")
+    processing.run_first_open_derived_work("owner", {"id": "conversation", "jit_first_open": {"effects": {}}}, "lease")
 
-    monkeypatch.setattr(processing, "update_goal_progress", goal_work)
-    state = {
-        "effects": {
-            "folder_assignment": {"state": "complete"},
-            "goal_progress": {"state": "pending"},
-            "app_fanout": {"state": "pending"},
-        }
-    }
-    try:
-        processing.run_first_open_derived_work("owner", {"id": "conversation", "jit_first_open": state}, "lease")
-    except RuntimeError as error:
-        assert "authority suspended before goal_progress" in str(error)
-    else:
-        raise AssertionError("kill must block the goal mutation")
-
-    assert completed == []
+    assert completed == ["folder_assignment", "app_fanout"]
 
 
 def test_kill_flip_after_app_llm_blocks_result_and_usage_commits(monkeypatch) -> None:

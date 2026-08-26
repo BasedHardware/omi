@@ -2214,6 +2214,9 @@ def process_conversation(
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
             submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
+            # Automatic goal updates are excluded from the JIT featureset
+            # entirely (not deferred): a JIT-admitted conversation never
+            # updates goals; users update goals through explicit actions.
             if not jit_defer_expensive:
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
 

@@ -19,7 +19,12 @@ if TYPE_CHECKING:
     from models.memory_apply import MemoryControlState
 
 CONVERSATIONS_COLLECTION = 'conversations'
-FIRST_OPEN_EFFECTS = ('folder_assignment', 'goal_progress', 'app_fanout')
+# Automatic goal-progress updates are excluded from the JIT featureset: goals
+# change only through explicit user action for JIT-admitted conversations.
+# Obligations persisted before that removal may still carry a goal_progress
+# effect row; ``_effects`` normalizes to this tuple, so completion never waits
+# on the retired effect.
+FIRST_OPEN_EFFECTS = ('folder_assignment', 'app_fanout')
 
 
 def _refs(client: Any, uid: str) -> tuple[Any, Any, Any]:

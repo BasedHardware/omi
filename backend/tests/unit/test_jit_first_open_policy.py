@@ -65,7 +65,9 @@ def test_enabled_plan_defers_all_expensive_fanout_but_keeps_cheap_projections(
     assert plan.summary_eager is True
     assert plan.retrieval_index_eager is True
     assert plan.folder_assignment_on_first_open is True
-    assert plan.goal_progress_on_first_open is True
+    # Automatic goal updates are excluded from the JIT featureset entirely;
+    # the plan cannot even express deferring them.
+    assert not hasattr(plan, "goal_progress_on_first_open")
     assert plan.app_fanout_on_first_open is True
 
 

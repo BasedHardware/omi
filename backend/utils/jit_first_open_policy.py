@@ -6,10 +6,12 @@ enrolment state.  That keeps the decision testable and prevents a stale client
 configuration from turning an optimization into a data-loss path.
 
 When the policy is enabled, the capture path may write cheap summary/index
-projections, but expensive derived work (folder assignment, goal progress, and
-app fan-out) is owed to the first-open worker.  The existing processing path
-remains the fallback when the policy is disabled or cannot identify a supported
-source/tier.
+projections, but expensive derived work (folder assignment and app fan-out) is
+owed to the first-open worker.  Automatic goal-progress updates are not part of
+the JIT featureset at all: for a JIT-admitted conversation goals change only
+through explicit user action, never as a deferred effect.  The existing
+processing path remains the fallback when the policy is disabled or cannot
+identify a supported source/tier.
 """
 
 from __future__ import annotations
@@ -57,7 +59,6 @@ class FirstOpenPlan:
     summary_eager: bool
     retrieval_index_eager: bool
     folder_assignment_on_first_open: bool
-    goal_progress_on_first_open: bool
     app_fanout_on_first_open: bool
     reason: Literal[
         "rollout_disabled",
@@ -69,12 +70,7 @@ class FirstOpenPlan:
 
     @property
     def defer_derived_work(self) -> bool:
-        return (
-            self.enabled
-            and self.folder_assignment_on_first_open
-            and self.goal_progress_on_first_open
-            and self.app_fanout_on_first_open
-        )
+        return self.enabled and self.folder_assignment_on_first_open and self.app_fanout_on_first_open
 
 
 @dataclass(frozen=True)
@@ -175,7 +171,6 @@ def resolve_first_open_plan(
         summary_eager=True,
         retrieval_index_eager=True,
         folder_assignment_on_first_open=True,
-        goal_progress_on_first_open=True,
         app_fanout_on_first_open=True,
         reason="enabled",
     )
@@ -199,7 +194,6 @@ def _disabled_plan(
         summary_eager=False,
         retrieval_index_eager=False,
         folder_assignment_on_first_open=False,
-        goal_progress_on_first_open=False,
         app_fanout_on_first_open=False,
         reason=reason,
     )

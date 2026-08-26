@@ -18,8 +18,6 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
     obligation = conversation_data.get('jit_first_open') or {}
     raw_effects = obligation.get('effects')
     states = dict(raw_effects) if isinstance(raw_effects, Mapping) else {}
-    account_generation = obligation.get('account_generation')
-    source_generation = obligation.get('source_generation')
     source = getattr(conversation.source, 'value', conversation.source)
 
     def complete_state(effect: str) -> bool:
@@ -83,19 +81,6 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
             ):
                 raise RuntimeError('first-open authority lost while refreshing folder count')
         complete('folder_assignment')
-
-    if not complete_state('goal_progress'):
-        authorize('goal_progress')
-        if not processing.update_goal_progress(
-            uid,
-            conversation,
-            idempotency_key_prefix=f'jit-first-open:{conversation.id}',
-            authority_account_generation=account_generation,
-            authority_source_generation=source_generation,
-            effect_authorizer=lambda: authorize('goal_progress'),
-        ):
-            raise RuntimeError('goal progress first-open effect failed')
-        complete('goal_progress')
 
     if complete_state('app_fanout'):
         return

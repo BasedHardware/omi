@@ -324,12 +324,11 @@ def test_first_open_retry_preserves_completed_effect_receipts() -> None:
     )
     assert retry is not None
     assert not conversations_db.complete_first_open_effect(
-        "owner", "conversation", first, "goal_progress", firestore_client=store
+        "owner", "conversation", first, "app_fanout", firestore_client=store
     )
-    for effect in ("goal_progress", "app_fanout"):
-        assert conversations_db.complete_first_open_effect(
-            "owner", "conversation", retry, effect, firestore_client=store
-        )
+    assert conversations_db.complete_first_open_effect(
+        "owner", "conversation", retry, "app_fanout", firestore_client=store
+    )
     assert conversations_db.finish_first_open_work(
         "owner", "conversation", retry, succeeded=True, firestore_client=store
     )
