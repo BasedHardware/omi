@@ -3,6 +3,9 @@ import { env } from "cloudflare:workers";
 import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { beforeEach, describe, expect, test } from "vitest";
 
+import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
+
+import { MAIN_CONVERSATION_ID } from "../src/conversations";
 import handler from "../src/index";
 
 const chatSchema = [
@@ -13,6 +16,14 @@ const chatSchema = [
   "CREATE INDEX IF NOT EXISTS chat_admissions_generation ON chat_admissions (generation_id)",
   "CREATE TABLE IF NOT EXISTS chat_generation_events (generation_id TEXT NOT NULL, account_id TEXT NOT NULL, event_id TEXT NOT NULL, ordinal INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY (generation_id, event_id))",
   "CREATE INDEX IF NOT EXISTS chat_generation_events_account ON chat_generation_events (account_id)",
+];
+
+const attachmentSchema = [
+  "CREATE TABLE IF NOT EXISTS chat_attachments (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, op_id TEXT NOT NULL, display_name TEXT NOT NULL, media_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, state TEXT NOT NULL CHECK (state IN ('staged', 'uploaded', 'ingesting', 'ingested', 'invalid', 'bound', 'expired')), r2_key TEXT NOT NULL, expires_at INTEGER NOT NULL, bound_message_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS chat_attachments_account ON chat_attachments (account_id)",
+  "CREATE INDEX IF NOT EXISTS chat_attachments_account_state ON chat_attachments (account_id, state)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS chat_attachments_account_op ON chat_attachments (account_id, op_id)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS chat_attachments_r2_key ON chat_attachments (r2_key)",
 ];
 
 const taskSchema =
@@ -36,6 +47,36 @@ const chatCreate = (id: string, text = "hello") => ({
   attachmentIds: [],
 });
 
+const insertAttachment = async (input: {
+  id: string;
+  accountId: string;
+  state: string;
+  boundMessageId?: string | null;
+  displayName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+}) => {
+  const now = Date.now();
+  await env.DB.prepare(
+    "INSERT INTO chat_attachments (id, account_id, op_id, display_name, media_type, size_bytes, state, r2_key, expires_at, bound_message_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  )
+    .bind(
+      input.id,
+      input.accountId,
+      `op-${input.id}`,
+      input.displayName ?? "report.pdf",
+      input.mimeType ?? "application/pdf",
+      input.sizeBytes ?? 1024,
+      input.state,
+      `attachments/${input.accountId}/${input.id}`,
+      now + 86_400_000,
+      input.boundMessageId ?? null,
+      now,
+      now
+    )
+    .run();
+};
+
 const fetchWorker = (path: string, init?: RequestInit) =>
   handler.fetch(
     new Request(`https://worker.test${path}`, init),
@@ -51,10 +92,14 @@ beforeEach(async () => {
   for (const statement of chatSchema) {
     await env.DB.exec(statement);
   }
+  for (const statement of attachmentSchema) {
+    await env.DB.exec(statement);
+  }
   await env.DB.exec(taskSchema);
   await env.DB.prepare("DELETE FROM chat_messages").run();
   await env.DB.prepare("DELETE FROM chat_admissions").run();
   await env.DB.prepare("DELETE FROM chat_generation_events").run();
+  await env.DB.prepare("DELETE FROM chat_attachments").run();
 
   const stub = env.ACCOUNTS.getByName("test-account");
   await runInDurableObject(stub, (instance) =>
@@ -328,5 +373,209 @@ describe("D1-authoritative chat persistence", () => {
       kind: string;
     };
     expect(eventPayload.kind).toBe("cancelled");
+  });
+});
+
+describe("D1 chat projects an honest conversation list", () => {
+  test("admitted chat becomes a conversation page, not projection_unavailable", async () => {
+    const created = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(chatCreate("d1-conversation-one", "project me")),
+    });
+    expect(created.status).toBe(201);
+
+    const envelope = await fetchWorker("/v1/conversations", {
+      headers: authenticatedHeaders,
+    });
+    expect(envelope.status).toBe(200);
+    const page = (await envelope.json()) as {
+      items: Array<{
+        id: string;
+        title: string;
+        overview: string;
+        source: string;
+      }>;
+      completeness: { version: string; status: string };
+      absence: { kind: string } | null;
+    };
+    expect(page.completeness).toEqual({
+      version: "conversations-completeness-v1",
+      status: "complete",
+      reasons: [],
+      frontiers: {
+        declaredFrontier: "frontier-v1:conversations-declared",
+        newestAppliedFrontier: "frontier-v1:conversations-declared",
+        missingAppliedFrontierReason: null,
+      },
+    });
+    expect(page.absence).toBeNull();
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]).toMatchObject({
+      id: MAIN_CONVERSATION_ID,
+      title: "project me",
+      overview: "project me",
+      source: "chat",
+    });
+
+    const legacy = await fetchWorker("/v1/conversations?limit=50&offset=0", {
+      headers: authenticatedHeaders,
+    });
+    expect(legacy.status).toBe(200);
+    const records = (await legacy.json()) as Array<{
+      id: string;
+      structured: { title: string };
+    }>;
+    expect(records).toEqual([
+      expect.objectContaining({
+        id: MAIN_CONVERSATION_ID,
+        structured: expect.objectContaining({ title: "project me" }),
+      }),
+    ]);
+  });
+
+  test("memories remain an empty recall page because D1 has no memories store", async () => {
+    const response = await fetchWorker("/v1/memories", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    const page = parseSynthesizedPageJson(body);
+    expect(page).not.toBeNull();
+    expect(page?.items).toEqual([]);
+    expect(page?.completeness.status).toBe("complete");
+    expect(page?.absence).toEqual({ kind: "query_gap" });
+  });
+});
+
+describe("D1 chat attachment admit bind", () => {
+  test("zero attachments still admit", async () => {
+    const response = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(chatCreate("d1-attach-none")),
+    });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      message: { attachments: unknown[] };
+    };
+    expect(body.message.attachments).toEqual([]);
+  });
+
+  test("foreign and incomplete attachments stay rejected", async () => {
+    await insertAttachment({
+      id: "d1-att-foreign",
+      accountId: "other-account",
+      state: "ingested",
+    });
+    await insertAttachment({
+      id: "d1-att-staged",
+      accountId: "test-account",
+      state: "staged",
+    });
+
+    const foreign = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("d1-attach-foreign"),
+        attachmentIds: ["d1-att-foreign"],
+      }),
+    });
+    const incomplete = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("d1-attach-staged"),
+        attachmentIds: ["d1-att-staged"],
+      }),
+    });
+
+    expect(foreign.status).toBe(422);
+    expect((await foreign.json()) as { error: { code: string } }).toEqual({
+      error: {
+        code: "attachment_rejected",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
+    expect(incomplete.status).toBe(422);
+    expect((await incomplete.json()) as { error: { code: string } }).toEqual({
+      error: {
+        code: "attachment_rejected",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
+  });
+
+  test("completed same-account attachments bind onto the admitted message", async () => {
+    await insertAttachment({
+      id: "d1-att-ready",
+      accountId: "test-account",
+      state: "ingested",
+      displayName: "notes.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 2048,
+    });
+
+    const response = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("d1-attach-ready"),
+        attachmentIds: ["d1-att-ready"],
+      }),
+    });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      message: {
+        id: string;
+        attachments: Array<{
+          id: string;
+          displayName: string;
+          mediaType: string;
+          sizeBytes: number;
+          contentReference: string | null;
+        }>;
+      };
+    };
+    expect(body.message.id).toBe("d1-attach-ready");
+    expect(body.message.attachments).toEqual([
+      {
+        id: "d1-att-ready",
+        displayName: "notes.pdf",
+        mediaType: "application/pdf",
+        sizeBytes: 2048,
+        contentReference: "d1-att-ready",
+      },
+    ]);
+
+    const row = await env.DB.prepare(
+      "SELECT state, bound_message_id, account_id FROM chat_attachments WHERE id = ?"
+    )
+      .bind("d1-att-ready")
+      .first<{
+        state: string;
+        bound_message_id: string | null;
+        account_id: string;
+      }>();
+    expect(row).toEqual({
+      state: "bound",
+      bound_message_id: "d1-attach-ready",
+      account_id: "test-account",
+    });
+
+    const stored = await env.DB.prepare(
+      "SELECT payload FROM chat_messages WHERE id = ?"
+    )
+      .bind("d1-attach-ready")
+      .first<{ payload: string }>();
+    const payload = JSON.parse(stored!.payload) as {
+      attachments: Array<{ id: string }>;
+    };
+    expect(payload.attachments).toEqual([
+      expect.objectContaining({ id: "d1-att-ready", displayName: "notes.pdf" }),
+    ]);
   });
 });

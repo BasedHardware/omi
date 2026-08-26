@@ -4,6 +4,12 @@ import { SYNTHESIZED_READ_CONTRACT_VERSION } from "@omi-core/ratified-contracts/
 import { AccountBackend } from "./account";
 import { readHistory, readSettings } from "./chat";
 import {
+  conversationPage,
+  paginateConversations,
+  readConversations,
+  toLegacyConversation,
+} from "./conversations";
+import {
   gatewayConfig,
   gatewayModeEnabled,
   type GatewaySecretEnv,
@@ -24,6 +30,7 @@ import {
   makeR2UploadUrlSigner,
   parseAttachmentStageRequest,
   parseSignedUploadConfig,
+  resolveAttachmentsForAdmit,
   stageAttachment,
   type AttachmentIngestMessage,
 } from "./attachments";
@@ -195,7 +202,16 @@ app.post("/v1/chat-messages", async (context) => {
   const body = parsed.value;
   if (!isChatCreate(body))
     return backendError("validation", "edit_request", 422);
-  if ((body.attachmentIds?.length ?? 0) > 0)
+  const db = context.env.DB;
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const resolved = await resolveAttachmentsForAdmit(
+    db,
+    context.get("accountId"),
+    body.attachmentIds,
+    body.id
+  );
+  if (resolved.kind === "rejected")
     return backendError("attachment_rejected", "edit_request", 422);
   const stub = account(context);
   const admission = await stub.admit(
@@ -208,6 +224,9 @@ app.post("/v1/chat-messages", async (context) => {
   }
   if (admission === "entitlement") {
     return backendError("entitlement", "upgrade", 402);
+  }
+  if (admission === "attachment_rejected") {
+    return backendError("attachment_rejected", "edit_request", 422);
   }
   console.log(
     JSON.stringify(
@@ -323,12 +342,68 @@ app.post("/v1/chat-attachments/:id/complete", async (context) => {
   }
 });
 
-app.get("/v1/conversations", () =>
-  backendError("projection_unavailable", "retry", 503, true)
-);
-app.get("/v1/memories", () =>
-  backendError("projection_unavailable", "retry", 503, true)
-);
+app.get("/v1/conversations", async (context) => {
+  const query = new URL(context.req.url).searchParams;
+  const keys = [...query.keys()];
+  const hasOffset = query.has("offset");
+  if (hasOffset) {
+    if (
+      keys.some((key) => key !== "limit" && key !== "offset") ||
+      query.getAll("limit").length > 1 ||
+      query.getAll("offset").length > 1
+    ) {
+      return backendError("bad_request", "edit_request", 400);
+    }
+    const limit = parseLimit(query.get("limit") ?? undefined);
+    const offset = parseOffset(query.get("offset") ?? undefined);
+    if (limit === null || offset === null)
+      return backendError("bad_request", "edit_request", 400);
+    const db = context.env.DB;
+    if (db === undefined) return json([]);
+    const items = await readConversations(db, context.get("accountId"));
+    return json(
+      items
+        .slice(offset, offset + limit)
+        .map((item) => toLegacyConversation(item))
+    );
+  }
+  if (
+    keys.some((key) => key !== "limit" && key !== "cursor") ||
+    query.getAll("limit").length > 1 ||
+    query.getAll("cursor").length > 1
+  ) {
+    return backendError("bad_request", "edit_request", 400);
+  }
+  const limit = parseLimit(query.get("limit") ?? undefined);
+  const cursor = query.get("cursor") ?? undefined;
+  if (limit === null || cursor === "")
+    return backendError("bad_request", "edit_request", 400);
+  const db = context.env.DB;
+  if (db === undefined) return json(conversationPage([], false, null));
+  const page = paginateConversations(
+    await readConversations(db, context.get("accountId")),
+    limit,
+    cursor
+  );
+  return page === "invalid_cursor"
+    ? backendError("bad_request", "edit_request", 400)
+    : json(page);
+});
+app.get("/v1/memories", (context) => {
+  const query = new URL(context.req.url).searchParams;
+  if (
+    [...query.keys()].some((key) => key !== "limit" && key !== "cursor") ||
+    query.getAll("limit").length > 1 ||
+    query.getAll("cursor").length > 1
+  ) {
+    return backendError("bad_request", "edit_request", 400);
+  }
+  const limit = parseTaskLimit(query.get("limit"));
+  const cursor = query.get("cursor") ?? undefined;
+  if (cursor === "") return backendError("bad_request", "edit_request", 400);
+  void limit;
+  return json(emptyPage("recall-completeness-v1"));
+});
 app.get("/v1/tasks", async (context) => {
   const query = new URL(context.req.url).searchParams;
   if (
@@ -444,6 +519,12 @@ function configurationReady(env: WorkerEnv): boolean {
 function parseLimit(value: string | undefined): number | null {
   if (value === undefined) return 50;
   if (!/^(?:[1-9]|[1-9][0-9]|100)$/.test(value)) return null;
+  return Number(value);
+}
+
+function parseOffset(value: string | undefined): number | null {
+  if (value === undefined) return 0;
+  if (!/^(?:0|[1-9][0-9]{0,8})$/.test(value)) return null;
   return Number(value);
 }
 

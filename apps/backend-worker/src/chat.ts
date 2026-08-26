@@ -3,6 +3,10 @@ import { parseRecordId } from "@omi-core/contracts";
 import type { ChatCompletedAssistantMessage } from "@omi-core/contracts";
 
 import {
+  bindAttachmentStatement,
+  resolveAttachmentsForAdmit,
+} from "./attachments";
+import {
   CHAT_CAPABILITIES,
   type ChatCreate,
   type ChatMessage,
@@ -64,7 +68,7 @@ export async function admitMessage(
   accountId: string,
   input: ChatCreate,
   chatLimit: number | null
-): Promise<Admission | "conflict" | "entitlement"> {
+): Promise<Admission | "conflict" | "entitlement" | "attachment_rejected"> {
   const payloadHash = computePayloadHash(input);
   const prior = await db
     .prepare(
@@ -100,6 +104,14 @@ export async function admitMessage(
     };
   }
 
+  const resolved = await resolveAttachmentsForAdmit(
+    db,
+    accountId,
+    input.attachmentIds,
+    input.id
+  );
+  if (resolved.kind === "rejected") return "attachment_rejected";
+
   const usedRow = await db
     .prepare(
       "SELECT COUNT(*) AS count FROM chat_admissions WHERE account_id = ?"
@@ -113,7 +125,13 @@ export async function admitMessage(
 
   const generationId = crypto.randomUUID();
   const position = await nextPosition(db, accountId);
-  const message = humanMessage(input, payloadHash, position);
+  const message = humanMessage(
+    input,
+    payloadHash,
+    position,
+    resolved.attachments
+  );
+  const boundAt = Date.now();
 
   await db.batch([
     db
@@ -148,6 +166,9 @@ export async function admitMessage(
         accountId,
         JSON.stringify({ id: "1", kind: "snapshot", text: "" })
       ),
+    ...resolved.attachments.map((attachment) =>
+      bindAttachmentStatement(db, accountId, input.id, attachment.id, boundAt)
+    ),
   ]);
 
   return {
@@ -465,7 +486,8 @@ async function nextPosition(
 function humanMessage(
   input: ChatCreate,
   payloadHash: string,
-  position: number
+  position: number,
+  attachments: ChatMessage["attachments"]
 ): ChatMessage {
   return {
     id: recordId(input.id),
@@ -483,7 +505,7 @@ function humanMessage(
     reported: false,
     generationOutcome: null,
     revision: String(position),
-    attachments: [],
+    attachments,
   };
 }
 

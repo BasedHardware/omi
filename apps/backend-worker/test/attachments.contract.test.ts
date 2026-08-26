@@ -2,11 +2,13 @@ import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import {
   ATTACHMENT_CAPABILITIES,
+  bindAttachmentStatement,
   completeAttachment,
   consumeAttachmentIngest,
   createPresignedR2Url,
   parseAttachmentStageRequest,
   parseSignedUploadConfig,
+  resolveAttachmentsForAdmit,
   stageAttachment,
   type AttachmentIngestMessage,
 } from "../src/attachments";
@@ -913,5 +915,160 @@ describe("attachment completion + queue ingest vertical slice", () => {
       .first<{ state: string; account_id: string }>();
     expect(row!.account_id).toBe("other-account");
     expect(row!.state).toBe("staged");
+  });
+});
+
+async function insertStoredAttachment(input: {
+  id: string;
+  accountId: string;
+  state: string;
+  boundMessageId?: string | null;
+  displayName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+}): Promise<void> {
+  const now = Date.now();
+  await d1Mock
+    .prepare(
+      "INSERT INTO chat_attachments (id, account_id, op_id, display_name, media_type, size_bytes, state, r2_key, expires_at, bound_message_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(
+      input.id,
+      input.accountId,
+      `op-${input.id}`,
+      input.displayName ?? "report.pdf",
+      input.mimeType ?? "application/pdf",
+      input.sizeBytes ?? 1024,
+      input.state,
+      `attachments/${input.accountId}/${input.id}`,
+      now + 86_400_000,
+      input.boundMessageId ?? null,
+      now,
+      now
+    )
+    .run();
+}
+
+describe("attachment admit bind", () => {
+  test("zero attachments resolve as an empty bindable list", async () => {
+    const resolved = await resolveAttachmentsForAdmit(
+      d1Mock,
+      "test-account",
+      [],
+      "message-none"
+    );
+    expect(resolved).toEqual({ kind: "ok", attachments: [] });
+  });
+
+  test("rejects unknown, foreign, and incomplete attachment ids", async () => {
+    await insertStoredAttachment({
+      id: "att-foreign",
+      accountId: "other-account",
+      state: "ingested",
+    });
+    await insertStoredAttachment({
+      id: "att-staged",
+      accountId: "test-account",
+      state: "staged",
+    });
+
+    expect(
+      await resolveAttachmentsForAdmit(
+        d1Mock,
+        "test-account",
+        ["missing-id"],
+        "message-missing"
+      )
+    ).toEqual({ kind: "rejected" });
+    expect(
+      await resolveAttachmentsForAdmit(
+        d1Mock,
+        "test-account",
+        ["att-foreign"],
+        "message-foreign"
+      )
+    ).toEqual({ kind: "rejected" });
+    expect(
+      await resolveAttachmentsForAdmit(
+        d1Mock,
+        "test-account",
+        ["att-staged"],
+        "message-staged"
+      )
+    ).toEqual({ kind: "rejected" });
+  });
+
+  test("accepts a completed same-account attachment and binds it", async () => {
+    await insertStoredAttachment({
+      id: "att-ready",
+      accountId: "test-account",
+      state: "ingested",
+      displayName: "notes.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 2048,
+    });
+
+    const resolved = await resolveAttachmentsForAdmit(
+      d1Mock,
+      "test-account",
+      ["att-ready"],
+      "message-ready"
+    );
+    expect(resolved).toEqual({
+      kind: "ok",
+      attachments: [
+        {
+          id: "att-ready",
+          displayName: "notes.pdf",
+          mediaType: "application/pdf",
+          sizeBytes: 2048,
+          contentReference: "att-ready",
+        },
+      ],
+    });
+
+    if (resolved.kind !== "ok") return;
+    await bindAttachmentStatement(
+      d1Mock,
+      "test-account",
+      "message-ready",
+      "att-ready",
+      Date.now()
+    ).run();
+    const row = await d1Mock
+      .prepare(
+        "SELECT state, bound_message_id FROM chat_attachments WHERE id = ?"
+      )
+      .bind("att-ready")
+      .first<{ state: string; bound_message_id: string | null }>();
+    expect(row).toEqual({
+      state: "bound",
+      bound_message_id: "message-ready",
+    });
+  });
+
+  test("replay of an already-bound same-message attachment is accepted", async () => {
+    await insertStoredAttachment({
+      id: "att-replay",
+      accountId: "test-account",
+      state: "bound",
+      boundMessageId: "message-replay",
+    });
+    expect(
+      await resolveAttachmentsForAdmit(
+        d1Mock,
+        "test-account",
+        ["att-replay"],
+        "message-replay"
+      )
+    ).toMatchObject({ kind: "ok" });
+    expect(
+      await resolveAttachmentsForAdmit(
+        d1Mock,
+        "test-account",
+        ["att-replay"],
+        "message-other"
+      )
+    ).toEqual({ kind: "rejected" });
   });
 });
