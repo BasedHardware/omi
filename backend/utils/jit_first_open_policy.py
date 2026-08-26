@@ -109,24 +109,19 @@ def resolve_authorized_first_open_plan(
         else FirstOpenClientTier.MOBILE
     )
     try:
-        authority_resolver = authority
-        if authority_resolver is None:
-            rollout_module = importlib.import_module("utils.jit_rollout")
-            decision_stage = rollout_module.JITDecisionStage
-            resolve_rollout = rollout_module.resolve_jit_rollout
-
-            async def _backend_authority(user_id: str) -> Any:
-                return await resolve_rollout(
-                    user_id,
-                    stage=decision_stage.PAID_BOUNDARY if force_refresh else decision_stage.INGRESS,
-                    force_refresh=force_refresh,
-                )
-
-            authority_resolver = _backend_authority
-
-        decision = asyncio.run(authority_resolver(uid))
+        rollout_module = importlib.import_module("utils.jit_rollout")
+        decision_stage = rollout_module.JITDecisionStage
+        stage = decision_stage.PAID_BOUNDARY if force_refresh else decision_stage.INGRESS
+        if authority is not None:
+            decision = asyncio.run(authority(uid))
+        else:
+            # Loop-confined synchronous resolution: this function runs on
+            # finalization/threadpool threads, where a per-call asyncio.run
+            # against the shared async authority would cross event loops.
+            decision = rollout_module.resolve_jit_rollout_sync(uid, stage=stage, force_refresh=force_refresh)
         permitted = bool(getattr(decision, "permits_work", False))
-        kill_switch = str(getattr(decision, "kill_switch", "")).casefold().endswith("on")
+        kill_switch_state = getattr(getattr(decision, "kill_switch", None), "value", "")
+        kill_switch = str(kill_switch_state).casefold() == "enabled"
         return resolve_first_open_plan(
             feature_enabled=permitted,
             client_tier=tier,

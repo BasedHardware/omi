@@ -84,7 +84,7 @@ class ScreenActivitySyncResponse(BaseModel):
 
 
 async def _authorized_desktop_user(
-    uid: str = Depends(with_rate_limit(get_current_user_uid, "frame_requests:read")),
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "screen_activity:sync")),
 ) -> str:
     if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop"):
         raise HTTPException(status_code=402, detail="trial_expired")
@@ -158,10 +158,14 @@ async def sync_screen_activity(
         device_id = request.rows[0].client_device_id
         same_device_batch = bool(device_id) and all(row.client_device_id == device_id for row in request.rows)
         routed_device_id = device_id if isinstance(device_id, str) else ""
+        # Cached ingress read: this sync fires every ~60s from every desktop in
+        # the fleet, so an uncached (force_refresh) resolve here would bypass
+        # the per-uid coalescer and hammer the control plane once per device
+        # per minute. Frame-request delivery is metadata-only; the paid
+        # boundaries downstream re-resolve with force_refresh themselves.
         decision = await resolve_frame_request_authority(
             uid,
             stage=JITDecisionStage.INGRESS,
-            force_refresh=True,
         )
         if decision.enabled and decision.account_generation == request.account_generation and same_device_batch:
             try:

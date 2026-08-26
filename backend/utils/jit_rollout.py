@@ -18,7 +18,7 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Mapping
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
@@ -32,7 +32,14 @@ JIT_LEDGER_MIGRATION_FLAG_KEY = 'jit-processing-ledger-migration-v1'
 JIT_KILL_SWITCH_FLAG_KEY = 'jit-processing-kill-switch-v1'
 MAX_JIT_ROLLOUT_CACHE_SECONDS = 30.0
 DEFAULT_JIT_ROLLOUT_CACHE_SECONDS = 20.0
+# Unknown/error snapshots are cached only this briefly: long enough that a
+# fleet whose flags are absent (the normal dark state) does not pay one
+# uncached provider call per conversation finalization, short enough that a
+# provider recovery is observed within seconds. UNKNOWN can never authorize
+# work, so this only ever extends fail-closed behavior.
+UNKNOWN_JIT_ROLLOUT_CACHE_SECONDS = 5.0
 DEFAULT_JIT_ROLLOUT_TIMEOUT_SECONDS = 2.0
+SYNC_JIT_ROLLOUT_RESULT_TIMEOUT_SECONDS = 5.0
 DEFAULT_JIT_ROLLOUT_CACHE_ENTRIES = 4096
 POSTHOG_CONTROL_MAX_WORKERS = 4
 POSTHOG_CONTROL_MAX_QUEUE = 16
@@ -221,21 +228,21 @@ class JITRolloutAuthority:
         else:
             evaluation = await self._provider(uid)
         finished_at = self._monotonic()
-        # Cache only complete provider answers. Unknown/error snapshots retry on
-        # the next request instead of extending an outage into an authorization.
-        if evaluation.rollout != TriState.UNKNOWN and evaluation.kill_switch != TriState.UNKNOWN:
-            self._cache[uid] = _CacheEntry(evaluation=evaluation, expires_at=finished_at + self._ttl_seconds)
-            self._cache.move_to_end(uid)
-            while len(self._cache) > self._max_entries:
-                self._cache.popitem(last=False)
+        # Complete provider answers cache for the full TTL. Unknown/error
+        # snapshots cache only for a short negative TTL: UNKNOWN can never
+        # authorize work, so this cannot extend an outage into an
+        # authorization — it only stops a fleet with absent flags from paying
+        # one uncached provider call per request.
+        complete = evaluation.rollout != TriState.UNKNOWN and evaluation.kill_switch != TriState.UNKNOWN
+        entry_ttl = self._ttl_seconds if complete else min(UNKNOWN_JIT_ROLLOUT_CACHE_SECONDS, self._ttl_seconds)
+        self._cache[uid] = _CacheEntry(evaluation=evaluation, expires_at=finished_at + entry_ttl)
+        self._cache.move_to_end(uid)
+        while len(self._cache) > self._max_entries:
+            self._cache.popitem(last=False)
         decision = _effective_decision(
             evaluation,
             cache_hit=False,
-            cache_ttl_seconds=(
-                int(self._ttl_seconds)
-                if evaluation.rollout != TriState.UNKNOWN and evaluation.kill_switch != TriState.UNKNOWN
-                else 0
-            ),
+            cache_ttl_seconds=int(entry_ttl),
         )
         self._record(decision, stage=stage, latency_ms=max(0, int((finished_at - started_at) * 1000)))
         return decision
@@ -448,6 +455,65 @@ _ledger_migration_authority = JITRolloutAuthority(
     PostHogJITFlagProvider(rollout_flag_key=JIT_LEDGER_MIGRATION_FLAG_KEY)
 )
 
+# Synchronous callers (conversation finalization threads, the FastAPI sync
+# threadpool, first-open workers) must never share asyncio primitives or
+# in-flight tasks with the server's event loop: awaiting a Task attached to a
+# different loop raises, per-call ``asyncio.run`` loops strand coalescer
+# entries, and cross-thread cache mutation races. All sync resolution instead
+# runs on one long-lived control loop thread with its own authority/provider
+# instances, so every asyncio object involved is confined to a single loop.
+_sync_authority = JITRolloutAuthority(PostHogJITFlagProvider())
+_control_loop: asyncio.AbstractEventLoop | None = None
+_control_loop_lock = threading.Lock()
+
+
+def _get_control_loop() -> asyncio.AbstractEventLoop:
+    global _control_loop
+    with _control_loop_lock:
+        if _control_loop is None or _control_loop.is_closed():
+            loop = asyncio.new_event_loop()
+            thread = threading.Thread(target=loop.run_forever, name='jit-rollout-control-loop', daemon=True)
+            thread.start()
+            _control_loop = loop
+        return _control_loop
+
+
+def _unavailable_decision(reason: JITDecisionReason, error_class: JITErrorClass) -> JITRolloutDecision:
+    return JITRolloutDecision(
+        rollout=TriState.UNKNOWN,
+        kill_switch=TriState.UNKNOWN,
+        effective=TriState.UNKNOWN,
+        reason=reason,
+        error_class=error_class,
+        cache_hit=False,
+        cache_ttl_seconds=0,
+    )
+
+
+def resolve_jit_rollout_sync(
+    uid: str,
+    *,
+    stage: JITDecisionStage,
+    force_refresh: bool = False,
+    result_timeout_seconds: float = SYNC_JIT_ROLLOUT_RESULT_TIMEOUT_SECONDS,
+) -> JITRolloutDecision:
+    """Loop-confined resolution for non-async callers; unavailable states fail closed."""
+
+    try:
+        future = asyncio.run_coroutine_threadsafe(
+            _sync_authority.resolve(uid, stage=stage, force_refresh=force_refresh),
+            _get_control_loop(),
+        )
+    except Exception:
+        return _unavailable_decision(JITDecisionReason.PROVIDER_ERROR, JITErrorClass.PROVIDER)
+    try:
+        return future.result(timeout=result_timeout_seconds)
+    except FuturesTimeoutError:
+        future.cancel()
+        return _unavailable_decision(JITDecisionReason.PROVIDER_TIMEOUT, JITErrorClass.TIMEOUT)
+    except Exception:
+        return _unavailable_decision(JITDecisionReason.PROVIDER_ERROR, JITErrorClass.PROVIDER)
+
 
 async def resolve_jit_rollout(
     uid: str,
@@ -482,4 +548,5 @@ __all__ = [
     'close_posthog_control_plane',
     'resolve_jit_ledger_migration_rollout',
     'resolve_jit_rollout',
+    'resolve_jit_rollout_sync',
 ]

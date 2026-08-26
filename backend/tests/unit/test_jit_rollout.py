@@ -25,6 +25,7 @@ from utils.jit_rollout import (
     JITRolloutAuthority,
     PostHogJITFlagProvider,
     TriState,
+    UNKNOWN_JIT_ROLLOUT_CACHE_SECONDS,
 )
 from utils.executors import run_blocking, sync_executor
 from utils.other.endpoints import get_current_user_uid
@@ -105,8 +106,17 @@ async def test_cache_expires_within_thirty_seconds_and_is_owner_isolated():
 
 
 @pytest.mark.asyncio
-async def test_unknown_provider_results_are_not_cached():
+async def test_unknown_provider_results_use_short_negative_cache():
+    """UNKNOWN caches briefly (fleet-scale cost bound) but never for the full TTL.
+
+    A fleet whose flags are simply absent must not pay one uncached provider
+    call per request, so unknown snapshots are held for a short negative TTL.
+    They can never authorize work, and a provider recovery is observed as soon
+    as the negative entry expires — well before the positive TTL.
+    """
+
     calls = 0
+    clock = {'now': 0.0}
 
     async def provider(_: str) -> JITFlagEvaluation:
         nonlocal calls
@@ -118,11 +128,15 @@ async def test_unknown_provider_results_are_not_cached():
             JITErrorClass.PROVIDER,
         )
 
-    authority = JITRolloutAuthority(provider)
-    await authority.resolve('user-1', stage=JITDecisionStage.INGRESS)
-    await authority.resolve('user-1', stage=JITDecisionStage.INGRESS)
+    authority = JITRolloutAuthority(provider, monotonic=lambda: clock['now'])
+    first = await authority.resolve('user-1', stage=JITDecisionStage.INGRESS)
+    second = await authority.resolve('user-1', stage=JITDecisionStage.INGRESS)
+    assert calls == 1, 'a fresh unknown snapshot must be served from the negative cache'
+    assert not first.permits_work and not second.permits_work
 
-    assert calls == 2
+    clock['now'] = UNKNOWN_JIT_ROLLOUT_CACHE_SECONDS + 0.1
+    await authority.resolve('user-1', stage=JITDecisionStage.INGRESS)
+    assert calls == 2, 'the negative entry must expire long before the positive TTL'
 
 
 @pytest.mark.asyncio
