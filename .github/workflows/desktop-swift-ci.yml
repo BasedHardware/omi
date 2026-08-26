@@ -198,8 +198,16 @@ jobs:
           # test logs to its own file so parallel output cannot interleave;
           # failing logs are replayed in full at the end.
           log_dir="$(mktemp -d)"
-          printf '%s\n' tests/test-*.sh \
-            | grep -vE 'tests/test-(mounted-navigation-latency|named-bundle-resources)\.sh' \
+          # The skip hand list stays a `case` pattern: check-launcher-test-skips.py
+          # parses this exact shape to hold it equal to the # discovery-skip markers.
+          for t in tests/test-*.sh; do
+            case "$t" in
+              tests/test-mounted-navigation-latency.sh|tests/test-named-bundle-resources.sh)
+                continue
+                ;;
+            esac
+            printf '%s\n' "$t"
+          done \
             | xargs -P 3 -I{} bash -c '
                 t="$1"
                 log_dir="$2"
