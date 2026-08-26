@@ -68,6 +68,14 @@ class CleanupPreviewResponse(BaseModel):
     candidate_ids: List[str]
     candidate_meta: List[CleanupCandidateMeta]
     expires_in_seconds: int
+    total_open_action_items: int = Field(
+        description="True count of the user's open action items, independent of any scan cap"
+    )
+    scan_cap: int = Field(description="Per-strategy Firestore scan cap (see _ACTION_ITEMS_LIST_HARD_MAX)")
+    scan_truncated: bool = Field(
+        description="True if total_open_action_items exceeds scan_cap, so strategies may not "
+        "have considered every open task as a candidate"
+    )
 
 
 class CleanupExecuteRequest(BaseModel):
@@ -133,6 +141,10 @@ def cleanup_preview(
     if 'vague' in request.strategies:
         strategy_fns['vague'] = lambda: candidates_vague(uid)
 
+    total_open = action_items_db.get_open_action_items_count(uid)
+    scan_cap = action_items_db.get_action_items_list_scan_cap()
+    scan_truncated = total_open > scan_cap
+
     if not strategy_fns:
         return CleanupPreviewResponse(
             session_id='',
@@ -142,6 +154,9 @@ def cleanup_preview(
             candidate_ids=[],
             candidate_meta=[],
             expires_in_seconds=_SESSION_TTL,
+            total_open_action_items=total_open,
+            scan_cap=scan_cap,
+            scan_truncated=scan_truncated,
         )
 
     results: dict[str, list] = {}
@@ -189,6 +204,9 @@ def cleanup_preview(
             CleanupCandidateMeta(id=c['id'], strategy=c['strategy'], description=c['description']) for c in candidates
         ],
         expires_in_seconds=_SESSION_TTL,
+        total_open_action_items=total_open,
+        scan_cap=scan_cap,
+        scan_truncated=scan_truncated,
     )
 
 

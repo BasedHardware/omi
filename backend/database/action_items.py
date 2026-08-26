@@ -500,6 +500,18 @@ def get_action_item(uid: str, action_item_id: str) -> Optional[Dict[str, Any]]:
 # Hard safety caps for list reads. Unbounded streams + in-process sort caused prod GET
 # /v1/action-items to hit HTTP_GET_TIMEOUT (30s) → 504 on large accounts.
 _ACTION_ITEMS_LIST_HARD_MAX = 2000
+
+
+def get_action_items_list_scan_cap() -> int:
+    """Public accessor for _ACTION_ITEMS_LIST_HARD_MAX.
+
+    Lets a caller of get_action_items() (e.g. cleanup preview) tell whether the
+    2000-item scan cap may have left tasks out of what it read, without reaching
+    into a private module constant.
+    """
+    return _ACTION_ITEMS_LIST_HARD_MAX
+
+
 # Slack so a handful of soft-deleted rows in a Firestore prefix still fill the page.
 _ACTION_ITEMS_LIST_DELETED_SLACK = 32
 # Lean projection for GET /v1/action-items. Omit `provenance` (evidence arrays dominate
@@ -983,6 +995,34 @@ def get_action_items_count_by_conversation(uid: str, conversation_id: str) -> Di
     # between them can leave completed > total. Cap it so the three values stay internally consistent.
     completed = min(completed, total)
     return {'total': total, 'completed': completed, 'incomplete': max(0, total - completed)}
+
+
+def get_open_action_items_count(uid: str) -> int:
+    """Return the true count of open (incomplete) action items for a user.
+
+    Uses Firestore count() aggregation — no document reads, no _ACTION_ITEMS_LIST_HARD_MAX
+    cap — so callers (e.g. cleanup preview) can tell whether get_action_items()'s 2000-item
+    scan cap left tasks out of what it actually read. "Open" is derived as total minus
+    completed (not a completed==False equality filter) so legacy docs with a missing/null
+    completed field count as open, matching get_action_items' own treatment of them.
+    """
+    base = db.collection('users').document(uid).collection(action_items_collection)
+    total = int(base.count().get()[0][0].value)
+    completed = int(base.where(filter=FieldFilter('completed', '==', True)).count().get()[0][0].value)
+
+    # Exclude soft-retired items, same trade-off as get_action_items_count_by_conversation:
+    # stream just the (rare) deleted subset and subtract, rather than requiring a filtered
+    # composite index.
+    deleted_total = 0
+    deleted_completed = 0
+    for doc in base.where(filter=FieldFilter('deleted', '==', True)).stream():
+        deleted_total += 1
+        if (doc.to_dict() or {}).get('completed'):
+            deleted_completed += 1
+
+    total = max(0, total - deleted_total)
+    completed = max(0, min(completed - deleted_completed, total))
+    return max(0, total - completed)
 
 
 def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[str, Any]]:

@@ -38,6 +38,13 @@ def router():
     utils_other_pkg = AutoMockModule("utils.other")
     utils_other_pkg.__path__ = []
 
+    action_items_db_mock = AutoMockModule("database.action_items")
+    # Sane defaults so every test that doesn't care about scan-truncation
+    # (i.e. all of them except TestCleanupPreviewScanTruncation) doesn't have
+    # to monkeypatch these two calls just to avoid comparing MagicMocks.
+    action_items_db_mock.get_open_action_items_count = lambda uid: 0
+    action_items_db_mock.get_action_items_list_scan_cap = lambda: 2000
+
     fakes = {
         "langchain_core": langchain_pkg,
         "langchain_core.prompts": AutoMockModule("langchain_core.prompts"),
@@ -45,7 +52,7 @@ def router():
         "utils.notifications": AutoMockModule("utils.notifications"),
         "utils.other": utils_other_pkg,
         "utils.other.endpoints": AutoMockModule("utils.other.endpoints"),
-        "database.action_items": AutoMockModule("database.action_items"),
+        "database.action_items": action_items_db_mock,
         "database.redis_db": AutoMockModule("database.redis_db"),
         "database.vector_db": AutoMockModule("database.vector_db"),
     }
@@ -190,6 +197,53 @@ class TestCleanupPreview:
 
         assert len(result.candidate_meta) == 10
         assert {(m.id, m.description) for m in result.candidate_meta} == {(f"t{i}", f"task {i}") for i in range(10)}
+
+
+# ---------------------------------------------------------------------------
+# Scan-truncation reporting (get_action_items' 2000-item hard cap means
+# strategies can silently skip tasks on large accounts — surface that instead
+# of staying quiet about it)
+# ---------------------------------------------------------------------------
+
+
+class TestCleanupPreviewScanTruncation:
+    def test_not_truncated_when_open_count_within_cap(self, router, monkeypatch):
+        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _three_candidates())
+        monkeypatch.setattr(router, "merge_candidates", lambda lists: lists[0] if lists else [])
+        monkeypatch.setattr(router, "_save_session", lambda *a, **kw: None)
+        monkeypatch.setattr(router.action_items_db, "get_open_action_items_count", lambda uid: 1500)
+        monkeypatch.setattr(router.action_items_db, "get_action_items_list_scan_cap", lambda: 2000)
+
+        req = router.CleanupPreviewRequest(strategies=["stale_age"])
+        result = router.cleanup_preview(req, uid="uid-1")
+
+        assert result.total_open_action_items == 1500
+        assert result.scan_cap == 2000
+        assert result.scan_truncated is False
+
+    def test_truncated_when_open_count_exceeds_cap(self, router, monkeypatch):
+        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _three_candidates())
+        monkeypatch.setattr(router, "merge_candidates", lambda lists: lists[0] if lists else [])
+        monkeypatch.setattr(router, "_save_session", lambda *a, **kw: None)
+        monkeypatch.setattr(router.action_items_db, "get_open_action_items_count", lambda uid: 45000)
+        monkeypatch.setattr(router.action_items_db, "get_action_items_list_scan_cap", lambda: 2000)
+
+        req = router.CleanupPreviewRequest(strategies=["stale_age"])
+        result = router.cleanup_preview(req, uid="uid-1")
+
+        assert result.total_open_action_items == 45000
+        assert result.scan_cap == 2000
+        assert result.scan_truncated is True
+
+    def test_truncation_fields_present_on_empty_strategies_short_circuit(self, router, monkeypatch):
+        monkeypatch.setattr(router.action_items_db, "get_open_action_items_count", lambda uid: 5000)
+        monkeypatch.setattr(router.action_items_db, "get_action_items_list_scan_cap", lambda: 2000)
+
+        req = router.CleanupPreviewRequest(strategies=[])
+        result = router.cleanup_preview(req, uid="uid-1")
+
+        assert result.total_open_action_items == 5000
+        assert result.scan_truncated is True
 
 
 # ---------------------------------------------------------------------------
