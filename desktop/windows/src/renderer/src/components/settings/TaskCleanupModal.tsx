@@ -295,6 +295,16 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
             </p>
           )}
 
+          {preview.scan_truncated && (
+            <div className="flex items-start gap-2 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Scanned your {preview.scan_cap.toLocaleString()} oldest open tasks — you have{' '}
+              {preview.total_open_action_items.toLocaleString()} total, so{' '}
+              {(preview.total_open_action_items - preview.scan_cap).toLocaleString()} weren&apos;t
+              checked. Run cleanup again after this batch to reach the rest.
+            </div>
+          )}
+
           {/* Breakdown */}
           {Object.values(preview.breakdown).some((n) => n > 0) && (
             <div className="glass-subtle rounded-lg px-4 py-3 text-sm">

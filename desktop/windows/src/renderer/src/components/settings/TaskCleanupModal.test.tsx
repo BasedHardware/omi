@@ -22,7 +22,10 @@ const PREVIEW_RESULT = {
     { id: 't1', strategy: 'stale_age', description: 'Renew passport' },
     { id: 't2', strategy: 'stale_age', description: 'Book dentist' }
   ],
-  expires_in_seconds: 300
+  expires_in_seconds: 300,
+  total_open_action_items: 2,
+  scan_cap: 2000,
+  scan_truncated: false
 }
 
 beforeEach(() => {
@@ -70,5 +73,32 @@ describe('TaskCleanupModal review list', () => {
     const deleteButton = screen.getByText('Delete 0 tasks').closest('button') as HTMLButtonElement
     expect(deleteButton.disabled).toBe(true)
     expect(taskCleanupExecute).not.toHaveBeenCalled()
+  })
+})
+
+// Scan-cap truncation: get_action_items caps at 2000 open tasks, so accounts
+// with more than that get a silently partial scan unless the UI says so.
+describe('TaskCleanupModal scan truncation notice', () => {
+  it('shows a truncation notice when scan_truncated is true', async () => {
+    vi.mocked(taskCleanupPreview).mockResolvedValue({
+      ...PREVIEW_RESULT,
+      total_open_action_items: 45000,
+      scan_cap: 2000,
+      scan_truncated: true
+    })
+
+    render(<TaskCleanupModal open onOpenChange={vi.fn()} />)
+    fireEvent.click(screen.getByText('Analyze'))
+
+    await screen.findByText(/2,000 oldest open tasks/)
+    expect(screen.getByText(/43,000 weren't checked/)).toBeTruthy()
+  })
+
+  it('shows no truncation notice when scan_truncated is false', async () => {
+    render(<TaskCleanupModal open onOpenChange={vi.fn()} />)
+    fireEvent.click(screen.getByText('Analyze'))
+
+    await screen.findByText('Renew passport')
+    expect(screen.queryByText(/weren't checked/)).toBeNull()
   })
 })

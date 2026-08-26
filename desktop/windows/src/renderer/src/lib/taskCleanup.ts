@@ -35,6 +35,9 @@ export interface CleanupPreviewResult {
   candidate_ids: string[]
   candidate_meta: CleanupCandidateMeta[]
   expires_in_seconds: number
+  total_open_action_items: number
+  scan_cap: number
+  scan_truncated: boolean
 }
 
 export interface CleanupExecuteResult {
