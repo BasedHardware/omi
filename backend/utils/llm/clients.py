@@ -551,12 +551,15 @@ def get_llm(
         byok_key = get_byok_key(byok_provider)
 
     if not byok_key:
-        preferred_openrouter_key = get_byok_key('openrouter')
-        if preferred_openrouter_key:
-            model = _byok_fallback_model('openrouter')
-            provider = 'openrouter'
-            byok_provider = 'openrouter'
-            byok_key = preferred_openrouter_key
+        # Gemini and Anthropic have direct BYOK clients — do not override
+        feature_has_direct_byok = byok_provider in ('gemini', 'anthropic')
+        if not feature_has_direct_byok:
+            preferred_openrouter_key = get_byok_key('openrouter')
+            if preferred_openrouter_key:
+                model = _byok_fallback_model('openrouter')
+                provider = 'openrouter'
+                byok_provider = 'openrouter'
+                byok_key = preferred_openrouter_key
 
     if not byok_key:
         configured_provider = provider
