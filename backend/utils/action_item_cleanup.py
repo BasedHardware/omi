@@ -1,7 +1,7 @@
 import logging
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, cast
 
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -268,7 +268,7 @@ def candidates_llm_relevance(uid: str, confidence_threshold: float = 0.85) -> li
             age = f"{(datetime.now(timezone.utc) - created).days}d ago" if created else "unknown age"
             task_lines.append(f"- id:{item['id']} | {item.get('description', '')} [{age}]")
         try:
-            result: _BatchVerdicts = chain.invoke({"today": today, "tasks": "\n".join(task_lines)})
+            result = cast(_BatchVerdicts, chain.invoke({"today": today, "tasks": "\n".join(task_lines)}))
             return [
                 {'id': v.id, 'description': id_to_item[v.id].get('description', ''), 'strategy': 'llm_relevance'}
                 for v in result.verdicts
@@ -361,13 +361,13 @@ def candidates_conversation_context(uid: str, confidence_threshold: float = 0.85
         age = f"{(now - started_at).days} days ago" if started_at else "unknown"
         task_lines = [f"- id:{i['id']} | {i.get('description', '')}" for i in batch]
         try:
-            result: _BatchVerdicts = chain.invoke({
+            result = cast(_BatchVerdicts, chain.invoke({
                 "today": today,
                 "title": ctx['title'] or '(untitled)',
                 "overview": ctx['overview'] or '(no summary)',
                 "age": age,
                 "tasks": "\n".join(task_lines),
-            })
+            }))
             return [
                 {'id': v.id, 'description': id_to_item[v.id].get('description', ''), 'strategy': 'conversation_context'}
                 for v in result.verdicts
