@@ -48,6 +48,10 @@ _stubs = [
     'database.redis_db',
     'database.users',
     'database.vector_db',
+    # routers.conversations imports FirestoreReadSite from here at module scope.
+    # database is stubbed submodule-by-submodule in this file, so a new one has to
+    # be listed or collection fails with ModuleNotFoundError before any test runs.
+    'database.firestore_read_metrics',
     'firebase_admin',
     'firebase_admin.messaging',
     'firebase_admin.auth',
