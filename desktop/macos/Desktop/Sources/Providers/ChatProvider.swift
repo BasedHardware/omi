@@ -3611,10 +3611,11 @@ class ChatProvider: ObservableObject {
     messageId: String,
     status: KernelJournalTurnStatus,
     surface: AgentSurfaceReference? = nil,
-    ownerID: String
+    ownerID: String,
+    messageOverride: ChatMessage? = nil
   ) async -> Bool {
     let targetSurface = surface ?? mainChatSurfaceReference()
-    if let message = messages.first(where: { $0.id == messageId }) {
+    if let message = messageOverride ?? messages.first(where: { $0.id == messageId }) {
       return await kernelTurnProjection.updateTurn(
         surface: targetSurface,
         message: message,
@@ -3635,7 +3636,8 @@ class ChatProvider: ObservableObject {
   /// adapter completion cannot race two terminal journal updates or callbacks.
   private func finishJournalTarget(
     generation: Int,
-    status: KernelJournalTurnStatus
+    status: KernelJournalTurnStatus,
+    messageOverride: ChatMessage? = nil
   ) async -> Bool {
     guard let target = journalTerminalTargets.claim(generation: generation) else {
       return false
@@ -3653,7 +3655,8 @@ class ChatProvider: ObservableObject {
         messageId: target.assistantMessageId,
         status: status,
         surface: target.surface,
-        ownerID: target.ownerID
+        ownerID: target.ownerID,
+        messageOverride: messageOverride
       )
     }
     journalOwnerByMessageID.removeValue(forKey: target.assistantMessageId)
@@ -5478,8 +5481,12 @@ class ChatProvider: ObservableObject {
         ),
         providerAuthMessage: Self.providerAuthRequiredUserMessage(isUserClaudeMode: isUserClaudeMode)
       )
-      if let failureNotice {
-        applyTurnFailureMarker(failureNotice, toAssistantMessage: aiMessageId)
+      let failedAssistantMessage = failureNotice.flatMap {
+        applyTurnFailureMarker(
+          $0,
+          toAssistantMessage: aiMessageId,
+          fallbackAssistantMessage: aiMessage
+        )
       }
 
       if !watchdogFired, !toolStallAbortFired, let explicitStopReason {
@@ -5533,10 +5540,16 @@ class ChatProvider: ObservableObject {
         _ = await finishJournalTarget(
           generation: sendGen,
           queryResult: correlatedTerminalResult,
-          disposition: disposition
+          disposition: disposition,
+          acceptedMessage: failedAssistantMessage,
+          acceptedContent: failedAssistantMessage?.text
         )
       } else {
-        _ = await finishJournalTarget(generation: sendGen, status: .failed)
+        _ = await finishJournalTarget(
+          generation: sendGen,
+          status: .failed,
+          messageOverride: failedAssistantMessage
+        )
       }
 
       // Preserve only a bounded error class in analytics. Raw details stay
@@ -5769,11 +5782,33 @@ class ChatProvider: ObservableObject {
   /// finalized so `journalUpdate` carries it into the durable record. This is
   /// what stops the row being an empty `.failed` placeholder that the journal
   /// projection deletes, leaving the question with nothing under it.
-  func applyTurnFailureMarker(_ notice: ChatTurnFailureNotice, toAssistantMessage messageID: String) {
-    guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
-    messages[index].text = notice.transcriptContent(partialText: messages[index].text)
-    messages[index].isStreaming = false
-    messages[index].journalStatus = .failed
+  @discardableResult
+  func applyTurnFailureMarker(
+    _ notice: ChatTurnFailureNotice,
+    toAssistantMessage messageID: String,
+    fallbackAssistantMessage: ChatMessage? = nil
+  ) -> ChatMessage? {
+    if let index = messages.firstIndex(where: { $0.id == messageID }) {
+      messages[index].text = notice.transcriptContent(partialText: messages[index].text)
+      messages[index].isStreaming = false
+      messages[index].journalStatus = .failed
+      return messages[index]
+    }
+
+    // The agent runtime may terminalize and project an empty `.failed` row
+    // before Swift receives the error. Journal projection intentionally drops
+    // that empty placeholder, so reconstruct this already-admitted assistant
+    // row from the turn's original identity instead of losing the failure
+    // notice along with it.
+    guard var fallback = fallbackAssistantMessage,
+      fallback.id == messageID,
+      fallback.sender == .ai
+    else { return nil }
+    fallback.text = notice.transcriptContent(partialText: fallback.text)
+    fallback.isStreaming = false
+    fallback.journalStatus = .failed
+    messages.append(fallback)
+    return fallback
   }
 
   /// Put a failed turn's prompt back in the composer it came from, so the

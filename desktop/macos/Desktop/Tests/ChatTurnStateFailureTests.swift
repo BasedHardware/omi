@@ -47,6 +47,45 @@ final class ChatTurnStateFailureTests: XCTestCase {
     )
   }
 
+  /// The runtime can publish an empty `.failed` assistant row before Swift's
+  /// catch block runs. Journal projection drops that placeholder, so the
+  /// failure path must restore the already-admitted assistant identity rather
+  /// than silently leaving the question as the final row.
+  func testFailedTurnRestoresMarkerWhenRuntimeAlreadyRemovedTheAssistantRow() {
+    let provider = ChatProvider()
+    let fallback = ChatMessage(
+      id: "a1",
+      clientTurnId: "t1",
+      text: "",
+      sender: .ai,
+      isStreaming: true
+    )
+    provider.messages = [
+      ChatMessage(id: "u1", clientTurnId: "t1", text: "What did I do today?", sender: .user)
+    ]
+    guard
+      let notice = ChatTurnFailureNotice.forFailure(
+        errorDescription: "Upstream provider error",
+        presentsUserError: true
+      )
+    else { return XCTFail("expected a marker for the provider failure") }
+
+    let terminalMessage = provider.applyTurnFailureMarker(
+      notice,
+      toAssistantMessage: "a1",
+      fallbackAssistantMessage: fallback
+    )
+
+    XCTAssertEqual(terminalMessage?.text, notice.text)
+    XCTAssertEqual(terminalMessage?.journalStatus, .failed)
+    XCTAssertFalse(terminalMessage?.isStreaming ?? true)
+    XCTAssertEqual(
+      provider.messages.map(\.sender), [.user, .ai],
+      "The failed assistant identity must be restored after the runtime projection race"
+    )
+    XCTAssertEqual(provider.messages.last?.text, notice.text)
+  }
+
   /// Output the turn did manage to produce is not thrown away to make room
   /// for the reason.
   func testPartialAnswerSurvivesBesideTheMarker() {
