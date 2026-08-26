@@ -501,3 +501,67 @@ async def test_resume_reuses_the_lifecycle_snapshot_instead_of_reading_twice(rec
         'conversation-old'
     ], f'expected exactly one get_conversation call, got {get_conversation_calls}'
     assert host.state.current_conversation_id == 'conversation-old'
+
+
+def _stored_conversation_with_audio(audio_files: list[dict[str, Any]]) -> dict[str, Any]:
+    """An empty generation that nonetheless registered private-cloud audio.
+
+    This is the shape STT failure leaves behind: the pusher landed real chunks
+    and registered them, but no segment ever arrived, so the emptiness guard
+    still authorizes the delete.
+    """
+    return conversations_db.encode_conversation_for_write(
+        'uid',
+        {
+            'id': 'conversation',
+            'status': 'in_progress',
+            'transcript_segments': [],
+            'audio_files': audio_files,
+        },
+        'standard',
+    )
+
+
+def test_empty_cleanup_publishes_the_snapshot_it_deleted(recording_store):
+    conversation_path = ('users', 'uid', 'conversations', 'conversation')
+    audio_files = [{'path': 'chunks/uid/conversation/0.wav'}]
+    recording_store.documents[conversation_path] = _stored_conversation_with_audio(audio_files)
+    recording_sessions.create_or_get_recording_session(
+        'uid', 'recording', 'conversation', firestore_client=recording_store
+    )
+
+    captured: dict[str, Any] = {}
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid',
+        'conversation',
+        'recording',
+        firestore_client=recording_store,
+        deleted_conversation=captured,
+    )
+
+    assert deleted is True
+    assert conversation_path not in recording_store.documents
+    # Physical cleanup can only see the row through this snapshot; the document
+    # itself is gone by the time the caller gets to decide anything.
+    assert captured['audio_files'] == audio_files
+
+
+def test_empty_cleanup_publishes_nothing_when_it_refuses_to_delete(recording_store):
+    conversation_path = ('users', 'uid', 'conversations', 'conversation')
+    recording_store.documents[conversation_path] = _stored_conversation([{'id': 'late', 'text': 'persisted'}])
+    recording_sessions.create_or_get_recording_session(
+        'uid', 'recording', 'conversation', firestore_client=recording_store
+    )
+
+    captured: dict[str, Any] = {}
+    deleted = recording_sessions.tombstone_and_delete_empty_conversation(
+        'uid',
+        'conversation',
+        'recording',
+        firestore_client=recording_store,
+        deleted_conversation=captured,
+    )
+
+    assert deleted is False
+    assert conversation_path in recording_store.documents
+    assert captured == {}

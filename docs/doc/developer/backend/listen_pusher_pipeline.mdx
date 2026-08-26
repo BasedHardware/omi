@@ -137,6 +137,22 @@ terminal parent; the listen handler opens one fresh generation and replays that
 buffer once. The first-segment `started_at` value commits in that same content
 transaction, so this recovery cannot leave a timestamp-only write behind.
 
+Deleting an empty generation also sweeps its private-cloud audio, but only
+when that generation never registered any. Emptiness is decided from
+transcript segments, photos and `has_content`; `audio_files` is deliberately
+not part of the test, so a recording whose STT produced nothing while the
+provider was failing still reaches this delete with real audio registered on
+it. Those bytes are the last surviving copy of that recording and are kept, at
+the cost of leaving a prefix under `chunks/{uid}/{conversation_id}/` that no
+Firestore row points at any more — the bucket has no lifecycle rule there, so
+retained audio is retained until something reclaims it deliberately. Only a
+generation with no registered audio is swept, because nothing else could have
+referenced those chunks. The decision reads the snapshot the delete
+transaction actually removed rather than re-fetching the document: a fetch
+beforehand races the pusher's own registration write, and losing that race in
+the other direction would delete a recording that had just become
+referenceable.
+
 ## Capture-device provenance
 
 Every capture client with WebSocket-upgrade header support sends
