@@ -120,8 +120,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     readsPhase,
     refreshReads,
   } = useDesktopReads();
-  const {completeFirstRun, onboardingRequired, signInAndRefresh, signingIn} =
-    useOnboarding(macDesktop, refreshReads);
+  const {
+    completeFirstRun,
+    onboardingRequired,
+    signInAndRefresh,
+    signOutAndRefresh,
+    signingIn,
+  } = useOnboarding(macDesktop, refreshReads);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchArmed, setSearchArmed] = useState(false);
@@ -234,11 +239,16 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   }, [homeSearchFocusNonce]);
 
   useEffect(() => {
+    if (reduceMotion) {
+      stageOpacity.setValue(1);
+      stageTranslateY.setValue(0);
+      return;
+    }
     stageOpacity.setValue(0);
-    stageTranslateY.setValue(reduceMotion ? 0 : 8);
+    stageTranslateY.setValue(8);
     Animated.parallel([
       Animated.timing(stageOpacity, {
-        duration: reduceMotion ? 1 : 180,
+        duration: 180,
         easing: Easing.bezier(0.22, 1, 0.36, 1),
         toValue: 1,
         // Keep first content paint on the JS driver: the native driver can
@@ -246,7 +256,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         useNativeDriver: false,
       }),
       Animated.timing(stageTranslateY, {
-        duration: reduceMotion ? 1 : 180,
+        duration: 180,
         easing: Easing.bezier(0.22, 1, 0.36, 1),
         toValue: 0,
         useNativeDriver: false,
@@ -1243,9 +1253,16 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     outcome={routeOutcome}
                   />
                 ) : route === 'Connectors' ? (
-                  <ConnectorsPage />
+                  <ConnectorsPage
+                    onSignIn={signInAndRefresh}
+                    signingIn={signingIn}
+                  />
                 ) : (
-                  <SettingsPage />
+                  <SettingsPage
+                    onSignIn={signInAndRefresh}
+                    onSignOut={signOutAndRefresh}
+                    signingIn={signingIn}
+                  />
                 )}
               </View>
             </Animated.View>
@@ -1272,7 +1289,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   ) : null;
 
   return (
-    <PageShell desktopOverlay={macDestinationMenu} macDesktop={macDesktop}>
+    <PageShell
+      desktopOverlay={macDestinationMenu}
+      macDesktop={macDesktop}
+      workspaceMaterial>
       {shell}
     </PageShell>
   );

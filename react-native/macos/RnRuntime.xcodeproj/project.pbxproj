@@ -45,6 +45,7 @@
 		A10404000000000000000002 /* OmiSFSymbolView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiSFSymbolView.mm; sourceTree = "<group>"; };
 		A10404000000000000000003 /* OmiSFSymbolView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiSFSymbolView.h; sourceTree = "<group>"; };
 		A10405000000000000000002 /* OmiAuthModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiAuthModule.mm; sourceTree = "<group>"; };
+		A10405000000000000000003 /* OmiAuthModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiAuthModule.h; sourceTree = "<group>"; };
 		A10406000000000000000002 /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
 		A10407000000000000000002 /* LocalAuthentication.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = LocalAuthentication.framework; path = System/Library/Frameworks/LocalAuthentication.framework; sourceTree = SDKROOT; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
@@ -111,6 +112,7 @@
 				A10403000000000000000002 /* OmiGlassPanelView.mm */,
 				A10404000000000000000003 /* OmiSFSymbolView.h */,
 				A10404000000000000000002 /* OmiSFSymbolView.mm */,
+				A10405000000000000000003 /* OmiAuthModule.h */,
 				A10405000000000000000002 /* OmiAuthModule.mm */,
 			);
 			path = "RnRuntime-macOS";

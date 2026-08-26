@@ -18,6 +18,8 @@ export type {
   NativeSnapshot,
   OmiBackend,
   OmiAuth,
+  OmiAuthSignInResult,
+  OmiAuthSignOutResult,
   OmiNative,
 } from './omiNativeTypes';
 

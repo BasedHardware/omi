@@ -1,4 +1,5 @@
 #import "OmiBackendModule.h"
+#import "OmiAuthModule.h"
 
 #import <LocalAuthentication/LocalAuthentication.h>
 #import <Security/Security.h>
@@ -247,7 +248,9 @@ static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSStr
   NSDictionary *session = OmiOwnKeychainCloudSession();
   NSString *ownKeychainToken = OmiOwnKeychainCloudToken(session);
   NSString *cloud = ownKeychainToken;
-  if (cloud.length == 0) cloud = environment[@"OMI_CLOUD_API_TOKEN"] ?: environment[@"OMI_API_TOKEN"];
+  if (cloud.length == 0 && !OmiAuthEnvironmentCloudTokensIgnored()) {
+    cloud = environment[@"OMI_CLOUD_API_TOKEN"] ?: environment[@"OMI_API_TOKEN"];
+  }
   if (cloud.length == 0) return nil;
   OmiBackendPolicy *policy = [[OmiBackendPolicy alloc] init];
   policy.url = OmiValidatedURL(@"https://api.omi.me", NO);

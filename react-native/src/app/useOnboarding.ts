@@ -69,10 +69,27 @@ export function useOnboarding(
     }
   }, [refreshReads]);
 
+  const signOutAndRefresh = useCallback(async () => {
+    const auth = omiAuth;
+    if (auth === undefined || auth === null) {
+      throw new Error('Sign out is not available in this app session.');
+    }
+    const result = await auth.signOut();
+    if (!result.signedOut) {
+      throw new Error('Could not clear this app session.');
+    }
+    const hasSession = await auth.hasCloudSession();
+    if (macDesktop && !hasSession) {
+      setOnboardingRequired(true);
+    }
+    await refreshReads(false);
+  }, [macDesktop, refreshReads]);
+
   return {
     completeFirstRun,
     onboardingRequired,
     signInAndRefresh,
+    signOutAndRefresh,
     signingIn,
   };
 }
