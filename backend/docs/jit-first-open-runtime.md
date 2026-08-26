@@ -6,13 +6,14 @@ supported. Clients cannot supply a cohort or enrollment flag.
 
 When enabled, summary creation and retrieval indexing remain on capture. The
 backend transactionally writes `jit_first_open.state=pending` before deferring
-folder assignment, goal progress, and conversation-app fan-out. A detail read
-claims a token-fenced lease and dispatches those effects. Concurrent/repeated
-opens do not duplicate a live claim; failures return to pending and expired
-leases can be reclaimed. Completion is accepted only from the current token.
-Outstanding work re-reads uncached paid-boundary rollout/kill authority before
-each provider call and again before every result, usage, folder, goal, or
-receipt commit. A kill that changes while a provider request is already in
+folder assignment and conversation-app fan-out (automatic goal updates are
+removed from the JIT featureset entirely; goals change only through manual or
+explicit actions). A detail read claims a token-fenced lease and dispatches
+those effects. Concurrent/repeated opens do not duplicate a live claim;
+failures return to pending and expired leases can be reclaimed. Completion is
+accepted only from the current token. Outstanding work re-reads uncached
+paid-boundary rollout/kill authority before each provider call and again
+before every result, usage, folder, or receipt commit. A kill that changes while a provider request is already in
 flight cannot retract that paid request, but its result is suspended and no
 mutation commits. Kill/off/unknown never drain persisted work.
 

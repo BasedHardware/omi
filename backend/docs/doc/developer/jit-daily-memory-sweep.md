@@ -49,11 +49,17 @@ single at-most-once invocation, and the full bounded candidate page (memory
 candidates plus folder assignments) and its digest are staged under the
 sweep-owned control path before any candidate can be applied. A later retry
 reads that exact stage; a missing or malformed stage is incomplete and never
-triggers a second, nondeterministic extraction. The cost gate is a ceiling
-checked before any provider call: twice the spine characters plus the full
-transcript-fetch budget must fit `MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD`
-(set it to at least ~$0.75 to cover maximal days; typical days ceiling far
-lower).
+triggers a second, nondeterministic extraction. The one exception is a stage
+written under an older `daily_memory_sweep_daily_summary_stage.*` schema
+version (a deployment boundary): that deployment owned the window's model
+invocation and its own apply path, so the reader attests an empty page and
+lets the cursor advance instead of stalling every user on a schema bump. The
+cost gate is a ceiling checked before any provider call: twice the spine
+characters, plus the full transcript-fetch budget, plus the clamped
+model-controlled phase-B additions (draft memories, request reasons, prior-
+memory lookup queries and results) must fit
+`MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD` (set it to at least ~$0.80 to
+cover maximal days; typical days ceiling far lower).
 
 Onboarding provenance is a server-generated session marker written by the
 listen runtime; client `source` and onboarding flags are not trusted. The

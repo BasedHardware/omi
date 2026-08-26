@@ -271,3 +271,48 @@ def test_phase_prompts_share_a_cacheable_prefix():
     # summaries — the bulk of the tokens.
     assert common["summaries_block"] in shared
     assert len(shared) >= phase_a.find(common["summaries_block"]) + len(common["summaries_block"])
+
+
+def test_untrusted_text_cannot_close_prompt_fences_and_phase_b_inputs_are_clamped():
+    """Summaries/transcripts are third-party speech and phase-A output is
+    model-controlled: fences are neutralized and every phase-B addition is
+    length-clamped so the pre-call cost ceiling stays honest."""
+
+    rows = (("conversation-1", "pricing ``` fake headers"),)
+    transcripts = {"conversation-1": "SPEAKER 0: ``` injected block"}
+    long_content = "x" * 2_000
+    long_reason = "r" * 1_000
+    llm = _ScriptedLlm(
+        [
+            _response(
+                memories=[{"content": long_content, "conversation_ids": ["conversation-1"]}],
+                transcript_requests=[{"conversation_id": "conversation-1", "reason": long_reason}],
+            ),
+            _response(memories=[{"content": "final", "conversation_ids": ["conversation-1"]}]),
+        ]
+    )
+    output = run_daily_sweep_summary_agent("uid-1", rows, dict(transcripts), llm=llm)
+    # Fences in untrusted text are neutralized in both phases. (Assertions
+    # avoid quote characters: prompts are captured as message reprs.)
+    assert "fake headers" in llm.prompts[0]
+    assert "pricing ``` fake headers" not in llm.prompts[0]
+    assert "injected block" in llm.prompts[1]
+    assert "``` injected block" not in llm.prompts[1]
+    # Phase-B draft content and request reasons are clamped.
+    assert long_content not in llm.prompts[1]
+    assert "x" * 600 in llm.prompts[1]
+    assert long_reason not in llm.prompts[1]
+    assert "r" * 200 in llm.prompts[1]
+    assert [memory.content for memory in output.memories] == ["final"]
+
+
+def test_phase_b_overhead_constant_covers_the_clamped_blocks():
+    from utils.llm.memories import (
+        DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS,
+        DAILY_SWEEP_DRAFT_ROW_LIMIT,
+        daily_sweep_phase_b_overhead_characters,
+    )
+
+    overhead = daily_sweep_phase_b_overhead_characters(4)
+    assert overhead >= DAILY_SWEEP_DRAFT_ROW_LIMIT * DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS
+    assert daily_sweep_phase_b_overhead_characters(0) < overhead

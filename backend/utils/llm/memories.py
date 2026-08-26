@@ -647,9 +647,39 @@ _DAILY_SWEEP_FOLDER_TASK = (
     "folder list, or omit it if none fits.\nUnfiled conversations: {unfiled}\nFolders: {folders}"
 )
 
+# Phase-B input bounds. Everything phase B adds beyond the shared prefix and
+# the transcript-fetch budget is either model-controlled (draft memories,
+# request reasons, lookup queries) or ledger-controlled (lookup results), so
+# each piece is clamped here and the worst case is exported to the sweep's
+# pre-call cost ceiling via daily_sweep_phase_b_overhead_characters().
+DAILY_SWEEP_DRAFT_ROW_LIMIT = 24
+DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS = 600
+DAILY_SWEEP_DRAFT_CITED_IDS = 8
+DAILY_SWEEP_REQUEST_REASON_CHARACTERS = 200
+DAILY_SWEEP_LOOKUP_QUERY_CHARACTERS = 200
+DAILY_SWEEP_LOOKUP_RESULT_ROWS = 10
+DAILY_SWEEP_LOOKUP_RESULT_CHARACTERS = 400
+
+
+def daily_sweep_phase_b_overhead_characters(max_memory_lookups: int) -> int:
+    """Worst-case characters phase B adds beyond the spine and excerpts."""
+
+    draft = DAILY_SWEEP_DRAFT_ROW_LIMIT * (DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS + DAILY_SWEEP_DRAFT_CITED_IDS * 40)
+    reasons = DAILY_SWEEP_DRAFT_ROW_LIMIT * DAILY_SWEEP_REQUEST_REASON_CHARACTERS
+    lookups = max(0, max_memory_lookups) * (
+        DAILY_SWEEP_LOOKUP_QUERY_CHARACTERS + DAILY_SWEEP_LOOKUP_RESULT_ROWS * DAILY_SWEEP_LOOKUP_RESULT_CHARACTERS
+    )
+    return draft + reasons + lookups
+
+
+def _neutralize_fences(text: str) -> str:
+    """Keep untrusted text from closing the prompt's ``` blocks."""
+
+    return text.replace("```", "'''")
+
 
 def _daily_sweep_summaries_block(summary_rows: Sequence[tuple[str, str]]) -> str:
-    return "\n".join(f"[{conversation_id}] {text}" for conversation_id, text in summary_rows)
+    return "\n".join(f"[{conversation_id}] {_neutralize_fences(text)}" for conversation_id, text in summary_rows)
 
 
 def _daily_sweep_folder_task(folder_options: Sequence[tuple[str, str]], needs_folder_ids: Sequence[str]) -> str:
@@ -708,7 +738,7 @@ def run_daily_sweep_summary_agent(
     def lookup_results_block(lookups: Sequence[Any]) -> str:
         sections = []
         for lookup in lookups:
-            query = str(getattr(lookup, "query", "") or "").strip()[:200]
+            query = str(getattr(lookup, "query", "") or "").strip()[:DAILY_SWEEP_LOOKUP_QUERY_CHARACTERS]
             if not query:
                 continue
             results: List[str] = []
@@ -717,8 +747,14 @@ def run_daily_sweep_summary_agent(
                     results = [str(item) for item in memory_searcher(query)]
                 except Exception:
                     results = []
-            rendered = "\n".join(f"- {str(item)[:400]}" for item in results[:10]) or "- (no matches)"
-            sections.append(f"Q: {query}\n{rendered}")
+            rendered = (
+                "\n".join(
+                    f"- {_neutralize_fences(str(item)[:DAILY_SWEEP_LOOKUP_RESULT_CHARACTERS])}"
+                    for item in results[:DAILY_SWEEP_LOOKUP_RESULT_ROWS]
+                )
+                or "- (no matches)"
+            )
+            sections.append(f"Q: {_neutralize_fences(query)}\n{rendered}")
         return "\n\n".join(sections)
 
     try:
@@ -740,12 +776,17 @@ def run_daily_sweep_summary_agent(
             if not requests and not lookups:
                 return _sanitized_daily_sweep_output(first, known_ids, max_candidates)
             excerpts = "\n\n".join(
-                f"[{request.conversation_id}] ({request.reason})\n"
-                + (transcript_lookup.get(request.conversation_id) or "")[: max(1, max_fetch_characters)]
+                f"[{request.conversation_id}] "
+                f"({_neutralize_fences(str(request.reason or '')[:DAILY_SWEEP_REQUEST_REASON_CHARACTERS])})\n"
+                + _neutralize_fences(
+                    (transcript_lookup.get(request.conversation_id) or "")[: max(1, max_fetch_characters)]
+                )
                 for request in requests
             )
             draft = "\n".join(
-                f"- {memory.content} (from {', '.join(memory.conversation_ids)})" for memory in first.memories
+                f"- {_neutralize_fences(str(memory.content or '')[:DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS])} "
+                f"(from {', '.join(str(item)[:64] for item in memory.conversation_ids[:DAILY_SWEEP_DRAFT_CITED_IDS])})"
+                for memory in first.memories[:DAILY_SWEEP_DRAFT_ROW_LIMIT]
             )
             second = invoke(
                 daily_sweep_transcript_review_prompt,
@@ -771,7 +812,13 @@ def run_daily_sweep_summary_agent(
 def _sanitized_daily_sweep_output(
     output: DailySweepAgentPassOutput, known_ids: set, max_candidates: int
 ) -> DailySweepAgentPassOutput:
-    """Drop memories without valid provenance and assignments for unknown rows."""
+    """Drop memories without valid provenance and assignments for unknown rows.
+
+    folder_id is only checked for non-emptiness here; membership in the user's
+    real folder set is enforced downstream in daily_memory_sweep (both when the
+    page is staged and again on apply). Do not reuse this sanitizer anywhere
+    that lacks that second gate.
+    """
 
     memories = []
     for memory in output.memories:

@@ -7,7 +7,7 @@ import json
 import re
 import traceback
 from datetime import datetime, timezone, timedelta
-from typing import Any, Callable, Dict, List, Optional, Set, cast
+from typing import Any, Dict, List, Optional, Set, cast
 
 import database.goals as goals_db
 import database.memories as memories_db
@@ -251,9 +251,6 @@ def extract_and_update_goal_progress(
     *,
     idempotency_key_prefix: Optional[str] = None,
     account_generation: Optional[int] = None,
-    authority_account_generation: Optional[int] = None,
-    authority_source_generation: Optional[int] = None,
-    effect_authorizer: Optional[Callable[[], None]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Extract goal progress from text and update if found.
@@ -331,8 +328,6 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                     continue
                 old_value = goal.get('current_value', 0)
                 if new_value != old_value:
-                    if effect_authorizer is not None:
-                        effect_authorizer()
                     if idempotency_key_prefix is None:
                         goals_db.update_goal_progress(uid, goal_id, new_value)
                     else:
@@ -342,8 +337,6 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                             new_value,
                             idempotency_key=f'{idempotency_key_prefix}:{goal_id}',
                             account_generation=account_generation,
-                            authority_account_generation=authority_account_generation,
-                            authority_source_generation=authority_source_generation,
                         )
                     goal_title = goal.get('title', '')
                     logger.info(

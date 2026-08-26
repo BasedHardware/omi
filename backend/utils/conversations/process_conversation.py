@@ -782,9 +782,6 @@ def update_goal_progress(
     conversation: Conversation,
     *,
     idempotency_key_prefix: Optional[str] = None,
-    authority_account_generation: Optional[int] = None,
-    authority_source_generation: Optional[int] = None,
-    effect_authorizer: Optional[Callable[[], None]] = None,
 ) -> bool:
     """Extract and update goal progress from conversation text."""
     try:
@@ -815,9 +812,6 @@ def update_goal_progress(
                 text,
                 idempotency_key_prefix=idempotency_key_prefix,
                 account_generation=account_generation,
-                authority_account_generation=authority_account_generation,
-                authority_source_generation=authority_source_generation,
-                effect_authorizer=effect_authorizer,
             )
         return True
     except Exception as e:

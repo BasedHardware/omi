@@ -1447,9 +1447,13 @@ def test_completed_day_agent_assigns_folders_for_unopened_conversations(monkeypa
     assert db.store["users/user-1/conversations/conversation-1"]["folder_id"] == "folder-1"
 
 
-def test_folder_backstop_never_overwrites_and_requires_obligation():
+def test_folder_backstop_never_overwrites_and_requires_obligation(monkeypatch):
     from utils.memory.daily_memory_sweep import _apply_daily_sweep_folder_assignments
 
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.firestore.transactional",
+        lambda function: lambda transaction, *args: function(transaction, *args),
+    )
     db = _Db()
     db.document("users/user-1/conversations/filed").set(
         {"jit_first_open": {"state": "pending"}, "folder_id": "existing", "discarded": False}
@@ -1663,3 +1667,118 @@ def test_completed_day_agent_slot_reaches_the_candidate(monkeypatch):
     assert result.source_status == "complete"
     # The candidate validator normalizes slot names to snake_case.
     assert result.daily_summary[0].slot == "current_city"
+
+
+def test_completed_day_stale_schema_stage_attests_empty_and_advances(monkeypatch):
+    """A stage written by an older deployment must not stall the cursor forever."""
+
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    local_date = date(2026, 8, 23)
+    window = completed_local_day_window(local_date, "UTC")
+    ref = _daily_summary_staged_candidates_ref(
+        db,
+        "user-1",
+        local_date,
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        window_id=window.window_id,
+    )
+    ref.set(
+        {
+            "schema_version": "daily_memory_sweep_daily_summary_stage.v1",
+            "uid": "user-1",
+            "local_date": local_date.isoformat(),
+            "candidate_page": [{"legacy": "shape"}],
+            "candidate_count": 1,
+        }
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._read_completed_day_conversation_sources",
+        lambda *_args, **_kwargs: ((_day_source("conversation-1", "stable summary"),), "complete"),
+    )
+    model = DailySweepModelAuthority(enabled=True, model_name="test", max_candidates=8, max_cost_usd=1.0)
+
+    def should_not_run(_uid, _rows, _lookup, **_kwargs):
+        raise AssertionError("a stale-schema stage must not rerun the agent")
+
+    result = produce_completed_day_daily_summary_sources(
+        "user-1",
+        local_date,
+        "UTC",
+        control,
+        db_client=db,
+        model_authority=model,
+        agent_runner=should_not_run,
+        window_override=window,
+    )
+    # The older deployment owned this window's invocation and apply; the day
+    # completes empty instead of blocking every later day.
+    assert result.source_status == "complete_zero"
+    assert result.daily_summary == ()
+
+
+def test_sweep_slot_refresh_amends_sweep_occupant_but_never_user_statements(monkeypatch):
+    """A sweep-authored slot occupant is refreshed by an equal-rank slot
+    candidate (profile maintenance); user statements and subject-only matches
+    keep the strict rank rule."""
+
+    from models.product_memory import MemoryItemStatus, MemoryKind
+    from utils.memory.daily_memory_sweep import LedgerWriteReason, _apply_candidate
+
+    def occupant(reason):
+        return SimpleNamespace(
+            memory_id="memory-existing",
+            status=MemoryItemStatus.active,
+            kind=MemoryKind.fact,
+            write_reason=reason,
+        )
+
+    amended = []
+    monkeypatch.setattr("utils.memory.daily_memory_sweep._target_for_candidate", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.amend_fact",
+        lambda uid, memory_id, content, **kwargs: amended.append((memory_id, content)) or "memory-amended",
+    )
+
+    # Sweep-authored occupant + slot candidate: refresh via amend.
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._find_active_slot_or_subject",
+        lambda *_a, **_k: occupant(LedgerWriteReason.daily_reconciliation),
+    )
+    memory_id, skip = _apply_candidate(
+        "user-1", date(2026, 8, 23), _candidate(content="David now lives in Austin"), db_client=_Db()
+    )
+    assert (memory_id, skip) == ("memory-amended", None)
+    assert amended == [("memory-existing", "David now lives in Austin")]
+
+    # A direct user statement is never overwritten by sweep inference.
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._find_active_slot_or_subject",
+        lambda *_a, **_k: occupant(LedgerWriteReason.direct_user_statement),
+    )
+    memory_id, skip = _apply_candidate("user-1", date(2026, 8, 23), _candidate(), db_client=_Db())
+    assert (memory_id, skip) == ("memory-existing", "existing_active_slot")
+
+    # Subject-only matches (no slot) stay duplicates, not updates.
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._find_active_slot_or_subject",
+        lambda *_a, **_k: occupant(LedgerWriteReason.daily_reconciliation),
+    )
+    memory_id, skip = _apply_candidate("user-1", date(2026, 8, 23), _candidate(slot=None), db_client=_Db())
+    assert (memory_id, skip) == ("memory-existing", "existing_active_subject")
+    assert len(amended) == 1
+
+
+def test_unstructured_fallback_marker_matches_the_prompt_rule():
+    """The producer's raw-transcript marker and the prompt rule that gates
+    slots on it must stay the same literal string, or the gate silently
+    stops firing."""
+
+    from utils import prompts
+    from utils.memory.daily_memory_sweep import UNSTRUCTURED_SUMMARY_MARKER
+
+    assert UNSTRUCTURED_SUMMARY_MARKER in prompts._DAILY_SWEEP_SHARED_RULES
+    rule = next(line for line in prompts._DAILY_SWEEP_SHARED_RULES.splitlines() if UNSTRUCTURED_SUMMARY_MARKER in line)
+    assert "NEVER set a slot" in rule

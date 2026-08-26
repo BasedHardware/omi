@@ -93,7 +93,12 @@ MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS = 200
 MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS = 120_000
 MAX_DAILY_TRANSCRIPT_FETCHES = 8
 MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS = 8_000
+MAX_DAILY_MEMORY_LOOKUPS = 4
 MAX_SUMMARY_FALLBACK_TRANSCRIPT_CHARACTERS = 1_200
+# Rows whose "summary" is a raw transcript head (no structured summary exists)
+# carry this marker so the agent prompt can refuse to source standing-profile
+# slots from unstructured third-party speech without transcript verification.
+UNSTRUCTURED_SUMMARY_MARKER = "(unstructured transcript excerpt)"
 MAX_ONBOARDING_CONVERSATIONS = 8
 MAX_ONBOARDING_SCAN_PAGES = 16
 MAX_ONBOARDING_INPUT_CHARACTERS = 24_000
@@ -2647,7 +2652,19 @@ def _apply_candidate(
     if candidate.operation == "add":
         occupant = _find_active_slot_or_subject(uid, candidate, db_client=db_client)
         if occupant is not None:
-            if candidate.authority.rank <= _target_authority(occupant):
+            occupant_rank = _target_authority(occupant)
+            # A slot is a standing attribute the daily run maintains: a
+            # sweep-authored occupant may be refreshed by an equal-rank sweep
+            # candidate carrying the same slot (same-slot supersession).
+            # Subject-matched occupants without a slot stay strictly ranked —
+            # equal rank there is a duplicate observation, not an update — and
+            # a higher-authority occupant (a direct user statement) is never
+            # overwritten by sweep inference.
+            sweep_slot_refresh = (
+                bool(candidate.slot)
+                and candidate.authority.rank == occupant_rank == SweepAuthority.sweep_inference.rank
+            )
+            if candidate.authority.rank <= occupant_rank and not sweep_slot_refresh:
                 return occupant.memory_id, "existing_active_slot" if candidate.slot else "existing_active_subject"
             target = occupant
             effective_operation = "amend"
@@ -3248,8 +3265,11 @@ def _read_completed_day_conversation_sources(
         else:
             # A finished conversation without a structured summary still counts
             # toward the day: fall back to a bounded transcript head so the
-            # spine never silently omits an eligible source.
-            summary = transcript[:MAX_SUMMARY_FALLBACK_TRANSCRIPT_CHARACTERS]
+            # spine never silently omits an eligible source. The marker lets
+            # the prompt hold these rows to a higher verification bar (raw
+            # speech is the least trusted input in the spine).
+            head = transcript[:MAX_SUMMARY_FALLBACK_TRANSCRIPT_CHARACTERS]
+            summary = f"{UNSTRUCTURED_SUMMARY_MARKER} {head}" if head else ""
         summary = summary.strip()
         if not summary and not transcript:
             continue
@@ -3871,6 +3891,19 @@ def _load_or_stage_daily_summary_candidates(
         if not getattr(snapshot, "exists", False):
             return None
         payload = snapshot.to_dict() or {}
+        if (
+            isinstance(payload, dict)
+            and payload.get("schema_version") != DAILY_SUMMARY_STAGE_SCHEMA_VERSION
+            and str(payload.get("schema_version") or "").startswith("daily_memory_sweep_daily_summary_stage.")
+        ):
+            # A stage written by a different deployment of this module is
+            # unreadable here, but it is not corrupt: the deployment that
+            # wrote it owned this window's model invocation and its own apply
+            # path.  Re-extracting would double-bill and could conflict with
+            # that deployment's receipts, and refusing forever would stall the
+            # cursor on every schema bump.  Attest the day as consumed with no
+            # further candidates so the cursor can advance.
+            return (), ()
         expires_raw = payload.get("expires_at") if isinstance(payload, dict) else None
         try:
             expires_at = (
@@ -3956,6 +3989,7 @@ def _load_or_stage_daily_summary_candidates(
             max_transcript_fetches=MAX_DAILY_TRANSCRIPT_FETCHES,
             max_fetch_characters=MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS,
             memory_searcher=_daily_sweep_ledger_searcher(uid, db_client=db_client),
+            max_memory_lookups=MAX_DAILY_MEMORY_LOOKUPS,
             cache_key=f"daily-sweep:{uid}",
         )
         candidates: List[DailySweepCandidate] = []
@@ -4156,10 +4190,25 @@ def _apply_daily_sweep_folder_assignments(
 
     Guards per row: the conversation must still exist, be non-discarded, carry
     a first-open obligation, and have no folder yet — a folder set by the
-    first-open worker (or the user) in the meantime always wins.  Every row is
+    first-open worker (or the user) in the meantime always wins.  The check
+    and the write share one transaction so a concurrent first-open or user
+    assignment cannot be clobbered by a stale read.  Every row is
     best-effort: replaying a staged page after a crash re-applies only the
     rows that are still unfiled.
     """
+
+    def assign_if_unfiled(transaction: Any, reference: Any, folder_id: str) -> bool:
+        snapshot = reference.get(transaction=transaction)
+        raw = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+        if (
+            not isinstance(raw, dict)
+            or raw.get("discarded")
+            or (raw.get("folder_id") or "")
+            or not isinstance(raw.get("jit_first_open"), Mapping)
+        ):
+            return False
+        transaction.set(reference, {"folder_id": folder_id}, merge=True)
+        return True
 
     applied = 0
     for assignment in assignments:
@@ -4169,16 +4218,8 @@ def _apply_daily_sweep_folder_assignments(
             continue
         try:
             reference = db_client.document(f"users/{uid}/conversations/{conversation_id}")
-            snapshot = reference.get()
-            raw = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
-            if (
-                not isinstance(raw, dict)
-                or raw.get("discarded")
-                or (raw.get("folder_id") or "")
-                or not isinstance(raw.get("jit_first_open"), Mapping)
-            ):
+            if not firestore.transactional(assign_if_unfiled)(db_client.transaction(), reference, folder_id):
                 continue
-            reference.set({"folder_id": folder_id}, merge=True)
             applied += 1
         except Exception:
             continue
@@ -4313,12 +4354,21 @@ def produce_completed_day_daily_summary_sources(
         from utils.llm.memories import run_daily_sweep_summary_agent
 
         runner = run_daily_sweep_summary_agent
+    from utils.llm.memories import daily_sweep_phase_b_overhead_characters
+
     spine_characters = sum(len(row.summary_text) for row in conversation_rows)
     # Conservative ceiling: the spine is sent in phase A, and a verification
-    # phase may re-send the spine plus the full transcript-fetch budget.  The
-    # budget check must hold for the worst case before any provider call.
+    # phase may re-send the spine plus the full transcript-fetch budget plus
+    # the clamped model-controlled additions (draft memories, request reasons,
+    # lookup queries and results).  The budget check must hold for the worst
+    # case before any provider call.
     estimated_cost = (
-        (2 * spine_characters + MAX_DAILY_TRANSCRIPT_FETCHES * MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS) / 1000.0
+        (
+            2 * spine_characters
+            + MAX_DAILY_TRANSCRIPT_FETCHES * MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS
+            + daily_sweep_phase_b_overhead_characters(MAX_DAILY_MEMORY_LOOKUPS)
+        )
+        / 1000.0
     ) * MODEL_COST_PER_1K_INPUT_CHARACTERS_USD
     if estimated_cost > model.max_cost_usd:
         return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
