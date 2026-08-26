@@ -1540,18 +1540,22 @@ def _extract_memories_inner(
     # here is both the cost saving the cutover promises and the correctness
     # fix. Only a positively-read non-compatibility mode skips; any read
     # failure preserves the legacy eager path.
+    sweep_owned_mode: str | None = None
     try:
         from models.memory_apply import WriterMode
         from utils.memory.memory_system import ensure_canonical_apply_control_state
 
         control = ensure_canonical_apply_control_state(uid, db_client=db_client)
         writer_mode = getattr(control, 'writer_mode', WriterMode.compatibility)
+        if writer_mode != WriterMode.compatibility:
+            sweep_owned_mode = getattr(writer_mode, 'value', str(writer_mode))
     except Exception:
-        return _extract_memories_canonical(uid, conversation, db_client=db_client, parity_capture=parity_capture)
-    if writer_mode != WriterMode.compatibility:
+        # Unreadable control state preserves the legacy eager path.
+        sweep_owned_mode = None
+    if sweep_owned_mode is not None:
         logger.info(
             'memory extraction skipped: writer_mode=%s owns formation uid=%s conv=%s',
-            getattr(writer_mode, 'value', writer_mode),
+            sweep_owned_mode,
             uid,
             conversation.id,
         )
