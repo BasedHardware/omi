@@ -82,6 +82,10 @@ actor JITProactivityRuntime {
     let task: Task<Void, Never>
   }
   private var executionHeartbeats: [String: ExecutionHeartbeat] = [:]
+  /// Budget-day formatting runs on every context-visit admission; formatter
+  /// construction is too expensive to repeat there. Actor-isolated, rebuilt
+  /// only when the system timezone changes.
+  private var cachedDayFormatter: (timezone: TimeZone, formatter: DateFormatter)?
 
   init(
     flags: @escaping FlagResolver = { snapshot in
@@ -167,7 +171,7 @@ actor JITProactivityRuntime {
         guard let snoozedUntil = trigger.snoozedUntil else { return true }
         return now >= snoozedUntil
       }
-      let day = Self.day(for: now)
+      let day = day(for: now)
       let counts = try await wakeupCounts(
         triggerIDs: triggers.map(\.id), budgetDay: day, now: now)
       let receiptMatchesSnapshot =
@@ -374,7 +378,7 @@ actor JITProactivityRuntime {
       semanticFingerprint: opaqueSemanticFingerprint,
       locallyRelevant: context.locallyRelevant,
       boundedEvidence: context.boundedEvidence)
-    let day = Self.day(for: observation.occurredAt ?? Date())
+    let day = day(for: observation.occurredAt ?? Date())
     let nanoClaim: JITTriggerWakeupClaim?
     do {
       nanoClaim = try await mirror.claimAmbientNanoChange(
@@ -531,12 +535,17 @@ actor JITProactivityRuntime {
     JITProactivityReservation.identifier("ambient-context", contextID)
   }
 
-  private static func day(for date: Date) -> String {
+  private func day(for date: Date) -> String {
+    let timezone = TimeZone.current
+    if let cached = cachedDayFormatter, cached.timezone == timezone {
+      return cached.formatter.string(from: date)
+    }
     let formatter = DateFormatter()
     formatter.calendar = Calendar(identifier: .gregorian)
     formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.timeZone = .current
+    formatter.timeZone = timezone
     formatter.dateFormat = "yyyy-MM-dd"
+    cachedDayFormatter = (timezone, formatter)
     return formatter.string(from: date)
   }
 }

@@ -252,9 +252,11 @@ actor ProactiveLaneClient {
   }
 
   static func jitState(_ value: Any?) -> JITProactivityRolloutState {
+    // Wire contract: backend TriState serializes exactly `enabled`/`disabled`/
+    // `unknown`. Anything else — including retired spellings — fails closed.
     switch (value as? String)?.lowercased() {
-    case "on": return .enabled
-    case "off": return .disabled
+    case "enabled": return .enabled
+    case "disabled": return .disabled
     default: return .unknown
     }
   }
@@ -493,9 +495,16 @@ enum ContextProactivityTelemetry {
 
   static func recordJITAdmission(outcome: String, reason: String) async {
     let allowedOutcomes = Set(["legacy_fallback", "suppressed", "contract_missing"])
+    // Exact reason set produced by JITProactivityPolicy.decide,
+    // JITProactivityRuntime.admission/admitAmbient, and
+    // JITProactivityCoordinator.handle. Anything else stays "other".
     let allowedReasons = Set([
       "kill_switch", "rollout_unknown", "rollout_disabled",
-      "authoritative_trigger_action_unavailable", "planned", "ambient",
+      "no_eligible_candidate",
+      "planned_runtime_rejected", "planned_match_ambiguous", "planned_action_invalid",
+      "planned_duplicate_or_budget", "authoritative_snapshot_unavailable", "jit_execution_missing",
+      "ambient_local_gate", "ambient_nano_receipt_unavailable", "ambient_nano_budget",
+      "ambient_nano_rejected", "ambient_duplicate_or_budget", "ambient_receipt_unavailable",
     ])
     await MainActor.run {
       let boundedOutcome = allowedOutcomes.contains(outcome) ? outcome : "other"

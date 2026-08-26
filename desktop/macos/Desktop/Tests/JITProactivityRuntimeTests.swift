@@ -42,10 +42,14 @@ final class JITProactivityRuntimeTests: XCTestCase {
   }
 
   func testRolloutWireStatesFailClosed() {
-    XCTAssertEqual(ProactiveLaneClient.jitState("on"), .enabled)
-    XCTAssertEqual(ProactiveLaneClient.jitState("off"), .disabled)
+    XCTAssertEqual(ProactiveLaneClient.jitState("enabled"), .enabled)
+    XCTAssertEqual(ProactiveLaneClient.jitState("disabled"), .disabled)
+    XCTAssertEqual(ProactiveLaneClient.jitState("unknown"), .unknown)
     XCTAssertEqual(ProactiveLaneClient.jitState("future"), .unknown)
     XCTAssertEqual(ProactiveLaneClient.jitState(nil), .unknown)
+    // Retired spellings must fail closed, not re-enable the lane.
+    XCTAssertEqual(ProactiveLaneClient.jitState("on"), .unknown)
+    XCTAssertEqual(ProactiveLaneClient.jitState("off"), .unknown)
   }
 
   func testEnabledAuthorityFailsClosedWhenSnapshotIsUnavailable() async throws {
