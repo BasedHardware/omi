@@ -118,6 +118,11 @@ Future<Map<String, String>> buildHeaders({
   String? method,
   bool forWebSocket = false,
 }) async {
+  final effectiveAuthCheck = shouldHonorRequestedOmiAuth(
+    requested: requireAuthCheck,
+    customBackendActive: Env.hasApiBaseUrlOverride,
+    url: url,
+  );
   final headers = <String, String>{
     'X-Request-Start-Time': (DateTime.now().millisecondsSinceEpoch / 1000).toString(),
     'X-App-Platform': PlatformManager.instance.platform,
@@ -130,7 +135,7 @@ Future<Map<String, String>> buildHeaders({
   if (shouldAttachAccountGenerationHeader(
     url: url,
     method: method,
-    requireAuthCheck: requireAuthCheck,
+    requireAuthCheck: effectiveAuthCheck,
     forWebSocket: forWebSocket,
   )) {
     final accountGeneration = AccountCutoverRuntime.instance.control.accountGeneration;
@@ -141,7 +146,7 @@ Future<Map<String, String>> buildHeaders({
     }
   }
 
-  if (requireAuthCheck) {
+  if (effectiveAuthCheck) {
     // Authenticated requests must never degrade into anonymous traffic. A
     // typed exception stops the request before it reaches the network.
     headers['Authorization'] = await getAuthHeader(expireTerminalSession: expireTerminalSession);
@@ -162,8 +167,11 @@ String normalizeOmiApiUrlForHostMatch(String url) {
 }
 
 bool _isRequiredAuthCheck(String url) {
-  // Agent VM endpoints always hit prod even when app uses dev
-  if (url.contains('api.omi.me')) return true;
+  if (shouldAttachOmiCredentials(url)) return true;
+  // A runtime override is a separate trust boundary. Never send the user's
+  // Omi credential to it, even when it happens to share a path with the
+  // configured API base URL.
+  if (Env.hasApiBaseUrlOverride) return false;
   final base = Env.apiBaseUrl;
   if (base != null && base.isNotEmpty) {
     final normalizedUrl = normalizeOmiApiUrlForHostMatch(url);
@@ -173,6 +181,25 @@ bool _isRequiredAuthCheck(String url) {
     }
   }
   return false;
+}
+
+/// Omi credentials are scoped to Omi-owned product API authorities. Hostname
+/// parsing avoids substring matches such as `api.omi.me.attacker.example`.
+@visibleForTesting
+bool shouldAttachOmiCredentials(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || !{'https', 'wss'}.contains(uri.scheme.toLowerCase())) return false;
+  return {'api.omi.me', 'api.omiapi.com'}.contains(uri.host.toLowerCase());
+}
+
+/// Central guard for callers that historically requested auth unconditionally.
+/// A custom backend remains credential-free, while explicit calls to an
+/// official Omi authority (such as the agent VM) retain authentication.
+@visibleForTesting
+bool shouldHonorRequestedOmiAuth({required bool requested, required bool customBackendActive, String? url}) {
+  if (!requested) return false;
+  if (!customBackendActive) return true;
+  return url != null && shouldAttachOmiCredentials(url);
 }
 
 const _mutatingHttpMethods = {'POST', 'PUT', 'PATCH', 'DELETE'};

@@ -31,6 +31,7 @@ import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/backend_url_override.dart';
 import 'package:omi/env/environment_profile.dart';
 import 'package:omi/env/prod_env.dart';
 import 'package:omi/firebase_options_local.dart' as local;
@@ -160,6 +161,9 @@ Future _init() async {
   Env.validateProfilePairing();
   validateApplicationStartupRouting();
 
+  await SharedPreferencesUtil.init();
+  BackendUrlOverride.restore(SharedPreferencesUtil().customBackendUrl);
+
   FlutterForegroundTask.initCommunicationPort();
 
   // Service manager
@@ -181,8 +185,6 @@ Future _init() async {
   if (PlatformManager().isFCMSupported) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }
-
-  await SharedPreferencesUtil.init();
 
   // TestFlight remains a distribution/telemetry signal; production-family
   // builds always use the established production backend.

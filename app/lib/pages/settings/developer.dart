@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -500,6 +501,26 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DataPrivacyPage())),
                   ),
                   const SizedBox(height: 12),
+
+                  if (!kReleaseMode) ...[
+                    _buildSectionHeader(
+                      context.l10n.customBackendUrlTitle,
+                    ),
+                    _buildSectionContainer(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: _buildTextField(
+                            controller: provider.customBackendUrl,
+                            label: context.l10n.backendUrlLabel,
+                            hint: 'https://omi.example.com/',
+                            keyboardType: TextInputType.url,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                  ],
 
                   // Transcription Section
                   GestureDetector(
