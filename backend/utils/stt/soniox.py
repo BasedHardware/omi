@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 SONIOX_SERVICE_NAME: Final = 'soniox'
 SONIOX_WS_URL: Final = os.getenv('SONIOX_WS_URL', 'wss://stt-rt.soniox.com/transcribe-websocket')
 SONIOX_MODEL: Final = os.getenv('SONIOX_MODEL', 'stt-rt-v5')
+# Soniox closes any socket that receives neither audio nor a keepalive for 20s.
+# VAD gating routinely holds audio back for longer than that, so idle sockets die
+# as 408 request_timeout unless we fill the gap ourselves.
+SONIOX_KEEPALIVE_SECONDS: Final = 10.0
 
 
 class SafeSonioxSocket(STTSocket):
@@ -136,7 +140,11 @@ class SafeSonioxSocket(STTSocket):
     async def _send_loop(self) -> None:
         try:
             while not self._closed and not self._dead:
-                data = await self._send_queue.get()
+                try:
+                    data = await asyncio.wait_for(self._send_queue.get(), timeout=SONIOX_KEEPALIVE_SECONDS)
+                except asyncio.TimeoutError:
+                    await self._ws.send(json.dumps({'type': 'keepalive'}))
+                    continue
                 if data == b'':
                     # Documented end-of-audio signal: an empty text frame.
                     await self._ws.send('')
