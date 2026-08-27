@@ -1,5 +1,5 @@
 import { getApprovedApps } from '@/lib/api/public';
-import { categoryMetadata } from '@/components/marketplace/category';
+import { categoryMetadata } from '@/features/marketplace';
 
 type SitemapEntry = {
   url: string;

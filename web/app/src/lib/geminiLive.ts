@@ -1,5 +1,5 @@
 import { createAudioCapture, type AudioCapture } from '@/lib/audioCapture';
-import type { RealtimeUsageReport } from '@/lib/api';
+import type { RealtimeUsageReport } from '@/features/chat/api';
 
 const GEMINI_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
 const GEMINI_LIVE_ENDPOINT =

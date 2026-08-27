@@ -46,8 +46,8 @@ default access policy of Short-term + Long-term.
 - `desktop/macos/Desktop/Sources/MemoryBankConnector.swift`
 - `desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage.swift`
 - `desktop/macos/Desktop/Sources/Rewind/Core/MemoryModels.swift`
-- `web/app/src/components/memories/**`
-- `web/app/src/lib/memoryExport.ts`
+- `web/app/src/features/memories/**`
+- `web/app/src/features/memories/memoryExport.ts`
 - `web/frontend/src/components/memories/**`
 
 ## PR rule

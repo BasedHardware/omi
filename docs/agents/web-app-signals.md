@@ -9,7 +9,7 @@ so the next person does not reintroduce the pattern it replaced.
 | Need | Use |
 |---|---|
 | Read something from the API | `useAsyncResource(key, fetcher)` (`web/app/src/hooks/useAsyncResource.ts`) |
-| A list that is also written optimistically | A signal store — see `createGoalsStore` in `web/app/src/hooks/useGoals.ts` |
+| A list that is also written optimistically | A signal store — see `createGoalsStore` in `web/app/src/features/goals/useGoals.ts` |
 | Subscribe a component to a raw signal | `useSignalValue` / `useResourceValue` (`web/app/src/lib/signals.ts`) |
 
 `useAsyncResource` is keyed: change the key and it refetches, pass `null` and it

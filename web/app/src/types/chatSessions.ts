@@ -2,7 +2,7 @@
  * Chat-session wire types, mirroring `backend/routers/chat_sessions.py`.
  *
  * Shapes are camelCase to match the desktop clients (and so the ported view
- * helpers work unchanged); `lib/api.ts` translates snake_case on the wire.
+ * helpers work unchanged); the chat feature API translates snake_case on the wire.
  *
  * Shared-thread continuity: the default thread every client reads through
  * `/v2/messages` is the `plugin_id == null` session. Omitting `chat_session_id`

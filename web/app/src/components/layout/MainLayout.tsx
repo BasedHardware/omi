@@ -5,21 +5,18 @@ import { usePathname, useSearchParams } from '@tschk/moonshine-next/navigation';
 import { motion } from 'framer-motion';
 import dynamic from '@tschk/moonshine-next/dynamic';
 import { Sidebar, MobileMenuButton } from './Sidebar';
-import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
+import { ChatProvider, useChat as useChatContext } from '@/features/chat';
 import { BottomNavigation } from './BottomNavigation';
-import {
-  NotificationProvider,
-  useNotificationContext,
-} from '@/components/notifications/NotificationContext';
-import { HeaderRecordingIndicator } from '@/components/recording';
-import { getChatApps } from '@/lib/api';
+import { NotificationProvider, useNotificationContext } from '@/features/notifications';
+import { HeaderRecordingIndicator } from '@/features/recording';
+import { getChatApps } from '@/features/connectors';
 import { cn } from '@/lib/utils';
-import { MemoriesPrefetcher } from '@/components/memories/MemoriesPrefetcher';
-import { ChatBubble } from '@/components/chat/ChatBubble';
+import { MemoriesPrefetcher } from '@/features/memories';
+import { ChatBubble } from '@/features/chat';
 
 // Dynamic imports for panels - not visible on initial load
 const ChatPanel = dynamic(
-  () => import('@/components/chat/ChatPanel').then((mod) => ({ default: mod.ChatPanel })),
+  () => import('@/features/chat').then((mod) => ({ default: mod.ChatPanel })),
   {
     ssr: false,
   },
@@ -27,7 +24,7 @@ const ChatPanel = dynamic(
 
 const NotificationCenter = dynamic(
   () =>
-    import('@/components/notifications/NotificationCenter').then((mod) => ({
+    import('@/features/notifications').then((mod) => ({
       default: mod.NotificationCenter,
     })),
   {

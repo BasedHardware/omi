@@ -1,4 +1,4 @@
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { ProtectedRoute } from '@/features/auth';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StartupModals } from '@/components/ui/StartupModals';
 

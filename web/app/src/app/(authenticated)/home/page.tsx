@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { HomePage } from '@/components/home/HomePage';
+import { HomePage } from '@/features/home';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 

@@ -1,5 +1,5 @@
 import { cp, mkdir } from 'node:fs/promises';
-import { categoryMetadata } from '../src/components/marketplace/category';
+import { categoryMetadata } from '../src/features/marketplace/ui/category';
 
 export function deriveWebSocketBaseUrl(
   apiBaseUrl: string,

@@ -9,7 +9,7 @@ vi.mock('@/lib/clientDevice', () => ({
   getWebDeviceIdHash: vi.fn(async () => 'test-device'),
 }));
 
-import { getUserSubscription } from '@/lib/api';
+import { getUserSubscription } from '@/features/settings';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -28,18 +28,19 @@ describe('getUserSubscription plan decoding', () => {
   ])('decodes %s without capability inference', async (raw, expectedPaid) => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            subscription: {
-              plan: raw,
-              status: 'active',
-              features: [],
-              cancel_at_period_end: false,
-            },
-          }),
-          { headers: { 'content-type': 'application/json' } },
-        ),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              subscription: {
+                plan: raw,
+                status: 'active',
+                features: [],
+                cancel_at_period_end: false,
+              },
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          ),
       ),
     );
 

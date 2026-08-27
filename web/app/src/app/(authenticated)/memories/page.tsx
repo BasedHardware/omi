@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { MemoriesPage } from '@/components/memories/MemoriesPage';
+import { MemoriesPage } from '@/features/memories';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 

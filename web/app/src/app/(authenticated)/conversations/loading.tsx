@@ -1,8 +1,8 @@
 'use client';
 
 import { GanttChartSquare } from 'lucide-react';
-import { ConversationGallerySkeleton } from '@/components/conversations/ConversationGallery';
-import { FolderTabsSkeleton } from '@/components/conversations/FolderTabs';
+import { ConversationGallerySkeleton } from '@/features/conversations';
+import { FolderTabsSkeleton } from '@/features/conversations';
 
 export default function ConversationsLoading() {
   return (
