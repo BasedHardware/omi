@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAuthFetch } from "@/hooks/useAuthToken";
+import { patchPromptActive } from "@/lib/desktop-prompts-toggle";
 
 // Remote in-app prompts for Omi Desktop. Create/toggle here; every client
 // picks the change up within ~5 minutes — no app release. Responses arrive
@@ -152,14 +153,21 @@ export default function PromptsPage() {
   }
 
   async function setActive(prompt: Prompt, active: boolean) {
+    // Optimistic flip, but the switch is the kill switch: verify the PATCH
+    // and roll back on failure so the UI never claims a state change that
+    // did not reach Firestore.
     setPrompts((current) =>
       current.map((p) => (p.id === prompt.id ? { ...p, active } : p)),
     );
-    await fetchWithAuth(`/api/omi/desktop-prompts/${prompt.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active }),
-    });
+    const result = await patchPromptActive(fetchWithAuth, prompt.id, active);
+    if (!result.ok) {
+      setPrompts((current) =>
+        current.map((p) =>
+          p.id === prompt.id ? { ...p, active: prompt.active } : p,
+        ),
+      );
+      setError(result.error ?? "toggle failed");
+    }
   }
 
   async function remove(prompt: Prompt) {
