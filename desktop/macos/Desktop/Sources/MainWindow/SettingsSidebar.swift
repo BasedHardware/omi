@@ -486,9 +486,9 @@ struct SettingsSidebar: View {
       Spacer()
     }
     .frame(width: SettingsSidebarMetrics.expandedWidth)
-    // A half-step of shading, and deliberately not a second material: the window already wears the
-    // glass, and a `.regularMaterial` here would be a *within-window* blur stacked on it — two
-    // materials in one window, which on light glass reads as a grey slab down the side.
+    // A half-step of shading, and deliberately not a second material: the host already wears the
+    // glass (`PageGlassLane` in modern Settings, `LegacySidebarSurface` in old Home), and a
+    // `.regularMaterial` here would be a within-window blur stacked on it.
     .background(Ink.rowFill)
   }
 
