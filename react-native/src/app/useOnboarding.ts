@@ -36,23 +36,11 @@ export function useOnboarding(
     };
   }, [macDesktop]);
 
+  // Every sign-in path — first-run Welcome, Settings, Connectors, Home
+  // recovery — is the same native OmiAuth session. A successful signIn always
+  // records completion and leaves first-run, so no surface can strand the
+  // user on Welcome after the native session is established.
   const signInAndRefresh = useCallback(async () => {
-    if (omiAuth === undefined || omiAuth === null) {
-      return;
-    }
-    setSigningIn(true);
-    try {
-      const result = await omiAuth.signIn();
-      if (result.signedIn) {
-        await omiAuth.markOnboardingComplete();
-        await refreshReads(false);
-      }
-    } finally {
-      setSigningIn(false);
-    }
-  }, [refreshReads]);
-
-  const completeFirstRun = useCallback(async () => {
     if (omiAuth === undefined || omiAuth === null) {
       return;
     }
@@ -68,6 +56,8 @@ export function useOnboarding(
       setSigningIn(false);
     }
   }, [refreshReads]);
+
+  const completeFirstRun = signInAndRefresh;
 
   const signOutAndRefresh = useCallback(async () => {
     const auth = omiAuth;

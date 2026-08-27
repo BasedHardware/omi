@@ -1,9 +1,9 @@
 export const color = {
   canvas: '#141414',
+  chrome: 'rgba(18, 20, 19, 0.78)',
   chromeText: '#c8cbc6',
   danger: '#d9826f',
   focus: '#78bda5',
-  glass: 'rgba(18, 20, 19, 0.22)',
   input: 'rgba(255, 255, 255, 0.1)',
   inputPressed: 'rgba(255, 255, 255, 0.14)',
   menu: 'rgba(31, 35, 33, 0.98)',
