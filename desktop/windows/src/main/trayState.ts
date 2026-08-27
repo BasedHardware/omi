@@ -74,7 +74,7 @@ export interface TrayMenuActions {
  * Menu.buildFromTemplate. Layout mirrors Mac's menu bar (OmiApp.swift): the
  * Screen Analysis toggle sits at the top and Check for Updates sits just before
  * Quit. `screenCaptureEnabled` drives the checkbox; `toggleLabel` is the
- * pause/resume label from describeTray. "Open Bar" has no Mac equivalent (the
+ * pause/resume label from describeTray. "Toggle OMI Bar" has no Mac equivalent (the
  * bar is Windows/Linux-only) — it's the manual fallback for platforms where
  * the global summon hotkey can't register.
  */
@@ -91,7 +91,7 @@ export function buildTrayMenuTemplate(
     },
     { type: 'separator' },
     { label: 'Open Omi', click: () => actions.showMainWindow() },
-    { label: 'Open Bar', click: () => actions.openBar() },
+    { label: 'Toggle OMI Bar', click: () => actions.openBar() },
     { label: opts.toggleLabel, click: () => actions.toggleListening() },
     { type: 'separator' },
     { label: 'Settings', click: () => actions.openSettings() },

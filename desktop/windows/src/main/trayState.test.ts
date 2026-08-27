@@ -81,7 +81,7 @@ describe('buildTrayMenuTemplate', () => {
     expect(labels(items)).toEqual([
       'Screen Analysis',
       'Open Omi',
-      'Open Bar',
+      'Toggle OMI Bar',
       'Pause listening',
       'Settings',
       'Check for Updates',
@@ -128,7 +128,7 @@ describe('buildTrayMenuTemplate', () => {
     ) as Item[]
     byLabel(items, 'Screen Analysis').click?.()
     byLabel(items, 'Open Omi').click?.()
-    byLabel(items, 'Open Bar').click?.()
+    byLabel(items, 'Toggle OMI Bar').click?.()
     byLabel(items, 'Pause listening').click?.()
     byLabel(items, 'Settings').click?.()
     byLabel(items, 'Check for Updates').click?.()
