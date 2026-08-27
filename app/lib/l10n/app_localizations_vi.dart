@@ -2045,6 +2045,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get memoryDeleted => 'Đã xóa ký ức.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Hoàn tác';
 
   @override

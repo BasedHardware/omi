@@ -33,7 +33,11 @@ def _load_modules():
     a stubbed database._client + google.cloud.firestore_v1 chain."""
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
+    client_stub.get_firestore_client = lambda: client_stub.db
     client_stub.document_id_from_seed = lambda seed: "id-" + str(abs(hash(seed)) % (10**12))
+
+    legal_holds_stub = ModuleType("database.legal_holds")
+    legal_holds_stub.assert_no_destructive_operation_transaction = lambda *_args, **_kwargs: None
 
     google_pkg = ModuleType("google")
     google_pkg.__path__ = []  # type: ignore[attr-defined]
@@ -44,6 +48,7 @@ def _load_modules():
 
     fakes = {
         "database._client": client_stub,
+        "database.legal_holds": legal_holds_stub,
         "google": google_pkg,
         "google.cloud": google_cloud_pkg,
         "google.cloud.firestore_v1": firestore_v1_stub,

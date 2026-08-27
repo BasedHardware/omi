@@ -2042,6 +2042,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get memoryDeleted => 'Prisiminimas ištrintas.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Atšaukti';
 
   @override

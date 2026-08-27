@@ -32,6 +32,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
+import 'package:omi/widgets/components/chat_evidence_card.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -243,8 +244,9 @@ Widget buildMessageWidget(
   Function(String)? onAskOmi,
   bool showThinkingAfterText = false,
 }) {
+  final Widget messageWidget;
   if (message.memories.isNotEmpty) {
-    return MemoriesMessageWidget(
+    messageWidget = MemoriesMessageWidget(
       showTypingIndicator: showTypingIndicator,
       messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
       messageText: message.isEmpty ? '...' : message.text.decodeString,
@@ -255,20 +257,20 @@ Widget buildMessageWidget(
       onAskOmi: onAskOmi,
     );
   } else if (message.type == MessageType.daySummary) {
-    return DaySummaryWidget(
+    messageWidget = DaySummaryWidget(
       showTypingIndicator: showTypingIndicator,
       messageText: message.text.decodeString,
       date: message.createdAt,
     );
   } else if (displayOptions) {
-    return InitialMessageWidget(
+    messageWidget = InitialMessageWidget(
       showTypingIndicator: showTypingIndicator,
       messageText: message.text.decodeString,
       sendMessage: sendMessage,
       onAskOmi: onAskOmi,
     );
   } else {
-    return NormalMessageWidget(
+    messageWidget = NormalMessageWidget(
       showTypingIndicator: showTypingIndicator,
       showThinkingAfterText: showThinkingAfterText,
       thinkings: message.thinkings,
@@ -279,6 +281,21 @@ Widget buildMessageWidget(
       onAskOmi: onAskOmi,
     );
   }
+
+  final evidence = message.evidenceEnvelope;
+  if (evidence == null || evidence.isEmpty) return messageWidget;
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      messageWidget,
+      const SizedBox(height: 8),
+      // The released mobile surface has no trusted evidence navigator yet.
+      // Keep cards non-actionable until one is supplied; arbitrary URI fields
+      // can never become an external action.
+      ChatEvidenceReferenceList(envelope: evidence),
+    ],
+  );
 }
 
 class InitialMessageWidget extends StatelessWidget {

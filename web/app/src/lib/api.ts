@@ -32,6 +32,10 @@ import type {
   ActionItemsResponse,
   FairUseStatusResponse,
 } from './omiApi.generated';
+import {
+  normalizeKnowledgeLedgerMemories,
+  normalizeKnowledgeLedgerMemory,
+} from './knowledgeLedger';
 export type {
   MergeConversationsResponse,
   CreateConversationResponse,
@@ -506,7 +510,8 @@ export async function getMemories(params: GetMemoriesParams = {}): Promise<Memor
     offset: offset.toString(),
   });
 
-  return fetchWithAuth<Memory[]>(`/v3/memories?${queryParams}`);
+  const raw = await fetchWithAuth<unknown>(`/v3/memories?${queryParams}`);
+  return normalizeKnowledgeLedgerMemories(raw);
 }
 
 /**
@@ -519,7 +524,7 @@ export interface CreateMemoryParams {
 }
 
 export async function createMemory(params: CreateMemoryParams): Promise<Memory> {
-  const memory = await fetchWithAuth<Memory>('/v3/memories', {
+  const raw = await fetchWithAuth<unknown>('/v3/memories', {
     method: 'POST',
     body: JSON.stringify({
       content: params.content,
@@ -527,6 +532,8 @@ export async function createMemory(params: CreateMemoryParams): Promise<Memory> 
       category: params.category || 'manual',
     }),
   });
+  const memory = normalizeKnowledgeLedgerMemory(raw);
+  if (!memory) throw new Error('Malformed memory response');
   invalidateCache(invalidationPatterns.memories);
   return memory;
 }

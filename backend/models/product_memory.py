@@ -1,3 +1,6 @@
+import json
+import hashlib
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -33,6 +36,56 @@ class MemoryLayer(str, Enum):
 
 # Legacy memory name — same enum, kept for backward-compatible imports.
 MemoryTier = MemoryLayer
+
+
+class MemoryKind(str, Enum):
+    """Semantic kind for the intent-backed knowledge ledger.
+
+    ``tier`` remains a storage-compatibility projection during the client
+    migration. It is not the lifecycle authority for ledger rows.
+    """
+
+    fact = "fact"
+    document = "document"
+    trigger = "trigger"
+
+
+class MemorySubjectScope(str, Enum):
+    primary_user = "primary_user"
+    user_owned_project = "user_owned_project"
+    user_relationship = "user_relationship"
+    third_party = "third_party"
+
+
+class LedgerWriteReason(str, Enum):
+    direct_user_statement = "direct_user_statement"
+    explicit_remember = "explicit_remember"
+    agent_reusable_conclusion = "agent_reusable_conclusion"
+    recurring_workflow = "recurring_workflow"
+    standing_trigger = "standing_trigger"
+    onboarding = "onboarding"
+    daily_reconciliation = "daily_reconciliation"
+    legacy_migration = "legacy_migration"
+
+
+MAX_LEDGER_CONTENT_CHARACTERS = 4_000
+MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS = 24_000
+MAX_LEDGER_SLOT_CHARACTERS = 64
+# Twelve deterministic selectors plus one separately governed action object.
+MAX_LEDGER_TRIGGER_CONDITION_KEYS = 13
+MAX_LEDGER_TRIGGER_CONDITION_CHARACTERS = 8_000
+MAX_MEMORY_ARGUMENTS_JSON_BYTES = 8 * 1024
+
+
+def normalized_memory_content_key(content: Optional[str]) -> Optional[str]:
+    """Stable casefolded content identity used by authority-safe dedupe."""
+
+    if content is None:
+        return None
+    normalized = " ".join(unicodedata.normalize("NFKC", content).casefold().split())
+    if not normalized:
+        return None
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 class MemoryItemStatus(str, Enum):
@@ -117,6 +170,7 @@ class MemoryItem(BaseModel):
     status: MemoryItemStatus
     processing_state: ProcessingState
     content: Optional[str]
+    normalized_content_key: Optional[str] = None
     evidence: List[MemoryEvidence] = Field(default_factory=list)
     source_state: SourceState
     sensitivity_labels: List[str]
@@ -146,6 +200,17 @@ class MemoryItem(BaseModel):
     graph_ready: bool = False
     graph_assertion_id: Optional[str] = None
     graph_plan_hash: Optional[str] = None
+    ledger_schema_version: Optional[str] = None
+    kind: MemoryKind = MemoryKind.fact
+    subject_scope: MemorySubjectScope = MemorySubjectScope.primary_user
+    slot: Optional[str] = None
+    body: Optional[str] = None
+    valid_from: Optional[datetime] = None
+    valid_to: Optional[datetime] = None
+    curation_weight: int = 0
+    trigger_condition: Dict[str, Any] = Field(default_factory=dict)
+    intent_backed: bool = False
+    write_reason: Optional[LedgerWriteReason] = None
 
     @field_validator("memory_id", "uid", "visibility")
     @classmethod
@@ -161,7 +226,7 @@ class MemoryItem(BaseModel):
             raise ValueError("version must be positive")
         return value
 
-    @field_validator("captured_at", "updated_at", "expires_at")
+    @field_validator("captured_at", "updated_at", "expires_at", "valid_from", "valid_to")
     @classmethod
     def validate_timezone(cls, value: Optional[datetime]) -> Optional[datetime]:
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
@@ -172,6 +237,32 @@ class MemoryItem(BaseModel):
     @classmethod
     def normalize_sensitivity(cls, value: List[str]) -> List[str]:
         return sorted({label.strip().lower() for label in value if label and label.strip()})
+
+    @field_validator("slot")
+    @classmethod
+    def normalize_slot(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = "_".join(value.strip().lower().replace("-", "_").split())
+        return normalized or None
+
+    @field_validator("curation_weight")
+    @classmethod
+    def validate_curation_weight(cls, value: int) -> int:
+        if value < -100 or value > 100:
+            raise ValueError("curation_weight must be between -100 and 100")
+        return value
+
+    @field_validator("trigger_condition")
+    @classmethod
+    def validate_trigger_condition_size(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            encoded = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("trigger_condition must be JSON serializable") from exc
+        if len(encoded) > MAX_LEDGER_TRIGGER_CONDITION_CHARACTERS:
+            raise ValueError("ledger trigger condition exceeds the serialized limit")
+        return value
 
     @computed_field(return_type=List[str])
     @property
@@ -188,6 +279,9 @@ class MemoryItem(BaseModel):
 
     @model_validator(mode="after")
     def validate_tier_invariants(self):
+        expected_content_key = normalized_memory_content_key(self.content)
+        if self.normalized_content_key != expected_content_key:
+            object.__setattr__(self, "normalized_content_key", expected_content_key)
         if self.updated_at < self.captured_at:
             raise ValueError("updated_at must be >= captured_at")
         if self.status == MemoryItemStatus.active and not (self.content or "").strip():
@@ -212,10 +306,44 @@ class MemoryItem(BaseModel):
         if self.source_state == SourceState.active and not self.user_asserted:
             if not any(e.source_state == SourceState.active for e in self.evidence):
                 raise ValueError("active source memory requires at least one active evidence record")
+        if self.valid_to is not None:
+            lower_bound = self.valid_from or self.captured_at
+            if self.valid_to < lower_bound:
+                raise ValueError("valid_to must be >= valid_from")
+        if self.kind != MemoryKind.fact and self.slot is not None:
+            raise ValueError("only fact ledger rows may define a slot")
+        if self.kind == MemoryKind.trigger and not self.trigger_condition:
+            raise ValueError("trigger ledger rows require trigger_condition")
+        if self.kind != MemoryKind.trigger and self.trigger_condition:
+            raise ValueError("trigger_condition is only valid for trigger ledger rows")
+        if self.ledger_schema_version == "knowledge_ledger.v1":
+            if len(self.content or "") > MAX_LEDGER_CONTENT_CHARACTERS:
+                raise ValueError("knowledge ledger content exceeds the ledger limit")
+            if len(self.slot or "") > MAX_LEDGER_SLOT_CHARACTERS:
+                raise ValueError("knowledge ledger slot exceeds the ledger limit")
+            if self.kind == MemoryKind.document:
+                if not (self.body or "").strip():
+                    raise ValueError("ledger documents require a non-empty body")
+                if len(self.body or "") > MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS:
+                    raise ValueError("ledger document body exceeds the ledger limit")
+            elif self.body is not None:
+                raise ValueError("ledger body is only valid for document rows")
+            if len(self.trigger_condition) > MAX_LEDGER_TRIGGER_CONDITION_KEYS:
+                raise ValueError("ledger trigger condition exceeds the ledger key limit")
+            if self.write_reason is None or (
+                not self.intent_backed and self.write_reason != LedgerWriteReason.legacy_migration
+            ):
+                raise ValueError("knowledge ledger rows require an intent-backed write reason")
         return self
 
 
 MemoryItem = MemoryItem
+
+
+def memory_item_has_lifecycle_metadata(item: MemoryItem) -> bool:
+    """Return whether a row still carries legacy lifecycle audit metadata."""
+
+    return item.promotion is not None
 
 
 def new_memory_id() -> str:

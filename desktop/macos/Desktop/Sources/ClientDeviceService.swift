@@ -51,6 +51,15 @@ final class ClientDeviceService {
     return digest.map { String(format: "%02x", $0) }.joined().prefix(8).description
   }
 
+  /// The durable, per-installation random identity used as the local key for
+  /// JIT's opaque correlation identifiers. This is deliberately not derived
+  /// from the machine name, account, or captured content. It is persisted in
+  /// the scoped Keychain for production builds and in bundle-scoped defaults
+  /// for development builds, matching the existing device identity lifetime.
+  var installationIdentity: String {
+    resolveInstallId()
+  }
+
   /// Contract: `{platform}_{hash}` — same shape as backend FCM `device_key`.
   var clientDeviceId: String {
     "macos_\(deviceIdHash)"

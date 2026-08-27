@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +18,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
+import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/transcript.dart';
 
@@ -246,8 +245,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                       ),
                                     )
                                   : provider.photos.isNotEmpty
-                                      ? _buildChronologicalTimeline(
-                                          provider, transcriptSessionId, transcriptScrollState)
+                                      ? _buildChronologicalTimeline(provider, transcriptSessionId,
+                                          transcriptScrollState, widget.topConversationId ?? provider.topConversationId)
                                       : getTranscriptWidget(
                                           false,
                                           provider.segments,
@@ -401,7 +400,12 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   /// Builds a chronological timeline interleaving photo groups and transcript segments.
-  Widget _buildChronologicalTimeline(CaptureProvider provider, String sessionId, TranscriptScrollState scrollState) {
+  Widget _buildChronologicalTimeline(
+    CaptureProvider provider,
+    String sessionId,
+    TranscriptScrollState scrollState,
+    String? conversationId,
+  ) {
     final photos = List<ConversationPhoto>.from(provider.photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final segments = provider.segments;
 
@@ -424,7 +428,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       for (var index = 0; index < photoGroups.length; index++)
         Padding(
           padding: EdgeInsets.only(top: index == 0 ? 16 : 0),
-          child: _buildPhotoGroupTimelineItem(photoGroups[index], photos),
+          child: _buildPhotoGroupTimelineItem(photoGroups[index], photos, conversationId),
         ),
     ];
 
@@ -447,7 +451,11 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     );
   }
 
-  Widget _buildPhotoGroupTimelineItem(List<ConversationPhoto> group, List<ConversationPhoto> allPhotos) {
+  Widget _buildPhotoGroupTimelineItem(
+    List<ConversationPhoto> group,
+    List<ConversationPhoto> allPhotos,
+    String? conversationId,
+  ) {
     final firstPhoto = group.first;
     final timeStr =
         '${firstPhoto.createdAt.hour.toString().padLeft(2, '0')}:${firstPhoto.createdAt.minute.toString().padLeft(2, '0')}';
@@ -487,15 +495,17 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     borderRadius: const BorderRadius.only(topLeft: Radius.circular(18), topRight: Radius.circular(18)),
                     child: group.length == 1
                         ? GestureDetector(
-                            onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(group.first)),
-                            child: Image.memory(
-                              base64Decode(group.first.base64),
-                              fit: BoxFit.cover,
+                            onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(group.first), conversationId),
+                            child: SizedBox(
                               width: double.infinity,
-                              gaplessPlayback: true,
+                              child: ConversationPhotoImage(
+                                photo: group.first,
+                                conversationId: conversationId,
+                                fit: BoxFit.cover,
+                              ),
                             ),
                           )
-                        : _buildPhotoGrid(group, allPhotos),
+                        : _buildPhotoGrid(group, allPhotos, conversationId),
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -520,17 +530,17 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     );
   }
 
-  Widget _buildPhotoGrid(List<ConversationPhoto> group, List<ConversationPhoto> allPhotos) {
+  Widget _buildPhotoGrid(List<ConversationPhoto> group, List<ConversationPhoto> allPhotos, String? conversationId) {
     if (group.length == 2) {
       return Row(
         children: group
             .map(
               (photo) => Expanded(
                 child: GestureDetector(
-                  onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(photo)),
+                  onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(photo), conversationId),
                   child: AspectRatio(
                     aspectRatio: 1,
-                    child: Image.memory(base64Decode(photo.base64), fit: BoxFit.cover, gaplessPlayback: true),
+                    child: ConversationPhotoImage(photo: photo, conversationId: conversationId, fit: BoxFit.cover),
                   ),
                 ),
               ),
@@ -548,10 +558,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               .map(
                 (photo) => Expanded(
                   child: GestureDetector(
-                    onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(photo)),
+                    onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(photo), conversationId),
                     child: AspectRatio(
                       aspectRatio: 1,
-                      child: Image.memory(base64Decode(photo.base64), fit: BoxFit.cover, gaplessPlayback: true),
+                      child: ConversationPhotoImage(photo: photo, conversationId: conversationId, fit: BoxFit.cover),
                     ),
                   ),
                 ),
@@ -564,10 +574,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               ...secondRow.map(
                 (photo) => Expanded(
                   child: GestureDetector(
-                    onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(photo)),
+                    onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(photo), conversationId),
                     child: AspectRatio(
                       aspectRatio: 1,
-                      child: Image.memory(base64Decode(photo.base64), fit: BoxFit.cover, gaplessPlayback: true),
+                      child: ConversationPhotoImage(photo: photo, conversationId: conversationId, fit: BoxFit.cover),
                     ),
                   ),
                 ),
@@ -580,19 +590,22 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     );
   }
 
-  void _openPhotoViewer(List<ConversationPhoto> allPhotos, int index) {
+  void _openPhotoViewer(List<ConversationPhoto> allPhotos, int index, String? conversationId) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => MediaViewerPage(
-          items: allPhotos
-              .map((photo) => MediaViewerItem(
-                    base64: photo.base64,
-                    heroTag: photo.id,
-                    showCaptionStrip: true,
-                    caption: photo.description,
-                    discarded: photo.discarded,
-                  ))
-              .toList(),
+          items: allPhotos.map((photo) {
+            final hasInlineBytes = photo.base64.isNotEmpty;
+            return MediaViewerItem(
+              base64: hasInlineBytes ? photo.base64 : null,
+              bytesLoader: hasInlineBytes ? null : () => loadConversationPhotoBytes(photo, conversationId),
+              mimeType: photo.contentType,
+              heroTag: photo.id,
+              showCaptionStrip: true,
+              caption: photo.description,
+              discarded: photo.discarded,
+            );
+          }).toList(),
           initialIndex: index >= 0 ? index : 0,
         ),
       ),

@@ -2043,6 +2043,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get memoryDeleted => 'Uspomena Obrisana.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Vrati Unazad';
 
   @override

@@ -176,6 +176,42 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in memory_secrets
 
 
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
+    jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
+    maintenance = jobs['memory-maintenance-job']
+    daily = jobs['daily-memory-sweep-job']
+    daily_names = {
+        'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH',
+        'MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME',
+        'MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES',
+        'MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD',
+        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME',
+        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG',
+        'MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS',
+        'MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED',
+        'POSTHOG_HOST',
+    }
+    assert daily_names.isdisjoint(maintenance.get('env', {}))
+    assert 'POSTHOG_PROJECT_API_KEY' not in maintenance.get('secrets', {})
+    assert {
+        'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED',
+    } <= set(daily.get('env', {}))
+    assert 'POSTHOG_PROJECT_API_KEY' in daily.get('secrets', {})
+
+
+def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
+    entrypoint = (_SCRIPT.parents[1] / 'modal' / 'memory_maintenance_job.py').read_text(encoding='utf-8')
+    dockerfile = (_SCRIPT.parents[1] / 'modal' / 'Dockerfile.memory_maintenance_job').read_text(encoding='utf-8')
+    assert 'daily_memory_sweep' not in entrypoint
+    assert 'daily_memory_sweep_job.py' not in dockerfile
+    assert 'memory_maintenance_job.py' in dockerfile
+
+
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
     serialized = json.dumps(_MANIFEST['environments']['dev'], sort_keys=True)
     assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
@@ -425,7 +461,9 @@ def test_desktop_backend_compose_pins_vertex_pt(env, project):
     assert f'GOOGLE_CLOUD_PROJECT={project}' in rendered, VERTEX_PT_CONTRACT
     assert 'GCP_LOCATION=us-central1' in rendered, VERTEX_PT_CONTRACT
     assert 'PROMETHEUS_SIDECAR_PORT=9090' in rendered
-    assert _MODULE['_render_secrets'](desktop['secrets']) == 'METRICS_SECRET=METRICS_SECRET:latest'
+    assert _MODULE['_render_secrets'](desktop['secrets']) == (
+        'METRICS_SECRET=METRICS_SECRET:latest\nPOSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest'
+    )
     docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
     assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')
 

@@ -1073,7 +1073,11 @@ class ChatProvider: ObservableObject {
   /// Watchdog tasks capture their gen and only reset state if it still
   /// matches — so a watchdog fired by a stuck send #N won't cancel a
   /// later, healthy send #N+1. See sendMessage() and stopAgent().
-  private var sendGeneration: Int = 0
+  ///
+  /// Readable (never writable) outside the provider so a test can assert that a
+  /// transcript reset actually revoked the in-flight turn — the bump is what
+  /// makes `ChatQueryResultAuthority` reject the dead turn's late result.
+  private(set) var sendGeneration: Int = 0
   private var sendLockOwnership = ChatSendLockOwnership()
 
   /// Whether a new turn can start right now. The bridge holds one message
@@ -1311,6 +1315,7 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Cached Context for Prompts
   private var cachedMemories: [ServerMemory] = []
+  private var cachedLedgerPromptProjection: KnowledgeLedgerPromptProjection?
   private var memoriesLoaded = false
   private var cachedGoals: [Goal] = []
   private var goalsLoaded = false
@@ -1701,6 +1706,7 @@ class ChatProvider: ObservableObject {
     sessions.removeAll()
     currentSession = nil
     cachedMemories = []
+    cachedLedgerPromptProjection = nil
     memoriesLoaded = false
     cachedGoals = []
     goalsLoaded = false
@@ -2366,6 +2372,13 @@ class ChatProvider: ObservableObject {
   func selectSession(_ session: ChatSession, force: Bool = false) async {
     guard force || currentSession?.id != session.id || isInDefaultChat else { return }
 
+    // This replaces the transcript, so it is a transcript reset and must go
+    // through the one revocation authority — same as `selectApp`/`reinitialize`.
+    // Without it a turn still in flight for the previous session stays
+    // generation-current, and its late result (including the reconstructed
+    // failure notice) is accepted into *this* session's transcript.
+    revokeActiveTurn(reason: .superseded)
+
     currentSession = session
     isInDefaultChat = false
     isLoading = true
@@ -2484,8 +2497,12 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Load Context (Memories)
 
-  /// Loads user memories from local SQLite for use in prompts (refreshed each turn).
+  /// Loads prompt knowledge on every turn. The canonical path activates only
+  /// from an owner-pinned dedicated server receipt; any disabled/unknown
+  /// rollout, kill switch, incomplete migration, mixed schema, or auth race
+  /// retains the released local-cache behavior for rollback compatibility.
   private func refreshMemoriesForPrompt() async {
+    cachedLedgerPromptProjection = nil
     do {
       cachedMemories = try await MemoryStorage.shared.getLocalMemories(limit: 50)
       memoriesLoaded = true
@@ -2494,10 +2511,60 @@ class ChatProvider: ObservableObject {
       logError("Failed to load memories from local DB", error: error)
       // Continue without memories - non-critical
     }
+
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      await loadAIProfileIfNeeded()
+      return
+    }
+    do {
+      let snapshot = try await APIClient.shared.getKnowledgeLedgerPromptSnapshot(
+        authorizationSnapshot: authorization)
+      guard snapshot.isAuthoritative else {
+        await loadAIProfileIfNeeded()
+        return
+      }
+      Task {
+        do {
+          _ = try await KnowledgeLedgerMirrorCoordinator.shared.sync(
+            authorizationSnapshot: authorization)
+        } catch {
+          log("ChatProvider: exhaustive ledger mirror convergence deferred")
+        }
+      }
+      let projection = KnowledgeLedgerPromptProjection(
+        memories: snapshot.memories,
+        hasAuthoritativeSnapshot: true)
+      guard projection.isCompleteLedgerSnapshot else {
+        log("ChatProvider: canonical ledger prompt snapshot rejected as incomplete or mixed-version")
+        await loadAIProfileIfNeeded()
+        return
+      }
+      try await MemoryStorage.shared.syncAuthoritativeKnowledgeLedgerSnapshot(
+        snapshot.memories,
+        authorizationSnapshot: authorization)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+      cachedLedgerPromptProjection = projection
+      // Authoritative empty and non-empty ledgers both replace the independent
+      // synthesized profile. Mark it reloadable so a later flag-off or stale
+      // receipt can intentionally restore compatibility on the next turn.
+      cachedAIProfile = ""
+      aiProfileLoaded = false
+      log("ChatProvider: adopted authoritative ledger prompt snapshot (\(snapshot.memories.count) rows)")
+    } catch {
+      logError("ChatProvider: authoritative ledger prompt refresh failed closed", error: error)
+      await loadAIProfileIfNeeded()
+    }
   }
 
   /// Formats cached memories into a string for the prompt
   private func formatMemoriesSection(citations: ChatPromptCitationLedger) -> String {
+    if let projection = cachedLedgerPromptProjection,
+      let rendered = projection.render(
+        userName: AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.givenName,
+        marker: { citations.marker(kind: .memory, sourceID: $0) })
+    {
+      return "<user_facts>\n\(rendered)</user_facts>"
+    }
     guard !cachedMemories.isEmpty else { return "" }
 
     let userName = AuthService.shared.displayName.isEmpty ? "the user" : AuthService.shared.givenName
@@ -2515,14 +2582,16 @@ class ChatProvider: ObservableObject {
 
   private func makePromptCitationLedger(includesLegacyGoals: Bool) -> ChatPromptCitationLedger {
     let formatter = ISO8601DateFormatter()
-    var sources = cachedMemories.prefix(30).map {
-      ChatPromptCitationSource(
-        kind: .memory,
-        sourceID: $0.id,
-        title: $0.headline ?? "Memory",
-        preview: $0.content,
-        createdAt: formatter.string(from: $0.createdAt))
-    }
+    var sources =
+      cachedLedgerPromptProjection?.citationSources
+      ?? cachedMemories.prefix(30).map {
+        ChatPromptCitationSource(
+          kind: .memory,
+          sourceID: $0.id,
+          title: $0.headline ?? "Memory",
+          preview: $0.content,
+          createdAt: formatter.string(from: $0.createdAt))
+      }
     if includesLegacyGoals {
       sources.append(
         contentsOf: cachedGoals.filter(\.isActive).map {
@@ -2647,6 +2716,11 @@ class ChatProvider: ObservableObject {
 
   /// Fetches the latest AI-generated user profile from local database
   private func loadAIProfileIfNeeded() async {
+    guard promptKnowledgeSelection.shouldLoadLegacyAIProfile else {
+      cachedAIProfile = ""
+      aiProfileLoaded = false
+      return
+    }
     guard !aiProfileLoaded else { return }
 
     if let profile = await AIUserProfileService.shared.getLatestProfile() {
@@ -2658,8 +2732,11 @@ class ChatProvider: ObservableObject {
 
   /// Formats AI profile into a prompt section
   private func formatAIProfileSection() -> String {
-    guard !cachedAIProfile.isEmpty else { return "" }
-    return "\n<ai_user_profile>\n\(cachedAIProfile)\n</ai_user_profile>"
+    promptKnowledgeSelection.legacyAIProfileSection(profileText: cachedAIProfile)
+  }
+
+  private var promptKnowledgeSelection: ChatPromptKnowledgeSelection {
+    ChatPromptKnowledgeSelection(authoritativeLedger: cachedLedgerPromptProjection)
   }
 
   // MARK: - Load Database Schema
@@ -2907,7 +2984,6 @@ class ChatProvider: ObservableObject {
       await loadGoalsIfNeeded()
     }
     await loadTasksIfNeeded()
-    await loadAIProfileIfNeeded()
     await loadSchemaIfNeeded()
     await discoverClaudeConfig()
 
@@ -3546,10 +3622,11 @@ class ChatProvider: ObservableObject {
     messageId: String,
     status: KernelJournalTurnStatus,
     surface: AgentSurfaceReference? = nil,
-    ownerID: String
+    ownerID: String,
+    messageOverride: ChatMessage? = nil
   ) async -> Bool {
     let targetSurface = surface ?? mainChatSurfaceReference()
-    if let message = messages.first(where: { $0.id == messageId }) {
+    if let message = messageOverride ?? messages.first(where: { $0.id == messageId }) {
       return await kernelTurnProjection.updateTurn(
         surface: targetSurface,
         message: message,
@@ -3570,7 +3647,8 @@ class ChatProvider: ObservableObject {
   /// adapter completion cannot race two terminal journal updates or callbacks.
   private func finishJournalTarget(
     generation: Int,
-    status: KernelJournalTurnStatus
+    status: KernelJournalTurnStatus,
+    messageOverride: ChatMessage? = nil
   ) async -> Bool {
     guard let target = journalTerminalTargets.claim(generation: generation) else {
       return false
@@ -3588,7 +3666,8 @@ class ChatProvider: ObservableObject {
         messageId: target.assistantMessageId,
         status: status,
         surface: target.surface,
-        ownerID: target.ownerID
+        ownerID: target.ownerID,
+        messageOverride: messageOverride
       )
     }
     journalOwnerByMessageID.removeValue(forKey: target.assistantMessageId)
@@ -5413,8 +5492,12 @@ class ChatProvider: ObservableObject {
         ),
         providerAuthMessage: Self.providerAuthRequiredUserMessage(isUserClaudeMode: isUserClaudeMode)
       )
-      if let failureNotice {
-        applyTurnFailureMarker(failureNotice, toAssistantMessage: aiMessageId)
+      let failedAssistantMessage = failureNotice.flatMap {
+        applyTurnFailureMarker(
+          $0,
+          toAssistantMessage: aiMessageId,
+          fallbackAssistantMessage: aiMessage
+        )
       }
 
       if !watchdogFired, !toolStallAbortFired, let explicitStopReason {
@@ -5468,10 +5551,16 @@ class ChatProvider: ObservableObject {
         _ = await finishJournalTarget(
           generation: sendGen,
           queryResult: correlatedTerminalResult,
-          disposition: disposition
+          disposition: disposition,
+          acceptedMessage: failedAssistantMessage,
+          acceptedContent: failedAssistantMessage?.text
         )
       } else {
-        _ = await finishJournalTarget(generation: sendGen, status: .failed)
+        _ = await finishJournalTarget(
+          generation: sendGen,
+          status: .failed,
+          messageOverride: failedAssistantMessage
+        )
       }
 
       // Preserve only a bounded error class in analytics. Raw details stay
@@ -5704,11 +5793,33 @@ class ChatProvider: ObservableObject {
   /// finalized so `journalUpdate` carries it into the durable record. This is
   /// what stops the row being an empty `.failed` placeholder that the journal
   /// projection deletes, leaving the question with nothing under it.
-  func applyTurnFailureMarker(_ notice: ChatTurnFailureNotice, toAssistantMessage messageID: String) {
-    guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
-    messages[index].text = notice.transcriptContent(partialText: messages[index].text)
-    messages[index].isStreaming = false
-    messages[index].journalStatus = .failed
+  @discardableResult
+  func applyTurnFailureMarker(
+    _ notice: ChatTurnFailureNotice,
+    toAssistantMessage messageID: String,
+    fallbackAssistantMessage: ChatMessage? = nil
+  ) -> ChatMessage? {
+    if let index = messages.firstIndex(where: { $0.id == messageID }) {
+      messages[index].text = notice.transcriptContent(partialText: messages[index].text)
+      messages[index].isStreaming = false
+      messages[index].journalStatus = .failed
+      return messages[index]
+    }
+
+    // The agent runtime may terminalize and project an empty `.failed` row
+    // before Swift receives the error. Journal projection intentionally drops
+    // that empty placeholder, so reconstruct this already-admitted assistant
+    // row from the turn's original identity instead of losing the failure
+    // notice along with it.
+    guard var fallback = fallbackAssistantMessage,
+      fallback.id == messageID,
+      fallback.sender == .ai
+    else { return nil }
+    fallback.text = notice.transcriptContent(partialText: fallback.text)
+    fallback.isStreaming = false
+    fallback.journalStatus = .failed
+    messages.append(fallback)
+    return fallback
   }
 
   /// Put a failed turn's prompt back in the composer it came from, so the
@@ -6528,6 +6639,12 @@ class ChatProvider: ObservableObject {
   func clearChat() async {
     isClearing = true
     defer { isClearing = false }
+
+    // Clearing blanks the transcript, so revoke first. Otherwise the in-flight
+    // turn keeps the send lock and stays generation-current, and its late
+    // result — the reconstructed failure notice included — resurrects a row in
+    // the transcript the user just cleared.
+    revokeActiveTurn(reason: .superseded)
 
     if isInDefaultChat {
       let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)

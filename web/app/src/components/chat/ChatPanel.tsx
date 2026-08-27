@@ -12,7 +12,9 @@ import type { App } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 import { shouldSubmitComposerKey } from '@/lib/chatComposerKey';
+import { parseChatEvidenceFromRecord } from '@/lib/chatEvidence';
 import { ChatMarkdown } from './ChatMarkdown';
+import { ChatEvidenceCard } from './ChatEvidenceCard';
 
 interface FilePreviewItem {
   file: File;
@@ -494,20 +496,20 @@ export function ChatPanel() {
                           message.sender === 'human' ? 'justify-end' : 'justify-start',
                         )}
                       >
-                        <div
-                          className={cn(
-                            'max-w-[80%] rounded-2xl px-4 py-2.5',
-                            message.sender === 'human'
-                              ? 'bg-text-primary text-bg-primary'
-                              : 'bg-bg-tertiary text-text-primary',
-                          )}
-                        >
-                          {message.sender === 'human' ? (
+                        {message.sender === 'human' ? (
+                          <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-text-primary text-bg-primary">
                             <p className="text-sm whitespace-pre-wrap">{message.text}</p>
-                          ) : (
-                            <ChatMarkdown>{message.text}</ChatMarkdown>
-                          )}
-                        </div>
+                          </div>
+                        ) : (
+                          <div className="max-w-[80%] min-w-0">
+                            <div className="rounded-2xl px-4 py-2.5 bg-bg-tertiary text-text-primary">
+                              <ChatMarkdown>{message.text}</ChatMarkdown>
+                            </div>
+                            <ChatEvidenceCard
+                              envelope={parseChatEvidenceFromRecord(message)}
+                            />
+                          </div>
+                        )}
                       </div>
                     ))}
 

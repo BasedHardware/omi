@@ -2042,6 +2042,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get memoryDeleted => 'स्मृती हटवली गेली.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'पूर्ववत् करा';
 
   @override

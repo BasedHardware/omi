@@ -2049,6 +2049,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get memoryDeleted => 'Ingatan Dipadam.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Buat Asal';
 
   @override

@@ -35,6 +35,22 @@ describe("desktop tool policy", () => {
     expect(result.requiredBundles).toEqual(["desktop.context.screenshot_image"]);
   });
 
+  it("keeps look_at_frame on the same scoped, audited screenshot path", () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: "look_at_frame",
+      operation: "look_at_frame",
+      resourceRef: "screenshot:42",
+      selectedBundles: ["desktop.context.screenshot_image"],
+      includesScreenshotImageBytes: true,
+    });
+
+    expect(result.decision).toBe("dispatch_required");
+    expect(result.descriptor.privacyTier).toBe("sensitive");
+    expect(result.descriptor.approvalPolicy).toBe("user_approval");
+    expect(result.requiredBundles).toEqual(["desktop.context.screenshot_image"]);
+    expect(result.reason).toContain("dispatch");
+  });
+
   it("requires dispatch for task writes by default", () => {
     const result = evaluateDesktopToolPolicy({
       toolName: "complete_task",

@@ -26,6 +26,14 @@ import type { InsightPayload } from '../../../shared/types'
 
 const MINUTE = 60_000
 
+/** A pending reservation blocks every other proactive lane, so a slot that is
+ *  never committed nor cancelled — a throw between `reserve` and delivery —
+ *  would silence ALL proactive notifications for the rest of the process. A
+ *  reservation therefore expires: once it is this old it no longer blocks and is
+ *  pruned. This bounds the damage of a leak; it does not excuse one, and callers
+ *  must still cancel on every failure path. */
+const PENDING_SLOT_TTL_MS = 10 * MINUTE
+
 /** Level → minimum interval between notifications.
  *  `Infinity` = off (never), `null` = no throttle at all. */
 const LEVEL_INTERVALS_MS: readonly (number | null)[] = [
@@ -47,6 +55,12 @@ export function minIntervalMs(level: number): number | null {
 export type SuppressionReason = 'snoozed' | 'notifications_off' | 'frequency'
 export type ThrottleDecision = { allowed: true } | { allowed: false; reason: SuppressionReason }
 
+export type NotificationDeliverySlot = {
+  token: string
+  assistantId: string
+  now: number
+}
+
 export type ThrottleInput = {
   assistantId: string
   now: number
@@ -64,23 +78,45 @@ export type ThrottleInput = {
 export class NotificationThrottle {
   private lastGlobalAt: number | null = null
   private readonly lastByAssistant = new Map<string, number>()
+  private readonly pending = new Map<string, NotificationDeliverySlot>()
 
-  /** Pure: does not mutate. */
+  /** Drop reservations older than the TTL. An abandoned slot must never become a
+   *  permanent gag on every assistant. */
+  private prunePending(now: number): void {
+    for (const [token, slot] of this.pending) {
+      if (now - slot.now >= PENDING_SLOT_TTL_MS) this.pending.delete(token)
+    }
+  }
+
+  /** Expires stale reservations first; beyond that it does not mutate — neither
+   *  clock moves here. */
   decide(input: ThrottleInput): ThrottleDecision {
+    this.prunePending(input.now)
     if (input.snoozedUntil !== null && input.now < input.snoozedUntil)
       return { allowed: false, reason: 'snoozed' }
     if (!input.respectFrequency) return { allowed: true }
     if (!input.notificationsEnabled) return { allowed: false, reason: 'notifications_off' }
 
     const interval = minIntervalMs(input.frequencyLevel)
-    if (interval === null) return { allowed: true } // Maximum — no throttle
+    // Even maximum frequency has one exclusive in-flight display slot. This is
+    // a delivery invariant, not a frequency budget: the first candidate must
+    // either commit a visible toast or cancel before another may proceed.
+    if (this.pending.size > 0) return { allowed: false, reason: 'frequency' }
+    if (interval === null) return { allowed: true } // Maximum — no time throttle
     if (interval === Infinity) return { allowed: false, reason: 'frequency' } // Off
 
     if (this.lastGlobalAt !== null && input.now - this.lastGlobalAt < interval)
       return { allowed: false, reason: 'frequency' }
+    for (const slot of this.pending.values()) {
+      if (input.now - slot.now < interval) return { allowed: false, reason: 'frequency' }
+    }
     const last = this.lastByAssistant.get(input.assistantId)
     if (last !== undefined && input.now - last < interval)
       return { allowed: false, reason: 'frequency' }
+    const assistantPending = [...this.pending.values()].find(
+      (slot) => slot.assistantId === input.assistantId && input.now - slot.now < interval
+    )
+    if (assistantPending) return { allowed: false, reason: 'frequency' }
     return { allowed: true }
   }
 
@@ -98,6 +134,39 @@ export class NotificationThrottle {
     if (decision.allowed && input.respectFrequency) this.record(input.assistantId, input.now)
     return decision
   }
+
+  /** Reserve a display slot without spending either clock. The reservation is
+   * intentionally local and short-lived; callers must commit only after they
+   * have a user-visible payload, or cancel it on every failure path. */
+  reserve(input: ThrottleInput): NotificationDeliverySlot | ThrottleDecision {
+    const decision = this.decide(input)
+    if (!decision.allowed) return decision
+    if (!input.respectFrequency)
+      return {
+        token: `${input.assistantId}:${input.now}:${Math.random()}`,
+        assistantId: input.assistantId,
+        now: input.now
+      }
+    const slot: NotificationDeliverySlot = {
+      token: `${input.assistantId}:${input.now}:${Math.random()}`,
+      assistantId: input.assistantId,
+      now: input.now
+    }
+    this.pending.set(slot.token, slot)
+    return slot
+  }
+
+  commit(slot: NotificationDeliverySlot): boolean {
+    const current = this.pending.get(slot.token)
+    if (!current) return false
+    this.pending.delete(slot.token)
+    this.record(slot.assistantId, slot.now)
+    return true
+  }
+
+  cancel(slot: NotificationDeliverySlot): boolean {
+    return this.pending.delete(slot.token)
+  }
 }
 
 // --- Runtime singleton -------------------------------------------------------
@@ -108,6 +177,16 @@ const throttle = new NotificationThrottle()
 // rather than in AppSettings: it is a transient "not right now", not a
 // preference, and it should not survive a restart.
 let snoozedUntil: number | null = null
+
+// When authoritative Windows JIT is active, the legacy insight/context-bucket
+// lane must not spend a second, untracked ambient notification budget. The
+// callback is host-owned and fail-open while JIT authority is unknown so the
+// existing assistant remains the rollback lane when the flag is off.
+let jitLegacyAmbientGate: (() => boolean) | null = null
+
+export function setJitLegacyAmbientGate(gate: (() => boolean) | null): void {
+  jitLegacyAmbientGate = gate
+}
 
 /** Silence every proactive notification until `untilMs`. Pass null to clear. */
 export function setNotificationSnooze(untilMs: number | null): void {
@@ -145,6 +224,10 @@ export function notifyProactive(
   payload: InsightPayload,
   opts: { respectFrequency?: boolean; now?: number } = {}
 ): boolean {
+  if (assistantId === 'insight' && jitLegacyAmbientGate?.()) {
+    console.log('[assistants] legacy insight suppressed while JIT authority is active')
+    return false
+  }
   const settings = getAppSettings()
   const now = opts.now ?? Date.now()
   const decision = throttle.tryAllow({
@@ -161,4 +244,39 @@ export function notifyProactive(
   }
   deliverInsight(payload)
   return true
+}
+
+/** Acquire the real local toast budget before any JIT server reservation or
+ * model call. A null result means snoozed, disabled, frequency-suppressed, or
+ * already reserved by a concurrent proactive lane. */
+export function reserveProactiveDeliverySlot(
+  assistantId: string,
+  now: number = Date.now()
+): NotificationDeliverySlot | null {
+  const settings = getAppSettings()
+  const decision = throttle.reserve({
+    assistantId,
+    now,
+    frequencyLevel: settings.notificationFrequency,
+    notificationsEnabled: settings.notificationsEnabled,
+    snoozedUntil,
+    respectFrequency: true
+  })
+  return 'token' in decision ? decision : null
+}
+
+/** Commit the previously acquired local slot and send through the existing
+ * insight surface. No caller should emit a JIT delivery receipt unless this
+ * returns true. */
+export function commitProactiveDeliverySlot(
+  slot: NotificationDeliverySlot,
+  payload: InsightPayload
+): boolean {
+  if (!throttle.commit(slot)) return false
+  deliverInsight(payload)
+  return true
+}
+
+export function cancelProactiveDeliverySlot(slot: NotificationDeliverySlot): void {
+  throttle.cancel(slot)
 }

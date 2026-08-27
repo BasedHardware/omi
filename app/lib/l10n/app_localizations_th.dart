@@ -2031,6 +2031,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get memoryDeleted => 'ลบความทรงจำแล้ว';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'เลิกทำ';
 
   @override

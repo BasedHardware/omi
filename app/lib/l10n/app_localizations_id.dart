@@ -2048,6 +2048,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get memoryDeleted => 'Memori Dihapus.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Batalkan';
 
   @override

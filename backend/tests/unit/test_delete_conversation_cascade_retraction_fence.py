@@ -76,5 +76,5 @@ def test_exhausted_replacement_conflict_maps_to_retryable_503_before_any_delete(
     )
     assert mapped, "the retract call must map ConversationReplacementConflictError to a 503"
     assert (
-        "conversations_db.delete_conversation" in body.split("except ConversationReplacementConflictError")[1]
-    ), "the conversation document delete must stay in the post-retract success path"
+        "delete_conversation_and_frame_evidence" in body.split("except ConversationReplacementConflictError")[1]
+    ), "conversation and frame-evidence deletion must stay in the post-retract success path"

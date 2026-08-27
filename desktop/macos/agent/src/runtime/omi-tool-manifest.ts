@@ -590,6 +590,19 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
   get_screenshot: {
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Get Screenshot", "Fetch a local Rewind screenshot image by screenshot_id.", ["Local API only."]),
+    aliasCapabilityDocs: {
+      look_at_frame: {
+        ...doc(
+          "Look at Frame",
+          "Inspect one retrieved Rewind frame by screenshot_id for a just-in-time visual answer.",
+          [
+            "Use only after search_screen_history returns the screenshot_id; never invent an id.",
+            "This is one-frame inspection, not a continuous vision lane. Local API only.",
+          ],
+        ),
+        surfaces: ["desktop_chat"],
+      },
+    },
   },
   get_work_context: {
     surfaces: ["desktop_chat"],
@@ -1473,7 +1486,8 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "localApiOnly" },
     intendedForAgents: true,
     runtimePreconditions: ["Local API only."],
-    adapters: localApiOnly(),
+    aliases: ["look_at_frame"],
+    adapters: { "local-agent-api": { advertised: true, aliases: ["look_at_frame"] } },
   },
 ];
 

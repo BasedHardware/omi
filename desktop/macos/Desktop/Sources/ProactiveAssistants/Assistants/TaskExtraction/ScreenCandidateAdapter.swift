@@ -422,6 +422,13 @@ enum CandidateOutboxRetryPolicy {
 }
 
 enum ScreenCandidateAdapter {
+  /// The legacy capture contract may identify a staged task rather than a Rewind screenshot.
+  static let captureEvidenceVersion = "capture.v2"
+
+  static func evidenceVersion(for screenshotID: Int64?) -> String {
+    screenshotID == nil ? captureEvidenceVersion : RewindEvidenceCardPolicy.supportedVersion
+  }
+
   static func idempotencyKey(deviceID: String, localID: Int64) -> String {
     "screen:\(deviceID):\(localID)"
   }
@@ -474,7 +481,8 @@ enum ScreenCandidateAdapter {
     task: ExtractedTask,
     dueAt: Date?,
     localEvidenceID: String,
-    deviceID: String
+    deviceID: String,
+    evidenceVersion: String = ScreenCandidateAdapter.captureEvidenceVersion
   ) -> ScreenCandidateDecision {
     let facts = facts(for: task)
     let outcome = ScreenCapturePolicy.evaluate(facts)
@@ -488,7 +496,7 @@ enum ScreenCandidateAdapter {
       id: localEvidenceID,
       kind: .local_screen,
       scope: .device_local,
-      version: "capture.v2"
+      version: evidenceVersion
     )
     let owner = OmiAPI.TaskOwner(rawValue: facts.owner) ?? .unknown
     let priority = OmiAPI.TaskPriority(rawValue: task.priority.rawValue)

@@ -178,6 +178,7 @@ def test_memory_collections_frozen_path_strings_unchanged():
     paths = MemoryCollections(uid="uid-test")
     assert paths.memory_items == "users/uid-test/memory_items"
     assert paths.memory_operations == "users/uid-test/memory_operations"
+    assert paths.memory_ledger_reopens == "users/uid-test/memory_ledger_reopens"
     assert paths.memory_outbox == "users/uid-test/memory_outbox"
     assert paths.memory_control_state == "users/uid-test/memory_control/state"
     assert paths.memory_apply_control_state == "users/uid-test/memory_state/apply_control"

@@ -1,10 +1,4 @@
-"""Regression test for renaming a missing person.
-
-PATCH /v1/users/people/{person_id}/name -> update_person did a bare Firestore .update(), which
-raises NotFound on a missing/stale person id (e.g. after the idempotent DELETE removed it),
-surfacing as HTTP 500. update_person now checks existence and returns False so the router can 404.
-Pinned against a fake Firestore via patch.object on the db proxy, no live services.
-"""
+"""Regression tests for stable person rename and alias retention."""
 
 import os
 from unittest.mock import MagicMock, patch
@@ -15,6 +9,7 @@ os.environ.setdefault(
 )
 
 import database.users as users_db  # noqa: E402
+from database import person_aliases  # noqa: E402
 
 
 def _person_ref(fake_db, exists):
@@ -26,27 +21,67 @@ def _person_ref(fake_db, exists):
 
 def test_update_person_missing_returns_false_without_updating():
     fake_db = MagicMock()
-    ref = _person_ref(fake_db, exists=False)
-    with patch.object(users_db, "db", fake_db):
+    _person_ref(fake_db, exists=False)
+    with patch.object(users_db, "db", fake_db), patch.object(
+        users_db, "rename_person_retaining_aliases", return_value=False
+    ) as rename:
         assert users_db.update_person("u1", "missing", "Alice") is False
-    ref.update.assert_not_called()  # no .update() -> no NotFound -> no 500
+    rename.assert_called_once_with(fake_db, "u1", "missing", "Alice")
 
 
 def test_update_person_existing_updates_and_returns_true():
     fake_db = MagicMock()
-    ref = _person_ref(fake_db, exists=True)
-    with patch.object(users_db, "db", fake_db):
+    _person_ref(fake_db, exists=True)
+    with patch.object(users_db, "db", fake_db), patch.object(
+        users_db, "rename_person_retaining_aliases", return_value=True
+    ) as rename:
         assert users_db.update_person("u1", "p1", "Alice") is True
-    ref.update.assert_called_once_with({"name": "Alice"})
+    rename.assert_called_once_with(fake_db, "u1", "p1", "Alice")
 
 
 def test_update_person_deleted_between_check_and_update_returns_false():
-    # The person passes the existence check but is deleted before .update() lands, so Firestore
-    # raises NotFound. That race must still 404, not surface as a 500. Use users_db.NotFound (the exact
-    # class update_person catches) rather than importing google.api_core here, so this test is not
-    # broken by another test in the full suite that stubs the google namespace in sys.modules.
     fake_db = MagicMock()
-    ref = _person_ref(fake_db, exists=True)
-    ref.update.side_effect = users_db.NotFound("person deleted mid-rename")
-    with patch.object(users_db, "db", fake_db):
+    _person_ref(fake_db, exists=True)
+    with patch.object(users_db, "db", fake_db), patch.object(users_db, "rename_person_retaining_aliases") as rename:
+        rename.return_value = False
         assert users_db.update_person("u1", "racing", "Alice") is False
+
+
+def test_person_alias_boundary_maps_transactional_not_found_to_missing():
+    fake_db = MagicMock()
+    with patch.object(
+        person_aliases,
+        "update_person_name_transaction",
+        side_effect=person_aliases.NotFound("person deleted mid-rename"),
+    ):
+        assert person_aliases.rename_person_retaining_aliases(fake_db, "u1", "racing", "Alice") is False
+
+
+def test_person_rename_transaction_retains_old_names_as_bounded_exact_aliases():
+    transaction = MagicMock()
+    person_ref = MagicMock()
+    snapshot = person_ref.get.return_value
+    snapshot.exists = True
+    snapshot.to_dict.return_value = {
+        "name": "Alice Smith",
+        "aliases": ["Ally", " ALICE SMITH ", "A. Smith", None],
+    }
+
+    result = person_aliases.update_person_name_transaction.to_wrap(transaction, person_ref, " Alicia Smith ")
+
+    assert result is True
+    payload = transaction.update.call_args.args[1]
+    assert payload["name"] == "Alicia Smith"
+    assert payload["aliases"] == ["Ally", "ALICE SMITH", "A. Smith"]
+    assert payload["updated_at"].tzinfo is not None
+
+
+def test_person_rename_transaction_rejects_blank_without_mutation():
+    transaction = MagicMock()
+    person_ref = MagicMock()
+    snapshot = person_ref.get.return_value
+    snapshot.exists = True
+    snapshot.to_dict.return_value = {"name": "Alice"}
+
+    assert person_aliases.update_person_name_transaction.to_wrap(transaction, person_ref, "   ") is False
+    transaction.update.assert_not_called()
