@@ -1324,26 +1324,24 @@ struct DesktopHomeView: View {
   @ViewBuilder
   private var sidebarSlot: some View {
     if showsPrimarySidebar {
-      ZStack {
-        SidebarView(
-          selectedIndex: $selectedIndex,
-          isCollapsed: $isSidebarCollapsed,
-          memoryDestinationRawValue: $memoryDestinationRawValue,
-          appState: appState,
-          ownsShellHitRegion: !isInSettings
-        )
-        .opacity(isInSettings ? 0 : 1)
-        .allowsHitTesting(!isInSettings)
-        if isInSettings { settingsSidebar }
+      LegacySidebarSurface {
+        ZStack {
+          SidebarView(
+            selectedIndex: $selectedIndex,
+            isCollapsed: $isSidebarCollapsed,
+            memoryDestinationRawValue: $memoryDestinationRawValue,
+            appState: appState
+          )
+          .opacity(isInSettings ? 0 : 1)
+          .allowsHitTesting(!isInSettings)
+          if isInSettings { settingsSidebar }
+        }
       }
-      .fixedSize(horizontal: true, vertical: false)
-      .clipped()
     }
   }
 
-  /// The settings section list. Modern settings hosts it inside the page panel; legacy Home keeps it
-  /// in the old sidebar slot beside that panel. The latter has no glass underneath it, so the sidebar
-  /// must register its own shell hit region or the transparent window passes its clicks through.
+  /// The settings section list. Modern settings hosts it inside the page panel; legacy Home hosts the
+  /// whole sidebar slot on `LegacySidebarSurface`, so this view always inherits a glass ground.
   private var settingsSidebar: some View {
     SettingsSidebar(
       selectedSection: $selectedSettingsSection,
@@ -1355,8 +1353,7 @@ struct DesktopHomeView: View {
             ? SidebarNavItem.dashboard.rawValue
             : previousIndexBeforeSettings
         }
-      }, appState: appState,
-      ownsShellHitRegion: showsPrimarySidebar)
+      }, appState: appState)
   }
 
   // Main content area. It paints **no background**: the window has no ground at all

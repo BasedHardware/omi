@@ -95,9 +95,9 @@ final class GlassPanelHitRegionTests: XCTestCase {
   }
 
   /// Legacy Home hosts both its primary navigation and Settings menu beside `PageGlassLane`. The
-  /// slot must keep either visible menu interactive, while the modern panel-hosted Settings menu
-  /// must not add a rectangular region that would reclaim the panel's rounded corner cut-outs.
-  func testLegacySidebarSlotOwnsHitsForBothMenus() throws {
+  /// slot must give either menu the real shared glass and its matching hit region, while the modern
+  /// panel-hosted Settings menu must inherit the page panel instead of adding a second material.
+  func testLegacySidebarSlotOwnsGlassAndHitsForBothMenus() throws {
     defer { teardownWindow() }
 
     for host in SidebarHost.allCases {
@@ -109,6 +109,9 @@ final class GlassPanelHitRegionTests: XCTestCase {
       XCTAssertEqual(
         InkGlassHitRegions.shared.hasSurfaces(in: window), host.expectsSurface,
         "\(host): standalone ownership must match the host")
+      XCTAssertEqual(
+        hasBehindWindowGlass(in: window), host.expectsSurface,
+        "\(host): a standalone menu needs actual glass, not only an invisible hit marker")
       XCTAssertEqual(
         InkGlassHitRegions.shared.containsPoint(inside, in: window), host.expectsSurface,
         "\(host): every visible legacy menu must keep mouse input")
@@ -186,17 +189,19 @@ final class GlassPanelHitRegionTests: XCTestCase {
     let sidebar: AnyView
     switch host {
     case .panelSettings:
-      sidebar = AnyView(settingsSidebar(ownsShellHitRegion: false))
+      sidebar = AnyView(settingsSidebar)
     case .legacySettings:
-      sidebar = AnyView(settingsSidebar(ownsShellHitRegion: true))
+      sidebar = AnyView(LegacySidebarSurface { settingsSidebar })
     case .legacyNavigation:
       sidebar = AnyView(
-        SidebarView(
-          selectedIndex: .constant(SidebarNavItem.dashboard.rawValue),
-          isCollapsed: .constant(true),
-          memoryDestinationRawValue: .constant(MemoryHubDestination.memories.rawValue),
-          appState: AppState()
-        ))
+        LegacySidebarSurface {
+          SidebarView(
+            selectedIndex: .constant(SidebarNavItem.dashboard.rawValue),
+            isCollapsed: .constant(true),
+            memoryDestinationRawValue: .constant(MemoryHubDestination.memories.rawValue),
+            appState: AppState()
+          )
+        })
     }
 
     let root = HStack(spacing: 0) {
@@ -215,14 +220,25 @@ final class GlassPanelHitRegionTests: XCTestCase {
     return NSRect(origin: .zero, size: sidebarSize)
   }
 
-  private func settingsSidebar(ownsShellHitRegion: Bool) -> some View {
+  private var settingsSidebar: some View {
     SettingsSidebar(
       selectedSection: .constant(.general),
       highlightedSettingId: .constant(nil),
       onBack: {},
-      appState: AppState(),
-      ownsShellHitRegion: ownsShellHitRegion
+      appState: AppState()
     )
+  }
+
+  private func hasBehindWindowGlass(in window: NSWindow) -> Bool {
+    guard let contentView = window.contentView else { return false }
+    return viewTree(rootedAt: contentView).contains { view in
+      guard let material = view as? NSVisualEffectView else { return false }
+      return material.blendingMode == .behindWindow
+    }
+  }
+
+  private func viewTree(rootedAt root: NSView) -> [NSView] {
+    [root] + root.subviews.flatMap { viewTree(rootedAt: $0) }
   }
 
   private func teardownWindow() {

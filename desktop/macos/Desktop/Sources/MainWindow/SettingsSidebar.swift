@@ -412,9 +412,6 @@ struct SettingsSidebar: View {
   @Binding var highlightedSettingId: String?
   let onBack: () -> Void
   @ObservedObject var appState: AppState
-  /// Standalone legacy Settings has no page glass underneath it, so it must own mouse input itself.
-  /// Panel-hosted Settings leaves this false to preserve the panel's rounded corner cut-outs.
-  var ownsShellHitRegion = false
 
   @State private var isBackHovered = false
   @State private var searchQuery = ""
@@ -489,15 +486,10 @@ struct SettingsSidebar: View {
       Spacer()
     }
     .frame(width: SettingsSidebarMetrics.expandedWidth)
-    // A half-step of shading, and deliberately not a second material: the window already wears the
-    // glass, and a `.regularMaterial` here would be a *within-window* blur stacked on it — two
-    // materials in one window, which on light glass reads as a grey slab down the side.
+    // A half-step of shading, and deliberately not a second material: the host already wears the
+    // glass (`PageGlassLane` in modern Settings, `LegacySidebarSurface` in old Home), and a
+    // `.regularMaterial` here would be a within-window blur stacked on it.
     .background(Ink.rowFill)
-    .background {
-      if ownsShellHitRegion {
-        InkGlassHitRegionReporter()
-      }
-    }
   }
 
   private var searchField: some View {
