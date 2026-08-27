@@ -6,7 +6,6 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:provider/provider.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
@@ -678,28 +677,11 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   String _estimateFileSize() {
-    // Estimate size based on codec, sample rate, channels, and duration
-    int bytesPerSecond;
-    switch (widget.wal.codec) {
-      case BleAudioCodec.opus:
-      case BleAudioCodec.opusFS320:
-        bytesPerSecond = widget.wal.codec == BleAudioCodec.opusFS320 ? 40000 : 8000; // ~320kbps vs ~64kbps
-        break;
-      case BleAudioCodec.pcm16:
-        bytesPerSecond = widget.wal.sampleRate * 2 * widget.wal.channel; // 16-bit samples
-        break;
-      case BleAudioCodec.pcm8:
-        bytesPerSecond = widget.wal.sampleRate * 1 * widget.wal.channel; // 8-bit samples
-        break;
-      case BleAudioCodec.mulaw16:
-      case BleAudioCodec.mulaw8:
-        bytesPerSecond = widget.wal.sampleRate * 1 * widget.wal.channel; // μ-law is 8-bit encoded
-        break;
-      default:
-        bytesPerSecond = 8000;
-    }
-
-    final totalBytes = bytesPerSecond * widget.wal.seconds;
+    final totalBytes = widget.wal.codec.estimatedRecordingBytes(
+      seconds: widget.wal.seconds,
+      sampleRate: widget.wal.sampleRate,
+      channels: widget.wal.channel,
+    );
     return _formatBytes(totalBytes);
   }
 

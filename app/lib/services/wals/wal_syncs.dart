@@ -189,23 +189,11 @@ class WalSyncs implements IWalSync {
   }
 
   int _estimateWalSize(Wal wal) {
-    int bytesPerSecond;
-    switch (wal.codec) {
-      case BleAudioCodec.opusFS320:
-        bytesPerSecond = 16000;
-      case BleAudioCodec.opus:
-        bytesPerSecond = 8000;
-        break;
-      case BleAudioCodec.pcm16:
-        bytesPerSecond = wal.sampleRate * 2 * wal.channel;
-        break;
-      case BleAudioCodec.pcm8:
-        bytesPerSecond = wal.sampleRate * 1 * wal.channel;
-        break;
-      default:
-        bytesPerSecond = 8000;
-    }
-    return bytesPerSecond * wal.seconds;
+    return wal.codec.estimatedRecordingBytes(
+      seconds: wal.seconds,
+      sampleRate: wal.sampleRate,
+      channels: wal.channel,
+    );
   }
 
   Future<void> deleteAllSyncedWals() async {
