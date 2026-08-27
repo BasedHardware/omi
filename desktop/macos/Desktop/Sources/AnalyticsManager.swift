@@ -715,6 +715,22 @@ class AnalyticsManager {
     PostHogManager.shared.desktopRatingSubmitted(rating: rating)
   }
 
+  func desktopPromptShown(promptId: String, promptType: String) {
+    PostHogManager.shared.track(
+      "Desktop Prompt Shown", properties: ["prompt_id": promptId, "prompt_type": promptType])
+  }
+
+  func desktopPromptAnswered(promptId: String, promptType: String, value: String) {
+    PostHogManager.shared.track(
+      "Desktop Prompt Answered",
+      properties: ["prompt_id": promptId, "prompt_type": promptType, "value": value])
+  }
+
+  func desktopPromptDismissed(promptId: String, promptType: String) {
+    PostHogManager.shared.track(
+      "Desktop Prompt Dismissed", properties: ["prompt_id": promptId, "prompt_type": promptType])
+  }
+
   // MARK: - Search Events
 
   func searchQueryEntered(query: String) {

@@ -62,6 +62,9 @@ enum DefaultsKey: String {
   case ratingPromptQuestionCount = "ratingPromptQuestionCount"
   case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"
   case ratingPromptDismissed = "ratingPromptDismissed"
+  /// One-shot marker: the question counter was seeded from server chat
+  /// history so long-time users see the rating ask without three NEW questions.
+  case ratingPromptHistorySeeded = "ratingPromptHistorySeeded"
   case screenAnalysisAutoStartFixedV2 = "screenAnalysisAutoStartFixed_v2"
   case screenAnalysisAutoStartFixedV3 = "screenAnalysisAutoStartFixed_v3"
   case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
@@ -168,6 +171,12 @@ struct ScopedDefaultsKey {
 
   static func importConnectorSourceCount(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
+  }
+
+  /// Per-prompt resolution of a remote (admin-authored) prompt: "answered" or
+  /// "dismissed". Absent = still eligible.
+  static func remotePromptResolution(promptId: String) -> Self {
+    Self(rawValue: "remotePrompt.resolution.v1.\(promptId)")
   }
 
   static func taskInterruptionLedger(ownerID: String) -> Self {

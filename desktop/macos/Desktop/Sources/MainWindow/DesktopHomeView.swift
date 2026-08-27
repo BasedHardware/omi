@@ -1150,8 +1150,15 @@ struct DesktopHomeView: View {
         GoalCelebrationView()
       }
       .overlay(alignment: .bottom) {
-        // One-time rating ask, due after the user's 3rd question.
+        // One-time rating ask, due after the user's 3rd question. Remote
+        // (admin-authored) prompts render through the same slot; the built-in
+        // ask has right of way inside RemotePromptEngine.evaluate().
         RatingPromptBar()
+        RemotePromptBar()
+      }
+      .task {
+        RemotePromptEngine.shared.start()
+        await RatingPromptManager.shared.seedFromHistoryIfNeeded()
       }
       .overlay {
         if !usesChatFirstShell && showTryAskingPopup {
