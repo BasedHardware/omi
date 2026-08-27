@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 import uuid
 from typing import List, Dict, Any, Union, Optional
-import hashlib
 import os
 import asyncio
 
@@ -61,7 +60,6 @@ from models.conversation import Conversation
 from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
 from utils.conversations.factory import deserialize_conversation, deserialize_conversations
 from models.other import Person, CreatePerson
-from models.shared import StatusResponse
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
 from datetime import datetime, time, timedelta
@@ -86,8 +84,10 @@ from models.users import (
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    request_has_llm_byok_key,
     enforce_chat_quota,
     get_chat_quota_snapshot,
+    get_basic_plan_limits,
     get_default_basic_subscription,
     get_paid_plan_definitions,
     get_plan_display_name,
@@ -126,7 +126,11 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
-from utils.byok import has_byok_keys, invalidate_byok_state_cache, peppered_fingerprint
+from utils.byok import (
+    get_byok_key,
+    invalidate_byok_state_cache,
+    peppered_fingerprint,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1097,7 +1101,7 @@ def get_user_usage_stats_endpoint(
 
 
 _SHA256_HEX_RE = re.compile(r'^[a-f0-9]{64}$')
-_BYOK_REQUIRED_PROVIDERS = {'openai', 'anthropic', 'gemini', 'deepgram'}
+_BYOK_ALLOWED_PROVIDERS = {'openai', 'anthropic', 'gemini', 'openrouter', 'deepgram'}
 
 
 class BYOKActivateRequest(BaseModel):
@@ -1116,14 +1120,14 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
     detect rotation without ever seeing the keys. The live keys themselves
     travel on every request as headers; they are never persisted.
     """
-    missing = _BYOK_REQUIRED_PROVIDERS - set(data.fingerprints.keys())
-    if missing:
+    providers = set(data.fingerprints.keys())
+    if not providers - {'deepgram'}:
         raise HTTPException(
             status_code=400,
-            detail=f"Missing fingerprints for providers: {sorted(missing)}",
+            detail='At least one LLM provider fingerprint is required',
         )
     for provider, fp in data.fingerprints.items():
-        if provider not in _BYOK_REQUIRED_PROVIDERS:
+        if provider not in _BYOK_ALLOWED_PROVIDERS:
             raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
         if not _SHA256_HEX_RE.match(fp):
             raise HTTPException(
@@ -1144,15 +1148,21 @@ def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byo
     return {"active": False}
 
 
-def _byok_unlimited_subscription() -> Subscription:
-    """BYOK free plan: unlimited limits, marked with the `byok` feature flag."""
+def _byok_unlimited_subscription(
+    transcription_seconds: Optional[int] = None, words_transcribed: Optional[int] = None
+) -> Subscription:
+    """BYOK free plan: unlimited limits, marked with the `byok` feature flag.
+
+    LLM-only requests pass the free-tier transcription/words allowances so the
+    snapshot stays metered where Omi still pays for STT; unlimited stays `None`.
+    """
     return Subscription(
         plan=PlanType.unlimited,
         status=SubscriptionStatus.active,
         features=["byok"],
         limits=PlanLimits(
-            transcription_seconds=None,
-            words_transcribed=None,
+            transcription_seconds=transcription_seconds,
+            words_transcribed=words_transcribed,
             insights_gained=None,
         ),
     )
@@ -1167,20 +1177,44 @@ def get_user_subscription_endpoint(
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
 ):
     """Gets the user's subscription plan and usage."""
-    # BYOK free plan: user supplies their own OpenAI/Anthropic/Gemini/Deepgram keys.
-    # Only return unlimited when the request actually carries BYOK headers (desktop).
-    # Mobile (no BYOK headers) should see the real subscription even if BYOK is active.
+    # BYOK free plan: unlimited chat/insights only for a validated LLM-capability
+    # key (same predicate as enforce_chat_quota). Deepgram-only does not unlock this.
     # Synthetic paid-tier quota for BYOK / marketplace-reviewer overrides so
     # these users aren't surprised by a disabled phone-call feature.
     unlimited_phone_quota = PhoneCallQuota(has_access=True, is_paid=True)
 
-    if users_db.is_byok_active(uid) and has_byok_keys():
+    if users_db.is_byok_active(uid) and request_has_llm_byok_key():
+        # Snapshot split: a validated LLM key unlocks unlimited chat/insights, but
+        # backend transcription credits still flow through Omi's Deepgram, so the
+        # transcription/words fields stay metered on the free tier unless this
+        # request also carries a validated Deepgram key (same predicate as
+        # has_transcription_credits).
+        if get_byok_key('deepgram'):
+            return UserSubscriptionResponse(
+                subscription=_byok_unlimited_subscription(),
+                transcription_seconds_used=0,
+                transcription_seconds_limit=0,
+                words_transcribed_used=0,
+                words_transcribed_limit=0,
+                insights_gained_used=0,
+                insights_gained_limit=0,
+                available_plans=[],
+                show_subscription_ui=False,
+                phone_call_quota=unlimited_phone_quota,
+            )
+        usage = get_monthly_usage_for_subscription(uid)
+        basic_limits = get_basic_plan_limits()
         return UserSubscriptionResponse(
-            subscription=_byok_unlimited_subscription(),
-            transcription_seconds_used=0,
-            transcription_seconds_limit=0,
-            words_transcribed_used=0,
-            words_transcribed_limit=0,
+            subscription=_byok_unlimited_subscription(
+                transcription_seconds=basic_limits.transcription_seconds,
+                words_transcribed=basic_limits.words_transcribed,
+            ),
+            transcription_seconds_used=usage.get('transcription_seconds', 0),
+            # Wire convention (see WIRE BRIDGE below): unlimited remains 0; a
+            # finite allowance must be the real positive limit.
+            transcription_seconds_limit=basic_limits.transcription_seconds or 0,
+            words_transcribed_used=usage.get('words_transcribed', 0),
+            words_transcribed_limit=basic_limits.words_transcribed or 0,
             insights_gained_used=0,
             insights_gained_limit=0,
             available_plans=[],
@@ -1396,7 +1430,7 @@ def get_user_chat_usage_quota(
     # BYOK free plan: user brings their own keys, so there's no Omi-side cost
     # to meter. Only return unlimited when BYOK headers are on the request (desktop).
     # Mobile (no headers) should see real quota.
-    if users_db.is_byok_active(uid) and has_byok_keys():
+    if users_db.is_byok_active(uid) and request_has_llm_byok_key():
         return ChatUsageQuota(
             plan='Free (BYOK)',
             plan_type=PlanType.unlimited.value,

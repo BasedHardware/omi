@@ -3232,5 +3232,6 @@
     "appReEnableFailedTitle": "Opnieuw inschakelen mislukt",
     "appReEnableFailedBody": "Deze app kon niet opnieuw worden ingeschakeld. Probeer het opnieuw.",
     "appDisabledOn": "Uitgeschakeld op {date}.",
-    "appDisabledLastError": "Laatste fout: {error}."
+    "appDisabledLastError": "Laatste fout: {error}.",
+    "prerecordedTranscript": "Vooraf opgenomen"
 }

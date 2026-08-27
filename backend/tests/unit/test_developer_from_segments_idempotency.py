@@ -140,6 +140,7 @@ _drop_stale_module('routers.developer', BACKEND_DIR / 'routers' / 'developer.py'
 _drop_stale_module('utils.conversations.render', BACKEND_DIR / 'utils' / 'conversations' / 'render.py')
 
 import database.conversations as conversations_db  # noqa: E402
+from database.firestore_read_metrics import FirestoreReadSite  # noqa: E402
 import routers.developer as developer  # noqa: E402
 import utils.task_intelligence.proactive_engine as proactive_engine  # noqa: E402
 import utils.conversations.meeting_receipt as meeting_receipt  # noqa: E402
@@ -291,7 +292,9 @@ def test_client_session_id_uses_stable_conversation_id(monkeypatch):
     assert captured['conversation'].external_data['from_segments_client_session_id'] == 'local-session-1'
     assert isinstance(captured['conversation'].external_data['from_segments_claimed_at'], datetime)
     assert captured['conversation'].status == ConversationStatus.completed
-    conversations_db.get_conversation.assert_called_once_with('uid1', expected_id)
+    conversations_db.get_conversation.assert_called_once_with(
+        'uid1', expected_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
+    )
     claim.assert_called_once()
     assert claim.call_args.args[0] == 'uid1'
     assert claim.call_args.args[1]['id'] == expected_id

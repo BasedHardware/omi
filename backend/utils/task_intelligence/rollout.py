@@ -6,6 +6,8 @@ generation fences and diagnostics, not memory-cohort rollout gates.
 
 # LIFECYCLE: permanent
 
+from typing import Any
+
 from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowControl, TaskWorkflowMode
 
 
@@ -45,7 +47,7 @@ def resolve_task_intelligence_for_user(
     uid: str,
     workflow_mode: TaskWorkflowMode | str,
     account_generation: int = 0,
-    db_client=None,
+    db_client: Any | None = None,
 ) -> TaskIntelligenceRolloutDecision:
     """Resolve one universal task decision for any authenticated UID."""
 

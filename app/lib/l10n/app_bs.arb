@@ -10798,5 +10798,6 @@
     "appReEnableFailedTitle": "Ponovno omogućavanje nije uspjelo",
     "appReEnableFailedBody": "Ovu aplikaciju nije bilo moguće ponovo omogućiti. Pokušaj ponovo.",
     "appDisabledOn": "Onemogućeno {date}.",
-    "appDisabledLastError": "Posljednja greška: {error}."
+    "appDisabledLastError": "Posljednja greška: {error}.",
+    "prerecordedTranscript": "Unaprijed snimljeno"
 }

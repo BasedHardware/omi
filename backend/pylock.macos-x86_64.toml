@@ -313,12 +313,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/0a/ed/86ed74d8829c3bc56
 wheels = [{ url = "https://files.pythonhosted.org/packages/fd/4d/e6e40f93031adbf654d34e542bd396e9f3bc1c6209b40c920d58c9e1317a/fakeredis-2.36.2-py3-none-any.whl", upload-time = 2026-06-17T13:25:36Z, size = 141039, hashes = { sha256 = "84cbb9c74ca8946c0d2499daadf3a5d0bfe3cfbac71e3398316d1a1eab3421c4" } }]
 
 [[packages]]
-name = "fal-client"
-version = "0.4.1"
-sdist = { url = "https://files.pythonhosted.org/packages/e3/54/7674e1c8181e5b4125dba43ea10e2324131bfee0498444d5bdf39907713b/fal_client-0.4.1.tar.gz", upload-time = 2024-06-28T18:43:25Z, size = 8413, hashes = { sha256 = "3121cdbf4be8a47226e6df8e782340c1a603b17ec04942a131c2929a32aedff3" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/0d/fd/340396fdceb9ac2fac768f9d91b0e8a1cf18c554567afd9bf01b60c949e8/fal_client-0.4.1-py3-none-any.whl", upload-time = 2024-06-28T18:43:24Z, size = 6296, hashes = { sha256 = "3fe13ac5108a02c1c27e146e52dcbb0b10d33694d870c8a1769966af18ff4a3f" } }]
-
-[[packages]]
 name = "fastapi"
 version = "0.121.0"
 sdist = { url = "https://files.pythonhosted.org/packages/8c/e3/77a2df0946703973b9905fd0cde6172c15e0781984320123b4f5079e7113/fastapi-0.121.0.tar.gz", upload-time = 2025-11-03T10:25:54Z, size = 342412, hashes = { sha256 = "06663356a0b1ee93e875bbf05a31fb22314f5bed455afaaad2b2dad7f26e98fa" } }
@@ -439,6 +433,12 @@ name = "google-cloud-firestore"
 version = "2.20.0"
 sdist = { url = "https://files.pythonhosted.org/packages/ce/9b/7c2f746cd8ec3f08d02d5626d863c2486dd69eb0b1f77bdcd9b0fe15d478/google_cloud_firestore-2.20.0.tar.gz", upload-time = 2025-01-13T21:39:43Z, size = 491103, hashes = { sha256 = "ad863be58667233921e02f0b81aa94a816f5e63a707cb33c97b1aa357a50566d" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/80/3f/52fd16f3de3ed4ac2e3b7c728fb3b29b081791cf6292b74e4301ad489737/google_cloud_firestore-2.20.0-py2.py3-none-any.whl", upload-time = 2025-01-13T21:39:40Z, size = 337765, hashes = { sha256 = "505ef6951b56ea91f6762d99b3429ca6def6dceb254b4ba1ffc85e69b71414d7" } }]
+
+[[packages]]
+name = "google-cloud-kms"
+version = "3.6.0"
+sdist = { url = "https://files.pythonhosted.org/packages/73/8a/ee0569d6dd4f4bb99fdf2a28466f1914a3f2849506c75b620c213feb043b/google_cloud_kms-3.6.0.tar.gz", upload-time = 2025-09-22T16:51:16Z, size = 329923, hashes = { sha256 = "c0f7f2474e35e99e6a36651520a26fdba4bb8e73b7cd0d9bff8c8bd92737afcc" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/7c/82/686bde4666b72e821f724dc2d143ad0b9a50af7c145ecba1e57ccb9aeb97/google_cloud_kms-3.6.0-py3-none-any.whl", upload-time = 2025-09-22T16:51:00Z, size = 272683, hashes = { sha256 = "1dc389f327cce288ac3091860497ab50b2d166fb71603e632bc4bfd1b2b74cd5" } }]
 
 [[packages]]
 name = "google-cloud-storage"
@@ -687,6 +687,12 @@ name = "langchain"
 version = "1.2.10"
 sdist = { url = "https://files.pythonhosted.org/packages/16/22/a4d4ac98fc2e393537130bbfba0d71a8113e6f884d96f935923e247397fe/langchain-1.2.10.tar.gz", upload-time = 2026-02-10T14:56:49Z, size = 570071, hashes = { sha256 = "bdcd7218d9c79a413cf15e106e4eb94408ac0963df9333ccd095b9ed43bf3be7" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/7c/06/c3394327f815fade875724c0f6cff529777c96a1e17fea066deb997f8cf5/langchain-1.2.10-py3-none-any.whl", upload-time = 2026-02-10T14:56:47Z, size = 111738, hashes = { sha256 = "e07a377204451fffaed88276b8193e894893b1003e25c5bca6539288ccca3698" } }]
+
+[[packages]]
+name = "langchain-anthropic"
+version = "1.1.0"
+sdist = { url = "https://files.pythonhosted.org/packages/d2/d3/8ac7d664e87aa9bdf5f6a4d55324316933aec8beb1690932dbe7b63416e2/langchain_anthropic-1.1.0.tar.gz", upload-time = 2025-11-17T21:31:31Z, size = 684087, hashes = { sha256 = "427e102b76a417fb5713e81e853225e7459d71fc7abdf4d86722f0e01ad43845" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/aa/95/f340acdd8d9f392606f026a1326a33cfb1f9b172c7607c70ab0c2b43d74d/langchain_anthropic-1.1.0-py3-none-any.whl", upload-time = 2025-11-17T21:31:29Z, size = 47793, hashes = { sha256 = "2593f10b984448e31a9fd486ab2f7ebc8a0f7f82ba1ca477339e4f5ddd7f0e8d" } }]
 
 [[packages]]
 name = "langchain-classic"

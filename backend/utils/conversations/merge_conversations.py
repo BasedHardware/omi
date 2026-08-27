@@ -36,7 +36,6 @@ from utils.other.storage import (
     enqueue_conversation_artifact_build,
     list_audio_chunks,
     private_cloud_sync_bucket,
-    _get_extension_for_path,
 )
 from utils.object_store import get_object_store
 import logging

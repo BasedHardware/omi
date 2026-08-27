@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-from utils.executors import db_executor, postprocess_executor
+from utils.executors import postprocess_executor
 from utils.mcp_data import date_only_to_utc_epoch
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -42,6 +42,10 @@ from dependencies import (
 )
 from utils.other.endpoints import with_rate_limit, with_rate_limit_context
 from utils.log_sanitizer import sanitize_pii
+from utils.memory.default_read_rollout import (
+    MemoryReadDecision,
+    read_default_read_rollout,
+)
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_external_default_memory_read,

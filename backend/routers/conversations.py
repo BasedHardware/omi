@@ -10,6 +10,7 @@ import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
+from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
 from utils.other.storage import delete_conversation_audio_files
@@ -104,7 +105,9 @@ router = APIRouter()
 
 
 def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = conversations_db.get_conversation(
+        uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
+    )
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 

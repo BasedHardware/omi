@@ -19,6 +19,7 @@ from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
+from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
 
@@ -508,10 +509,13 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversation(uid, conversation_id):
+def get_conversation(uid, conversation_id, *, read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = _document_data_with_revision(conversation_ref.get())
+    record_document_read(
+        read_site, FirestoreReadOutcome.HIT if conversation_data is not None else FirestoreReadOutcome.MISS
+    )
     return conversation_data
 
 
@@ -1075,30 +1079,58 @@ def delete_conversation(uid, conversation_id):
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversations_by_id(uid, conversation_ids, include_discarded: bool = False):
-    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded)
+def get_conversations_by_id(
+    uid,
+    conversation_ids,
+    include_discarded: bool = False,
+    *,
+    read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+):
+    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
-def get_conversations_by_id_without_photos(uid, conversation_ids, include_discarded: bool = False):
-    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded)
+def get_conversations_by_id_without_photos(
+    uid,
+    conversation_ids,
+    include_discarded: bool = False,
+    *,
+    read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+):
+    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
 
 
-def _get_conversations_by_id(uid, conversation_ids, include_discarded: bool = False):
+def _get_conversations_by_id(
+    uid,
+    conversation_ids,
+    include_discarded: bool = False,
+    *,
+    read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
 
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
     docs = db.get_all(doc_refs)
 
+    hits = 0
+    misses = 0
     conversations_by_id = {}
     for doc in docs:
         if doc.exists:
+            hits += 1
             data = doc.to_dict()
             if data.get('discarded') and not include_discarded:
                 continue
             data.setdefault('id', doc.id)
             conversations_by_id[str(data['id'])] = data
+        else:
+            misses += 1
+
+    if hits:
+        record_document_read(read_site, FirestoreReadOutcome.HIT, count=hits)
+    if misses:
+        record_document_read(read_site, FirestoreReadOutcome.MISS, count=misses)
 
     return [
         conversations_by_id[str(conversation_id)]
@@ -1720,7 +1752,7 @@ def set_postprocessing_status(
     conversation_id: str,
     status: PostProcessingStatus,
     fail_reason: str = None,
-    model: PostProcessingModel = PostProcessingModel.fal_whisperx,
+    model: PostProcessingModel = PostProcessingModel.prerecorded,
 ):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -1780,6 +1812,7 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
     soniox_ref = conversation_ref.collection('soniox_streaming')
     speechmatics_ref = conversation_ref.collection('speechmatics_streaming')
     whisperx_ref = conversation_ref.collection('fal_whisperx')
+    prerecorded_ref = conversation_ref.collection('prerecorded')
 
     # Sort each provider's segments by start time, tolerating a legacy/partial doc missing 'start'
     # (a bare x['start'] would KeyError and 500 the whole transcripts response).
@@ -1790,6 +1823,9 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
             sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x.get('start', 0))
         ),
         'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x.get('start', 0))),
+        'prerecorded': list(
+            sorted([doc.to_dict() for doc in prerecorded_ref.stream()], key=lambda x: x.get('start', 0))
+        ),
     }
 
 

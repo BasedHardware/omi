@@ -3232,5 +3232,6 @@
     "appReEnableFailedTitle": "Gagal mengaktifkan semula",
     "appReEnableFailedBody": "Apl ini tidak dapat diaktifkan semula. Sila cuba lagi.",
     "appDisabledOn": "Dilumpuhkan pada {date}.",
-    "appDisabledLastError": "Ralat terakhir: {error}."
+    "appDisabledLastError": "Ralat terakhir: {error}.",
+    "prerecordedTranscript": "Pra-rakam"
 }

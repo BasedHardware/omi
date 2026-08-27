@@ -453,7 +453,12 @@ class TranscriptionService: @unchecked Sendable {
 
     // BYOK: attach user keys so the transcription backend can use the user's
     // Deepgram token for this session (and any downstream LLM calls).
-    for (provider, entry) in APIKeyService.byokSnapshot {
+    if let entry = APIKeyService.activeBYOKSnapshot[.deepgram] {
+      request.setValue(entry.key, forHTTPHeaderField: BYOKProvider.deepgram.headerName)
+    }
+    if let provider = APIKeyService.selectedBYOKLLMProvider,
+      let entry = APIKeyService.activeBYOKSnapshot[provider]
+    {
       request.setValue(entry.key, forHTTPHeaderField: provider.headerName)
     }
 
@@ -760,7 +765,12 @@ extension TranscriptionService {
     request.httpMethod = "POST"
     request.setValue(authHeader, forHTTPHeaderField: "Authorization")
     request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-    for (provider, entry) in APIKeyService.byokSnapshot {
+    if let entry = APIKeyService.activeBYOKSnapshot[.deepgram] {
+      request.setValue(entry.key, forHTTPHeaderField: BYOKProvider.deepgram.headerName)
+    }
+    if let provider = APIKeyService.selectedBYOKLLMProvider,
+      let entry = APIKeyService.activeBYOKSnapshot[provider]
+    {
       request.setValue(entry.key, forHTTPHeaderField: provider.headerName)
     }
     request.httpBody = audioData

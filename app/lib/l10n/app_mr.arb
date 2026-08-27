@@ -10798,5 +10798,6 @@
     "appReEnableFailedTitle": "पुन्हा सक्षम करता आले नाही",
     "appReEnableFailedBody": "हे अ‍ॅप पुन्हा सक्षम करता आले नाही. कृपया पुन्हा प्रयत्न करा.",
     "appDisabledOn": "{date} रोजी अक्षम केले.",
-    "appDisabledLastError": "शेवटची त्रुटी: {error}"
+    "appDisabledLastError": "शेवटची त्रुटी: {error}",
+    "prerecordedTranscript": "पूर्व-रेकॉर्डेड"
 }

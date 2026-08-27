@@ -9934,4 +9934,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'ಕೊನೆಯ ದೋಷ: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'ಮುಂಚಿತವಾಗಿ ರೆಕಾರ್ಡ್';
 }

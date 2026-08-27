@@ -3328,5 +3328,6 @@
     "appReEnableFailedTitle": "Az újraengedélyezés nem sikerült",
     "appReEnableFailedBody": "Ezt az alkalmazást nem sikerült újraengedélyezni. Próbáld újra.",
     "appDisabledOn": "Letiltva ekkor: {date}.",
-    "appDisabledLastError": "Utolsó hiba: {error}."
+    "appDisabledLastError": "Utolsó hiba: {error}.",
+    "prerecordedTranscript": "Előre rögzített"
 }

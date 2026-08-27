@@ -129,7 +129,7 @@ class TestEffectiveDesktopAccessTier:
             subscription_mod.users_db, 'get_user_valid_subscription', lambda _uid, **_kwargs: post_cutoff_neo
         )
         monkeypatch.setattr(subscription_mod.users_db, 'is_byok_active', lambda _uid, **_kwargs: False)
-        monkeypatch.setattr(subscription_mod, '_request_has_all_byok_keys', lambda: False)
+        monkeypatch.setattr(subscription_mod, '_request_has_llm_byok_key', lambda: False)
         monkeypatch.setattr(subscription_mod.redis_db, 'get_generic_cache', lambda _key: next(cache_values))
         monkeypatch.setattr(subscription_mod.redis_db, 'set_generic_cache', lambda *_args, **_kwargs: None)
         monkeypatch.setattr(subscription_mod.redis_db, 'delete_generic_cache', clear_cache)
@@ -137,7 +137,13 @@ class TestEffectiveDesktopAccessTier:
 
         assert is_trial_paywalled('neo-uid', 'desktop') is False
         assert get_remaining_transcription_seconds('neo-uid', source='desktop') is None
-        assert cleared_cache_keys == ['trial_paywall:expired:neo-uid']
+        assert cleared_cache_keys == [
+            'trial_paywall:expired:neo-uid:openrouter',
+            'trial_paywall:expired:neo-uid:openai',
+            'trial_paywall:expired:neo-uid:anthropic',
+            'trial_paywall:expired:neo-uid:gemini',
+            'trial_paywall:expired:neo-uid',
+        ]
 
 
 class TestNeoGrandfatherUntil:

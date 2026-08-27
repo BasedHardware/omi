@@ -3210,5 +3210,6 @@
     "appReEnableFailedTitle": "Повторното активиране не бе успешно",
     "appReEnableFailedBody": "Това приложение не можа да бъде активирано отново. Опитайте пак.",
     "appDisabledOn": "Деактивирано на {date}.",
-    "appDisabledLastError": "Последна грешка: {error}."
+    "appDisabledLastError": "Последна грешка: {error}.",
+    "prerecordedTranscript": "Предварително записано"
 }

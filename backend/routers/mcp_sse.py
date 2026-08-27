@@ -286,7 +286,6 @@ TOOL_REQUIRED_SCOPE = {
     "get_chat_messages": "chat.read",
     "get_people": "people.read",
     "get_screen_activity": "screen_activity.read",
-    "get_daily_summaries": "conversations.read",
 }
 
 

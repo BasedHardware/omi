@@ -813,13 +813,12 @@ export default function omiProvider(pi: ExtensionAPI): void {
   const baseUrl = process.env.OMI_API_BASE_URL || "https://api.omi.me/v2";
   const apiKey = process.env.OMI_API_KEY || "";
 
-  // BYOK: the Swift app sets OMI_BYOK_* env vars (all four, or none) when the user
-  // is on the free plan with their own provider keys. Attach them as X-BYOK-*
-  // headers on every request to the omi backend so it (a) applies the request-level
-  // all-four-keys paywall exemption and (b) routes inference through the user's own
-  // Anthropic key instead of Omi's server key. We only attach the complete set —
-  // the backend's has_all_byok_keys() requires all four to be present.
+  // BYOK: the Swift app sets OMI_BYOK_* env vars for the selected LLM provider and
+  // optional Deepgram key. Attach configured capabilities as X-BYOK-* headers on
+  // every request so the backend applies the LLM BYOK quota exemption and routes
+  // inference through the selected provider key instead of Omi's server key.
   const byokMap: Array<[string, string]> = [
+    ["OMI_BYOK_OPENROUTER", "X-BYOK-OpenRouter"],
     ["OMI_BYOK_OPENAI", "X-BYOK-OpenAI"],
     ["OMI_BYOK_ANTHROPIC", "X-BYOK-Anthropic"],
     ["OMI_BYOK_GEMINI", "X-BYOK-Gemini"],
@@ -830,9 +829,9 @@ export default function omiProvider(pi: ExtensionAPI): void {
     const value = process.env[envName];
     if (value && value.length > 0) byokHeaders[headerName] = value;
   }
-  const byokActive = Object.keys(byokHeaders).length === byokMap.length;
+  const byokActive = Object.keys(byokHeaders).length > 0;
   if (byokActive) {
-    process.stderr.write(`[omi-provider] BYOK active — attaching ${byokMap.length} X-BYOK headers\n`);
+    process.stderr.write(`[omi-provider] BYOK active — attaching ${Object.keys(byokHeaders).length} X-BYOK headers\n`);
   }
 
   pi.registerProvider("omi", {

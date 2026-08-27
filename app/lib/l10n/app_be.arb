@@ -10798,5 +10798,6 @@
     "appReEnableFailedTitle": "Не ўдалося ўключыць зноў",
     "appReEnableFailedBody": "Не ўдалося паўторна ўключыць гэту праграму. Паспрабуйце яшчэ раз.",
     "appDisabledOn": "Адключана {date}.",
-    "appDisabledLastError": "Апошняя памылка: {error}."
+    "appDisabledLastError": "Апошняя памылка: {error}.",
+    "prerecordedTranscript": "Папярэдне запісанае"
 }

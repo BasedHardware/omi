@@ -9928,4 +9928,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Ralat terakhir: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Pra-rakam';
 }

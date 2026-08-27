@@ -57,8 +57,8 @@ cat >"$PLIST_PATH" <<EOF
   <integer>10</integer>
   <key>WatchPaths</key>
   <array>
-    <string>$WATCH_REPO/desktop/Desktop/Sources</string>
-    <string>$WATCH_REPO/desktop/Desktop/Resources</string>
+    <string>$WATCH_REPO/desktop/macos/Desktop/Sources</string>
+    <string>$WATCH_REPO/desktop/macos/Desktop/Sources/Resources</string>
   </array>
   <key>StandardOutPath</key>
   <string>$STATE_DIR/launchd.out.log</string>

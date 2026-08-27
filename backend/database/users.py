@@ -13,6 +13,7 @@ from database.account_deletion_transitions import (
     record_late_agent_vm_cleanup as _record_late_agent_vm_cleanup_txn,
 )
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
+from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import (
     delete_cached_user_geolocation,
@@ -294,18 +295,34 @@ def is_byok_active(uid: str, *, firestore_client: Any | None = None) -> bool:
     return age <= BYOK_HEARTBEAT_TTL_SECONDS
 
 
-def set_byok_active(uid: str, fingerprints: dict):
-    user_ref = db.collection('users').document(uid)
-    user_ref.set(
+@transactional
+def _set_byok_active_transaction(transaction, user_ref, fingerprints: dict):
+    snapshot = user_ref.get(transaction=transaction)
+    data = snapshot.to_dict() or {}
+    byok = data.get('byok') or {}
+    enrolled_fingerprints = dict(fingerprints) if isinstance(fingerprints, dict) else {}
+    fingerprints_write = dict(enrolled_fingerprints)
+    existing_fingerprints = byok.get('fingerprints')
+    if isinstance(existing_fingerprints, dict):
+        for provider in existing_fingerprints:
+            if provider not in enrolled_fingerprints:
+                fingerprints_write[provider] = firestore.DELETE_FIELD
+    transaction.set(
+        user_ref,
         {
             'byok': {
                 'active': True,
-                'fingerprints': fingerprints,
+                'fingerprints': fingerprints_write,
                 'last_seen_at': datetime.now(timezone.utc),
             }
         },
         merge=True,
     )
+
+
+def set_byok_active(uid: str, fingerprints: dict):
+    user_ref = db.collection('users').document(uid)
+    _set_byok_active_transaction(db.transaction(), user_ref, fingerprints)
 
 
 def clear_byok_active(uid: str):
@@ -346,6 +363,10 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     """
     client = firestore_client or get_firestore_client()
     snapshot = client.collection('account_deletions').document(uid).get()
+    record_document_read(
+        FirestoreReadSite.USER_DELETION_WIPE_STATUS,
+        FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,
+    )
     if not snapshot.exists:
         return None
     status = (snapshot.to_dict() or {}).get('wipe_status')

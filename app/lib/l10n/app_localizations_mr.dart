@@ -9911,4 +9911,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'शेवटची त्रुटी: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'पूर्व-रेकॉर्डेड';
 }

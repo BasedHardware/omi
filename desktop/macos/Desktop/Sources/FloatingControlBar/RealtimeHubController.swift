@@ -751,7 +751,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       "RealtimeHub: preserving barge-in turn while failing over "
         + "\(provider.displayName) → \(alternate.displayName)")
 
-    if let key = APIKeyService.byokKey(alternate.byokProvider) {
+    if let key = APIKeyService.selectedRealtimeBYOKKey(for: alternate.byokProvider) {
       pendingBargeInProvider = alternate
       pendingBargeInAuth = .byokKey(key)
       replacementAudioBuffer = pendingTurn

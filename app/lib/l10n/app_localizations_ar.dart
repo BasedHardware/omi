@@ -9844,4 +9844,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'آخر خطأ: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'مسجّل مسبقاً';
 }

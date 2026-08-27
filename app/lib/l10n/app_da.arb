@@ -3250,5 +3250,6 @@
     "appReEnableFailedTitle": "Kunne ikke genaktivere",
     "appReEnableFailedBody": "Denne app kunne ikke genaktiveres. Prøv igen.",
     "appDisabledOn": "Deaktiveret den {date}.",
-    "appDisabledLastError": "Seneste fejl: {error}."
+    "appDisabledLastError": "Seneste fejl: {error}.",
+    "prerecordedTranscript": "Forudoptaget"
 }

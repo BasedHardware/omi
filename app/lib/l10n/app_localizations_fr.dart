@@ -9989,4 +9989,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Dernière erreur : $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Préenregistré';
 }

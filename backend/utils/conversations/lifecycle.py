@@ -18,6 +18,7 @@ from typing import Any, Mapping
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
+from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import (
@@ -32,6 +33,7 @@ from utils.conversations.finalization_decision import (
     decide_finalization,
 )
 from utils.observability.fallback import record_fallback
+from utils.other.storage import delete_conversation_audio_files
 from utils.journey_metrics_contract import bounded_client_kind
 from utils.observability.journeys import record_client_journey_accepted, record_journey_accepted
 
@@ -553,16 +555,61 @@ def delete_empty_recording_conversation(
     recording_session_id: str | None,
 ) -> bool:
     """Delete only a still-empty listen generation and tombstone it atomically."""
+    deleted_conversation: dict[str, Any] = {}
     deleted = recording_sessions_db.tombstone_and_delete_empty_conversation(
         uid,
         conversation_id,
         recording_session_id,
+        deleted_conversation=deleted_conversation,
     )
     if deleted:
         # Parent deletion is transactionally fenced with content writes; photos
         # are a subcollection and need their physical cleanup afterwards.
         conversations_db.delete_conversation_photos(uid, conversation_id)
+        _discard_unreferenced_audio(uid, conversation_id, deleted_conversation)
     return deleted
+
+
+def _discard_unreferenced_audio(
+    uid: str,
+    conversation_id: str,
+    deleted_conversation: Mapping[str, Any],
+) -> None:
+    """Reclaim private-cloud bytes the deleted row was the last owner of.
+
+    Emptiness here means no transcript segments, no photos and no ``has_content``
+    — it never consults ``audio_files``. A generation whose STT produced nothing
+    because the provider was failing is therefore deleted with real audio still
+    registered on it, and those bytes are the only surviving copy of that
+    recording, so they stay: the row is gone either way, and retained chunks can
+    still be reprocessed or restored. Only a generation that never registered any
+    audio can be leaving chunks nothing will ever reference again (#11742).
+    """
+    if deleted_conversation.get('audio_files'):
+        logger.info(
+            'Retained registered audio for empty conversation uid=%s conversation_id=%s',
+            uid,
+            conversation_id,
+        )
+        return
+    try:
+        delete_conversation_audio_files(uid, conversation_id)
+    except Exception:
+        # The row is already gone, so there is nothing left to keep consistent
+        # with; a failed sweep just leaves the orphan this call meant to reclaim.
+        logger.exception(
+            'Failed to reclaim unreferenced audio uid=%s conversation_id=%s',
+            uid,
+            conversation_id,
+        )
+        record_fallback(
+            component='other',
+            from_mode='private_cloud_sync',
+            to_mode='drop',
+            reason='other',
+            outcome='exhausted',
+            log=logger,
+        )
 
 
 def open_live_recording_session(
@@ -592,7 +639,9 @@ def open_live_recording_session(
     if existing is None:
         return dict(binding) | {'requires_rollover': False}
 
-    conversation = conversations_db.get_conversation(uid, existing['conversation_id'])
+    conversation = conversations_db.get_conversation(
+        uid, existing['conversation_id'], read_site=FirestoreReadSite.LIFECYCLE_OPEN_LIVE_SESSION_BINDING
+    )
     if conversation is not None:
         return dict(binding) | {
             'requires_rollover': False,

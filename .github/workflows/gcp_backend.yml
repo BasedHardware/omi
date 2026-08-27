@@ -407,6 +407,11 @@ jobs:
           runtime_gcp_project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
           # Unset by default, which keeps the existing signing behaviour.
           firebase_probe_signer_service_account: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
+          # The known-audio gate runs only for development, where the Firebase
+          # auth project (based-hardware) is not this lane's deploy project.
+          # This environment secret is the production Firebase signer key; the
+          # token minter refuses it if its project does not match.
+          firebase_probe_signer_credentials: ${{ github.event.inputs.environment == 'development' && secrets.GCP_SERVICE_ACCOUNT || '' }}
           runtime_env: ${{ vars.ENV }}
           region: ${{ env.REGION }}
           service: ${{ env.SERVICE }}

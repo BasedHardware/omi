@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -28,7 +29,7 @@ try:
     if os.getenv('SERVICE_ACCOUNT_JSON'):
         service_account_info = os.environ["SERVICE_ACCOUNT_JSON"]
         cred = credentials.Certificate(
-            eval(service_account_info) if service_account_info.startswith('{') else service_account_info
+            json.loads(service_account_info) if service_account_info.startswith('{') else service_account_info
         )
     else:
         cred = credentials.ApplicationDefault()
@@ -131,9 +132,7 @@ def main():
     print(f"  (users with >= {format_duration(args.min_seconds)} transcription)")
     print(f"  Formula: ratio = transcription_seconds / max(conversations, 1)")
     print(f"{'='*110}\n")
-    print(
-        f"  {'Rank':<6} {'Transcription':<16} {'Convos':<10} {'Ratio':<14} {'Sec/Conv':<12} {'Email':<35} {'UID'}"
-    )
+    print(f"  {'Rank':<6} {'Transcription':<16} {'Convos':<10} {'Ratio':<14} {'Sec/Conv':<12} {'Email':<35} {'UID'}")
     print(f"  {'-'*6} {'-'*16} {'-'*10} {'-'*14} {'-'*12} {'-'*35} {'-'*36}")
 
     for i, (uid, seconds, convs, ratio) in enumerate(top, 1):

@@ -9943,4 +9943,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Utolsó hiba: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Előre rögzített';
 }

@@ -9906,4 +9906,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Senaste fel: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Förinspelat';
 }

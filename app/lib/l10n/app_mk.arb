@@ -10798,5 +10798,6 @@
     "appReEnableFailedTitle": "Повторното овозможување не успеа",
     "appReEnableFailedBody": "Оваа апликација не можеше повторно да се овозможи. Обидете се повторно.",
     "appDisabledOn": "Оневозможена на {date}.",
-    "appDisabledLastError": "Последна грешка: {error}."
+    "appDisabledLastError": "Последна грешка: {error}.",
+    "prerecordedTranscript": "Претходно снимено"
 }

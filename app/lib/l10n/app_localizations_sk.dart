@@ -9895,4 +9895,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Posledná chyba: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Prednahraté';
 }

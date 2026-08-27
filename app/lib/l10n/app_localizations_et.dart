@@ -9896,4 +9896,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Viimane viga: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Eelsalvestatud';
 }

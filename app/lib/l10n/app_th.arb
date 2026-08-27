@@ -3232,5 +3232,6 @@
     "appReEnableFailedTitle": "เปิดใช้งานอีกครั้งไม่สำเร็จ",
     "appReEnableFailedBody": "ไม่สามารถเปิดใช้งานแอปนี้อีกครั้งได้ โปรดลองใหม่",
     "appDisabledOn": "ปิดใช้งานเมื่อ {date}",
-    "appDisabledLastError": "ข้อผิดพลาดล่าสุด: {error}"
+    "appDisabledLastError": "ข้อผิดพลาดล่าสุด: {error}",
+    "prerecordedTranscript": "บันทึกไว้ล่วงหน้า"
 }

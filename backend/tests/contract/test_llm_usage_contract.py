@@ -112,7 +112,7 @@ def test_a_model_name_with_dots_stays_one_counter(usage):
     assert _counter(daily, 'chat', 'qwen2', '5:14b', 'input_tokens') == 0, 'the dot must not split'
 
 
-def test_the_backends_now_nest_alike_and_still_diverge_on_the_key_filter(usage, request):
+def test_the_backends_now_agree_on_both_counts(usage):
     """MEASURED DIVERGENCE (BACKLOG L50), pinned so neither side can drift without telling us. This
     suite found two independent upstream defects on the Firestore path. **One of them is now closed**,
     and this test is the record of that — it was
@@ -125,13 +125,17 @@ def test_the_backends_now_nest_alike_and_still_diverge_on_the_key_filter(usage, 
        fix (#12065) and now expands the dotted paths before writing, so **both backends nest and the
        divergence is gone**. That is what the first assertion below is for: it fails the day the
        expansion is dropped.
-    2. STILL OPEN. `get_usage_summary` filters `where("__name__", ">=", cutoff_id)` with a STRING.
-       Firestore requires a Key there and rejects the query outright: `400 __key__ filter value must be
-       a Key`. On Mongo the facade maps `__name__` onto the document-name keyset, so a string is fine.
-       Proposed upstream as #12066; pinned here until it lands.
-    """
-    from google.api_core.exceptions import InvalidArgument
+    2. ALSO CLOSED, and this test is how we found out. `get_usage_summary` filtered
+       `where("__name__", ">=", cutoff_id)` with a STRING. Firestore requires a Key there and rejected
+       the query outright (`400 __key__ filter value must be a Key`), so the reader raised on EVERY
+       call; on Mongo the facade maps `__name__` onto the document-name keyset, so a string was fine
+       and the defect was invisible there. We proposed the fix upstream as #12066 and the docstring
+       said "pinned here until it lands" — it landed in the +135 alignment, Firestore stopped raising,
+       and this test failed with DID NOT RAISE. That is the pin doing its job, not a regression.
 
+       Both reasons are now converged, so the assertions below are symmetric: the same shape and the
+       same summary on both backends. If either side drifts again, one of them fails.
+    """
     import database.llm_usage as usage_db
 
     usage_db.record_llm_usage(usage['uid'], 'chat', 'model-a', input_tokens=9, output_tokens=1)
@@ -141,12 +145,8 @@ def test_the_backends_now_nest_alike_and_still_diverge_on_the_key_filter(usage, 
     assert daily['chat']['model-a']['input_tokens'] == 9
     assert 'chat.model-a.input_tokens' not in daily, 'no literal dotted key survives on either backend'
 
-    # Reason 2, still divergent.
-    if request.node.callspec.params['bind_store'] == 'firestore':
-        with pytest.raises(InvalidArgument):
-            usage_db.get_usage_summary(usage['uid'], days=1)
-    else:
-        assert usage_db.get_usage_summary(usage['uid'], days=1)['chat']['input_tokens'] == 9
+    # Reason 2, now converged: the summary reader answers on BOTH backends, with the same number.
+    assert usage_db.get_usage_summary(usage['uid'], days=1)['chat']['input_tokens'] == 9
 
 
 # --- transaction ----------------------------------------------------------------------------------

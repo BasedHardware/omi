@@ -14,6 +14,13 @@ import pytest
 from unittest.mock import MagicMock
 
 
+@pytest.fixture(scope='module')
+def conversations_db():
+    import database.conversations as cdb
+
+    return cdb
+
+
 class TestShouldDeferDesktopProcessing:
     @pytest.fixture(autouse=True)
     def _setup_subscription(self):
@@ -41,10 +48,11 @@ class TestShouldDeferDesktopProcessing:
             mod = _stub(name)
             if name == 'database._client':
                 mod.db = MagicMock()
-                # subscription.py imports these at module level (+39 upstream); expose them on the
-                # stub so the fresh subscription exec resolves without pulling the real client.
-                mod.get_customer_firestore_client = MagicMock()
-                mod.get_firestore_client = MagicMock()
+                # subscription.py imports this at module level; expose it on the stub so the fresh
+                # subscription exec resolves without pulling the real client. The sibling
+                # get_firestore_client stub went away with upstream's import cleanup (#11303) — it is no
+                # longer imported there, so stubbing it would only describe a dependency that is gone.
+                mod.get_customer_firestore_client = MagicMock(return_value=MagicMock())
             elif name == 'database.redis_db':
                 mod.get_generic_cache = MagicMock(return_value=None)
                 mod.set_generic_cache = MagicMock()
@@ -107,12 +115,19 @@ class TestShouldDeferDesktopProcessing:
         self._users.get_user_valid_subscription.return_value = self._sub_with_plan(PlanType.architect)
         assert self._sub.should_defer_desktop_processing('uid') is False
 
-    def test_byok_basic_is_not_deferred(self):
+    def test_byok_basic_with_openai_is_not_deferred(self, monkeypatch):
         from models.users import PlanType
 
         self._users.is_byok_active.return_value = True
         self._users.get_user_valid_subscription.return_value = None
+        monkeypatch.setattr(self._sub, 'get_byok_key', lambda provider: 'sk-openai' if provider == 'openai' else None)
         assert self._sub.should_defer_desktop_processing('uid') is False
+
+    def test_byok_basic_without_openai_is_deferred(self, monkeypatch):
+        self._users.is_byok_active.return_value = True
+        self._users.get_user_valid_subscription.return_value = None
+        monkeypatch.setattr(self._sub, 'get_byok_key', lambda provider: 'sk-gemini' if provider == 'gemini' else None)
+        assert self._sub.should_defer_desktop_processing('uid') is True
 
     def test_lookup_error_fails_safe_to_not_deferred(self):
         self._users.is_byok_active.side_effect = RuntimeError("firestore down")
@@ -124,9 +139,7 @@ class TestDeferredNotRequeuedBySweeper:
     get_processing_conversations (the listen-session sweeper re-sends those to pusher, which would
     background-process deferred rows and defeat the cost saving)."""
 
-    def test_get_processing_conversations_excludes_deferred(self):
-        import database.conversations as cdb
-
+    def test_get_processing_conversations_excludes_deferred(self, conversations_db):
         def _doc(d):
             m = MagicMock()
             m.to_dict.return_value = d
@@ -141,6 +154,6 @@ class TestDeferredNotRequeuedBySweeper:
         chain.stream.return_value = docs
         mock_db = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value.where.return_value = chain
-        with __import__('unittest.mock', fromlist=['patch']).patch.object(cdb, 'db', mock_db):
-            result = cdb.get_processing_conversations('uid-x')
+        with __import__('unittest.mock', fromlist=['patch']).patch.object(conversations_db, 'db', mock_db):
+            result = conversations_db.get_processing_conversations('uid-x')
         assert [c['id'] for c in result] == ['b', 'c']

@@ -14,6 +14,7 @@ import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
 from database._client import db
+from database.firestore_read_metrics import FirestoreReadSite
 
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
@@ -1670,7 +1671,9 @@ def _create_conversation_from_segments(
     conversation_id = None
     if request.client_session_id:
         conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
-        existing_conversation = conversations_db.get_conversation(uid, conversation_id)
+        existing_conversation = conversations_db.get_conversation(
+            uid, conversation_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
+        )
         if existing_conversation:
             if _is_stale_from_segments_claim(
                 existing_conversation, request.client_session_id, datetime.now(timezone.utc)

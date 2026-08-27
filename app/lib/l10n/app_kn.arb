@@ -10798,5 +10798,6 @@
     "appReEnableFailedTitle": "ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಲಿಲ್ಲ",
     "appReEnableFailedBody": "ಈ ಆ್ಯಪ್ ಅನ್ನು ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "appDisabledOn": "{date} ರಂದು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ.",
-    "appDisabledLastError": "ಕೊನೆಯ ದೋಷ: {error}"
+    "appDisabledLastError": "ಕೊನೆಯ ದೋಷ: {error}",
+    "prerecordedTranscript": "ಮುಂಚಿತವಾಗಿ ರೆಕಾರ್ಡ್"
 }

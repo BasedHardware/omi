@@ -10798,5 +10798,6 @@
     "appReEnableFailedTitle": "دوبارہ فعال نہیں ہو سکا",
     "appReEnableFailedBody": "اس ایپ کو دوبارہ فعال نہیں کیا جا سکا۔ براہ کرم دوبارہ کوشش کریں۔",
     "appDisabledOn": "{date} کو غیر فعال کیا گیا۔",
-    "appDisabledLastError": "آخری خرابی: {error}"
+    "appDisabledLastError": "آخری خرابی: {error}",
+    "prerecordedTranscript": "پہلے سے ریکارڈ شدہ"
 }

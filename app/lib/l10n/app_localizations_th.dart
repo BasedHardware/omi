@@ -9845,4 +9845,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'ข้อผิดพลาดล่าสุด: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'บันทึกไว้ล่วงหน้า';
 }

@@ -66,6 +66,11 @@ evenly across those slices, so timestamps stay proportional to the text they
 carry. A slice is never emitted without text: an entry with fewer words than
 slices is split into as many slices as it has words.
 
+Post-processing stores the normalized result under the `prerecorded` transcript
+model and exposes that key through the transcript comparison API. The former
+`fal_whisperx` collection is a legacy read path only and is not the active
+post-processing output.
+
 Every `/v4/listen` stream receives a durable, user-scoped `recording_session`
 resource before it creates or resumes a conversation. A client-generated
 `client_conversation_id` remains that resource's ID when present; legacy
@@ -136,6 +141,22 @@ STT segments or photos, the late write is fenced rather than recreating the
 terminal parent; the listen handler opens one fresh generation and replays that
 buffer once. The first-segment `started_at` value commits in that same content
 transaction, so this recovery cannot leave a timestamp-only write behind.
+
+Deleting an empty generation also sweeps its private-cloud audio, but only
+when that generation never registered any. Emptiness is decided from
+transcript segments, photos and `has_content`; `audio_files` is deliberately
+not part of the test, so a recording whose STT produced nothing while the
+provider was failing still reaches this delete with real audio registered on
+it. Those bytes are the last surviving copy of that recording and are kept, at
+the cost of leaving a prefix under `chunks/{uid}/{conversation_id}/` that no
+Firestore row points at any more — the bucket has no lifecycle rule there, so
+retained audio is retained until something reclaims it deliberately. Only a
+generation with no registered audio is swept, because nothing else could have
+referenced those chunks. The decision reads the snapshot the delete
+transaction actually removed rather than re-fetching the document: a fetch
+beforehand races the pusher's own registration write, and losing that race in
+the other direction would delete a recording that had just become
+referenceable.
 
 ## Capture-device provenance
 

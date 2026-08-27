@@ -157,6 +157,7 @@ def router():
         "database.fair_use": _pkg("database.fair_use"),
         "database.webhook_health": _pkg("database.webhook_health"),
         "database.mem_db": _pkg("database.mem_db"),
+        "database.firestore_read_metrics": _pkg("database.firestore_read_metrics"),
         "utils.apps": _pkg("utils.apps"),
         "database.users": _pkg("database.users"),
         "database.vector_db": _pkg("database.vector_db"),

@@ -3237,5 +3237,6 @@
     "appReEnableFailedTitle": "Nepodarilo sa znovu zapnúť",
     "appReEnableFailedBody": "Túto aplikáciu sa nepodarilo znovu zapnúť. Skús to znova.",
     "appDisabledOn": "Vypnuté {date}.",
-    "appDisabledLastError": "Posledná chyba: {error}."
+    "appDisabledLastError": "Posledná chyba: {error}.",
+    "prerecordedTranscript": "Prednahraté"
 }

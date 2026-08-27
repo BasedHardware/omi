@@ -821,7 +821,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Separates voluntary churn (ended after a cancellation request) from involuntary churn (payment_failed / payment_disputed). Different problems, different owners. Counts are webhook deliveries, which Stripe may retry \u2014 this is an operational trend signal, not billing-grade numbers. Stripe (via the Omi TV board) remains source of truth.",
+      "description": "Separates voluntary churn (ended after a cancellation request) from involuntary churn (payment_failed / payment_disputed). Different problems, different owners. Counts are webhook deliveries, which Stripe may retry \u2014 this is an operational trend signal, not billing-grade numbers. Stripe (via the Omi TV board) remains source of truth. `reason` is Stripe cancellation_details.reason and is only ever populated on `ended`; `payment_failed` is involuntary by construction and always carries reason=\"none\".",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -1007,15 +1007,20 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "1 when the gateway has tripped its breaker; requests are being shed.",
+      "description": "1 when the gateway has tripped its breaker; requests are being shed. A blank panel means no replica published this series at all: that is \"the reporter is gone\", not \"the value is zero\", and the two must never render the same.",
       "fieldConfig": {
         "defaults": {
+          "noValue": "not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -1052,7 +1057,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(llm_gateway_circuit_open) or vector(0)",
+          "expr": "max(llm_gateway_circuit_open)",
           "instant": true,
           "refId": "A"
         }
@@ -1128,15 +1133,20 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Requests refused before reaching a provider.",
+      "description": "Requests refused before reaching a provider. This counter has no series until the first rejection, so a rejection-free window is empty. The 0 is supplied by llm_gateway_config_info, which every gateway pod publishes at startup: if the gateway stops reporting the panel goes blank instead of showing a green 0.",
       "fieldConfig": {
         "defaults": {
+          "noValue": "gateway not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "orange",
@@ -1173,7 +1183,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "round(sum(increase(llm_gateway_request_rejections_total[$__range]))) or vector(0)",
+          "expr": "round(sum(increase(llm_gateway_request_rejections_total[$__range]))) or (max(llm_gateway_config_info) * 0)",
           "instant": true,
           "refId": "A"
         }
@@ -1415,15 +1425,20 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Non-zero means the pusher breaker has tripped.",
+      "description": "Non-zero means the pusher breaker has tripped. A blank panel means no replica published this series at all: that is \"the reporter is gone\", not \"the value is zero\", and the two must never render the same.",
       "fieldConfig": {
         "defaults": {
+          "noValue": "not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -1460,7 +1475,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(pusher_circuit_breaker_state) or vector(0)",
+          "expr": "max(pusher_circuit_breaker_state)",
           "instant": true,
           "refId": "A"
         }
@@ -1473,15 +1488,20 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Age of the oldest finalization job that has not reached a terminal state \u2014 a conversation the user is still waiting on. Aggregated with max(), not sum(): every backend-listen replica publishes the same global value.",
+      "description": "Age of the oldest finalization job that has not reached a terminal state \u2014 a conversation the user is still waiting on. Aggregated with max(), not sum(): every backend-listen replica publishes the same global value. A blank panel means no replica published this series at all: that is \"the reporter is gone\", not \"the value is zero\", and the two must never render the same.",
       "fieldConfig": {
         "defaults": {
+          "noValue": "not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "orange",
@@ -1522,7 +1542,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(listen_finalization_oldest_nonterminal_age_seconds) or vector(0)",
+          "expr": "max(listen_finalization_oldest_nonterminal_age_seconds)",
           "instant": true,
           "refId": "A"
         }
@@ -1535,15 +1555,20 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Finalization jobs that exhausted all 5 attempts, over the selected range. NOT the same as conversations lost: the discard is guarded on the conversation still being in `processing`, and measured over 14d only ~15% of dead letters actually discarded a conversation \u2014 the rest had already been finalized inline. There is no metric for the discarded subset yet.",
+      "description": "Finalization jobs that exhausted all 5 attempts, over the selected range. NOT the same as conversations lost: the discard is guarded on the conversation still being in `processing`, and measured over 14d only ~15% of dead letters actually discarded a conversation \u2014 the rest had already been finalized inline. There is no metric for the discarded subset yet. A blank panel means no replica published this series at all: that is \"the reporter is gone\", not \"the value is zero\", and the two must never render the same.",
       "fieldConfig": {
         "defaults": {
+          "noValue": "not reporting",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -1580,7 +1605,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "round(sum(increase(listen_finalization_dead_letter_total[$__range]))) or vector(0)",
+          "expr": "round(sum(increase(listen_finalization_dead_letter_total[$__range])))",
           "instant": true,
           "refId": "A"
         }
