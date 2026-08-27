@@ -94,6 +94,21 @@ final class RemotePromptEngine: ObservableObject {
     evaluate()
   }
 
+  /// The built-in rating ask owns the bottom slot whenever it is visible.
+  /// A remote prompt that was already on screen is SUSPENDED (cleared without
+  /// a resolution) and re-offered by evaluate() once the ask resolves — the
+  /// same third question that arms the rating bar must never leave two bars
+  /// stacked in one overlay.
+  func builtInAskChanged() {
+    let askActive =
+      RatingPromptManager.shared.isVisible || RatingPromptManager.shared.thankYouRating != nil
+    if askActive {
+      current = nil
+    } else {
+      evaluate()
+    }
+  }
+
   func answer(value: String) {
     guard let spec = current else { return }
     markResolved(spec.id, outcome: "answered")

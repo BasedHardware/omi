@@ -99,11 +99,13 @@ final class RatingPromptManager: ObservableObject {
 
   func closeThankYou() {
     thankYouRating = nil
+    RemotePromptEngine.shared.builtInAskChanged()
   }
 
   func referFriend() {
     thankYouRating = nil
     NotificationCenter.default.post(name: .openReferralSheet, object: nil)
+    RemotePromptEngine.shared.builtInAskChanged()
   }
 
   func dismiss() {
@@ -131,6 +133,7 @@ final class RatingPromptManager: ObservableObject {
       submittedRating: submittedRating,
       dismissed: isDismissed,
       remotelyDisabled: isRemotelyDisabled)
+    RemotePromptEngine.shared.builtInAskChanged()
     // While the prompt is on screen, poll for a remote disable so an active
     // kill switch takes effect within minutes, not at the next app launch.
     if isVisible, flagPollTask == nil {
