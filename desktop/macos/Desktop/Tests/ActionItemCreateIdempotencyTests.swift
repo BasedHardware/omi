@@ -28,9 +28,13 @@ private final class ActionItemCreateURLCapture: URLProtocol, @unchecked Sendable
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
   override func startLoading() {
+    guard let url = request.url else {
+      client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+      return
+    }
     Self.lock.lock()
     Self.request = CapturedCreateRequest(
-      url: request.url!,
+      url: url,
       method: request.httpMethod ?? "GET",
       headers: request.allHTTPHeaderFields ?? [:]
     )
@@ -39,8 +43,13 @@ private final class ActionItemCreateURLCapture: URLProtocol, @unchecked Sendable
     let body = Data(
       #"{"id":"task-1","description":"Buy milk","completed":false,"created_at":"2026-01-01T00:00:00.000Z","updated_at":"2026-01-01T00:00:00.000Z"}"#
         .utf8)
-    let response = HTTPURLResponse(
-      url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+    guard
+      let response = HTTPURLResponse(
+        url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+    else {
+      client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+      return
+    }
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: body)
     client?.urlProtocolDidFinishLoading(self)
