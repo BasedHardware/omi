@@ -34,6 +34,7 @@ import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/services/sockets/live_listen_auth_recovery.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
@@ -82,6 +83,7 @@ class CaptureController extends ChangeNotifier
 
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
+  Future<void>? _liveListenAuthRecoveryInFlight;
   DateTime? _keepAliveLastExecutedAt;
   Timer? _inProgressConversationRefreshTimer;
   int _inProgressConversationRefreshAttempts = 0;
@@ -1739,7 +1741,55 @@ class CaptureController extends ChangeNotifier
     }
 
     notifyListeners();
+
+    if (closeCode == 4001 || closeCode == 4004) {
+      _scheduleLiveListenAuthRecovery(closeCode!);
+      return;
+    }
+
     _startKeepAliveServices();
+  }
+
+  void _scheduleLiveListenAuthRecovery(int closeCode) {
+    if (_liveListenAuthRecoveryInFlight != null) return;
+
+    final recovery = _recoverLiveListenAuthClose(closeCode);
+    _liveListenAuthRecoveryInFlight = recovery;
+    unawaited(
+      recovery.whenComplete(() {
+        if (identical(_liveListenAuthRecoveryInFlight, recovery)) {
+          _liveListenAuthRecoveryInFlight = null;
+        }
+      }),
+    );
+  }
+
+  Future<void> _recoverLiveListenAuthClose(int closeCode) async {
+    try {
+      final disposition = await recoverLiveListenAuthClose(
+        closeCode: closeCode,
+        refreshToken: AuthService.instance.refreshIdToken,
+        expireSession: AuthService.instance.expireSession,
+      );
+
+      if (!_shouldReconnectTranscriptionSocket) return;
+
+      switch (disposition) {
+        case LiveListenAuthDisposition.reconnectNow:
+          await _reconnectActiveCapture();
+        case LiveListenAuthDisposition.retryLater:
+        case LiveListenAuthDisposition.notAuthRelated:
+          _startKeepAliveServices();
+        case LiveListenAuthDisposition.sessionExpired:
+          _keepAliveTimer?.cancel();
+          _keepAliveTimer = null;
+      }
+    } catch (error, stackTrace) {
+      Logger.handle(error, stackTrace, message: 'Live-listen auth recovery failed');
+      if (_shouldReconnectTranscriptionSocket) {
+        _startKeepAliveServices();
+      }
+    }
   }
 
   bool get _shouldReconnectTranscriptionSocket {
