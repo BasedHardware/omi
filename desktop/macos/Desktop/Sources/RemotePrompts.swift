@@ -107,12 +107,15 @@ final class RemotePromptEngine: ObservableObject {
     evaluate()
   }
 
-  /// Owner transition: drop the previous account's prompt from the slot
-  /// (its resolution keys no longer apply) and re-evaluate/refetch for the
-  /// new owner.
+  /// Owner transition: drop the previous account's prompt AND its fetched
+  /// specs — the server filters audience (rollout %, channel) per user, so
+  /// the old payload must never be evaluated for the new owner (a failed
+  /// refetch would otherwise show account A's prompts to account B
+  /// indefinitely). Nothing renders until an authenticated fetch for the new
+  /// owner succeeds.
   func ownerDidChange() {
     current = nil
-    evaluate()
+    specs = []
     Task { await self.refreshFromServer() }
   }
 

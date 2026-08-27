@@ -100,12 +100,15 @@ final class PromptStateAccountScopingTests: XCTestCase {
     XCTAssertTrue(RatingPromptManager.shared.isVisible)
   }
 
-  func testOwnerTransitionClearsRemotePromptFromTheSlot() async {
-    let spec = RemotePromptSpec(
-      id: "switch-banner", type: "banner", question: "Hey", options: [],
+  func testOwnerTransitionNeverLeaksAnotherAccountsAudienceFilteredSpecs() async {
+    // The server filters audience per user: A is inside the rollout, B is
+    // NOT (and B's refetch also fails — the worst case).
+    let specA = RemotePromptSpec(
+      id: "a-only-banner", type: "banner", question: "Hey A", options: [],
       ctaLabel: "Open", ctaURL: "https://omi.me", triggerKind: "app_launch", triggerCount: 0)
+    struct Offline: Error {}
     RemotePromptEngine.shared.isSignedInCheck = { true }
-    RemotePromptEngine.shared.fetch = { [spec] }
+    RemotePromptEngine.shared.fetch = { [specA] }
     await RemotePromptEngine.shared.refreshFromServer()
     for account in ["user-a", "user-b"] {
       owner = account
@@ -113,21 +116,28 @@ final class PromptStateAccountScopingTests: XCTestCase {
       RatingPromptManager.shared.dismiss()
     }
     owner = "user-a"
+    RemotePromptEngine.shared.fetch = {
+      if self.owner == "user-a" { return [specA] }
+      throw Offline()
+    }
     await RemotePromptEngine.shared.refreshFromServer()
-    XCTAssertEqual(RemotePromptEngine.shared.current?.id, "switch-banner")
+    XCTAssertEqual(RemotePromptEngine.shared.current?.id, "a-only-banner")
 
-    // Owner switch drops the previous account's prompt synchronously and
-    // re-evaluates for the new owner (also eligible here -> re-offered).
+    // Switch to B: the slot AND the stale payload clear synchronously, and
+    // because B's fetch fails, NOTHING may render — A's audience-filtered
+    // prompt must not survive the switch.
     owner = "user-b"
     RemotePromptEngine.shared.ownerDidChange()
-    XCTAssertEqual(RemotePromptEngine.shared.current?.id, "switch-banner")
-    RemotePromptEngine.shared.dismissCurrent()
+    XCTAssertNil(RemotePromptEngine.shared.current)
+    XCTAssertTrue(RemotePromptEngine.shared.specs.isEmpty)
+    await RemotePromptEngine.shared.refreshFromServer()  // B's fetch throws
     XCTAssertNil(RemotePromptEngine.shared.current)
 
-    // Back to A: B's dismissal must not stick to A.
+    // Back to A: a successful refetch restores A's prompt, unresolved.
     owner = "user-a"
     RemotePromptEngine.shared.ownerDidChange()
-    XCTAssertEqual(RemotePromptEngine.shared.current?.id, "switch-banner")
+    await RemotePromptEngine.shared.refreshFromServer()
+    XCTAssertEqual(RemotePromptEngine.shared.current?.id, "a-only-banner")
 
     RemotePromptEngine.shared.fetch = { [] }
     await RemotePromptEngine.shared.refreshFromServer()
