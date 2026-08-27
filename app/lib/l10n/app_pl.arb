@@ -3267,5 +3267,7 @@
     "appReEnableFailedBody": "Nie udało się ponownie włączyć tej aplikacji. Spróbuj ponownie.",
     "appDisabledOn": "Wyłączona {date}.",
     "appDisabledLastError": "Ostatni błąd: {error}.",
-    "prerecordedTranscript": "Wstępnie nagrane"
+    "prerecordedTranscript": "Wstępnie nagrane",
+    "pendantRecordingSyncBlocked": "Pendant wciąż nagrywa, więc zapisany dźwięk nie może zostać przesłany. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie.",
+    "pendantFullSyncBlocked": "Pamięć Pendanta jest pełna i wciąż jest on w trybie nagrywania, więc zapisanego dźwięku nie można przenieść. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie."
 }

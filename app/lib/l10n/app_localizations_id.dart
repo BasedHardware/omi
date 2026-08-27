@@ -9913,4 +9913,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Prarekam';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant masih merekam, jadi audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Penyimpanan Pendant penuh dan masih dalam mode perekaman, sehingga audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.';
 }

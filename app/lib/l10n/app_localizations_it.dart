@@ -9959,4 +9959,12 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Preregistrato';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Il Pendant sta ancora registrando, quindi l\'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'La memoria del Pendant è piena ed è ancora in modalità registrazione, quindi l\'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo.';
 }

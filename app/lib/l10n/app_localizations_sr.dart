@@ -9918,4 +9918,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Унапред снимљено';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant и даље снима, па сачувани звук не може да се пренесе. Притисните дугме на Pendant-у да зауставите снимање, а затим поново синхронизујте.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Меморија Pendant-а је пуна и он је и даље у режиму снимања, па сачувани звук не може да се пренесе. Притисните дугме на Pendant-у да зауставите снимање, а затим поново синхронизујте.';
 }

@@ -9951,4 +9951,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'ముందుగా రికార్డ్ చేసినది';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant ఇంకా రికార్డ్ చేస్తోంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయలేము. రికార్డింగ్ ఆపడానికి Pendant బటన్ నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant నిల్వ నిండిపోయింది మరియు అది ఇంకా రికార్డింగ్ మోడ్‌లో ఉంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయడం సాధ్యం కాదు. రికార్డింగ్ ఆపడానికి Pendant బటన్‌ను నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.';
 }
