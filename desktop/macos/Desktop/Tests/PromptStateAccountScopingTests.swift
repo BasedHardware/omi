@@ -11,6 +11,7 @@ final class PromptStateAccountScopingTests: XCTestCase {
 
   override func setUp() async throws {
     RatingPromptManager.shared.remoteDisableCheck = { false }
+    RatingPromptManager.shared.isSignedInCheck = { true }
     RatingPromptManager.shared.ownerProvider = { self.owner }
     RemotePromptEngine.shared.ownerProvider = { self.owner }
     for account in ["user-a", "user-b"] {
@@ -29,6 +30,7 @@ final class PromptStateAccountScopingTests: XCTestCase {
     }
     RatingPromptManager.shared.ownerProvider = { RuntimeOwnerIdentity.currentOwnerId() ?? "anonymous" }
     RemotePromptEngine.shared.ownerProvider = { RuntimeOwnerIdentity.currentOwnerId() ?? "anonymous" }
+    RatingPromptManager.shared.isSignedInCheck = { AuthState.shared.isSignedIn }
     RatingPromptManager.shared.remoteDisableCheck = {
       PostHogManager.shared.isFeatureEnabled(RatingPromptPolicy.killSwitchFlag)
     }
@@ -233,6 +235,37 @@ final class PromptStateAccountScopingTests: XCTestCase {
       UserDefaults.standard.object(
         forKey: ScopedDefaultsKey.ratingPrompt("historySeeded", ownerID: "user-a")) != nil)
 
+    RatingPromptManager.shared.historyFetch = { _ in [] }
+  }
+
+  func testSeedNeverDecreasesACountAdvancedDuringItsFetch() async {
+    actor Gate {
+      private var waiter: CheckedContinuation<Void, Never>?
+      func wait() async { await withCheckedContinuation { waiter = $0 } }
+      func open() {
+        waiter?.resume()
+        waiter = nil
+      }
+    }
+    let gate = Gate()
+    RatingPromptManager.shared.historyFetch = { _ in
+      await gate.wait()
+      let json = (1...5).map { "{\"id\":\"m\($0)\",\"sender\":\"human\",\"text\":\"q\"}" }
+      return try JSONDecoder().decode([ChatMessageDB].self, from: Data("[\(json.joined(separator: ","))]".utf8))
+    }
+    owner = "user-a"
+    let inFlight = Task { await RatingPromptManager.shared.seedFromHistoryIfNeeded() }
+    await Task.yield()
+
+    // The user keeps asking questions while the fetch is parked.
+    for _ in 1...5 { RatingPromptManager.shared.recordQuestionAsked() }
+    XCTAssertEqual(RatingPromptManager.shared.questionCount, 5)
+
+    await gate.open()
+    await inFlight.value
+
+    // The seed merged with, and did not roll back, the live count.
+    XCTAssertEqual(RatingPromptManager.shared.questionCount, 5)
     RatingPromptManager.shared.historyFetch = { _ in [] }
   }
 
