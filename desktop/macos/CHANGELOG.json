@@ -2,6 +2,16 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.227",
+      "date": "2026-08-27",
+      "changes": [
+        "Conversation photos now remain available with their conversation and render reliably on desktop.",
+        "Added smarter just-in-time proactive help with safer trigger authority, durable memory privacy cleanup, explicit feedback controls, and offline retry when feedback cannot be sent immediately",
+        "Made planned proactive triggers run through the authoritative local watchlist before ambient suggestions.",
+        "Omi can now act once on an enrolled standing proactive instruction when its locally observed conditions are met, with durable duplicate and daily-budget protection"
+      ]
+    },
+    {
       "version": "0.12.226",
       "date": "2026-08-27",
       "changes": [
