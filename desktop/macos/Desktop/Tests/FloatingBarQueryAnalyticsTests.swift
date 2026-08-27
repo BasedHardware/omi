@@ -14,16 +14,16 @@ private final class Box<T>: @unchecked Sendable {
 final class FloatingBarQueryAnalyticsTests: XCTestCase {
   private let capturedBox = Box<[(String, [String: Any])]>([])
 
-  override func tearDown() async throws {
-    AnalyticsManager.shared.setFloatingBarQueryTelemetryCaptureForTests(nil)
-    try await super.tearDown()
-  }
-
   private func startCapturing() {
     let box = capturedBox
     box.value = []
     AnalyticsManager.shared.setFloatingBarQueryTelemetryCaptureForTests { event, properties in
       box.value.append((event, properties))
+    }
+    addTeardownBlock {
+      await MainActor.run {
+        AnalyticsManager.shared.setFloatingBarQueryTelemetryCaptureForTests(nil)
+      }
     }
   }
 
