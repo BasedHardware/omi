@@ -350,6 +350,10 @@ def _desktop_transcribe_isolation():
         # be a real function (not MagicMock) or it corrupts decorated function signatures.
         for _ufull in [
             'utils.llm',
+            # routers/chat.py imports this at module scope. `utils.llm` is stubbed as a
+            # MagicMock rather than a package, so an unlisted submodule fails to resolve
+            # ("'utils.llm' is not a package") instead of falling back to the stub.
+            'utils.llm.gateway_client',
             'utils.llm.memories',
             'utils.llm.persona',
             'utils.llm.chat',

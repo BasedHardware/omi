@@ -249,6 +249,9 @@ def wire_common_stubs(install) -> SimpleNamespace:
     usage_tracker = install('utils.llm.usage_tracker', ModuleType('utils.llm.usage_tracker'))
     usage_tracker.set_usage_context = MagicMock(return_value='usage-token')
     usage_tracker.reset_usage_context = MagicMock()
+    # Real signature returns Optional[UsageContext]; None is the no-active-context value,
+    # which is what these router tests run under.
+    usage_tracker.get_current_context = MagicMock(return_value=None)
 
     class Features:
         CHAT = 'chat'
