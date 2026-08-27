@@ -1437,6 +1437,13 @@ extension RealtimeHubController {
       fallbackProvider = nil
       pendingFailoverReason = nil
     }
+    if deferIdleRewarmIfUserAway(closeCategory: closeCategory) {
+      recordCloseResolution(
+        turnOutcome: turnOutcome,
+        recoveryAction: .sessionRewarm,
+        recoveryResult: .deferredUserAway)
+      return
+    }
     guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else {
       teardownSession()
       recordCloseResolution(
@@ -1452,21 +1459,6 @@ extension RealtimeHubController {
       turnOutcome: turnOutcome,
       recoveryAction: .sessionRewarm,
       recoveryResult: .started)
-  }
-
-  /// OpenAI limits realtime sessions to sixty minutes. Rotation is a normal
-  /// transport lifecycle event: keep the provider choice, replace the retired
-  /// socket immediately, and let the reducer terminalize an interrupted turn.
-  func recoverFromExpectedSessionRotation(
-    _ plan: RealtimeHubSessionRotationPlan,
-    activeTurn: VoiceTurn?
-  ) {
-    if plan == .terminateActiveTurnAndRewarm {
-      terminateActiveHubTurn(activeTurn)
-    }
-    hubReconnectStrikes = 0
-    reconnectPending = true
-    replaceSessionAfterDrain()
   }
 
   /// A warm background socket must never terminate a Deepgram/Omni fallback

@@ -299,6 +299,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Failover chain: when the Auto-selected (primary) provider can't connect, the hub
   /// tries the OTHER realtime provider before dropping to the legacy Claude cascade.
   /// nil = on the primary; non-nil = the provider we failed over TO.
+  /// Presence-gated warming (RealtimeHubWarmPresencePolicy): true while an
+  /// idle-teardown re-warm is deferred because the user is away from the
+  /// machine. `presenceRewarmTask` polls for returned input and re-warms.
+  var warmDeferredForUserAway = false
+  var presenceRewarmTask: Task<Void, Never>?
+  /// Seam so tests/automation can substitute the HID idle sample.
+  var presenceIdleProvider: () -> TimeInterval? = { UserInputPresence.secondsSinceLastInput() }
+
   var fallbackProvider: RealtimeHubProvider?
   /// Reason passed to ``failoverToAlternateProvider``; cleared after a successful connect on the alternate.
   var pendingFailoverReason: String?
@@ -849,31 +857,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   func hasPendingInputPreparation(for turnID: VoiceTurnID?) -> Bool {
     guard let turnID else { return false }
     return reconnectAudioBuffer?.turnID == turnID || admittedInputTurnID == turnID
-  }
-
-  /// Non-production manager-harness facts. These describe ownership and
-  /// admission only; they deliberately omit turn IDs, context payload, and
-  /// provider text so a failed physical-path probe is diagnosable without
-  /// exposing user content.
-  func automationPTTInputDiagnostics() -> [String: String] {
-    let requirement = voiceSessionContext(for: currentOwnerScope)
-    let preparation: String
-    if reconnectAudioBuffer != nil {
-      preparation = "buffered"
-    } else if admittedInputTurnID != nil {
-      preparation = "admitted"
-    } else {
-      preparation = "none"
-    }
-    return [
-      "ptt_admission": pttAdmission == .immediate ? "immediate" : "capture_and_buffer",
-      "ptt_input_preparation": preparation,
-      "ptt_rebind_attempts": "\(reconnectAudioBuffer?.rebindAttempts ?? 0)",
-      "ptt_binding_matches_requirement":
-        (requirement.isResolved && requirement.snapshotFreshnessIdentity == sessionVoiceContextFreshnessIdentity)
-        ? "true" : "false",
-      "ptt_handoff_pending": pendingSessionRefreshReason ?? "none",
-    ]
   }
 
   /// The reducer selected the non-hub fallback for this logical turn. Drop only

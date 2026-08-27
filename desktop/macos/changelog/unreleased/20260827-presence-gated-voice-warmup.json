@@ -1,0 +1,3 @@
+{
+  "change": "Voice stays instant while you're at your Mac, and stops burning provider quota while you're away: the always-warm voice session now pauses after 10 minutes without keyboard or mouse input and re-warms the moment you're back — this idle re-warm loop is what exhausted the shared Gemini quota and switched everyone's voice to the OpenAI fallback."
+}

@@ -1091,3 +1091,47 @@ enum RealtimeHubBargeInContinuity {
     return Task.isCancelled ? .cancelled : .contextUnavailable
   }
 }
+
+/// Presence-gated warming. The warm hub socket exists so PTT answers instantly
+/// while the user is at the machine. Gemini idle-closes a silent socket every
+/// ~150s, and each re-warm re-bills the full session context (~18.5k tokens
+/// measured on a 37k-char context) — 24/7, per running app, whether or not the
+/// user is even at the computer. Fleet-wide that loop is what tripped the
+/// project's Gemini spend throttle (close 1011 "exceeded your current quota")
+/// and flipped every user's voice to OpenAI. Deferring re-warm while the user
+/// is away keeps the latency guarantee whenever they are present: warming
+/// resumes on the first returned input event, seconds before any realistic PTT
+/// press, and a cold PTT still has the bounded warm-wait + cascade fallback.
+enum RealtimeHubWarmPresencePolicy {
+  /// User-input idle time after which an idle-teardown re-warm is deferred.
+  static let idleThreshold: TimeInterval = 10 * 60
+  /// While deferred, how often the controller re-samples for returned input.
+  static let presencePollInterval: TimeInterval = 10
+
+  /// `nil` = the idle query failed → warm (fail-open to today's behavior).
+  static func shouldRewarmAfterIdleTeardown(secondsSinceLastUserInput: TimeInterval?) -> Bool {
+    guard let idle = secondsSinceLastUserInput else { return true }
+    return idle < idleThreshold
+  }
+
+  /// While deferred: fresh input since the previous poll → resume warming.
+  static func shouldResumeWarming(secondsSinceLastUserInput: TimeInterval?) -> Bool {
+    guard let idle = secondsSinceLastUserInput else { return true }
+    return idle < presencePollInterval
+  }
+}
+enum RealtimeProviderCloseRecoveryAction: String {
+  case none
+  case sessionRewarm = "session_rewarm"
+  case providerFailover = "provider_failover"
+  case cascade
+}
+
+enum RealtimeProviderCloseRecoveryResult: String {
+  case notNeeded = "not_needed"
+  case started
+  case exhausted
+  /// Idle-teardown re-warm deferred because the user is away from the machine
+  /// (RealtimeHubWarmPresencePolicy); warming resumes on returned input.
+  case deferredUserAway = "deferred_user_away"
+}
