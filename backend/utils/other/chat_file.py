@@ -2,7 +2,7 @@ import base64
 import mimetypes
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, NoReturn, Optional, Tuple, Union, cast
 
 import openai
 from openai import AsyncOpenAI
@@ -117,7 +117,7 @@ def _file_is_pdf(name: str, mime_type: str) -> bool:
     return Path(name).suffix.lower() == '.pdf'
 
 
-def _reraise_provider_file_error(error: Exception) -> None:
+def _reraise_provider_file_error(error: Exception) -> NoReturn:
     if isinstance(error, openai.NotFoundError):
         raise StaleChatFileError("Unsupported attachment: the uploaded file is no longer available.") from error
     if isinstance(error, openai.BadRequestError):
@@ -129,12 +129,6 @@ def _completion_model(files: List[FileChat]) -> str:
     if files and any(f.is_pdf() for f in files):
         return _FILE_CHAT_DOCUMENT_MODEL
     return _FILE_CHAT_VISION_MODEL
-
-
-def _completion_token_kwargs(model: str) -> Dict[str, int]:
-    if model.startswith('gpt-5'):
-        return {'max_completion_tokens': _FILE_CHAT_COMPLETION_TOKENS}
-    return {'max_tokens': _FILE_CHAT_COMPLETION_TOKENS}
 
 
 class _StreamingCallbackProtocol:
@@ -286,12 +280,21 @@ class FileChatTool:
             try:
                 messages = await self._completion_messages(question, files)
                 model = _completion_model(files)
-                stream = await _get_async_openai().chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    stream=True,
-                    **_completion_token_kwargs(model),
-                )
+                client = _get_async_openai()
+                if model.startswith('gpt-5'):
+                    stream = await client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        stream=True,
+                        max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                    )
+                else:
+                    stream = await client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        stream=True,
+                        max_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                    )
             except (openai.NotFoundError, openai.BadRequestError) as error:
                 _reraise_provider_file_error(error)
             async for chunk in stream:
@@ -308,11 +311,18 @@ class FileChatTool:
         try:
             messages = self._completion_messages_sync(question, files)
             model = _completion_model(files)
-            response = openai.chat.completions.create(
-                model=model,
-                messages=messages,
-                **_completion_token_kwargs(model),
-            )
+            if model.startswith('gpt-5'):
+                response = openai.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                )
+            else:
+                response = openai.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                )
         except (openai.NotFoundError, openai.BadRequestError) as error:
             _reraise_provider_file_error(error)
         choice = response.choices[0] if response.choices else None
