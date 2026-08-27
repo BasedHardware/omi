@@ -2043,6 +2043,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get memoryDeleted => 'Minne slettet.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Angre';
 
   @override
@@ -9903,4 +9906,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Forhåndsinnspilt';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant tar fortsatt opp, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Lagringen på Pendant er full, og den er fortsatt i opptaksmodus, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.';
 }

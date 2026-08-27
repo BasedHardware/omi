@@ -102,6 +102,60 @@ def _is_sentinel(value: Any) -> bool:
     return value is DELETE or value is SERVER_TIMESTAMP or isinstance(value, (ArrayUnion, ArrayRemove, Increment))
 
 
+def _contains_sentinel(value: Any) -> bool:
+    """Whether a plain (non-sentinel) value has a sentinel somewhere INSIDE it."""
+    if isinstance(value, dict):
+        return any(_is_sentinel(item) or _contains_sentinel(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_is_sentinel(item) or _contains_sentinel(item) for item in value)
+    return False
+
+
+def _resolve_nested(value: Any, now: datetime) -> Any:
+    """Resolve sentinels sitting inside a map/array value that is written WHOLE.
+
+    Firestore resolves ``SERVER_TIMESTAMP`` at any depth; a Mongo update operator only reaches the
+    path it names, so a nested sentinel used to travel to the driver as a Python object and die there
+    ("cannot encode object: SERVER_TIMESTAMP"). Found by the dual-backend contract for
+    ``database/first_open_obligations.py``, which writes ``{'jit_first_open': {..., 'updated_at':
+    SERVER_TIMESTAMP}}`` — green on Firestore, a crash on Mongo, i.e. first-open work was broken on
+    every Mongo deployment.
+
+    The timestamp resolves to the SAME ``now`` this adapter already stamps ``_updated_at`` with, so
+    the two agree within one write. Dotted leaf ops are not an option here: this value replaces the
+    map (Firestore ``update`` semantics), and ``$set`` of the map plus ``$currentDate`` of a path
+    inside it is a path conflict Mongo rejects — and a deep-merge instead of a replace would keep
+    keys the caller deliberately dropped (``finish_first_open_work`` pops the lease token).
+
+    ``DELETE`` inside a replaced map means the key is simply absent. The array transforms have no
+    meaning inside a value that is being replaced wholesale, so they are refused loudly rather than
+    silently written as objects.
+    """
+    if isinstance(value, dict):
+        resolved: Dict[str, Any] = {}
+        for key, item in value.items():
+            if item is DELETE:
+                continue
+            if item is SERVER_TIMESTAMP:
+                resolved[key] = now
+            elif isinstance(item, (ArrayUnion, ArrayRemove, Increment)):
+                raise ValueError(f"array/increment transform is not supported inside a replaced map: {key!r}")
+            else:
+                resolved[key] = _resolve_nested(item, now)
+        return resolved
+    if isinstance(value, (list, tuple)):
+        items = []
+        for item in value:
+            if item is SERVER_TIMESTAMP:
+                items.append(now)
+            elif _is_sentinel(item):
+                raise ValueError("transform sentinels are not supported inside an array value")
+            else:
+                items.append(_resolve_nested(item, now))
+        return items if isinstance(value, list) else tuple(items)
+    return value
+
+
 def _doc_meta(path: str) -> tuple[str, str, str]:
     """(mongo_collection_name, parent_collection_path, key) for a document path (even segments)."""
     segments = path.split("/")
@@ -113,7 +167,7 @@ def _collection_name(collection_path: str) -> str:
     return collection_path.split("/")[-1]
 
 
-def _build_update_ops(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+def _build_update_ops(data: Dict[str, Any], now: Optional[datetime] = None) -> Dict[str, Dict[str, Any]]:
     """Translate a neutral write dict (plain values + sentinels) to Mongo update operators.
 
     Every field is stored under the ``d`` payload subdocument, so keys are prefixed with ``d.``.
@@ -121,8 +175,9 @@ def _build_update_ops(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     targets the nested field natively — the same semantics as a Firestore dotted-key update.
     """
     ops: Dict[str, Dict[str, Any]] = {}
+    resolved_now = now if now is not None else _now()
     for key, value in data.items():
-        _apply_field_op(ops, "d." + key, value)
+        _apply_field_op(ops, "d." + key, value, resolved_now)
     return ops
 
 
@@ -144,7 +199,7 @@ def _as_already_exists(path: str):
         raise AlreadyExists(path) from exc
 
 
-def _apply_field_op(ops: Dict[str, Dict[str, Any]], field: str, value: Any) -> None:
+def _apply_field_op(ops: Dict[str, Dict[str, Any]], field: str, value: Any, now: Optional[datetime] = None) -> None:
     """Map one (dotted field, neutral value) into the right Mongo update operator on ``ops``."""
     if value is DELETE:
         ops.setdefault("$unset", {})[field] = ""
@@ -156,6 +211,8 @@ def _apply_field_op(ops: Dict[str, Dict[str, Any]], field: str, value: Any) -> N
         ops.setdefault("$pull", {})[field] = {"$in": list(value.values)}
     elif isinstance(value, Increment):
         ops.setdefault("$inc", {})[field] = value.amount
+    elif _contains_sentinel(value):
+        ops.setdefault("$set", {})[field] = _resolve_nested(value, now if now is not None else _now())
     else:
         ops.setdefault("$set", {})[field] = value
 
@@ -261,7 +318,9 @@ class _MongoBatch:
             )
             self._append_bump(collection_name, path, now)
         else:
-            plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
+            # Sentinels nested inside a value are resolved here (see _resolve_nested); a raw
+            # sentinel object would reach the BSON encoder and die.
+            plain = _resolve_nested({k: v for k, v in data.items() if not _is_sentinel(v)}, now)
             # Pipeline replace: whole ``d`` (non-merge), monotonic ``_updated_at``, immutable ``_created_at``
             # via ``$ifNull`` (pipelines have no ``$setOnInsert``) (cubic 10887 #1 + mongo.py:161).
             doc_update = [
@@ -298,8 +357,10 @@ class _MongoBatch:
         # duplicate _id raises the neutral AlreadyExists so create-if-absent recovery (staged-task
         # restore) branches identically to the Firestore batch, which raises AlreadyExists at commit.
         collection_name, parent, key = _doc_meta(path)
-        plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
         now = _now()
+        # Sentinels nested inside a value are resolved against the same `now` stamped below
+        # (see _resolve_nested): a raw sentinel object would reach the BSON encoder and die.
+        plain = _resolve_nested({k: v for k, v in data.items() if not _is_sentinel(v)}, now)
         document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": now, "_created_at": now, "d": plain}
         transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
 
@@ -482,7 +543,9 @@ def _do_set(db, path: str, data: Dict[str, Any], *, merge: bool = False, session
     # (non-merge semantics), a monotonic ``_updated_at`` (strictly increasing per doc), and keep an
     # immutable ``_created_at`` with ``$ifNull`` (pipeline updates have no ``$setOnInsert``) (cubic
     # PR 10887 #1 + mongo.py:161). Any transforms (rare on a non-merge set) apply right after.
-    plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
+    # Sentinels nested inside a value are resolved here (see _resolve_nested); a raw
+    # sentinel object would reach the BSON encoder and die.
+    plain = _resolve_nested({k: v for k, v in data.items() if not _is_sentinel(v)}, now)
     with _as_already_exists(path):
         collection.update_one(
             {"_id": path},
@@ -555,8 +618,10 @@ def _do_delete(db, path: str, *, if_updated_at: Any = None, session: Any = None)
 
 def _do_create(db, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
     collection_name, parent, key = _doc_meta(path)
-    plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
     now = _now()
+    # Sentinels nested inside a value are resolved against the same `now` stamped below
+    # (see _resolve_nested): a raw sentinel object would reach the BSON encoder and die.
+    plain = _resolve_nested({k: v for k, v in data.items() if not _is_sentinel(v)}, now)
     document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": now, "_created_at": now, "d": plain}
     try:
         db[collection_name].insert_one(document, session=session)

@@ -37,6 +37,19 @@ def _one_row_per_surface(monkeypatch):
     # Surfaces that are not under test here.
     monkeypatch.setattr(account_deletion, 'delete_all_conversation_recordings', lambda uid: 0)
     monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', lambda uid: {'vector_ids': []})
+    # The object-store sweeps upstream added to the wipe in the +30 merge. They read Firestore for the
+    # id inventories and then talk to the object store, so in a hermetic run they fail on egress and
+    # land in `required_failures` — drowning the signal this file exists for. Neutralised, not asserted:
+    # their own cover is tests/unit/test_owner_storage_purge_and_gate.py, on both backends.
+    monkeypatch.setattr(account_deletion, 'delete_all_user_storage_objects', lambda uid: 0)
+    monkeypatch.setattr(account_deletion, 'get_conversation_photos', lambda uid, conversation_id: [])
+    monkeypatch.setattr(account_deletion.frame_requests_db, 'list_all_frame_request_storage_ids', lambda uid: [])
+    monkeypatch.setattr(account_deletion.frame_requests_db, 'list_all_frame_upload_orphan_storage_ids', lambda uid: [])
+    monkeypatch.setattr(
+        account_deletion.frame_requests_db, 'list_all_frame_deletion_outbox_storage_ids', lambda uid: []
+    )
+    monkeypatch.setattr(account_deletion, 'delete_frame_request_pixels_for_user', lambda uid, ids: 0)
+    monkeypatch.setattr(account_deletion, 'delete_all_frame_request_pixels_for_user', lambda uid: 0)
 
 
 def _no_vector_store(monkeypatch):

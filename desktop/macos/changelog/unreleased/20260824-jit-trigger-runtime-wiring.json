@@ -1,0 +1,3 @@
+{
+  "change": "Made planned proactive triggers run through the authoritative local watchlist before ambient suggestions."
+}

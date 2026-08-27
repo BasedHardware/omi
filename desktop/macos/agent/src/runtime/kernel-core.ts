@@ -1134,6 +1134,7 @@ export class KernelCore {
               runId: accepted.run.runId,
               attemptId: attempt.attemptId,
               toolCapabilityRef: toolCapability.capabilityRef,
+              builtInToolPolicy: toolCapability.builtInToolPolicy,
               binding: handle,
               prompt: effectivePromptBlocks ?? [{ type: "text", text: effectivePrompt }],
               mode: input.mode ?? "ask",

@@ -3969,6 +3969,12 @@ abstract class AppLocalizations {
   /// **'Memory Deleted.'**
   String get memoryDeleted;
 
+  /// Notice shown when the memory history response is truncated
+  ///
+  /// In en, this message translates to:
+  /// **'Some memory history is unavailable. Showing the history received so far.'**
+  String get memoryHistoryPartial;
+
   /// Undo button text
   ///
   /// In en, this message translates to:
@@ -18446,6 +18452,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Prerecorded'**
   String get prerecordedTranscript;
+
+  /// Shown when offline sync stalls because the Limitless Pendant is actively recording; it cannot serve stored audio until recording stops
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant is still recording, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
+  String get pendantRecordingSyncBlocked;
+
+  /// Shown when offline sync stalls because the Limitless Pendant's flash storage is full; a full pendant stays armed in recording mode and serves no stored audio until recording is stopped
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
+  String get pendantFullSyncBlocked;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

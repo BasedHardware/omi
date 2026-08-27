@@ -32,7 +32,19 @@ def events(monkeypatch):
 
     monkeypatch.setattr(vector_db, 'record_fallback', lambda **kw: recorded.append(kw))
     monkeypatch.setattr(vector_db, 'is_vector_available', lambda: True)
+    # Upstream's +30 merge wrapped every provider write in an account fence that reads Firestore. It
+    # skips when the store is a test double, so declare one here: forcing `is_vector_available` True
+    # without one would make these hermetic tests reach the metadata server through the fence, which
+    # is neither what they assert nor something CI can do.
+    monkeypatch.setattr(vector_db, '_vector_store', lambda: _UnusedStore())
     return recorded
+
+
+class _UnusedStore:
+    """A stand-in for tests whose subject is the embedding side; no write should reach it."""
+
+    def upsert(self, *_args, **_kwargs):  # pragma: no cover - reaching this is the failure
+        raise AssertionError('the vector store must not be written to in this test')
 
 
 def _break_embeddings(monkeypatch):

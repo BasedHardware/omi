@@ -2029,6 +2029,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryDeleted => 'تم حذف الذكرى.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'تراجع';
 
   @override
@@ -9847,4 +9850,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'مسجّل مسبقاً';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'لا يزال Pendant يسجّل، لذا لا يمكن نقل الصوت المخزّن عليه. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'ذاكرة Pendant ممتلئة وما زال في وضع التسجيل، لذا لا يمكن نقل الصوت المخزّن. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.';
 }

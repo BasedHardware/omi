@@ -1,4 +1,5 @@
 import json
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -625,6 +626,7 @@ def test_derived_vector_index_returns_ids_only_and_uses_versioned_namespace(monk
     monkeypatch.setattr(vector_db, '_vector_store', lambda: _PortOverIndex(fake))
     monkeypatch.setattr(vector_db, 'is_vector_available', lambda: True)
     monkeypatch.setattr(vector_db, 'embeddings', SimpleNamespace(embed_query=lambda text: [0.1, 0.2]))
+    monkeypatch.setattr(vector_db, 'external_write_fence', lambda *args, **kwargs: nullcontext())
 
     assert vector_db.upsert_workstream_association_vector(
         'uid-1',

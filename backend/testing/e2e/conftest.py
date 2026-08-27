@@ -219,6 +219,48 @@ def fake_storage():
 _app_cache = None
 
 
+def _install_hermetic_privacy_projection_fakes() -> None:
+    """Confirm deletion at provider boundaries the hermetic stack does not run.
+
+    Re-expressed on the neutral vector seam (ADR-0033): upstream installs a Pinecone-shaped
+    ``FakeVectorIndex`` on the module-level ``vector_db.index``, which the port removed — reads and
+    writes go through ``_vector_store()`` and the availability gate. The equivalent here installs the
+    port-shaped ``FakeVectorStore`` at those two seams, so the deletion path below runs for real
+    instead of being skipped for want of a provider.
+    """
+    import database.vector_db as vector_db
+    import utils.memory.atom_keyword_index as atom_keyword_index
+    from fakes.vector_search import DeterministicEmbeddings, FakeVectorStore
+
+    import utils.vector as vector_pkg
+    import utils.vector.factory as vector_factory
+
+    embeddings = DeterministicEmbeddings()
+    vector_db.embeddings = embeddings
+    hermetic_store = FakeVectorStore(embeddings)
+    # The factory, not `vector_db._vector_store`: that is the seam `install_vector_search_fakes` uses
+    # for a per-test store, and overriding the accessor itself would shadow it — the writes would land
+    # in this session-wide store while the test inspected its own, empty one (measured, on
+    # test_canonical_memory_pipeline).
+    vector_pkg.get_vector_store = lambda: hermetic_store
+    vector_factory.get_vector_store = lambda: hermetic_store
+    vector_db.is_vector_available = lambda: True
+
+    real_vector_delete = vector_db.delete_canonical_memory_vectors
+
+    def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> bool:
+        # The in-memory store is always installed above, so the real deletion path always runs — the
+        # `index is None` branch upstream keeps for "no provider configured" has no counterpart here.
+        return real_vector_delete(uid, memory_id)
+
+    def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client=None) -> bool:
+        del db_client
+        return bool(uid and memory_id)
+
+    vector_db.delete_canonical_memory_vectors = delete_canonical_memory_vectors
+    atom_keyword_index.delete_atom_keyword_doc = delete_atom_keyword_doc
+
+
 def _create_backend_app(fake_firestore_instance, fake_redis_instance, fake_storage_instance):
     """
     Create the real FastAPI app with patched dependencies.
@@ -263,6 +305,8 @@ def _create_backend_app(fake_firestore_instance, fake_redis_instance, fake_stora
 
     # Import the real FastAPI app (triggers all backend module imports)
     import main as backend_main
+
+    _install_hermetic_privacy_projection_fakes()
 
     # Some backend modules bind ``db``/``r`` with ``from database._client import db``
     # or ``from database.redis_db import r`` at import time. If an import raced ahead

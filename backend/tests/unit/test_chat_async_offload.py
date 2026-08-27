@@ -450,6 +450,70 @@ async def test_agentic_setup_reads_run_off_loop():
         assert threads[name] is not loop_thread, f"{name} setup read must run off the event-loop thread"
 
 
+async def test_agentic_chat_uses_server_rollout_for_jit_gate_and_config():
+    """The chat producer must project only the backend authority into tool config."""
+    seen = {}
+
+    class EnabledDecision:
+        permits_work = True
+
+    async def resolve(uid, *, stage, force_refresh=False):
+        seen['authority_call'] = (uid, stage, force_refresh)
+        return EnabledDecision()
+
+    async def fake_agent_stream(
+        system_prompt,
+        _anthropic_messages,
+        _tool_schemas,
+        _tool_registry,
+        callback,
+        _full_response,
+        _safety_guard,
+        configurable,
+    ):
+        seen['system_prompt'] = system_prompt
+        seen['configurable'] = configurable
+        await callback.queue.put(None)
+
+    with patch.object(agentic, 'resolve_jit_rollout', new=resolve), patch.object(
+        agentic, 'get_user_timezone', return_value='UTC'
+    ), patch.object(agentic, '_get_agentic_qa_prompt', return_value='SYSTEM'), patch.object(
+        agentic, 'load_app_tools', return_value=[]
+    ), patch.object(
+        agentic, 'get_current_datetime_block', return_value=''
+    ), patch.object(
+        agentic, '_convert_tools', return_value=([], {})
+    ), patch.object(
+        agentic, '_messages_to_anthropic', return_value=[]
+    ), patch.object(
+        agentic, '_inject_current_datetime', side_effect=lambda messages, _block: messages
+    ), patch.object(
+        agentic, '_run_anthropic_agent_stream', new=fake_agent_stream
+    ):
+        chunks = [
+            chunk
+            async for chunk in agentic.execute_agentic_chat_stream(
+                'server-owned-uid', [], app=None, callback_data={}, chat_session=None, current_datetime_block=''
+            )
+        ]
+
+    assert chunks == [f'think: {agentic.AGENT_STREAM_SETUP_PROGRESS}', None]
+    assert seen['authority_call'][0] == 'server-owned-uid'
+    assert seen['authority_call'][1].value == 'read_only'
+    assert seen['configurable']['jit_conversation_retrieval_enabled'] is True
+    assert '<jit_conversation_retrieval>' in seen['system_prompt']
+
+
+async def test_jit_authority_error_keeps_conversation_retrieval_gate_off():
+    """A control-plane error must preserve healthy legacy chat behavior."""
+
+    async def fail_resolve(*_args, **_kwargs):
+        raise RuntimeError('provider detail must not escape')
+
+    with patch.object(agentic, 'resolve_jit_rollout', new=fail_resolve):
+        assert await agentic._resolve_jit_conversation_retrieval('server-owned-uid') is False
+
+
 async def test_callback_preserves_langchain_persona_stream_contract():
     """The shared callback must still bridge LangChain token/end events for persona chat."""
     callback = agentic.AsyncStreamingCallback()

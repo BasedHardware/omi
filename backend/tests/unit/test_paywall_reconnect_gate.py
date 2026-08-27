@@ -405,11 +405,29 @@ class TestByokRequestEscapeHatch:
 
         self._sub = sub
         self._byok = byok
+        # The middleware validates request keys against enrollment and warms
+        # this cache before subscription checks run. Model that boundary
+        # directly; falling through to a real Firestore lookup makes this unit
+        # test retry external credentials for minutes.
+        original_cached_byok_state = sub.get_cached_byok_state
+        sub.get_cached_byok_state = MagicMock(
+            return_value={
+                'fingerprints': {
+                    'openrouter': 'enrolled',
+                    'openai': 'enrolled',
+                    'anthropic': 'enrolled',
+                    'gemini': 'enrolled',
+                    'deepgram': 'enrolled',
+                }
+            }
+        )
 
         yield
 
-        # Reset BYOK contextvar between tests so leftover keys don't bleed.
+        # Reset BYOK contextvars between tests so leftover keys/uid don't bleed.
+        sub.get_cached_byok_state = original_cached_byok_state
         byok._byok_ctx.set(None)
+        byok.set_byok_uid(None)
         for name in stubs:
             if saved[name] is None:
                 sys.modules.pop(name, None)
@@ -426,11 +444,15 @@ class TestByokRequestEscapeHatch:
             }
         )
         self._byok._byok_validated_ctx.set(True)
+        # The enrollment-verifying escape hatch needs the request uid on the
+        # context (middleware sets it in production).
+        self._byok.set_byok_uid('uid-stale-firestore')
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
 
     def test_validated_llm_byok_header_bypasses_paywall(self):
         self._byok.set_byok_keys({'openrouter': 'sk-stub'})
         self._byok._byok_validated_ctx.set(True)
+        self._byok.set_byok_uid('uid-stale-firestore')
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
 
     def test_validated_deepgram_only_header_still_paywalls(self):

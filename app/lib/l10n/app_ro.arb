@@ -3233,5 +3233,7 @@
     "appReEnableFailedBody": "Această aplicație nu a putut fi reactivată. Încearcă din nou.",
     "appDisabledOn": "Dezactivată pe {date}.",
     "appDisabledLastError": "Ultima eroare: {error}.",
-    "prerecordedTranscript": "Preînregistrat"
+    "prerecordedTranscript": "Preînregistrat",
+    "pendantRecordingSyncBlocked": "Pendant încă înregistrează, așa că sunetul stocat nu poate fi transferat. Apasă butonul Pendant pentru a opri înregistrarea, apoi sincronizează din nou.",
+    "pendantFullSyncBlocked": "Spațiul de stocare al Pendantului este plin și acesta este încă în modul de înregistrare, așa că audio-ul stocat nu poate fi transferat. Apăsați butonul Pendantului pentru a opri înregistrarea, apoi sincronizați din nou."
 }

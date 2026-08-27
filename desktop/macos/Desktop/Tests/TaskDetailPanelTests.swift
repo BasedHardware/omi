@@ -65,8 +65,99 @@ final class TaskDetailPanelTests: XCTestCase {
     let links = TaskDetailSourceLinkPolicy.links(for: task)
     XCTAssertEqual(links.count, 2)
     XCTAssertTrue(links.contains { $0.route == .memory(id: "memory-1") })
+    // A screen ref the frame contract cannot resolve still routes to the
+    // Rewind page. Only refs with no valid destination at all are dropped.
     XCTAssertTrue(links.contains { $0.route == .rewind })
     XCTAssertFalse(links.contains { $0.id.contains("artifact-1") })
+  }
+
+  @MainActor
+  func testRewindFrameNavigationRequiresTheValidatedPresentationLease() {
+    let focusRequests = NotificationCountRecorder()
+    let rewindNavigations = NotificationCountRecorder()
+    RewindCitationFocusState.shared.request(777)
+    let focusToken = NotificationCenter.default.addObserver(
+      forName: .rewindCitationFocusRequested,
+      object: nil,
+      queue: .main
+    ) { _ in focusRequests.record() }
+    let navigationToken = NotificationCenter.default.addObserver(
+      forName: .navigateToRewind,
+      object: nil,
+      queue: .main
+    ) { _ in rewindNavigations.record() }
+    defer {
+      NotificationCenter.default.removeObserver(focusToken)
+      NotificationCenter.default.removeObserver(navigationToken)
+      _ = RewindCitationFocusState.shared.consume()
+    }
+
+    TaskDetailSourceNavigator.open(.rewindFrame(id: 42))
+
+    XCTAssertEqual(focusRequests.count, 0)
+    XCTAssertEqual(rewindNavigations.count, 0)
+    XCTAssertEqual(RewindCitationFocusState.shared.pendingScreenshotID, 777)
+  }
+
+  @MainActor
+  func testRewindFrameNavigationRejectsLeaseAfterCompletedOwnerTransition() throws {
+    let owner = try XCTUnwrap(RewindCaptureOwnerSnapshot.capture())
+    RewindCaptureOwnerGeneration.beginTransition()
+    RewindCaptureOwnerGeneration.endTransition()
+    let focusRequests = NotificationCountRecorder()
+    let rewindNavigations = NotificationCountRecorder()
+    let focusToken = NotificationCenter.default.addObserver(
+      forName: .rewindCitationFocusRequested,
+      object: nil,
+      queue: .main
+    ) { _ in focusRequests.record() }
+    let navigationToken = NotificationCenter.default.addObserver(
+      forName: .navigateToRewind,
+      object: nil,
+      queue: .main
+    ) { _ in rewindNavigations.record() }
+    defer {
+      NotificationCenter.default.removeObserver(focusToken)
+      NotificationCenter.default.removeObserver(navigationToken)
+    }
+
+    TaskDetailSourceNavigator.open(
+      .rewindFrame(id: 42),
+      rewindLease: RewindEvidenceCardLease(screenshotID: 42, owner: owner)
+    )
+
+    XCTAssertEqual(focusRequests.count, 0)
+    XCTAssertEqual(rewindNavigations.count, 0)
+  }
+
+  @MainActor
+  func testRewindFrameNavigationPostsOneFocusAndOneDestinationNotification() throws {
+    let owner = try XCTUnwrap(RewindCaptureOwnerSnapshot.capture())
+    let focusRequests = NotificationCountRecorder()
+    let rewindNavigations = NotificationCountRecorder()
+    let focusToken = NotificationCenter.default.addObserver(
+      forName: .rewindCitationFocusRequested,
+      object: nil,
+      queue: .main
+    ) { _ in focusRequests.record() }
+    let navigationToken = NotificationCenter.default.addObserver(
+      forName: .navigateToRewind,
+      object: nil,
+      queue: .main
+    ) { _ in rewindNavigations.record() }
+    defer {
+      NotificationCenter.default.removeObserver(focusToken)
+      NotificationCenter.default.removeObserver(navigationToken)
+      _ = RewindCitationFocusState.shared.consume()
+    }
+
+    TaskDetailSourceNavigator.open(
+      .rewindFrame(id: 42),
+      rewindLease: RewindEvidenceCardLease(screenshotID: 42, owner: owner)
+    )
+
+    XCTAssertEqual(focusRequests.count, 1)
+    XCTAssertEqual(rewindNavigations.count, 1)
   }
 
   func testPanelDetailsRetainUnmodeledTaskMetadata() {
@@ -194,5 +285,13 @@ final class TaskDetailPanelTests: XCTestCase {
       category: category,
       provenance: provenance
     )
+  }
+}
+
+private final class NotificationCountRecorder: @unchecked Sendable {
+  private(set) var count = 0
+
+  func record() {
+    count += 1
   }
 }

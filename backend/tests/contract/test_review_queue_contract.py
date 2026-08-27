@@ -265,33 +265,35 @@ def test_the_cascade_purge_reaches_past_its_first_page(queue):
 
     assert purged == sorted(doomed), 'the cascade stopped before the tail of its own result set'
     for review_id in doomed:
-        stored = _stored(queue, review_id)
-        assert stored['status'] == 'tombstoned'
-        assert stored['candidate'] == {'id': memory_id}, 'the quoted content must be redacted, not kept'
+        # Upstream hardened this in the +30 merge: the row is DELETED rather than tombstoned with a
+        # redacted candidate. Stronger, and the reason the assertion moved — a tombstone still carried
+        # the identifier of a memory the user asked to have removed.
+        assert _stored(queue, review_id) is None, 'a conflict quoting a deleted memory must not survive'
     assert _stored(queue, unrelated)['status'] == 'pending', 'the cascade must not touch other conflicts'
 
 
 def test_a_repeated_cascade_purge_is_a_no_op(queue):
-    """Deletion is retried. A second pass must not rewrite the tombstone: it would move `resolved_at`
-    and the audit trail would then lie about when the conflict was closed.
+    """Deletion is retried, so the second pass must be harmless and must report honestly.
 
-    Two independent mechanisms produce that, and neither dies alone — measured, not assumed. The
-    `already_redacted` short-circuit skips the write; the write itself, when it does run over an
-    already-tombstoned row, preserves `reason`/`resolved_at`/`updated_at` from the stored document.
-    Removing either one leaves this green; removing BOTH turns it red. So it holds the INVARIANT the
-    user's audit trail depends on rather than any one guard, which is the honest thing for it to hold.
+    The assertion moved with upstream's +30 merge, which changed the cascade from tombstoning a
+    redacted row to deleting it. The old invariant was about not rewriting the tombstone's
+    `resolved_at`; with no row left there is nothing to rewrite, and the invariant becomes the one a
+    retrying deletion worker actually depends on: the second call finds nothing, says so by returning
+    an empty list, and touches no other conflict.
     """
     import database.review_queue as review_db
 
     memory_id = f"mem-{queue['run']}"
     review_id = _seed(queue, f"px-{queue['run']}", fact_id=memory_id, candidate={'id': memory_id, 'text': 'gone'})
+    unrelated = _seed(queue, f"keep-{queue['run']}", fact_id='other-memory', candidate={'id': 'other-memory'})
 
     assert review_db.purge_stale_review_conflicts_for_memories(queue['uid'], [memory_id]) == [review_id]
-    first = _stored(queue, review_id)
+    assert _stored(queue, review_id) is None
 
-    assert review_db.purge_stale_review_conflicts_for_memories(queue['uid'], [memory_id]) == [review_id]
+    assert review_db.purge_stale_review_conflicts_for_memories(queue['uid'], [memory_id]) == []
 
-    assert _stored(queue, review_id) == first
+    assert _stored(queue, review_id) is None
+    assert _stored(queue, unrelated)['status'] == 'pending'
 
 
 def test_the_cascade_follows_the_conflict_side_as_well_as_the_fact_side(queue):

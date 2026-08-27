@@ -143,6 +143,8 @@ class ListenSessionRuntime:
         self.pusher_close: Optional[Callable[..., Awaitable[Any]]] = None
         self.pusher_tasks: List[asyncio.Task[Any]] = []
         self.onboarding_handler: Optional[OnboardingHandler] = None
+        self.onboarding_admitted = False
+        self.onboarding_session_id: Optional[str] = None
         self.onboarding_omi_speaker_id = OnboardingHandler.OMI_SPEAKER_ID
         self.receiver: Any = None
         self.speakers: Any = None
@@ -303,6 +305,27 @@ class ListenSessionRuntime:
         if not base.user_exists:
             await request.websocket.close(code=1008, reason='Bad user')
             return False
+        # ``onboarding=enabled`` is a client hint only.  Direct-user
+        # provenance requires a short-lived backend admission derived from the
+        # durable account state (onboarding not completed). The admission is
+        # issued or refreshed here at connect time so a client that fetched
+        # onboarding state more than the admission TTL ago — or never calls
+        # the state endpoint at all — still gets a server-owned session, while
+        # completed accounts can never re-enter onboarding provenance.
+        if request.onboarding_mode:
+            try:
+                admitted = await run_blocking(db_executor, user_db.ensure_backend_onboarding_admission, request.uid)
+            except Exception as error:
+                # Issuing is best-effort: a still-valid admission from the state
+                # endpoint may exist, and the read below fails closed on its own.
+                logger.warning('Onboarding admission issue failed type=%s', type(error).__name__)
+                admitted = True
+            self.onboarding_session_id = (
+                await run_blocking(db_executor, user_db.get_backend_onboarding_admission, request.uid)
+                if admitted
+                else None
+            )
+            self.onboarding_admitted = isinstance(self.onboarding_session_id, str)
         self.user_has_credits = base.user_has_credits
         self.language = normalize_language(request.language)
         single_language_mode = should_force_single_language(
@@ -386,13 +409,18 @@ class ListenSessionRuntime:
         if FAIR_USE_ENABLED:
             self.state.fair_use_track_dg_usage = context.fair_use_track_dg_usage
             self.state.fair_use_dg_budget_exhausted = context.fair_use_dg_budget_exhausted
-        if request.onboarding_mode:
+        if request.onboarding_mode and self.onboarding_admitted:
 
             async def send_onboarding(event: Dict[str, Any]) -> None:
                 if self.state.active and request.websocket.client_state == WebSocketState.CONNECTED:
                     await request.websocket.send_json(event)
 
-            self.onboarding_handler = OnboardingHandler(request.uid, send_onboarding, self.transcripts.enqueue)
+            self.onboarding_handler = OnboardingHandler(
+                request.uid,
+                send_onboarding,
+                self.transcripts.enqueue,
+                session_id=self.onboarding_session_id,
+            )
             self.spawn(self.onboarding_handler.send_current_question(), name='onboarding_first_question')
         return True
 

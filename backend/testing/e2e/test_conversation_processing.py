@@ -45,8 +45,8 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "get_overlapping_calendar_event", _async_none)
     monkeypatch.setattr(process_module, "write_conversation_link_to_calendar_event", _async_noop)
     monkeypatch.setattr(process_module, "precache_conversation_audio", lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_module, "_trigger_apps", lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_module, "_update_goal_progress", lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_module, "trigger_conversation_apps", lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_module, "update_goal_progress", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "submit_with_context", run_selected_postprocess)
     monkeypatch.setattr(
         process_module,

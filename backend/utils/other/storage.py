@@ -7,6 +7,7 @@ import struct
 import threading
 import time
 import wave
+from contextlib import contextmanager
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from concurrent.futures import as_completed, wait, FIRST_COMPLETED
 
@@ -20,6 +21,7 @@ except Exception as e:
 else:
     _opus_import_error = None
 from database.redis_db import cache_signed_url, get_cached_signed_url, delete_cached_signed_url
+from database.legal_holds import external_write_fence
 from utils.object_store.errors import ObjectNotFound
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
@@ -77,6 +79,136 @@ screen_frames_bucket = os.getenv('BUCKET_SCREEN_FRAMES')
 _did_warn_missing_speech_profiles_bucket = False
 
 
+def _uses_real_object_store(store: Any = None) -> bool:
+    """Whether the active object store is a real adapter, not a test double.
+
+    This is upstream's ``_uses_real_gcs_bucket`` expressed on the port. Upstream can ask "is this a
+    concrete google.cloud.storage bucket?" because its writes carry a bucket OBJECT; ours carry a
+    bucket NAME, so that question has no answer here — ``type('omi-speech').__module__`` is
+    ``builtins`` and the fence would never engage, on any backend, GCS included.
+
+    The question that does carry over is the one upstream is really asking: am I about to mutate a
+    real provider, or a fake a test injected? Adapters we ship live under ``utils.object_store.adapters``;
+    fakes injected by the factory's setter do not. So hermetic tests stay hermetic, and the fence
+    covers S3/RustFS as well as GCS — those are just as external, and an on-prem install is the case
+    this initiative exists for.
+    """
+
+    return type(store if store is not None else _object_store()).__module__.startswith('utils.object_store.adapters')
+
+
+@contextmanager
+def owner_storage_write_gate(uid: str, store: Any = None):
+    """Fence one owner-scoped object-store mutation against account deletion.
+
+    The fence is checked after authorization/encoding but before the upload/copy call: a write is
+    refused while the account is being deleted or a destructive operation owns the account gate. It
+    takes no lock, so concurrent uploads for one account never contend with each other; the deletion
+    side verifies its purges left nothing behind. Local/offline providers and injected test doubles
+    remain hermetic and do not need Firestore authority.
+
+    ``store`` is the object the caller is about to write through, when it has one in hand. Upstream
+    passes the bucket for the same reason: a caller that resolved its own store (``merge_conversations``
+    holds one) must be judged on THAT store, not on whatever the global accessor would return — else a
+    hermetic test injecting a fake at the caller's seam still trips the fence.
+    """
+
+    if not uid:
+        raise ValueError('owner storage writes require a uid')
+    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
+    provider_mode = os.getenv('PROVIDER_MODE', '').strip().lower()
+    if stage in {'local', 'offline'} or provider_mode == 'offline' or not _uses_real_object_store(store):
+        yield None
+        return
+    with external_write_fence(uid):
+        yield None
+
+
+@contextmanager
+def _sync_path_owner_gate(file_path: str):
+    """Fence a sync-bucket write when the path names its owner, pass through when it does not.
+
+    Same shape as upstream's inline ``if owner_uid: with ... else: ...`` around each of the four
+    syncing writes, said once instead of four times.
+    """
+
+    owner_uid = _owner_uid_from_sync_path(file_path)
+    if not owner_uid:
+        yield None
+        return
+    with owner_storage_write_gate(owner_uid):
+        yield None
+
+
+def _owner_uid_from_sync_path(file_path: str) -> Optional[str]:
+    """Extract the owner from the only UID-scoped temporary-sync layout."""
+
+    parts = str(file_path).replace('\\', '/').split('/')
+    if len(parts) >= 2 and parts[0] == 'syncing' and parts[1] and parts[1] not in {'.', '..'}:
+        return parts[1]
+    return None
+
+
+def _delete_owner_bucket_prefix(bucket: str, prefix: str) -> int:
+    """Delete and verify one owner prefix, failing closed on a torn purge.
+
+    ``bucket`` is a NAME here, not a GCS bucket object: list/delete go through the port (ADR-0032),
+    so the purge works on whichever backend is configured. The verifying re-list is upstream's and
+    is the point of the function — a purge that silently left objects behind is the failure this
+    guards.
+    """
+
+    store = _object_store()
+    deleted = 0
+    for info in store.list(bucket, prefix):
+        store.delete(bucket, info.key)
+        deleted += 1
+    remaining = store.list(bucket, prefix)
+    if remaining:
+        raise RuntimeError(f'owner storage purge left {len(remaining)} objects under {prefix}')
+    return deleted
+
+
+def delete_all_user_storage_objects(uid: str) -> int:
+    """Purge every non-recordings configured GCS prefix owned by ``uid``.
+
+    The account deletion worker calls this while it owns the account-wide
+    destructive-operation gate. Prefix enumeration is intentionally broader
+    than Firestore's current ID inventories so playback, merge caches, stale
+    markers, and uploads from an in-flight request cannot survive the wipe.
+    ``delete_all_conversation_recordings`` handles its dedicated bucket in the
+    same account-deletion phase, preserving its existing operational metric.
+    """
+
+    if not uid:
+        return 0
+    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
+    if stage in {'local', 'offline'} or os.getenv('PROVIDER_MODE', '').strip().lower() == 'offline':
+        return 0
+
+    configured: list[tuple[Optional[str], tuple[str, ...]]] = [
+        (speech_profiles_bucket, (f'{uid}/',)),
+        (
+            private_cloud_sync_bucket,
+            tuple(f'{prefix}/{uid}/' for prefix in ('chunks', 'audio', 'merged', PLAYBACK_ARTIFACT_PREFIX)),
+        ),
+        (syncing_local_bucket, (f'syncing/{uid}/',)),
+        (chat_files_bucket, (f'{uid}/',)),
+    ]
+    deleted = 0
+    seen_buckets: set[tuple[str, str]] = set()
+    for bucket_name, prefixes in configured:
+        if not bucket_name:
+            continue
+        for prefix in prefixes:
+            key = (bucket_name, prefix)
+            if key in seen_buckets:
+                continue
+            seen_buckets.add(key)
+            deleted += _delete_owner_bucket_prefix(bucket_name, prefix)
+    return deleted
+
+
 def _get_opuslib() -> Any:
     if opuslib is None:
         raise RuntimeError(
@@ -123,7 +255,8 @@ def upload_profile_audio(file_path: str, uid: str) -> str:
     bucket = _speech_profiles_bucket_name(required=True)
     assert bucket is not None  # required=True raises if missing
     path = f'{uid}/speech_profile.wav'
-    _object_store().put_from_file(bucket, path, file_path)
+    with owner_storage_write_gate(uid):
+        _object_store().put_from_file(bucket, path, file_path)
     # A signed URL, not a public one: this is the user's VOICE. `public_url` returned an unauthenticated
     # link that works forever wherever the bucket is readable — on GCS it is, by project policy
     # (ADR-0087).
@@ -227,7 +360,8 @@ def upload_person_speech_sample_from_bytes(
     assert bucket is not None  # required=True raises if missing
     filename = f"{uuid_module.uuid4()}.wav"
     path = f'{uid}/people_profiles/{person_id}/{filename}'
-    _object_store().put(bucket, path, wav_buffer.getvalue(), content_type='audio/wav')
+    with owner_storage_write_gate(uid):
+        _object_store().put(bucket, path, wav_buffer.getvalue(), content_type='audio/wav')
 
     return path
 
@@ -329,9 +463,10 @@ def download_postprocessing_audio(file_path: str, destination_file_path: str) ->
 
 def upload_conversation_recording(file_path: str, uid: str, conversation_id: str) -> str:
     path = f'{uid}/{conversation_id}.wav'
-    _object_store().put_from_file(
-        _required_bucket(memories_recordings_bucket, 'BUCKET_MEMORIES_RECORDINGS'), path, file_path
-    )
+    with owner_storage_write_gate(uid):
+        _object_store().put_from_file(
+            _required_bucket(memories_recordings_bucket, 'BUCKET_MEMORIES_RECORDINGS'), path, file_path
+        )
     # Signed (ADR-0087): a conversation recording behind a link that never expires is the thing this
     # initiative exists to avoid.
     return _signed_url(
@@ -354,6 +489,9 @@ def get_conversation_recording_if_exists(uid: str, memory_id: str) -> Optional[s
 def delete_all_conversation_recordings(uid: str) -> int:
     if not uid:
         return 0
+    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
+    if stage in {'local', 'offline'} or os.getenv('PROVIDER_MODE', '').strip().lower() == 'offline':
+        return 0
     if not memories_recordings_bucket:
         # A required purge failure blocks the irreversible Firestore wipe (see
         # services/users/account_deletion.py), so an unconfigured bucket must not raise here:
@@ -365,6 +503,11 @@ def delete_all_conversation_recordings(uid: str) -> int:
     for obj in _object_store().list(memories_recordings_bucket, f"{uid}/"):
         _object_store().delete(memories_recordings_bucket, obj.key)
         deleted += 1
+    # Upstream's verifying re-list, on the port. Their version exempted a legacy MagicMock fixture
+    # that returns the same static blob on every listing; through the port there is no such fixture —
+    # the in-memory fake lists consistently, like GCS and S3 — so the proof runs unconditionally.
+    if _object_store().list(memories_recordings_bucket, f"{uid}/"):
+        raise RuntimeError(f'owner storage purge left objects under {uid}/')
     return deleted
 
 
@@ -377,24 +520,23 @@ def get_syncing_file_temporal_url(file_path: str):
     Signed like its twin below (ADR-0087) — it carries the same audio. The two differ only in expiry;
     this one has no live caller, and is kept because upstream's surface has it.
     """
-    _object_store().put_from_file(
-        _required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path, file_path
-    )
-    return _signed_url(
-        _required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path, USER_AUDIO_URL_MINUTES
-    )
+    bucket = _required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL')
+    with _sync_path_owner_gate(file_path):
+        _object_store().put_from_file(bucket, file_path, file_path)
+    return _signed_url(bucket, file_path, USER_AUDIO_URL_MINUTES)
 
 
 def get_syncing_file_temporal_signed_url(file_path: str):
-    _object_store().put_from_file(
-        _required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path, file_path
-    )
-    return _signed_url(_required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path, 15)
+    bucket = _required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL')
+    with _sync_path_owner_gate(file_path):
+        _object_store().put_from_file(bucket, file_path, file_path)
+    return _signed_url(bucket, file_path, 15)
 
 
 def delete_syncing_temporal_file(file_path: str):
     # The port's delete is idempotent (no raise on a missing object), so no NotFound guard is needed.
-    _object_store().delete(_required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path)
+    with _sync_path_owner_gate(file_path):
+        _object_store().delete(_required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path)
 
 
 # Long enough for every signed-URL consumer (Deepgram fetch, speaker-ID
@@ -417,9 +559,10 @@ def schedule_syncing_temporal_file_deletion(
 
 def upload_syncing_temporal_file(file_path: str):
     """Stage a local file in the syncing bucket (blob name = local relative path)."""
-    _object_store().put_from_file(
-        _required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path, file_path
-    )
+    with _sync_path_owner_gate(file_path):
+        _object_store().put_from_file(
+            _required_bucket(syncing_local_bucket, 'BUCKET_TEMPORAL_SYNC_LOCAL'), file_path, file_path
+        )
 
 
 def download_syncing_temporal_file(file_path: str) -> bool:
@@ -599,13 +742,18 @@ def upload_audio_chunk(
 
     upload_data = encode_pcm_to_opus(chunk_data)
 
-    if protection_level == 'enhanced':
-        encrypted_chunk = encryption.encrypt_audio_chunk(upload_data, uid)
-        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus.enc'
-        _object_store().put(private_cloud_sync_bucket, path, encrypted_chunk, content_type='application/octet-stream')
-    else:
-        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus'
-        _object_store().put(private_cloud_sync_bucket, path, upload_data, content_type='application/octet-stream')
+    with owner_storage_write_gate(uid):
+        if protection_level == 'enhanced':
+            encrypted_chunk = encryption.encrypt_audio_chunk(upload_data, uid)
+            path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus.enc'
+            _object_store().put(
+                private_cloud_sync_bucket, path, encrypted_chunk, content_type='application/octet-stream'
+            )
+        else:
+            path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus'
+            _object_store().put(
+                private_cloud_sync_bucket, path, upload_data, content_type='application/octet-stream'
+            )
 
     del upload_data
     return path
@@ -648,20 +796,25 @@ def upload_audio_chunks_batch(
     last_ts = f'{sorted_chunks[-1]["timestamp"]:.3f}'
     batch_name = f'{first_ts}-{last_ts}' if len(sorted_chunks) > 1 else first_ts
 
-    if protection_level == 'enhanced':
-        # Encrypt each chunk individually (length-prefixed), stream to the object store
-        path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.enc'
-        with _object_store().open_write(private_cloud_sync_bucket, path, content_type='application/octet-stream') as f:
-            for chunk in sorted_chunks:
-                encrypted_chunk = encryption.encrypt_audio_chunk(chunk['data'], uid)
-                f.write(encrypted_chunk)
-                del encrypted_chunk
-    else:
-        # Standard — stream raw PCM data to the object store
-        path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.bin'
-        with _object_store().open_write(private_cloud_sync_bucket, path, content_type='application/octet-stream') as f:
-            for chunk in sorted_chunks:
-                f.write(chunk['data'])
+    with owner_storage_write_gate(uid):
+        if protection_level == 'enhanced':
+            # Encrypt each chunk individually (length-prefixed), stream to the object store
+            path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.enc'
+            with _object_store().open_write(
+                private_cloud_sync_bucket, path, content_type='application/octet-stream'
+            ) as f:
+                for chunk in sorted_chunks:
+                    encrypted_chunk = encryption.encrypt_audio_chunk(chunk['data'], uid)
+                    f.write(encrypted_chunk)
+                    del encrypted_chunk
+        else:
+            # Standard — stream raw PCM data to the object store
+            path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.bin'
+            with _object_store().open_write(
+                private_cloud_sync_bucket, path, content_type='application/octet-stream'
+            ) as f:
+                for chunk in sorted_chunks:
+                    f.write(chunk['data'])
 
     return [path]
 
@@ -1110,13 +1263,14 @@ def get_or_create_merged_audio(
     def _upload_to_cache():
         try:
             expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3)
-            _object_store().put(
-                private_cloud_sync_bucket,
-                cache_path,
-                wav_data,
-                content_type='audio/wav',
-                metadata={'expires_at': expires_at.isoformat(), 'audio_file_id': audio_file_id},
-            )
+            with owner_storage_write_gate(uid):
+                _object_store().put(
+                    private_cloud_sync_bucket,
+                    cache_path,
+                    wav_data,
+                    content_type='audio/wav',
+                    metadata={'expires_at': expires_at.isoformat(), 'audio_file_id': audio_file_id},
+                )
             logger.info(f'audio_merge cached {log_ctx}')
         except Exception as e:
             logger.error(f'audio_merge cache_upload_failed {log_ctx}: {e}')
@@ -1202,7 +1356,8 @@ def download_playback_artifact(uid: str, conversation_id: str, audio_file_id: st
 
 def upload_playback_artifact(uid: str, conversation_id: str, audio_file_id: str, mp3_data: bytes) -> None:
     path = _playback_artifact_path(uid, conversation_id, audio_file_id)
-    _object_store().put(private_cloud_sync_bucket, path, mp3_data, content_type='audio/mpeg')
+    with owner_storage_write_gate(uid):
+        _object_store().put(private_cloud_sync_bucket, path, mp3_data, content_type='audio/mpeg')
 
 
 def _playback_unavailable_path(uid: str, conversation_id: str, audio_file_id: str) -> str:
@@ -1217,7 +1372,8 @@ def mark_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str
     lifecycle rule grants even these a retry eventually.
     """
     path = _playback_unavailable_path(uid, conversation_id, audio_file_id)
-    _object_store().put(private_cloud_sync_bucket, path, reason.encode('utf-8'), content_type='text/plain')
+    with owner_storage_write_gate(uid):
+        _object_store().put(private_cloud_sync_bucket, path, reason.encode('utf-8'), content_type='text/plain')
 
 
 def is_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str) -> bool:
@@ -1314,7 +1470,8 @@ def get_conversation_playback_signed_url(uid: str, conversation_id: str):
 
 def upload_conversation_playback_artifact(uid: str, conversation_id: str, mp3_data: bytes) -> None:
     path = _conversation_playback_path(uid, conversation_id)
-    _object_store().put(private_cloud_sync_bucket, path, mp3_data, content_type='audio/mpeg')
+    with owner_storage_write_gate(uid):
+        _object_store().put(private_cloud_sync_bucket, path, mp3_data, content_type='audio/mpeg')
 
 
 def _conversation_playback_unavailable_path(uid: str, conversation_id: str) -> str:
@@ -1325,9 +1482,10 @@ def mark_conversation_playback_unavailable(uid: str, conversation_id: str, finge
     """Marker content carries the fingerprint it was written for: a marker for a
     stale fingerprint is ignored on read (late chunks may fix a chunks_missing verdict)."""
     path = _conversation_playback_unavailable_path(uid, conversation_id)
-    _object_store().put(
-        private_cloud_sync_bucket, path, f'{fingerprint}:{reason}'.encode('utf-8'), content_type='text/plain'
-    )
+    with owner_storage_write_gate(uid):
+        _object_store().put(
+            private_cloud_sync_bucket, path, f'{fingerprint}:{reason}'.encode('utf-8'), content_type='text/plain'
+        )
 
 
 def get_conversation_playback_unavailable_fingerprint(uid: str, conversation_id: str) -> Optional[str]:
@@ -1576,19 +1734,20 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> Dict[str, str]:
     separate decision from where the URL comes from.
     """
     keys: Dict[str, str] = {}
-    for name in files_name:
-        try:
-            path = f'{uid}/{name}'
-            _object_store().put_from_file(
-                _required_bucket(chat_files_bucket, 'BUCKET_CHAT_FILES'),
-                path,
-                f'./{name}',
-                cache_control='public, no-cache',
-                public=True,
-            )
-            keys[name] = path
-        except Exception as e:
-            logger.error("Failed to upload {} due to exception: {}".format(name, e))
+    with owner_storage_write_gate(uid):
+        for name in files_name:
+            try:
+                path = f'{uid}/{name}'
+                _object_store().put_from_file(
+                    _required_bucket(chat_files_bucket, 'BUCKET_CHAT_FILES'),
+                    path,
+                    f'./{name}',
+                    cache_control='public, no-cache',
+                    public=True,
+                )
+                keys[name] = path
+            except Exception as e:
+                logger.error("Failed to upload {} due to exception: {}".format(name, e))
     return keys
 
 

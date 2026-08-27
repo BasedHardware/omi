@@ -17,6 +17,7 @@ from deepgram.clients.live.v1 import LiveOptions
 from config.stt_provider_policy import (
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
+    SONIOX_PROVIDER,
     STTServingSurface,
     deepgram_provider_for_runtime,
     default_models_for_surface,
@@ -33,6 +34,7 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
+from utils.stt.soniox import SafeSonioxSocket as SafeSonioxSocket, process_audio_soniox as process_audio_soniox
 from utils.stt.provider_resilience import (
     EXPECTED_REJECTIONS,
     ProviderCircuitBreaker,
@@ -55,6 +57,7 @@ class STTService(str, Enum):
     deepgram = "deepgram"
     modulate = "modulate"
     parakeet = "parakeet"
+    soniox = "soniox"
 
     @staticmethod
     def get_model_name(value: 'STTService') -> Optional[str]:
@@ -64,6 +67,8 @@ class STTService(str, Enum):
             return 'modulate_streaming'
         if value == STTService.parakeet:
             return 'parakeet_streaming'
+        if value == STTService.soniox:
+            return 'soniox_streaming'
 
 
 class ParakeetConnectionError(RuntimeError):
@@ -87,6 +92,10 @@ _modulate_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')),
     cooldown_seconds=float(os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')),
 )
+_soniox_circuit = ProviderCircuitBreaker(
+    failure_threshold=int(os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')),
+    cooldown_seconds=float(os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')),
+)
 
 
 def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
@@ -96,6 +105,8 @@ def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
         return _deepgram_circuit
     if primary_service == STTService.modulate:
         return _modulate_circuit
+    if primary_service == STTService.soniox:
+        return _soniox_circuit
     raise ValueError(f'connection fallback is not defined for a {primary_service.value} primary')
 
 
@@ -517,6 +528,10 @@ def get_stt_service_for_language(
                 and modulate_supports_language(requested_language)
             ):
                 return (STTService.modulate, requested_language, 'velma-2'), parakeet_fallback_reason
+            if model == 'soniox' and provider_is_enabled(SONIOX_PROVIDER, surface) and os.getenv('SONIOX_API_KEY'):
+                # Soniox identifies the language itself, so every requested language
+                # including 'multi' is serviceable.
+                return (STTService.soniox, requested_language, 'soniox'), parakeet_fallback_reason
         return None, parakeet_fallback_reason
 
     prefers_parakeet = (preferred_service or '').strip().lower() == STTService.parakeet.value

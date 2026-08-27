@@ -2007,6 +2007,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get memoryDeleted => '기억이 삭제되었습니다.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => '실행 취소';
 
   @override
@@ -9739,4 +9742,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => '사전 녹음';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant가 아직 녹음 중이어서 저장된 오디오를 전송할 수 없습니다. Pendant의 버튼을 눌러 녹음을 중지한 후 다시 동기화하세요.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant의 저장 공간이 가득 찼고 아직 녹음 모드이므로 저장된 오디오를 전송할 수 없습니다. Pendant의 버튼을 눌러 녹음을 중지한 다음 다시 동기화하세요.';
 }

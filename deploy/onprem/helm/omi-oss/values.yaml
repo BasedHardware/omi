@@ -246,6 +246,12 @@ objstore:
     CHAT_FILES: chat-files
     DESKTOP_UPDATES: desktop-updates
     PLUGINS_LOGOS: plugins-logos
+    # Frame-request evidence pixels, two tiers on purpose: the TEMPORARY one is meant to carry a
+    # lifecycle/expiration rule, the permanent one must not (utils/retrieval/frame_request_storage.py).
+    # Declared because routers/frame_requests.py IS mounted in main.py, so the feature is reachable
+    # here; the storage behind it goes through the object-store port, so it works on RustFS.
+    FRAME_REQUESTS: frame-requests
+    FRAME_REQUESTS_TEMPORARY: frame-requests-temporary
 push:
   enabled: false
   # Device-facing public URL (used by the phone's UnifiedPush distributor). Internal-only until the

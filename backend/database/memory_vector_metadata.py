@@ -5,9 +5,15 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional, cast, Mapping
+from typing import Any, Collection, Dict, Optional, cast, Mapping
 
 from models.memory_search_gateway import SearchDecision, SearchVectorHit
+from models.knowledge_ledger_search import (
+    LEDGER_INDEX_VERSION,
+    LEDGER_SEARCH_KINDS,
+    build_ledger_index_metadata,
+    validate_ledger_kinds,
+)
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS, MemoryTier, MemoryItem
 
 MEMORY_VECTOR_SCHEMA_VERSION = 1
@@ -102,11 +108,13 @@ def build_memory_vector_metadata(
     shared = _shared_memory_vector_metadata_fields(
         item, projection_commit_id=projection_commit_id, vector_updated_at=vector_updated_at
     )
-    return {
+    metadata = {
         "memory_schema_version": MEMORY_VECTOR_SCHEMA_VERSION,
         "memory_layer": item.tier.value,
         **shared,
     }
+    metadata.update(build_ledger_index_metadata(item))
+    return metadata
 
 
 def strip_null_metadata_values(metadata: Dict[str, Any]) -> Dict[str, Any]:
@@ -118,6 +126,22 @@ def build_default_memory_vector_filter(uid: str) -> Dict[str, Any]:
     return _base_memory_vector_filter(
         uid, {"memory_layer": {"$in": [MemoryTier.short_term.value, MemoryTier.long_term.value]}}
     )
+
+
+def build_ledger_memory_vector_filter(uid: str, kinds: Collection[str] = LEDGER_SEARCH_KINDS) -> Dict[str, Any]:
+    """Build a provider filter for open, versioned ledger rows only."""
+
+    parsed_kinds = validate_ledger_kinds(kinds)
+    result = build_default_memory_vector_filter(uid)
+    result["$and"].extend(
+        [
+            {"ledger_index_version": {"$eq": LEDGER_INDEX_VERSION}},
+            {"ledger_schema_version": {"$eq": "knowledge_ledger.v1"}},
+            {"ledger_row_state": {"$eq": "open"}},
+            {"ledger_kind": {"$in": sorted(parsed_kinds)}},
+        ]
+    )
+    return result
 
 
 def build_archive_memory_vector_filter(uid: str) -> Dict[str, Any]:
@@ -255,6 +279,7 @@ __all__ = [
     "build_archive_memory_vector_filter",
     "build_canonical_memory_vector_delete_filter",
     "build_default_memory_vector_filter",
+    "build_ledger_memory_vector_filter",
     "build_memory_vector_metadata",
     "canonical_memory_provider_id",
     "parse_memory_search_vector_hit",

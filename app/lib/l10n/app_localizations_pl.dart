@@ -2048,6 +2048,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get memoryDeleted => 'Wspomnienie usunięte.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Cofnij';
 
   @override
@@ -9935,4 +9938,12 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Wstępnie nagrane';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant wciąż nagrywa, więc zapisany dźwięk nie może zostać przesłany. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pamięć Pendanta jest pełna i wciąż jest on w trybie nagrywania, więc zapisanego dźwięku nie można przenieść. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie.';
 }

@@ -2059,6 +2059,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get memoryDeleted => 'Emlék törölve.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Visszavonás';
 
   @override
@@ -9946,4 +9949,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Előre rögzített';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'A Pendant még mindig felvételt készít, ezért a tárolt hang nem vihető át. Nyomd meg a Pendant gombját a felvétel leállításához, majd szinkronizálj újra.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra.';
 }

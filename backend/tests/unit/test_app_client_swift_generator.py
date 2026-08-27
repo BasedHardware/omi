@@ -43,6 +43,8 @@ def test_swift_dto_file_covers_desktop_high_traffic_read_schemas():
         'struct ActionItemUpdateRequest:',
         'struct ActionItem:',
         'struct MemoryDB:',
+        'struct MemoryEditResponse:',
+        'struct MemoryRevertRequest:',
         'struct GoalResponse:',
         'struct GoalDetailProjection:',
         'struct CandidateRecord:',
@@ -67,6 +69,8 @@ def test_swift_dto_file_covers_desktop_high_traffic_read_schemas():
     assert 'public let desiredOutcome: OmiPatchField<String>' in generated
     assert 'public let nextReviewAt: OmiPatchField<String>' in generated
     assert 'taskChange = .create(try c.decode(TaskCreatePayload.self' in generated
+    assert 'body: MemoryRevertRequest' in generated
+    assert 'async throws -> MemoryEditResponse' in generated
 
 
 def test_swift_generator_handles_refs_optionals_and_enums():

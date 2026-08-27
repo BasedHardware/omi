@@ -2003,6 +2003,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryDeleted => '记忆已删除。';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => '撤销';
 
   @override
@@ -9719,4 +9722,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => '预录';
+
+  @override
+  String get pendantRecordingSyncBlocked => 'Pendant 仍在录音，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
+
+  @override
+  String get pendantFullSyncBlocked => 'Pendant 的存储空间已满，且仍处于录音模式，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
 }

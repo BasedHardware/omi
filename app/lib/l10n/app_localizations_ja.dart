@@ -2007,6 +2007,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get memoryDeleted => '記憶を削除しました';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => '元に戻す';
 
   @override
@@ -9737,4 +9740,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => '事前録音';
+
+  @override
+  String get pendantRecordingSyncBlocked => 'Pendantはまだ録音中のため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendantのストレージが満杯で、まだ録音モードのままのため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。';
 }

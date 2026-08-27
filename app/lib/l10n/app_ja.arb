@@ -3209,5 +3209,7 @@
     "appReEnableFailedBody": "このアプリを再有効化できませんでした。もう一度お試しください。",
     "appDisabledOn": "{date} に無効化されました。",
     "appDisabledLastError": "最後のエラー: {error}",
-    "prerecordedTranscript": "事前録音"
+    "prerecordedTranscript": "事前録音",
+    "pendantRecordingSyncBlocked": "Pendantはまだ録音中のため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。",
+    "pendantFullSyncBlocked": "Pendantのストレージが満杯で、まだ録音モードのままのため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。"
 }

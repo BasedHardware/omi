@@ -2044,6 +2044,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get memoryDeleted => 'Mälestus kustutatud.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Tühista';
 
   @override
@@ -9899,4 +9902,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Eelsalvestatud';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant salvestab endiselt, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja sünkrooni uuesti.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendanti mälu on täis ja see on endiselt salvestusrežiimis, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja seejärel sünkrooni uuesti.';
 }

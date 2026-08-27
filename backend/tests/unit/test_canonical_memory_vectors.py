@@ -2,6 +2,7 @@ import importlib.util
 import os
 import sys
 import types
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -255,6 +256,12 @@ class _PortOverIndex:
         yield from self._i.list(prefix=prefix, namespace=namespace)
 
 
+@contextmanager
+def _allow_external_provider_write(uid, *, firestore_client=None):
+    assert uid
+    yield None
+
+
 def _load_vector_db_with_stubs():
     pinecone_module = types.ModuleType("pinecone")
     setattr(pinecone_module, "Pinecone", lambda api_key: None)
@@ -283,6 +290,7 @@ def _install_recording_vector_db(monkeypatch):
     monkeypatch.setattr(vector_db, "_vector_store", lambda: _PortOverIndex(fake_index))
     monkeypatch.setattr(vector_db, "is_vector_available", lambda: True)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    monkeypatch.setattr(vector_db, "external_write_fence", _allow_external_provider_write)
     sys.modules["database.vector_db"] = vector_db
     return vector_db, fake_index
 
@@ -605,12 +613,15 @@ def test_sync_canonical_memory_vector_swallows_pinecone_failure(monkeypatch):
     monkeypatch.setattr(vector_db, "_vector_store", lambda: _PortOverIndex(_FailingIndex()))
     monkeypatch.setattr(vector_db, "is_vector_available", lambda: True)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    monkeypatch.setattr(vector_db, "external_write_fence", _allow_external_provider_write)
     sys.modules["database.vector_db"] = vector_db
 
-    from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
+    from utils.memory import canonical_vector_sync
 
     hard_failures = []
-    synced = sync_canonical_memory_vector(_item(), on_hard_failure=lambda: hard_failures.append(1))
+    synced = canonical_vector_sync.sync_canonical_memory_vector(
+        _item(), on_hard_failure=lambda: hard_failures.append(1)
+    )
     assert synced is False
     assert hard_failures == [1]
 

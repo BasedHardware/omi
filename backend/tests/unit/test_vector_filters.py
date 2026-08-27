@@ -135,3 +135,18 @@ def test_query_memory_vector_candidates_requires_explicit_archive_mode_for_archi
     vector_db.query_memory_vector_candidates("uid-1", "query text", mode=SearchMode.archive_explicit)
 
     assert {"memory_layer": {"$eq": "archive"}} in fake_index.queries[0]["filter"]["$and"]
+
+
+def test_query_memory_vector_candidates_bounds_provider_top_k(monkeypatch):
+    """Upstream patches the raw ``index``; the port removed it, so the query goes through the seam the
+    other tests in this file already use. The bound itself is what matters: an unbounded ``limit``
+    reaching the provider is a cost and latency incident, and 60 is the ceiling."""
+    vector_db = _load_vector_db_with_stubs()
+    fake_index = _FakeIndex()
+    monkeypatch.setattr(vector_db, "_vector_store", lambda: _PortOverIndex(fake_index))
+    monkeypatch.setattr(vector_db, "is_vector_available", lambda: True)
+    monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+
+    vector_db.query_memory_vector_candidates("uid-1", "query text", limit=10_000)
+
+    assert fake_index.queries[0]["top_k"] == 60
