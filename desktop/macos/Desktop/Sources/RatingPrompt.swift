@@ -269,6 +269,8 @@ final class RatingPromptManager: ObservableObject {
   var isSignedInCheck: () -> Bool = { AuthState.shared.isSignedIn }
 
   func seedFromHistoryIfNeeded() async {
+    // Same launch seam: every caller that seeds also starts the config poll.
+    startConfigPolling()
     // Owner-fenced: the seed reads and WRITES the account that started it.
     // The fetch carries expectedOwnerId, and if the signed-in owner changed
     // while the request was in flight the result is discarded — account B
