@@ -1000,6 +1000,29 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
   }
 
+  // MARK: - Voice-bearing payload fragments (production seams)
+  //
+  // These are the exact fragments the session builders embed, exposed so a
+  // regression test asserts the payload a real session is configured with —
+  // a per-call-site voice string drifting back in (marin) fails the test.
+
+  /// The OpenAI `session.update` output-audio block. cedar: the deep, calm
+  /// male voice of the gpt-realtime family, Charon's counterpart, so a
+  /// provider failover does not change who Omi sounds like mid-conversation.
+  static func openAIOutputAudioConfig() -> [String: Any] {
+    [
+      "format": ["type": "audio/pcm", "rate": 24000],
+      "voice": RealtimeHubVoicePolicy.voiceName(for: .openai),
+    ]
+  }
+
+  /// The Gemini `setup.generationConfig.speechConfig` block. Pin the spoken
+  /// voice — with no speechConfig Gemini picks its own default, which differs
+  /// from the OpenAI hub voice and can change across model revisions.
+  static func geminiSpeechConfig() -> [String: Any] {
+    ["voiceConfig": ["prebuiltVoiceConfig": ["voiceName": RealtimeHubVoicePolicy.voiceName(for: .gemini)]]]
+  }
+
   private func openAISessionPayload() -> [String: Any] {
     var transcription: [String: Any] = ["model": "whisper-1"]
     if let inputTranscriptionLanguage {
@@ -1017,12 +1040,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
             "turn_detection": NSNull(),  // PTT controls turns
             "transcription": transcription,
           ],
-          // cedar: the deep, calm male voice of the gpt-realtime family — the closest
-          // match to the Gemini hub voice (Charon), so a provider failover does not
-          // change who Omi sounds like mid-conversation.
-          "output": [
-            "format": ["type": "audio/pcm", "rate": 24000], "voice": RealtimeHubVoicePolicy.voiceName(for: .openai),
-          ],
+          "output": Self.openAIOutputAudioConfig(),
         ],
         "tools": RealtimeHubTools.openAITools(availableDirectedProviders: availableDirectedProviders),
         "tool_choice": "auto",
@@ -1048,12 +1066,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           "generationConfig": [
             "responseModalities": ["AUDIO"], "temperature": 0.3,
             "mediaResolution": "MEDIA_RESOLUTION_HIGH",
-            // Pin the spoken voice — with no speechConfig Gemini picks its own default,
-            // which differs from the OpenAI hub voice (cedar) and can change across
-            // model revisions. Charon: deep, calm, "informative" — cedar's counterpart.
-            "speechConfig": [
-              "voiceConfig": ["prebuiltVoiceConfig": ["voiceName": RealtimeHubVoicePolicy.voiceName(for: .gemini)]]
-            ],
+            "speechConfig": Self.geminiSpeechConfig(),
           ],
           "systemInstruction": ["parts": [["text": instructions]]],
           "tools": [
