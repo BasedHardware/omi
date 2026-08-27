@@ -78,6 +78,10 @@ final class RatingPromptManager: ObservableObject {
   }
 
   private init() {
+    historyFetch = { owner in
+      try await APIClient.shared.getMessages(
+        limit: 100, expectedOwnerId: owner == "anonymous" ? nil : owner)
+    }
     refresh()
     // Sign-out is an owner transition too: hide immediately, not at the next
     // question. Sign-IN transitions arrive via the owner-keyed task in
@@ -169,7 +173,17 @@ final class RatingPromptManager: ObservableObject {
   /// the ask on their NEXT LAUNCH, not after three more questions: a one-shot
   /// seed of the counter from server chat history. Fetch failure leaves the
   /// marker unset so the next launch retries.
+  /// Injectable for tests; production asks the backend for the owner's own
+  /// messages, owner-asserted end to end (expectedOwnerId). Assigned in init
+  /// (APIClient is actor-isolated, so it cannot be a property default).
+  var historyFetch: ((String) async throws -> [ChatMessageDB])!
+
   func seedFromHistoryIfNeeded() async {
+    // Owner-fenced: the seed reads and WRITES the account that started it.
+    // The fetch carries expectedOwnerId, and if the signed-in owner changed
+    // while the request was in flight the result is discarded — account B
+    // must never be seeded from account A's history.
+    let owner = ownerProvider()
     guard !(defaults.object(forKey: scopedKey("historySeeded")) as? Bool ?? false) else { return }
     guard submittedRating == 0, !isDismissed,
       questionCount < RatingPromptPolicy.questionThreshold
@@ -182,8 +196,9 @@ final class RatingPromptManager: ObservableObject {
     var history: [ChatMessageDB] = []
     var fetched = false
     for attempt in 1...5 {
+      guard ownerProvider() == owner, !Task.isCancelled else { return }
       if AuthState.shared.isSignedIn,
-        let result = try? await APIClient.shared.getMessages(limit: 100)
+        let result = try? await historyFetch(owner)
       {
         history = result
         fetched = true
@@ -192,7 +207,7 @@ final class RatingPromptManager: ObservableObject {
       log("RatingPrompt: history seed attempt \(attempt) not ready, retrying")
       try? await Task.sleep(nanoseconds: 15_000_000_000)
     }
-    guard fetched else { return }
+    guard fetched, ownerProvider() == owner, !Task.isCancelled else { return }
     let asked = history.filter { $0.sender == "human" }.count
     log("RatingPrompt: history seed fetched \(history.count) messages, \(asked) questions")
     if asked >= RatingPromptPolicy.questionThreshold {

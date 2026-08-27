@@ -192,6 +192,50 @@ final class PromptStateAccountScopingTests: XCTestCase {
     await RemotePromptEngine.shared.refreshFromServer()
   }
 
+  func testDelayedHistorySeedFromPreviousOwnerNeverTouchesTheNextAccount() async {
+    // Account A's history fetch parks on a gate; the owner switches to B
+    // before it completes. B's seed state must remain untouched, and the
+    // stale result must be discarded entirely.
+    actor Gate {
+      private var waiter: CheckedContinuation<Void, Never>?
+      func wait() async { await withCheckedContinuation { waiter = $0 } }
+      func open() {
+        waiter?.resume()
+        waiter = nil
+      }
+    }
+    let gate = Gate()
+    RatingPromptManager.shared.historyFetch = { owner in
+      await gate.wait()
+      let json = (1...5).map { "{\"id\":\"m\($0)\",\"sender\":\"human\",\"text\":\"q\"}" }
+      let data = Data("[\(json.joined(separator: ","))]".utf8)
+      return try JSONDecoder().decode([ChatMessageDB].self, from: data)
+    }
+
+    owner = "user-a"
+    let inFlight = Task { await RatingPromptManager.shared.seedFromHistoryIfNeeded() }
+    await Task.yield()
+
+    owner = "user-b"
+    RatingPromptManager.shared.ownerDidChange()
+    await gate.open()
+    await inFlight.value
+
+    // B: untouched — no seeded marker, zero count, prompt not armed.
+    XCTAssertEqual(RatingPromptManager.shared.questionCount, 0)
+    XCTAssertFalse(
+      UserDefaults.standard.object(
+        forKey: ScopedDefaultsKey.ratingPrompt("historySeeded", ownerID: "user-b")) != nil)
+    XCTAssertFalse(RatingPromptManager.shared.isVisible)
+    // A: the stale result was discarded (owner changed mid-flight), so A's
+    // marker is also unset and the NEXT launch under A retries cleanly.
+    XCTAssertFalse(
+      UserDefaults.standard.object(
+        forKey: ScopedDefaultsKey.ratingPrompt("historySeeded", ownerID: "user-a")) != nil)
+
+    RatingPromptManager.shared.historyFetch = { _ in [] }
+  }
+
   func testLegacyGlobalStateMigratesToTheFirstAccountOnly() {
     UserDefaults.standard.set(4, forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
     UserDefaults.standard.set(true, forKey: DefaultsKey.ratingPromptDismissed.rawValue)
