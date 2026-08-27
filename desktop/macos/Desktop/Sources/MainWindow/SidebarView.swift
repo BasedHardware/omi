@@ -8,6 +8,8 @@ struct SidebarView: View {
   @Binding var isCollapsed: Bool
   @Binding var memoryDestinationRawValue: Int
   @ObservedObject var appState: AppState
+  /// False only while legacy Settings covers this kept-alive view in the shared sidebar slot.
+  var ownsShellHitRegion = true
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
 
@@ -250,6 +252,14 @@ struct SidebarView: View {
         }
     }
     .frame(width: currentWidth)
+    // The legacy shell floats this menu beside `PageGlassLane` on a transparent top-level window.
+    // Without its own registered surface the shell passes clicks on these visible controls through
+    // to Finder. Settings disables this kept-alive view's marker and owns the slot itself.
+    .background {
+      if ownsShellHitRegion {
+        InkGlassHitRegionReporter()
+      }
+    }
     .onAppear {
       syncMonitoringState()
       appState.checkAllPermissions()

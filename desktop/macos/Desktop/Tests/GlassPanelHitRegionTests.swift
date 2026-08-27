@@ -94,6 +94,39 @@ final class GlassPanelHitRegionTests: XCTestCase {
       "the band above the panel is air and must not swallow a click aimed at another app")
   }
 
+  /// Legacy Home hosts both its primary navigation and Settings menu beside `PageGlassLane`. The
+  /// slot must keep either visible menu interactive, while the modern panel-hosted Settings menu
+  /// must not add a rectangular region that would reclaim the panel's rounded corner cut-outs.
+  func testLegacySidebarSlotOwnsHitsForBothMenus() throws {
+    defer { teardownWindow() }
+
+    for host in SidebarHost.allCases {
+      let sidebar = mountSidebar(host)
+      let window = try XCTUnwrap(self.window)
+      let inside = NSPoint(x: sidebar.midX, y: sidebar.midY)
+      let beside = NSPoint(x: sidebar.maxX + 40, y: sidebar.midY)
+
+      XCTAssertEqual(
+        InkGlassHitRegions.shared.hasSurfaces(in: window), host.expectsSurface,
+        "\(host): standalone ownership must match the host")
+      XCTAssertEqual(
+        InkGlassHitRegions.shared.containsPoint(inside, in: window), host.expectsSurface,
+        "\(host): every visible legacy menu must keep mouse input")
+      XCTAssertFalse(
+        InkGlassHitRegions.shared.containsPoint(beside, in: window),
+        "the sidebar must not make the transparent space beside it interactive")
+      XCTAssertEqual(
+        ShellClickThroughPolicy.acceptsMouseHit(
+          localPoint: inside,
+          windowSize: window.frame.size,
+          isResizable: false,
+          contentContains: { InkGlassHitRegions.shared.containsPoint($0, in: window) }),
+        host.expectsSurface)
+
+      teardownWindow()
+    }
+  }
+
   /// Mounts one glass panel inset inside a larger transparent window and returns the panel's frame
   /// in window coordinates.
   private func mountPanel(reduceTransparency: Bool) -> NSRect {
@@ -126,6 +159,70 @@ final class GlassPanelHitRegionTests: XCTestCase {
       y: (windowSize.height - panelSize.height) / 2,
       width: panelSize.width,
       height: panelSize.height)
+  }
+
+  private enum SidebarHost: CaseIterable {
+    case panelSettings
+    case legacySettings
+    case legacyNavigation
+
+    var expectsSurface: Bool { self != .panelSettings }
+    var width: CGFloat {
+      self == .legacyNavigation ? 64 : SettingsSidebarMetrics.expandedWidth
+    }
+  }
+
+  private func mountSidebar(_ host: SidebarHost) -> NSRect {
+    let windowSize = NSSize(width: 500, height: 500)
+    let sidebarSize = NSSize(width: host.width, height: windowSize.height)
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: windowSize),
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false)
+    window.isOpaque = false
+    window.backgroundColor = .clear
+
+    let sidebar: AnyView
+    switch host {
+    case .panelSettings:
+      sidebar = AnyView(settingsSidebar(ownsShellHitRegion: false))
+    case .legacySettings:
+      sidebar = AnyView(settingsSidebar(ownsShellHitRegion: true))
+    case .legacyNavigation:
+      sidebar = AnyView(
+        SidebarView(
+          selectedIndex: .constant(SidebarNavItem.dashboard.rawValue),
+          isCollapsed: .constant(true),
+          memoryDestinationRawValue: .constant(MemoryHubDestination.memories.rawValue),
+          appState: AppState()
+        ))
+    }
+
+    let root = HStack(spacing: 0) {
+      sidebar
+      Spacer(minLength: 0)
+    }
+    .frame(width: windowSize.width, height: windowSize.height)
+
+    let hosting = NSHostingView(rootView: root)
+    hosting.frame = NSRect(origin: .zero, size: windowSize)
+    window.contentView = hosting
+    NonintrusiveTestWindow.orderIn(window)
+    hosting.layoutSubtreeIfNeeded()
+    self.window = window
+
+    return NSRect(origin: .zero, size: sidebarSize)
+  }
+
+  private func settingsSidebar(ownsShellHitRegion: Bool) -> some View {
+    SettingsSidebar(
+      selectedSection: .constant(.general),
+      highlightedSettingId: .constant(nil),
+      onBack: {},
+      appState: AppState(),
+      ownsShellHitRegion: ownsShellHitRegion
+    )
   }
 
   private func teardownWindow() {

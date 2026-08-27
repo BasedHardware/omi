@@ -1329,7 +1329,8 @@ struct DesktopHomeView: View {
           selectedIndex: $selectedIndex,
           isCollapsed: $isSidebarCollapsed,
           memoryDestinationRawValue: $memoryDestinationRawValue,
-          appState: appState
+          appState: appState,
+          ownsShellHitRegion: !isInSettings
         )
         .opacity(isInSettings ? 0 : 1)
         .allowsHitTesting(!isInSettings)
@@ -1340,10 +1341,9 @@ struct DesktopHomeView: View {
     }
   }
 
-  /// The settings section list. In the glass shell it belongs *inside* the Settings panel rather than
-  /// beside the whole window: the window has no ground, so a nav column left outside the panel is a
-  /// list of controls floating on the user's wallpaper. It needs no surface of its own — its
-  /// `Ink.rowFill` is already a wash meant to read as a shaded part of the glass it sits on.
+  /// The settings section list. Modern settings hosts it inside the page panel; legacy Home keeps it
+  /// in the old sidebar slot beside that panel. The latter has no glass underneath it, so the sidebar
+  /// must register its own shell hit region or the transparent window passes its clicks through.
   private var settingsSidebar: some View {
     SettingsSidebar(
       selectedSection: $selectedSettingsSection,
@@ -1355,7 +1355,8 @@ struct DesktopHomeView: View {
             ? SidebarNavItem.dashboard.rawValue
             : previousIndexBeforeSettings
         }
-      }, appState: appState)
+      }, appState: appState,
+      ownsShellHitRegion: showsPrimarySidebar)
   }
 
   // Main content area. It paints **no background**: the window has no ground at all
