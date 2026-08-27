@@ -66,4 +66,15 @@ describe('Moonshine web routes', () => {
       }).NEXT_PUBLIC_WS_BASE_URL,
     ).toBe('wss://recording.example.com');
   });
+
+  test('Tailwind content globs include feature modules', async () => {
+    const { default: config } = await import('../tailwind.config.ts');
+    const content = config.content;
+    const globs = Array.isArray(content) ? content : content.files;
+    expect(
+      globs.some(
+        (glob: string) => glob.includes('src/**') || glob.includes('src/features'),
+      ),
+    ).toBe(true);
+  });
 });
