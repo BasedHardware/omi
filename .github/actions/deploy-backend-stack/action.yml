@@ -972,7 +972,10 @@ runs:
         ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
         export ADMIN_KEY
         trap 'unset ADMIN_KEY' EXIT
-        python3 "$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url https://api.omi.dev
+        # api.omi.dev has never resolved (NXDOMAIN), so this smoke could not reach
+        # anything; api.omiapi.com is development's real public API host, matching
+        # the rest of the dev domain family (parakeet/nllb/pusher.omiapi.com).
+        python3 "$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url https://api.omiapi.com
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-
