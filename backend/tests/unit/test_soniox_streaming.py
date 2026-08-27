@@ -85,6 +85,23 @@ def test_consecutive_tokens_from_one_speaker_coalesce():
     assert batch[0]['end'] == pytest.approx(0.8)
 
 
+def test_a_null_duration_still_yields_an_increasing_end_time():
+    """Live tokens carry duration_ms: null, so ends must come from the next start."""
+    captured, _ = _drive(
+        [
+            {
+                'tokens': [
+                    {'text': 'Hello ', 'is_final': True, 'speaker': 1, 'start_ms': 300, 'duration_ms': None},
+                    {'text': 'there', 'is_final': True, 'speaker': 1, 'start_ms': 900, 'duration_ms': None},
+                ]
+            }
+        ]
+    )
+    segment = captured[0][0]
+    assert segment['start'] == pytest.approx(0.3)
+    assert segment['end'] >= segment['start']
+
+
 def test_a_speaker_change_starts_a_new_segment():
     captured, _ = _drive(
         [

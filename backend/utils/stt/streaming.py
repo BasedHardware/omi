@@ -1399,7 +1399,6 @@ class SafeSonioxSocket(STTSocket):
             if not text.strip():
                 continue
             start_ms = int(token.get('start_ms') or 0)
-            duration_ms = int(token.get('duration_ms') or 0)
             start = start_ms / 1000.0
             if self._preseconds and start < self._preseconds:
                 continue
@@ -1409,7 +1408,12 @@ class SafeSonioxSocket(STTSocket):
             except (TypeError, ValueError):
                 speaker_idx = 0
             speaker = f'SPEAKER_{speaker_idx:02d}'
-            end = (start_ms + duration_ms) / 1000.0
+            # Live tokens arrive with duration_ms null, so a segment's end has to come
+            # from the next token's start; the last one falls back to its own start.
+            duration_ms = token.get('duration_ms')
+            end = (start_ms + int(duration_ms)) / 1000.0 if duration_ms else start
+            if segments:
+                segments[-1]['end'] = max(segments[-1]['end'], start - self._preseconds)
             if segments and segments[-1]['speaker'] == speaker:
                 segments[-1]['text'] += text
                 segments[-1]['end'] = end
