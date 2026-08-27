@@ -14,6 +14,12 @@ _MANIFEST = _MODULE['_load_yaml'](_MODULE['DEFAULT_MANIFEST'])
 @pytest.fixture(autouse=True)
 def _reuse_parsed_repo_manifest(monkeypatch):
     monkeypatch.setitem(_MODULE, '_load_yaml', lambda _path: _MANIFEST)
+    # Full-state renderer tests need deploy-time values for every declared job.
+    for env_config in _MANIFEST['environments'].values():
+        for job in (env_config.get('cloud_run', {}).get('jobs') or {}).values():
+            for raw_entry in (job.get('env') or {}).values():
+                if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
+                    monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-value')))
 
 
 def _job_env_block(out: str, job_prefix: str) -> str:

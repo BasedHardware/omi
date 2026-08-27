@@ -41,8 +41,12 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
     for raw_entry in (cloud_run.get('network') or {}).get('flags', {}).values():
         if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
             monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-flag')))
-    for service in (cloud_run.get('services') or {}).values():
-        for raw_entry in (service.get('env') or {}).values():
+    runtime_targets = [
+        *(cloud_run.get('services') or {}).values(),
+        *(cloud_run.get('jobs') or {}).values(),
+    ]
+    for target in runtime_targets:
+        for raw_entry in (target.get('env') or {}).values():
             if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
                 monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-value')))
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='runtime_env_state_test_renderer')
