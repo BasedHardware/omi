@@ -20,6 +20,11 @@ class _Snapshot:
         return self._payload
 
 
+class _DocumentReference:
+    def __init__(self, uid):
+        self.id = uid
+
+
 class _Ref:
     def __init__(self, store, path):
         self.store = store
@@ -63,7 +68,8 @@ class _Query:
     def stream(self):
         rows = list(self.rows)
         if self.field and self.field[0] in ("__name__", "uid") and self.field[1] == ">":
-            rows = [row for row in rows if row.id > self.field[2]]
+            boundary = getattr(self.field[2], "id", self.field[2])
+            rows = [row for row in rows if row.id > boundary]
         rows.sort(key=lambda row: row.id)
         return rows[: self.page_size]
 
@@ -71,9 +77,17 @@ class _Query:
 class _Users:
     def __init__(self, rows):
         self.rows = rows
+        self.queries = []
+        self.requested_documents = []
 
     def where(self, *args, **kwargs):
-        return _Query(self.rows).where(*args, **kwargs)
+        query = _Query(self.rows).where(*args, **kwargs)
+        self.queries.append(query)
+        return query
+
+    def document(self, uid):
+        self.requested_documents.append(uid)
+        return _DocumentReference(uid)
 
 
 class _Db:
@@ -142,6 +156,8 @@ def test_independent_inventory_executes_registered_onboarding_cursor_query(monke
     page = independent.bounded_daily_memory_sweep_uid_inventory(db, limit=2, return_page=True)
     assert isinstance(page, independent.DailySweepUIDInventoryPage)
     assert page.onboarding_uids == ("a",)
+    assert db.users.requested_documents == []
+    assert all(query.field[0] != "__name__" for query in db.users.queries)
 
 
 def test_independent_onboarding_cursor_is_server_side_before_page_limit(monkeypatch):
@@ -163,6 +179,8 @@ def test_independent_onboarding_cursor_is_server_side_before_page_limit(monkeypa
     page = independent.bounded_daily_memory_sweep_uid_inventory(db, limit=2, return_page=True)
 
     assert page.onboarding_uids == ("z-user",)
+    assert db.users.requested_documents == ["m-user", "m-user"]
+    assert all(not isinstance(query.field[2], str) for query in db.users.queries)
 
 
 def test_independent_inventory_commits_only_its_own_fair_cursor_namespace():

@@ -310,19 +310,33 @@ def bounded_daily_memory_sweep_uid_inventory(
             ),
         ):
             try:
-                query: Any = query_spec.build(
-                    users,
-                    {"completed": True, "after_uid": onboarding_cursor},
-                    field_filter_factory=FieldFilter,
-                )
+                if onboarding_cursor:
+                    # Firestore's __name__ operand is a Key, not the document ID
+                    # string. A bare UID is rejected with InvalidArgument before
+                    # any onboarding row can be inventoried.
+                    document_factory = getattr(users, "document", None)
+                    after_uid = document_factory(onboarding_cursor) if callable(document_factory) else onboarding_cursor
+                    query: Any = query_spec.build(
+                        users,
+                        {"completed": True, "after_uid": after_uid},
+                        field_filter_factory=FieldFilter,
+                    )
+                else:
+                    # There is no valid empty document reference. The first page
+                    # needs only the onboarding predicate; later pages add the
+                    # server-side document-ID cursor above.
+                    query = cast(Any, where)(filter=FieldFilter(field_name, "==", True))
             except (TypeError, ValueError):
                 # Keep compatibility with small Firestore fakes and older
                 # client releases that do not accept FieldFilter as a kwarg.
                 query = cast(Any, where)(field_name, "==", True)
-                try:
-                    query = query.where(FieldPath.document_id(), ">", onboarding_cursor)
-                except TypeError:
-                    query = query.where(filter=FieldFilter(FieldPath.document_id(), ">", onboarding_cursor))
+                if onboarding_cursor:
+                    document_factory = getattr(users, "document", None)
+                    after_uid = document_factory(onboarding_cursor) if callable(document_factory) else onboarding_cursor
+                    try:
+                        query = query.where(FieldPath.document_id(), ">", after_uid)
+                    except TypeError:
+                        query = query.where(filter=FieldFilter(FieldPath.document_id(), ">", after_uid))
             try:
                 query = query.order_by("__name__")
             except (AttributeError, TypeError):
