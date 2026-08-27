@@ -331,18 +331,23 @@ class TestGeminiKeyNotInUrl:
 
 
 class TestChatQuotaBYOKBypass:
-    @patch('utils.subscription.has_validated_byok_keys', return_value=True)
-    @patch('utils.subscription.get_byok_keys', return_value={'openai': 'sk-user'})
-    @patch('utils.subscription.users_db')
-    @patch('utils.subscription.is_trial_paywalled', return_value=False)
-    def test_enforce_chat_quota_bypasses_for_validated_openai_key(
-        self, _mock_paywalled, mock_users_db, _mock_keys, _mock_validated
-    ):
-        mock_users_db.is_byok_active.return_value = True
-        from utils.subscription import enforce_chat_quota
+    def test_enforce_chat_quota_bypasses_for_validated_openai_key(self, monkeypatch):
+        from utils import subscription
 
-        enforce_chat_quota('byok-user-uid')
-        mock_users_db.is_byok_active.assert_called_once_with('byok-user-uid', firestore_client=None)
+        is_byok_active = MagicMock(return_value=True)
+        quota_snapshot = MagicMock()
+        monkeypatch.setattr(subscription.users_db, 'is_byok_active', is_byok_active)
+        monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *args, **kwargs: False)
+        monkeypatch.setattr(subscription, 'get_byok_uid', lambda: 'byok-user-uid')
+        monkeypatch.setattr(subscription, 'has_validated_byok_keys', lambda: True)
+        monkeypatch.setattr(subscription, 'get_cached_byok_state', lambda _uid: {'fingerprints': {'openai': 'fp'}})
+        monkeypatch.setattr(subscription, 'get_byok_key', lambda provider: 'sk-user' if provider == 'openai' else None)
+        monkeypatch.setattr(subscription, 'get_chat_quota_snapshot', quota_snapshot)
+
+        subscription.enforce_chat_quota('byok-user-uid')
+
+        is_byok_active.assert_called_once_with('byok-user-uid', firestore_client=None)
+        quota_snapshot.assert_not_called()
 
     @patch('utils.byok.get_byok_key', return_value=None)
     @patch('utils.subscription.users_db')
@@ -828,21 +833,42 @@ class TestRequestHasLLMByokKey:
     def test_accepts_openrouter_and_gemini(self, monkeypatch):
         from utils import subscription
 
+        monkeypatch.setattr(subscription, 'get_byok_uid', lambda: 'byok-user')
         monkeypatch.setattr(subscription, 'has_validated_byok_keys', lambda: True)
-        monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'openrouter': 'or-key'})
+
+        monkeypatch.setattr(
+            subscription, 'get_cached_byok_state', lambda _uid: {'fingerprints': {'openrouter': 'openrouter-fp'}}
+        )
+        monkeypatch.setattr(
+            subscription, 'get_byok_key', lambda provider: 'or-key' if provider == 'openrouter' else None
+        )
         assert subscription.request_has_llm_byok_key() is True
-        monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'gemini': 'gm-key'})
+
+        monkeypatch.setattr(
+            subscription, 'get_cached_byok_state', lambda _uid: {'fingerprints': {'gemini': 'gemini-fp'}}
+        )
+        monkeypatch.setattr(subscription, 'get_byok_key', lambda provider: 'gm-key' if provider == 'gemini' else None)
         assert subscription.request_has_llm_byok_key() is True
-        monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'deepgram': 'dg-key'})
+
+        monkeypatch.setattr(
+            subscription, 'get_cached_byok_state', lambda _uid: {'fingerprints': {'deepgram': 'deepgram-fp'}}
+        )
+        monkeypatch.setattr(subscription, 'get_byok_key', lambda provider: 'dg-key' if provider == 'deepgram' else None)
         assert subscription.request_has_llm_byok_key() is False
 
     def test_requires_validated_context(self, monkeypatch):
         from utils import subscription
 
+        cached_state = MagicMock(return_value={'fingerprints': {'openai': 'openai-fp'}})
+        get_key = MagicMock(return_value='sk')
+        monkeypatch.setattr(subscription, 'get_byok_uid', lambda: 'byok-user')
         monkeypatch.setattr(subscription, 'has_validated_byok_keys', lambda: False)
-        monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'openai': 'sk'})
-        assert subscription.request_has_llm_byok_key() is False
+        monkeypatch.setattr(subscription, 'get_cached_byok_state', cached_state)
+        monkeypatch.setattr(subscription, 'get_byok_key', get_key)
 
+        assert subscription.request_has_llm_byok_key() is False
+        cached_state.assert_not_called()
+        get_key.assert_not_called()
 
     def test_quota_snapshot_accepts_required_llm_provider(self, monkeypatch):
         from models.users import PlanType
@@ -1168,15 +1194,22 @@ class TestMiddlewareIsolation:
 
 
 class TestQuotaBoundaryTests:
-    @patch('utils.subscription.has_validated_byok_keys', return_value=True)
-    @patch('utils.subscription.get_byok_keys', return_value={'anthropic': 'sk-ant-user'})
-    @patch('utils.subscription.users_db')
-    def test_chat_quota_bypasses_with_validated_anthropic_key_only(self, mock_users_db, _mock_keys, _mock_validated):
+    def test_chat_quota_bypasses_with_validated_anthropic_key_only(self, monkeypatch):
         """Anthropic-only BYOK should also bypass chat quota."""
-        mock_users_db.is_byok_active.return_value = True
-        from utils.subscription import enforce_chat_quota
+        from utils import subscription
 
-        enforce_chat_quota('anthropic-byok-uid')  # Should not raise
+        monkeypatch.setattr(subscription.users_db, 'is_byok_active', lambda _uid, firestore_client=None: True)
+        monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *args, **kwargs: False)
+        monkeypatch.setattr(subscription, 'get_byok_uid', lambda: 'anthropic-byok-uid')
+        monkeypatch.setattr(subscription, 'has_validated_byok_keys', lambda: True)
+        monkeypatch.setattr(
+            subscription, 'get_cached_byok_state', lambda _uid: {'fingerprints': {'anthropic': 'anthropic-fp'}}
+        )
+        monkeypatch.setattr(
+            subscription, 'get_byok_key', lambda provider: 'sk-ant-user' if provider == 'anthropic' else None
+        )
+
+        subscription.enforce_chat_quota('anthropic-byok-uid')  # Should not raise
 
     @patch('utils.byok.get_byok_key', return_value=None)
     @patch('utils.subscription.users_db')
@@ -1279,15 +1312,17 @@ class TestBYOKFingerprintValidation:
 
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
-    def test_legacy_enrollment_allows_a_capability_scoped_header(self, mock_get_state):
-        """BYOK-active user sends some headers but missing a provider → 403."""
-        from utils.byok import _byok_ctx, validate_byok_request
+    def test_single_provider_enrollment_accepts_its_only_header(self, mock_get_state):
+        """A capability-scoped enrollment only requires the provider it enrolled."""
+        from utils.byok import _byok_ctx, get_byok_keys, validate_byok_request
 
-        mock_get_state.return_value = self._mock_byok_state()
-        # Send only openai key — this is a broken BYOK attempt (partial headers)
+        mock_get_state.return_value = self._mock_byok_state(
+            fingerprints={'openai': self._enrolled_fingerprints['openai']}
+        )
         token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
         try:
-            validate_byok_request('byok-uid')
+            validate_byok_request('single-provider-uid')
+            assert get_byok_keys() == {'openai': self._FAKE_KEY_OPENAI}
         finally:
             _byok_ctx.reset(token)
 
@@ -1380,16 +1415,15 @@ class TestBYOKFingerprintValidation:
 
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
-    def test_empty_fingerprint_entry_does_not_pass_a_key(self, mock_get_state):
+    def test_empty_fingerprint_entry_rejects_request_key(self, mock_get_state):
         """An enrolled provider with an empty/null stored fingerprint must NOT
         pass an unverified request key into the context.
 
-        The reviewer's gate: filter on a VALID stored fingerprint, not mere
-        provider membership. A request key for a provider whose stored
-        fingerprint is empty/null must be dropped exactly like an unenrolled
-        provider, so it never reaches the provider clients.
+        An empty enrollment cannot vouch for the request key, so the request
+        fails closed rather than silently falling back to an Omi-paid key.
         """
-        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+        from fastapi import HTTPException
+        from utils.byok import _byok_ctx, validate_byok_request
 
         state = self._mock_byok_state()
         state['fingerprints']['openai'] = ''
@@ -1398,24 +1432,28 @@ class TestBYOKFingerprintValidation:
         keys = dict(self._valid_request_keys)
         token = _byok_ctx.set(keys)
         try:
-            validate_byok_request('empty-fp-uid')
-            exposed = get_byok_keys()
-            assert 'openai' not in exposed, "empty-fingerprint openai key must not be used"
-            assert set(exposed) == set(state['fingerprints']) - {'openai'}
+            with pytest.raises(HTTPException) as exc_info:
+                validate_byok_request('empty-fp-uid')
+            assert exc_info.value.status_code == 403
+            assert exc_info.value.detail == 'BYOK key fingerprint mismatch for provider: openai'
         finally:
             _byok_ctx.reset(token)
 
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
-    def test_partial_headers_when_byok_active_stay_available(self, mock_get_state):
+    def test_partial_headers_when_byok_active_raise_403(self, mock_get_state):
         """BYOK-active user sending SOME but not all headers → 403 (incomplete BYOK attempt)."""
+        from fastapi import HTTPException
         from utils.byok import _byok_ctx, validate_byok_request
 
         mock_get_state.return_value = self._mock_byok_state()
         # Send only openai key, missing the rest — this is a broken BYOK attempt, not mobile
         token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
         try:
-            validate_byok_request('byok-uid')
+            with pytest.raises(HTTPException) as exc_info:
+                validate_byok_request('byok-uid')
+            assert exc_info.value.status_code == 403
+            assert exc_info.value.detail == 'BYOK key header missing for enrolled provider: anthropic'
         finally:
             _byok_ctx.reset(token)
 
@@ -1491,7 +1529,7 @@ class TestBYOKFingerprintValidation:
         token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
         try:
             error = validate_byok_websocket('byok-uid')
-            assert error is None
+            assert error == 'BYOK key header missing for enrolled provider: anthropic'
         finally:
             _byok_ctx.reset(token)
 
