@@ -62,6 +62,9 @@ enum DefaultsKey: String {
   case ratingPromptQuestionCount = "ratingPromptQuestionCount"
   case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"
   case ratingPromptDismissed = "ratingPromptDismissed"
+  /// One-shot marker: the question counter was seeded from server chat
+  /// history so long-time users see the rating ask without three NEW questions.
+  case ratingPromptHistorySeeded = "ratingPromptHistorySeeded"
   case screenAnalysisAutoStartFixedV2 = "screenAnalysisAutoStartFixed_v2"
   case screenAnalysisAutoStartFixedV3 = "screenAnalysisAutoStartFixed_v3"
   case homeOmiDeviceAccountHistory = "home-omi-device-account-history"

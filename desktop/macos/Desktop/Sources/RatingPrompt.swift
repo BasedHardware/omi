@@ -113,10 +113,50 @@ final class RatingPromptManager: ObservableObject {
     refresh()
   }
 
+  /// Users who already asked 3+ questions before this build ship must see
+  /// the ask on their NEXT LAUNCH, not after three more questions: a one-shot
+  /// seed of the counter from server chat history. Fetch failure leaves the
+  /// marker unset so the next launch retries.
+  func seedFromHistoryIfNeeded() async {
+    guard !defaults.bool(forKey: DefaultsKey.ratingPromptHistorySeeded.rawValue) else { return }
+    guard submittedRating == 0, !isDismissed,
+      questionCount < RatingPromptPolicy.questionThreshold
+    else {
+      defaults.set(true, forKey: DefaultsKey.ratingPromptHistorySeeded.rawValue)
+      return
+    }
+    // Launch timing: auth/session may not be ready at first .task — retry a
+    // few times before deferring to the next launch (marker stays unset).
+    var history: [ChatMessageDB] = []
+    var fetched = false
+    for attempt in 1...5 {
+      if AuthState.shared.isSignedIn,
+        let result = try? await APIClient.shared.getMessages(limit: 100)
+      {
+        history = result
+        fetched = true
+        break
+      }
+      log("RatingPrompt: history seed attempt \(attempt) not ready, retrying")
+      try? await Task.sleep(nanoseconds: 15_000_000_000)
+    }
+    guard fetched else { return }
+    let asked = history.filter { $0.sender == "human" }.count
+    log("RatingPrompt: history seed fetched \(history.count) messages, \(asked) questions")
+    if asked >= RatingPromptPolicy.questionThreshold {
+      defaults.set(
+        RatingPromptPolicy.questionThreshold,
+        forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+    }
+    defaults.set(true, forKey: DefaultsKey.ratingPromptHistorySeeded.rawValue)
+    refresh()
+  }
+
   /// Automation/testing hook: rewind the persisted state so the real trigger
   /// path can be exercised repeatedly on a dev bundle.
   func resetForTesting() {
     thankYouRating = nil
+    defaults.removeObject(forKey: DefaultsKey.ratingPromptHistorySeeded.rawValue)
     defaults.removeObject(forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
     defaults.removeObject(forKey: DefaultsKey.ratingPromptSubmittedRating.rawValue)
     defaults.removeObject(forKey: DefaultsKey.ratingPromptDismissed.rawValue)
@@ -133,7 +173,12 @@ final class RatingPromptManager: ObservableObject {
       submittedRating: submittedRating,
       dismissed: isDismissed,
       remotelyDisabled: isRemotelyDisabled)
-    RemotePromptEngine.shared.builtInAskChanged()
+    // Deferred: refresh() runs inside this singleton's own `static let`
+    // initialization, and RemotePromptEngine.builtInAskChanged() reads
+    // RatingPromptManager.shared back — a synchronous call would re-enter the
+    // still-initializing static let (startup deadlock). The async hop runs
+    // after init completes.
+    Task { @MainActor in RemotePromptEngine.shared.builtInAskChanged() }
     // While the prompt is on screen, poll for a remote disable so an active
     // kill switch takes effect within minutes, not at the next app launch.
     if isVisible, flagPollTask == nil {

@@ -1156,7 +1156,10 @@ struct DesktopHomeView: View {
         RatingPromptBar()
         RemotePromptBar()
       }
-      .task { RemotePromptEngine.shared.start() }
+      .task {
+        RemotePromptEngine.shared.start()
+        await RatingPromptManager.shared.seedFromHistoryIfNeeded()
+      }
       .overlay {
         if !usesChatFirstShell && showTryAskingPopup {
           let suggestions = PostOnboardingPromptSuggestions.suggestions()
