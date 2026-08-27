@@ -1,7 +1,14 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { getMessages, sendMessageStream, clearMessages as clearMessagesApi, saveRealtimeMessage } from '@/features/chat/api';
+import { useCallback, useMemo } from 'react';
+import { createSignal } from '@tschk/moonshine';
+import { useSignalValue } from '@/lib/signals';
+import {
+  getMessages,
+  sendMessageStream,
+  clearMessages as clearMessagesApi,
+  saveRealtimeMessage,
+} from '@/features/chat/api';
 import type { ClientMessage, MessageChunk, MessageFile } from '@/types/conversation';
 import type { ChatContextInfo } from '@/features/chat/ui/ChatContext';
 import { useRequestOwner } from '@/hooks/useRequestOwner';
@@ -33,76 +40,63 @@ interface UseChatReturn {
   appendRealtimeExchange: (humanText: string, aiText: string) => Promise<void>;
 }
 
+export function createChatStore() {
+  const messages = createSignal<ClientMessage[]>([]);
+  const isLoading = createSignal(false);
+  const isStreaming = createSignal(false);
+  const streamingText = createSignal('');
+  const currentThinking = createSignal('');
+  const error = createSignal<string | null>(null);
+  let historyLoadedKey: string | null = null;
+
+  return {
+    messages,
+    isLoading,
+    isStreaming,
+    streamingText,
+    currentThinking,
+    error,
+    getHistoryLoadedKey: () => historyLoadedKey,
+    setHistoryLoadedKey: (key: string | null) => {
+      historyLoadedKey = key;
+    },
+  };
+}
+
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const { appId, chatSessionId = null } = options;
-
-  const [messages, setMessages] = useState<ClientMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingText, setStreamingText] = useState('');
-  const [currentThinking, setCurrentThinking] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  // Track current app + session to detect changes
-  const currentAppIdRef = useRef(appId);
-  const currentSessionIdRef = useRef(chatSessionId);
-  // Track if we've loaded history for the current app + session
-  const historyLoadedRef = useRef<string | null>(null);
-
-  // A load or a stream belongs to the thread it was started for. Switching
-  // threads mid-flight must not let the previous thread's response land in the
-  // newly-selected one.
+  const store = useMemo(() => createChatStore(), [appId, chatSessionId]);
   const claimRequest = useRequestOwner(`${appId ?? ''}||${chatSessionId ?? ''}`);
 
-  // Reset state when the app or the selected session changes. Switching threads
-  // must clear the transcript: leaving the previous session's messages on
-  // screen reads as though they belong to the newly-selected chat. The
-  // transient stream state goes with it, for the same reason.
-  useEffect(() => {
-    if (
-      currentAppIdRef.current !== appId ||
-      currentSessionIdRef.current !== chatSessionId
-    ) {
-      currentAppIdRef.current = appId;
-      currentSessionIdRef.current = chatSessionId;
-      historyLoadedRef.current = null;
-      setMessages([]);
-      setError(null);
-      setStreamingText('');
-      setCurrentThinking('');
-      setIsStreaming(false);
-      setIsLoading(false);
-    }
-  }, [appId, chatSessionId]);
+  const messages = useSignalValue(store.messages);
+  const isLoading = useSignalValue(store.isLoading);
+  const isStreaming = useSignalValue(store.isStreaming);
+  const streamingText = useSignalValue(store.streamingText);
+  const currentThinking = useSignalValue(store.currentThinking);
+  const error = useSignalValue(store.error);
 
-  /**
-   * Load message history from server
-   */
   const loadHistory = useCallback(async () => {
     const targetKey = `${appId ?? ''}||${chatSessionId ?? ''}`;
-    if (historyLoadedRef.current === targetKey) return;
+    if (store.getHistoryLoadedKey() === targetKey) return;
 
     const isCurrent = claimRequest();
-    setIsLoading(true);
-    setError(null);
+    store.isLoading.set(true);
+    store.error.set(null);
 
     try {
       const history = await getMessages(appId, chatSessionId);
       if (!isCurrent()) return;
-      setMessages([...history].reverse());
-      historyLoadedRef.current = targetKey;
+      store.messages.set([...history].reverse());
+      store.setHistoryLoadedKey(targetKey);
     } catch (err) {
       if (!isCurrent()) return;
       console.error('Failed to load message history:', err);
-      setError('Failed to load message history');
+      store.error.set('Failed to load message history');
     } finally {
-      if (isCurrent()) setIsLoading(false);
+      if (isCurrent()) store.isLoading.set(false);
     }
-  }, [appId, chatSessionId, claimRequest]);
+  }, [appId, chatSessionId, claimRequest, store]);
 
-  /**
-   * Send a message and handle streaming response
-   */
   const sendMessage = useCallback(
     async (
       text: string,
@@ -110,17 +104,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       context?: ChatContextInfo | null,
       optimisticFiles?: MessageFile[],
     ) => {
-      if ((!text.trim() && !fileIds?.length) || isStreaming) return;
+      if ((!text.trim() && !fileIds?.length) || store.isStreaming.peek()) return;
 
       const isCurrent = claimRequest();
-      setError(null);
-      setIsStreaming(true);
-      setStreamingText('');
-      setCurrentThinking('');
+      store.error.set(null);
+      store.isStreaming.set(true);
+      store.streamingText.set('');
+      store.currentThinking.set('');
 
-      // Add user message to the list immediately (optimistic update).
-      // Client-only fields (`ask_for_nps`) live on ClientMessage; backend REST
-      // authority for messages is the generated `Message` schema.
       const createdAt = new Date().toISOString();
       const uploadedFilesById = new Map(
         optimisticFiles?.map((file) => [file.id, file]) ?? [],
@@ -146,7 +137,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         ask_for_nps: false,
       };
 
-      setMessages((prev) => [...prev, userMessage]);
+      store.messages.set((prev) => [...prev, userMessage]);
 
       let accumulatedText = '';
 
@@ -154,35 +145,30 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         await sendMessageStream(
           text.trim(),
           (chunk: MessageChunk) => {
-            // Chunks that arrive after the reader moved to another thread
-            // belong to the thread they were requested for, not this one.
             if (!isCurrent()) return;
             switch (chunk.type) {
               case 'think':
-                setCurrentThinking((prev) => prev + chunk.text);
+                store.currentThinking.set((prev) => prev + chunk.text);
                 break;
 
               case 'data':
                 accumulatedText += chunk.text;
-                setStreamingText(accumulatedText);
+                store.streamingText.set(accumulatedText);
                 break;
 
               case 'done':
-                // Replace streaming text with final message
                 if (chunk.message) {
-                  setMessages((prev) => [...prev, chunk.message!]);
+                  store.messages.set((prev) => [...prev, chunk.message!]);
                 }
-                setStreamingText('');
-                setCurrentThinking('');
+                store.streamingText.set('');
+                store.currentThinking.set('');
                 break;
 
               case 'message':
-                // Handle related memory messages if needed
-                // chunk.message contains related memory data
                 break;
 
               case 'error':
-                setError(chunk.text);
+                store.error.set(chunk.text);
                 break;
             }
           },
@@ -191,9 +177,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       } catch (err) {
         if (!isCurrent()) return;
         console.error('Failed to send message:', err);
-        setError(err instanceof Error ? err.message : 'Failed to send message');
+        store.error.set(err instanceof Error ? err.message : 'Failed to send message');
 
-        // If we have accumulated text, add it as a partial message
         if (accumulatedText) {
           const partialMessage: ClientMessage = {
             id: `error-${Date.now()}`,
@@ -206,39 +191,36 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             memories: [],
             ask_for_nps: false,
           };
-          setMessages((prev) => [...prev, partialMessage]);
+          store.messages.set((prev) => [...prev, partialMessage]);
         }
       } finally {
         if (isCurrent()) {
-          setIsStreaming(false);
-          setStreamingText('');
+          store.isStreaming.set(false);
+          store.streamingText.set('');
         }
       }
     },
-    [appId, chatSessionId, isStreaming, claimRequest],
+    [appId, chatSessionId, claimRequest, store],
   );
 
-  /**
-   * Clear all message history
-   */
   const clearHistory = useCallback(async () => {
     const isCurrent = claimRequest();
-    setIsLoading(true);
-    setError(null);
+    store.isLoading.set(true);
+    store.error.set(null);
 
     try {
       await clearMessagesApi(appId, chatSessionId);
       if (!isCurrent()) return;
-      setMessages([]);
-      historyLoadedRef.current = null;
+      store.messages.set([]);
+      store.setHistoryLoadedKey(null);
     } catch (err) {
       if (!isCurrent()) return;
       console.error('Failed to clear messages:', err);
-      setError('Failed to clear message history');
+      store.error.set('Failed to clear message history');
     } finally {
-      if (isCurrent()) setIsLoading(false);
+      if (isCurrent()) store.isLoading.set(false);
     }
-  }, [appId, chatSessionId, claimRequest]);
+  }, [appId, chatSessionId, claimRequest, store]);
 
   const appendRealtimeExchange = useCallback(
     async (humanText: string, aiText: string) => {
@@ -264,8 +246,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         app_id: appId,
       }));
 
-      setMessages((current) => [...current, ...optimistic]);
-      setError(null);
+      store.messages.set((current) => [...current, ...optimistic]);
+      store.error.set(null);
 
       try {
         for (const message of optimistic) {
@@ -279,11 +261,11 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         }
       } catch (err) {
         console.error('Failed to save live conversation:', err);
-        if (isCurrent()) setError('Live conversation was not saved to chat history');
+        if (isCurrent()) store.error.set('Live conversation was not saved to chat history');
         throw err;
       }
     },
-    [appId, chatSessionId, claimRequest],
+    [appId, chatSessionId, claimRequest, store],
   );
 
   return {

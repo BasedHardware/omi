@@ -1,9 +1,11 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
+import { createSignal } from '@tschk/moonshine';
 import { getGoalAdvice, getGoalHistory } from '@/features/goals/api';
 import { useAsyncResource } from '@/hooks/useAsyncResource';
 import { useRequestOwner } from '@/hooks/useRequestOwner';
+import { useSignalValue } from '@/lib/signals';
 import type { GoalHistoryEntry } from '@/types/goals';
 
 export interface UseGoalDetailReturn {
@@ -18,12 +20,20 @@ export interface UseGoalDetailReturn {
 
 const NO_HISTORY: GoalHistoryEntry[] = [];
 
+export function createGoalAdviceStore() {
+  const advice = createSignal<string | null>(null);
+  const loading = createSignal(false);
+  const error = createSignal<string | null>(null);
+  return { advice, loading, error };
+}
+
 /**
  * History for one goal, plus advice fetched only on demand.
  *
  * Advice is an LLM call behind a server-side rate limit, so it never runs on
- * open — only when the user asks for it. It is therefore plain state rather
- * than a resource, which would fetch eagerly.
+ * open — only when the user asks for it. A new store per goal id drops in-flight
+ * writes the way `useRequestOwner` does: the previous goal's response cannot
+ * land under the newly selected title.
  */
 export function useGoalDetail(goalId: string | null): UseGoalDetailReturn {
   const history = useAsyncResource(
@@ -32,60 +42,38 @@ export function useGoalDetail(goalId: string | null): UseGoalDetailReturn {
     { fallbackMessage: 'Failed to load history' },
   );
 
-  const [advice, setAdvice] = useState<string | null>(null);
-  const [adviceLoading, setAdviceLoading] = useState(false);
-  const [adviceError, setAdviceError] = useState<string | null>(null);
-  const [adviceGoalId, setAdviceGoalId] = useState<string | null>(goalId);
-
-  // Advice belongs to the goal it was requested for; drop it when the
-  // selection changes rather than showing it under a new title. The in-flight
-  // request goes with it: the new goal starts idle, not stuck behind the old
-  // goal's pending call.
-  if (goalId !== adviceGoalId) {
-    setAdviceGoalId(goalId);
-    setAdvice(null);
-    setAdviceError(null);
-    setAdviceLoading(false);
-  }
-
+  const store = useMemo(() => createGoalAdviceStore(), [goalId]);
   const claimRequest = useRequestOwner(goalId);
+
+  const advice = useSignalValue(store.advice);
+  const adviceLoading = useSignalValue(store.loading);
+  const adviceError = useSignalValue(store.error);
 
   const requestAdvice = useCallback(async () => {
     if (!goalId) return;
     const isCurrent = claimRequest();
-    setAdviceLoading(true);
-    setAdviceError(null);
+    store.loading.set(true);
+    store.error.set(null);
     try {
       const result = await getGoalAdvice(goalId);
       if (!isCurrent()) return;
-      setAdvice(result);
+      store.advice.set(result);
     } catch (err) {
       if (!isCurrent()) return;
       console.error('Failed to load goal advice:', err);
-      setAdviceError(err instanceof Error ? err.message : 'Failed to load advice');
+      store.error.set(err instanceof Error ? err.message : 'Failed to load advice');
     } finally {
-      if (isCurrent()) setAdviceLoading(false);
+      if (isCurrent()) store.loading.set(false);
     }
-  }, [goalId, claimRequest]);
+  }, [goalId, claimRequest, store]);
 
-  return useMemo(
-    () => ({
-      history: history.data ?? NO_HISTORY,
-      historyLoading: history.loading,
-      historyError: history.error,
-      advice,
-      adviceLoading,
-      adviceError,
-      requestAdvice,
-    }),
-    [
-      history.data,
-      history.loading,
-      history.error,
-      advice,
-      adviceLoading,
-      adviceError,
-      requestAdvice,
-    ],
-  );
+  return {
+    history: history.data ?? NO_HISTORY,
+    historyLoading: history.loading,
+    historyError: history.error,
+    advice,
+    adviceLoading,
+    adviceError,
+    requestAdvice,
+  };
 }

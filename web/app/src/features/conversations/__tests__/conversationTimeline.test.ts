@@ -6,6 +6,7 @@ import {
   dayKeyOf,
   dayLabel,
   flattenTimelineItems,
+  groupRecapsByMonth,
   parseLocalDay,
   selectionFromSearchParams,
 } from '../model';
@@ -207,5 +208,17 @@ describe('selectionFromSearchParams', () => {
 
   it('selects a conversation when only id is set', () => {
     expect(selectionFromSearchParams('c1', null)).toEqual({ kind: 'conversation', id: 'c1' });
+  });
+});
+
+describe('groupRecapsByMonth', () => {
+  it('groups by local calendar month', () => {
+    const grouped = groupRecapsByMonth([
+      recap('jan', '2025-01-15'),
+      recap('feb', '2025-02-01'),
+      recap('jan-2', '2025-01-02'),
+    ]);
+    expect(Object.keys(grouped)).toEqual(['January 2025', 'February 2025']);
+    expect(grouped['January 2025']?.map((item) => item.id)).toEqual(['jan', 'jan-2']);
   });
 });

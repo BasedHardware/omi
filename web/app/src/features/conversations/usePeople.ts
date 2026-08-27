@@ -1,7 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { getPeople, createPerson, updatePersonName, deletePerson } from '@/features/conversations/api';
+import { useCallback, useEffect, useMemo } from 'react';
+import { createSignal } from '@tschk/moonshine';
+import { useSignalValue } from '@/lib/signals';
+import {
+  getPeople,
+  createPerson,
+  updatePersonName,
+  deletePerson,
+} from '@/features/conversations/api';
 import type { Person } from '@/types/user';
 
 interface UsePeopleReturn {
@@ -14,75 +21,125 @@ interface UsePeopleReturn {
   removePerson: (personId: string) => Promise<boolean>;
 }
 
-/**
- * Hook to manage people (speakers) for transcript identification
- */
-export function usePeople(): UsePeopleReturn {
-  const [people, setPeople] = useState<Person[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function messageFor(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
 
-  const fetchPeople = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+function sortPeople(people: Person[]): Person[] {
+  return [...people].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function createPeopleStore() {
+  const people = createSignal<Person[]>([]);
+  const loading = createSignal(true);
+  const error = createSignal<string | null>(null);
+  const mutationTails = new Map<string, Promise<void>>();
+
+  const enqueueMutation = <T>(id: string, mutation: () => Promise<T>): Promise<T> => {
+    const previous = mutationTails.get(id);
+    const result = previous ? previous.then(mutation) : mutation();
+    const tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    mutationTails.set(id, tail);
+    void tail.then(() => {
+      if (mutationTails.get(id) === tail) mutationTails.delete(id);
+    });
+    return result;
+  };
+
+  const load = async () => {
+    loading.set(true);
     try {
-      const data = await getPeople();
-      // Sort alphabetically by name
-      setPeople(data.sort((a, b) => a.name.localeCompare(b.name)));
+      people.set(sortPeople(await getPeople()));
+      error.set(null);
     } catch (err) {
       console.error('Failed to fetch people:', err);
-      setError('Failed to load people');
+      error.set('Failed to load people');
     } finally {
-      setLoading(false);
+      loading.set(false);
     }
-  }, []);
+  };
 
-  useEffect(() => {
-    fetchPeople();
-  }, [fetchPeople]);
-
-  const addPerson = useCallback(async (name: string): Promise<Person | null> => {
+  const add = async (name: string): Promise<Person | null> => {
     try {
-      const newPerson = await createPerson(name);
-      setPeople(prev => [...prev, newPerson].sort((a, b) => a.name.localeCompare(b.name)));
-      return newPerson;
+      const created = await createPerson(name);
+      people.set((current) => sortPeople([...current, created]));
+      error.set(null);
+      return created;
     } catch (err) {
       console.error('Failed to create person:', err);
+      error.set(messageFor(err, 'Failed to create person'));
       return null;
     }
-  }, []);
+  };
 
-  const updatePerson = useCallback(async (personId: string, name: string): Promise<boolean> => {
-    try {
-      await updatePersonName(personId, name);
-      setPeople(prev =>
-        prev
-          .map(p => (p.id === personId ? { ...p, name } : p))
-          .sort((a, b) => a.name.localeCompare(b.name))
+  const update = (personId: string, name: string): Promise<boolean> =>
+    enqueueMutation(personId, async () => {
+      const previous = people.peek().find((person) => person.id === personId);
+      if (!previous) return false;
+      people.set((current) =>
+        sortPeople(current.map((person) => (person.id === personId ? { ...person, name } : person))),
       );
-      return true;
-    } catch (err) {
-      console.error('Failed to update person:', err);
-      return false;
-    }
-  }, []);
+      try {
+        await updatePersonName(personId, name);
+        error.set(null);
+        return true;
+      } catch (err) {
+        console.error('Failed to update person:', err);
+        people.set((current) =>
+          current.map((person) => (person.id === personId ? previous : person)),
+        );
+        error.set(messageFor(err, 'Failed to update person'));
+        return false;
+      }
+    });
 
-  const removePerson = useCallback(async (personId: string): Promise<boolean> => {
-    try {
-      await deletePerson(personId);
-      setPeople(prev => prev.filter(p => p.id !== personId));
-      return true;
-    } catch (err) {
-      console.error('Failed to delete person:', err);
-      return false;
-    }
-  }, []);
+  const remove = (personId: string): Promise<boolean> =>
+    enqueueMutation(personId, async () => {
+      const removed = people.peek().find((person) => person.id === personId);
+      people.set((current) => current.filter((person) => person.id !== personId));
+      try {
+        await deletePerson(personId);
+        error.set(null);
+        return true;
+      } catch (err) {
+        console.error('Failed to delete person:', err);
+        if (removed) {
+          people.set((current) => sortPeople([...current, removed]));
+        }
+        error.set(messageFor(err, 'Failed to delete person'));
+        return false;
+      }
+    });
+
+  return { people, loading, error, load, add, update, remove };
+}
+
+export function usePeople(): UsePeopleReturn {
+  const store = useMemo(() => createPeopleStore(), []);
+
+  useEffect(() => {
+    void store.load();
+  }, [store]);
+
+  const people = useSignalValue(store.people);
+  const loading = useSignalValue(store.loading);
+  const error = useSignalValue(store.error);
+
+  const addPerson = useCallback((name: string) => store.add(name), [store]);
+  const updatePerson = useCallback(
+    (personId: string, name: string) => store.update(personId, name),
+    [store],
+  );
+  const removePerson = useCallback((personId: string) => store.remove(personId), [store]);
 
   return {
     people,
     loading,
     error,
-    refresh: fetchPeople,
+    refresh: store.load,
     addPerson,
     updatePerson,
     removePerson,

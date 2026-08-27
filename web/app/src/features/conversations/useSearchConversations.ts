@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
+import { createSignal } from '@tschk/moonshine';
+import { useSignalValue } from '@/lib/signals';
 import { searchConversations as searchConversationsApi } from '@/features/conversations/api';
 import type { Conversation } from '@/types/conversation';
 
@@ -15,27 +17,31 @@ interface UseSearchConversationsReturn {
   clear: () => void;
 }
 
-export function useSearchConversations(): UseSearchConversationsReturn {
-  const [results, setResults] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
-  const currentQueryRef = useRef<string>('');
+export function createSearchConversationsStore() {
+  const results = createSignal<Conversation[]>([]);
+  const loading = createSignal(false);
+  const error = createSignal<string | null>(null);
+  const currentPage = createSignal(1);
+  const totalPages = createSignal(0);
+  let currentQuery = '';
 
-  const search = useCallback(async (query: string) => {
-    // Don't search if query is empty
+  const reset = () => {
+    results.set([]);
+    currentPage.set(1);
+    totalPages.set(0);
+    currentQuery = '';
+  };
+
+  const search = async (query: string) => {
     if (!query.trim()) {
-      setResults([]);
-      setCurrentPage(1);
-      setTotalPages(0);
-      currentQueryRef.current = '';
+      error.set(null);
+      reset();
       return;
     }
 
-    currentQueryRef.current = query;
-    setLoading(true);
-    setError(null);
+    currentQuery = query;
+    loading.set(true);
+    error.set(null);
 
     try {
       const response = await searchConversationsApi({
@@ -43,60 +49,61 @@ export function useSearchConversations(): UseSearchConversationsReturn {
         page: 1,
         perPage: 20,
       });
-
-      setResults(response.items);
-      setCurrentPage(response.current_page);
-      setTotalPages(response.total_pages);
+      results.set(response.items);
+      currentPage.set(response.current_page);
+      totalPages.set(response.total_pages);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed');
+      error.set(err instanceof Error ? err.message : 'Search failed');
       console.error('Search error:', err);
     } finally {
-      setLoading(false);
+      loading.set(false);
     }
-  }, []);
+  };
 
-  const loadMore = useCallback(async () => {
-    if (loading || currentPage >= totalPages || !currentQueryRef.current) {
+  const loadMore = async () => {
+    if (loading.peek() || currentPage.peek() >= totalPages.peek() || !currentQuery) {
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    loading.set(true);
+    error.set(null);
 
     try {
       const response = await searchConversationsApi({
-        query: currentQueryRef.current,
-        page: currentPage + 1,
+        query: currentQuery,
+        page: currentPage.peek() + 1,
         perPage: 20,
       });
-
-      setResults((prev) => [...prev, ...response.items]);
-      setCurrentPage(response.current_page);
-      setTotalPages(response.total_pages);
+      results.set((prev) => [...prev, ...response.items]);
+      currentPage.set(response.current_page);
+      totalPages.set(response.total_pages);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load more results');
+      error.set(err instanceof Error ? err.message : 'Failed to load more results');
       console.error('Load more error:', err);
     } finally {
-      setLoading(false);
+      loading.set(false);
     }
-  }, [loading, currentPage, totalPages]);
+  };
 
-  const clear = useCallback(() => {
-    setResults([]);
-    setCurrentPage(1);
-    setTotalPages(0);
-    setError(null);
-    currentQueryRef.current = '';
-  }, []);
+  const clear = () => {
+    error.set(null);
+    reset();
+  };
+
+  return { results, loading, error, currentPage, totalPages, search, loadMore, clear };
+}
+
+export function useSearchConversations(): UseSearchConversationsReturn {
+  const store = useMemo(() => createSearchConversationsStore(), []);
 
   return {
-    results,
-    loading,
-    error,
-    currentPage,
-    totalPages,
-    search,
-    loadMore,
-    clear,
+    results: useSignalValue(store.results),
+    loading: useSignalValue(store.loading),
+    error: useSignalValue(store.error),
+    currentPage: useSignalValue(store.currentPage),
+    totalPages: useSignalValue(store.totalPages),
+    search: useCallback((query: string) => store.search(query), [store]),
+    loadMore: useCallback(() => store.loadMore(), [store]),
+    clear: useCallback(() => store.clear(), [store]),
   };
 }

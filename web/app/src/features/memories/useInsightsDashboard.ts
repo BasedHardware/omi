@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { createSignal } from '@tschk/moonshine';
+import { useSignalValue } from '@/lib/signals';
 import type { Memory } from '@/types/conversation';
 
 // Re-export types and constants for external use
@@ -204,18 +206,25 @@ export interface UseInsightsDashboardReturn {
  * - Only processes first 100 memories (reduces computation time)
  * - Returns loading state for smooth UX
  */
+const EMPTY_INSIGHTS: Omit<UseInsightsDashboardReturn, 'computing'> = {
+  summary: null,
+  lifeBalance: [],
+  risingTags: [],
+  fadingTags: [],
+  activityCalendar: [],
+  dayOfWeekPattern: [],
+  hourPattern: [],
+  allTags: [],
+};
+
+export function createInsightsDashboardStore() {
+  const insights = createSignal(EMPTY_INSIGHTS);
+  const computing = createSignal(false);
+  return { insights, computing };
+}
+
 export function useInsightsDashboard(memories: Memory[]): UseInsightsDashboardReturn {
-  const [insights, setInsights] = useState<Omit<UseInsightsDashboardReturn, 'computing'>>({
-    summary: null,
-    lifeBalance: [],
-    risingTags: [],
-    fadingTags: [],
-    activityCalendar: [],
-    dayOfWeekPattern: [],
-    hourPattern: [],
-    allTags: [],
-  });
-  const [computing, setComputing] = useState(false);
+  const store = useMemo(() => createInsightsDashboardStore(), []);
   const workerRef = useRef<Worker | null>(null);
   const memoriesLengthRef = useRef(0);
 
@@ -231,17 +240,8 @@ export function useInsightsDashboard(memories: Memory[]): UseInsightsDashboardRe
     if (!memories || memories.length === 0) {
       // Only update if we previously had memories
       if (memoriesLengthRef.current > 0) {
-        setInsights({
-          summary: null,
-          lifeBalance: [],
-          risingTags: [],
-          fadingTags: [],
-          activityCalendar: [],
-          dayOfWeekPattern: [],
-          hourPattern: [],
-          allTags: [],
-        });
-        setComputing(false);
+        store.insights.set(EMPTY_INSIGHTS);
+        store.computing.set(false);
         memoriesLengthRef.current = 0;
       }
       prevKeyRef.current = memoriesKey;
@@ -261,7 +261,7 @@ export function useInsightsDashboard(memories: Memory[]): UseInsightsDashboardRe
     memoriesLengthRef.current = memories.length;
 
     // Create worker
-    setComputing(true);
+    store.computing.set(true);
 
     const worker = new Worker(new URL('./insights.worker.ts', import.meta.url), {
       type: 'module',
@@ -277,17 +277,17 @@ export function useInsightsDashboard(memories: Memory[]): UseInsightsDashboardRe
       const { type, insights: computedInsights, error } = e.data;
 
       if (type === 'result') {
-        setInsights(computedInsights);
-        setComputing(false);
+        store.insights.set(computedInsights);
+        store.computing.set(false);
       } else if (type === 'error') {
         console.error('Worker error:', error);
-        setComputing(false);
+        store.computing.set(false);
       }
     };
 
     worker.onerror = (error) => {
       console.error('Worker error:', error);
-      setComputing(false);
+      store.computing.set(false);
     };
 
     // Cleanup
@@ -295,7 +295,10 @@ export function useInsightsDashboard(memories: Memory[]): UseInsightsDashboardRe
       worker.terminate();
       workerRef.current = null;
     };
-  }, [memoriesKey]);
+  }, [memoriesKey, store]);
+
+  const insights = useSignalValue(store.insights);
+  const computing = useSignalValue(store.computing);
 
   return {
     ...insights,

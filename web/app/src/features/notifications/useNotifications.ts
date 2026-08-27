@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { createSignal } from '@tschk/moonshine';
 import { useRouter } from '@tschk/moonshine-next/navigation';
+import { useSignalValue } from '@/lib/signals';
 import type {
   OmiNotification,
   NotificationType,
@@ -14,16 +16,13 @@ import {
   getNotificationPermission,
 } from '@/lib/firebase';
 import { registerFCMToken, unregisterFCMToken } from '@/features/notifications/api';
+import { getNotificationRoute } from '@/features/notifications/model';
 import type { MessagePayload } from 'firebase/messaging';
 
-// Constants
 const STORAGE_KEY = 'omi-notifications';
 const MAX_NOTIFICATIONS = 100;
 const FCM_TOKEN_KEY = 'omi-fcm-token';
 
-/**
- * Load notifications from localStorage
- */
 function loadNotifications(): OmiNotification[] {
   if (typeof window === 'undefined') return [];
 
@@ -36,14 +35,10 @@ function loadNotifications(): OmiNotification[] {
   }
 }
 
-/**
- * Save notifications to localStorage
- */
 function saveNotifications(notifications: OmiNotification[]): void {
   if (typeof window === 'undefined') return;
 
   try {
-    // Limit to max notifications
     const trimmed = notifications.slice(0, MAX_NOTIFICATIONS);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
   } catch (error) {
@@ -51,17 +46,11 @@ function saveNotifications(notifications: OmiNotification[]): void {
   }
 }
 
-/**
- * Get stored FCM token
- */
 function getStoredFCMToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem(FCM_TOKEN_KEY);
 }
 
-/**
- * Store FCM token
- */
 function storeFCMToken(token: string | null): void {
   if (typeof window === 'undefined') return;
 
@@ -72,9 +61,6 @@ function storeFCMToken(token: string | null): void {
   }
 }
 
-/**
- * Convert FCM payload to OmiNotification
- */
 function payloadToNotification(payload: MessagePayload): OmiNotification {
   const data = payload.data || {};
   const notification = payload.notification || {};
@@ -91,105 +77,89 @@ function payloadToNotification(payload: MessagePayload): OmiNotification {
   };
 }
 
-/**
- * Get the route for a notification based on its type and navigate_to value
- */
-function getNotificationRoute(notification: OmiNotification): string {
-  const navigateTo = notification.navigate_to;
-
-  if (!navigateTo) return '/';
-
-  // Handle different notification types and their routes
-  if (navigateTo.startsWith('/tasks')) {
-    const taskId = navigateTo.split('/').pop();
-    return taskId ? `/tasks?highlight=${taskId}` : '/tasks';
-  }
-
-  // Recaps merged into Timeline: a recap is a tile in the day it summarises.
-  if (navigateTo.startsWith('/daily-summary')) {
-    const recapId = navigateTo.split('/').pop();
-    return recapId ? `/conversations?recap=${recapId}` : '/conversations';
-  }
-
-  if (navigateTo.startsWith('/recaps')) {
-    const recapId = navigateTo.split('/').pop();
-    return recapId ? `/conversations?recap=${recapId}` : '/conversations';
-  }
-
-  if (navigateTo.startsWith('/conversations')) {
-    return navigateTo.replace('/conversations', '/conversations');
-  }
-
-  if (navigateTo.startsWith('/apps')) {
-    const appId = navigateTo.split('/').pop();
-    return appId ? `/apps?id=${appId}` : '/apps';
-  }
-
-  // Handle /chat/{app_id} routes - use query param for capability-aware routing
-  // MainLayout's ChatAppRouter will check if app has chat capability:
-  // - If yes: open chat panel with that app
-  // - If no: open notification center (notification-only apps like Bitcoin)
-  if (navigateTo.startsWith('/chat/')) {
-    const appId = navigateTo.split('/').pop();
-    return appId ? `/home?chatApp=${appId}` : '/home';
-  }
-
-  return navigateTo;
-}
-
 export interface UseNotificationsReturn {
-  // State
   notifications: OmiNotification[];
   unreadCount: number;
   permission: NotificationPermissionStatus;
   isSupported: boolean;
   isLoading: boolean;
   fcmToken: string | null;
-
-  // Actions
   requestPermission: () => Promise<boolean>;
   markAsRead: (notificationId: string) => void;
   markAllAsRead: () => void;
   clearNotification: (notificationId: string) => void;
   clearAllNotifications: () => void;
-
-  // Navigation
   navigateToNotification: (notification: OmiNotification) => void;
-
-  // Cleanup
   unregisterToken: () => Promise<void>;
-
-  // Debug - send a test notification to verify UI works
   sendTestNotification: () => void;
 }
 
-/**
- * Hook for managing notifications
- */
+export function createNotificationsStore() {
+  const notifications = createSignal<OmiNotification[]>(loadNotifications());
+  const permission = createSignal<NotificationPermissionStatus>('default');
+  const isSupported = createSignal(false);
+  const isLoading = createSignal(true);
+  const fcmToken = createSignal<string | null>(null);
+
+  const commit = (next: OmiNotification[]) => {
+    const trimmed = next.slice(0, MAX_NOTIFICATIONS);
+    notifications.set(trimmed);
+    saveNotifications(trimmed);
+  };
+
+  const prepend = (notification: OmiNotification) => {
+    commit([notification, ...notifications.peek()]);
+  };
+
+  const markAsRead = (notificationId: string) => {
+    commit(
+      notifications.peek().map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
+    );
+  };
+
+  const markAllAsRead = () => {
+    commit(notifications.peek().map((n) => ({ ...n, read: true })));
+  };
+
+  const clearNotification = (notificationId: string) => {
+    commit(notifications.peek().filter((n) => n.id !== notificationId));
+  };
+
+  const clearAll = () => {
+    commit([]);
+  };
+
+  return {
+    notifications,
+    permission,
+    isSupported,
+    isLoading,
+    fcmToken,
+    prepend,
+    markAsRead,
+    markAllAsRead,
+    clearNotification,
+    clearAll,
+  };
+}
+
 export function useNotifications(): UseNotificationsReturn {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<OmiNotification[]>([]);
-  const [permission, setPermission] = useState<NotificationPermissionStatus>('default');
-  const [isSupported, setIsSupported] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [fcmToken, setFcmToken] = useState<string | null>(null);
+  const store = useMemo(() => createNotificationsStore(), []);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
-  // Calculate unread count
+  const notifications = useSignalValue(store.notifications);
+  const permission = useSignalValue(store.permission);
+  const isSupported = useSignalValue(store.isSupported);
+  const isLoading = useSignalValue(store.isLoading);
+  const fcmToken = useSignalValue(store.fcmToken);
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  // Handle foreground message (defined before useEffect that uses it)
   const handleForegroundMessage = useCallback(
     (payload: MessagePayload) => {
       const notification = payloadToNotification(payload);
+      store.prepend(notification);
 
-      setNotifications((prev) => {
-        const updated = [notification, ...prev].slice(0, MAX_NOTIFICATIONS);
-        saveNotifications(updated);
-        return updated;
-      });
-
-      // Show browser notification for foreground messages
       if (Notification.permission === 'granted') {
         const browserNotif = new Notification(notification.title, {
           body: notification.body,
@@ -199,47 +169,36 @@ export function useNotifications(): UseNotificationsReturn {
 
         browserNotif.onclick = () => {
           window.focus();
-          const route = getNotificationRoute(notification);
-          router.push(route);
+          router.push(getNotificationRoute(notification));
           browserNotif.close();
         };
       }
     },
-    [router],
+    [router, store],
   );
 
-  // Initialize on mount
   useEffect(() => {
     async function init() {
-      setIsLoading(true);
+      store.isLoading.set(true);
+      store.notifications.set(loadNotifications());
 
-      // Load stored notifications
-      const stored = loadNotifications();
-      setNotifications(stored);
-
-      // Check basic browser support (without triggering Firebase initialization)
       const hasNotificationSupport =
         typeof window !== 'undefined' &&
         'Notification' in window &&
         'serviceWorker' in navigator;
-      setIsSupported(hasNotificationSupport);
+      store.isSupported.set(hasNotificationSupport);
 
-      // Get current permission status
       const perm = getNotificationPermission();
-      setPermission(perm);
+      store.permission.set(perm);
 
-      // Only try to get token if permission already granted
-      // This will initialize the service worker and messaging
       if (perm === 'granted' && hasNotificationSupport) {
         try {
-          // Get stored token BEFORE getting new one to compare
           const storedToken = getStoredFCMToken();
           const token = await getCurrentFCMToken();
 
           if (token) {
-            setFcmToken(token);
+            store.fcmToken.set(token);
 
-            // Register with backend if token changed or first time
             if (token !== storedToken) {
               try {
                 await registerFCMToken(token);
@@ -249,7 +208,6 @@ export function useNotifications(): UseNotificationsReturn {
               }
             }
 
-            // Subscribe to foreground messages
             const unsubscribe = await onForegroundMessage(handleForegroundMessage);
             if (unsubscribe) {
               unsubscribeRef.current = unsubscribe;
@@ -260,117 +218,73 @@ export function useNotifications(): UseNotificationsReturn {
         }
       }
 
-      setIsLoading(false);
+      store.isLoading.set(false);
     }
 
-    init();
+    void init();
 
     return () => {
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
       }
     };
-  }, [handleForegroundMessage]);
+  }, [handleForegroundMessage, store]);
 
-  // Request notification permission
   const requestPermissionHandler = useCallback(async (): Promise<boolean> => {
-    if (!isSupported) return false;
+    if (!store.isSupported.peek()) return false;
 
-    setIsLoading(true);
+    store.isLoading.set(true);
 
     try {
       const token = await requestNotificationPermission();
 
       if (token) {
-        setFcmToken(token);
+        store.fcmToken.set(token);
         storeFCMToken(token);
-        setPermission('granted');
-
-        // Register token with backend
+        store.permission.set('granted');
         await registerFCMToken(token);
 
-        // Subscribe to foreground messages
         const unsubscribe = await onForegroundMessage(handleForegroundMessage);
         if (unsubscribe) {
           unsubscribeRef.current = unsubscribe;
         }
 
-        setIsLoading(false);
+        store.isLoading.set(false);
         return true;
-      } else {
-        // Permission was denied
-        setPermission(getNotificationPermission());
-        setIsLoading(false);
-        return false;
       }
+
+      store.permission.set(getNotificationPermission());
+      store.isLoading.set(false);
+      return false;
     } catch (error) {
       console.error('Failed to request notification permission:', error);
-      setIsLoading(false);
+      store.isLoading.set(false);
       return false;
     }
-  }, [isSupported, handleForegroundMessage]);
+  }, [handleForegroundMessage, store]);
 
-  // Mark notification as read
-  const markAsRead = useCallback((notificationId: string) => {
-    setNotifications((prev) => {
-      const updated = prev.map((n) =>
-        n.id === notificationId ? { ...n, read: true } : n,
-      );
-      saveNotifications(updated);
-      return updated;
-    });
-  }, []);
-
-  // Mark all as read
-  const markAllAsRead = useCallback(() => {
-    setNotifications((prev) => {
-      const updated = prev.map((n) => ({ ...n, read: true }));
-      saveNotifications(updated);
-      return updated;
-    });
-  }, []);
-
-  // Clear a notification
-  const clearNotification = useCallback((notificationId: string) => {
-    setNotifications((prev) => {
-      const updated = prev.filter((n) => n.id !== notificationId);
-      saveNotifications(updated);
-      return updated;
-    });
-  }, []);
-
-  // Clear all notifications
-  const clearAllNotifications = useCallback(() => {
-    setNotifications([]);
-    saveNotifications([]);
-  }, []);
-
-  // Navigate to notification
   const navigateToNotification = useCallback(
     (notification: OmiNotification) => {
-      markAsRead(notification.id);
-      const route = getNotificationRoute(notification);
-      router.push(route);
+      store.markAsRead(notification.id);
+      router.push(getNotificationRoute(notification));
     },
-    [router, markAsRead],
+    [router, store],
   );
 
-  // Unregister token (for logout)
   const unregisterToken = useCallback(async () => {
-    const token = fcmToken || getStoredFCMToken();
+    const token = store.fcmToken.peek() || getStoredFCMToken();
     if (token) {
       await unregisterFCMToken(token);
       storeFCMToken(null);
-      setFcmToken(null);
+      store.fcmToken.set(null);
     }
 
     if (unsubscribeRef.current) {
       unsubscribeRef.current();
       unsubscribeRef.current = null;
     }
-  }, [fcmToken]);
+  }, [store]);
 
-  // Send a test notification (for debugging)
   const sendTestNotification = useCallback(() => {
     const testNotification: OmiNotification = {
       id: `test-${Date.now()}`,
@@ -381,13 +295,8 @@ export function useNotifications(): UseNotificationsReturn {
       read: false,
     };
 
-    setNotifications((prev) => {
-      const updated = [testNotification, ...prev].slice(0, MAX_NOTIFICATIONS);
-      saveNotifications(updated);
-      return updated;
-    });
+    store.prepend(testNotification);
 
-    // Also show a browser notification
     if (Notification.permission === 'granted') {
       const browserNotif = new Notification(testNotification.title, {
         body: testNotification.body,
@@ -400,7 +309,7 @@ export function useNotifications(): UseNotificationsReturn {
         browserNotif.close();
       };
     }
-  }, []);
+  }, [store]);
 
   return {
     notifications,
@@ -410,10 +319,10 @@ export function useNotifications(): UseNotificationsReturn {
     isLoading,
     fcmToken,
     requestPermission: requestPermissionHandler,
-    markAsRead,
-    markAllAsRead,
-    clearNotification,
-    clearAllNotifications,
+    markAsRead: useCallback((id: string) => store.markAsRead(id), [store]),
+    markAllAsRead: useCallback(() => store.markAllAsRead(), [store]),
+    clearNotification: useCallback((id: string) => store.clearNotification(id), [store]),
+    clearAllNotifications: useCallback(() => store.clearAll(), [store]),
     navigateToNotification,
     unregisterToken,
     sendTestNotification,

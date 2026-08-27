@@ -20,14 +20,17 @@ Cross-feature and `src/app` imports use the feature's public `index.ts` only.
 ## Kernel vs features
 
 - `src/shared/api/client.ts` — `fetchWithAuth` and authorized blob/audio headers
+- `src/shared/ui` — Toast, dialogs, input, maps, startup modals (no feature imports)
 - `src/lib` — firebase, cache, utils, generated OpenAPI types (not yet moved)
-- `src/components/ui` and `src/components/layout` — shared chrome (not yet moved)
+- `src/components/layout` — shell chrome (may import features)
 - Tailwind `content` is `src/**` so feature class names reach `styles.css`
 - `src/hooks/useAsyncResource.ts`, `useLocalStorage`, `useRequestOwner`,
   `useScrollEdges` — generic hooks, not a domain
 
-Writable-list moonshine stores (`createGoalsStore`) stay the pattern to copy
-later; this tree does not migrate remaining `useState` lists in the same pass.
+Writable moonshine stores hold lists and session state written from the UI
+(goals, tasks, people, conversations, recaps, memories, chat, search,
+notifications, knowledge graph, Gemini Live, goal advice). Read-only fetches
+use `useAsyncResource` (`useHomeTasks`, `useGoalDetail` history).
 
 ## Features (grow as domains move)
 

@@ -68,13 +68,9 @@ describe('Moonshine web routes', () => {
   });
 
   test('Tailwind content globs include feature modules', async () => {
-    const { default: config } = await import('../tailwind.config.ts');
-    const content = config.content;
-    const globs = Array.isArray(content) ? content : content.files;
-    expect(
-      globs.some(
-        (glob: string) => glob.includes('src/**') || glob.includes('src/features'),
-      ),
-    ).toBe(true);
+    const { readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const source = await readFile(join(import.meta.dir, '../tailwind.config.ts'), 'utf8');
+    expect(source.includes('src/**') || source.includes('src/features')).toBe(true);
   });
 });

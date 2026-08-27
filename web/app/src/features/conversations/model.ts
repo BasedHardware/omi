@@ -1,5 +1,5 @@
 import type { Conversation } from '@/types/conversation';
-import type { DailySummary } from '@/types/recap';
+import type { DailySummary, GroupedDailySummaries } from '@/types/recap';
 
 /**
  * A single tile in the Timeline gallery. Conversations and daily recaps share
@@ -226,4 +226,23 @@ export function conversationDurationSeconds(start: string | null, end: string | 
   const startDate = new Date(start);
   const endDate = new Date(end);
   return Math.floor((endDate.getTime() - startDate.getTime()) / 1000);
+}
+
+/** Group recaps by calendar month (e.g. "January 2025") for the recap list. */
+export function groupRecapsByMonth(recaps: DailySummary[]): GroupedDailySummaries {
+  if (!Array.isArray(recaps) || recaps.length === 0) {
+    return {};
+  }
+  return recaps.reduce((groups, recap) => {
+    const date = parseLocalDay(recap.date);
+    const monthKey = date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+    });
+    if (!groups[monthKey]) {
+      groups[monthKey] = [];
+    }
+    groups[monthKey].push(recap);
+    return groups;
+  }, {} as GroupedDailySummaries);
 }

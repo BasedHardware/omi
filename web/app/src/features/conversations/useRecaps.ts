@@ -1,8 +1,16 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { createSignal } from '@tschk/moonshine';
+import { useSignalValue } from '@/lib/signals';
 import type { DailySummary, GroupedDailySummaries } from '@/types/recap';
-import { getDailySummaries, getDailySummary, deleteDailySummary, generateTestDailySummary } from '@/features/conversations/api';
+import {
+  getDailySummaries,
+  getDailySummary,
+  deleteDailySummary,
+  generateTestDailySummary,
+} from '@/features/conversations/api';
+import { groupRecapsByMonth, parseLocalDay } from '@/features/conversations/model';
 import { getCache, setCache, updateCache, CACHE_TTL } from '@/lib/cache';
 
 export interface UseRecapsOptions {
@@ -22,10 +30,8 @@ export interface UseRecapsReturn {
   getRecapDetail: (id: string) => Promise<DailySummary | null>;
 }
 
-// Cache key for recaps data - uses centralized cache system
 const RECAPS_CACHE_KEY = 'recaps:list';
 
-// Structure stored in centralized cache
 interface RecapsCacheData {
   recaps: DailySummary[];
   offset: number;
@@ -47,226 +53,200 @@ function updateCacheRecaps(updater: (recaps: DailySummary[]) => DailySummary[]):
   }));
 }
 
-// Parse YYYY-MM-DD as local date (not UTC)
-function parseLocalDate(dateString: string): Date {
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
-// Group recaps by month (e.g., "January 2025")
-function groupByMonth(recaps: DailySummary[]): GroupedDailySummaries {
-  if (!Array.isArray(recaps) || recaps.length === 0) {
-    return {};
-  }
-  return recaps.reduce((groups, recap) => {
-    const date = parseLocalDate(recap.date);
-    const monthKey = date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-    });
-    if (!groups[monthKey]) {
-      groups[monthKey] = [];
-    }
-    groups[monthKey].push(recap);
-    return groups;
-  }, {} as GroupedDailySummaries);
-}
-
-// Safely extract array from API response
 function normalizeRecapsResponse(response: unknown): DailySummary[] {
   if (Array.isArray(response)) {
     return response;
   }
-  // Handle wrapped response like { daily_summaries: [...] }
   if (response && typeof response === 'object') {
     const obj = response as Record<string, unknown>;
     if (Array.isArray(obj.daily_summaries)) {
-      return obj.daily_summaries;
+      return obj.daily_summaries as DailySummary[];
     }
     if (Array.isArray(obj.summaries)) {
-      return obj.summaries;
+      return obj.summaries as DailySummary[];
     }
     if (Array.isArray(obj.data)) {
-      return obj.data;
+      return obj.data as DailySummary[];
     }
   }
   return [];
 }
 
-export function useRecaps(options: UseRecapsOptions = {}): UseRecapsReturn {
-  const { limit = 30 } = options;
+function messageFor(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
 
+export function createRecapsStore(limit: number) {
   const cachedEntry = getFromCache();
+  const recaps = createSignal<DailySummary[]>(cachedEntry?.data.recaps ?? []);
+  const loading = createSignal(!cachedEntry);
+  const error = createSignal<string | null>(null);
+  const hasMore = createSignal(cachedEntry?.data.hasMore ?? true);
+  let offset = cachedEntry?.data.offset ?? 0;
+  let fetching = false;
+  let initialized = false;
 
-  // Initialize state from cache if available
-  const [recaps, setRecaps] = useState<DailySummary[]>(cachedEntry?.data.recaps || []);
-  const [loading, setLoading] = useState(!cachedEntry);
-  const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(cachedEntry?.data.hasMore ?? true);
+  const doFetch = async (currentOffset: number): Promise<DailySummary[]> => {
+    return normalizeRecapsResponse(await getDailySummaries({ limit, offset: currentOffset }));
+  };
 
-  // Use ref for offset to avoid dependency issues
-  const offsetRef = useRef(cachedEntry?.data.offset || 0);
-  // Track if a fetch is in progress to prevent concurrent fetches
-  const fetchingRef = useRef(false);
-  // Track if initial fetch is done
-  const initializedRef = useRef(false);
-
-  // Compute grouped recaps
-  const groupedRecaps = useMemo(() => groupByMonth(recaps), [recaps]);
-
-  // Core fetch function
-  const doFetch = useCallback(async (currentOffset: number): Promise<DailySummary[]> => {
-    const result = await getDailySummaries({
-      limit,
-      offset: currentOffset,
-    });
-    return normalizeRecapsResponse(result);
-  }, [limit]);
-
-  // Initial load
-  useEffect(() => {
-    if (initializedRef.current) return;
-    initializedRef.current = true;
+  const ensureLoaded = async () => {
+    if (initialized) return;
+    initialized = true;
 
     const cached = getFromCache();
-
-    // If we have fresh cache, use it and skip fetch
     if (cached && !cached.isStale) {
-      setRecaps(cached.data.recaps);
-      setHasMore(cached.data.hasMore);
-      offsetRef.current = cached.data.offset;
-      setLoading(false);
+      recaps.set(cached.data.recaps);
+      hasMore.set(cached.data.hasMore);
+      offset = cached.data.offset;
+      loading.set(false);
       return;
     }
 
-    // If we have stale cache, show it but refresh in background
     if (cached) {
-      setRecaps(cached.data.recaps);
-      setHasMore(cached.data.hasMore);
-      offsetRef.current = cached.data.offset;
-      setLoading(false);
+      recaps.set(cached.data.recaps);
+      hasMore.set(cached.data.hasMore);
+      offset = cached.data.offset;
+      loading.set(false);
     }
 
-    const loadInitial = async () => {
-      if (fetchingRef.current) return;
-      fetchingRef.current = true;
-
-      if (!cached) {
-        setLoading(true);
-      }
-      setError(null);
-
-      try {
-        const result = await doFetch(0);
-        setRecaps(result);
-        offsetRef.current = result.length;
-        setHasMore(result.length >= limit);
-        setToCache(result, result.length, result.length >= limit);
-      } catch (err) {
-        if (!cached) {
-          setError(err instanceof Error ? err.message : 'Failed to load recaps');
-        }
-      } finally {
-        setLoading(false);
-        fetchingRef.current = false;
-      }
-    };
-
-    loadInitial();
-  }, [doFetch, limit]);
-
-  // Load more (pagination)
-  const loadMore = useCallback(async () => {
-    if (fetchingRef.current || !hasMore) return;
-    fetchingRef.current = true;
-    setLoading(true);
-
-    try {
-      const result = await doFetch(offsetRef.current);
-
-      setRecaps((prev) => {
-        // Deduplicate
-        const existingIds = new Set(prev.map((r) => r.id));
-        const newRecaps = result.filter((r) => !existingIds.has(r.id));
-        const updated = [...prev, ...newRecaps];
-        const newOffset = offsetRef.current + result.length;
-        const newHasMore = result.length >= limit;
-        setToCache(updated, newOffset, newHasMore);
-        return updated;
-      });
-
-      offsetRef.current += result.length;
-      setHasMore(result.length >= limit);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load more recaps');
-    } finally {
-      setLoading(false);
-      fetchingRef.current = false;
+    if (fetching) return;
+    fetching = true;
+    if (!cached) {
+      loading.set(true);
     }
-  }, [doFetch, hasMore, limit]);
-
-  // Refresh
-  const refresh = useCallback(async () => {
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
-    setLoading(true);
-    setError(null);
+    error.set(null);
 
     try {
       const result = await doFetch(0);
-      setRecaps(result);
-      offsetRef.current = result.length;
-      setHasMore(result.length >= limit);
+      recaps.set(result);
+      offset = result.length;
+      hasMore.set(result.length >= limit);
       setToCache(result, result.length, result.length >= limit);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to refresh recaps');
+      if (!cached) {
+        error.set(messageFor(err, 'Failed to load recaps'));
+      }
     } finally {
-      setLoading(false);
-      fetchingRef.current = false;
+      loading.set(false);
+      fetching = false;
     }
-  }, [doFetch, limit]);
+  };
 
-  // Remove recap
-  const removeRecap = useCallback(async (id: string): Promise<boolean> => {
+  const loadMore = async () => {
+    if (fetching || !hasMore.peek()) return;
+    fetching = true;
+    loading.set(true);
+
+    try {
+      const result = await doFetch(offset);
+      const existingIds = new Set(recaps.peek().map((r) => r.id));
+      const newRecaps = result.filter((r) => !existingIds.has(r.id));
+      const updated = [...recaps.peek(), ...newRecaps];
+      recaps.set(updated);
+      offset += result.length;
+      const nextHasMore = result.length >= limit;
+      hasMore.set(nextHasMore);
+      setToCache(updated, offset, nextHasMore);
+    } catch (err) {
+      error.set(messageFor(err, 'Failed to load more recaps'));
+    } finally {
+      loading.set(false);
+      fetching = false;
+    }
+  };
+
+  const refresh = async () => {
+    if (fetching) return;
+    fetching = true;
+    loading.set(true);
+    error.set(null);
+
+    try {
+      const result = await doFetch(0);
+      recaps.set(result);
+      offset = result.length;
+      hasMore.set(result.length >= limit);
+      setToCache(result, result.length, result.length >= limit);
+    } catch (err) {
+      error.set(messageFor(err, 'Failed to refresh recaps'));
+    } finally {
+      loading.set(false);
+      fetching = false;
+    }
+  };
+
+  const removeRecap = async (id: string): Promise<boolean> => {
+    const previous = recaps.peek();
+    recaps.set(previous.filter((r) => r.id !== id));
+    updateCacheRecaps((current) => current.filter((r) => r.id !== id));
+
     try {
       await deleteDailySummary(id);
-      const updater = (prev: DailySummary[]) => prev.filter((r) => r.id !== id);
-      setRecaps(updater);
-      updateCacheRecaps(updater);
+      error.set(null);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete recap');
+      recaps.set(previous);
+      updateCacheRecaps(() => previous);
+      error.set(messageFor(err, 'Failed to delete recap'));
       return false;
     }
-  }, []);
+  };
 
-  // Generate recap for a specific date
-  const generateForDate = useCallback(async (date: string): Promise<DailySummary | null> => {
+  const generateForDate = async (date: string): Promise<DailySummary | null> => {
     try {
       const newRecap = await generateTestDailySummary(date);
-      setRecaps((prev) => {
-        // Add to beginning and sort by date descending
-        const updated = [newRecap, ...prev.filter((r) => r.id !== newRecap.id)];
-        updated.sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
-        updateCacheRecaps(() => updated);
-        return updated;
-      });
+      const previous = recaps.peek();
+      const updated = [newRecap, ...previous.filter((r) => r.id !== newRecap.id)];
+      updated.sort(
+        (a, b) => parseLocalDay(b.date).getTime() - parseLocalDay(a.date).getTime(),
+      );
+      recaps.set(updated);
+      updateCacheRecaps(() => updated);
+      error.set(null);
       return newRecap;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate recap');
+      error.set(messageFor(err, 'Failed to generate recap'));
       return null;
     }
-  }, []);
+  };
 
-  // Get single recap detail
-  const getRecapDetail = useCallback(async (id: string): Promise<DailySummary | null> => {
+  const getRecapDetail = async (id: string): Promise<DailySummary | null> => {
     try {
       return await getDailySummary(id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load recap detail');
+      error.set(messageFor(err, 'Failed to load recap detail'));
       return null;
     }
-  }, []);
+  };
+
+  return {
+    recaps,
+    loading,
+    error,
+    hasMore,
+    ensureLoaded,
+    loadMore,
+    refresh,
+    removeRecap,
+    generateForDate,
+    getRecapDetail,
+  };
+}
+
+export function useRecaps(options: UseRecapsOptions = {}): UseRecapsReturn {
+  const { limit = 30 } = options;
+  const store = useMemo(() => createRecapsStore(limit), [limit]);
+
+  useEffect(() => {
+    void store.ensureLoaded();
+  }, [store]);
+
+  const recaps = useSignalValue(store.recaps);
+  const loading = useSignalValue(store.loading);
+  const error = useSignalValue(store.error);
+  const hasMore = useSignalValue(store.hasMore);
+  const groupedRecaps = useMemo(() => groupRecapsByMonth(recaps), [recaps]);
 
   return {
     recaps,
@@ -274,10 +254,10 @@ export function useRecaps(options: UseRecapsOptions = {}): UseRecapsReturn {
     loading,
     error,
     hasMore,
-    loadMore,
-    refresh,
-    removeRecap,
-    generateForDate,
-    getRecapDetail,
+    loadMore: useCallback(() => store.loadMore(), [store]),
+    refresh: useCallback(() => store.refresh(), [store]),
+    removeRecap: useCallback((id: string) => store.removeRecap(id), [store]),
+    generateForDate: useCallback((date: string) => store.generateForDate(date), [store]),
+    getRecapDetail: useCallback((id: string) => store.getRecapDetail(id), [store]),
   };
 }
