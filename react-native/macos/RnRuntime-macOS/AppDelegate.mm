@@ -8,6 +8,13 @@
 static const CGFloat OmiTrafficLightLeading = 13.0;
 static const CGFloat OmiTrafficLightSpacing = 6.0;
 
+// Opaque-enough dark fill for the stock titlebar. A translucent window
+// background is what the system titlebar paints with, so this reads as dark
+// glass over the desktop; the RN workspace material covers the content area.
+static NSColor *OmiTitlebarFillColor(void) {
+  return [NSColor colorWithRed:18.0 / 255.0 green:20.0 / 255.0 blue:19.0 / 255.0 alpha:0.88];
+}
+
 @implementation AppDelegate
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
@@ -56,11 +63,12 @@ static const CGFloat OmiTrafficLightSpacing = 6.0;
     return;
   }
 
-  // Inherit the system appearance so the stock titlebar and glass content
-  // follow Light/Dark Mode. Content starts below a compact native titlebar.
-  window.appearance = nil;
+  // The product is dark glass: pin the dark appearance so the stock titlebar
+  // title, the workspace material, and the RN chrome agree in Light Mode too.
+  // Content stays on the shared workspace glass below a filled native titlebar.
+  window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
   window.opaque = NO;
-  window.backgroundColor = NSColor.clearColor;
+  window.backgroundColor = OmiTitlebarFillColor();
   RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
   rootView.backgroundColor = NSColor.clearColor;
   window.hasShadow = NO;

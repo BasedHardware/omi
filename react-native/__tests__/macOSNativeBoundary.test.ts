@@ -7,7 +7,7 @@ function readNativeSource(fileName: string): string {
   return readFileSync(resolve(macOSRoot, fileName), 'utf8');
 }
 
-test('clears the React Native macOS host surface without making the window opaque', () => {
+test('keeps the RN host surface clear while the stock titlebar carries a dark glass fill', () => {
   const source = readNativeSource('AppDelegate.mm');
 
   expect(source).toContain('#import <React/RCTUIKit.h>');
@@ -16,7 +16,12 @@ test('clears the React Native macOS host surface without making the window opaqu
   );
   expect(source).toContain('rootView.backgroundColor = NSColor.clearColor;');
   expect(source).toContain('window.opaque = NO;');
-  expect(source).toContain('window.backgroundColor = NSColor.clearColor;');
+  expect(source).toContain('window.backgroundColor = OmiTitlebarFillColor();');
+  expect(source).toMatch(/alpha:0\.8[0-9]\]/);
+  expect(source).toContain(
+    'window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];',
+  );
+  expect(source).not.toContain('window.backgroundColor = NSColor.clearColor;');
 });
 
 test('uses standard visible macOS traffic lights with native window dragging', () => {
@@ -282,6 +287,28 @@ test('validates loopback callbacks before success and keeps listening past probe
     /callback\.scheme[^]*callback\.host[^]*callback\.port[^]*callback\.path/,
   );
   expect(auth).toMatch(/values\[@"state"\][^]*values\[@"code"\]/);
+});
+
+test('serves a branded auto-closing success page and returns the user to the app', () => {
+  const auth = readNativeSource('OmiAuthModule.mm');
+
+  expect(auth).not.toContain('Signed in to Omi. You can close this window.');
+  expect(auth).toContain('OmiAuthSuccessPageHTML');
+  expect(auth).toContain('<title>Signed in to Omi</title>');
+  expect(auth).toContain('window.close()');
+  expect(auth).toContain('setTimeout(close');
+  expect(auth).toContain('Content-Length');
+  // The product mark only: eight white dots on dark glass, no rainbow.
+  expect(auth.match(/<circle /g)).toHaveLength(8);
+  expect(auth.match(/fill='#ffffff'/g)).toHaveLength(8);
+  expect(auth).not.toContain('hsl(');
+  // The session hands the foreground back to Omi once the code lands.
+  expect(auth).toContain('bringOmiToFront');
+  expect(auth).toContain('[NSApp activate];');
+  expect(auth).toContain('makeKeyAndOrderFront');
+  expect(auth).toMatch(
+    /finishSignInAttempt:[^]*\[self\.authenticationSession cancel\];[^]*OmiAuthSetEnvironmentCloudTokensIgnored\(NO\);[^]*resolve\(value\);[^]*\[self bringOmiToFront\];/,
+  );
 });
 
 test('fences overlapping native macOS sign-in attempts', () => {

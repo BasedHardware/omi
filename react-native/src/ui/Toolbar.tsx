@@ -105,7 +105,7 @@ export function Toolbar({
 const styles = StyleSheet.create({
   frame: {
     alignSelf: 'stretch',
-    backgroundColor: tokens.color.glass,
+    backgroundColor: tokens.color.chrome,
     borderRadius: tokens.radius.none,
     height: tokens.size.toolbar,
     marginHorizontal: tokens.space.none,

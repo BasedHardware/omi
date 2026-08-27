@@ -351,6 +351,7 @@ jest.mock('../src/omiNative', () => ({
 }));
 
 import App, {omiDotColor, resolveInitialRoute} from '../App';
+import {useOnboarding} from '../src/app/useOnboarding';
 
 function chatMessage(
   id: string,
@@ -2281,6 +2282,43 @@ test('signs in from first-run onboarding, records completion, and shows Home', a
   ).toBeDefined();
   expect(JSON.stringify(renderer.toJSON())).toContain('Search Omi');
   expect(JSON.stringify(renderer.toJSON())).toContain('Home search dock');
+});
+
+test('a successful native sign-in through the shared path dismisses first-run', async () => {
+  mockPlatformOS = 'macos';
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  let gate: ReturnType<typeof useOnboarding> | undefined;
+  const refreshes: boolean[] = [];
+  function GateProbe() {
+    gate = useOnboarding(true, async initial => {
+      refreshes.push(initial);
+    });
+    return null;
+  }
+
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(<GateProbe />);
+    await Promise.resolve();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+  });
+  expect(gate!.onboardingRequired).toBe(true);
+
+  await ReactTestRenderer.act(async () => {
+    await gate!.signInAndRefresh();
+    await Promise.resolve();
+  });
+
+  expect(mockAuth.signIn).toHaveBeenCalledTimes(1);
+  expect(mockAuth.markOnboardingComplete).toHaveBeenCalledTimes(1);
+  expect(gate!.onboardingRequired).toBe(false);
+  expect(refreshes).toEqual([false]);
+  expect(gate!.signingIn).toBe(false);
+  expect(gate!.completeFirstRun).toBe(gate!.signInAndRefresh);
+  await ReactTestRenderer.act(async () => {
+    renderer.unmount();
+  });
 });
 
 test('keeps macOS Home as search chrome followed by compact navigation and timeline', async () => {
