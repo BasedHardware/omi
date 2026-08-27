@@ -3654,6 +3654,15 @@ final class DesktopAutomationActionRegistry {
       case "5", "rewind": item = .rewind
       case "6", "apps": item = .apps
       case ",", "comma", "settings": item = .settings
+      // Settings sub-sections ride the same notifications the app already posts
+      // for its own deep-links (the Tasks gear, the floating-bar context menu),
+      // so QA can land on a specific pane without any cursor input.
+      case "tasksettings", "advancedsettings":
+        NotificationCenter.default.post(name: .navigateToTaskSettings, object: nil)
+        return ["navigated": "Settings › Advanced"]
+      case "floatingbarsettings":
+        NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
+        return ["navigated": "Settings › Floating Bar"]
       default: item = nil
       }
       guard let item else {
