@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { BulkActionBar } from '@/components/tasks/BulkActionBar';
+import { BulkActionBar } from '@/features/tasks/ui/BulkActionBar';
 
 function renderBar(onCopy = vi.fn()) {
   render(
