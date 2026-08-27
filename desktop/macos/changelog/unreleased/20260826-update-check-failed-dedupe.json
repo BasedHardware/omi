@@ -1,3 +1,0 @@
-{
-  "change": "A single failed update check is now reported once instead of once per Sparkle callback"
-}
