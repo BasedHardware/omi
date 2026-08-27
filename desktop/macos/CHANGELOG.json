@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.229",
+      "date": "2026-08-27",
+      "changes": [
+        "Every Omi reply in chat shows the Omi mark again, not just the newest one"
+      ]
+    },
+    {
       "version": "0.12.228",
       "date": "2026-08-27",
       "changes": [
