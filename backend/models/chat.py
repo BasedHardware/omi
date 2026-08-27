@@ -44,6 +44,11 @@ class FileChat(BaseModel):
     def is_image(self):
         return self.mime_type.startswith("image")
 
+    def is_pdf(self) -> bool:
+        if (self.mime_type or '').lower() == 'application/pdf':
+            return True
+        return (self.name or '').lower().endswith('.pdf')
+
     def model_dump(self, **kwargs):
         exclude_fields = {'thumb_name'}
         return super().model_dump(exclude=exclude_fields, **kwargs)
@@ -327,6 +332,7 @@ class ChatSession(BaseModel):
     app_id: Optional[str] = None
     plugin_id: Optional[str] = None
     created_at: datetime
+    # Legacy Assistants IDs remain readable on old session docs; nothing writes them.
     openai_thread_id: Optional[str] = None
     openai_assistant_id: Optional[str] = None
 

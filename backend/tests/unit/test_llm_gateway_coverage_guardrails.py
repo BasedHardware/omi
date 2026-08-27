@@ -67,7 +67,7 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
     DirectUse('utils/memory_ingestion/export_runner.py', 'OPENAI_API_KEY'),
     DirectUse('utils/other/chat_file.py', 'AsyncOpenAI'),
-    DirectUse('utils/other/chat_file.py', 'openai.beta'),
+    DirectUse('utils/other/chat_file.py', 'openai.chat.completions'),
     DirectUse('utils/other/chat_file.py', 'openai.files'),
     DirectUse('utils/retrieval/agentic.py', 'anthropic_client.messages'),
     DirectUse('routers/omni_relay.py', 'GEMINI_API_KEY'),
@@ -220,7 +220,9 @@ def test_acknowledged_file_chat_surface_is_observed_without_a_gateway_block():
     """
     source = (BACKEND_DIR / 'utils/other/chat_file.py').read_text(encoding='utf-8')
 
-    assert 'record_direct_exception_surface(surface=\'file_chat.openai_files_assistants_vision\')' in source
+    assert "record_direct_exception_surface(surface=_FILE_CHAT_SURFACE)" in source or (
+        "record_direct_exception_surface(surface='file_chat.openai_files_chat_completions')" in source
+    )
     assert 'raise_if_gateway_feature_mode_blocks_direct_model_surface' not in source
 
 
