@@ -14,9 +14,11 @@ final class RemotePromptLedgerTests: XCTestCase {
 
   override func setUp() async throws {
     RatingPromptManager.shared.remoteDisableCheck = { false }
+    RatingPromptManager.shared.ownerProvider = { "ledger-user" }
+    RemotePromptEngine.shared.ownerProvider = { "ledger-user" }
     RatingPromptManager.shared.resetForTesting()
     // The built-in ask must not own the slot in this test.
-    UserDefaults.standard.set(true, forKey: DefaultsKey.ratingPromptDismissed.rawValue)
+    RatingPromptManager.shared.dismiss()
     RemotePromptEngine.shared.isSignedInCheck = { true }
     RemotePromptEngine.shared.fetch = { [self.spec] }
     RemotePromptEngine.shared.resetForTesting()
@@ -30,6 +32,8 @@ final class RemotePromptLedgerTests: XCTestCase {
     await RemotePromptEngine.shared.refreshFromServer()
     RemotePromptEngine.shared.resetForTesting()
     RatingPromptManager.shared.resetForTesting()
+    RatingPromptManager.shared.ownerProvider = { RuntimeOwnerIdentity.currentOwnerId() ?? "anonymous" }
+    RemotePromptEngine.shared.ownerProvider = { RuntimeOwnerIdentity.currentOwnerId() ?? "anonymous" }
     RatingPromptManager.shared.remoteDisableCheck = {
       PostHogManager.shared.isFeatureEnabled(RatingPromptPolicy.killSwitchFlag)
     }
@@ -39,13 +43,15 @@ final class RemotePromptLedgerTests: XCTestCase {
     XCTAssertNil(RemotePromptEngine.shared.current)
     // Questions persisted by a PREVIOUS session (or the history seed) — write
     // the ledger key directly, then simulate the relaunch-time fetch.
-    UserDefaults.standard.set(3, forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+    UserDefaults.standard.set(
+      3, forKey: ScopedDefaultsKey.ratingPrompt("questionCount", ownerID: "ledger-user"))
     await RemotePromptEngine.shared.refreshFromServer()
     XCTAssertEqual(RemotePromptEngine.shared.current?.id, "q3-survey")
   }
 
   func testLedgerBelowThresholdStaysHidden() async {
-    UserDefaults.standard.set(2, forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+    UserDefaults.standard.set(
+      2, forKey: ScopedDefaultsKey.ratingPrompt("questionCount", ownerID: "ledger-user"))
     await RemotePromptEngine.shared.refreshFromServer()
     XCTAssertNil(RemotePromptEngine.shared.current)
   }

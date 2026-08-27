@@ -50,6 +50,12 @@ final class RemotePromptEngine: ObservableObject {
   var fetch: () async throws -> [RemotePromptSpec]
   /// Injectable for tests; production reads the real auth state.
   var isSignedInCheck: () -> Bool = { AuthState.shared.isSignedIn }
+  /// Same account scoping as RatingPromptManager (#9821 bleed class).
+  var ownerProvider: () -> String = { RuntimeOwnerIdentity.currentOwnerId() ?? "anonymous" }
+
+  private func resolutionKey(_ promptId: String) -> ScopedDefaultsKey {
+    .remotePromptResolution(promptId: promptId, ownerID: ownerProvider())
+  }
 
   private init() {
     fetch = {
@@ -88,11 +94,11 @@ final class RemotePromptEngine: ObservableObject {
     evaluate()
   }
 
-  /// The accepted-question ledger IS the persisted rating-prompt counter —
-  /// one source of truth, so relaunches and the history seed carry over to
-  /// "after Nth question" remote prompts instead of restarting at zero.
+  /// The accepted-question ledger IS the rating manager's persisted,
+  /// owner-scoped counter — one accessor, so relaunches, the history seed,
+  /// and account switches all carry over consistently.
   private var questionCount: Int {
-    defaults.integer(forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+    RatingPromptManager.shared.questionCount
   }
 
   /// Notification from the accepted-question seam (the manager increments the
@@ -149,7 +155,7 @@ final class RemotePromptEngine: ObservableObject {
   /// real trigger path can be exercised repeatedly on a dev bundle.
   func resetForTesting() {
     for spec in specs {
-      defaults.removeObject(forKey: ScopedDefaultsKey.remotePromptResolution(promptId: spec.id))
+      defaults.removeObject(forKey: resolutionKey(spec.id))
     }
     current = nil
     evaluate()
@@ -163,7 +169,7 @@ final class RemotePromptEngine: ObservableObject {
     guard current == nil else { return }
     let resolved = Set(
       specs.map(\.id).filter {
-        defaults.object(forKey: ScopedDefaultsKey.remotePromptResolution(promptId: $0)) != nil
+        defaults.object(forKey: resolutionKey($0)) != nil
       })
     if let due = RemotePromptPolicy.duePrompt(
       specs: specs, resolvedIds: resolved, questionCount: questionCount)
@@ -174,7 +180,7 @@ final class RemotePromptEngine: ObservableObject {
   }
 
   private func markResolved(_ id: String, outcome: String) {
-    defaults.set(outcome, forKey: ScopedDefaultsKey.remotePromptResolution(promptId: id))
+    defaults.set(outcome, forKey: resolutionKey(id))
   }
 }
 
