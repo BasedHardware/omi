@@ -2,7 +2,7 @@
 
 After prod flipped OMI_LLM_GATEWAY_FEATURE_MODE=gateway (PR #11281), every POST /v2/files 500'd:
 FileChatTool.upload() called raise_if_gateway_feature_mode_blocks_direct_model_surface, which raised
-GatewayDirectModelSurfaceBlocked because file chat runs directly on OpenAI Files/Assistants/vision and
+GatewayDirectModelSurfaceBlocked because file chat runs directly on OpenAI Files/vision and
 has no gateway lane. The surface is now recorded via record_direct_exception_surface and never blocked.
 """
 
@@ -17,6 +17,8 @@ from unittest.mock import patch
 import utils.other.chat_file as cf  # noqa: E402
 from utils.llm.gateway_client import LLM_GATEWAY_FEATURE_MODE_ENV_VAR  # noqa: E402
 
+_MINIMAL_PDF = b'%PDF-1.1\n%%EOF\n'
+
 
 def _gateway_mode(monkeypatch):
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
@@ -27,15 +29,15 @@ def _gateway_mode(monkeypatch):
 
 def test_upload_proceeds_and_records_surface_under_gateway_mode(monkeypatch, tmp_path):
     _gateway_mode(monkeypatch)
-    file_path = tmp_path / 'note.txt'
-    file_path.write_text('hello')
+    file_path = tmp_path / 'note.pdf'
+    file_path.write_bytes(_MINIMAL_PDF)
 
-    fake_files = SimpleNamespace(create=lambda **_kwargs: SimpleNamespace(id='file-1', filename='note.txt'))
+    fake_files = SimpleNamespace(create=lambda **_kwargs: SimpleNamespace(id='file-1', filename='note.pdf'))
     with patch.object(cf.openai, 'files', fake_files), patch.object(cf, 'record_direct_exception_surface') as record:
         result = cf.FileChatTool.upload(file_path)
 
     assert result['file_id'] == 'file-1'
-    record.assert_called_once_with(surface='file_chat.openai_files_assistants_vision')
+    record.assert_called_once_with(surface='file_chat.openai_files_chat_completions')
 
 
 def test_upload_proceeds_when_gateway_mode_is_misconfigured_in_prod(monkeypatch, tmp_path):
@@ -47,23 +49,23 @@ def test_upload_proceeds_when_gateway_mode_is_misconfigured_in_prod(monkeypatch,
     monkeypatch.delenv('APP_ENV', raising=False)
     monkeypatch.setenv('K_SERVICE', 'omi-backend')
     monkeypatch.delenv('OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE', raising=False)
-    file_path = tmp_path / 'note.txt'
-    file_path.write_text('hello')
+    file_path = tmp_path / 'note.pdf'
+    file_path.write_bytes(_MINIMAL_PDF)
 
-    fake_files = SimpleNamespace(create=lambda **_kwargs: SimpleNamespace(id='file-1', filename='note.txt'))
+    fake_files = SimpleNamespace(create=lambda **_kwargs: SimpleNamespace(id='file-1', filename='note.pdf'))
     with patch.object(cf.openai, 'files', fake_files), patch.object(cf, 'record_direct_exception_surface') as record:
         result = cf.FileChatTool.upload(file_path)
 
     assert result['file_id'] == 'file-1'
-    record.assert_called_once_with(surface='file_chat.openai_files_assistants_vision')
+    record.assert_called_once_with(surface='file_chat.openai_files_chat_completions')
 
 
 def test_upload_does_not_record_surface_outside_gateway_mode(monkeypatch, tmp_path):
     monkeypatch.delenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, raising=False)
-    file_path = tmp_path / 'note.txt'
-    file_path.write_text('hello')
+    file_path = tmp_path / 'note.pdf'
+    file_path.write_bytes(_MINIMAL_PDF)
 
-    fake_files = SimpleNamespace(create=lambda **_kwargs: SimpleNamespace(id='file-1', filename='note.txt'))
+    fake_files = SimpleNamespace(create=lambda **_kwargs: SimpleNamespace(id='file-1', filename='note.pdf'))
     with patch.object(cf.openai, 'files', fake_files), patch.object(cf, 'record_direct_exception_surface') as record:
         result = cf.FileChatTool.upload(file_path)
 

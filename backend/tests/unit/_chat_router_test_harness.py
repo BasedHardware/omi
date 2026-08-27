@@ -255,11 +255,21 @@ def wire_common_stubs(install) -> SimpleNamespace:
     usage_tracker = install('utils.llm.usage_tracker', ModuleType('utils.llm.usage_tracker'))
     usage_tracker.set_usage_context = MagicMock(return_value='usage-token')
     usage_tracker.reset_usage_context = MagicMock()
+    usage_tracker.get_current_context = MagicMock(return_value=None)
+    usage_tracker.track_usage = MagicMock()
 
     class Features:
         CHAT = 'chat'
 
     usage_tracker.Features = Features
+
+    # routers.chat imports gateway_client at module load. Keep a package-safe stub
+    # so isolated file runs never pull the real client (which imports get_current_context).
+    gateway_client = install('utils.llm.gateway_client', ModuleType('utils.llm.gateway_client'))
+    gateway_client.CHAT_AGENT_ROUTE_DIRECT = 'direct'
+    gateway_client.get_chat_agent_route = MagicMock(return_value='direct')
+    gateway_client.should_route_features_through_gateway = MagicMock(return_value=False)
+    gateway_client.GatewayDirectModelSurfaceBlocked = type('GatewayDirectModelSurfaceBlocked', (Exception,), {})
 
     limiter = install('utils.voice_duration_limiter', ModuleType('utils.voice_duration_limiter'))
     limiter.compute_pcm_duration_ms = MagicMock(return_value=1000)

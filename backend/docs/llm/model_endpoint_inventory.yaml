@@ -125,18 +125,18 @@ surfaces:
     migration_status: gateway_only_fail_closed
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_client_config.py::test_app_icon_generation_always_uses_gateway
   - surface: file_chat_vision
-    code_path: backend/utils/other/chat_file.py:_ask_vision_stream
+    code_path: backend/utils/other/chat_file.py:_ask_files_stream
     current_provider_model: openai/gpt-5.6-luna
-    request_shape: streaming vision chat completion
+    request_shape: streaming vision chat completion (image_url)
     gateway_lane_capability_needed: gateway-owned vision chat lane or file-chat replacement retrieval path
     migration_status: acknowledged_direct_file_lifecycle_surface; intentionally remains direct during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and records direct-exception telemetry without raising (PR #11419)
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
-  - surface: file_chat_assistants
+  - surface: file_chat_completions
     code_path: backend/utils/other/chat_file.py:FileChatTool
-    current_provider_model: openai/gpt-4.1 with Assistants, Threads, Files, File Search
-    request_shape: file upload, assistants, file_search, streaming run deltas
-    gateway_lane_capability_needed: gateway-owned file/assistant lifecycle or replacement retrieval path
-    migration_status: acknowledged_direct_file_lifecycle_surface; intentionally remains direct during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and records direct-exception telemetry without raising (PR #11419)
+    current_provider_model: openai/gpt-4.1 Chat Completions file parts for PDFs (gpt-5.6-luna remains image-only)
+    request_shape: file upload purpose=user_data, streaming chat completion file input parts
+    gateway_lane_capability_needed: gateway-owned file lifecycle or replacement retrieval path
+    migration_status: acknowledged_direct_file_lifecycle_surface; intentionally remains direct during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and records direct-exception telemetry without raising (PR #11419). Assistants/Threads retired after the 2026-08-26 sunset.
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: omni_realtime_relay
     code_path: backend/routers/omni_relay.py
