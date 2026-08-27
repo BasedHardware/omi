@@ -42,7 +42,7 @@ dependencies:
   firebase_core: 3.13.0
   firebase_auth: 5.5.3
   firebase_messaging: 15.2.5
-  firebase_crashlytics: 4.3.2
+  firebase_crashlytics: 4.3.5
 
   # Auth
   google_sign_in: 6.2.2
@@ -182,14 +182,6 @@ flutter_launcher_icons:
   image_path: "assets/images/app_launcher_icon.png"
 
 flutter:
-  # Flutter 3.44 turned Swift Package Manager on by default for iOS/macOS.
-  # firebase_crashlytics 4.3.2 is built against firebase_core 3.11.0 while
-  # firebase_messaging 15.2.5 is built against 3.13.0, so SPM cannot resolve a
-  # single `flutterfire` package version and every iOS archive fails. CocoaPods
-  # tolerates the skew. Re-enable once the Firebase plugin versions are aligned;
-  # Flutter will eventually stop honouring this. https://github.com/BasedHardware/omi/issues/11676
-  config:
-    enable-swift-package-manager: false
   generate: true
   uses-material-design: true
   assets:
