@@ -183,6 +183,28 @@ async def test_a_declared_language_is_sent_as_a_hint():
     assert config['language_hints'] == ['ja']
 
 
+@pytest.mark.asyncio
+async def test_a_silent_socket_sends_keepalives_instead_of_idling_out():
+    """VAD gating starves the socket of audio; Soniox drops it after 20s without one."""
+    ws = AsyncMock()
+    ws.__aiter__ = lambda _self: _empty_stream()
+    with patch('utils.stt.soniox.SONIOX_KEEPALIVE_SECONDS', 0.01):
+        sock = SafeSonioxSocket(ws, lambda _s: None, asyncio.get_running_loop())
+        await asyncio.sleep(0.08)
+        sock.finish()
+    keepalives = [c.args[0] for c in ws.send.await_args_list if c.args and c.args[0] == '{"type": "keepalive"}']
+    assert len(keepalives) >= 2
+
+
+def _empty_stream():
+    async def gen():
+        await asyncio.sleep(10)
+        if False:
+            yield ''
+
+    return gen()
+
+
 def test_soniox_is_streaming_only_and_off_by_default():
     assert provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.STREAMING)
     assert not provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.PRERECORDED)
