@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock the renderer BYOK cache so we can drive the "BYOK active" branch. Default
 // inactive, matching a free (non-BYOK) user; individual tests flip it on.
-const h = vi.hoisted(() => ({ isByokActiveCached: vi.fn(() => false) }))
-vi.mock('./byokKeys', () => ({ isByokActiveCached: h.isByokActiveCached }))
+const h = vi.hoisted(() => ({ hasTranscriptionByokCached: vi.fn(() => false) }))
+vi.mock('./byokKeys', () => ({ hasTranscriptionByokCached: h.hasTranscriptionByokCached }))
 
 import {
   onUsageLimit,
@@ -26,7 +26,7 @@ const quota = (p: Partial<ChatUsageQuota>): ChatUsageQuota => ({
 
 beforeEach(() => {
   __resetUsageLimitSession()
-  h.isByokActiveCached.mockReturnValue(false)
+  h.hasTranscriptionByokCached.mockReturnValue(false)
 })
 
 describe('usage-limit pub/sub', () => {
@@ -104,8 +104,8 @@ describe('maybeTriggerTranscriptionQuotaPopup', () => {
     expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(true)
   })
 
-  it('never paywalls a BYOK user — no popup on a quota error while BYOK is active', () => {
-    h.isByokActiveCached.mockReturnValue(true)
+  it('never paywalls a Deepgram BYOK user — no popup on a quota error', () => {
+    h.hasTranscriptionByokCached.mockReturnValue(true)
     const seen: (UsageLimitReason | null)[] = []
     onUsageLimit((r) => seen.push(r))
     // A quota-exhausted error that WOULD raise the popup for a free user...
@@ -113,20 +113,20 @@ describe('maybeTriggerTranscriptionQuotaPopup', () => {
     expect(seen).toEqual([null]) // only the immediate value; never 'transcription'
   })
 
-  it('still shows the popup for a non-BYOK (free) user on the same quota error', () => {
-    h.isByokActiveCached.mockReturnValue(false)
+  it('still shows the popup for a non-Deepgram (free) user on the same quota error', () => {
+    h.hasTranscriptionByokCached.mockReturnValue(false)
     const seen: (UsageLimitReason | null)[] = []
     onUsageLimit((r) => seen.push(r))
     expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(true)
     expect(seen.at(-1)).toBe('transcription')
   })
 
-  it('does not consume the latch while BYOK is active — a later exhaustion after BYOK clears still shows', () => {
-    h.isByokActiveCached.mockReturnValue(true)
+  it('does not consume the latch while Deepgram BYOK is active — a later exhaustion after it clears still shows', () => {
+    h.hasTranscriptionByokCached.mockReturnValue(true)
     expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(false)
-    // BYOK is cleared (keys removed / different account); the guard no longer
-    // suppresses and the still-armed latch lets the genuine exhaustion show.
-    h.isByokActiveCached.mockReturnValue(false)
+    // Deepgram BYOK is cleared; the guard no longer suppresses and the
+    // still-armed latch lets the genuine exhaustion show.
+    h.hasTranscriptionByokCached.mockReturnValue(false)
     expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(true)
   })
 })

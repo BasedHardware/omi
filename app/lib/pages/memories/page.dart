@@ -438,50 +438,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   }
 
   void _showQuickEditSheet(BuildContext context, Memory memory, MemoriesProvider provider) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => MemoryEditSheet(memory: memory, provider: provider, onDelete: (_, __, ___) {}),
-    );
-  }
-
-  // ignore: unused_element
-  void _showDeleteAllConfirmation(BuildContext context, MemoriesProvider provider) {
-    if (provider.memories.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.l10n.noMemoriesToDelete), duration: const Duration(seconds: 2)));
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        title: Text(context.l10n.clearMemoryTitle, style: const TextStyle(color: Colors.white)),
-        content: Text(context.l10n.clearMemoryMessage, style: TextStyle(color: Colors.grey.shade300)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              MaterialLocalizations.of(context).cancelButtonLabel,
-              style: TextStyle(color: Colors.grey.shade400),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              provider.deleteAllMemories();
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(context.l10n.memoryClearedSuccess), duration: const Duration(seconds: 2)),
-              );
-            },
-            child: Text(context.l10n.clearMemoryButton, style: const TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+    showMemoryQuickEditSheet(context, memory, provider);
   }
 
   void scrollToTop() {
@@ -498,30 +455,5 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       isScrollControlled: true,
       builder: (context) => MemoryManagementSheet(provider: provider),
     );
-  }
-}
-
-// ignore: unused_element
-class _SliverSearchBarDelegate extends SliverPersistentHeaderDelegate {
-  final double minHeight;
-  final double maxHeight;
-  final Widget child;
-
-  _SliverSearchBarDelegate({required this.minHeight, required this.maxHeight, required this.child});
-
-  @override
-  double get minExtent => minHeight;
-
-  @override
-  double get maxExtent => maxHeight;
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return SizedBox.expand(child: child);
-  }
-
-  @override
-  bool shouldRebuild(_SliverSearchBarDelegate oldDelegate) {
-    return maxHeight != oldDelegate.maxHeight || minHeight != oldDelegate.minHeight || child != oldDelegate.child;
   }
 }

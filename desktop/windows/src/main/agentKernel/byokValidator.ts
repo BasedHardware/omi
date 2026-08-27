@@ -2,7 +2,7 @@
 // `BYOKValidator` (desktop/macos/Desktop/Sources/BYOKValidator.swift).
 //
 // We never flip the backend onto the BYOK free plan with a dead key: enrollment
-// live-validates all four keys first. Each ping hits the provider's cheapest
+// live-validates every configured LLM key first. Each ping hits the provider's cheapest
 // auth-gated endpoint; any 2xx means the key at least authenticates (billing
 // problems surface later as a normal inference error — not a key-shape problem
 // we could have caught up front). A 401/403 is a definitive rejection.
@@ -35,7 +35,15 @@ function providerRequest(
 ): { url: string; headers: Record<string, string> } {
   switch (provider) {
     case 'openai':
-      return { url: 'https://api.openai.com/v1/models', headers: { Authorization: `Bearer ${key}` } }
+      return {
+        url: 'https://api.openai.com/v1/models',
+        headers: { Authorization: `Bearer ${key}` }
+      }
+    case 'openrouter':
+      return {
+        url: 'https://openrouter.ai/api/v1/auth/key',
+        headers: { Authorization: `Bearer ${key}` }
+      }
     case 'anthropic':
       return {
         url: 'https://api.anthropic.com/v1/models?limit=1',
@@ -92,16 +100,14 @@ export async function validateProviderKey(
 }
 
 /**
- * Validate every provider in `keys` in parallel. Only the four canonical
- * providers are checked; missing entries are validated as empty (fail), so the
- * caller can treat a non-`ok` result uniformly as "not all four authenticate".
+ * Validate every configured provider in `keys` in parallel.
  */
 export async function validateAllByokKeys(
   keys: ByokKeys,
   fetchImpl: FetchLike = globalThis.fetch as unknown as FetchLike
 ): Promise<ByokValidationResults> {
   const entries = await Promise.all(
-    BYOK_PROVIDERS.map(
+    BYOK_PROVIDERS.filter((provider) => Boolean(keys[provider]?.trim())).map(
       async (provider): Promise<[ByokProvider, ByokKeyValidation]> => [
         provider,
         await validateProviderKey(provider, keys[provider] ?? '', fetchImpl)

@@ -9894,4 +9894,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Lỗi gần nhất: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Đã ghi sẵn';
 }

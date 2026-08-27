@@ -106,6 +106,77 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
     fi
   fi
 
+  # OPT-IN partition: run the files that are not known module-stub offenders in one
+  # parallel pytest session instead of one process each.
+  #
+  # OFF BY DEFAULT, and the reason is measured, not cautious. The theory was that
+  # per-file isolation is only owed to the files that mutate ``sys.modules`` at module
+  # scope, that tests/.module_stub_legacy_allowlist enumerates them, and that the other
+  # ~875 files could therefore share a session. The allowlist does not enumerate them:
+  # scripts/check_module_stub_pollution.py only sees *direct* module-scope writes, and
+  # the common pattern in this tree is a module-scope call to a same-file helper that
+  # writes sys.modules (or an import of the deprecated tests/unit/memory_import_isolation).
+  # Measured on this selection (930 files, 55 allowlisted):
+  #   - collecting the 875 non-allowlisted files in one process SIGSEGVs. The upb
+  #     protobuf backend aborts when an evicted google.cloud.firestore_v1 type module is
+  #     re-executed and re-registers a file descriptor.
+  #   - splitting them into 35 chunks of 25 and collecting each chunk separately still
+  #     fails in 11 of 35 chunks (42 collection errors plus one segfault), so the
+  #     contamination is dense rather than a handful of nameable offenders.
+  #   - collecting 815 of them in one process is OOM-killed, and each xdist worker
+  #     collects the whole selection, so memory scales with worker count too.
+  # Making this the default would trade a slow suite for a broken one. It ships behind
+  # the knob so the machinery and its contracts exist for whoever finishes the
+  # import-purity work in backend/docs/test_isolation.md; flip the default then.
+  parallel_session="${BACKEND_PYTEST_PARALLEL_SESSION:-0}"
+  allowlist_path="${BACKEND_MODULE_STUB_ALLOWLIST:-tests/.module_stub_legacy_allowlist}"
+
+  isolated_tests=()
+  batched_tests=()
+  if [[ "$parallel_session" != "1" && "$parallel_session" != "true" ]]; then
+    isolated_tests=("${selected_tests[@]}")
+  else
+    isolate_everything=0
+    # Allowlist entries are repo-relative (backend/tests/...); the selector emits
+    # backend-relative paths (tests/...). Normalize both sides to backend-relative
+    # before comparing, or the partition silently sends every offender to the batch.
+    allowlist_entries=$'\n'
+    if [[ -f "$allowlist_path" ]]; then
+      while IFS= read -r allowlist_line || [[ -n "$allowlist_line" ]]; do
+        entry="${allowlist_line%%#*}"
+        entry="${entry#"${entry%%[![:space:]]*}"}"
+        entry="${entry%"${entry##*[![:space:]]}"}"
+        [[ -n "$entry" ]] || continue
+        entry="${entry#./}"
+        entry="${entry#backend/}"
+        allowlist_entries+="$entry"$'\n'
+      done < "$allowlist_path"
+    else
+      echo "Module-stub legacy allowlist not found at $allowlist_path; isolating every file." >&2
+      isolate_everything=1
+    fi
+
+    for test_path in "${selected_tests[@]}"; do
+      normalized="${test_path#./}"
+      normalized="${normalized#backend/}"
+      if [[ "$isolate_everything" == "1" || "$allowlist_entries" == *$'\n'"$normalized"$'\n'* ]]; then
+        isolated_tests+=("$test_path")
+      else
+        batched_tests+=("$test_path")
+      fi
+    done
+  fi
+
+  # Bash 3.2 errors on ``"${empty[@]}"`` under ``set -u``; read the lengths with the
+  # check relaxed and gate every expansion on them.
+  set +u
+  isolated_count="${#isolated_tests[@]}"
+  batched_count="${#batched_tests[@]}"
+  set -u
+  if [[ "$batched_count" -gt 0 ]]; then
+    echo "Partition: $batched_count file(s) in one parallel pytest session, $isolated_count file(s) in per-file isolation."
+  fi
+
   active_pids=()
   active_status_files=()
   active_test_paths=()
@@ -168,48 +239,51 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
     set -u
   }
 
-  for test_path in "${selected_tests[@]}"; do
-    status_file="$status_dir/$test_index.status"
-    test_index=$((test_index + 1))
-    (
-      echo "::group::$test_path"
-      set +e
-      "$PYTHON_BIN" -m pytest "${pytest_args[@]}" "$test_path"
-      status=$?
-      set -e
-      if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
-        echo "No tests matched marker expression for $test_path; treating as skipped."
-        status=0
-      fi
-      if [[ "$status" -ne 0 ]]; then
-        echo "::error title=Backend unit file failed::$test_path exited with status $status"
-      fi
-      echo "::endgroup::"
-      # Rename after writing so the scheduler never observes a partial status.
-      status_temp="$status_file.pending"
-      printf '%s\t%s\n' "$status" "$test_path" > "$status_temp"
-      mv "$status_temp" "$status_file"
-      exit 0
-    ) &
-    active_pids+=("$!")
-    active_status_files+=("$status_file")
-    active_test_paths+=("$test_path")
+  if [[ "$isolated_count" -gt 0 ]]; then
+    for test_path in "${isolated_tests[@]}"; do
+      status_file="$status_dir/$test_index.status"
+      test_index=$((test_index + 1))
+      (
+        echo "::group::$test_path"
+        set +e
+        "$PYTHON_BIN" -m pytest "${pytest_args[@]}" "$test_path"
+        status=$?
+        set -e
+        if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
+          echo "No tests matched marker expression for $test_path; treating as skipped."
+          status=0
+        fi
+        if [[ "$status" -ne 0 ]]; then
+          echo "::error title=Backend unit file failed::$test_path exited with status $status"
+        fi
+        echo "::endgroup::"
+        # Rename after writing so the scheduler never observes a partial status.
+        status_temp="$status_file.pending"
+        printf '%s\t%s\n' "$status" "$test_path" > "$status_temp"
+        mv "$status_temp" "$status_file"
+        exit 0
+      ) &
+      active_pids+=("$!")
+      active_status_files+=("$status_file")
+      active_test_paths+=("$test_path")
 
-    while [[ "$(active_pid_count)" -ge "$worker_count" ]]; do
-      reap_finished_children
-      if [[ "$(active_pid_count)" -lt "$worker_count" ]]; then
-        break
-      fi
-      sleep 0.02
+      while [[ "$(active_pid_count)" -ge "$worker_count" ]]; do
+        reap_finished_children
+        if [[ "$(active_pid_count)" -lt "$worker_count" ]]; then
+          break
+        fi
+        sleep 0.02
+      done
     done
-  done
 
-  while [[ "$(active_pid_count)" -gt 0 ]]; do
-    reap_finished_children
-    if [[ "$(active_pid_count)" -gt 0 ]]; then
-      sleep 0.02
-    fi
-  done
+    while [[ "$(active_pid_count)" -gt 0 ]]; do
+      reap_finished_children
+      if [[ "$(active_pid_count)" -gt 0 ]]; then
+        sleep 0.02
+      fi
+    done
+
+  fi
 
   for status_file in "$status_dir"/*.status; do
     [[ -e "$status_file" ]] || continue
@@ -221,17 +295,81 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
     fi
   done
 
+  batch_unattributed=0
+  if [[ "$batched_count" -gt 0 ]]; then
+    batch_args=("${pytest_args[@]}")
+    if "$PYTHON_BIN" -c "import xdist" >/dev/null 2>&1; then
+      batch_args+=(-n "$worker_count" --dist=loadfile)
+    else
+      echo "pytest-xdist is not installed; running the parallel partition serially."
+    fi
+
+    batch_log="$status_dir/parallel-batch.log"
+    echo "::group::Backend unit parallel session ($batched_count file(s))"
+    set +e
+    "$PYTHON_BIN" -m pytest "${batch_args[@]}" "${batched_tests[@]}" 2>&1 | tee "$batch_log"
+    batch_status="${PIPESTATUS[0]}"
+    set -e
+    # Exit 5 means "collected nothing", which for a single file legitimately means "every
+    # test in it was deselected by the marker". For the parallel session it also fires
+    # when the session died: an xdist run whose workers all crash reports "no tests ran"
+    # and exits 5. Mapping that to success turned a suite-wide segfault into a green run
+    # during this change's own validation. Only honour it when nothing crashed.
+    if [[ "$batch_status" -eq 5 && -n "$marker_expr" ]]; then
+      if grep -qE 'crashed workers|Fatal Python error|INTERNALERROR|error(s)? during collection' "$batch_log"; then
+        echo "Parallel session collected no tests because it crashed; not treating as skipped."
+      else
+        echo "No tests matched marker expression for the parallel partition; treating as skipped."
+        batch_status=0
+      fi
+    fi
+    echo "::endgroup::"
+
+    if [[ "$batch_status" -ne 0 ]]; then
+      failed=1
+      # The parallel session is one process, so there is no per-file exit status to
+      # read. pytest's short summary (FAILED/ERROR lines, on by default) names the node
+      # id of every failure and every collection error. Session-level gates that fail
+      # without failing a test -- the fast-unit duration guard -- announce their files
+      # with the BACKEND-UNIT-FAILED-FILE marker from tests/conftest.py instead. Both
+      # feed the same per-file report and rerun list.
+      batch_failed_files="$(
+        grep -E '^(FAILED|ERROR|BACKEND-UNIT-FAILED-FILE) ' "$batch_log" 2>/dev/null |
+          awk '{print $2}' | sed 's/::.*$//' | sort -u || true
+      )"
+      if [[ -n "$batch_failed_files" ]]; then
+        while IFS= read -r batch_failed_path; do
+          [[ -n "$batch_failed_path" ]] || continue
+          echo "::error title=Backend unit file failed::$batch_failed_path failed in the parallel session"
+          echo "Backend unit test file failed: $batch_failed_path (status $batch_status)"
+          failed_test_paths+=("$batch_failed_path")
+        done <<< "$batch_failed_files"
+      else
+        batch_unattributed=1
+        echo "::error title=Backend unit parallel session failed::exited with status $batch_status"
+        echo "Backend unit parallel session failed (status $batch_status) without naming a file."
+      fi
+    fi
+  fi
+
   if [[ "$failed" -ne 0 ]]; then
     rerun_list="/tmp/omi-backend-unit-failures.txt"
     echo
     echo "Backend unit suite failed."
     echo "Reproduce only the failed file(s) with the same test.sh runner and timing guard:"
     printf '  : > %q\n' "$rerun_list"
+    set +u
     for test_path in "${failed_test_paths[@]}"; do
       printf '  echo %q >> %q\n' "$test_path" "$rerun_list"
     done
+    set -u
     printf '  BACKEND_UNIT_TEST_FILE_LIST=%q bash test.sh\n' "$rerun_list"
     echo "Do not use bare pytest for fast-unit timing failures; it omits test.sh's guard settings."
+    if [[ "$batch_unattributed" -ne 0 ]]; then
+      echo "The parallel session failed without naming a file (crash, worker death, or a"
+      echo "session-level guard). Re-run the selection one file per process by clearing"
+      echo "  BACKEND_PYTEST_PARALLEL_SESSION"
+    fi
   fi
 
   rm -rf "$status_dir"

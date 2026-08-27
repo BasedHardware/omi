@@ -18434,6 +18434,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Last error: {error}.'**
   String appDisabledLastError(String error);
+
+  /// Tab label for the prerecorded conversation transcript
+  ///
+  /// In en, this message translates to:
+  /// **'Prerecorded'**
+  String get prerecordedTranscript;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -189,6 +189,7 @@ final class ChatQueryTelemetryTests: XCTestCase {
       Set(payload.properties.keys),
       Set([
         "attempt_id", "surface", "harness", "duration_ms", "error_class", "error",
+        "error_code", "root_cause",
         "partial_response", "watchdog_fired", "telemetry_schema_version", "input_length_bucket",
         "attachment_count", "has_image",
       ])
@@ -196,6 +197,82 @@ final class ChatQueryTelemetryTests: XCTestCase {
     XCTAssertEqual(payload.properties["error_class"] as? String, "timeout")
     XCTAssertEqual(payload.properties["error"] as? String, "timeout")
     XCTAssertFalse(payload.properties.keys.contains("text"))
+  }
+
+  /// The 2026-08 macOS churn cohort could not explain `chat_agent_error` because
+  /// only the bridge catch path supplied a `ChatQueryErrorDetail`; every other
+  /// terminal arrived with no `error_code` and no `root_cause`. Every failure
+  /// class must now classify itself.
+  func testEveryFailureClassCarriesABoundedCodeAndRootCause() {
+    let allClasses: [ChatQueryErrorClass] = [
+      .agentError, .agentRuntime, .attachmentUpload, .authentication, .bridgeUnavailable,
+      .bridgeStartFailed, .browserExtensionMissing, .concurrentRequest, .encoding, .quota,
+      .resourceExhausted, .sessionSetup, .timeout, .toolStall, .transientNetwork, .unknown,
+    ]
+    let allowedRootCauses = Set(
+      [
+        ChatQueryRootCause.agentRuntime, .attachmentPipeline, .bridgeProcess, .browserExtension,
+        .deviceResources, .localSession, .network, .providerClaude, .requestEncoding, .unclassified,
+      ].map(\.rawValue))
+
+    for errorClass in allClasses {
+      let payload = ChatQueryTelemetryEvent.failed(
+        ChatQueryTelemetryContext(attemptId: "a", surface: "main_chat", harness: "pimono"),
+        durationMs: 10,
+        errorClass: errorClass,
+        partialResponse: false,
+        detail: nil
+      ).analyticsPayload
+      let code = payload.properties["error_code"] as? String
+      let rootCause = payload.properties["root_cause"] as? String
+      XCTAssertNotNil(code, "\(errorClass.rawValue) emitted no error_code")
+      XCTAssertFalse(code?.isEmpty ?? true, "\(errorClass.rawValue) emitted an empty error_code")
+      XCTAssertNotNil(rootCause, "\(errorClass.rawValue) emitted no root_cause")
+      XCTAssertTrue(
+        allowedRootCauses.contains(rootCause ?? ""),
+        "\(errorClass.rawValue) emitted unbounded root_cause \(rootCause ?? "nil")")
+    }
+  }
+
+  /// Auth kept the value already published to PostHog so existing breakdowns
+  /// stay valid, and the two timeouts stay distinguishable because they have
+  /// different owners.
+  func testRootCauseAndTimeoutCodesStayActionable() {
+    func payload(_ errorClass: ChatQueryErrorClass, watchdogFired: Bool = false) -> [String: Any] {
+      ChatQueryTelemetryEvent.failed(
+        ChatQueryTelemetryContext(attemptId: "a", surface: "main_chat", harness: "pimono"),
+        durationMs: 10,
+        errorClass: errorClass,
+        partialResponse: false,
+        detail: nil,
+        watchdogFired: watchdogFired
+      ).analyticsPayload.properties
+    }
+
+    XCTAssertEqual(payload(.authentication)["root_cause"] as? String, "provider_claude")
+    XCTAssertEqual(payload(.authentication)["turn_disposition"] as? String, "auth_blocked")
+    XCTAssertEqual(payload(.quota)["root_cause"] as? String, "provider_claude")
+    XCTAssertEqual(payload(.bridgeUnavailable)["root_cause"] as? String, "bridge_process")
+    XCTAssertEqual(payload(.timeout, watchdogFired: true)["error_code"] as? String, "watchdog_timeout")
+    XCTAssertEqual(payload(.timeout)["error_code"] as? String, "bridge_timeout")
+  }
+
+  /// A detail is strictly better information than the class fallback, so it
+  /// must win rather than be shadowed by it.
+  func testErrorDetailCodeOverridesTheClassFallback() {
+    let payload = ChatQueryTelemetryEvent.failed(
+      ChatQueryTelemetryContext(attemptId: "a", surface: "main_chat", harness: "pimono"),
+      durationMs: 10,
+      errorClass: .agentRuntime,
+      partialResponse: false,
+      detail: .from(
+        BridgeError.agentRuntimeFailure(
+          AgentRuntimeFailure(code: "adapter_not_registered", userMessage: "Agent run failed")))
+    ).analyticsPayload
+
+    XCTAssertEqual(payload.properties["failure_code"] as? String, "adapter_not_registered")
+    XCTAssertNotEqual(payload.properties["error_code"] as? String, "agent_runtime_failure")
+    XCTAssertEqual(payload.properties["root_cause"] as? String, "agent_runtime")
   }
 
   func testDecoratedToolAndFailureDimensionsCannotLeakContentOrExplodeCardinality() {

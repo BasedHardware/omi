@@ -10797,5 +10797,6 @@
     "appReEnableFailedTitle": "فعال‌سازی مجدد ممکن نشد",
     "appReEnableFailedBody": "این برنامه دوباره فعال نشد. لطفاً دوباره تلاش کنید.",
     "appDisabledOn": "در {date} غیرفعال شد.",
-    "appDisabledLastError": "آخرین خطا: {error}"
+    "appDisabledLastError": "آخرین خطا: {error}",
+    "prerecordedTranscript": "از پیش ضبط‌شده"
 }

@@ -29,9 +29,46 @@ fi
 # Dart formatting for app/
 STAGED_DART_FILES=$(git diff --cached --name-only --diff-filter=ACM "app/**.dart" | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' -e '^app/lib/l10n/app_localizations.*\.dart$')
 
+if [ -n "$STAGED_DART_FILES" ] && [ "${OMI_SKIP_DART_FORMAT:-}" = "1" ]; then
+  echo "OMI_SKIP_DART_FORMAT=1: leaving staged Dart files unformatted."
+  STAGED_DART_FILES=""
+fi
+
 if [ -n "$STAGED_DART_FILES" ]; then
-  echo "Formatting staged Dart files in app/..."
-  echo "$STAGED_DART_FILES" | xargs dart format --line-length 120
+  ROOT="$(git rev-parse --show-toplevel)"
+  PINNED_FLUTTER=$(git show :.github/workflows/repo-checks.yml 2>/dev/null | sed -n 's/^[[:space:]]*flutter-version:[[:space:]]*//p' | head -1 | tr -d "\"' ")
+  if [ -z "$PINNED_FLUTTER" ]; then
+    PINNED_FLUTTER=$(sed -n 's/^[[:space:]]*flutter-version:[[:space:]]*//p' "$ROOT/.github/workflows/repo-checks.yml" 2>/dev/null | head -1 | tr -d "\"' ")
+  fi
+  if [ -z "$PINNED_FLUTTER" ]; then
+    echo "Could not read the pinned flutter-version from .github/workflows/repo-checks.yml." >&2
+    echo "Refusing to run 'dart format' with an unknown toolchain. Set OMI_SKIP_DART_FORMAT=1 to commit unformatted." >&2
+    exit 1
+  fi
+  if command -v flutter >/dev/null 2>&1; then
+    # Git exports linked-worktree metadata to hooks. Flutter resolves its own
+    # SDK version through Git, so those variables must not leak into the probe.
+    LOCAL_FLUTTER=$(
+      unset GIT_DIR GIT_WORK_TREE
+      flutter --version 2>/dev/null | sed -n 's/^Flutter \([0-9][^ ]*\).*/\1/p' | head -1
+    )
+  else
+    LOCAL_FLUTTER=""
+  fi
+  if [ "$LOCAL_FLUTTER" != "$PINNED_FLUTTER" ]; then
+    echo "Dart formatter toolchain mismatch: repo pins Flutter $PINNED_FLUTTER, found ${LOCAL_FLUTTER:-no flutter on PATH}." >&2
+    echo "A different Dart SDK reformats untouched files into a shape CI rejects, so formatting is refused." >&2
+    echo "Install Flutter $PINNED_FLUTTER (fvm use $PINNED_FLUTTER), or set OMI_SKIP_DART_FORMAT=1 to commit unformatted." >&2
+    exit 1
+  fi
+  DART_BIN="$(dirname "$(command -v flutter)")/dart"
+  if [ ! -x "$DART_BIN" ]; then
+    echo "Dart formatter sibling not found: expected $DART_BIN next to the validated flutter." >&2
+    echo "Refusing to run an unrelated 'dart' from PATH. Set OMI_SKIP_DART_FORMAT=1 to commit unformatted." >&2
+    exit 1
+  fi
+  echo "Formatting staged Dart files in app/ with Flutter $PINNED_FLUTTER..."
+  echo "$STAGED_DART_FILES" | xargs "$DART_BIN" format --line-length 120
   echo "$STAGED_DART_FILES" | xargs git add
 fi
 
@@ -69,25 +106,87 @@ if [ -n "$STAGED_ARB_FILES" ]; then
 fi
 
 # Web (JS/TS/JSX/TSX) formatting with Prettier
-STAGED_WEB_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|jsx|ts|tsx)$' | grep -E '^web/')
+# Auto-generated TypeScript (e.g. the admin OpenAPI client) is excluded: a
+# regenerated artifact must not be swept through Prettier's format-and-add.
+STAGED_WEB_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|jsx|ts|tsx)$' | grep -E '^web/' | grep -v '\.generated\.ts$')
+
+if [ -n "$STAGED_WEB_FILES" ] && [ "${OMI_SKIP_WEB_FORMAT:-}" = "1" ]; then
+  echo "OMI_SKIP_WEB_FORMAT=1: leaving staged web files unformatted."
+  STAGED_WEB_FILES=""
+fi
 
 if [ -n "$STAGED_WEB_FILES" ]; then
   echo "Formatting staged web files with Prettier..."
-  for dir in web/frontend web/app web/personas-open-source; do
+  for dir in $(echo "$STAGED_WEB_FILES" | cut -d/ -f1-2 | sort -u); do
     DIR_FILES=$(echo "$STAGED_WEB_FILES" | grep "^$dir/")
     if [ -z "$DIR_FILES" ]; then
       continue
     fi
-    if [ -x "$dir/node_modules/.bin/prettier" ]; then
-      echo "$DIR_FILES" | xargs "$dir/node_modules/.bin/prettier" --write
-    elif command -v npx >/dev/null 2>&1; then
-      echo "$DIR_FILES" | xargs npx --prefix "$dir" prettier --write
-    elif command -v prettier >/dev/null 2>&1; then
-      echo "$DIR_FILES" | xargs prettier --write
-    else
-      echo "prettier not found for $dir. Run 'npm install' in $dir or install prettier globally." >&2
+    PINNED=$(git show :"$dir/package.json" 2>/dev/null | sed -n 's/.*"prettier"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+    if [ -z "$PINNED" ]; then
+      PINNED=$(sed -n 's/.*"prettier"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$dir/package.json" 2>/dev/null | head -1)
+    fi
+    if [ -z "$PINNED" ]; then
+      echo "$dir/package.json does not pin prettier; refusing to format $dir." >&2
+      echo "Pin prettier there, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
       exit 1
     fi
+    PRETTIER_BIN="$dir/node_modules/.bin/prettier"
+    if [ -x "$PRETTIER_BIN" ]; then
+      LOCAL_VERSION=$("$PRETTIER_BIN" --version 2>/dev/null)
+    else
+      LOCAL_VERSION=""
+    fi
+    RESOLVED_VERSION=$(git show :"$dir/package-lock.json" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print((d.get('packages',{}).get('node_modules/prettier') or {}).get('version',''))" 2>/dev/null)
+    if [ -n "$RESOLVED_VERSION" ]; then
+      if [ -z "$LOCAL_VERSION" ] || [ "$LOCAL_VERSION" != "$RESOLVED_VERSION" ]; then
+        echo "Prettier toolchain mismatch in $dir: package-lock resolves $RESOLVED_VERSION, found ${LOCAL_VERSION:-no $dir/node_modules/.bin/prettier}." >&2
+        echo "A floating prettier reformats files into a shape CI rejects, so formatting is refused." >&2
+        echo "Run 'npm ci' in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+        exit 1
+      fi
+    else
+      echo "Prettier lockfile pin missing or unresolvable in $dir: refusing to format $dir." >&2
+      echo "A missing, empty, or unparseable package-lock.json lets a floating prettier reformat files into a shape CI rejects." >&2
+      echo "Run 'npm ci' in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+      exit 1
+    fi
+    for plugin in prettier-plugin-tailwindcss; do
+      PLUGIN_RESOLVED=$(git show :"$dir/package-lock.json" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print((d.get('packages',{}).get('node_modules/' + sys.argv[1]) or {}).get('version',''))" "$plugin" 2>/dev/null)
+      PLUGIN_DECLARED=$(git show :"$dir/package.json" 2>/dev/null | sed -n "s/.*\"$plugin\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -1)
+      if [ -z "$PLUGIN_DECLARED" ]; then
+        PLUGIN_DECLARED=$(sed -n "s/.*\"$plugin\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$dir/package.json" 2>/dev/null | head -1)
+      fi
+      if [ -z "$PLUGIN_RESOLVED" ]; then
+        if [ -n "$PLUGIN_DECLARED" ]; then
+          echo "Prettier plugin toolchain unresolved in $dir: package.json declares $plugin $PLUGIN_DECLARED, package-lock.json has no entry for it." >&2
+          echo "Prettier auto-loads any installed plugin, so a stale or missing one reformats files into a shape CI rejects; formatting is refused." >&2
+          echo "Run 'npm ci' in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+          exit 1
+        fi
+        continue
+      fi
+      PLUGIN_PKG="$dir/node_modules/$plugin/package.json"
+      if [ -f "$PLUGIN_PKG" ]; then
+        PLUGIN_LOCAL=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('version',''))" "$PLUGIN_PKG" 2>/dev/null)
+      else
+        PLUGIN_LOCAL=""
+      fi
+      if [ -z "$PLUGIN_LOCAL" ] || [ "$PLUGIN_LOCAL" != "$PLUGIN_RESOLVED" ]; then
+        echo "Prettier plugin toolchain mismatch in $dir: package-lock resolves $plugin $PLUGIN_RESOLVED, found ${PLUGIN_LOCAL:-no $dir/node_modules/$plugin}." >&2
+        echo "A missing or stale plugin reformats files into a shape CI rejects, so formatting is refused." >&2
+        echo "Run 'npm ci' in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+        exit 1
+      fi
+    done
+    for file in $DIR_FILES; do
+      if ! git diff --quiet -- "$file"; then
+        echo "$file has unstaged edits; refusing to format-and-add because it would sweep them into the commit." >&2
+        echo "Stage or commit the remaining edits first, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+        exit 1
+      fi
+    done
+    echo "$DIR_FILES" | xargs "$PRETTIER_BIN" --write
     echo "$DIR_FILES" | xargs git add
   done
 fi

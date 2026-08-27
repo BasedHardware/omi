@@ -379,3 +379,33 @@ def test_signer_service_account_must_look_like_a_service_account(monkeypatch):
         with pytest.raises(module.ProbeTokenError) as caught:
             module.mint_probe_token('based-hardware-dev', 'based-hardware', signer_service_account=bad)
         assert caught.value.stage == 'signer_service_account'
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+PROBE_ACTION = REPOSITORY_ROOT / '.github/actions/transcription-release-candidate-probe/action.yml'
+DEPLOY_BACKEND_STACK_ACTION = REPOSITORY_ROOT / '.github/actions/deploy-backend-stack/action.yml'
+GCP_BACKEND_WORKFLOW = REPOSITORY_ROOT / '.github/workflows/gcp_backend.yml'
+
+
+def test_development_backend_deploy_supplies_a_firebase_project_signer():
+    """The known-audio gate authenticates against production Firebase.
+
+    A development deploy identity cannot sign for that project, so the lane
+    failed at custom_token_signing until it named its own signer. Losing this
+    wiring silently re-blocks every development backend deploy.
+    """
+    workflow = GCP_BACKEND_WORKFLOW.read_text(encoding='utf-8')
+    assert 'firebase_probe_signer_credentials:' in workflow
+    assert 'secrets.GCP_SERVICE_ACCOUNT' in workflow
+
+    stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
+    assert 'firebase_signer_credentials: ${{ inputs.firebase_probe_signer_credentials }}' in stack
+
+
+def test_probe_action_stages_the_signer_key_as_transient_owner_only_material():
+    action = PROBE_ACTION.read_text(encoding='utf-8')
+    assert '--signer-credentials-file' in action
+    assert 'chmod 600 "$signer_file"' in action
+    # The key must not outlive the probe.
+    assert 'rm -f "$token_file" ${signer_file:+"$signer_file"}' in action
+    assert 'rm -f "$signer_file"' in action

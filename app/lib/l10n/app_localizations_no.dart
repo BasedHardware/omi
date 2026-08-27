@@ -9897,4 +9897,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Siste feil: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Forhåndsinnspilt';
 }

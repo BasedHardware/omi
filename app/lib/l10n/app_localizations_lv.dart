@@ -9923,4 +9923,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Pēdējā kļūda: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Iepriekš ierakstīts';
 }

@@ -9919,4 +9919,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Paskutinė klaida: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Išankstinis įrašas';
 }

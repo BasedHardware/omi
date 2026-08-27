@@ -3231,5 +3231,6 @@
     "appReEnableFailedTitle": "Η επανενεργοποίηση απέτυχε",
     "appReEnableFailedBody": "Δεν ήταν δυνατή η επανενεργοποίηση αυτής της εφαρμογής. Δοκιμάστε ξανά.",
     "appDisabledOn": "Απενεργοποιήθηκε στις {date}.",
-    "appDisabledLastError": "Τελευταίο σφάλμα: {error}."
+    "appDisabledLastError": "Τελευταίο σφάλμα: {error}.",
+    "prerecordedTranscript": "Προηχογραφημένο"
 }

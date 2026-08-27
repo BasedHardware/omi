@@ -9900,4 +9900,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Poslední chyba: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Předem nahráno';
 }

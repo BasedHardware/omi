@@ -10797,5 +10797,6 @@
     "appReEnableFailedTitle": "ההפעלה מחדש נכשלה",
     "appReEnableFailedBody": "לא ניתן היה להפעיל מחדש את האפליקציה הזו. נסה שוב.",
     "appDisabledOn": "הושבתה בתאריך {date}.",
-    "appDisabledLastError": "השגיאה האחרונה: {error}"
+    "appDisabledLastError": "השגיאה האחרונה: {error}",
+    "prerecordedTranscript": "הוקלט מראש"
 }

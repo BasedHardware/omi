@@ -9921,4 +9921,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Остання помилка: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Попередній запис';
 }
