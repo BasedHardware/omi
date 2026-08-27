@@ -10,8 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-from typing import Any
-
 from utils.object_store.errors import ObjectNotFound
 from utils.other import storage as _storage
 from utils.other.storage import owner_storage_write_gate
