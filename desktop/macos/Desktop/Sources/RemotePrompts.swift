@@ -42,13 +42,14 @@ final class RemotePromptEngine: ObservableObject {
   @Published private(set) var current: RemotePromptSpec?
 
   private(set) var specs: [RemotePromptSpec] = []
-  private var questionCount = 0
   private var pollTask: Task<Void, Never>?
   private let defaults = UserDefaults.standard
   static let pollInterval: TimeInterval = 300
 
   /// Seam for tests and the automation bridge; production uses APIClient.
   var fetch: () async throws -> [RemotePromptSpec]
+  /// Injectable for tests; production reads the real auth state.
+  var isSignedInCheck: () -> Bool = { AuthState.shared.isSignedIn }
 
   private init() {
     fetch = {
@@ -70,7 +71,7 @@ final class RemotePromptEngine: ObservableObject {
   }
 
   func refreshFromServer() async {
-    guard AuthState.shared.isSignedIn else { return }
+    guard isSignedInCheck() else { return }
     do {
       specs = try await fetch()
     } catch {
@@ -87,10 +88,16 @@ final class RemotePromptEngine: ObservableObject {
     evaluate()
   }
 
-  /// Fed from the same accepted-question seam as RatingPromptManager: only
-  /// sends the chat provider accepted advance this counter.
+  /// The accepted-question ledger IS the persisted rating-prompt counter —
+  /// one source of truth, so relaunches and the history seed carry over to
+  /// "after Nth question" remote prompts instead of restarting at zero.
+  private var questionCount: Int {
+    defaults.integer(forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+  }
+
+  /// Notification from the accepted-question seam (the manager increments the
+  /// persisted counter before calling this).
   func recordQuestionAsked() {
-    questionCount += 1
     evaluate()
   }
 
@@ -144,7 +151,6 @@ final class RemotePromptEngine: ObservableObject {
     for spec in specs {
       defaults.removeObject(forKey: ScopedDefaultsKey.remotePromptResolution(promptId: spec.id))
     }
-    questionCount = 0
     current = nil
     evaluate()
   }
