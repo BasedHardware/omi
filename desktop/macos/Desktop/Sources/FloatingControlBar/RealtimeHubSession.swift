@@ -1020,7 +1020,9 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           // cedar: the deep, calm male voice of the gpt-realtime family — the closest
           // match to the Gemini hub voice (Charon), so a provider failover does not
           // change who Omi sounds like mid-conversation.
-          "output": ["format": ["type": "audio/pcm", "rate": 24000], "voice": "cedar"],
+          "output": [
+            "format": ["type": "audio/pcm", "rate": 24000], "voice": RealtimeHubVoicePolicy.voiceName(for: .openai),
+          ],
         ],
         "tools": RealtimeHubTools.openAITools(availableDirectedProviders: availableDirectedProviders),
         "tool_choice": "auto",
@@ -1048,9 +1050,9 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
             "mediaResolution": "MEDIA_RESOLUTION_HIGH",
             // Pin the spoken voice — with no speechConfig Gemini picks its own default,
             // which differs from the OpenAI hub voice (cedar) and can change across
-            // model revisions. Charon: deep, calm, "informative" — closest match to marin.
+            // model revisions. Charon: deep, calm, "informative" — cedar's counterpart.
             "speechConfig": [
-              "voiceConfig": ["prebuiltVoiceConfig": ["voiceName": "Charon"]]
+              "voiceConfig": ["prebuiltVoiceConfig": ["voiceName": RealtimeHubVoicePolicy.voiceName(for: .gemini)]]
             ],
           ],
           "systemInstruction": ["parts": [["text": instructions]]],
