@@ -22,3 +22,19 @@ RUN git config --system --add safe.directory '*'
 RUN pip install --no-cache-dir aioresponses==0.7.8 fake-firestore==0.13.1 fakeredis==2.36.2 \
     lupa==2.8 pytest-httpserver==1.1.5 werkzeug==3.1.8 pymongo==4.10.1 mongomock==4.3.0 \
     boto3==1.35.36 http-ece==1.2.1
+
+# uv, for the OpenAPI runner behind `backend-route-policy-baseline` and the other openapi gates: it
+# builds `.openapi-venv` itself and refuses to start without uv ("uv is required for the OpenAPI
+# runner"). CI gets it from the setup-uv action; here it comes from the same installer the replay-harness
+# image uses, so the two agree on where uv lives.
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
+    && uv --version
+
+# bun, for the `web-app-checks` manifest gate: `web/app/test.sh` runs `bun install --frozen-lockfile`
+# and `bun run check`, and there is no npm equivalent — the lockfile is `bun.lock`. Without it the gate
+# dies on "bun: command not found" and, because the manifest runner is fail-fast, every check after it
+# never runs. Installed to /usr/local so it is on PATH for any user.
+RUN apt-get update && apt-get install -y --no-install-recommends unzip \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash \
+    && bun --version
