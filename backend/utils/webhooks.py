@@ -12,7 +12,6 @@ from database.redis_db import (
     user_webhook_status_db,
     disable_user_webhook_db,
     enable_user_webhook_db,
-    set_user_webhook_db,
 )
 from database.webhook_health import (
     record_dev_webhook_failure,
@@ -22,7 +21,6 @@ from database.webhook_health import (
 )
 from models.conversation import Conversation
 from models.users import WebhookType, webhook_url_from_setting
-import database.notifications as notification_db
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from utils.conversations.render import conversation_to_dict
 from utils.executors import db_executor, run_blocking

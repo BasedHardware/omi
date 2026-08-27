@@ -1205,6 +1205,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
       uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
         (provider, UserDefaults.standard.string(forKey: provider.storageKey))
       })
+    let savedFingerprints = APIKeyService.enrolledFingerprints()
     defer {
       for provider in BYOKProvider.allCases {
         if let saved = savedKeys[provider] ?? nil {
@@ -1220,6 +1221,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
       } else {
         UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
       }
+      APIKeyService.persistEnrolledFingerprints(savedFingerprints)
     }
 
     for provider in BYOKProvider.allCases {
@@ -1232,6 +1234,12 @@ final class AgentRuntimeProcessTests: XCTestCase {
         }))
     UserDefaults.standard.set(BYOKLLMProvider.openai.rawValue, forKey: .byokLLMProvider)
     let openAIKey = APIKeyService.byokKey(.openai)!
+    // usableBYOKEnvironment() gates on isByokActive, which requires the
+    // selected provider's key to be enrolled (#11454's fingerprint contract),
+    // separately from the per-request health suppression this test exercises.
+    APIKeyService.persistEnrolledFingerprints([
+      BYOKProvider.openai.rawValue: APIKeyService.byokFingerprint(openAIKey)
+    ])
     CredentialHealthManager.shared.recordProviderFailure(
       .providerAuthFailed(provider: .openai, mode: .byok),
       provider: .openai,
@@ -1252,6 +1260,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
       uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
         (provider, UserDefaults.standard.string(forKey: provider.storageKey))
       })
+    let savedFingerprints = APIKeyService.enrolledFingerprints()
     defer {
       for provider in BYOKProvider.allCases {
         if let saved = savedKeys[provider] ?? nil {
@@ -1267,6 +1276,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
       } else {
         UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
       }
+      APIKeyService.persistEnrolledFingerprints(savedFingerprints)
     }
 
     for provider in BYOKProvider.allCases {
@@ -1278,6 +1288,11 @@ final class AgentRuntimeProcessTests: XCTestCase {
           ($0.rawValue, APIKeyService.byokFingerprint("sk-agent-\($0.rawValue)"))
         }))
     UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    // usableBYOKEnvironment() gates on isByokActive, which requires the
+    // selected provider's key to be enrolled (#11454's fingerprint contract).
+    APIKeyService.persistEnrolledFingerprints([
+      BYOKProvider.openrouter.rawValue: APIKeyService.byokFingerprint("sk-agent-openrouter")
+    ])
 
     let result = AgentRuntimeProcess.usableBYOKEnvironment()
 

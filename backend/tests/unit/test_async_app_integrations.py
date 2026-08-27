@@ -4,6 +4,7 @@ Verifies that trigger_realtime_audio_bytes and trigger_realtime_integrations
 use asyncio.gather + httpx instead of Thread+join + requests.
 """
 
+import inspect
 import os
 import sys
 import types
@@ -577,7 +578,13 @@ class TestAsyncTriggerRealtimeAudioBytes:
 
     @pytest.mark.asyncio
     async def test_no_threading_used(self):
-        """Verify threading.Thread is NOT used in the async path."""
+        """Verify realtime audio fan-out stays async (no threading import/use)."""
+        # Static tripwire on the real fan-out implementation (not the thin wrapper).
+        code = app_integrations._async_trigger_realtime_audio_bytes.__code__
+        assert "threading" not in code.co_names
+        assert "Thread" not in code.co_names
+        assert "gather_safe" in code.co_names
+
         app1 = _make_app("a1", "https://app1.test/hook", triggers_audio=True)
 
         mock_response = MagicMock()
@@ -588,9 +595,9 @@ class TestAsyncTriggerRealtimeAudioBytes:
 
         with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
             app_integrations, "get_webhook_client", return_value=mock_client
-        ), patch.object(app_integrations, "threading") as mock_threading:
+        ):
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00'))
-            mock_threading.Thread.assert_not_called()
+            mock_client.post.assert_awaited()
 
 
 class TestAudioBytesChunkedFanOut:
