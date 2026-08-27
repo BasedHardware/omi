@@ -88,7 +88,7 @@ def normalize_config(raw: Dict[str, Any] | None) -> Dict[str, Any]:
     return {
         'enabled': raw.get('enabled') is not False,
         'title': text('title', DEFAULT_TITLE),
-        'body': raw.get('body').strip() if isinstance(raw.get('body'), str) else '',
+        'body': text('body', ''),
         'thank_you_text': text('thank_you_text', DEFAULT_THANK_YOU_TEXT),
         'refer_cta_text': text('refer_cta_text', DEFAULT_REFER_CTA_TEXT),
         'question_threshold': _clamped_int(raw.get('question_threshold'), 3, 1, 50),
