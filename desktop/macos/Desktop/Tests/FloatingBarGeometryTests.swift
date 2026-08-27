@@ -604,3 +604,57 @@ final class FloatingBarGeometryTests: XCTestCase {
       "an ordered-out panel must never retain event ownership")
   }
 }
+
+// MARK: - Notch top re-anchoring
+
+/// The island hangs from the display top by definition. Auto layout grows the
+/// panel from a pinned bottom-left origin when SwiftUI content has not
+/// finished collapsing, which pushed the chrome above the screen and made the
+/// island "disappear after hovering" until Push-to-Talk resized it back.
+final class NotchTopReanchorTests: XCTestCase {
+  private let screen = NSRect(x: 0, y: 0, width: 2048, height: 1330)
+
+  func testGrowthFromPinnedOriginIsReanchoredToScreenTop() {
+    // The reproduced bug frame: collapse origin kept, menu height restored by
+    // the hosting view's min-size constraint — top edge 240pt offscreen.
+    let grown = NSRect(x: 816, y: 1263, width: 430, height: 307)
+    let anchored = FloatingControlBarGeometry.notchTopReanchoredFrame(
+      frame: grown, screenFrame: screen, isResizable: false, isUserDragging: false)
+    XCTAssertEqual(anchored, NSRect(x: 809, y: 1023, width: 430, height: 307))
+    XCTAssertEqual(anchored?.maxY, screen.maxY)
+  }
+
+  func testCorrectlyAnchoredFrameIsLeftAlone() {
+    let idle = NSRect(x: 828, y: 1263, width: 392, height: 67)
+    XCTAssertNil(
+      FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: idle, screenFrame: screen, isResizable: false, isUserDragging: false))
+  }
+
+  func testUserControlledWindowsAreNeverFought() {
+    let grown = NSRect(x: 816, y: 900, width: 430, height: 307)
+    XCTAssertNil(
+      FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: grown, screenFrame: screen, isResizable: true, isUserDragging: false),
+      "a resizable conversation panel is the user's to size")
+    XCTAssertNil(
+      FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: grown, screenFrame: screen, isResizable: false, isUserDragging: true),
+      "a drag in progress must not be yanked back")
+  }
+
+  func testDegenerateScreenIsIgnored() {
+    let grown = NSRect(x: 0, y: 0, width: 430, height: 307)
+    XCTAssertNil(
+      FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: grown, screenFrame: .zero, isResizable: false, isUserDragging: false))
+  }
+
+  func testSubPointDriftIsNotChurned() {
+    let nearlyAnchored = NSRect(x: 828, y: 1262.7, width: 392, height: 67)
+    XCTAssertNil(
+      FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: nearlyAnchored, screenFrame: screen, isResizable: false, isUserDragging: false),
+      "epsilon keeps AppKit rounding from causing a setFrame loop")
+  }
+}

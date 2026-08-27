@@ -93,6 +93,34 @@ enum FloatingControlBarGeometry {
   /// state transitions. Window owns which transition is active and supplies
   /// its already-adjusted target size; geometry owns whether that transition
   /// may inherit the current midpoint or must return to a canonical anchor.
+  /// A notch island hangs from the display's top edge by definition. Auto
+  /// layout can grow the panel to fit content that has not finished
+  /// collapsing (the hosting view forwards SwiftUI's min size as a window
+  /// constraint), and AppKit grows windows from their pinned bottom-left
+  /// origin — which pushes the top-anchored chrome above the screen where
+  /// nothing ever brings it back (the "island disappeared after hovering"
+  /// bug). Whenever a resize leaves the top edge somewhere other than the
+  /// screen top while the island is in its non-interactive chrome state,
+  /// the frame is re-anchored instead of trusted.
+  static func notchTopReanchoredFrame(
+    frame: NSRect,
+    screenFrame: NSRect,
+    isResizable: Bool,
+    isUserDragging: Bool,
+    epsilon: CGFloat = 0.5
+  ) -> NSRect? {
+    guard !isResizable, !isUserDragging else { return nil }
+    guard screenFrame.width > 0, screenFrame.height > 0 else { return nil }
+    let desiredTop = screenFrame.maxY
+    guard abs(frame.maxY - desiredTop) > epsilon else { return nil }
+    return NSRect(
+      x: screenFrame.midX - frame.width / 2,
+      y: desiredTop - frame.height,
+      width: frame.width,
+      height: frame.height
+    )
+  }
+
   static func surfaceTransitionFrame(
     currentFrame: NSRect,
     targetSize: NSSize,
