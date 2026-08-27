@@ -223,7 +223,7 @@ export function createBarWindow(): BrowserWindow {
     // surface itself (dark, rounded — understated).
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       backgroundThrottling: false
     }
   })

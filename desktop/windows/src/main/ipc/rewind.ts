@@ -26,7 +26,7 @@ import { getCaptureDirective } from '../rewind/captureDirective'
 import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rebuildRewindIndexFromDisk } from '../rewind/rebuildIndex'
 import { rewindRoot } from '../rewind/paths'
-import { readRewindFrame } from '../rewind/frameFile'
+import { MAX_REWIND_FRAME_BYTES, readRewindFrame } from '../rewind/frameFile'
 import type { RewindSettings } from '../../shared/types'
 
 /** How many semantic neighbours to pull before the similarity floor + the
@@ -62,7 +62,7 @@ async function vectorHits(query: string): Promise<VectorHit[]> {
 // results (type "invoice", then "receipt": invoice's vectors land last).
 let searchSeq = 0
 
-export function registerRewindHandlers(): void {
+export function registerRewindHandlers(getCaptureWc: () => Electron.WebContents | null): void {
   ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
     listRewindFrames(from, to)
   )
@@ -154,7 +154,17 @@ export function registerRewindHandlers(): void {
   ipcMain.handle('rewind:captureSourceId', async () => getRewindCaptureSourceId())
   // Receive a sampled JPEG frame from the renderer capture host and store it
   // (after foreground-window metadata + idle/lock/dup gating).
-  ipcMain.handle('rewind:saveFrame', async (_e, data: Uint8Array, sourceId: string) => {
+  ipcMain.handle('rewind:saveFrame', async (e, data: Uint8Array, sourceId: string) => {
+    const captureWc = getCaptureWc()
+    if (!captureWc || e.sender.id !== captureWc.id) {
+      throw new Error('rewind:saveFrame is restricted to the capture renderer')
+    }
+    if (!(data instanceof Uint8Array) || data.byteLength === 0) {
+      throw new Error('rewind:saveFrame requires non-empty bytes')
+    }
+    if (data.byteLength > MAX_REWIND_FRAME_BYTES) {
+      throw new Error('rewind:saveFrame exceeds the frame-size limit')
+    }
     // Foreground focus can move again while getUserMedia opens a new display.
     // Never attach the new window's metadata/privacy decision to stale pixels.
     if (!(await isCurrentRewindCaptureSource(sourceId))) {

@@ -34,4 +34,32 @@ describe('scrubEventPii', () => {
   it('handles an event with no message or exception', () => {
     expect(() => scrubEventPii({})).not.toThrow()
   })
+
+  it('drops URL queries and scrubs breadcrumbs, extra fields, and secret keys', () => {
+    const event = {
+      request: {
+        url: 'https://api.omi.me/callback?code=secret#done',
+        query_string: 'code=secret',
+        headers: { authorization: 'Bearer token', Accept: 'application/json' }
+      },
+      breadcrumbs: [
+        {
+          message: 'signed in as ada@example.com',
+          data: { url: 'https://example.com/path?state=secret' }
+        }
+      ],
+      extra: {
+        owner: 'ada@example.com',
+        nested: { api_key: 'sk-secret' }
+      }
+    }
+    const out = scrubEventPii(event)
+    expect(out.request.url).toBe('https://api.omi.me/callback')
+    expect(out.request).not.toHaveProperty('query_string')
+    expect(out.request.headers.authorization).toBe('[redacted]')
+    expect(out.breadcrumbs[0].message).toBe('signed in as [email]')
+    expect(out.breadcrumbs[0].data.url).toBe('https://example.com/path')
+    expect(out.extra.owner).toBe('[email]')
+    expect(out.extra.nested.api_key).toBe('[redacted]')
+  })
 })

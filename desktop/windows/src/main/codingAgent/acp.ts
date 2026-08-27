@@ -366,6 +366,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       if (!this.acpEntry) {
         throw new Error('acp adapter requires an acpEntry path to the bundled ACP bridge')
       }
+      // Preserve the ambient environment for the bundled agent's user-installed
+      // integrations. This compatibility exception is tracked with C1/M11.
       const env = { ...process.env }
       delete env.ANTHROPIC_API_KEY
       delete env.CLAUDE_CODE_USE_VERTEX
