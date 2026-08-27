@@ -100,6 +100,7 @@ from routers import (
     public_shared_conversation_chat,
     screen_frames,
     jit_ledger_snapshot,
+    csat,
     jit_rollout,
 )
 from routers.listen.registry import proactive_message_dispatcher
@@ -199,6 +200,7 @@ app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
 app.include_router(referrals.router)
+app.include_router(csat.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)

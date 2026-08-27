@@ -1162,6 +1162,7 @@ struct DesktopHomeView: View {
         RatingPromptManager.shared.ownerDidChange()
         RemotePromptEngine.shared.ownerDidChange()
         RemotePromptEngine.shared.start()
+        RatingPromptManager.shared.startConfigPolling()
         await RatingPromptManager.shared.seedFromHistoryIfNeeded()
       }
       .overlay {
