@@ -1,5 +1,0 @@
-{
-  "changes": [
-    "Rating and in-app prompt history is now tracked per account, so switching accounts on one Mac never hides or repeats prompts incorrectly."
-  ]
-}
