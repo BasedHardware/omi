@@ -83,6 +83,56 @@ final class PromptStateAccountScopingTests: XCTestCase {
     await RemotePromptEngine.shared.refreshFromServer()
   }
 
+  func testOwnerTransitionSwapsCachedStateImmediately() async {
+    // Account A has an armed, VISIBLE rating prompt.
+    for _ in 1...3 { RatingPromptManager.shared.recordQuestionAsked() }
+    XCTAssertTrue(RatingPromptManager.shared.isVisible)
+
+    // Switch to account B: the owner-keyed task calls ownerDidChange() —
+    // no question, no flag reload. Cached visibility must drop at once.
+    owner = "user-b"
+    RatingPromptManager.shared.ownerDidChange()
+    XCTAssertFalse(RatingPromptManager.shared.isVisible)
+
+    // And switching back restores A's armed prompt the same way.
+    owner = "user-a"
+    RatingPromptManager.shared.ownerDidChange()
+    XCTAssertTrue(RatingPromptManager.shared.isVisible)
+  }
+
+  func testOwnerTransitionClearsRemotePromptFromTheSlot() async {
+    let spec = RemotePromptSpec(
+      id: "switch-banner", type: "banner", question: "Hey", options: [],
+      ctaLabel: "Open", ctaURL: "https://omi.me", triggerKind: "app_launch", triggerCount: 0)
+    RemotePromptEngine.shared.isSignedInCheck = { true }
+    RemotePromptEngine.shared.fetch = { [spec] }
+    await RemotePromptEngine.shared.refreshFromServer()
+    for account in ["user-a", "user-b"] {
+      owner = account
+      RemotePromptEngine.shared.resetForTesting()
+      RatingPromptManager.shared.dismiss()
+    }
+    owner = "user-a"
+    await RemotePromptEngine.shared.refreshFromServer()
+    XCTAssertEqual(RemotePromptEngine.shared.current?.id, "switch-banner")
+
+    // Owner switch drops the previous account's prompt synchronously and
+    // re-evaluates for the new owner (also eligible here -> re-offered).
+    owner = "user-b"
+    RemotePromptEngine.shared.ownerDidChange()
+    XCTAssertEqual(RemotePromptEngine.shared.current?.id, "switch-banner")
+    RemotePromptEngine.shared.dismissCurrent()
+    XCTAssertNil(RemotePromptEngine.shared.current)
+
+    // Back to A: B's dismissal must not stick to A.
+    owner = "user-a"
+    RemotePromptEngine.shared.ownerDidChange()
+    XCTAssertEqual(RemotePromptEngine.shared.current?.id, "switch-banner")
+
+    RemotePromptEngine.shared.fetch = { [] }
+    await RemotePromptEngine.shared.refreshFromServer()
+  }
+
   func testLegacyGlobalStateMigratesToTheFirstAccountOnly() {
     UserDefaults.standard.set(4, forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
     UserDefaults.standard.set(true, forKey: DefaultsKey.ratingPromptDismissed.rawValue)

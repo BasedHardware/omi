@@ -79,6 +79,14 @@ final class RatingPromptManager: ObservableObject {
 
   private init() {
     refresh()
+    // Sign-out is an owner transition too: hide immediately, not at the next
+    // question. Sign-IN transitions arrive via the owner-keyed task in
+    // DesktopHomeView calling ownerDidChange().
+    NotificationCenter.default.addObserver(
+      forName: .userDidSignOut, object: nil, queue: nil
+    ) { _ in
+      Task { @MainActor in RatingPromptManager.shared.ownerDidChange() }
+    }
     // The kill switch must not wait for the next question: recompute whenever
     // PostHog delivers a flag payload (initial preload can finish AFTER this
     // singleton initializes, and reloads deliver mid-session flips).
@@ -91,6 +99,14 @@ final class RatingPromptManager: ObservableObject {
   }
 
   func flagsDidUpdate() {
+    refresh()
+  }
+
+  /// The signed-in owner changed (switch, sign-in, sign-out): recompute all
+  /// cached state for the NEW owner's keys immediately — cached isVisible /
+  /// thank-you from the previous account must never survive a switch.
+  func ownerDidChange() {
+    thankYouRating = nil
     refresh()
   }
 
