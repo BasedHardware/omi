@@ -751,9 +751,7 @@ def upload_audio_chunk(
             )
         else:
             path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus'
-            _object_store().put(
-                private_cloud_sync_bucket, path, upload_data, content_type='application/octet-stream'
-            )
+            _object_store().put(private_cloud_sync_bucket, path, upload_data, content_type='application/octet-stream')
 
     del upload_data
     return path

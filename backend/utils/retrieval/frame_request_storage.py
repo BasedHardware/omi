@@ -28,6 +28,7 @@ def _object_store():
 
     return _storage._object_store()
 
+
 TEMPORARY_STORAGE_PREFIX = "temporary-"
 PERMANENT_STORAGE_PREFIX = "permanent-"
 
@@ -90,9 +91,7 @@ def delete_frame_request_pixels(uid: str, storage_id: str) -> None:
 def download_frame_request_pixels(uid: str, storage_id: str) -> bytes:
     """Read owner-authorized pixels from their declared storage tier."""
 
-    return bytes(
-        _object_store().get_bytes(_bucket(permanent=_is_permanent(storage_id)), _object_name(uid, storage_id))
-    )
+    return bytes(_object_store().get_bytes(_bucket(permanent=_is_permanent(storage_id)), _object_name(uid, storage_id)))
 
 
 def copy_frame_request_pixels_to_permanent(uid: str, temporary_storage_id: str, permanent_storage_id: str) -> None:

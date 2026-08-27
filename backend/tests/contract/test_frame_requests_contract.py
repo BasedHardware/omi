@@ -185,9 +185,7 @@ def test_the_storage_id_enumeration_crosses_page_boundaries_exactly_once(queue):
         queue['store'].set(f"{queue['collection']}/{request.request_id}", {'storage_id': storage_id}, merge=True)
         expected.add(storage_id)
 
-    found = frame_requests.list_all_frame_request_storage_ids(
-        queue['uid'], page_size=2, firestore_client=_client()
-    )
+    found = frame_requests.list_all_frame_request_storage_ids(queue['uid'], page_size=2, firestore_client=_client())
 
     assert sorted(found) == sorted(expected)
     assert len(found) == len(set(found)), 'a page was returned twice'

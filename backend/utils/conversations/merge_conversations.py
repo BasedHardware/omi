@@ -48,6 +48,7 @@ except ImportError:
     def owner_storage_write_gate(uid: Any, store: Any = None) -> Any:
         return nullcontext()
 
+
 import logging
 
 logger = logging.getLogger(__name__)

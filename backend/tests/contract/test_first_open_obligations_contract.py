@@ -169,7 +169,11 @@ def test_a_stale_token_authorizes_nothing(work):
     )
     assert (
         first_open.commit_first_open_conversation_patch(
-            work['uid'], work['conversation_id'], stale, 'folder_assignment', {'title': 'stale'},
+            work['uid'],
+            work['conversation_id'],
+            stale,
+            'folder_assignment',
+            {'title': 'stale'},
             firestore_client=_client(),
         )
         is False
