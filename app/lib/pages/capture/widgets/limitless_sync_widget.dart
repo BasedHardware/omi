@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/pages/capture/widgets/limitless_sync_presentation.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/sync_confirmation.dart';
 
 class LimitlessSyncCardWidget extends StatelessWidget {
   const LimitlessSyncCardWidget({super.key});
@@ -26,11 +26,16 @@ class LimitlessSyncCardWidget extends StatelessWidget {
         final pendingFlashPages =
             syncProvider.allWals.where((w) => w.storage == WalStorage.flashPage && w.status == WalStatus.miss).toList();
 
-        if (pendingFlashPages.isEmpty && !syncProvider.isSyncing) {
+        final presentation = LimitlessSyncPresentation.resolve(
+          hasPendingFlashPages: pendingFlashPages.isNotEmpty,
+          isCloudUploading: syncProvider.isSyncing,
+          isFlashDraining: syncProvider.isFlashPageSyncing,
+        );
+
+        if (!presentation.isVisible) {
           return const SizedBox();
         }
 
-        final isSyncing = syncProvider.isSyncing;
         final progress = syncProvider.walsSyncedProgress;
 
         return Container(
@@ -49,32 +54,41 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      isSyncing ? context.l10n.syncingYourRecordings : context.l10n.syncYourRecordings,
+                      presentation.showsCloudProgress
+                          ? context.l10n.syncingYourRecordings
+                          : context.l10n.syncYourRecordings,
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                     ),
                   ),
-                  if (!isSyncing)
+                  if (presentation.showsCloudProgress)
+                    Text(
+                      '${(progress * 100).toInt()}%',
+                      style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  if (presentation.showsCloudProgress &&
+                      (presentation.showsFlashDrainProgress || presentation.canOffloadDevice))
+                    const SizedBox(width: 12),
+                  if (presentation.showsFlashDrainProgress)
+                    const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                    )
+                  else if (presentation.canOffloadDevice)
                     ElevatedButton(
-                      onPressed: () async {
-                        if (await confirmSyncForCustomStt(context) && context.mounted) syncProvider.syncWals();
-                      },
+                      onPressed: syncProvider.offloadLimitlessFlash,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
+                        backgroundColor: const Color(0xFF16A34A),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       child: Text(context.l10n.syncNow),
-                    )
-                  else
-                    Text(
-                      '${(progress * 100).toInt()}%',
-                      style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                 ],
               ),
               // Progress bar when syncing
-              if (isSyncing) ...[
+              if (presentation.showsCloudProgress) ...[
                 const SizedBox(height: 12),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),

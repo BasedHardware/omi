@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:async';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -14,10 +15,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 class _FakeSyncs {
   FlashSyncStallReason flashStallReason = FlashSyncStallReason.none;
   SyncLocalFilesResponse? syncAllResult;
+  bool isFlashPageSyncing = false;
+  int offloadFlashPagesCalls = 0;
+  Completer<void>? offloadCompleter;
 
   Future<List<Wal>> getAllWals() async => [];
 
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async => syncAllResult;
+
+  Future<void> offloadFlashPages() async {
+    offloadFlashPagesCalls++;
+    await offloadCompleter?.future;
+  }
 }
 
 class _FakeWalService implements IWalService {
@@ -113,6 +122,35 @@ void main() {
 
     expect(provider.syncState.isCompleted, isTrue);
     expect(provider.syncState.hasError, isFalse);
+    provider.dispose();
+  });
+
+  test('device-only offload does not enter the cloud sync state machine', () async {
+    final walService = _FakeWalService();
+    final provider = SyncProvider(walService: walService, uploadGate: _hermeticGate(), startBackgroundSync: false);
+    await provider.initialized;
+
+    await provider.offloadLimitlessFlash();
+
+    expect(walService.syncs.offloadFlashPagesCalls, 1);
+    expect(provider.syncState.isSyncing, isFalse);
+    provider.dispose();
+  });
+
+  test('device-only offload is single-flight before the WAL service reports syncing', () async {
+    final walService = _FakeWalService();
+    walService.syncs.offloadCompleter = Completer<void>();
+    final provider = SyncProvider(walService: walService, uploadGate: _hermeticGate(), startBackgroundSync: false);
+    await provider.initialized;
+
+    final first = provider.offloadLimitlessFlash();
+    final second = provider.offloadLimitlessFlash();
+
+    expect(provider.isFlashPageSyncing, isTrue);
+    expect(walService.syncs.offloadFlashPagesCalls, 1);
+    walService.syncs.offloadCompleter!.complete();
+    await Future.wait([first, second]);
+    expect(provider.isFlashPageSyncing, isFalse);
     provider.dispose();
   });
 }
