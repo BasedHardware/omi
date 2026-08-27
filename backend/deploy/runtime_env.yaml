@@ -1101,28 +1101,28 @@ environments:
               value: 'on'
               category: memory_rollout
             MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: memory_rollout
             MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH:
               value: 'false'
               category: memory_rollout
             MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
-              value: 'false'
+              value: 'true'
               category: memory_rollout
             MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
-              value: disabled
+              value: gpt-5.6-luna
               category: memory_rollout
             MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES:
               value: '8'
               category: memory_rollout
             MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
-              value: '0'
+              value: '0.80'
               category: memory_rollout
             MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
-              value: 'false'
+              value: 'true'
               category: memory_rollout
             MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
-              value: ''
+              value: daily-memory-sweep-v1
               category: memory_rollout
             MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
               value: '3'

@@ -491,21 +491,27 @@ overlay:
           MEMORY_ENABLED:
             value: 'on'
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
-            value: 'false'
+            value: 'true'
           MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH:
             value: 'false'
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
-            value: 'false'
+            value: 'true'
+          # Declaration interlock: must equal get_model('memories') or the run
+          # refuses the provider call. Keep both in step when the route moves.
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
-            value: disabled
+            value: gpt-5.6-luna
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES:
             value: '8'
+          # Worst-case pre-call ceiling for a maximal day, including phase B's
+          # clamped draft/reason/lookup overhead. Typical days cost cents.
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
-            value: '0'
+            value: '0.80'
+          # A disabled or unnamed cohort is a closed rollout, not all-users:
+          # enrolment is one PostHog boolean flag, evaluated per uid.
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
-            value: 'false'
+            value: 'true'
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
-            value: ''
+            value: daily-memory-sweep-v1
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
             value: '3'
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
