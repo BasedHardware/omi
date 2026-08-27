@@ -1181,6 +1181,21 @@ class SafeModulateSocket(STTSocket):
         self._stream_transcript(segments)
 
 
+MODULATE_STREAMING_HOST: Final = os.getenv('MODULATE_STREAMING_HOST', 'modulate-developer-apis.com')
+MODULATE_MULTILINGUAL_PATH: Final = 'velma-2-stt-streaming'
+MODULATE_ENGLISH_FAST_PATH: Final = 'velma-2-stt-streaming-english-v2'
+MODULATE_ENGLISH_FAST_ENABLED: Final = os.getenv('MODULATE_ENGLISH_FAST_ENABLED', 'true').lower() == 'true'
+
+
+def _modulate_english_fast_selected(language: str) -> bool:
+    """Return whether a session should use the English-only Velma-2 model.
+
+    The multilingual model must serve every other language, and 'multi' cannot be
+    routed here because auto-detection may resolve to a non-English speaker.
+    """
+    return MODULATE_ENGLISH_FAST_ENABLED and normalized_stt_language(language) == 'en'
+
+
 async def process_audio_modulate(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     sample_rate: int,
@@ -1191,23 +1206,33 @@ async def process_audio_modulate(
     if not api_key:
         raise ValueError('MODULATE_API_KEY environment variable is not set')
 
+    english_fast = _modulate_english_fast_selected(language)
     params = {
         'api_key': api_key,
-        'speaker_diarization': 'true',
-        'partial_results': 'true',
         'sample_rate': str(sample_rate),
         'audio_format': 's16le',
         'num_channels': '1',
     }
-    if language and language != 'multi':
-        params['language'] = language
-    uri = f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming?{urllib.parse.urlencode(params)}'
+    if english_fast:
+        # This model accepts neither speaker_diarization nor partial_results, and
+        # rejects a language parameter. It emits partial_utterance by default and
+        # omits the speaker field, which _handle_utterance already maps to SPEAKER_00.
+        path = MODULATE_ENGLISH_FAST_PATH
+        params['endpointing'] = 'true'
+    else:
+        path = MODULATE_MULTILINGUAL_PATH
+        params['speaker_diarization'] = 'true'
+        params['partial_results'] = 'true'
+        if language and language != 'multi':
+            params['language'] = language
+    uri = f'wss://{MODULATE_STREAMING_HOST}/api/{path}?{urllib.parse.urlencode(params)}'
 
-    logger.info(f'Connecting to Modulate Velma-2 streaming sample_rate={sample_rate} language={language}')
+    model = 'english-fast-v2' if english_fast else 'multilingual'
+    logger.info(f'Connecting to Modulate Velma-2 streaming model={model} sample_rate={sample_rate} language={language}')
     ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
     loop = asyncio.get_running_loop()
     sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds)
-    logger.info('Modulate Velma-2 streaming connection established')
+    logger.info(f'Modulate Velma-2 streaming connection established model={model}')
     return sock
 
 
