@@ -2896,10 +2896,7 @@ class ChatProvider: ObservableObject {
         line += " [priority: \(priority)]"
       }
       if let dueAt = task.dueAt {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        line += " [due: \(formatter.string(from: dueAt))]"
+        line += " [due: \(DesktopChatTimestampFormat.userFacing(dueAt, timeZone: .current))]"
       }
       if let category = task.category {
         line += " [category: \(category)]"
