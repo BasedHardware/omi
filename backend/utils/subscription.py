@@ -25,7 +25,7 @@ from config.plan_catalog import (
     resolve_stripe_price_plan,
 )
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
-from utils.byok import get_byok_key, get_byok_keys, get_byok_uid, get_cached_byok_state, has_validated_byok_keys
+from utils.byok import get_byok_key, get_byok_uid, get_cached_byok_state, has_validated_byok_keys
 from utils.log_sanitizer import sanitize
 from utils.observability.fallback import record_fallback
 import logging
