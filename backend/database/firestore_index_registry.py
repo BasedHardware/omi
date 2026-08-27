@@ -517,6 +517,17 @@ UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
 
 # Bounded daily-sweep occupant lookups. The sweep must prove the active
 # subject/slot cohort without scanning an arbitrary memory collection page.
+#
+# Every composite index terminates in __name__, and Firestore reports it back
+# that way, so a declaration that omits it can never match the live inventory:
+# reconciliation reports the index missing forever and then fails re-creating
+# it (ALREADY_EXISTS), which takes the Firestore schema workflow -- and the
+# development deploy's readiness gate behind it -- down permanently. These
+# prefixes exist so the derived specs append their extra predicates *before*
+# that terminator rather than after it.
+_DAILY_SWEEP_ACTIVE_FACT_PREFIX = (_asc('status'), _asc('kind'), _asc('subject_scope'))
+_DAILY_SWEEP_ACTIVE_FACT_ENTITY_PREFIX = _DAILY_SWEEP_ACTIVE_FACT_PREFIX + (_asc('subject_entity_id'),)
+
 DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY = FirestoreQuerySpec(
     identifier='daily_sweep_active_fact_subject',
     collection_group='memory_items',
@@ -526,7 +537,7 @@ DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('kind', '==', 'kind'),
         FirestoreQueryFilter('subject_scope', '==', 'subject_scope'),
     ),
-    index_fields=(_asc('status'), _asc('kind'), _asc('subject_scope')),
+    index_fields=_DAILY_SWEEP_ACTIVE_FACT_PREFIX + (_asc('__name__'),),
 )
 
 DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY = FirestoreQuerySpec(
@@ -534,7 +545,7 @@ DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY = FirestoreQuerySpec(
     collection_group='memory_items',
     query_scope='COLLECTION',
     filters=DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.filters + (FirestoreQueryFilter('slot', '==', 'slot'),),
-    index_fields=DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.index_fields + (_asc('slot'),),
+    index_fields=_DAILY_SWEEP_ACTIVE_FACT_PREFIX + (_asc('slot'), _asc('__name__')),
 )
 
 # Entity-scoped variants are required when a candidate names a subject.  The
@@ -546,7 +557,7 @@ DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY = FirestoreQuerySpec(
     query_scope='COLLECTION',
     filters=DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.filters
     + (FirestoreQueryFilter('subject_entity_id', '==', 'subject_entity_id'),),
-    index_fields=DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.index_fields + (_asc('subject_entity_id'),),
+    index_fields=_DAILY_SWEEP_ACTIVE_FACT_ENTITY_PREFIX + (_asc('__name__'),),
 )
 
 DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY = FirestoreQuerySpec(
@@ -554,7 +565,7 @@ DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY = FirestoreQuerySpec(
     collection_group='memory_items',
     query_scope='COLLECTION',
     filters=DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY.filters + (FirestoreQueryFilter('slot', '==', 'slot'),),
-    index_fields=DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY.index_fields + (_asc('slot'),),
+    index_fields=_DAILY_SWEEP_ACTIVE_FACT_ENTITY_PREFIX + (_asc('slot'), _asc('__name__')),
 )
 
 # Unslotted duplicate checks must match the normalized content identity in
@@ -567,7 +578,7 @@ DAILY_SWEEP_ACTIVE_FACT_SUBJECT_CONTENT_QUERY = FirestoreQuerySpec(
     query_scope='COLLECTION',
     filters=DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.filters
     + (FirestoreQueryFilter('normalized_content_key', '==', 'normalized_content_key'),),
-    index_fields=DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY.index_fields + (_asc('normalized_content_key'),),
+    index_fields=_DAILY_SWEEP_ACTIVE_FACT_PREFIX + (_asc('normalized_content_key'), _asc('__name__')),
 )
 
 DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY = FirestoreQuerySpec(
@@ -576,7 +587,7 @@ DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY = FirestoreQuerySpec(
     query_scope='COLLECTION',
     filters=DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY.filters
     + (FirestoreQueryFilter('normalized_content_key', '==', 'normalized_content_key'),),
-    index_fields=DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY.index_fields + (_asc('normalized_content_key'),),
+    index_fields=_DAILY_SWEEP_ACTIVE_FACT_ENTITY_PREFIX + (_asc('normalized_content_key'), _asc('__name__')),
 )
 
 # Onboarding cold-start discovery is a bounded cursor-relative query over the
