@@ -12,15 +12,17 @@ import SwiftUI
 /// Settings menu share one owner for both their visible glass and their mouse-hit region.
 struct LegacySidebarSurface<Content: View>: View {
   private let content: Content
+  private let reduceTransparency: Bool?
 
-  init(@ViewBuilder content: () -> Content) {
+  init(reduceTransparency: Bool? = nil, @ViewBuilder content: () -> Content) {
     self.content = content()
+    self.reduceTransparency = reduceTransparency
   }
 
   var body: some View {
     content
       .fixedSize(horizontal: true, vertical: false)
       .clipped()
-      .inkGlassPanel(cornerRadius: 0, shadow: nil)
+      .inkGlassPanel(cornerRadius: 0, shadow: nil, reduceTransparency: reduceTransparency)
   }
 }

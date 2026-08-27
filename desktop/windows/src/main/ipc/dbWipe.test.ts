@@ -47,6 +47,19 @@ describe('wipeUserDataOn (sign-out teardown)', () => {
     }
   })
 
+  it('wipes legacy user data when an additive JIT bootstrap left mirror tables absent', () => {
+    const db = makeSeededDb()
+    const optionalJitTables = USER_DATA_TABLES.filter((table) => table.startsWith('jit_'))
+    for (const table of optionalJitTables) db.exec(`DROP TABLE ${table}`)
+
+    wipeUserDataOn(db)
+
+    for (const table of USER_DATA_TABLES) {
+      if (optionalJitTables.includes(table)) continue
+      expect(count(db, table)).toBe(0)
+    }
+  })
+
   it('does not clear install-scoped JIT cleanup authority during account wipe', () => {
     const db = makeSeededDb()
     db.exec('CREATE TABLE jit_keyframe_pin (v INTEGER)')

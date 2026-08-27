@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -132,6 +133,45 @@ def test_temporary_image_read_is_owner_fenced_and_never_promotes(monkeypatch):
     assert response.content == b"jpg"
     assert response.headers["content-type"] == "image/jpeg"
     assert temporary.state == FrameRequestState.uploaded
+
+
+def test_temporary_image_read_force_refreshes_authority_before_releasing_pixels(monkeypatch):
+    calls = []
+
+    async def authorize(_uid, account_generation, **kwargs):
+        assert account_generation == 7
+        calls.append(kwargs.get("force_refresh", False))
+        if kwargs.get("force_refresh"):
+            raise PermissionError("kill switch enabled")
+
+    monkeypatch.setattr(frame_requests, "authorize_frame_request", authorize)
+    now = datetime.now(timezone.utc)
+    temporary = FrameRequest(
+        request_id="frame-1",
+        uid="uid-1",
+        device_id="mac-1",
+        account_generation=7,
+        dedupe_key="dedupe-1",
+        screenshot_id="42",
+        state=FrameRequestState.uploaded,
+        created_at=now,
+        expires_at=now.replace(year=now.year + 1),
+        uploaded_at=now,
+        byte_count=3,
+        content_type="image/jpeg",
+        storage_id="storage-1",
+        cleanup_state="pending",
+        cleanup_next_attempt_at=now,
+    )
+    monkeypatch.setattr(frame_requests, "get_frame_request", lambda *_args: temporary)
+    download = MagicMock(return_value=b"jpg")
+    monkeypatch.setattr(frame_requests, "download_frame_request_pixels", download)
+
+    response = _client().get("/v1/frame-requests/temporary/frame-1/image?account_generation=7")
+
+    assert response.status_code == 404
+    assert calls == [False, True]
+    download.assert_not_called()
 
 
 def test_temporary_image_read_rejects_conversation_owned_pixels(monkeypatch):

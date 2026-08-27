@@ -76,7 +76,15 @@ export interface WipeableDb {
   // The wipe runs each DELETE with no bound params, so a no-arg `run` keeps the
   // interface assignable from both better-sqlite3 and node:sqlite Statements
   // (whose own `run` accept optional/variadic params).
-  prepare(sql: string): { run: () => unknown }
+  prepare(sql: string): { run: () => unknown; get: () => unknown }
+}
+
+function tableExists(d: WipeableDb, table: (typeof USER_DATA_TABLES)[number]): boolean {
+  // USER_DATA_TABLES is a compile-time allowlist, so interpolating its table
+  // name is safe and keeps this compatible with both SQLite drivers.
+  return Boolean(
+    d.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '${table}'`).get()
+  )
 }
 
 /** Clear every user-data table in one transaction. Rolls back on any failure so a
@@ -84,7 +92,13 @@ export interface WipeableDb {
 export function wipeUserDataOn(d: WipeableDb): void {
   d.exec('BEGIN')
   try {
-    for (const table of USER_DATA_TABLES) d.prepare(`DELETE FROM ${table}`).run()
+    for (const table of USER_DATA_TABLES) {
+      // JIT bootstrap is additive and deliberately fail-open for the legacy
+      // app. If it failed before creating every optional mirror table, account
+      // switching must still erase all legacy user data atomically.
+      if (table.startsWith('jit_') && !tableExists(d, table)) continue
+      d.prepare(`DELETE FROM ${table}`).run()
+    }
     d.exec('COMMIT')
   } catch (e) {
     d.exec('ROLLBACK')

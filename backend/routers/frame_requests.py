@@ -162,6 +162,7 @@ async def _authorize(
     *,
     mutation: bool = False,
     paid_boundary: bool = False,
+    force_refresh: bool = False,
 ) -> None:
     stage = (
         JITDecisionStage.PAID_BOUNDARY
@@ -173,7 +174,7 @@ async def _authorize(
             uid,
             account_generation,
             stage=stage,
-            force_refresh=mutation or paid_boundary,
+            force_refresh=mutation or paid_boundary or force_refresh,
         )
     except PermissionError as exc:
         raise HTTPException(status_code=404, detail="frame_requests_unavailable") from exc
@@ -292,6 +293,10 @@ async def consume_temporary_frame_request_image(
         raise HTTPException(status_code=410, detail="frame_request_expired")
     if frame_request.state != FrameRequestState.uploaded or not frame_request.storage_id:
         raise HTTPException(status_code=409, detail=f"frame_request_{frame_request.state.value}")
+    # Pixel release is the data boundary. Re-check uncached authority after
+    # owner/state validation so a newly enabled kill switch cannot be masked
+    # by the short read-path rollout cache.
+    await _authorize(uid, account_generation, force_refresh=True)
     try:
         payload = await run_blocking(
             storage_executor,
