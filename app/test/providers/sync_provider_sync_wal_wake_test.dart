@@ -28,6 +28,7 @@ class _FakeSyncs {
 
   bool get isStorageSyncing => false;
   bool get isSdCardSyncing => false;
+  bool get isFlashPageSyncing => false;
 
   SyncLocalFilesResponse? get accumulatedResponse => null;
 
