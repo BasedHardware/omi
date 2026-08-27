@@ -177,6 +177,8 @@ final class RatingPromptManager: ObservableObject {
   /// messages, owner-asserted end to end (expectedOwnerId). Assigned in init
   /// (APIClient is actor-isolated, so it cannot be a property default).
   var historyFetch: ((String) async throws -> [ChatMessageDB])!
+  /// Injectable for tests; production reads the real auth state.
+  var isSignedInCheck: () -> Bool = { AuthState.shared.isSignedIn }
 
   func seedFromHistoryIfNeeded() async {
     // Owner-fenced: the seed reads and WRITES the account that started it.
@@ -197,7 +199,7 @@ final class RatingPromptManager: ObservableObject {
     var fetched = false
     for attempt in 1...5 {
       guard ownerProvider() == owner, !Task.isCancelled else { return }
-      if AuthState.shared.isSignedIn,
+      if isSignedInCheck(),
         let result = try? await historyFetch(owner)
       {
         history = result
@@ -211,7 +213,12 @@ final class RatingPromptManager: ObservableObject {
     let asked = history.filter { $0.sender == "human" }.count
     log("RatingPrompt: history seed fetched \(history.count) messages, \(asked) questions")
     if asked >= RatingPromptPolicy.questionThreshold {
-      defaults.set(RatingPromptPolicy.questionThreshold, forKey: scopedKey("questionCount"))
+      // Merge, never decrease: questions asked live while the history fetch
+      // was in flight already advanced the persisted count past the seed
+      // value, and the seed must not roll that back.
+      defaults.set(
+        max(questionCount, RatingPromptPolicy.questionThreshold),
+        forKey: scopedKey("questionCount"))
     }
     defaults.set(true, forKey: scopedKey("historySeeded"))
     refresh()
