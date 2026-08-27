@@ -1,8 +1,8 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BetaWelcomeModal } from '@/components/ui/BetaWelcomeModal';
-import { StartupModals } from '@/components/ui/StartupModals';
+import { BetaWelcomeModal } from '@/shared/ui/BetaWelcomeModal';
+import { StartupModals } from '@/shared/ui/StartupModals';
 
 const mocks = vi.hoisted(() => ({
   confetti: vi.fn(),

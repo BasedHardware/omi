@@ -30,7 +30,7 @@ because they share this component, not because someone kept them in sync.
 `PageHeader` is the different thing it looks like: a back button beside a title,
 for detail and sub pages.
 
-shadcn/ui is set up (`web/app/components.json`, primitives in `web/app/src/components/ui/`
+shadcn/ui is set up (`web/app/components.json`, primitives in `web/app/src/shared/ui/`
 lowercase). Its generator emits literal `oklch(...)` strings, which are not
 valid classes in this project, so every primitive is restyled onto the Omi
 tokens on the way in. Do that for any primitive you add.

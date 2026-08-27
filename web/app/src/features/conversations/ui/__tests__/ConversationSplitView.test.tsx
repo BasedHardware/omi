@@ -34,7 +34,7 @@ vi.mock('@/features/auth', () => ({
 vi.mock('@/features/chat', () => ({
   useChat: () => ({ setContext: harness.setContext }),
 }));
-vi.mock('@/components/ui/Toast', () => ({
+vi.mock('@/shared/ui/Toast', () => ({
   useToast: () => ({ showToast: vi.fn() }),
 }));
 vi.mock('@/hooks/useLocalStorage', () => ({
@@ -151,7 +151,7 @@ vi.mock('@/features/conversations/ui/FolderDialog', () => ({
 vi.mock('@/features/conversations/ui/MoveFolderDialog', () => ({
   MoveFolderDialog: () => null,
 }));
-vi.mock('@/components/ui/ResizeHandle', () => ({ ResizeHandle: () => null }));
+vi.mock('@/shared/ui/ResizeHandle', () => ({ ResizeHandle: () => null }));
 vi.mock('@/features/conversations/api', () => ({
   getFolders: harness.getFolders,
   createFolder: vi.fn(),

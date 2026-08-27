@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Pause, Play, Square } from 'lucide-react';
 import type { TranscriptSegment } from '@/features/recording';
-import { OmiPulseMark } from '@/components/ui/OmiPulseMark';
+import { OmiPulseMark } from '@/shared/ui/OmiPulseMark';
 import { cn } from '@/lib/utils';
 
 /**

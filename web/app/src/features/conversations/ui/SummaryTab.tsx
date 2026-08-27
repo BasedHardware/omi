@@ -8,7 +8,7 @@ import { AppSummaryCard } from './AppSummaryCard';
 import { GenerateSummaryButton } from './GenerateSummaryButton';
 import type { Conversation, AppResponse, Geolocation } from '@/types/conversation';
 
-const SingleLocationMap = dynamic(() => import('@/components/ui/SingleLocationMap'), {
+const SingleLocationMap = dynamic(() => import('@/shared/ui/SingleLocationMap'), {
   ssr: false,
   loading: () => (
     <div className="h-full bg-bg-tertiary animate-pulse flex items-center justify-center rounded-r-xl">

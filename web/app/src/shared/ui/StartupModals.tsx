@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { BetaWelcomeModal } from '@/components/ui/BetaWelcomeModal';
-import { WhatsNewModal } from '@/components/ui/WhatsNewModal';
+import { BetaWelcomeModal } from '@/shared/ui/BetaWelcomeModal';
+import { WhatsNewModal } from '@/shared/ui/WhatsNewModal';
 
 // Increment this version when adding new features
 const WHATS_NEW_VERSION = 1;

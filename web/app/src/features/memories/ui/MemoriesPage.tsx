@@ -33,7 +33,7 @@ import { MemoryFilters } from './MemoryFilters';
 import { MemoryQuickAdd } from './MemoryQuickAdd';
 import { LifeBalanceChart, TrendingSidebar } from './InsightsDashboard';
 import { useInsightsDashboard } from '@/features/memories/useInsightsDashboard';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { PageToolbar } from '@/components/layout/PageToolbar';
 import { BulkActionBar } from '@/features/tasks';
 import { copyMemoriesToClipboard, downloadMemories } from '@/features/memories/memoryExport';

@@ -30,9 +30,9 @@ import {
 import { MoveFolderDialog } from './MoveFolderDialog';
 import { RecapDetailPanel } from '../recaps/RecapDetailPanel';
 import { ConversationGallery, ConversationGallerySkeleton } from './ConversationGallery';
-import { ResizeHandle } from '@/components/ui/ResizeHandle';
+import { ResizeHandle } from '@/shared/ui/ResizeHandle';
 import { PageToolbar } from '@/components/layout/PageToolbar';
-import { useToast } from '@/components/ui/Toast';
+import { useToast } from '@/shared/ui/Toast';
 import { mergeConversations, getFolders, createFolder, updateFolder, deleteFolder, bulkMoveConversationsToFolder, toggleStarred, deleteConversation } from '../api';
 import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';

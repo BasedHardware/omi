@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/shared/ui/input';
 
 export interface PageToolbarSearch {
   value: string;

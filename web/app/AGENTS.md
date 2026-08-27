@@ -4,7 +4,7 @@ The signed-in Omi web client: React 19 on the `@tschk/moonshine` runtime, served
 by Bun. Siblings: `web/admin`, `web/frontend`, `web/personas-open-source`.
 
 Code layout: domain modules under `src/features/<name>/{api,model,ui}` plus
-`src/shared` (HTTP kernel). Map and import rules:
+`src/shared` (HTTP kernel and UI primitives). Map and import rules:
 [`ARCHITECTURE.md`](./ARCHITECTURE.md). Guard: `bun run check:imports`.
 Outside a feature import only its `index.ts`, `api.ts`, or `model.ts`.
 

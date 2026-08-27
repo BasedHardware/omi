@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
 import { Loader2, AlertTriangle, Settings } from 'lucide-react';
 import { useAuth } from '@/features/auth';
-import { useToast } from '@/components/ui/Toast';
+import { useToast } from '@/shared/ui/Toast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
   SECTION_INFO,

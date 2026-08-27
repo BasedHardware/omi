@@ -1,6 +1,6 @@
 import { AuthProvider } from '@/features/auth';
 import { RecordingProvider, RecordingController } from '@/features/recording';
-import { ToastProvider } from '@/components/ui/Toast';
+import { ToastProvider } from '@/shared/ui/Toast';
 import { PublicBuildCanary } from '@/components/public-build-canary';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
