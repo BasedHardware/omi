@@ -24,6 +24,7 @@
 #include "imu.h"
 #include "lib/core/sd_card.h"
 #include "rtc.h"
+#include "software_vad.h"
 #include "spi_flash.h"
 #include "wdog_facade.h"
 
@@ -37,6 +38,12 @@ bool is_connected = false;
 bool is_charging = false;
 bool is_off = false;
 bool blink_toggle = false;
+
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+/* Intentionally global: metrics are the first fields and can be decoded from
+ * this symbol through non-resetting SWD snapshots during the +56 soak. */
+struct software_vad_state g_software_vad;
+#endif
 
 static void print_reset_reason(void)
 {
@@ -75,6 +82,14 @@ static void codec_handler(uint8_t *data, size_t len)
     }
 }
 
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+static int emit_pcm_to_codec(const int16_t *samples, size_t sample_count, void *context)
+{
+    ARG_UNUSED(context);
+    return codec_receive_pcm((int16_t *) samples, sample_count);
+}
+#endif
+
 static void mic_handler(int16_t *buffer)
 {
 #ifdef CONFIG_OMI_ENABLE_MONITOR
@@ -82,9 +97,21 @@ static void mic_handler(int16_t *buffer)
     monitor_inc_mic_buffer();
 #endif
 
-    // Hardware AAD (T5838) is handled inside mic.c; the mic callback only
-    // forwards audio to the codec here.
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+    bool was_recording = g_software_vad.recording;
+    int err =
+        software_vad_process(&g_software_vad, buffer, MIC_BUFFER_SAMPLES, k_uptime_get(), emit_pcm_to_codec, NULL);
+    if (was_recording != g_software_vad.recording) {
+        LOG_INF("Software VAD: %s (avg=%u, input=%u, emitted=%u, gated=%u)",
+                g_software_vad.recording ? "ACTIVE" : "QUIET",
+                g_software_vad.metrics.last_average_amplitude,
+                g_software_vad.metrics.input_blocks,
+                g_software_vad.metrics.emitted_blocks,
+                g_software_vad.metrics.gated_blocks);
+    }
+#else
     int err = codec_receive_pcm(buffer, MIC_BUFFER_SAMPLES);
+#endif
     if (err) {
         LOG_ERR("Failed to process PCM data: %d", err);
     }
@@ -336,6 +363,20 @@ int main(void)
         return ret;
     }
 
+#ifdef CONFIG_OMI_ENABLE_VAD_GATE
+    const struct software_vad_config vad_config = {
+        .amplitude_threshold = CONFIG_OMI_VAD_ABS_THRESHOLD,
+        .debounce_frames = CONFIG_OMI_VAD_DEBOUNCE_FRAMES,
+        .hold_ms = CONFIG_OMI_VAD_HOLD_MS,
+    };
+    software_vad_init(&g_software_vad, &vad_config, k_uptime_get());
+    LOG_INF("Software VAD enabled: threshold=%u debounce=%u hold=%lldms preroll=%u blocks",
+            vad_config.amplitude_threshold,
+            vad_config.debounce_frames,
+            (long long) vad_config.hold_ms,
+            SOFTWARE_VAD_PREROLL_FRAMES);
+#endif
+
     // Initialize microphone
     LOG_INF("Initializing microphone...\n");
     set_mic_callback(mic_handler);
@@ -345,7 +386,9 @@ int main(void)
         error_microphone();
         return ret;
     }
-    // Hardware AAD (T5838) is started inside mic_start().
+    /* CV1 v0.5 hardware AAD sleep is disabled in +56. The microphone remains
+     * in compliant continuous PDM capture and software VAD gates downstream
+     * codec/transport work. */
 
     LOG_INF("Device initialized successfully\n");
 
