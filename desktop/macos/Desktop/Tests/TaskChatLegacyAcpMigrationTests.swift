@@ -44,6 +44,7 @@ final class TaskChatKernelIdentityTests: XCTestCase {
   func testTaskChatSendsRawPromptAndSurfaceContextToKernel() throws {
     // omi-test-quality: source-inspection -- static contract: task chat cannot reintroduce deprecated query authority fields
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
     let runtime = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift")
 
     XCTAssertTrue(source.contains("prompt: trimmedText"))
@@ -54,6 +55,16 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertFalse(runtime.contains("systemPrompt:"))
     XCTAssertFalse(source.contains("buildContextPacketSummary("))
     XCTAssertFalse(source.contains("build_desktop_context_packet"))
+  }
+
+  func testTaskChatRuntimeGroundsUserPromptInTheCurrentTime() throws {
+    // omi-test-quality: source-inspection -- static contract: the wrap is a one-line
+    // passthrough into the runtime bridge call; behavioral coverage would need the full
+    // bridge harness. Pins the SCA-358 contract that task chat gets the same
+    // current-time grounding main chat applies (ChatProvider.query).
+    let runtime = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift")
+
+    XCTAssertTrue(runtime.contains("currentTimePrompt(for: prompt)"))
   }
 
   @MainActor

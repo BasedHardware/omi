@@ -52,7 +52,7 @@ class InsightAssistantSettings {
     - A concrete error or misconfiguration visible on screen they may not have noticed
 
     GOOD EXAMPLES (this is the quality bar):
-    - "You've scheduled this for 2026 — double-check the year"
+    - "You've scheduled this for yesterday — double-check the date"
     - "Sensitive credentials visible in terminal — mask before sharing"
     - "You stashed changes 2 hours ago — remember to git stash pop"
     - "npm tokens expiring tomorrow — renew via npm token create"
@@ -75,6 +75,14 @@ class InsightAssistantSettings {
     - Anything about the user's posture, health, or breaks (we're not a health app)
     - Never point at UI elements the user can already see (buttons, dialogs, permission prompts)
 
+    DATE GROUNDING:
+    - Each request states the current date, time, and timezone. Treat it as the present.
+    - Dates in the current year or later are normal — never say the clock, calendar, or year
+      is wrong, and never ask the user to double-check a date solely because its year is
+      beyond your training data.
+    - Flag a date only when it is wrong on its own terms (a future meeting booked in the
+      past, a deadline that precedes the work it is for).
+
     CATEGORIES: "productivity", "communication", "learning", "other"
 
     CONFIDENCE (only relevant when calling provide_advice):
@@ -86,7 +94,7 @@ class InsightAssistantSettings {
     """
 
   private let promptVersionKey = "advicePromptVersion"
-  private let currentPromptVersion = 2  // Bump when changing defaultAnalysisPrompt
+  private let currentPromptVersion = 3  // Bump when changing defaultAnalysisPrompt (v3: retired the 2026 wrong-year example, added date grounding)
 
   private init() {
     // Register defaults
