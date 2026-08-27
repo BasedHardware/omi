@@ -8,8 +8,8 @@ import {
   transformToPlugin,
   type V2AppData,
 } from '@/lib/api/public';
-import { CompactPluginCard } from '@/components/marketplace/plugin-card/CompactPluginCard';
-import { CategoryBreadcrumb } from '@/components/marketplace/CategoryBreadcrumb';
+import { CompactPluginCard } from '@/features/marketplace';
+import { CategoryBreadcrumb } from '@/features/marketplace';
 import { BreadcrumbJsonLd, SoftwareAppJsonLd } from '@/components/seo/JsonLd';
 import { Calendar, User, FolderOpen, Puzzle, ArrowRight, DollarSign } from 'lucide-react';
 import Image from '@tschk/moonshine-next/image';

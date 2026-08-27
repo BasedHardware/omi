@@ -3,9 +3,9 @@ import type { Config } from 'tailwindcss';
 const config: Config = {
   darkMode: ['class'],
   content: [
-    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    // Feature modules live under src/features; omitting that path drops their
+    // utilities from styles.css and the UI looks unstyled or re-nested.
+    './src/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     screens: {

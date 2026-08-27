@@ -843,7 +843,6 @@ class TestRequestHasLLMByokKey:
         monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'openai': 'sk'})
         assert subscription.request_has_llm_byok_key() is False
 
-
     def test_quota_snapshot_accepts_required_llm_provider(self, monkeypatch):
         from models.users import PlanType
         from utils import subscription

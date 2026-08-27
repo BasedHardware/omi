@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
 import Image from '@tschk/moonshine-next/image';
 import Link from '@tschk/moonshine-next/link';
 import { motion } from 'framer-motion';
-import { useAuth } from '@/components/auth/AuthProvider';
+import { useAuth } from '@/features/auth';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 import { isFirebaseAuthConfigured } from '@/lib/firebase';

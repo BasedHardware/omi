@@ -14,7 +14,7 @@ vi.mock('@/lib/api/public', () => ({
     capabilities: new Set(),
   }),
 }));
-vi.mock('@/components/marketplace/AppList', () => ({
+vi.mock('@/features/marketplace', () => ({
   default: ({
     initialPlugins,
   }: {
@@ -26,8 +26,8 @@ vi.mock('@/components/marketplace/AppList', () => ({
       ))}
     </div>
   ),
+  PromoCard: () => null,
 }));
-vi.mock('@/components/marketplace/PromoCard', () => ({ PromoCard: () => null }));
 vi.mock('@/components/seo/JsonLd', () => ({ CollectionPageJsonLd: () => null }));
 vi.mock('@/moonshine/register-client-route', () => ({
   registerMoonshineRoute: () => {},

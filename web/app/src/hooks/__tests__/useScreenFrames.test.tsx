@@ -6,14 +6,14 @@ import type {
   ConversationScreenFrameSet,
 } from '@/types/conversation';
 
-vi.mock('@/lib/api', () => ({
+vi.mock('@/features/conversations/api', () => ({
   getConversationScreenFrames: vi.fn(),
   deleteScreenFrame: vi.fn(),
   deleteAllScreenFrames: vi.fn(),
   patchScreenFrameSharing: vi.fn(),
 }));
 
-const api = await import('@/lib/api');
+const api = await import('@/features/conversations/api');
 
 function frame(id: string): ConversationScreenFrame {
   return {

@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useParams } from '@tschk/moonshine-next/navigation';
 import Link from '@tschk/moonshine-next/link';
-import { AppForm } from '@/components/apps/AppForm';
-import { getApp } from '@/lib/api';
+import { AppForm } from '@/features/connectors';
+import { getApp } from '@/features/connectors';
 import type { App } from '@/types/apps';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 

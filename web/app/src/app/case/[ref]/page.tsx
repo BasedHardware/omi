@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from '@tschk/moonshine-next/navigation';
-import { CaseStatusView } from '@/components/fair-use/CaseStatusView';
+import { CaseStatusView } from '@/features/fair-use';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 // This page runs entirely in the browser, on the web origin. The backend

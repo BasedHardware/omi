@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { ConversationSplitView } from '@/components/conversations/ConversationSplitView';
+import { ConversationSplitView } from '@/features/conversations';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 

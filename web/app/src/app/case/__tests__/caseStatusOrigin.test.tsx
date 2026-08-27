@@ -7,7 +7,7 @@ vi.mock('@tschk/moonshine-next/navigation', () => ({
 vi.mock('@/moonshine/register-client-route', () => ({
   registerMoonshineRoute: () => {},
 }));
-vi.mock('@/components/fair-use/CaseStatusView', () => ({
+vi.mock('@/features/fair-use', () => ({
   CaseStatusView: ({ status }: { status: { stage: string } | null }) => (
     <div data-testid="case-view">{status ? status.stage : 'not-found'}</div>
   ),

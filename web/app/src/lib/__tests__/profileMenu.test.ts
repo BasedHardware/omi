@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PROFILE_MENU_MAX_HEIGHT, profileMenuHeightBound } from '@/lib/profileMenu';
-import { SETTINGS_SECTIONS } from '@/lib/settingsSections';
+import { SETTINGS_SECTIONS } from '@/features/settings';
 
 /**
  * The profile menu opens by transitioning to a fixed max-height rather than to

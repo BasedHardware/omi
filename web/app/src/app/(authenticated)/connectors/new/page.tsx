@@ -1,6 +1,6 @@
 'use client';
 
-import { AppForm } from '@/components/apps/AppForm';
+import { AppForm } from '@/features/connectors';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function NewAppPage() {

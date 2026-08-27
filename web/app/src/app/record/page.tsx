@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, ArrowLeft } from 'lucide-react';
 import Link from '@tschk/moonshine-next/link';
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { ProtectedRoute } from '@/features/auth';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { useRecordingContext } from '@/components/recording/RecordingContext';
-import { AudioModeSelector } from '@/components/recording/AudioModeSelector';
-import { RecordingControls } from '@/components/recording/RecordingControls';
-import { LiveTranscript } from '@/components/recording/LiveTranscript';
+import { useRecordingContext } from '@/features/recording';
+import { AudioModeSelector } from '@/features/recording';
+import { RecordingControls } from '@/features/recording';
+import { LiveTranscript } from '@/features/recording';
 import { cn } from '@/lib/utils';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 

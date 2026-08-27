@@ -19,13 +19,13 @@ vi.mock('@tschk/moonshine-next/image', () => ({
     <img src={src} alt={alt} className={className} />
   ),
 }));
-vi.mock('@/components/auth/AuthProvider', () => ({
+vi.mock('@/features/auth', () => ({
   useAuth: () => ({
     user: { displayName: 'Omi User', email: 'user@example.com', photoURL: null },
     signOut: vi.fn(),
   }),
 }));
-vi.mock('@/components/notifications/NotificationContext', () => ({
+vi.mock('@/features/notifications', () => ({
   useNotificationContext: () => ({ toggleNotificationCenter: vi.fn(), unreadCount: 0 }),
 }));
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { FairUseStatus } from '@/components/fair-use/FairUseStatus';
+import { FairUseStatus } from '@/features/fair-use';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 

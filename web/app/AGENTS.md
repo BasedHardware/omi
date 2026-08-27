@@ -3,6 +3,15 @@
 The signed-in Omi web client: React 19 on the `@tschk/moonshine` runtime, served
 by Bun. Siblings: `web/admin`, `web/frontend`, `web/personas-open-source`.
 
+Code layout: domain modules under `src/features/<name>/{api,model,ui}` plus
+`src/shared` (HTTP kernel and UI primitives). Map and import rules:
+[`ARCHITECTURE.md`](./ARCHITECTURE.md). Guard: `bun run check:imports`.
+Outside a feature import only its `index.ts`, `api.ts`, or `model.ts`.
+
+Current domains: `auth`, `chat`, `connectors`, `conversations` (includes recaps),
+`fair-use`, `goals`, `home`, `marketplace`, `memories` (**INV-MEM-1**),
+`notifications`, `recording`, `settings`, `tasks`.
+
 ## Setup
 
 ```bash
@@ -44,7 +53,7 @@ reads, a signal store for optimistically-written lists. Import only the kernel â
 why and the pitfalls: [`docs/agents/web-app-signals.md`](../../docs/agents/web-app-signals.md).
 
 Tests live in `__tests__/` beside the code (`vitest.config.mts`, jsdom, `@` â†’
-`src/`). Prefer pure logic in `src/lib/` and `src/hooks/`; reserve component
+`src/`). Prefer pure logic in `src/features/<domain>/model.ts`; reserve component
 rendering for behavior that only appears in the tree.
 
 ## Parity With Desktop

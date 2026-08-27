@@ -2,22 +2,16 @@
 
 import { MarketplaceHeader } from '@/components/layout/MarketplaceHeader';
 import { Footer } from '@/components/layout/Footer';
-import { LoginPanel } from '@/components/auth/LoginPanel';
-import { useAuth } from '@/components/auth/AuthProvider';
+import { LoginPanel } from '@/features/auth';
+import { useAuth } from '@/features/auth';
 
-export default function PublicLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function PublicLayout({ children }: { children: React.ReactNode }) {
   const { isLoginPanelOpen, closeLoginPanel } = useAuth();
 
   return (
     <div className="min-h-screen bg-[#0B0F17] flex flex-col">
       <MarketplaceHeader />
-      <main className="flex-1">
-        {children}
-      </main>
+      <main className="flex-1">{children}</main>
       <Footer />
       <LoginPanel isOpen={isLoginPanelOpen} onClose={closeLoginPanel} />
     </div>

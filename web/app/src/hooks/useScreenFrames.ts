@@ -6,7 +6,7 @@ import {
   deleteScreenFrame,
   getConversationScreenFrames,
   patchScreenFrameSharing,
-} from '@/lib/api';
+} from '@/features/conversations/api';
 import type { ConversationScreenFrameSet } from '@/types/conversation';
 
 interface UseScreenFramesOptions {

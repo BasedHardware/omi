@@ -7,7 +7,7 @@ page, moving a surface between pages, or debugging an animation that looks stuck
 
 | Route | Holds |
 |---|---|
-| `/home` | The hub **and** the chat. Chat is not a separate page: `web/app/src/components/home/HomePage.tsx` keeps recent history above the hub and the current exchange below it, with transcript rendering owned by `web/app/src/components/chat/ChatTranscript.tsx`. Live capture also starts here, from the composer. |
+| `/home` | The hub **and** the chat. Chat is not a separate page: `web/app/src/features/home/ui/HomePage.tsx` keeps recent history above the hub and the current exchange below it, with transcript rendering owned by `web/app/src/features/chat/ui/ChatTranscript.tsx`. Live capture also starts here, from the composer. |
 | `/conversations` | Conversations and daily recaps in one day-grouped gallery. A recap is the summary of a day, so it leads that day rather than living in a list of its own. |
 | `/memories`, `/tasks` | As named. |
 | `/connectors` | Installed apps **and** external services — the former Settings → Integrations. |
@@ -30,7 +30,7 @@ because they share this component, not because someone kept them in sync.
 `PageHeader` is the different thing it looks like: a back button beside a title,
 for detail and sub pages.
 
-shadcn/ui is set up (`web/app/components.json`, primitives in `web/app/src/components/ui/`
+shadcn/ui is set up (`web/app/components.json`, primitives in `web/app/src/shared/ui/`
 lowercase). Its generator emits literal `oklch(...)` strings, which are not
 valid classes in this project, so every primitive is restyled onto the Omi
 tokens on the way in. Do that for any primitive you add.

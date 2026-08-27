@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { getAllAppsV2, getAppsV2, transformToPlugin } from '@/lib/api/public';
-import AppList from '@/components/marketplace/AppList';
-import { PromoCard } from '@/components/marketplace/PromoCard';
+import AppList from '@/features/marketplace';
+import { PromoCard } from '@/features/marketplace';
 import { CollectionPageJsonLd } from '@/components/seo/JsonLd';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 

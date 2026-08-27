@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from '@tschk/moonshine-next/navigation';
-import { CompactPluginCard } from '@/components/marketplace/plugin-card/CompactPluginCard';
-import { FeaturedPluginCard } from '@/components/marketplace/plugin-card/FeaturedPluginCard';
-import { ScrollableCategoryNav } from '@/components/marketplace/ScrollableCategoryNav';
-import { CategoryBreadcrumb } from '@/components/marketplace/CategoryBreadcrumb';
-import { CategoryHeader } from '@/components/marketplace/CategoryHeader';
+import { CompactPluginCard } from '@/features/marketplace';
+import { FeaturedPluginCard } from '@/features/marketplace';
+import { ScrollableCategoryNav } from '@/features/marketplace';
+import { CategoryBreadcrumb } from '@/features/marketplace';
+import { CategoryHeader } from '@/features/marketplace';
 import { getAllAppsV2, transformToPlugin } from '@/lib/api/public';
-import { getCategoryMetadata } from '@/components/marketplace/category';
+import { getCategoryMetadata } from '@/features/marketplace';
 import { BreadcrumbJsonLd, CollectionPageJsonLd } from '@/components/seo/JsonLd';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 

@@ -25,7 +25,7 @@ vi.mock('@tschk/moonshine-next/link', () => ({
     createElement('a', { href }, children),
 }));
 
-vi.mock('@/components/auth/AuthProvider', () => ({
+vi.mock('@/features/auth', () => ({
   useAuth: () => ({
     user: authUser,
     loading: false,

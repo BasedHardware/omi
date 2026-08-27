@@ -10,7 +10,7 @@ import {
   requestCurrentState,
   type RecordingBroadcastMessage,
 } from '@/lib/recordingBroadcast';
-import type { RecordingState, AudioMode } from '@/components/recording/RecordingContext';
+import type { RecordingState, AudioMode } from '@/features/recording';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 // Extended message type for start command with audio mode

@@ -48,12 +48,12 @@ function DiscordIcon({ className }: { className?: string }) {
     </svg>
   );
 }
-import { useAuth } from '@/components/auth/AuthProvider';
-import { useNotificationContext } from '@/components/notifications/NotificationContext';
+import { useAuth } from '@/features/auth';
+import { useNotificationContext } from '@/features/notifications';
 import { cn } from '@/lib/utils';
-import { SETTINGS_SECTIONS, type SettingsSectionId } from '@/lib/settingsSections';
+import { SETTINGS_SECTIONS, type SettingsSectionId } from '@/features/settings';
 import { PROFILE_MENU_MAX_HEIGHT } from '@/lib/profileMenu';
-import { ConfettiBurst } from '@/components/ui/ConfettiBurst';
+import { ConfettiBurst } from '@/shared/ui/ConfettiBurst';
 
 /** How long the banner takes to swell and pop, and the burst to clear it. */
 const BANNER_BURST_MS = 420;

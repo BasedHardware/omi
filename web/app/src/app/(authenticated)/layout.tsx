@@ -1,6 +1,6 @@
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { ProtectedRoute } from '@/features/auth';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { StartupModals } from '@/components/ui/StartupModals';
+import { StartupModals } from '@/shared/ui/StartupModals';
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   return (
