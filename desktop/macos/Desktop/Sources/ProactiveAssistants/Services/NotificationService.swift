@@ -54,6 +54,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// Title that identifies screen capture reset notifications
   static let screenCaptureResetTitle = "Screen Recording Needs Reset"
 
+  /// Title that identifies the consent-decline notice: macOS re-confirmed consent for
+  /// app-built capture filters and the capture loop went terminal instead of retrying
+  /// (see ScreenCaptureConsentPolicy). Distinct from the reset title on purpose — the
+  /// grant is intact, so the repair is "start capturing again", NOT the tccutil wipe
+  /// the reset flow performs.
+  static let screenCaptureConsentTitle = "Screen Recording Paused"
+
   /// UserDefaults key that records whether the screen capture reset notification
   /// has already been shown in the current broken-capture episode. Cleared by
   /// `AppState.checkScreenRecordingPermission()` as soon as capture recovers,
@@ -262,6 +269,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         switch Self.openAction(assistantId: assistantId, title: title) {
         case .resetScreenCapture:
           self.handleScreenCaptureResetAction(source: "notification_click")
+        case .resumeScreenCapture:
+          self.handleScreenCaptureResumeAction(source: "notification_click")
         case .openMainChat:
           // The same reveal-and-land-on-chat path the floating bar's
           // "Continue in Omi" affordance uses; the chat transcript there
@@ -316,6 +325,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     case none
     /// The screen-recording repair, which is an action rather than a page.
     case resetScreenCapture
+    /// Resume after a terminal consent decline: the grant is intact, so the repair is
+    /// simply restarting monitoring (one user-initiated capture attempt), never a reset.
+    case resumeScreenCapture
     /// The main-window chat surface, where the meeting-notes card (with its
     /// conversation link) was materialized.
     case openMainChat
@@ -328,6 +340,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// change with its own suppression-state migration.
   static func openAction(assistantId: String, title: String) -> OpenAction {
     if title == screenCaptureResetTitle { return .resetScreenCapture }
+    if title == screenCaptureConsentTitle { return .resumeScreenCapture }
     if assistantId == MeetingActionItemBannerPolicy.assistantID { return .openMainChat }
     return .none
   }
@@ -337,6 +350,22 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     log("Screen capture reset triggered from \(source)")
     AnalyticsManager.shared.screenCaptureResetClicked(source: source)
     ScreenCaptureService.resetScreenCapturePermissionAndRestart()
+  }
+
+  /// Handle the consent-decline resume: this is the single user-facing repair
+  /// affordance after a terminal "user declined TCCs" stop. It restarts monitoring —
+  /// one user-initiated capture attempt — which either just works (the user allowed
+  /// the OS dialog) or surfaces the consent dialog exactly once, at a moment the user
+  /// chose. Deliberately not the reset flow: the TCC grant is intact.
+  private func handleScreenCaptureResumeAction(source: String) {
+    log("Screen capture resume triggered from \(source)")
+    Task { @MainActor in
+      ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
+        if !success, let error {
+          log("Screen capture resume from \(source) failed to start monitoring: \(error)")
+        }
+      }
+    }
   }
 
   /// Send a notification via the floating bar, and optionally as a native macOS system banner.
@@ -377,6 +406,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     deliverSystemBanner: Bool = false,
     deliveryMode: NotificationDeliveryMode = .standard,
     respectFrequency: Bool = true,
+    isPersistent: Bool = false,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) {
     guard !ownerID.isEmpty,
@@ -433,8 +463,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
-    // Every proactive notification belongs to one of the four user-facing categories
-    // (Focus, Task, Insight, Memory), and this shared boundary is where a category's
+    // Every proactive notification belongs to one of the five user-facing categories
+    // (Focus, Task, Insight, Memory, Integration), and this shared boundary is where a category's
     // Settings toggle binds every producer — goals and meeting action items included,
     // not just the assistants that consult their own toggle before generating.
     // Functional notices (`respectFrequency: false`) map to `.general` and stay ungated.
@@ -444,7 +474,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
         taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
         insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
-        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled)
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled,
+        meetingSummaryEnabled: MeetingSummaryNotificationSettings.isEnabled)
     {
       log("NotificationService: suppressing \(assistantId) notification because its category toggle is off")
       recordInsightDeliveryOutcome(
@@ -458,7 +490,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // Proactive notifications honor the user's frequency setting. Functional
     // notifications (Crisp support replies, screen-recording permission prompts,
     // onboarding test) pass `respectFrequency: false` to bypass the gate.
+    // The meeting summary share card is exempt: it is a direct receipt of the
+    // user's own meeting ending, so it must appear after every meeting — the
+    // master toggle and its own category toggle above remain its only gates.
     if respectFrequency
+      && assistantId != MeetingActionItemBannerPolicy.assistantID
       && !isProactiveNotificationEligible(
         assistantId: assistantId,
         now: Date(),
@@ -523,6 +559,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         suggestionTelemetryIdentity: suggestionTelemetryIdentity,
         insightDeliveryID: insightDeliveryID,
         screenshotData: screenshotData,
+        isPersistent: isPersistent,
         onPresented: recordPresentation
       )
       switch presentation {
@@ -684,17 +721,19 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       onDropped?()
       return .suppressed
     }
-    // The director's decisions ride the same four category toggles as the dedicated
-    // assistants. Settings promises exactly four notification types — Focus, Task,
-    // Insight, Memory — and a toggle that silences only some producers of its
-    // category would make that promise a lie.
+    // The director's decisions ride the same category toggles as the dedicated
+    // assistants. Settings promises exactly five notification types — Focus, Task,
+    // Insight, Memory, Integration — and a toggle that silences only some producers
+    // of its category would make that promise a lie.
     guard
       Self.categoryToggleAllows(
         kind: ProactiveNotificationKind.from(decisionType: decisionType),
         focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
         taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
         insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
-        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled)
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled,
+        meetingSummaryEnabled: MeetingSummaryNotificationSettings.isEnabled)
     else {
       onDropped?()
       return .suppressed
@@ -761,23 +800,27 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   }
 
   /// Maps every proactive notification kind to its user-facing category — Focus, Task,
-  /// Insight, or Memory — and answers whether that category's Settings toggle allows
-  /// delivery. Focus is the focus-nudge assistant alone; generic tips, resurfaced
-  /// items, and generated goals are all insights; meeting action items are tasks.
-  /// `.general` is functional system alerting outside the taxonomy and is never
-  /// category-gated.
+  /// Insight, Memory, or Integration — and answers whether that category's Settings
+  /// toggle allows delivery. Focus is the focus-nudge assistant alone; generic tips,
+  /// resurfaced items, and generated goals are all insights; meeting action items are
+  /// tasks; connect-an-app offers are integrations. `.general` is functional system
+  /// alerting outside the taxonomy and is never category-gated.
   nonisolated static func categoryToggleAllows(
     kind: ProactiveNotificationKind,
     focusEnabled: Bool,
     taskEnabled: Bool,
     insightEnabled: Bool,
-    memoryEnabled: Bool
+    memoryEnabled: Bool,
+    integrationEnabled: Bool,
+    meetingSummaryEnabled: Bool = true
   ) -> Bool {
     switch kind {
     case .suggestion: return focusEnabled
-    case .task, .meetingNotes: return taskEnabled
+    case .task: return taskEnabled
+    case .meetingNotes: return meetingSummaryEnabled
     case .insight, .resurface, .goal: return insightEnabled
     case .memory: return memoryEnabled
+    case .integration: return integrationEnabled
     case .general: return true
     }
   }

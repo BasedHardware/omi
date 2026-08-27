@@ -14,6 +14,7 @@ import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/logger.dart';
 
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
+typedef ConversationPageFetcher = Future<({List<ServerConversation> items, bool ok, bool truncated})> Function();
 typedef ConversationLifecycleFetcher = Future<({ServerConversation? item, bool ok})> Function(String id);
 typedef DailySummariesChecker = Future<bool> Function();
 typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
@@ -37,6 +38,17 @@ typedef ConversationDetailsFetcher = Future<ServerConversation?> Function(String
 DateTime conversationLocalDayKey(DateTime timestamp) {
   final local = timestamp.toLocal();
   return DateTime(local.year, local.month, local.day);
+}
+
+/// Search results keep server rank: day buckets appear in first-hit order,
+/// and items inside a day stay in ranked order (no recency re-sort).
+Map<DateTime, List<ServerConversation>> groupSearchResultsPreservingRank(Iterable<ServerConversation> source) {
+  final grouped = <DateTime, List<ServerConversation>>{};
+  for (final conversation in source) {
+    final date = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
+    grouped.putIfAbsent(date, () => []).add(conversation);
+  }
+  return grouped;
 }
 
 class ConversationProvider extends ChangeNotifier {
@@ -129,7 +141,7 @@ class ConversationProvider extends ChangeNotifier {
   ConversationDetailsFetcher? conversationDetailsFetcherOverride;
 
   @visibleForTesting
-  ConversationListFetcher? conversationPageFetcherOverride;
+  ConversationPageFetcher? conversationPageFetcherOverride;
 
   @visibleForTesting
   Future<bool> Function(String conversationId)? conversationDeleteFetcherOverride;
@@ -241,7 +253,8 @@ class ConversationProvider extends ChangeNotifier {
       speakerId: selectedSpeakerId,
     );
     if (generation != _sessionGeneration || !_isSignedIn()) return;
-    convos.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    // Search results are ranked by the server, including transcript-match relevance.
+    // Re-sorting by recency would bury older spoken-moment matches.
     searchedConversations = convos;
     currentSearchPage = current;
     totalSearchPages = total;
@@ -278,7 +291,6 @@ class ConversationProvider extends ChangeNotifier {
     );
     if (generation != _sessionGeneration || !_isSignedIn()) return;
     searchedConversations.addAll(newConvos);
-    searchedConversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     totalSearchPages = total;
     currentSearchPage = current;
     groupSearchConvosByDate();
@@ -532,7 +544,7 @@ class ConversationProvider extends ChangeNotifier {
     );
     if (_conversationServerOffset == 0) {
       _conversationServerOffset = rawNewConversations.length;
-      _conversationServerHasMore = rawNewConversations.length >= _conversationPageSize;
+      _conversationServerHasMore = !result.truncated && rawNewConversations.length >= _conversationPageSize;
     }
     _conversationServerLoadedIds.addAll(rawNewConversations.map((conversation) => conversation.id));
     final currentlyProcessingIds = processingConversations
@@ -659,7 +671,7 @@ class ConversationProvider extends ChangeNotifier {
       processingRowsAtStart,
     );
     _conversationServerOffset = result.items.length;
-    _conversationServerHasMore = result.items.length >= _conversationPageSize;
+    _conversationServerHasMore = !result.truncated && result.items.length >= _conversationPageSize;
     _conversationServerLoadedIds
       ..clear()
       ..addAll(result.items.map((conversation) => conversation.id));
@@ -875,7 +887,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void _groupSearchConvosByDateWithoutNotify() {
-    groupedConversations = _buildGroupedByDate(_filterOutConvos(searchedConversations));
+    groupedConversations = groupSearchResultsPreservingRank(_filterOutConvos(searchedConversations));
   }
 
   void _groupConversationsByDateWithoutNotify() {
@@ -935,9 +947,12 @@ class ConversationProvider extends ChangeNotifier {
     );
   }
 
-  Future<({List<ServerConversation> items, bool ok})> _getConversationsFromServer() async {
+  Future<({List<ServerConversation> items, bool ok, bool truncated})> _getConversationsFromServer() async {
     final fetcher = _conversationListFetcher;
-    if (fetcher != null) return fetcher();
+    if (fetcher != null) {
+      final result = await fetcher();
+      return (items: result.items, ok: result.ok, truncated: false);
+    }
 
     final (startDate, endDate) = _getDateFilterRange();
 
@@ -1120,7 +1135,7 @@ class ConversationProvider extends ChangeNotifier {
     }
     final newConversations = pageResult.items;
     _conversationServerOffset += newConversations.length;
-    _conversationServerHasMore = newConversations.length >= _conversationPageSize;
+    _conversationServerHasMore = !pageResult.truncated && newConversations.length >= _conversationPageSize;
     _conversationServerLoadedIds.addAll(newConversations.map((conversation) => conversation.id));
     final existingIds = conversations.map((conversation) => conversation.id).toSet();
     conversations.addAll(

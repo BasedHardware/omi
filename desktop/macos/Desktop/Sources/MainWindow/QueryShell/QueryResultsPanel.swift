@@ -69,6 +69,10 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
   /// what it costs, so it is the only thing that can say what is left; the host measures the window
   /// and `QueryShellLayout.panelBodyHeight` does the arithmetic.
   let bodyHeight: CGFloat
+  /// What the chip row does on this surface. Home narrows its search results in place; Activity's
+  /// row is navigation — see `ActivityDestinationChip`.
+  var chipBehavior: QueryPanelChipBehavior = .filterKinds
+
   /// One slot in the header's leading cluster, next to `Filter ›` / `‹ Results`.
   ///
   /// **The chrome still learns nothing about the body.** It does not know that the thing beside the
@@ -85,7 +89,6 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
   /// rows it filters. See `QueryComposerPlacement`.
   @ViewBuilder var footer: () -> Footer
   @ViewBuilder var content: () -> Content
-
   @State private var matching: Int = 0
   /// Whether `total` is a finished count or a running one. See `QueryShellCorpusSettled`.
   @State private var corpusSettled = false
@@ -147,7 +150,7 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
       HStack(spacing: 6) {
         Image(systemName: "line.3.horizontal.decrease")
           .scaledFont(size: OmiType.caption, weight: .semibold)
-        Text(request.range == .all ? "Filter" : request.range.title)
+        Text(request.range == .all ? chipBehavior.disclosureLabel : request.range.title)
           .scaledFont(size: OmiType.caption, weight: .semibold)
         Image(systemName: "chevron.right")
           .scaledFont(size: OmiType.micro, weight: .semibold)
@@ -203,17 +206,49 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
 
   // MARK: - Chips
 
+  @ViewBuilder
   private var chips: some View {
     HStack(spacing: QueryShellLayout.chipSpacing) {
-      ForEach(QueryShellKind.allCases) { kind in
-        QueryTypeChip(
-          title: kind.title,
-          isActive: request.kind == kind,
-          action: { request.kind = kind }
-        )
-        .accessibilityIdentifier("query-shell-chip-\(kind.rawValue)")
+      switch chipBehavior {
+      case .filterKinds:
+        ForEach(QueryShellKind.allCases) { kind in
+          QueryTypeChip(
+            title: kind.title,
+            isActive: request.kind == kind,
+            action: { request.kind = kind }
+          )
+          .accessibilityIdentifier("query-shell-chip-\(kind.rawValue)")
+        }
+      case .openDestinations(let selected, let open):
+        ForEach(ActivityDestinationChip.allCases) { chip in
+          QueryTypeChip(
+            title: chip.title,
+            isActive: chip == selected,
+            action: { open(chip) }
+          )
+          .accessibilityIdentifier("activity-chip-\(chip.rawValue)")
+        }
       }
       Spacer(minLength: 0)
+    }
+  }
+}
+
+/// The two things a chip row can mean. Standalone rather than nested in the generic panel so the
+/// contract is assertable without naming three view types, and modelled as a value so one surface
+/// cannot quietly become the other: a row where some chips filter and some navigate teaches a rule
+/// and then breaks it.
+enum QueryPanelChipBehavior {
+  case filterKinds
+  case openDestinations(selected: ActivityDestinationChip, open: (ActivityDestinationChip) -> Void)
+
+  /// What the row's own header calls it. The word has to follow the behaviour: on Home the chips
+  /// narrow the results in place and `Filter` is the truth; on Activity they open pages, and a row
+  /// of destinations under the word `Filter` describes something the row does not do.
+  var disclosureLabel: String {
+    switch self {
+    case .filterKinds: return "Filter"
+    case .openDestinations: return "View"
     }
   }
 }

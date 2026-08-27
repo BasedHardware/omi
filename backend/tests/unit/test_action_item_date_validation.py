@@ -123,8 +123,10 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval.tools",
     "utils.retrieval.tools.action_item_tools",
     "utils.retrieval.agentic",
+    "utils.retrieval.chat_scope",
     "utils.conversations",
     "utils.conversations.render",
+    "utils.conversations.wake_word",
     "langchain_core",
     "langchain_core.tools",
     "langchain_core.runnables",
@@ -277,6 +279,22 @@ import contextvars
 agentic_stub = _stub_module("utils.retrieval.agentic")
 agentic_stub.agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
+
+def _apply_chat_scope_dates(scope, start_date, end_date):
+    return start_date, end_date, None
+
+
+def _chat_scope_from_config(configurable):
+    if not isinstance(configurable, dict):
+        return None
+    scope = configurable.get("chat_scope")
+    return scope if isinstance(scope, dict) and scope else None
+
+
+_chat_scope_stub = _stub_module("utils.retrieval.chat_scope")
+_chat_scope_stub.apply_chat_scope_dates = _apply_chat_scope_dates
+_chat_scope_stub.chat_scope_from_config = _chat_scope_from_config
+
 # ---------------------------------------------------------------------------
 # Load production code
 # ---------------------------------------------------------------------------
@@ -325,6 +343,13 @@ _load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" /
 prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
 prompt_prefix_stub.ConversationPromptPrefix = MagicMock
 prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=False)
+
+# wake_word is stdlib-only; load the real trust-boundary helper before the
+# isolated conversation-processing module imports it.
+_load_module_from_file(
+    "utils.conversations.wake_word",
+    BACKEND_DIR / "utils" / "conversations" / "wake_word.py",
+)
 
 conversation_processing = _load_module_from_file(
     "utils.llm.conversation_processing",

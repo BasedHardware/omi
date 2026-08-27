@@ -1316,6 +1316,7 @@ class TestAsyncCoordinatorBehavioral:
             'database.users',
             'database.user_usage',
             'database.sync_ledger',
+            'database.firestore_read_metrics',
             'firebase_admin',
             'google',
             'google.cloud',
@@ -1606,6 +1607,28 @@ class TestAsyncCoordinatorBehavioral:
         pipeline.conversations_db.update_conversation.assert_called_once_with(
             'uid', 'current-conversation', {'audio_files': [{'path': 'current.opus'}]}
         )
+
+    def test_limitless_discard_recovery_emits_one_creation_webhook(self, fenced_worker_module):
+        """A pendant conversation becomes webhook-visible when merged speech revives it."""
+        _module, stubs = fenced_worker_module
+        pipeline = stubs['pipeline']
+        limitless_source = pipeline.ConversationSource.limitless
+        original = types.SimpleNamespace(source=limitless_source, discarded=True)
+        recovered = types.SimpleNamespace(source=limitless_source, discarded=False)
+
+        pipeline.conversations_db.get_conversation = MagicMock(return_value={'id': 'limitless-conversation'})
+        pipeline.deserialize_conversation = MagicMock(return_value=original)
+        pipeline.process_conversation = MagicMock(return_value=recovered)
+        pipeline._run_conversation_created_webhook = MagicMock()
+        pipeline.submit_with_context = MagicMock(side_effect=lambda _executor, fn, *args: fn(*args))
+
+        pipeline._reprocess_conversation_after_update('uid-1', 'limitless-conversation', 'en')
+
+        pipeline._run_conversation_created_webhook.assert_called_once_with('uid-1', recovered)
+
+        original.discarded = False
+        pipeline._reprocess_conversation_after_update('uid-1', 'limitless-conversation', 'en')
+        pipeline._run_conversation_created_webhook.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_durable_completion_offloads_epoch_and_terminal_metric(self, fenced_worker_module):
@@ -3026,6 +3049,7 @@ class TestV2EndpointExecution:
             'database.users',
             'database.user_usage',
             'database.sync_ledger',
+            'database.firestore_read_metrics',
             'firebase_admin',
             'google',
             'google.cloud',

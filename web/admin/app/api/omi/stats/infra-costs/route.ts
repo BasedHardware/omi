@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
-import { getPayload, setPayload } from "@/lib/payload-cache";
+import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
+import { fetchGcpBilling, type GcpBillingSnapshot } from "@/lib/services/gcp-billing";
+import { fetchAnthropicDailyCosts, fetchOpenAiDailyCosts } from "@/lib/services/provider-costs";
+import { fetchGatewayLedgerDays, type GatewayLedgerDay } from "@/lib/services/gateway-ledger";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
@@ -62,8 +65,83 @@ export interface InfraCostsPayload {
       mobileShare: number;
     };
     partial: boolean;
+    // Billing-mode metadata (absent on the legacy estimated path).
+    costSource?: "billing" | "estimated";
+    windowEnd?: string; // inclusive last usage day (D-2: the export back-fills ~2 days)
+    coverage?: {
+      gcpBilling: boolean;
+      anthropic: boolean;
+      openai: boolean;
+      trackedLlm: boolean;
+      gatewayLedger: boolean;
+    };
+    shares?: PlatformShares;
+    // Spend the provider invoiced that the gateway ledger never saw: calls that
+    // bypassed the gateway. Present only when both the ledger and the matching
+    // invoice leg are available — a missing leg would read as a fake $0 leak.
+    directPath?: { anthropicUsd?: number; openaiUsd?: number };
+    // Measured gateway spend over the same window as `daily`.
+    gatewayLedger?: {
+      windowUsd: number;
+      byProvider: Record<string, number>;
+      byClass: {
+        desktop: number;
+        mobile: number;
+        sharedExtraction: number;
+        sharedChat: number;
+        unknown: number;
+      };
+      byokIncluded: boolean;
+    };
   };
   generatedAt: number;
+}
+
+// Desktop/mobile split shares, produced by the omi-cost-analysis
+// usage-weighted cut (canonical method): LLM spend splits by the PostHog
+// memory-event mix, everything else by the all-core-event mix. Defaults are
+// the 2026-08-16 report; refresh via ADMIN_PLATFORM_COST_SHARES_JSON when a
+// new report is cut — they are measurements with an as-of date, not tunables.
+export interface PlatformShares {
+  llm: { desktop: number; mobile: number };
+  // Chat spend (Anthropic) splits by the chat-event mix, NOT the llm/memory
+  // mix: the tracked-token base is ~99.9% conversation extraction with no
+  // chat in it, so smearing Anthropic by it pushes desktop's own Claude
+  // floating-bar/chat spend onto mobile (2026-08-24 methodology audit).
+  chat: { desktop: number; mobile: number };
+  core: { desktop: number; mobile: number };
+  asOf: string;
+  method: string;
+}
+
+const DEFAULT_PLATFORM_SHARES: PlatformShares = {
+  llm: { desktop: 0.2273, mobile: 0.7727 },
+  chat: { desktop: 0.5464, mobile: 0.4536 },
+  core: { desktop: 0.4673, mobile: 0.5327 },
+  asOf: "2026-08-16",
+  method: "usage-weighted (omi-cost-analysis), chat mix per 2026-08-24 audit",
+};
+
+export function loadPlatformShares(): PlatformShares {
+  const raw = process.env.ADMIN_PLATFORM_COST_SHARES_JSON;
+  if (!raw) return DEFAULT_PLATFORM_SHARES;
+  try {
+    const parsed = JSON.parse(raw);
+    const pair = (p: any, fallback: { desktop: number; mobile: number }) => {
+      const d = Number(p?.desktop);
+      const m = Number(p?.mobile);
+      return Number.isFinite(d) && Number.isFinite(m) && d >= 0 && m >= 0 ? { desktop: d, mobile: m } : fallback;
+    };
+    return {
+      llm: pair(parsed.llm, DEFAULT_PLATFORM_SHARES.llm),
+      chat: pair(parsed.chat, DEFAULT_PLATFORM_SHARES.chat),
+      core: pair(parsed.core, DEFAULT_PLATFORM_SHARES.core),
+      asOf: typeof parsed.asOf === "string" ? parsed.asOf : DEFAULT_PLATFORM_SHARES.asOf,
+      method: typeof parsed.method === "string" ? parsed.method : DEFAULT_PLATFORM_SHARES.method,
+    };
+  } catch {
+    return DEFAULT_PLATFORM_SHARES;
+  }
 }
 
 // Per-service last-30-day ACTUAL cost rows, sourced from the team-beasts
@@ -268,8 +346,215 @@ export function infraCostsCacheKey(days: number, overheadMonthly: number): strin
   return `infra-costs:v1:${days}:${overheadMonthly}`;
 }
 
+// Billing mode: every dollar comes from a billing system — GCP BigQuery
+// billing export (net = cost + credits, series ends D-2 because the export
+// back-fills) plus the Anthropic/OpenAI organization cost APIs. The Firestore
+// llm_usage scan stays as an attribution signal (perUserLlmUsd, coverage)
+// but is NOT added to totals: its cost_usd rows are provider spend already
+// present in the provider invoices / GCP bill — adding both double-counts.
+async function computeBillingInfraCosts(
+  days: number,
+  overheadMonthly: number,
+): Promise<InfraCostsPayload | null> {
+  // The ledger leg is scoped to the GCP window, so it chains off the GCP
+  // promise rather than guessing the dates — but it still settles alongside the
+  // other legs instead of adding a serial round trip.
+  const gcpPromise = fetchGcpBilling(days);
+  const ledgerPromise = gcpPromise.then((snapshot) =>
+    snapshot ? fetchGatewayLedgerDays(snapshot.daily.map((d) => d.date)) : null,
+  );
+  const [gcpRes, anthropicRes, openaiRes, llmRes, ledgerRes] = await Promise.allSettled([
+    gcpPromise,
+    fetchAnthropicDailyCosts(days),
+    fetchOpenAiDailyCosts(days),
+    fetchLlmCostsPerDay(days),
+    ledgerPromise,
+  ]);
+  const gcp: GcpBillingSnapshot | null = gcpRes.status === "fulfilled" ? gcpRes.value : null;
+  if (!gcp) return null;
+  const anthropic = anthropicRes.status === "fulfilled" ? anthropicRes.value : null;
+  const openai = openaiRes.status === "fulfilled" ? openaiRes.value : null;
+  const llmByDay = llmRes.status === "fulfilled" ? llmRes.value : null;
+  const ledgerDays: GatewayLedgerDay[] | null =
+    ledgerRes.status === "fulfilled" ? ledgerRes.value : null;
+
+  const shares = loadPlatformShares();
+  const round = (v: number) => Math.round(v * 100) / 100;
+  const anthropicByDay = new Map((anthropic ?? []).map((r) => [r.date, r.usd]));
+  const openaiByDay = new Map((openai ?? []).map((r) => [r.date, r.usd]));
+  const ledgerByDay = new Map((ledgerDays ?? []).map((d) => [d.date, d]));
+
+  // Measured desktop share of that day's LLM spend, straight off the gateway
+  // ledger: desktop-only features count fully to desktop, shared features are
+  // split by the usage-weighted shares for their shape, and spend from features
+  // we can't classify falls back to the general activity mix. This replaces the
+  // static llm share on days the ledger covers — it is the same quantity,
+  // measured instead of assumed.
+  const measuredDesktopLlmShare = (day: GatewayLedgerDay): number => {
+    if (!(day.totalUsd > 0)) return shares.llm.desktop;
+    const desktopUsd =
+      day.byClass.desktop +
+      day.byClass.sharedExtraction * shares.llm.desktop +
+      day.byClass.sharedChat * shares.chat.desktop +
+      day.byClass.unknown * shares.core.desktop;
+    return Math.min(1, Math.max(0, desktopUsd / day.totalUsd));
+  };
+
+  // All legs clamp to the GCP window (ends D-2) so every plotted day has the
+  // same source coverage.
+  const daily: DailyCostPoint[] = gcp.daily.map((row) => {
+    // Extraction-model spend (Vertex/Gemini in the GCP bill + OpenAI) splits
+    // by the memory-token mix; Anthropic is chat and splits by the chat mix.
+    const llmPool = row.llmNetUsd + (openaiByDay.get(row.date) ?? 0);
+    const chatPool = anthropicByDay.get(row.date) ?? 0;
+    const otherPool = row.netUsd - row.llmNetUsd;
+    const ledgerDay = ledgerByDay.get(row.date);
+    const llmDesktop = ledgerDay ? measuredDesktopLlmShare(ledgerDay) : shares.llm.desktop;
+    const llmMobile = ledgerDay ? 1 - llmDesktop : shares.llm.mobile;
+    const desktop =
+      llmPool * llmDesktop + chatPool * shares.chat.desktop + otherPool * shares.core.desktop;
+    const mobile =
+      llmPool * llmMobile + chatPool * shares.chat.mobile + otherPool * shares.core.mobile;
+    return {
+      date: row.date,
+      desktop: round(desktop),
+      mobile: round(mobile),
+      unknown: 0,
+      total: round(desktop + mobile),
+    };
+  });
+
+  const windowDays = daily.length;
+  const anthropicTotal = daily.reduce((s, d) => s + (anthropicByDay.get(d.date) ?? 0), 0);
+  const openaiTotal = daily.reduce((s, d) => s + (openaiByDay.get(d.date) ?? 0), 0);
+
+  const breakdown: ServiceCostRow[] = [
+    ...gcp.services.map((svc) => {
+      const share = svc.isLlm ? shares.llm : shares.core;
+      return {
+        service: svc.service,
+        mtdUsd: round(svc.netUsd),
+        aprProjectionUsd: round(svc.netUsd),
+        desktopProjectionUsd: round(svc.netUsd * share.desktop),
+        mobileProjectionUsd: round(svc.netUsd * share.mobile),
+      };
+    }),
+    ...(anthropic
+      ? [{
+          service: "Anthropic (billed)",
+          mtdUsd: round(anthropicTotal),
+          aprProjectionUsd: round(anthropicTotal),
+          desktopProjectionUsd: round(anthropicTotal * shares.chat.desktop),
+          mobileProjectionUsd: round(anthropicTotal * shares.chat.mobile),
+        }]
+      : []),
+    ...(openai
+      ? [{
+          service: "OpenAI (billed)",
+          mtdUsd: round(openaiTotal),
+          aprProjectionUsd: round(openaiTotal),
+          desktopProjectionUsd: round(openaiTotal * shares.llm.desktop),
+          mobileProjectionUsd: round(openaiTotal * shares.llm.mobile),
+        }]
+      : []),
+  ].sort((a, b) => b.mtdUsd - a.mtdUsd);
+
+  const totalCostUsd = daily.reduce((s, d) => s + d.total, 0);
+  const totalDesktopUsd = daily.reduce((s, d) => s + d.desktop, 0);
+  const totalMobileUsd = daily.reduce((s, d) => s + d.mobile, 0);
+  const perUserLlmUsd = Object.values(llmByDay ?? {}).reduce(
+    (s, r) => s + r.desktop + r.mobile + r.unknown,
+    0,
+  );
+  const otherPoolTotal = gcp.daily.reduce((s, r) => s + (r.netUsd - r.llmNetUsd), 0);
+
+  // Ledger totals over exactly the plotted window (days outside it were never
+  // fetched, but be explicit rather than relying on that).
+  const windowLedgerDays = daily.map((d) => ledgerByDay.get(d.date)).filter(Boolean) as GatewayLedgerDay[];
+  const ledgerSummary =
+    windowLedgerDays.length > 0
+      ? {
+          windowUsd: round(windowLedgerDays.reduce((s, d) => s + d.totalUsd, 0)),
+          byProvider: windowLedgerDays.reduce<Record<string, number>>((acc, d) => {
+            for (const [provider, usd] of Object.entries(d.byProvider)) {
+              acc[provider] = round((acc[provider] ?? 0) + usd);
+            }
+            return acc;
+          }, {}),
+          byClass: windowLedgerDays.reduce(
+            (acc, d) => ({
+              desktop: round(acc.desktop + d.byClass.desktop),
+              mobile: round(acc.mobile + d.byClass.mobile),
+              sharedExtraction: round(acc.sharedExtraction + d.byClass.sharedExtraction),
+              sharedChat: round(acc.sharedChat + d.byClass.sharedChat),
+              unknown: round(acc.unknown + d.byClass.unknown),
+            }),
+            { desktop: 0, mobile: 0, sharedExtraction: 0, sharedChat: 0, unknown: 0 },
+          ),
+          byokIncluded: windowLedgerDays.some((d) => d.byokIncluded),
+        }
+      : null;
+
+  // Direct-path leak: invoiced spend the gateway ledger never recorded, i.e.
+  // calls that reached the provider without going through the gateway. Only
+  // computed where both sides of the subtraction are real measurements.
+  const directPath: { anthropicUsd?: number; openaiUsd?: number } | null = ledgerSummary
+    ? {
+        ...(anthropic
+          ? { anthropicUsd: Math.max(0, round(anthropicTotal - (ledgerSummary.byProvider.anthropic ?? 0))) }
+          : {}),
+        ...(openai
+          ? { openaiUsd: Math.max(0, round(openaiTotal - (ledgerSummary.byProvider.openai ?? 0))) }
+          : {}),
+      }
+    : null;
+
+  return {
+    days: windowDays,
+    daily,
+    breakdown,
+    summary: {
+      totalCostUsd: round(totalCostUsd),
+      totalDesktopUsd: round(totalDesktopUsd),
+      totalMobileUsd: round(totalMobileUsd),
+      totalUnknownUsd: 0,
+      perUserLlmUsd: round(perUserLlmUsd),
+      overheadUsd: round(otherPoolTotal),
+      assumptions: {
+        overheadMonthlyUsd: overheadMonthly,
+        desktopShare: Math.round(shares.core.desktop * 1000) / 1000,
+        mobileShare: Math.round(shares.core.mobile * 1000) / 1000,
+      },
+      partial: anthropic == null || openai == null || llmByDay == null || ledgerSummary == null,
+      costSource: "billing",
+      windowEnd: gcp.windowEnd,
+      coverage: {
+        gcpBilling: true,
+        anthropic: anthropic != null,
+        openai: openai != null,
+        trackedLlm: llmByDay != null,
+        gatewayLedger: ledgerSummary != null,
+      },
+      shares,
+      ...(directPath && Object.keys(directPath).length > 0 ? { directPath } : {}),
+      ...(ledgerSummary ? { gatewayLedger: ledgerSummary } : {}),
+    },
+    generatedAt: Date.now(),
+  };
+}
+
 export async function computeInfraCosts(opts: { days: number; overheadMonthly: number }): Promise<InfraCostsPayload> {
   const { days, overheadMonthly } = opts;
+
+  // Billing mode is authoritative; the legacy estimated path (hardcoded
+  // April service table) survives only as a labeled fallback so the wall
+  // keeps rendering through a BigQuery outage.
+  try {
+    const billed = await computeBillingInfraCosts(days, overheadMonthly);
+    if (billed) return billed;
+  } catch (err) {
+    console.error("Billing-mode infra costs failed, falling back to estimates:", err);
+  }
 
   const llmByDay = await fetchLlmCostsPerDay(days);
     const partial = llmByDay == null;
@@ -345,6 +630,14 @@ export async function computeInfraCosts(opts: { days: number; overheadMonthly: n
           mobileShare: Math.round(mobileShare * 1000) / 1000,
         },
         partial,
+        costSource: "estimated",
+        coverage: {
+          gcpBilling: false,
+          anthropic: false,
+          openai: false,
+          trackedLlm: llmByDay != null,
+          gatewayLedger: false,
+        },
       },
       generatedAt: Date.now(),
     };
@@ -365,13 +658,13 @@ export async function GET(request: NextRequest) {
     // any age, serve it (this route is too heavy to recompute inline).
     const cached = await getPayload<InfraCostsPayload>(key);
     if (cached) {
-      return NextResponse.json(cached.data);
+      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
     }
 
     // Cold start before the first precompute: compute inline (may be slow), cache, return.
     const payload = await computeInfraCosts({ days, overheadMonthly });
     await setPayload(key, payload);
-    return NextResponse.json(payload);
+    return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (err: any) {
     console.error("Infra costs error:", err);
     return NextResponse.json(

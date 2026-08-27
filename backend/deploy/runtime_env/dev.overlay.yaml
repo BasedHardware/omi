@@ -8,6 +8,9 @@ overlay:
   gke:
     backend-listen:
       env:
+        REFERRAL_PUBLIC_BASE_URL:
+          value: https://api.omiapi.com
+          category: service_discovery
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omiapi.com
         HOSTED_TRANSLATION_API_URL:

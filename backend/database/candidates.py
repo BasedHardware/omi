@@ -37,7 +37,17 @@ TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 PENDING_CANDIDATE_SEMANTIC_VERSION = 'task-create.v1'
 WORKSTREAM_CANDIDATE_SEMANTIC_VERSION = 'workstream-create.v1'
 MAX_CANDIDATE_EVIDENCE_REFS = 20
-PENDING_CANDIDATE_REUSE_WINDOW = timedelta(days=14)
+# A suggestion the user does not act on expires and is gone. This is a real
+# stored deadline, not a display filter: every read treats a lapsed pending
+# Candidate as expired.
+#
+# Storage is not reclaimed yet. A Firestore TTL policy on `expires_at` would do
+# it, but `firebase_index_manifest` can only express `ttl: false` indexing
+# exemptions, so a TTL policy cannot be declared through the generated manifest
+# today — and enabling auto-deletion on a live collection group is not a change
+# to smuggle in through a generated file. Expired Candidates therefore remain
+# stored but unreadable until that is addressed separately.
+SUGGESTION_TTL = timedelta(days=2)
 TASK_PRIORITY_RANK = {
     TaskPriority.low: 0,
     TaskPriority.medium: 1,
@@ -420,6 +430,63 @@ def _stored_task_priority(value: Any) -> Optional[TaskPriority]:
         return None
 
 
+def _as_utc(value: Any) -> Optional[datetime]:
+    if not isinstance(value, datetime):
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+def _suggestion_window_has_closed(
+    *,
+    status: str,
+    created_at: Optional[datetime],
+    expires_at: Optional[datetime],
+    now: datetime,
+) -> bool:
+    if status != CandidateStatus.pending.value:
+        return False
+    # Candidates written before suggestions had a deadline carry no `expires_at`.
+    # Derive one from creation so the pre-existing backlog ages out too, with no
+    # backfill.
+    deadline = expires_at or (created_at + SUGGESTION_TTL if created_at is not None else None)
+    if deadline is None:
+        return False
+    return deadline <= now
+
+
+def candidate_has_lapsed(candidate: CandidateRecord, *, now: datetime) -> bool:
+    """Whether a pending Candidate's suggestion window has closed.
+
+    Storage reclamation is asynchronous, so a lapsed Candidate can still be
+    readable. Every read path must ask this rather than trusting `status`.
+    """
+
+    return _suggestion_window_has_closed(
+        status=candidate.status.value,
+        created_at=candidate.created_at,
+        expires_at=candidate.expires_at,
+        now=now,
+    )
+
+
+def stored_candidate_has_lapsed(candidate: dict[str, Any], *, now: datetime) -> bool:
+    """`candidate_has_lapsed` for a stored document that was never parsed into a record.
+
+    The recommendation reader loads canonical state as raw documents, so it cannot
+    ask the record-shaped question. It must still ask the same one: a deadline that
+    only one reader enforces is a deadline the other readers repeal.
+    """
+
+    stored_status = candidate.get('status')
+    status = getattr(stored_status, 'value', stored_status)
+    return _suggestion_window_has_closed(
+        status=str(status) if status else CandidateStatus.pending.value,
+        created_at=_as_utc(candidate.get('created_at')),
+        expires_at=_as_utc(candidate.get('expires_at')),
+        now=now,
+    )
+
+
 def create_candidate(
     uid: str,
     proposal: CandidateCreate,
@@ -445,6 +512,7 @@ def create_candidate(
         account_generation=account_generation,
         idempotency_key=key_hash,
         created_at=now_value,
+        expires_at=now_value + SUGGESTION_TTL,
     )
     ref = _candidate_ref(uid, candidate_id)
     alias_ref = _candidate_idempotency_alias_ref(uid, key_hash)
@@ -531,7 +599,10 @@ def create_candidate(
             claimed_candidate is not None
             and claimed_candidate.status == CandidateStatus.pending
             and claimed_candidate.created_at.tzinfo is not None
-            and claimed_candidate.created_at >= now_value - PENDING_CANDIDATE_REUSE_WINDOW
+            # Reuse is bounded by the suggestion's own life, not by a separate
+            # window: a lapsed pending Candidate is unreadable, so merging a new
+            # capture into it would store a proposal the user can never see.
+            and not candidate_has_lapsed(claimed_candidate, now=now_value)
         )
         if (
             claimed_candidate is not None
@@ -877,6 +948,7 @@ def resolve_task_candidate(
             'resolution_reason': 'accepted',
             'result_task_id': task_id,
             'resolved_at': resolved_at,
+            'expires_at': None,
         }
         write_transaction.update(candidate_ref, candidate_patch)
         if candidate.proposed_action == CandidateAction.create:
@@ -1067,7 +1139,12 @@ def resolve_candidate_without_mutation(
             raise CandidateConflictError('Candidate resolution is already claimed')
         write_transaction.update(
             candidate_ref,
-            {'status': status.value, 'resolution_reason': reason or status.value, 'resolved_at': resolved_at},
+            {
+                'status': status.value,
+                'resolution_reason': reason or status.value,
+                'resolved_at': resolved_at,
+                'expires_at': None,
+            },
         )
         return CandidateResolutionReceipt(
             candidate_id=candidate_id,
@@ -1133,6 +1210,7 @@ def reconcile_migrated_candidate(
             'status': status.value,
             'resolution_reason': reason or f'legacy_{status.value}',
             'resolved_at': resolution_time,
+            'expires_at': None,
         }
         if result_task_id:
             patch['result_task_id'] = result_task_id
@@ -1325,6 +1403,8 @@ __all__ = [
     'list_candidates',
     'pending_candidate_semantic_identity',
     'reconcile_migrated_candidate',
+    'candidate_has_lapsed',
+    'stored_candidate_has_lapsed',
     'resolve_candidate_without_mutation',
     'resolve_task_candidate',
     'task_id_for_candidate',

@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Fixed push-to-talk never actually starting from the top-edge bar: the bar's PTT commands (warm/start/release/drain/dispose/rebuild) were silently rejected by an authorization check written before PTT moved into the bar."
+  ]
+}

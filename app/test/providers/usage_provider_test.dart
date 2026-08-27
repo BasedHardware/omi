@@ -72,5 +72,12 @@ void main() {
         expect(provider.canAccessPhoneCalls, isTrue, reason: '${plan.name} is paid');
       }
     });
+
+    test('an unknown plan does not unlock paid-only features', () {
+      final provider = UsageProvider();
+      provider.debugSetSubscription(_subscriptionOn(PlanType.unknown('future_plan_123'), used: 0, limit: 0));
+
+      expect(provider.canAccessPhoneCalls, isFalse);
+    });
   });
 }

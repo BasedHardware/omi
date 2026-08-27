@@ -18333,6 +18333,30 @@ abstract class AppLocalizations {
   /// **'Open store'**
   String get accountCutoverOpenStore;
 
+  /// Chat timeframe scope chip for today
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get chatScopeToday;
+
+  /// Chat timeframe scope chip for this week
+  ///
+  /// In en, this message translates to:
+  /// **'This week'**
+  String get chatScopeThisWeek;
+
+  /// Chat scope chip when asking about a specific conversation
+  ///
+  /// In en, this message translates to:
+  /// **'About: {title}'**
+  String chatScopeAbout(String title);
+
+  /// Tooltip for Ask button on conversation detail
+  ///
+  /// In en, this message translates to:
+  /// **'Ask about this'**
+  String get askAboutThisConversation;
+
   /// Toggle label controlling whether Custom STT raw audio is also sent to Omi
   ///
   /// In en, this message translates to:
@@ -18356,6 +18380,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t share diagnostics. Please try again.'**
   String get diagnosticsShareFailed;
+
+  /// Heading of the notice shown on an app the backend has automatically disabled
+  ///
+  /// In en, this message translates to:
+  /// **'This app is disabled and cannot be installed.'**
+  String get appDisabledTitle;
+
+  /// Explains that an app was auto-disabled because its webhook endpoint kept failing
+  ///
+  /// In en, this message translates to:
+  /// **'Its endpoint failed for 72 hours in a row, so deliveries were stopped.'**
+  String get appDisabledWebhookFailures;
+
+  /// Explains that an app was disabled for a reason other than webhook failures
+  ///
+  /// In en, this message translates to:
+  /// **'It was disabled by Omi.'**
+  String get appDisabledGeneric;
+
+  /// Hint telling the app owner to repair their endpoint before re-enabling the app
+  ///
+  /// In en, this message translates to:
+  /// **'Fix the endpoint first — re-enabling re-checks every configured URL.'**
+  String get appDisabledOwnerHint;
+
+  /// Button that clears the disabled flag on an app the owner has repaired
+  ///
+  /// In en, this message translates to:
+  /// **'Re-enable'**
+  String get appReEnable;
+
+  /// Title of the dialog shown when re-enabling a disabled app is rejected
+  ///
+  /// In en, this message translates to:
+  /// **'Could not re-enable'**
+  String get appReEnableFailedTitle;
+
+  /// Body of the dialog shown when re-enabling fails and the server gave no reason
+  ///
+  /// In en, this message translates to:
+  /// **'This app could not be re-enabled. Please try again.'**
+  String get appReEnableFailedBody;
+
+  /// States the date an app was automatically disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled on {date}.'**
+  String appDisabledOn(String date);
+
+  /// States the last error recorded from the app's endpoint before it was disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Last error: {error}.'**
+  String appDisabledLastError(String error);
+
+  /// Tab label for the prerecorded conversation transcript
+  ///
+  /// In en, this message translates to:
+  /// **'Prerecorded'**
+  String get prerecordedTranscript;
+
+  /// Shown when offline sync stalls because the Limitless Pendant is actively recording; it cannot serve stored audio until recording stops
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant is still recording, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
+  String get pendantRecordingSyncBlocked;
+
+  /// Shown when offline sync stalls because the Limitless Pendant's flash storage is full; a full pendant stays armed in recording mode and serves no stored audio until recording is stopped
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
+  String get pendantFullSyncBlocked;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

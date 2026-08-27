@@ -478,6 +478,26 @@ def test_firestore_ledger_write_is_immutable_idempotent_and_snapshots_subscripti
     assert not record_llm_gateway_attempt(event, firestore_client=client)
     stored = client.collections[ATTEMPTS_COLLECTION]['invocation-1:1']
     assert stored['subscription_tier'] == 'pro'
+    assert stored['plan_id'] == 'architect'
+    assert stored['plan_attribution_status'] == 'complete'
+    assert stored['cost_attribution_status'] == 'missing'
+
+
+def test_firestore_ledger_marks_priced_omi_cost_complete_for_the_canonical_plan() -> None:
+    client = _FakeFirestoreClient(subscription_plan='operator')
+    event = {
+        'attempt_id': 'invocation-1:2',
+        'provider': 'openai',
+        'user_uid': 'user-123',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 2500,
+    }
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    stored = client.collections[ATTEMPTS_COLLECTION]['invocation-1:2']
+    assert stored['plan_id'] == 'operator'
+    assert stored['cost_attribution_status'] == 'complete'
 
 
 @pytest.mark.asyncio
@@ -726,3 +746,42 @@ def test_short_context_luna_request_uses_short_context_rates() -> None:
     # 100K output @ $1.20/M + 60K cache-write @ $0.25/M = $147,600 micro-USD.
     assert event.estimated_cost_micro_usd == 147_600
     assert event.rate_card_id == 'openai.gpt-5.6-luna.2026-07-30'
+
+
+def _platform_attempt() -> Any:
+    trace = AttemptTrace()
+    return trace.record(
+        provider='anthropic',
+        configured_model='claude-sonnet-4-5',
+        route_artifact_id='route.chat_agent.model_config.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(usage=ProviderUsage(prompt_tokens=10, uncached_input_tokens=10)),
+    )
+
+
+def test_app_platform_is_recorded_on_the_accounting_event() -> None:
+    """chat_agent spend must be splittable desktop vs mobile in the ledger."""
+    context = AccountingContext.create(
+        request_id='request-platform',
+        caller='backend',
+        user_uid='user-123',
+        feature='chat_agent',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        app_platform='desktop',
+    )
+
+    event = build_accounting_event(context, _platform_attempt())
+
+    assert event.app_platform == 'desktop'
+    assert event.as_dict()['app_platform'] == 'desktop'
+
+
+def test_unknown_app_platform_is_persisted_as_unattributed() -> None:
+    event = build_accounting_event(_context(), _platform_attempt())
+
+    assert event.app_platform is None
+    assert event.as_dict()['app_platform'] is None

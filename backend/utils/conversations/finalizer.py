@@ -10,6 +10,7 @@ import logging
 from enum import Enum
 
 from database import conversations as conversations_db
+from database.firestore_read_metrics import FirestoreReadSite
 from database.redis_db import get_cached_user_geolocation
 from models.conversation_enums import ConversationStatus
 from models.geolocation import Geolocation
@@ -56,7 +57,13 @@ async def finalize_persisted_conversation(
     integration delivery is dropped rather than dead-lettering the whole
     conversation for a third-party endpoint that is down.
     """
-    conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
+    conversation_data = await run_blocking(
+        db_executor,
+        conversations_db.get_conversation,
+        uid,
+        conversation_id,
+        read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
+    )
     if not conversation_data:
         # A prior delivery can have durably completed fanout just before the
         # worker crashes.  Preserve that acknowledgement even if the row is
@@ -205,11 +212,16 @@ async def finalize_persisted_conversation(
             raise ConversationFinalizationError('fanout_completion_conflict')
         return ConversationFinalizationDisposition.completed
     except Exception as error:
-        # Provider and validation exceptions can contain transcript excerpts.
-        # The job stores and logs only a bounded failure code.
+        # Provider and validation exceptions can contain transcript excerpts, so the job stores
+        # and logs a bounded failure code instead of the message. The exception TYPE carries no
+        # transcript and is the one thing that tells an operator where to look — provider,
+        # schema or datastore. Without it `processing_failed` is unactionable: a dead-lettered
+        # conversation reports the same nine characters whatever went wrong. The warning fifteen
+        # lines up already logs `type(error).__name__` under the same constraint.
         logger.error(
-            'persisted conversation finalization failed uid=%s conversation=%s failure=processing_failed',
+            'persisted conversation finalization failed uid=%s conversation=%s failure=processing_failed error=%s',
             uid,
             conversation_id,
+            type(error).__name__,
         )
         raise ConversationFinalizationError('processing_failed') from error

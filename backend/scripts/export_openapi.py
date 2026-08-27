@@ -80,6 +80,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/persons',
     '/v1/phone',
     '/v1/screen-activity',
+    '/v1/screen-frame-egress',
     '/v1/stripe',
     '/v1/sync',
     '/v1/task-integrations',
@@ -142,6 +143,34 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     (
         'PATCH',
         '/v1/conversations/{conversation_id}/visibility',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/share-recipients',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/screenshots',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'DELETE',
+        '/v1/conversations/{conversation_id}/screenshots',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'DELETE',
+        '/v1/conversations/{conversation_id}/screenshots/{frame_id}',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'PATCH',
+        '/v1/conversations/{conversation_id}/screenshot-sharing',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/shared/screenshots',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'POST',
+        '/v1/conversations/{conversation_id}/share-email',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
         'PATCH',
@@ -272,6 +301,18 @@ APP_CLIENT_PUBLIC_PATHS = frozenset(
         '/v2/messages/shared/{token}',
     }
 )
+# Developer-API-key-only routes that must not appear in the Firebase app-client
+# contract. The app-client exporter stamps firebaseBearer on every included path;
+# leaking these would teach generated clients and agents the wrong auth scheme.
+APP_CLIENT_EXCLUDED_ROUTES: dict[tuple[str, str], str] = {
+    (
+        'POST',
+        '/v1/dev/user/ask',
+    ): (
+        'Developer API key + conversations:read only (dev:ask); public OpenAPI is the '
+        'authoritative contract. App-client firebaseBearer would mis-document auth.'
+    ),
+}
 
 HTTP_METHODS = {'GET', 'POST', 'PUT', 'PATCH', 'DELETE'}
 
@@ -690,6 +731,10 @@ def is_app_client_contract_path(path: str) -> bool:
     return False
 
 
+def is_app_client_excluded_route(method: str, path: str) -> bool:
+    return (method.upper(), path) in APP_CLIENT_EXCLUDED_ROUTES
+
+
 def is_integration_public_contract_path(path: str) -> bool:
     return path in INTEGRATION_PUBLIC_PATHS
 
@@ -713,11 +758,19 @@ def public_contract_routes(app) -> list[APIRoute]:
 
 
 def app_client_contract_routes(app) -> list[APIRoute]:
-    return [
-        route
-        for route in app.routes
-        if isinstance(route, APIRoute) and is_app_client_contract_path(route.path) and route.include_in_schema
-    ]
+    routes: list[APIRoute] = []
+    for route in app.routes:
+        if (
+            not isinstance(route, APIRoute)
+            or not is_app_client_contract_path(route.path)
+            or not route.include_in_schema
+        ):
+            continue
+        methods = {m.upper() for m in (route.methods or set()) if m.upper() in HTTP_METHODS}
+        if methods and all(is_app_client_excluded_route(method, route.path) for method in methods):
+            continue
+        routes.append(route)
+    return routes
 
 
 def integration_public_contract_routes(app) -> list[APIRoute]:
@@ -962,6 +1015,12 @@ def validate_contract(app, schema: dict[str, Any], surface: str = 'public') -> N
         for path in schema.get('paths', {}):
             if not is_app_client_contract_path(path):
                 raise OpenAPIContractError(f'non-app-client route leaked into app-client OpenAPI: {path}')
+        for method, path in documented_route_keys(schema):
+            if is_app_client_excluded_route(method, path):
+                raise OpenAPIContractError(
+                    f'Developer-API-only route leaked into app-client OpenAPI: {method} {path} '
+                    f'({APP_CLIENT_EXCLUDED_ROUTES[(method, path)]})'
+                )
     elif surface == 'integration-public':
         documented = set(documented_route_keys(schema))
         expected = set(

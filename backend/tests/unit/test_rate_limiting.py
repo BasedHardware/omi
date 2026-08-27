@@ -14,7 +14,12 @@ import pytest
 from fastapi import HTTPException
 
 from testing.import_isolation import stub_modules
-from utils.rate_limit_config import RATE_LIMIT_BOOST, RATE_POLICIES, get_effective_limit
+from utils.rate_limit_config import (
+    BOOST_EXEMPT_POLICIES,
+    RATE_LIMIT_BOOST,
+    RATE_POLICIES,
+    get_effective_limit,
+)
 
 
 class _RedisError(Exception):
@@ -130,6 +135,11 @@ class TestRatePolicies(unittest.TestCase):
             max_req, _ = RATE_POLICIES[name]
             self.assertGreaterEqual(max_req, 100, f"{name} should allow bursts")
 
+    def test_action_items_list_caps_tight_loops(self):
+        """First-party listing must be below a Windows poll storm and above hydrate."""
+        max_req, window = RATE_POLICIES["action_items:list"]
+        self.assertEqual((max_req, window), (12, 60))
+
 
 class TestBoostFactor(unittest.TestCase):
     """Test boost factor applies correctly."""
@@ -155,6 +165,71 @@ class TestBoostFactor(unittest.TestCase):
         _, window = get_effective_limit("chat:send_message", boost=5.0)
         _, base_window = RATE_POLICIES["chat:send_message"]
         self.assertEqual(window, base_window)
+
+
+class TestBoostExemption(unittest.TestCase):
+    """A boost-exempt policy serves its base limit; everything else still boosts.
+
+    Prod ran RATE_LIMIT_BOOST=100, which turned the 12/60s action_items:list cap
+    into 1,200/60s — so the cap never fired while ~82 stale Windows clients
+    hot-looped GET /v1/action-items at ~97 req/min (48.8% of all billable
+    Firestore reads). The exemption is what makes that cap real, and lowering the
+    global boost instead would silently retune ~40 unrelated policies.
+    """
+
+    def test_action_items_list_is_exempt_by_default(self):
+        self.assertIn("action_items:list", BOOST_EXEMPT_POLICIES)
+
+    def test_exempt_policy_ignores_the_boost(self):
+        """(b) The exempt policy enforces its base limit under any boost."""
+        base = RATE_POLICIES["action_items:list"]
+        for boost in (2.0, 100.0, 1000.0):
+            self.assertEqual(get_effective_limit("action_items:list", boost=boost), base)
+
+    def test_exempt_policy_still_honours_a_tightening_boost_is_not_required(self):
+        """The exemption is absolute in both directions — base limit, always."""
+        base = RATE_POLICIES["action_items:list"]
+        self.assertEqual(get_effective_limit("action_items:list", boost=0.1), base)
+
+    def test_non_exempt_policies_still_boost(self):
+        """(a) Every other policy keeps the existing boost behaviour."""
+        for name in RATE_POLICIES:
+            if name in BOOST_EXEMPT_POLICIES:
+                continue
+            base, window = RATE_POLICIES[name]
+            max_req, eff_window = get_effective_limit(name, boost=100.0)
+            self.assertEqual(max_req, max(1, int(base * 100.0)), f"{name} must still boost")
+            self.assertEqual(eff_window, window)
+
+    def test_exempt_set_is_env_overridable(self):
+        """Operator escape hatch: the exemption list is env-driven, no code change."""
+        import utils.rate_limit_config as rlc
+
+        with patch.dict(os.environ, {"RATE_LIMIT_BOOST_EXEMPT": ""}):
+            importlib.reload(rlc)
+            self.assertEqual(rlc.BOOST_EXEMPT_POLICIES, frozenset())
+            base, _ = rlc.RATE_POLICIES["action_items:list"]
+            self.assertEqual(rlc.get_effective_limit("action_items:list", boost=100.0)[0], base * 100)
+
+        with patch.dict(os.environ, {"RATE_LIMIT_BOOST_EXEMPT": "action_items:list, chat:send_message"}):
+            importlib.reload(rlc)
+            self.assertEqual(rlc.BOOST_EXEMPT_POLICIES, frozenset({"action_items:list", "chat:send_message"}))
+
+        importlib.reload(rlc)
+
+    def test_unknown_exempt_names_are_dropped_not_enforced(self):
+        """A typo in the env var must not take the process down or exempt nothing real."""
+        import utils.rate_limit_config as rlc
+
+        with patch.dict(os.environ, {"RATE_LIMIT_BOOST_EXEMPT": "action_items:lst,action_items:list"}):
+            importlib.reload(rlc)
+            self.assertEqual(rlc.BOOST_EXEMPT_POLICIES, frozenset({"action_items:list"}))
+        importlib.reload(rlc)
+
+    def test_default_boost_leaves_every_limit_unchanged(self):
+        """With the default boost of 1.0 the exemption is a no-op for everyone."""
+        for name, (base, window) in RATE_POLICIES.items():
+            self.assertEqual(get_effective_limit(name, boost=1.0), (base, window))
 
 
 class TestShadowMode(unittest.TestCase):
@@ -270,6 +345,53 @@ class TestEnforceRateLimit(unittest.TestCase):
     def test_fail_open_on_redis_error(self, mock_check):
         # Should not raise — fail open
         self.ep._enforce_rate_limit("uid123", "chat:send_message")
+
+    @patch('utils.rate_limit_config.RATE_LIMIT_BOOST', 100.0)
+    @patch('utils.other.endpoints.check_rate_limit')
+    @patch('utils.other.endpoints.RATE_LIMIT_SHADOW', False)
+    def test_action_items_list_checks_base_limit_under_a_boost(self, mock_check):
+        """The Redis check for the exempt policy uses 12/60s even at boost=100."""
+        mock_check.return_value = (True, 11, 0)
+        self.ep._enforce_rate_limit("uid123", "action_items:list")
+        _key, policy, max_requests, window = mock_check.call_args[0]
+        self.assertEqual(policy, "action_items:list")
+        self.assertEqual((max_requests, window), RATE_POLICIES["action_items:list"])
+
+    @patch('utils.rate_limit_config.RATE_LIMIT_BOOST', 100.0)
+    @patch('utils.other.endpoints.check_rate_limit', return_value=(False, 0, 37))
+    @patch('utils.other.endpoints.RATE_LIMIT_SHADOW', False)
+    def test_action_items_list_429_carries_the_degraded_mode_contract(self, mock_check):
+        """(c) The 429 the Windows client's degraded-mode handling keys on.
+
+        ``53d5b9e54a`` (desktop/windows/src/main/observability/) classifies a
+        response purely by status: ``classifyForRateLimit(429) == 'hit'``. A storm
+        (banner) additionally needs >= 5 hits across >= 2 distinct request paths
+        within 60s, so a client looping GET /v1/action-items alone gets 429s and a
+        stalled sync but NOT the banner — that rule lives in the client and is
+        covered by ``backendDegraded.test.ts``. What the server owes it is a real
+        429 with an honest Retry-After and a limit header that reports the cap
+        actually enforced (12), not the boosted one (1200).
+        """
+        with self.assertRaises(HTTPException) as ctx:
+            self.ep._enforce_rate_limit("uid123", "action_items:list")
+
+        exc = ctx.exception
+        self.assertEqual(exc.status_code, 429)
+        self.assertEqual(exc.headers["Retry-After"], "37")
+        self.assertEqual(exc.headers["X-RateLimit-Remaining"], "0")
+        base_max, _ = RATE_POLICIES["action_items:list"]
+        self.assertEqual(exc.headers["X-RateLimit-Limit"], str(base_max))
+
+    @patch('utils.rate_limit_config.RATE_LIMIT_BOOST', 100.0)
+    @patch('utils.other.endpoints.check_rate_limit')
+    @patch('utils.other.endpoints.RATE_LIMIT_SHADOW', False)
+    def test_boosted_policies_still_check_the_boosted_limit(self, mock_check):
+        """The exemption is scoped to one policy; the boost still relaxes the rest."""
+        mock_check.return_value = (True, 1, 0)
+        self.ep._enforce_rate_limit("uid123", "chat:send_message")
+        _key, _policy, max_requests, _window = mock_check.call_args[0]
+        base_max, _ = RATE_POLICIES["chat:send_message"]
+        self.assertEqual(max_requests, base_max * 100)
 
 
 class TestCheckRateLimitBoundary(unittest.TestCase):

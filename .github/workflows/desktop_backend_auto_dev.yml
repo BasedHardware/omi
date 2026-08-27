@@ -6,6 +6,7 @@ on:
     paths:
       - 'backend/Dockerfile.desktop_backend'
       - 'backend/**/*.py'
+      - 'backend/deploy/cloud_run_gmp_sidecar.yaml'
       - 'backend/pylock.runtime.toml'
       - 'backend/runtime_images.json'
       - '.github/workflows/desktop_backend_auto_dev.yml'
@@ -218,7 +219,7 @@ jobs:
           no_traffic: true
           flags: >-
             --allow-unauthenticated
-            --revision-suffix=${{ steps.candidate-identity.outputs.revision_suffix }}
+            --revision-suffix=${{ steps.candidate-identity.outputs.revision_suffix }}-base
             --tag=${{ env.CANDIDATE_TAG }}
             --network=${{ vars.CLOUD_RUN_VPC_NETWORK }}
             --subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}
@@ -238,6 +239,7 @@ jobs:
             OMI_LLM_GATEWAY_FEATURE_MODE=gateway
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
             OMI_LLM_CHAT_AGENT_ROUTE=gateway
+            PROMETHEUS_SIDECAR_PORT=9090
           secrets: |
             /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=GEMINI_API_KEY:latest
@@ -253,6 +255,32 @@ jobs:
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
+            METRICS_SECRET=METRICS_SECRET:latest
+
+      # See desktop_backend_prod.yml: the expectation is rendered from the
+      # manifest so it cannot drift from the values actually deployed.
+      - name: Render desktop backend expected env state
+        id: desktop-expected-env
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/render_backend_runtime_env.py \
+            --env dev \
+            --manifest backend/deploy/runtime_env.yaml \
+            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json"
+
+      - name: Attach Managed Prometheus sidecar to development candidate
+        id: attach-gmp-sidecar
+        run: |
+          python3 backend/scripts/attach_cloud_run_gmp_sidecar.py \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="$REGION" \
+            --service="$SERVICE" \
+            --base-revision="desktop-backend-${{ steps.candidate-identity.outputs.revision_suffix }}-base" \
+            --final-revision="${{ steps.candidate-identity.outputs.revision }}" \
+            --ingress-container=desktop-backend-1 \
+            --config=backend/deploy/cloud_run_gmp_sidecar.yaml \
+            --expected-env-state="$RUNNER_TEMP/desktop-backend-runtime-env-state.json" \
+            --tag="$CANDIDATE_TAG"
 
       - name: Wait for no-traffic candidate readiness
         env:
@@ -273,10 +301,21 @@ jobs:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           set -euo pipefail
-          runtime_image_ref="$(gcloud run revisions describe "${{ steps.candidate-identity.outputs.revision }}" \
-            --project="$PROJECT_ID" \
-            --region="$REGION" \
-            --format='value(status.imageDigest)')"
+          # The revision "status" block's legacy image-digest field is a single-container
+          # scalar in the Cloud Run v1 Revision API: RevisionStatus has no per-container
+          # digest map, so it comes back empty on multi-container revisions. The Managed
+          # Prometheus sidecar (#11998) made every desktop-backend candidate two-container,
+          # so that field went empty and the guard below started failing closed. Extract
+          # the image by container name instead, and assert there is exactly one match so
+          # the guard still fails closed if the container topology ever changes again.
+          runtime_image_ref="$(
+            gcloud run revisions describe "${{ steps.candidate-identity.outputs.revision }}" \
+              --project="$PROJECT_ID" \
+              --region="$REGION" \
+              --format=json |
+            jq -er '[.spec.containers[]? | select(.name == "desktop-backend-1") | .image] as $images |
+              if (($images | length) == 1 and ($images[0] | type) == "string" and ($images[0] | length) > 0)
+              then $images[0] else error("expected exactly one desktop-backend-1 container image") end')"
           runtime_digest="$(python3 .github/scripts/verify_desktop_backend_image_lineage.py \
             --build-image-ref="$BUILD_IMAGE_REF" \
             --runtime-image-ref="$runtime_image_ref" \

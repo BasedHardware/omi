@@ -28,7 +28,6 @@ def _stub_webhook_db_helpers(monkeypatch):
     monkeypatch.setattr(webhooks_module, "get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
     monkeypatch.setattr(webhooks_module, "disable_user_webhook_db", MagicMock())
     monkeypatch.setattr(webhooks_module, "enable_user_webhook_db", MagicMock())
-    monkeypatch.setattr(webhooks_module, "set_user_webhook_db", MagicMock())
     monkeypatch.setattr(webhooks_module, "record_dev_webhook_success", MagicMock())
     monkeypatch.setattr(webhooks_module, "record_dev_webhook_failure", MagicMock(return_value=False))
 
@@ -453,12 +452,16 @@ class TestCircuitBreakerIntegration:
 
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
+        attempt = MagicMock()
 
         with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
             "utils.webhooks.get_webhook_client", return_value=mock_client
-        ):
-            await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
+        ), patch("utils.webhooks.ClientJourneyAttempt", return_value=attempt) as journey_factory:
+            await realtime_transcript_webhook("uid-1", [{"text": "hello"}], client_kind='mobile_android')
             mock_cb.record_success.assert_called_once()
+        journey_factory.assert_called_once_with('app_webhook_delivery', 'mobile_android')
+        attempt.succeed.assert_called_once_with()
+        attempt.fail.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_transcript_webhook_records_failure_on_exception(self):
@@ -468,12 +471,17 @@ class TestCircuitBreakerIntegration:
 
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=Exception("connection refused"))
+        attempt = MagicMock()
 
         with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
             "utils.webhooks.get_webhook_client", return_value=mock_client
-        ), patch("utils.webhooks._get_dev_webhook_retry_delays", return_value=()):
+        ), patch("utils.webhooks._get_dev_webhook_retry_delays", return_value=()), patch(
+            "utils.webhooks.ClientJourneyAttempt", return_value=attempt
+        ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_cb.record_failure.assert_called_once()
+        attempt.fail.assert_called_once_with('provider_error')
+        attempt.succeed.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_audio_bytes_webhook_skips_when_circuit_open(self):

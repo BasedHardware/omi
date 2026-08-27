@@ -9821,6 +9821,20 @@ class AppLocalizationsHi extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
+  String get chatScopeToday => 'आज';
+
+  @override
+  String get chatScopeThisWeek => 'इस सप्ताह';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'इसके बारे में: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'इसके बारे में पूछें';
+
+  @override
   String get sendRawAudioToOmi => 'Omi को कच्चा ऑडियो भेजें';
 
   @override
@@ -9832,4 +9846,47 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'डायग्नोस्टिक्स साझा नहीं किया जा सका। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get appDisabledTitle => 'यह ऐप अक्षम है और इंस्टॉल नहीं किया जा सकता।';
+
+  @override
+  String get appDisabledWebhookFailures => 'इसका एंडपॉइंट लगातार 72 घंटे तक विफल रहा, इसलिए डिलीवरी रोक दी गई।';
+
+  @override
+  String get appDisabledGeneric => 'इसे Omi ने अक्षम कर दिया था।';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'पहले एंडपॉइंट ठीक करें — फिर से सक्षम करने पर हर कॉन्फ़िगर किया गया URL दोबारा जाँचा जाता है।';
+
+  @override
+  String get appReEnable => 'फिर से सक्षम करें';
+
+  @override
+  String get appReEnableFailedTitle => 'फिर से सक्षम नहीं हो सका';
+
+  @override
+  String get appReEnableFailedBody => 'इस ऐप को फिर से सक्षम नहीं किया जा सका। कृपया पुनः प्रयास करें।';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date को अक्षम किया गया।';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'अंतिम त्रुटि: $error';
+  }
+
+  @override
+  String get prerecordedTranscript => 'पूर्व-रिकॉर्डेड';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant अभी भी रिकॉर्ड कर रहा है, इसलिए उसमें संग्रहीत ऑडियो स्थानांतरित नहीं किया जा सकता। रिकॉर्डिंग रोकने के लिए Pendant का बटन दबाएँ, फिर दोबारा सिंक करें।';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant का स्टोरेज भर गया है और यह अभी भी रिकॉर्डिंग मोड में है, इसलिए संग्रहीत ऑडियो स्थानांतरित नहीं किया जा सकता। रिकॉर्डिंग रोकने के लिए Pendant का बटन दबाएँ, फिर दोबारा सिंक करें।';
 }

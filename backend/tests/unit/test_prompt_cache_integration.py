@@ -35,10 +35,74 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 # ---------------------------------------------------------------------------
 
 
+_STUBBED_MODULE_NAMES: set[str] = set()
+
+# Real modules this file stubs that are safe and cheap to actually import (pure
+# Python / lazy client construction, no database or network access at import
+# time). See the note inside `_stub_module` for why this set must stay narrow.
+_EAGER_REAL_IMPORT_NAMES = frozenset(
+    {
+        "utils.llm.clients",
+        "utils.llm.gateway_client",
+        "langchain_core",
+        "langchain_core.runnables",
+        "langchain_core.callbacks",
+    }
+)
+
+
 def _stub_module(name: str) -> types.ModuleType:
-    if name not in sys.modules:
-        mod = types.ModuleType(name)
-        sys.modules[name] = mod
+    """Install a synthetic module at ``sys.modules[name]`` for this file's stub graph.
+
+    The first time this file stubs a given name, it always installs a brand-new
+    ``ModuleType`` — even if ``name`` is already present in ``sys.modules`` as a
+    real, previously-imported production module (e.g. because another test file
+    already ran ``from utils.llm import clients`` before this module was
+    collected). Reusing that real module object here would let the MagicMock
+    attribute assignments below mutate the actual production module in place,
+    which then silently poisons every other test in the same pytest process
+    that imports it afterwards (cross-test module-global pollution — the same
+    failure class as unrestored ``os.environ`` mutation, just via sys.modules).
+    Anything that already holds a direct reference to the real module object
+    (e.g. `from utils.llm import clients` executed by an earlier-collected test
+    file) is unaffected, since replacing the ``sys.modules`` entry does not
+    retroactively change already-bound names.
+
+    The new stub starts as a copy of whatever was already at
+    ``sys.modules[name]`` (real attributes and all), so any code imported later
+    in the same process that pulls a name this file never overrides (e.g.
+    ``feature_auto_lane_id`` off ``utils.llm.gateway_client``, which this file
+    leaves untouched) still finds it, instead of hitting an ``ImportError``
+    against an otherwise-empty stub. The explicit MagicMock assignments below
+    are applied on top and always win.
+
+    Subsequent calls for the same name within this file reuse the stub that
+    was created here, so repeated attribute assignments accumulate on one
+    object as before.
+    """
+    if name not in _STUBBED_MODULE_NAMES:
+        if name in _EAGER_REAL_IMPORT_NAMES and name not in sys.modules:
+            # These specific names are real, cheap, I/O-free modules (verified by
+            # inspection: no database/Firestore imports, no network calls at
+            # import time) that other test files legitimately need intact
+            # (e.g. `from utils.llm.clients import get_llm_gateway_chat_structured`
+            # in test_llm_gateway_client_config.py). Importing them for real
+            # before stubbing guarantees the merge below has every real
+            # attribute to copy forward, regardless of which test file happens
+            # to be collected first. Do NOT widen this set casually: several
+            # sibling modules (e.g. utils.llms.memory) pull in
+            # database._client / google.cloud.firestore, which has crashed the
+            # interpreter outright when imported inside a test process.
+            try:
+                importlib.import_module(name)
+            except Exception:
+                pass
+        stub = types.ModuleType(name)
+        existing = sys.modules.get(name)
+        if existing is not None:
+            stub.__dict__.update(existing.__dict__)
+        sys.modules[name] = stub
+        _STUBBED_MODULE_NAMES.add(name)
     return sys.modules[name]
 
 
@@ -247,6 +311,12 @@ _load_module_from_file("utils.retrieval.safety", BACKEND_DIR / "utils" / "retrie
 # Real (import-light) fallback telemetry: agentic.py imports record_fallback from it.
 _load_module_from_file("utils.observability.fallback", BACKEND_DIR / "utils" / "observability" / "fallback.py")
 
+# Real (import-light) journey metrics: routers/chat.py imports ClientJourneyAttempt to record
+# the realtime voice journey, and agentic.py imports it to record the memory_retrieval journey.
+# utils.observability is stubbed with an empty __path__, so like fallback above this must be
+# loaded from file or those imports fail.
+_load_module_from_file("utils.observability.journeys", BACKEND_DIR / "utils" / "observability" / "journeys.py")
+
 # Real (import-light) web_search gate. agentic.py now imports WEB_SEARCH_TOOL and
 # request_tools_after_private_taint from this sibling. utils.retrieval is stubbed
 # with an empty __path__, so the module must be loaded from file like safety.
@@ -320,6 +390,15 @@ def _get_agentic_module():
     agentic_stub = sys.modules.get("utils.retrieval.agentic")
     if agentic_stub is not None and not hasattr(agentic_stub, "CORE_TOOLS"):
         sys.modules.pop("utils.retrieval.agentic", None)
+
+    # Module-scope import in agentic.py; stub is enough for CORE_TOOLS / convert_tools tests.
+    chat_scope_mod = _stub_module("utils.retrieval.chat_scope")
+    if not hasattr(chat_scope_mod, "build_chat_scope"):
+        chat_scope_mod.build_chat_scope = MagicMock(return_value=None)
+    if not hasattr(chat_scope_mod, "chat_scope_from_config"):
+        chat_scope_mod.chat_scope_from_config = MagicMock(return_value=None)
+    if not hasattr(chat_scope_mod, "apply_chat_scope_dates"):
+        chat_scope_mod.apply_chat_scope_dates = MagicMock(side_effect=lambda _s, a, b: (a, b, None))
 
     # First make sure tool submodules are stubbed (they import from database)
     tools_pkg = _stub_module("utils.retrieval.tools")

@@ -744,7 +744,7 @@ def test_negative_user_review_is_authoritative_during_processing_race(monkeypatc
     assert all(doc["payload"]["content_hash"] == stored["content_hash"] for doc in review_events)
 
 
-def test_expired_short_term_is_default_hidden_and_ttl_audited(monkeypatch):
+def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(monkeypatch, caplog):
     uid = "uid-expired"
     _set_canonical(monkeypatch, uid)
     db = _Db(uid)
@@ -779,6 +779,8 @@ def test_expired_short_term_is_default_hidden_and_ttl_audited(monkeypatch):
     )
     db.docs[f"users/{uid}/memory_items/{item.memory_id}"] = item.model_dump(mode="json")
     db.docs[f"users/{uid}/memory_evidence/{evidence.evidence_id}"] = evidence.model_dump(mode="json")
+    assert [memory.id for memory in read_canonical_memories(uid, db_client=db, now=NOW)] == [item.memory_id]
+    caplog.set_level("INFO", logger="utils.memory.short_term_promotion")
 
     with pytest.MonkeyPatch.context() as local_patch:
         local_patch.setattr(
@@ -795,6 +797,8 @@ def test_expired_short_term_is_default_hidden_and_ttl_audited(monkeypatch):
     assert read_canonical_memories(uid, db_client=db, now=NOW) == []
     assert report.lifecycle_created_count == 1
     assert report.lifecycle_terminal_count == 1
+    assert "expired_without_recorded_disposition" in caplog.text
+    assert "expired_terminal_disposition_applied" in caplog.text
     settled = db.docs[f"users/{uid}/memory_items/{item.memory_id}"]
     assert settled["tier"] == MemoryTier.archive.value
     assert settled["status"] == MemoryItemStatus.hidden.value

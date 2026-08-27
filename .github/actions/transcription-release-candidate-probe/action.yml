@@ -11,6 +11,26 @@ inputs:
   firebase_auth_project_id:
     description: Firebase project whose ID-token audience the candidate verifies.
     required: true
+  firebase_signer_service_account:
+    description: >-
+      Service account to sign the probe's custom token as. Required when the
+      Firebase auth project differs from project_id, because Identity Toolkit
+      only accepts a signer authorized for that Firebase project. The caller's
+      deploy identity needs roles/iam.serviceAccountTokenCreator on it.
+    required: false
+    default: ''
+  firebase_signer_credentials:
+    description: >-
+      Base64-encoded service-account key for firebase_auth_project_id, used to
+      sign the probe's custom token locally. This is the other way to resolve a
+      Firebase auth project that differs from project_id, and unlike
+      firebase_signer_service_account it needs no IAM grant on the deploy
+      identity. The key is staged in a mode-0600 runner file and deleted after
+      the probe; the token minter rejects a key whose project does not match
+      firebase_auth_project_id. Mutually exclusive with
+      firebase_signer_service_account.
+    required: false
+    default: ''
   evidence_path:
     description: Optional absolute path for the redacted probe report.
     required: false
@@ -26,15 +46,37 @@ runs:
         EVIDENCE_PATH: ${{ inputs.evidence_path }}
         PROBE_SECRET_PROJECT: ${{ inputs.project_id }}
         FIREBASE_AUTH_PROJECT_ID: ${{ inputs.firebase_auth_project_id }}
+        FIREBASE_SIGNER_SERVICE_ACCOUNT: ${{ inputs.firebase_signer_service_account }}
+        FIREBASE_SIGNER_CREDENTIALS: ${{ inputs.firebase_signer_credentials }}
       run: |
         set -euo pipefail
+        umask 077
         DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
         token_file="$(mktemp "$RUNNER_TEMP/omi-transcription-probe.XXXXXX")"
-        trap 'rm -f "$token_file"' EXIT
-        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/firebase_release_probe_token.py" \
-          --secret-project "$PROBE_SECRET_PROJECT" \
-          --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
+        signer_file=''
+        trap 'rm -f "$token_file" ${signer_file:+"$signer_file"}' EXIT
+        if [[ -n "$FIREBASE_SIGNER_SERVICE_ACCOUNT" && -n "$FIREBASE_SIGNER_CREDENTIALS" ]]; then
+          echo "::error::Set at most one of firebase_signer_service_account or firebase_signer_credentials." >&2
+          exit 1
+        fi
+        token_args=(
+          --secret-project "$PROBE_SECRET_PROJECT"
+          --firebase-project "$FIREBASE_AUTH_PROJECT_ID"
           --token-output "$token_file"
+        )
+        if [[ -n "$FIREBASE_SIGNER_SERVICE_ACCOUNT" ]]; then
+          token_args+=(--signer-service-account "$FIREBASE_SIGNER_SERVICE_ACCOUNT")
+        elif [[ -n "$FIREBASE_SIGNER_CREDENTIALS" ]]; then
+          signer_file="$(mktemp "$RUNNER_TEMP/omi-firebase-probe-signer.XXXXXX")"
+          chmod 600 "$signer_file"
+          printf '%s' "$FIREBASE_SIGNER_CREDENTIALS" | base64 --decode > "$signer_file"
+          token_args+=(--signer-credentials-file "$signer_file")
+        fi
+        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/firebase_release_probe_token.py" "${token_args[@]}"
+        if [[ -n "$signer_file" ]]; then
+          rm -f "$signer_file"
+          signer_file=''
+        fi
         probe_args=(
           --candidate-api-url "$CANDIDATE_API_URL"
           --bearer-token-file "$token_file"

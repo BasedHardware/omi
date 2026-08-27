@@ -5,7 +5,7 @@ import uuid
 import logging
 import asyncio
 from datetime import timezone, timedelta, datetime
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
@@ -13,12 +13,14 @@ from fastapi import HTTPException
 
 import database._client as db_client_module
 from database import redis_db
+from database.firestore_read_metrics import FirestoreReadSite
 from database.auth import get_user_name
 from utils.conversations.transcript_for_llm import (
     conversation_transcript_for_action_items,
     conversation_transcript_for_llm,
     conversation_transcripts_for_llm,
 )
+from utils.conversations.wake_word import has_structural_wake_word_marker
 import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.users as users_db
@@ -27,11 +29,7 @@ import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
 import database.screen_activity as screen_activity_db
-from database.vector_db import (
-    upsert_action_item_vectors_batch,
-    delete_action_item_vectors_batch,
-    find_similar_action_items,
-)
+from database.vector_db import find_similar_action_items
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
 from utils.conversations.transcript_chunks import build_transcript_chunks
@@ -53,13 +51,20 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.memory.memory_service import MemoryService
+from utils.memory.decision_path_telemetry import (
+    classify_model_about,
+    count_speaker_ids,
+    emit_memory_capture_decision,
+    model_about_disagrees_with_attribution,
+)
+from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_examples
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
-from utils.byok import get_byok_key
+from utils.subscription import request_has_llm_byok_key
 from utils.transcribe_decisions import should_skip_custom_stt_postprocessing
 from models.other import Person
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
@@ -115,7 +120,6 @@ from utils.other.hume import (
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
-from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
@@ -175,6 +179,18 @@ class AppUsageAttribution(str, Enum):
     AUTOMATIC_PROCESSING = 'automatic_processing'
     EXPLICIT_SELECTION = 'explicit_selection'
     NON_USER_REPROCESS = 'non_user_reprocess'
+
+
+class ExplicitAppSelectionFailedError(RuntimeError):
+    """A reprocess that named one summarization app ended without its result.
+
+    Raised by `_trigger_apps` when an explicit `app_id` selection leaves no
+    non-empty result for that app — the execution failed (the executor loop
+    already logged the exception) or the model returned empty content.
+    First-party notes are a display fallback, not a substitute for the
+    selection the user made, so the reprocess boundary must surface a real
+    error instead of returning success with empty `apps_results` (SCA-359).
+    """
 
 
 def summary_pipeline_mode() -> SummaryPipelineMode:
@@ -268,6 +284,11 @@ def _fetch_dedup_candidates(uid: str, structured: Structured, conversation: Any 
     return _fetch_dedup_candidates_for_query(uid, structured.overview, conversation)
 
 
+def _primary_user_name(uid: str) -> Optional[str]:
+    raw_name = get_user_name(uid, use_default=False)
+    return raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else None
+
+
 def _get_structured(
     uid: str,
     language_code: str,
@@ -353,6 +374,7 @@ def _get_structured(
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
                         task_intelligence_capture=task_intelligence_capture,
+                        primary_user_name=_primary_user_name(uid),
                     )
                 return structured, False
 
@@ -378,6 +400,7 @@ def _get_structured(
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
         transcript_text, action_items_transcript = conversation_transcripts_for_llm(uid, main_conv, people)
+        has_wake_word_marker = has_structural_wake_word_marker(action_items_transcript)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
@@ -401,6 +424,7 @@ def _get_structured(
                         tz=tz_str,
                         task_intelligence_capture=task_intelligence_capture,
                         existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
+                        trusted_wake_word_markers=has_wake_word_marker,
                     )
                 return structured, False
             # reprocess endpoint
@@ -423,6 +447,8 @@ def _get_structured(
                     existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
                     output_language_code=user_language,
                     task_intelligence_capture=task_intelligence_capture,
+                    trusted_wake_word_markers=has_wake_word_marker,
+                    primary_user_name=_primary_user_name(uid),
                 )
             return structured, False
 
@@ -432,8 +458,14 @@ def _get_structured(
             duration_seconds = max(0, (main_conv.finished_at - main_conv.started_at).total_seconds())
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
+        discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
         with track_usage(uid, Features.CONVERSATION_DISCARD):
-            discarded = should_discard_conversation(transcript_text, main_conv.photos, duration_seconds)
+            discarded = should_discard_conversation(
+                discard_transcript,
+                main_conv.photos,
+                duration_seconds,
+                trusted_wake_word_markers=has_wake_word_marker,
+            )
         if discarded:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
@@ -458,6 +490,7 @@ def _get_structured(
                     tz=tz_str,
                     task_intelligence_capture=task_intelligence_capture,
                     existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
+                    trusted_wake_word_markers=has_wake_word_marker,
                 )
             return structured, False
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
@@ -482,6 +515,8 @@ def _get_structured(
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
                 task_intelligence_capture=task_intelligence_capture,
+                trusted_wake_word_markers=has_wake_word_marker,
+                primary_user_name=_primary_user_name(uid),
             )
         return structured, False
     except Exception as e:
@@ -694,6 +729,14 @@ def _trigger_apps(
             future.result()
         except Exception as e:
             logger.error(f"Error executing app: {e}")
+
+    if app_id:
+        # Explicit selection is fail-closed: the client asked for THIS app's summary, so a
+        # missing result (execution failed above) or empty content must not masquerade as
+        # success while first-party notes shadow the selection the user made (SCA-359).
+        selected_result = next((r for r in conversation.apps_results if r.app_id == app_id), None)
+        if selected_result is None or not selected_result.content.strip():
+            raise ExplicitAppSelectionFailedError(f'Selected app {app_id} produced no summary content')
 
 
 def _update_goal_progress(uid: str, conversation: Conversation) -> None:
@@ -1092,6 +1135,22 @@ def _canonical_extraction_unavailable(
     return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
 
 
+def _rejected_memory_examples_for_l1(uid: str, *, db_client: Any) -> Tuple[str, ...]:
+    """Fetch volatile owner feedback at the conversation orchestration boundary."""
+    try:
+        return get_recent_rejected_memory_examples(uid, db_client=db_client)
+    except Exception as exc:
+        logger.warning("canonical L1 rejection feedback unavailable uid=%s reason=%s", uid, type(exc).__name__)
+        record_fallback(
+            component="other",
+            from_mode="canonical_l1_rejection_feedback",
+            to_mode="extraction_without_rejection_feedback",
+            reason="other",
+            outcome="degraded",
+        )
+        return ()
+
+
 def _extract_memories_canonical(
     uid: str, conversation: Conversation, *, db_client: Any, parity_capture: SurfaceParityCapture | None = None
 ) -> ConversationMemoryExtractionResult:
@@ -1101,6 +1160,7 @@ def _extract_memories_canonical(
 
     language = users_db.get_user_language_preference(uid)
     capture_candidates: List[Tuple[Memory, List[str], str, List[str], bool]] = []
+    capture_decisions_by_memory_object: Dict[int, Tuple[str, bool]] = {}
 
     # Relative dates in delayed external content must resolve against capture
     # time, not the worker's current wall clock.  Keep this date grounding on
@@ -1156,6 +1216,7 @@ def _extract_memories_canonical(
                 language=language,
                 strict=True,
                 prompt_prefix=prompt_prefix,
+                rejected_memory_examples=_rejected_memory_examples_for_l1(uid, db_client=db_client),
             )
         except MemoryExtractionError as exc:
             return _canonical_extraction_unavailable(conversation, source, exc)
@@ -1182,19 +1243,29 @@ def _extract_memories_canonical(
                 user_name=user_name,
                 segments=conversation.transcript_segments,
             )
+            memory = Memory(
+                content=candidate.content,
+                category=(
+                    MemoryCategory.system
+                    if subject_attribution == SubjectAttribution.user
+                    else MemoryCategory.interesting
+                ),
+                visibility="private",
+                subject_entity_id=subject_entity_id,
+                subject_attribution=subject_attribution,
+            )
+            model_about = classify_model_about(
+                candidate.about,
+                user_name=user_name,
+                speaker_label=candidate.speaker_label,
+            )
+            capture_decisions_by_memory_object[id(memory)] = (
+                model_about,
+                model_about_disagrees_with_attribution(model_about, subject_attribution),
+            )
             capture_candidates.append(
                 (
-                    Memory(
-                        content=candidate.content,
-                        category=(
-                            MemoryCategory.system
-                            if subject_attribution == SubjectAttribution.user
-                            else MemoryCategory.interesting
-                        ),
-                        visibility="private",
-                        subject_entity_id=subject_entity_id,
-                        subject_attribution=subject_attribution,
-                    ),
+                    memory,
                     evidence_quotes,
                     subject_kind,
                     _l1_candidate_sensitivity_labels(candidate),
@@ -1242,6 +1313,7 @@ def _extract_memories_canonical(
 
     is_locked = conversation.is_locked
     parsed_memories: List[Tuple[MemoryDB, List[str], str, List[str]]] = []
+    capture_decisions_by_memory_id: Dict[str, Tuple[str, bool]] = {}
     seen_norm: Set[Tuple[str, str]] = set()
     subject_entity_id, subject_attribution = infer_subject_from_segments(conversation.transcript_segments)
     # Keep the service boundary bounded even when a provider or test double
@@ -1287,6 +1359,11 @@ def _extract_memories_canonical(
             subject_entity_id=candidate_subject_entity_id,
         )
         memory_db_obj.memory_tier = MemoryTier.short_term
+        if memory_db_obj.id:
+            capture_decisions_by_memory_id[memory_db_obj.id] = capture_decisions_by_memory_object.get(
+                id(memory),
+                ("not_applicable", False),
+            )
         parsed_memories.append((memory_db_obj, evidence_quotes, subject_kind, sensitivity_labels))
 
     replacement_payloads = [
@@ -1310,6 +1387,27 @@ def _extract_memories_canonical(
         conversation.id,
         replacement_payloads,
     )
+    capture_regime = getattr(conversation.source, "value", conversation.source) or ConversationSource.unknown.value
+    distinct_speaker_ids, owner_speaker_ids = count_speaker_ids(conversation.transcript_segments)
+    for memory_db_obj, _, _, _ in parsed_memories:
+        if not memory_db_obj.id:
+            continue
+        model_about, attribution_disagreed = capture_decisions_by_memory_id.get(
+            memory_db_obj.id,
+            ("not_applicable", False),
+        )
+        emit_memory_capture_decision(
+            logger,
+            uid=uid,
+            memory_id=memory_db_obj.id,
+            conversation_id=conversation.id,
+            capture_regime=str(capture_regime),
+            subject_attribution=memory_db_obj.subject_attribution,
+            model_about=model_about,
+            attribution_disagreed=attribution_disagreed,
+            distinct_speaker_ids=distinct_speaker_ids,
+            owner_speaker_ids=owner_speaker_ids,
+        )
     if len(parsed_memories) == 0:
         logger.info(f"No canonical memories extracted for conversation {conversation.id}")
         return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
@@ -1400,120 +1498,57 @@ def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> No
     send_notification(user_id, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _save_action_items(uid: str, conversation: Conversation):
+def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
+    """Propose a conversation's extracted action items as Candidates.
+
+    INVARIANT I1: nothing here writes an ``action_item``. Extraction produces
+    suggestions only; a task exists when the user says so. The items also stay
+    on ``conversation.structured``, which is what the summary view renders and
+    what its "Add to Tasks" button acts on.
     """
-    Save action items from a conversation to the dedicated action_items collection.
-    This runs in addition to storing them in the conversation for backward compatibility.
-    """
-    if not conversation.structured or not conversation.structured.action_items:
+    if not conversation.structured:
         return
 
-    is_locked = conversation.is_locked
-    if conversation_capture.process_conversation_before_legacy(uid, conversation):
-        emit_product_event(
-            uid=uid,
-            event='Task Extracted',
-            properties={
-                'task_count': len(conversation.structured.action_items),
-                'conversation_id': conversation.id,
-                'task_source': 'transcript',
-                'persistence_path': 'canonical_candidate',
-            },
+    try:
+        wake_word_gate = conversation_capture.prepare_wake_word_capture_gate(uid, conversation, people)
+    except Exception:
+        logger.exception(f"wake-word capture gate failed for conversation {conversation.id}")
+        record_fallback(
+            component='other',
+            from_mode='wake_word_gate',
+            to_mode='ungated_capture',
+            reason='other',
+            outcome='degraded',
+        )
+        wake_word_gate = None
+    if not conversation.structured.action_items:
+        return
+
+    try:
+        conversation_capture.process_conversation_before_legacy(uid, conversation, wake_word_gate)
+    except Exception:
+        # INV-TASK-2: a capture failure must not fall through to a writer. Defer
+        # and retry; silence is the correct failure. #12014's evidence clamp
+        # already stops the ValidationError that used to abort this path.
+        logger.exception(f"canonical task capture failed for conversation {conversation.id}")
+        record_fallback(
+            component='other',
+            from_mode='canonical_task_capture',
+            to_mode='defer_retry',
+            reason='other',
+            outcome='degraded',
         )
         return
-
-    action_items_data: List[Dict[str, Any]] = []
-    now = datetime.now(timezone.utc)
-
-    for action_item in conversation.structured.action_items:
-        action_item_data = {
-            'description': action_item.description,
-            'completed': action_item.completed,
-            'created_at': action_item.created_at or now,
-            'updated_at': action_item.updated_at or now,
-            'due_at': action_item.due_at,
-            'completed_at': action_item.completed_at,
+    emit_product_event(
+        uid=uid,
+        event='Task Extracted',
+        properties={
+            'task_count': len(conversation.structured.action_items),
             'conversation_id': conversation.id,
-            'is_locked': is_locked,
-            **conversation_capture.canonical_conversation_fields(action_item, conversation),
-        }
-        action_items_data.append(action_item_data)
-
-    if action_items_data:
-        # Delete existing action items and their vectors first (in case of reprocessing)
-        old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id)
-        old_ids = [item['id'] for item in old_items]
-        if old_ids:
-            delete_action_item_vectors_batch(uid, old_ids)
-        document_ids = conversation_capture.legacy_document_ids(
-            uid,
-            conversation.id,
-            conversation.structured.action_items,
-        )
-        if document_ids is None:
-            action_items_db.delete_action_items_for_conversation(uid, conversation.id)
-        else:
-            action_items_db.retire_action_items_for_conversation(
-                uid,
-                conversation.id,
-                active_ids=document_ids,
-                replacements=conversation_capture.legacy_replacement_map(
-                    old_items,
-                    conversation.structured.action_items,
-                    document_ids,
-                ),
-            )
-        # Save new action items
-        action_item_ids = action_items_db.create_action_items_batch(
-            uid,
-            action_items_data,
-            document_ids=document_ids,
-        )
-        logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
-
-        conversation_capture.reconcile_after_legacy(
-            uid,
-            conversation.id,
-            conversation.structured.action_items,
-            action_item_ids,
-        )
-        emit_product_event(
-            uid=uid,
-            event='Task Extracted',
-            properties={
-                'task_count': len(action_item_ids),
-                'conversation_id': conversation.id,
-                'task_source': 'transcript',
-                'persistence_path': 'legacy_projection',
-            },
-        )
-
-        # Send FCM data messages for action items with due dates
-        for idx, action_item in enumerate(conversation.structured.action_items):
-            if action_item.due_at and idx < len(action_item_ids):
-                action_item_id = action_item_ids[idx]
-                send_action_item_data_message(
-                    user_id=uid,
-                    action_item_id=action_item_id,
-                    description=action_item.description,
-                    due_at=action_item.due_at.isoformat(),
-                )
-
-        # Auto-sync to task integration — submit before vector ops so it always runs
-        created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
-
-        def _run_auto_sync():
-            asyncio.run(auto_sync_action_items_batch(uid, created_items))
-
-        submit_with_context(postprocess_executor, _run_auto_sync)
-
-        upsert_action_item_vectors_batch(
-            uid,
-            [
-                {'action_item_id': aid, 'description': data['description']}
-                for aid, data in zip(action_item_ids, action_items_data)
-            ],
-        )
+            'task_source': 'transcript',
+            'persistence_path': 'canonical_candidate',
+        },
+    )
 
 
 # Verbatim transcript-chunk indexing (ns_tchunks). Off by default: enables semantic
@@ -1835,7 +1870,7 @@ def process_conversation(
     if uses_custom_stt:
         # Deferred: users_db.is_byok_active does an uncached Firestore read, so
         # it only runs for custom-STT conversations, not every finalization.
-        has_llm_byok_key = bool(users_db.is_byok_active(uid) and (get_byok_key('openai') or get_byok_key('anthropic')))
+        has_llm_byok_key = bool(users_db.is_byok_active(uid) and request_has_llm_byok_key())
     else:
         has_llm_byok_key = False
     if uses_custom_stt and should_skip_custom_stt_postprocessing(
@@ -1925,6 +1960,12 @@ def process_conversation(
 
     # Wrap every post-persistence derived effect so the durable finalizer can
     # defer the bundle until it transactionally claims ownership (#10468 r5).
+    # Captured by _emit_derived_effects so an explicit-selection failure can fail the
+    # reprocess AFTER the derived-effect bundle (persist-as-today, action items, goals)
+    # instead of stranding it mid-way. Only reachable when `app_id` was set; automatic
+    # app selection stays fail-open (SCA-359).
+    explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
+
     def _emit_derived_effects() -> None:
         # Calendar auto-linking calls and mutates a user's Google Calendar during generic
         # conversation processing. Keep it opt-in so normal sync/reprocess jobs do not
@@ -2014,16 +2055,25 @@ def process_conversation(
             if insights_gained > 0:
                 record_usage(uid, insights_gained=insights_gained)
 
-            _trigger_apps(
-                uid,
-                conversation,
-                is_reprocess=is_reprocess,
-                app_id=app_id,
-                explicit_app=explicit_app,
-                usage_attribution=app_usage_attribution,
-                language_code=language_code,
-                people=people,
-            )
+            try:
+                _trigger_apps(
+                    uid,
+                    conversation,
+                    is_reprocess=is_reprocess,
+                    app_id=app_id,
+                    explicit_app=explicit_app,
+                    usage_attribution=app_usage_attribution,
+                    language_code=language_code,
+                    people=people,
+                )
+            except ExplicitAppSelectionFailedError as error:
+                # Fail closed without stranding the bundle: the write-back below still
+                # persists apps_results exactly as it does today (opt-in clears a stale
+                # selection) and the remaining derived effects still run; the error is
+                # re-raised after the bundle so the reprocess boundary returns a real
+                # failure instead of success-with-notes (SCA-359).
+                logger.error('Explicit app selection failed: %s', error)
+                explicit_selection_failures.append(error)
             # _trigger_apps only mutates the in-memory conversation and the durable write above already
             # happened, so persist its output the same way the calendar_event/folder_id/audio_files
             # write-backs do. Otherwise the app summary the LLM just produced is discarded.
@@ -2046,7 +2096,7 @@ def process_conversation(
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
-            submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
+            submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
             submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 
         # Create audio files from chunks if private cloud sync was enabled
@@ -2086,6 +2136,12 @@ def process_conversation(
             derived_effects_observer(_emit_derived_effects)
         return conversation
     _emit_derived_effects()
+    if explicit_selection_failures:
+        # Same contract the structured-summary boundary already enforces: a failed
+        # processing step is a real error, never a 200 whose payload quietly
+        # substitutes first-party notes for the selected app's summary (SCA-359).
+        failure = explicit_selection_failures[0]
+        raise conversation_processing_http_exception(failure) from failure
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation
 
@@ -2288,7 +2344,9 @@ def retrieve_in_progress_conversation(uid: str) -> Optional[Dict[str, Any]]:
     existing: Optional[Dict[str, Any]] = None
 
     if conversation_id:
-        existing = conversations_db.get_conversation(uid, conversation_id)
+        existing = conversations_db.get_conversation(
+            uid, conversation_id, read_site=FirestoreReadSite.PROCESS_CONVERSATION_RETRIEVE_IN_PROGRESS
+        )
         if existing and existing['status'] != 'in_progress':
             existing = None
 

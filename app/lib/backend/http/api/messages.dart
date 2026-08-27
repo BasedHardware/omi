@@ -8,6 +8,48 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
 
+/// Hard-scope payload for POST /v2/messages `context` (#4515).
+class ChatPageContext {
+  final String type;
+  final String? id;
+  final String? title;
+  final String? startDate;
+  final String? endDate;
+
+  const ChatPageContext({
+    required this.type,
+    this.id,
+    this.title,
+    this.startDate,
+    this.endDate,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        if (id != null) 'id': id,
+        if (title != null) 'title': title,
+        if (startDate != null) 'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+      };
+
+  ChatPageContext copyWith({
+    String? type,
+    String? id,
+    String? title,
+    String? startDate,
+    String? endDate,
+    bool clearDates = false,
+  }) {
+    return ChatPageContext(
+      type: type ?? this.type,
+      id: id ?? this.id,
+      title: title ?? this.title,
+      startDate: clearDates ? null : (startDate ?? this.startDate),
+      endDate: clearDates ? null : (endDate ?? this.endDate),
+    );
+  }
+}
+
 Future<List<ServerMessage>> getMessagesServer({
   String? appId,
   bool dropdownSelected = false,
@@ -130,15 +172,25 @@ ServerMessageChunk? parseVoiceMessageStreamChunk(String line, String messageId) 
   return parseMessageChunk(line, messageId);
 }
 
-Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, List<String>? filesId}) async* {
+Stream<ServerMessageChunk> sendMessageStreamServer(
+  String text, {
+  String? appId,
+  List<String>? filesId,
+  ChatPageContext? context,
+}) async* {
   var url = '${Env.apiBaseUrl}v2/messages?app_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v2/messages';
   }
 
   var messageId = "1000"; // Default new message
+  final body = <String, dynamic>{
+    'text': text,
+    'file_ids': filesId,
+    if (context != null) 'context': context.toJson(),
+  };
 
-  await for (var line in makeStreamingApiCall(url: url, body: jsonEncode({'text': text, 'file_ids': filesId}))) {
+  await for (var line in makeStreamingApiCall(url: url, body: jsonEncode(body))) {
     if (line.startsWith('error:402:')) {
       yield ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
       return;

@@ -10,7 +10,7 @@ final class BYOKIncompleteHintTests: XCTestCase {
     let hint = byokMissingKeysHint(["sk-test", "", "", ""])
     XCTAssertEqual(
       hint,
-      "Still missing: Anthropic, Gemini, Deepgram. All 4 keys must be entered at the same time to activate the free plan."
+      "Still missing: OpenAI, Anthropic, Gemini. All 4 keys must be entered at the same time to activate the free plan."
     )
     XCTAssertNil(byokMissingKeysHint(["", "", "", ""]), "blank form shows no hint")
     XCTAssertNil(byokMissingKeysHint(["a", "b", "c", "d"]), "complete form shows no hint")

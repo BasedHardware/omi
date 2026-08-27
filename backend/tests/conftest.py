@@ -23,6 +23,7 @@ os.environ.setdefault('MEMORY_MODE', 'read')
 # Some unit tests exercise canonical-memory LLM call paths. Provide a fake key
 # so client construction remains hermetic when those tests invoke it.
 os.environ.setdefault('OPENAI_API_KEY', 'fake-key-for-hermetic-tests')
+os.environ.setdefault('PERPLEXITY_API_KEY', 'fake-key-for-hermetic-tests')
 
 # Some unit tests exercise token counting. Stub tiktoken before any test
 # triggers an encoding lookup, avoiding a download in hermetic CI.
@@ -119,12 +120,59 @@ def pytest_runtest_call(item):
         _test_item_cpu[item.nodeid] += time.process_time() - start
 
 
+_xdist_duration_failures = []
+
+# Contract with backend/test.sh: the runner's parallel partition is one pytest process
+# for many files, so it recovers per-file failures by reading pytest's short summary.
+# A duration-guard failure never appears there (the tests themselves passed), which
+# would leave the runner's rerun list empty. Emitting this marker keeps "the suite told
+# me exactly which file to re-run" true for the guard too. test.sh greps for the prefix.
+_FAILED_FILE_MARKER = 'BACKEND-UNIT-FAILED-FILE'
+
+
+def _report_failed_files(terminalreporter, offenders):
+    if terminalreporter is None:
+        return
+    for test_id in sorted({str(test_id).split('::', 1)[0] for test_id, _ in offenders}):
+        terminalreporter.line(f'{_FAILED_FILE_MARKER} {test_id}')
+
+
 def pytest_sessionfinish(session, exitstatus):
     global _network_guard
-    _enforce_fast_unit_duration_guard(session)
+    failures = _enforce_fast_unit_duration_guard(session)
+    # Under xdist the guard runs inside a worker, and a worker's ``session.exitstatus``
+    # is discarded by the controller -- the run's status comes from test outcomes alone.
+    # Without this handoff the fast-unit duration budget would stop blocking the moment
+    # the runner batched files into a parallel session: a gate that silently stops
+    # gating. Workers ship their offenders over ``workeroutput``; the controller
+    # collects them in ``pytest_testnodedown`` and fails the session itself.
+    workeroutput = getattr(session.config, 'workeroutput', None)
+    if workeroutput is not None:
+        workeroutput['backend_fast_unit_duration_failures'] = list(failures)
+    elif _xdist_duration_failures:
+        terminalreporter = session.config.pluginmanager.get_plugin('terminalreporter')
+        if terminalreporter is not None:
+            terminalreporter.section('Backend fast unit duration guard failures (CPU time, parallel workers)')
+            for test_id, seconds in sorted(_xdist_duration_failures, key=lambda item: item[1], reverse=True):
+                terminalreporter.line(f'{seconds:7.2f}s  {test_id}')
+            terminalreporter.line(f'Allow intentional exceptions in {_FAST_UNIT_ALLOWLIST.relative_to(BACKEND_DIR)}.')
+            _report_failed_files(terminalreporter, _xdist_duration_failures)
+        session.exitstatus = 1
     if _network_guard is not None:
         _network_guard.__exit__(None, None, None)
         _network_guard = None
+
+
+try:  # pragma: no cover - depends on whether pytest-xdist is installed
+    import xdist  # noqa: F401
+except ImportError:  # pytest rejects unknown ``pytest_*`` hook names, so only define it
+    pass  # when the plugin that owns the hook is actually present.
+else:
+
+    def pytest_testnodedown(node, error):
+        output = getattr(node, 'workeroutput', None) or {}
+        for entry in output.get('backend_fast_unit_duration_failures', ()):
+            _xdist_duration_failures.append((entry[0], entry[1]))
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
@@ -153,21 +201,29 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         terminalreporter.line(f'{time.perf_counter() - session_start:7.2f}s  total pytest session wall time')
 
 
+_GUARD_CONFIG_ERROR = [('fast unit duration guard configuration error', 0.0)]
+
+
 def _enforce_fast_unit_duration_guard(session):
+    """Fail the session on per-test CPU budget overruns; return the offenders.
+
+    The return value is what lets the guard survive xdist: a worker's exitstatus is
+    thrown away, so ``pytest_sessionfinish`` ships these entries to the controller.
+    """
     raw_warn_limit = os.environ.get('BACKEND_FAST_UNIT_WARN_SECONDS')
     raw_fail_limit = os.environ.get('BACKEND_FAST_UNIT_FAIL_SECONDS')
     if (not raw_warn_limit and not raw_fail_limit) or not _collected_unit_files:
-        return
+        return []
 
     terminalreporter = session.config.pluginmanager.get_plugin('terminalreporter')
     warn_limit = _parse_fast_unit_limit(raw_warn_limit, 'BACKEND_FAST_UNIT_WARN_SECONDS', terminalreporter)
     fail_limit = _parse_fast_unit_limit(raw_fail_limit, 'BACKEND_FAST_UNIT_FAIL_SECONDS', terminalreporter)
     if warn_limit is None and raw_warn_limit:
         session.exitstatus = 1
-        return
+        return list(_GUARD_CONFIG_ERROR)
     if fail_limit is None and raw_fail_limit:
         session.exitstatus = 1
-        return
+        return list(_GUARD_CONFIG_ERROR)
 
     if warn_limit is None:
         warn_limit = fail_limit
@@ -179,7 +235,7 @@ def _enforce_fast_unit_duration_guard(session):
                 'BACKEND_FAST_UNIT_FAIL_SECONDS must be greater than or equal to ' 'BACKEND_FAST_UNIT_WARN_SECONDS.'
             )
         session.exitstatus = 1
-        return
+        return list(_GUARD_CONFIG_ERROR)
 
     # The guard measures per-test CPU time (``_test_item_cpu``), not wall-clock, because
     # wall-clock inflates unpredictably under parallel contention. CPU time is the better
@@ -216,7 +272,7 @@ def _enforce_fast_unit_duration_guard(session):
         if fail_limit is not None and seconds > fail_limit and not _duration_allowlisted(test_id, allowlist)
     ]
     if not warning_offenders and not failure_offenders:
-        return
+        return []
 
     if terminalreporter is not None:
         if warning_offenders:
@@ -232,8 +288,10 @@ def _enforce_fast_unit_duration_guard(session):
             + (f', fail limit = {fail_limit:.2f}s.)' if fail_limit is not None else '.)')
         )
         terminalreporter.line(f'Allow intentional exceptions in {_FAST_UNIT_ALLOWLIST.relative_to(BACKEND_DIR)}.')
+        _report_failed_files(terminalreporter, failure_offenders)
     if failure_offenders:
         session.exitstatus = 1
+    return failure_offenders
 
 
 def _parse_fast_unit_limit(raw_value, name, terminalreporter):

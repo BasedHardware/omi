@@ -42,6 +42,9 @@ enum DefaultsKey: String {
   case multiChatEnabled = "multiChatEnabled"
   /// Opt-in: proactive notifications are also spoken out loud on delivery.
   case speakNotificationsAloud = "speakNotificationsAloud"
+  /// Opt-out (defaults to on): the post-meeting summary share notification —
+  /// the persistent notch card offering "Copy link" / "Send to <participant>".
+  case meetingSummaryNotificationsEnabled = "meetingSummaryNotificationsEnabled"
   /// Opt-out: when you open an app Omi integrates with but have not connected,
   /// Omi offers the connection once. Defaults to on; the per-integration
   /// budgets in `IntegrationNudgePolicy` are what keep that from being noise.
@@ -56,6 +59,9 @@ enum DefaultsKey: String {
   case onboardingJustCompleted = "onboardingJustCompleted"
   case hasCompletedFileIndexing = "hasCompletedFileIndexing"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
+  case ratingPromptQuestionCount = "ratingPromptQuestionCount"
+  case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"
+  case ratingPromptDismissed = "ratingPromptDismissed"
   case screenAnalysisAutoStartFixedV2 = "screenAnalysisAutoStartFixed_v2"
   case screenAnalysisAutoStartFixedV3 = "screenAnalysisAutoStartFixed_v3"
   case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
@@ -63,6 +69,10 @@ enum DefaultsKey: String {
   case pairedDeviceName = "pairedDeviceName"
   case pairedDeviceType = "pairedDeviceType"
   case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
+  /// Client-side mirror of the server's `meeting_note_screenshots_enabled` account setting
+  /// (contract §3/§9). Absent key means enabled (default on) — see
+  /// `MeetingNoteScreenshotsFeature.isEnabled`.
+  case meetingNoteScreenshotsEnabled = "meetingNoteScreenshotsEnabled"
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
@@ -74,6 +84,11 @@ enum DefaultsKey: String {
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case askOmiBarEnabled = "askOmiBarEnabled"
+  case byokLLMProvider = "dev_byok_llm_provider"
+  /// Provider → SHA-256 fingerprint last enrolled after BYOKValidator .ok.
+  case byokEnrolledFingerprints = "byok_enrolled_fingerprints"
+  /// UID that last owned persisted BYOK keys on this Mac.
+  case byokOwnerUid = "byok_owner_uid"
   case rewindDisableContentCache = "rewindDisableContentCache"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.

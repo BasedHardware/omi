@@ -9911,6 +9911,20 @@ class AppLocalizationsTa extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
+  String get chatScopeToday => 'இன்று';
+
+  @override
+  String get chatScopeThisWeek => 'இந்த வாரம்';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title பற்றி';
+  }
+
+  @override
+  String get askAboutThisConversation => 'இதைப் பற்றி கேள்';
+
+  @override
   String get sendRawAudioToOmi => 'மூல ஆடியோவை Omi-க்கு அனுப்பவும்';
 
   @override
@@ -9922,4 +9936,48 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'கண்டறிதல் தரவைப் பகிர முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get appDisabledTitle => 'இந்த ஆப் முடக்கப்பட்டுள்ளது, நிறுவ முடியாது.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'அதன் எண்ட்பாயிண்ட் தொடர்ந்து 72 மணி நேரம் தோல்வியடைந்ததால், அனுப்புதல் நிறுத்தப்பட்டது.';
+
+  @override
+  String get appDisabledGeneric => 'இதை Omi முடக்கியது.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'முதலில் எண்ட்பாயிண்டை சரிசெய்யவும் — மீண்டும் இயக்கும்போது அமைக்கப்பட்ட ஒவ்வொரு URL-ஐயும் மீண்டும் சரிபார்க்கும்.';
+
+  @override
+  String get appReEnable => 'மீண்டும் இயக்கு';
+
+  @override
+  String get appReEnableFailedTitle => 'மீண்டும் இயக்க முடியவில்லை';
+
+  @override
+  String get appReEnableFailedBody => 'இந்த ஆப்பை மீண்டும் இயக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date அன்று முடக்கப்பட்டது.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'கடைசி பிழை: $error';
+  }
+
+  @override
+  String get prerecordedTranscript => 'முன் பதிவு';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant இன்னும் பதிவு செய்து கொண்டிருக்கிறது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant பொத்தானை அழுத்தி, பிறகு மீண்டும் ஒத்திசைக்கவும்.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant-இன் சேமிப்பகம் நிரம்பிவிட்டது, அது இன்னும் பதிவு பயன்முறையில் உள்ளது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant-இன் பொத்தானை அழுத்தி, பின்னர் மீண்டும் ஒத்திசைக்கவும்.';
 }

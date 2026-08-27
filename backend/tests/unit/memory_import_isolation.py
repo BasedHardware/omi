@@ -105,6 +105,7 @@ def install_canonical_write_runtime_stubs() -> list[str]:
     subscription_mod.get_default_basic_subscription = MagicMock()
     subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
+    subscription_mod.request_has_llm_byok_key = lambda: False
     sys.modules["utils.subscription"] = subscription_mod
     touched.append("utils.subscription")
 
@@ -132,12 +133,55 @@ def install_canonical_write_runtime_stubs() -> list[str]:
     return touched
 
 
+# `from ._client import db` binds the Firestore handle into the importing module's
+# own namespace at import time, so replacing sys.modules["database._client"] later
+# cannot reach an already-imported copy. Any test that re-imports code calling into
+# these must drop them first or it silently runs against a live client that retries
+# with backoff.
+CLIENT_BINDING_DATABASE_MODULES = (
+    "database.notifications",
+    "database.conversations",
+    "database.redis_db",
+    "database.users",
+    "database.memories",
+    "database.action_items",
+    "database.tasks",
+)
+
+
+def drop_client_binding_modules(names: Sequence[str] = CLIENT_BINDING_DATABASE_MODULES) -> None:
+    """Evict modules that captured a live client at import time.
+
+    Call before install_*_stubs() so the stub install actually takes effect. Pair
+    with snapshot_sys_modules()/restore_sys_modules() on the same names.
+    """
+    for name in names:
+        module = sys.modules.pop(name, None)
+        if module is None or "." not in name:
+            continue
+        parent_name, child_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is module:
+            delattr(parent, child_name)
+
+
 def install_ws_i_heavy_import_stubs() -> list[str]:
     """Install heavy-import stubs used by WS-I process_conversation / memories router tests."""
     touched: list[str] = []
 
     def _set(name: str, module: ModuleType) -> None:
         sys.modules[name] = module
+        # Rebinding sys.modules alone is not enough. `import database.notifications
+        # as notification_db` resolves through getattr(database, "notifications")
+        # and only falls back to sys.modules on AttributeError, so a parent package
+        # still holding the real submodule hands it straight back and the stub never
+        # takes effect. restore_sys_modules() already unwinds the parent attribute on
+        # teardown; this is the matching half on the way in.
+        if "." in name:
+            parent_name, child_name = name.rsplit(".", 1)
+            parent = sys.modules.get(parent_name)
+            if isinstance(parent, ModuleType):
+                setattr(parent, child_name, module)
         touched.append(name)
 
     firebase_admin = types.ModuleType("firebase_admin")
@@ -222,6 +266,7 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     subscription_mod.get_default_basic_subscription = MagicMock()
     subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
+    subscription_mod.request_has_llm_byok_key = lambda: False
     _set("utils.subscription", subscription_mod)
 
     vector_db_mod = AutoMockModule("database.vector_db")
@@ -289,6 +334,9 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
         "utils.conversations.transcript_chunks",
         "utils.retrieval.tools.memory_tools",
     ):
+        # Deliberately does not displace an already-imported real module: several
+        # callers depend on the real one being kept. A caller that needs the stub to
+        # win must drop the real module first -- see drop_client_binding_modules().
         if name not in sys.modules:
             _set(name, AutoMockModule(name))
 
@@ -426,6 +474,7 @@ def install_ws_j_heavy_import_stubs() -> list[str]:
         "utils.conversations.factory",
         "utils.conversations.process_conversation",
         "utils.conversations.search",
+        "utils.conversations.mcp_transcript_search",
         "utils.conversations.calendar_linking",
         "utils.speaker_identification",
         "utils.app_integrations",

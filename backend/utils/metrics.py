@@ -1,5 +1,16 @@
-from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
+import os
+import threading
+from typing import Any
+
 from fastapi import Response
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest, start_http_server
+
+from utils.journey_metrics_contract import (
+    CLIENT_JOURNEY_ISSUE_CLASSES,
+    CLIENT_JOURNEY_OUTCOMES,
+    CLIENT_JOURNEYS,
+    CLIENT_KINDS,
+)
 
 BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS = Gauge(
     'backend_listen_active_ws_connections',
@@ -78,20 +89,76 @@ for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
 for _outcome in ('requeued', 'enqueue_failed'):
     OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
 
+OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
+    'omi_client_journey_accepted_total',
+    'Accepted client-segmented product journeys by bounded journey and client kind',
+    ['journey', 'client_kind'],
+)
+
+OMI_CLIENT_JOURNEY_TERMINAL_TOTAL = Counter(
+    'omi_client_journey_terminal_total',
+    'Terminal client-segmented product journey outcomes by bounded labels',
+    ['journey', 'client_kind', 'outcome'],
+)
+
+OMI_CLIENT_JOURNEY_ISSUES_TOTAL = Counter(
+    'omi_client_journey_issues_total',
+    'Bounded issue detail for failed or degraded client-segmented product journeys',
+    ['journey', 'client_kind', 'issue_class'],
+)
+
+OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
+    'omi_client_journey_duration_seconds',
+    'Elapsed time from acceptance to terminal client-segmented journey outcome',
+    ['journey', 'outcome'],
+    buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 900, 3600, 21600, 86400),
+)
+
+# This is a separate, versioned contract from the legacy omi_journey_* family
+# above. Keep client_kind off the histogram: its 16 bucket series per child
+# would multiply the most expensive metric without helping outcome segmentation.
+# Initialize the complete bounded product so healthy-but-idle exporters expose
+# zeros instead of making an idle process indistinguishable from a missing one.
+for _journey in CLIENT_JOURNEYS:
+    for _client_kind in CLIENT_KINDS:
+        OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey, client_kind=_client_kind)
+        for _outcome in CLIENT_JOURNEY_OUTCOMES:
+            OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
+                journey=_journey,
+                client_kind=_client_kind,
+                outcome=_outcome,
+            )
+        for _issue_class in CLIENT_JOURNEY_ISSUE_CLASSES:
+            OMI_CLIENT_JOURNEY_ISSUES_TOTAL.labels(
+                journey=_journey,
+                client_kind=_client_kind,
+                issue_class=_issue_class,
+            )
+    for _outcome in CLIENT_JOURNEY_OUTCOMES:
+        OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(journey=_journey, outcome=_outcome)
+
+# The three gauges below report one GLOBAL Firestore-derived quantity, and every
+# replica publishes the same value. Aggregate them with max(), never sum(): a
+# sum() multiplies the real number by the replica count and, while replicas run
+# different images, mixes two different answers to the same question.
 LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
-    'Age of the oldest queued, leased, or blocked listen finalization job',
+    'Global age of the oldest queued, leased, or blocked listen finalization job; '
+    'replicated per process, aggregate with max() not sum()',
 )
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
-    'Current durable listen finalization job count by non-success status',
+    'Global durable listen finalization job count by non-success status; replicated '
+    'per process, aggregate with max() not sum(). dead_letter is cumulative and only '
+    'ever rises: it is an all-time terminal total, not a backlog',
     ['status'],
 )
 
 LISTEN_FINALIZATION_DURABLE_JOBS = Gauge(
     'listen_finalization_durable_jobs',
-    'Authoritative Firestore finalization jobs by closed durable lifecycle state',
+    'Global authoritative Firestore finalization jobs by closed durable lifecycle '
+    'state; replicated per process, aggregate with max() not sum()',
     ['state'],
 )
 
@@ -115,6 +182,17 @@ LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL = Counter(
 # series, distinguishing no stranded rows from a missing scrape target.
 for _outcome in ('completed', 'migrated', 'skipped', 'error'):
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
+
+LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL = Counter(
+    'listen_finalization_byok_abandonments_total',
+    'Stranded BYOK finalization job dispositions by the abandonment sweep',
+    ['outcome'],
+)
+
+# Zero-initialize the closed outcome set so an idle process exports every
+# series, distinguishing no stranded rows from a missing scrape target.
+for _outcome in ('abandoned_conversation_closed', 'abandoned_bookkeeping', 'skipped', 'error'):
+    LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome=_outcome)
 
 LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
     'llm_gateway_chat_extraction_requests_total',
@@ -306,6 +384,30 @@ MEMORY_HISTORICAL_SUPPRESSION_TOTAL = Counter(
     ['reason'],
 )
 
+LIST_READ_REQUEST_TOTAL = Counter(
+    'list_read_requests_total',
+    'Bounded list GET read outcomes by route',
+    ['route', 'outcome'],
+)
+
+LIST_READ_DOCUMENTS_TOTAL = Counter(
+    'list_read_documents_total',
+    'Documents scanned by bounded list GET reads by route',
+    ['route'],
+)
+
+LIST_READ_SECONDS = Histogram(
+    'list_read_seconds',
+    'Wall-clock seconds spent in bounded list GET reads by route',
+    ['route'],
+)
+
+for _list_route in ('action-items', 'conversations', 'memories'):
+    LIST_READ_DOCUMENTS_TOTAL.labels(route=_list_route)
+    LIST_READ_SECONDS.labels(route=_list_route)
+    for _list_outcome in ('complete', 'truncated'):
+        LIST_READ_REQUEST_TOTAL.labels(route=_list_route, outcome=_list_outcome)
+
 MEMORY_HISTORICAL_MATERIALIZATION_TOTAL = Counter(
     'memory_historical_materialization_total',
     'Lazy historical-memory materialization outcomes',
@@ -331,6 +433,14 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
     ['provider', 'terminal_state'],
 )
 
+OMI_SUBSCRIPTION_EVENTS = Counter(
+    'omi_subscription_events_total',
+    'Stripe subscription lifecycle events observed via webhook. Counts webhook '
+    'deliveries, which Stripe may retry, so treat these as an operational trend '
+    'signal rather than a billing-grade figure; Stripe remains source of truth.',
+    ['event', 'plan', 'interval', 'reason'],
+)
+
 
 # Pusher readiness / drain gauges. Label-free (low cardinality) so they scrape
 # cheaply. Initialized to serving below so an idle healthy pod reads
@@ -351,3 +461,42 @@ PUSHER_DRAIN_IN_PROGRESS.set(0)
 
 def metrics_response() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+_sidecar_server_lock = threading.Lock()
+_sidecar_server: Any | None = None
+_sidecar_server_thread: threading.Thread | None = None
+
+
+def start_metrics_sidecar_server() -> None:
+    """Expose the process registry only on loopback for the Cloud Run sidecar."""
+    raw_port = os.environ.get('PROMETHEUS_SIDECAR_PORT', '').strip()
+    if not raw_port:
+        return
+    try:
+        port = int(raw_port)
+    except ValueError as exc:
+        raise RuntimeError('PROMETHEUS_SIDECAR_PORT must be an integer') from exc
+    if not 1 <= port <= 65535:
+        raise RuntimeError('PROMETHEUS_SIDECAR_PORT must be between 1 and 65535')
+
+    global _sidecar_server, _sidecar_server_thread
+    with _sidecar_server_lock:
+        if _sidecar_server is not None:
+            return
+        _sidecar_server, _sidecar_server_thread = start_http_server(port, addr='127.0.0.1')
+
+
+def stop_metrics_sidecar_server() -> None:
+    global _sidecar_server, _sidecar_server_thread
+    with _sidecar_server_lock:
+        server = _sidecar_server
+        thread = _sidecar_server_thread
+        _sidecar_server = None
+        _sidecar_server_thread = None
+    if server is None:
+        return
+    server.shutdown()
+    server.server_close()
+    if thread is not None:
+        thread.join(timeout=5)

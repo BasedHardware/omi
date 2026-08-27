@@ -40,15 +40,21 @@ enum IntegrationNudgeRoute: Equatable, Hashable {
 enum IntegrationNudgeTriggerMatch: Equatable {
   /// The frontmost application is one of these bundle identifiers.
   case application(bundleIdentifiers: [String])
-  /// The frontmost application is a browser and its window *title* ends with one
-  /// of these suffixes, case-insensitively.
+  /// The frontmost application is a browser and its window *title* ends with the
+  /// site's own name, case-insensitively.
   ///
   /// A window title is the page's `document.title`, never its URL, so a domain
   /// keyword matches nothing real. What is reliable is where sites put their own
-  /// name: at the end. X renders "Home / X", Gmail "Inbox (12) - you@corp.com -
-  /// Gmail", ChatGPT just "ChatGPT". Anchoring to the end is what separates
-  /// those from "ChatGPT vs Claude — a comparison", which is the false positive
-  /// that matters — a wrong nudge is worse than a missing one.
+  /// name: at the end, behind a separator. X renders "Home / X", Gmail "Inbox
+  /// (12) - you@corp.com - Gmail", ChatGPT just "ChatGPT".
+  ///
+  /// The name must be the *whole* title or sit behind a separator — a bare
+  /// "ends with" test reads any sentence that happens to trail off in the name
+  /// as the site itself. Measured against 95,577 real titles from this
+  /// developer's own browser history, the unanchored form claimed "How to Create
+  /// Studio Ghibli Style Art With ChatGPT" as ChatGPT, "Context for Claude" as
+  /// Claude, and "World Wealth Report 2024: HNWI Wealth Management | Capgemini"
+  /// as Gemini. Requiring the separator drops all three and costs no real title.
   ///
   /// An integration whose real titles carry no site name gets no browser trigger
   /// at all rather than a guess. Notion web titles are the page name alone, and
@@ -59,7 +65,17 @@ enum IntegrationNudgeTriggerMatch: Equatable {
   /// the same active-window lookup the proactive assistants already use, and
   /// reading the address bar would mean driving the Accessibility API across
   /// every browser.
-  case browserTitleSuffix(suffixes: [String])
+  case browserTitleSite(names: [String])
+  /// The frontmost application is a browser showing a Gmail mailbox whose
+  /// account is on a Google Workspace domain.
+  ///
+  /// Workspace replaces "Gmail" in the title with the organization's own name —
+  /// "Inbox (3,012) - you@company.com - Acme Mail" — so `browserTitleSite` can
+  /// never name it. That is not an edge case: in the same 95,577-title corpus it
+  /// is 51% of all Gmail visits, and every one of them was invisible to the
+  /// nudge. The shape that identifies it is the account address Gmail puts in
+  /// the middle segment; " Mail" alone would claim Proton and Yahoo too.
+  case browserTitleGoogleWorkspaceMailbox
 }
 
 struct IntegrationNudgeTrigger: Equatable {
@@ -71,7 +87,7 @@ struct IntegrationNudgeTrigger: Equatable {
   var kind: IntegrationNudgeTelemetry.TriggerKind {
     switch match {
     case .application: return .nativeApp
-    case .browserTitleSuffix: return .browserSite
+    case .browserTitleSite, .browserTitleGoogleWorkspaceMailbox: return .browserSite
     }
   }
 }
@@ -176,7 +192,11 @@ enum IntegrationNudgeCatalog {
       triggers: [
         IntegrationNudgeTrigger(
           id: "gmail_web",
-          match: .browserTitleSuffix(suffixes: ["Gmail"])
+          match: .browserTitleSite(names: ["Gmail"])
+        ),
+        IntegrationNudgeTrigger(
+          id: "gmail_workspace_web",
+          match: .browserTitleGoogleWorkspaceMailbox
         ),
         IntegrationNudgeTrigger(
           id: "gmail_client_app",
@@ -237,7 +257,7 @@ enum IntegrationNudgeCatalog {
       triggers: [
         IntegrationNudgeTrigger(
           id: "x_web",
-          match: .browserTitleSuffix(suffixes: ["/ X", "/ Twitter"])
+          match: .browserTitleSite(names: ["X", "Twitter"])
         )
       ]
     ),
@@ -295,7 +315,7 @@ enum IntegrationNudgeCatalog {
         ),
         IntegrationNudgeTrigger(
           id: "chatgpt_web",
-          match: .browserTitleSuffix(suffixes: ["ChatGPT"])
+          match: .browserTitleSite(names: ["ChatGPT"])
         ),
       ]
     ),
@@ -318,7 +338,7 @@ enum IntegrationNudgeCatalog {
         ),
         IntegrationNudgeTrigger(
           id: "claude_web",
-          match: .browserTitleSuffix(suffixes: ["Claude"])
+          match: .browserTitleSite(names: ["Claude"])
         ),
       ]
     ),
@@ -337,7 +357,7 @@ enum IntegrationNudgeCatalog {
       triggers: [
         IntegrationNudgeTrigger(
           id: "gemini_web",
-          match: .browserTitleSuffix(suffixes: ["Gemini"])
+          match: .browserTitleSite(names: ["Google Gemini", "Gemini"])
         )
       ]
     ),

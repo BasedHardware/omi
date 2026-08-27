@@ -385,6 +385,7 @@ class GeneratedCandidateRecord {
   final GeneratedCandidateCompatibilityMetadata? compatibility;
   final DateTime createdAt;
   final List<GeneratedEvidenceRef> evidenceRefs;
+  final DateTime? expiresAt;
   final String? goalId;
   final String idempotencyKey;
   final double ownershipConfidence;
@@ -408,6 +409,7 @@ class GeneratedCandidateRecord {
     this.compatibility,
     required this.createdAt,
     required this.evidenceRefs,
+    this.expiresAt,
     this.goalId,
     required this.idempotencyKey,
     required this.ownershipConfidence,
@@ -433,6 +435,7 @@ class GeneratedCandidateRecord {
       compatibility: _readFieldValue<GeneratedCandidateCompatibilityMetadata>(_readField(json, const ["compatibility"]), "compatibility", (value) => _readObject(value, GeneratedCandidateCompatibilityMetadata.fromJson), requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       evidenceRefs: _required(_readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: true, nullable: false), "evidence_refs"),
+      expiresAt: _readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: false, nullable: true),
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       idempotencyKey: _required(_readFieldValue<String>(_readField(json, const ["idempotency_key"]), "idempotency_key", _readString, requiredField: true, nullable: false), "idempotency_key"),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
@@ -459,6 +462,7 @@ class GeneratedCandidateRecord {
       'compatibility': compatibility?.toJson(),
       'created_at': createdAt.toUtc().toIso8601String(),
       'evidence_refs': evidenceRefs.map((value) => value.toJson()).toList(),
+      'expires_at': expiresAt?.toUtc().toIso8601String(),
       'goal_id': goalId,
       'idempotency_key': idempotencyKey,
       'ownership_confidence': ownershipConfidence,

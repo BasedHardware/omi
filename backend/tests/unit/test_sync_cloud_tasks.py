@@ -695,18 +695,77 @@ class TestVerifyCloudTasksOidc:
                 cloud_tasks.enqueue_sync_job({'job_id': 'j'})
 
     def test_backfill_lane_still_uses_the_main_queue(self):
-        # An offline recording can never carry server capture proof, so every
-        # offline upload classifies as backfill. Routing that lane to the
-        # bounded historical-recovery worker sent the whole offline workload
-        # through a few dispatch slots, and Cloud Tasks backed the surplus off
-        # for hours. The lane label stays on the payload for metering.
+        # Flag-off is the #10400 contract: every offline upload classifies as
+        # backfill, and routing that lane to the bounded recovery worker used
+        # to strand recordings for hours. Default-off keeps that behaviour.
         cloud_tasks = _load_cloud_tasks()
         env = {
+            'SYNC_BACKFILL_ROUTING_ENABLED': 'false',
             'SYNC_TASKS_QUEUE': 'sync-jobs',
             'SYNC_TASKS_HANDLER_URL': 'https://backend-sync.example.com/v2/sync-jobs/run',
             'SYNC_BACKFILL_TASKS_QUEUE': 'sync-backfill',
             'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+        }
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+            cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'backfill'})
+
+        enqueue.assert_called_once_with(
+            'sync-jobs',
+            'https://backend-sync.example.com/v2/sync-jobs/run',
+            'job-1',
+            {'job_id': 'job-1', 'lane': 'backfill'},
+        )
+
+    def test_backfill_lane_uses_backfill_queue_when_routing_enabled(self):
+        cloud_tasks = _load_cloud_tasks()
+        env = {
+            'SYNC_BACKFILL_ROUTING_ENABLED': 'true',
+            'SYNC_TASKS_QUEUE': 'sync-jobs',
+            'SYNC_TASKS_HANDLER_URL': 'https://backend-sync.example.com/v2/sync-jobs/run',
+            'SYNC_BACKFILL_TASKS_QUEUE': 'sync-backfill',
+            'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+            'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+        }
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+            cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'backfill'})
+
+        enqueue.assert_called_once_with(
+            'sync-backfill',
+            'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+            'job-1',
+            {'job_id': 'job-1', 'lane': 'backfill'},
+            audience='https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+        )
+
+    def test_fresh_lane_uses_main_queue_when_backfill_routing_enabled(self):
+        cloud_tasks = _load_cloud_tasks()
+        env = {
+            'SYNC_BACKFILL_ROUTING_ENABLED': 'true',
+            'SYNC_TASKS_QUEUE': 'sync-jobs',
+            'SYNC_TASKS_HANDLER_URL': 'https://backend-sync.example.com/v2/sync-jobs/run',
+            'SYNC_BACKFILL_TASKS_QUEUE': 'sync-backfill',
+            'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+            'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+        }
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+            cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'fresh'})
+
+        enqueue.assert_called_once_with(
+            'sync-jobs',
+            'https://backend-sync.example.com/v2/sync-jobs/run',
+            'job-1',
+            {'job_id': 'job-1', 'lane': 'fresh'},
+        )
+
+    def test_backfill_routing_falls_back_to_main_queue_when_env_missing(self):
+        cloud_tasks = _load_cloud_tasks()
+        env = {
+            'SYNC_BACKFILL_ROUTING_ENABLED': 'true',
+            'SYNC_TASKS_QUEUE': 'sync-jobs',
+            'SYNC_TASKS_HANDLER_URL': 'https://backend-sync.example.com/v2/sync-jobs/run',
+            'SYNC_BACKFILL_TASKS_QUEUE': '',
+            'SYNC_BACKFILL_TASKS_HANDLER_URL': '',
         }
         with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'backfill'})
@@ -917,6 +976,7 @@ def _load_sync_router_for_fast_path():
         'database.users',
         'database.user_usage',
         'database.sync_ledger',
+        'database.firestore_read_metrics',
         'firebase_admin',
         'google',
         'google.cloud',

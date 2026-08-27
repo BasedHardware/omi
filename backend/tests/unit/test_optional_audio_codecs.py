@@ -80,6 +80,7 @@ def _install_storage_import_stubs(monkeypatch):
             "database.redis_db",
             cache_signed_url=MagicMock(),
             get_cached_signed_url=MagicMock(),
+            delete_cached_signed_url=MagicMock(),
         ),
         "database.users": _module("database.users"),
         "utils.encryption": _module("utils.encryption"),

@@ -1,18 +1,28 @@
 version: 2
 name: conversation-detail
 tier: 2
-description: Hermetic conversation detail open + full-width transcript pane via capture seam
+description: Hermetic conversation detail open, dark screenshot prototype, and full-width transcript pane
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationAppSelectorSheet.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummarySelection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSummarySections.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/ConversationDetailAutomationState.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/LiveTranscriptView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/TranscriptDetailView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/CitationCardView.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingFrameJudge.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingFrameSelector.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingFrameSimilarity.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingNoteScreenshotViews.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingScreenshotsStore.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/ScreenFrameQuickLook.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingBannerPalette.swift
+  - desktop/macos/Desktop/Sources/MeetingScreenshots/ScreenFrameEgressWireTypes.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ScreenFrames.swift
 preconditions:
   - automation_bridge_ready
 
@@ -55,8 +65,37 @@ steps:
       result.detail.transcript_drawer_open: "true"
       result.detail.segment_count: "1"
 
+  # The frames themselves need a provisioned bucket and a live judge, so what this asserts is the
+  # half that is otherwise untestable: that Quick Look's panel — a *system* window, which no
+  # capture path in this app can photograph — actually opens for us. `panel_controlled` is the
+  # load-bearing one: the panel only has a data source if `beginPreviewPanelControl` ran, and that
+  # only runs if something in the responder chain claimed it.
   - id: S5
+    name: Quick Look opens and takes our data source
+    bridge.action:
+      name: screen_frame_quick_look_probe
+      params:
+        source: synthetic
+    expect:
+      ok: true
+      result.detail.panel_exists: "true"
+      result.detail.panel_visible: "true"
+      result.detail.panel_controlled: "true"
+      result.detail.ready_count: "1"
+
+  - id: S6
+    name: Closing the panel takes the materialised bytes off disk with it
+    bridge.action:
+      name: screen_frame_quick_look_probe
+      params:
+        dismiss: "true"
+    expect:
+      ok: true
+      result.detail.dismissed: "true"
+
+  - id: S7
     name: Logs clean
     log.expect:
       absent:
         - "DesktopAutomationBridge: failed"
+        - "MeetingScreenshots:"

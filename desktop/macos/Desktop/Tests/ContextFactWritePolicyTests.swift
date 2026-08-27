@@ -206,6 +206,99 @@ final class ContextDirectorTaskRefsTests: XCTestCase {
       ["task:abc-123"])
   }
 
+  func testUserAuthoredQuestionFloorsToArmingEligibility() {
+    // The live fact that kept the answer-delivery path dark: worthiness 0.0.
+    XCTAssertEqual(
+      ContextFactWritePolicy.verdict(
+        "The body of the email currently contains the question: What is the latest omi desktop app download link?"),
+      .floorHumanEvent)
+    XCTAssertEqual(
+      ContextFactWritePolicy.verdict(
+        "The user is asking david@scalingforever.com: where can I grab the newest Omi desktop build?"),
+      .floorHumanEvent)
+    // Displayed questions without an authoring frame never floor.
+    XCTAssertNotEqual(
+      ContextFactWritePolicy.verdict("The page shows a FAQ question about billing."),
+      .floorHumanEvent)
+    // A paraphrased question (asking verb + interrogative clause, no "?") floors.
+    XCTAssertEqual(
+      ContextFactWritePolicy.verdict(
+        "The user is asking where to download the latest version of Omi desktop."),
+      .floorHumanEvent)
+    // A paraphrased REQUEST with a strong asking verb needs no question marker
+    // (live extraction: "asking for a link ... to be shared").
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "The user is asking for a link to the latest Omi desktop to be shared with david@scalingforever.com."))
+    // A mangled subject with an embedded question mark in a compose frame
+    // still floors (live extraction: "Yu is composing a new email ...").
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "Yu is composing a new email to david@scalingforever.com with the body: What is the latest omi desktop link?"))
+    // The prompt's Good example is machinery when echoed verbatim.
+    XCTAssertEqual(
+      ContextFactWritePolicy.verdict(
+        "The user is asking alex@example.com: When is the next release shipping?"),
+      .dropMachinery)
+    // "A user wrote: <question>?" (live extraction phrasing) floors.
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "A user wrote: Yo David, link for the latest Omi desktop please?"))
+    // Someone else's question never qualifies.
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "David asked when the offsite is scheduled?"))
+    // Authoring frames without a question signal never floor via this class.
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "The user is composing an email addressed to david@scalingforever.com."))
+    // Passive draft-subject phrasings (live 02:22 extraction, both scored 0.0
+    // and kept the departure trigger dark) floor.
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "A draft email is addressed to david@scalingforever.com containing a question about the Omi desktop download URL."
+      ))
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "A note or message content questions the URL to download Omi for Mac."))
+    // A displayed artifact that merely lists questions is not an authored ask.
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "The page shows frequently asked questions about billing."))
+    // User-subject inclusion phrasing (live 02:44 extraction, scored 0.9 by
+    // the model yet unclassified, which kept the forced lookup dark).
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "The user included a question about the latest Omi desktop link in the body of the email."))
+    // Compose-anchored artifact-subject asking (live 03:00 extraction, w=1.0
+    // yet unclassified — run6's silence).
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "A message is being composed to david@scalingforever.com asking for the latest Omi desktop link."))
+    // Received mail is someone else's ask, never the user's.
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "An email from David asks when the offsite is scheduled."))
+    // Structural catch-all (live 03:36 extraction — sixth distinct paraphrase):
+    // an artifact-subject statement quoting a literal question mark is the
+    // user's own typed question.
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "The message body includes the line: 'Quote probe David: what is the latest Omi desktop link?'"))
+    // ...but a received artifact stays excluded even with a quoted question.
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "An email from David contains the line: 'when is the offsite?'"))
+    // Every artifact-subject branch honors the received marker, including the
+    // original contains-the-question shape (review finding).
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "An email from David contains the question: when is the offsite scheduled?"))
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "A message received from the sender questions the deployment timeline."))
+  }
+
   func testSuppliedRefsSurviveWhitespaceAndDeduplicate() {
     XCTAssertEqual(
       ContextDirectorTaskRefs.resolvable(

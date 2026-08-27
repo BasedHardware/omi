@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentCompletionVoiceDelivery.swift
   - desktop/macos/Desktop/Sources/Chat/ChatDraftStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationJournalCopy.swift
   - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AskAIInputView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
@@ -45,6 +46,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBackgroundModifier.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceWaveformBars.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Tools.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+People.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarReceiptCard.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchCardVoiceDelivery.swift

@@ -124,21 +124,42 @@ class MetadataTests(unittest.TestCase):
         self.assertIsNone(extract_merged_pr_number("security(backend): gate Anthropic web search"))
         self.assertIsNone(extract_merged_pr_number(""))
 
-    def test_main_push_body_appends_live_pr_body_for_squash_head(self) -> None:
-        """#11835: squash commit list omitted INV-CHAT-1; the PR body had it."""
+    def test_main_push_body_uses_live_pr_body_for_squash_head(self) -> None:
+        """#12003: wrapped merge text must not remain beside line-sensitive metadata."""
         commit = (
             "Cut the Windows app's idle and focus-driven backend request volume (#11835)\n\n"
-            "* Stop rebuilding the about-user card on every voice hub warm\n"
+            "Line-Count-Exception: backend/utils/conversations/process_conversation.py | 2403 ->\n"
+            "  2424 | extracted helper keeps the production owner readable\n"
         )
-        metadata = type("M", (), {"body": "## Product invariants affected\n\n- INV-CHAT-1\n", "number": 11835})()
-        combined = resolve_main_push_body(
+        live_body = (
+            "## Product invariants affected\n\n"
+            "- INV-CHAT-1\n\n"
+            "Line-Count-Exception: backend/utils/conversations/process_conversation.py | "
+            "2403 -> 2424 | extracted helper keeps the production owner readable\n"
+        )
+        metadata = type("M", (), {"body": live_body, "number": 11835})()
+        resolved = resolve_main_push_body(
             commit,
             repository="BasedHardware/omi",
             token="test-token",
             loader=lambda *args, **kwargs: metadata,
         )
-        self.assertIn("INV-CHAT-1", combined)
-        self.assertTrue(combined.startswith(commit.rstrip()))
+        self.assertEqual(resolved, live_body)
+        self.assertNotIn("2403 ->\n", resolved)
+
+    def test_main_push_body_keeps_commit_message_when_live_pr_body_is_empty(self) -> None:
+        commit = "Cut the Windows app's idle volume (#11835)\n\nFailure-Class: FC-example\n"
+        metadata = type("M", (), {"body": "  \n", "number": 11835})()
+
+        self.assertEqual(
+            resolve_main_push_body(
+                commit,
+                repository="BasedHardware/omi",
+                token="test-token",
+                loader=lambda *args, **kwargs: metadata,
+            ),
+            commit,
+        )
 
     def test_main_push_body_keeps_commit_message_without_pr_number_or_token(self) -> None:
         commit = "direct push that forgot INV-CHAT-1\n"

@@ -154,8 +154,12 @@ class TestCacheInvalidationBehavioral:
         assert 'trial_paywall:expired:' in fn_body
         delete_count = fn_body.count('delete_generic_cache')
         assert (
-            delete_count == 1
-        ), f"clear_trial_paywall_cache should call delete_generic_cache exactly once, got {delete_count}"
+            delete_count >= 2
+        ), f"clear_trial_paywall_cache should clear general and provider-specific keys, got {delete_count}"
+        assert 'gemini' in fn_body
+        assert 'openai' in fn_body
+        assert 'openrouter' in fn_body
+        assert 'anthropic' in fn_body
 
 
 class TestPlatformFiltering:
@@ -173,7 +177,7 @@ class TestPlatformFiltering:
         assert fn_start != -1
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
         filter_pos = fn_body.find('platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS')
-        expiry_pos = fn_body.find('_is_trial_expired_cached(uid')
+        expiry_pos = fn_body.find('_is_trial_expired_cached')
         assert filter_pos != -1, "is_trial_paywalled must filter non-desktop platforms"
         assert expiry_pos != -1, "is_trial_paywalled must call the cached expiry lookup"
         assert filter_pos < expiry_pos, "platform filtering must happen before the expiry lookup"
@@ -183,9 +187,7 @@ class TestPlatformFiltering:
         fn_start = src.find('def is_trial_paywalled(')
         assert fn_start != -1
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
-        assert (
-            'return _is_trial_expired_cached(uid' in fn_body
-        ), "desktop paywall decisions must use the cached expiry lookup"
+        assert '_is_trial_expired_cached' in fn_body, "desktop paywall decisions must use the cached expiry lookup"
 
     def test_is_trial_paywalled_uses_lower_for_case_insensitivity(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
@@ -331,7 +333,12 @@ class TestIsTrialPaywalledBehavioral:
 
     def test_clear_cache_calls_redis_delete(self):
         self._sub.clear_trial_paywall_cache('test-uid-123')
-        self._sub.redis_db.delete_generic_cache.assert_called_with('trial_paywall:expired:test-uid-123')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:gemini')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:openai')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:openrouter')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:anthropic')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123')
+        assert self._sub.redis_db.delete_generic_cache.call_count == 5
 
 
 class TestByokRequestEscapeHatch:
@@ -418,18 +425,17 @@ class TestByokRequestEscapeHatch:
                 'deepgram': 'stub-deepgram',
             }
         )
+        self._byok._byok_validated_ctx.set(True)
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
 
-    def test_partial_byok_headers_still_paywall(self):
-        # Only 3 of 4 — not a fully-enrolled BYOK request, paywall remains.
-        self._byok.set_byok_keys(
-            {
-                'openai': 'sk-stub',
-                'anthropic': 'sk-stub',
-                'gemini': 'stub',
-                # deepgram missing
-            }
-        )
+    def test_validated_llm_byok_header_bypasses_paywall(self):
+        self._byok.set_byok_keys({'openrouter': 'sk-stub'})
+        self._byok._byok_validated_ctx.set(True)
+        assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
+
+    def test_validated_deepgram_only_header_still_paywalls(self):
+        self._byok.set_byok_keys({'deepgram': 'stub-deepgram'})
+        self._byok._byok_validated_ctx.set(True)
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is True
 
     def test_empty_byok_keys_still_paywall(self):
@@ -457,6 +463,7 @@ class TestByokRequestEscapeHatch:
                 'deepgram': 'stub-deepgram',
             }
         )
+        self._byok._byok_validated_ctx.set(True)
         meta = self._sub.get_trial_metadata('uid-stale-firestore')
         assert meta.trial_expired is False
 

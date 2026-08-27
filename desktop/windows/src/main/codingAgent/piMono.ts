@@ -86,6 +86,21 @@ export interface HarnessConfig {
    * managed `OMI_API_KEY` is always the Firebase token, never a BYOK key.
    */
   byokEnv?: Record<string, string>
+  /**
+   * Re-read credentials immediately before spawn. The factory snapshots
+   * `authToken`/`byokEnv` at worker-build time; a hidden-window Firebase token
+   * can go stale and Settings can rewrite `byok-keys.json` while that worker
+   * is still pinned. When set, `start()` prefers this over the snapshot.
+   * A thrown refresh keeps the snapshot (never spawn with an empty token just
+   * because the renderer pull timed out). A null result means the session is
+   * gone (signed out); `start()` then fails closed rather than baking the
+   * construction-time token.
+   */
+  resolveSpawnCredentials?: () => Promise<{
+    authToken?: string
+    omiApiBaseUrl?: string
+    byokEnv?: Record<string, string>
+  } | null>
 }
 
 interface SessionOpts {
@@ -267,6 +282,19 @@ function requiredAgentControlFailure(toolName: string, output: string): string |
   return undefined
 }
 
+function sameByokEnv(
+  left: Record<string, string> | undefined,
+  right: Record<string, string> | undefined
+): boolean {
+  const a = left ?? {}
+  const b = right ?? {}
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)])
+  for (const key of keys) {
+    if (a[key] !== b[key]) return false
+  }
+  return true
+}
+
 function requiredControlOperationKey(
   toolName: string,
   input: Record<string, unknown> | undefined
@@ -283,12 +311,12 @@ function requiredControlOperationKey(
 // Map desktop model IDs (claude-*) to omi provider model IDs.
 // Covers short aliases and dated versions used by the chat provider/ChatLab.
 const MODEL_MAP: Record<string, string> = {
-  'claude-opus-4-6': 'omi-opus',
+  'claude-opus-4-6': 'omi-sonnet',
   'claude-sonnet-4-6': 'omi-sonnet',
   'claude-sonnet-4': 'omi-sonnet',
-  'claude-opus-4': 'omi-opus',
+  'claude-opus-4': 'omi-sonnet',
   'claude-sonnet-4-20250514': 'omi-sonnet',
-  'claude-opus-4-20250514': 'omi-opus'
+  'claude-opus-4-20250514': 'omi-sonnet'
 }
 
 function mapModel(model: string): string {
@@ -460,6 +488,8 @@ export class PiMonoAdapter {
   private readonly sessionPrefix: string
   /** True when a token refresh was deferred because a prompt was active */
   private pendingTokenRefresh = false
+  /** True when a BYOK env change was deferred because a prompt was active */
+  private pendingByokRefresh = false
   /** True when a system-prompt change was deferred because a prompt was active */
   private pendingSystemPromptRefresh = false
 
@@ -472,10 +502,33 @@ export class PiMonoAdapter {
       options.extensionPath || process.env.PI_EXTENSION_PATH || resolveBundledExtension()
   }
 
+  /** Overlay a renderer pull / BYOK re-read onto the construction-time snapshot.
+   *  Null = signed out / no session: wipe the snapshot so `start()` refuses
+   *  instead of baking the departed user's construction-time token. Throw =
+   *  renderer pull failed; keep the snapshot. */
+  private async applyResolvedSpawnCredentials(): Promise<void> {
+    if (!this.config.resolveSpawnCredentials) return
+    try {
+      const next = await this.config.resolveSpawnCredentials()
+      if (!next) {
+        this.config.authToken = undefined
+        this.config.byokEnv = {}
+        return
+      }
+      if (next.authToken) this.config.authToken = next.authToken
+      if (next.omiApiBaseUrl) this.config.omiApiBaseUrl = next.omiApiBaseUrl
+      if (next.byokEnv !== undefined) this.config.byokEnv = next.byokEnv
+    } catch (e) {
+      process.stderr.write(`[pi-mono] spawn credential refresh failed: ${(e as Error).message}\n`)
+    }
+  }
+
   async start(): Promise<void> {
     if (this.process) {
       return
     }
+
+    await this.applyResolvedSpawnCredentials()
 
     const args = [
       '--mode',
@@ -604,6 +657,17 @@ export class PiMonoAdapter {
       this.activePromptGeneration = 0
       rmSync(this.contextFilePath, { force: true })
     })
+  }
+
+  /** Sign-out: drop baked credentials, cancel a deferred restart, and kill the
+   *  subprocess so a later BYOK/token restart cannot spawn as the departed user. */
+  async revokeAndStop(): Promise<void> {
+    this.pendingTokenRefresh = false
+    this.pendingByokRefresh = false
+    this.pendingSystemPromptRefresh = false
+    this.config.authToken = undefined
+    this.config.byokEnv = {}
+    await this.stop()
   }
 
   async stop(): Promise<void> {
@@ -870,6 +934,27 @@ export class PiMonoAdapter {
     return true
   }
 
+  /** Update BYOK env by restarting the subprocess when idle.
+   *  The pi-mono extension bakes `OMI_BYOK_*` at startup, so a Settings save
+   *  is invisible to a live worker until this restart. Empty `{}` clears BYOK
+   *  (managed billing). Same defer-if-busy contract as `updateAuthToken`. */
+  async updateByokEnv(env: Record<string, string>): Promise<boolean> {
+    if (sameByokEnv(this.config.byokEnv, env)) return true
+    this.config.byokEnv = env
+    if (this.pendingRequests.size > 0) {
+      this.pendingByokRefresh = true
+      process.stderr.write('[pi-mono] BYOK env stored (restart deferred, prompt active)\n')
+      return false
+    }
+    if (!this.process) return true
+    await this.stop()
+    await this.start()
+    this.config.onRestart?.('byok')
+    this.pendingByokRefresh = false
+    process.stderr.write('[pi-mono] subprocess restarted with updated BYOK env\n')
+    return true
+  }
+
   /** Whether a prompt is currently in-flight */
   get isIdle(): boolean {
     return this.pendingRequests.size === 0
@@ -898,20 +983,22 @@ export class PiMonoAdapter {
     process.stderr.write('[pi-mono] new_session sent (worker reassigned to a new chat)\n')
   }
 
-  /** Whether a deferred restart is pending (token or system prompt) */
+  /** Whether a deferred restart is pending (token, BYOK, or system prompt) */
   get hasPendingRestart(): boolean {
-    return this.pendingTokenRefresh || this.pendingSystemPromptRefresh
+    return this.pendingTokenRefresh || this.pendingByokRefresh || this.pendingSystemPromptRefresh
   }
 
   /** Execute the deferred restart (call after prompt completes).
-   *  Handles both token refresh and system-prompt change — both baked at
-   *  spawn time, both requiring a restart. */
+   *  Token, BYOK env, and system prompt are all baked at spawn. */
   async executePendingRestart(): Promise<void> {
-    if (!this.pendingTokenRefresh && !this.pendingSystemPromptRefresh) return
+    if (!this.pendingTokenRefresh && !this.pendingByokRefresh && !this.pendingSystemPromptRefresh)
+      return
     const reasons: string[] = []
     if (this.pendingTokenRefresh) reasons.push('token')
+    if (this.pendingByokRefresh) reasons.push('byok')
     if (this.pendingSystemPromptRefresh) reasons.push('systemPrompt')
     this.pendingTokenRefresh = false
+    this.pendingByokRefresh = false
     this.pendingSystemPromptRefresh = false
     await this.stop()
     await this.start()
@@ -1026,6 +1113,10 @@ export class PiMonoAdapter {
 
       case 'turn_end':
         this.handleTurnEnd(event)
+        break
+
+      case 'agent_settled':
+        // Advisory upstream event; turn_end remains authoritative for completion.
         break
 
       case 'agent_start':

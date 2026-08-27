@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -10,12 +11,13 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from jsonschema import Draft202012Validator, SchemaError, ValidationError
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from database._client import get_customer_firestore_client
 from database import redis_db, users as users_db
+from config.plan_catalog import DESKTOP_PROFILE_DEFAULTS
 from models.users import PlanType, Subscription
 from utils.env_loader import EnvStage, resolve_stage_from_env
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -25,12 +27,12 @@ from utils.llm.gateway_client import llm_gateway_headers
 from utils.llm.gateway_observability import record_direct_exception_surface
 from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS, has_cacheable_prefix
 from utils.llm.providers import get_openai_api_key
+from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
+from utils.observability.journeys import ClientJourneyAttempt
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import (
-    DESKTOP_ACCESS_TIER_ARCHITECT,
     DESKTOP_ACCESS_TIER_FREE,
-    DESKTOP_ACCESS_TIER_FULL,
     effective_desktop_access_tier,
     is_desktop_trial_paywalled,
 )
@@ -40,18 +42,13 @@ logger = logging.getLogger(__name__)
 
 _MAX_REQUEST_BYTES = 5 * 1024 * 1024
 _QUOTA_WINDOW_SECONDS = 24 * 60 * 60
-# Explicit per-tier ceilings. These are deliberately not a constant multiple of
-# a shared base row: measured desktop dogfooding runs ~37 extraction calls per
-# hour of active use, so the architect extraction ceiling is sized for a genuine
-# 24-hour day (~888 calls) plus burst headroom, while reasoning is sized for a
-# background reconciler that batches ~2 calls per pass on top of the per-visit
-# gate and director calls. Lower tiers are sized for a partial day and stay
-# governed by the device-side frequency gate.
-_TIER_DAILY_LIMITS: dict[str, dict[str, int]] = {
-    DESKTOP_ACCESS_TIER_FREE: {"proactive_extraction": 150, "proactive_reasoning": 60},
-    DESKTOP_ACCESS_TIER_FULL: {"proactive_extraction": 1000, "proactive_reasoning": 500},
-    DESKTOP_ACCESS_TIER_ARCHITECT: {"proactive_extraction": 2000, "proactive_reasoning": 1000},
-}
+# The catalog owns these profile allocations. They are deliberately not a
+# constant multiple of a shared base row: measured desktop dogfooding runs
+# ~37 extraction calls per hour of active use, so the architect extraction
+# ceiling is sized for a genuine 24-hour day (~888 calls) plus burst headroom,
+# while reasoning is sized for a background reconciler that batches ~2 calls per
+# pass on top of the per-visit gate and director calls. Lower tiers are sized
+# for a partial day and stay governed by the device-side frequency gate.
 _OPERATION_LANES = {
     "proactive_extraction": "omi:auto:desktop-proactive-extraction",
     "proactive_reasoning": "omi:auto:desktop-proactive-reasoning",
@@ -129,7 +126,8 @@ def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str,
     payload = _gateway_payload(request)
     gateway_url = os.getenv("OMI_LLM_GATEWAY_URL", "").strip()
     if gateway_url:
-        headers = llm_gateway_headers(feature=f"desktop_{request.operation.value}")
+        # This surface is desktop-only traffic, so the platform is known statically.
+        headers = llm_gateway_headers(feature=f"desktop_{request.operation.value}", platform="desktop")
         headers["X-Omi-User-Uid"] = uid
         headers["X-Omi-Request-ID"] = request_id
         return _ProviderRequest(
@@ -182,10 +180,13 @@ def _quota_limit_for_subscription(operation: ProactiveOperation, subscription: S
     """Return the server-authoritative proactive ceiling for a verified plan."""
     plan = subscription.plan if subscription is not None else PlanType.basic
     tier = effective_desktop_access_tier(plan, subscription)
-    # Keep the lookup total: an unrecognised tier resolves to the free row
-    # rather than raising, so a new tier string can never 500 the lane.
-    limits = _TIER_DAILY_LIMITS.get(tier, _TIER_DAILY_LIMITS[DESKTOP_ACCESS_TIER_FREE])
-    return limits[operation.value]
+    # Keep the lookup total: an unrecognised tier resolves to the catalog's
+    # free profile rather than raising, so a new tier string can never 500 the
+    # lane. The router owns the meter and reservation mechanics; the catalog
+    # owns the per-profile allocation.
+    profile = DESKTOP_PROFILE_DEFAULTS.get(tier, DESKTOP_PROFILE_DEFAULTS[DESKTOP_ACCESS_TIER_FREE])
+    limits = profile['proactivity_daily']
+    return int(limits[operation.value])
 
 
 class ProactiveOperation(str, Enum):
@@ -554,8 +555,34 @@ async def _post_provider_completion(
     return response.json()
 
 
-@router.post("/v1/desktop/proactivity/completions", response_model=ProactiveCompletionEnvelope)
-async def proactive_completion(
+def _proactivity_client_kind(x_app_platform: object, user_agent: object) -> ClientKind:
+    headers: dict[str, str] = {}
+    if isinstance(x_app_platform, str):
+        headers['x-app-platform'] = x_app_platform
+    if isinstance(user_agent, str):
+        headers['user-agent'] = user_agent
+    return resolve_client_kind_from_headers(headers)
+
+
+def _proactivity_issue_class(exc: BaseException) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return 'upstream_timeout'
+    if isinstance(exc, HTTPException):
+        if exc.status_code in {408, 504}:
+            return 'upstream_timeout'
+        if exc.status_code == _INVALID_STRUCTURED_OUTPUT_STATUS:
+            return 'invalid_response'
+        if exc.status_code == 503:
+            return 'dependency_unavailable'
+        if exc.status_code >= 500:
+            return 'provider_error'
+        return 'upstream_rejected'
+    if isinstance(exc, httpx.HTTPStatusError):
+        return 'upstream_rejected'
+    return 'provider_error'
+
+
+async def _proactive_completion_unobserved(
     request: ProactiveCompletionRequest,
     response: Response,
     uid: str = Depends(_authorized_desktop_user),
@@ -694,3 +721,30 @@ def _validate_gateway_output(response: Mapping[str, Any], request: ProactiveComp
             validator.validate(decoded)
         except (json.JSONDecodeError, ValidationError, TypeError) as exc:
             raise _invalid_structured_output() from exc
+
+
+@router.post("/v1/desktop/proactivity/completions", response_model=ProactiveCompletionEnvelope)
+async def proactive_completion(
+    request: ProactiveCompletionRequest,
+    response: Response,
+    uid: str = Depends(_authorized_desktop_user),
+    x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    user_agent: str | None = Header(None, alias='User-Agent'),
+) -> ProactiveCompletionEnvelope:
+    attempt = ClientJourneyAttempt(
+        'desktop_proactivity',
+        _proactivity_client_kind(x_app_platform, user_agent),
+    )
+    try:
+        result = await _proactive_completion_unobserved(request, response, uid=uid)
+    except asyncio.CancelledError:
+        attempt.cancel()
+        raise
+    except Exception as exc:
+        if isinstance(exc, HTTPException) and exc.status_code == 429:
+            attempt.degrade('quota_capped')
+        else:
+            attempt.fail(_proactivity_issue_class(exc))
+        raise
+    attempt.succeed()
+    return result

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-mirrored-model-omits-new-member",
+  "violated_contract": "A hand-written model or policy that mirrors a source of truth — a generated wire DTO, a route mapping, an enum of destinations — must derive its membership from that source rather than restate it by hand. When the source gains a member and the mirror does not, the new member is dropped in silence: there is no decode error, no unhandled case, no failing test, because the mirror is still internally consistent. The feature reads as merely thin or as an intermittent UI bug rather than as a missing field, so it survives review and ships. #11834 moved the substance of a conversation summary out of `overview` into a new `sections` array; the generated clients decoded it and both hand-written domain models (Swift and Dart) never read the field, so every desktop and mobile summary silently rendered a one-paragraph compatibility stub for weeks. #11372 added `.activity` as a fourth Memory-hub view sharing the memories route, but the route-survival policy preserved members by naming one of them, so selecting Activity was rewritten back to Memories one frame after every click.",
+  "canonical_prevention": "Derive the mirror from the source instead of listing members: map over the generated DTO's field rather than copying a subset of it, and answer membership questions with the shared mapping (`MemoryHubSelectionPolicy.chatFirstRoute(for:) == .memories`) rather than an `==` against one named case. Where a reachability or capability claim depends on the membership, point the claim at the same value the UI renders from, so a dropped member fails a test instead of disappearing from the product — `ShellDestination.Reach.activityChipRow` is checked against `ActivityDestinationChip.reachableHubDestinations`, which is what the chip row itself iterates. Cover the serialization round trip, not only the decode: a field that decodes but is absent from `encode`/`toJson` renders once and returns empty after the next launch, which reads as a different bug entirely.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityDestinationChip.swift",
+    "desktop/macos/Desktop/Tests/ConversationSummarySectionsDecodeTests.swift",
+    "desktop/macos/Desktop/Tests/ChatFirstDestinationParityTests.swift",
+    "app/test/backend/structured_sections_test.dart"
+  ],
+  "evidence_prs": [11372, 11834],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Services/APIClient/**",
+    "desktop/macos/Desktop/Sources/MainWindow/**",
+    "app/lib/backend/schema/**"
+  ],
+  "status": "open"
+}

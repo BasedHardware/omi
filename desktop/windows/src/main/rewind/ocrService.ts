@@ -70,6 +70,16 @@ export function startRewindOcr(): void {
   timer = setInterval(() => void backfill(), BACKFILL_INTERVAL_MS)
 }
 
+/** Stop the backfill sweep. Must run before helperProcess.dispose() in
+ *  will-quit — otherwise a tick firing after dispose() lazily respawns a
+ *  fresh helper that nothing is left to kill, orphaning it past app exit. */
+export function stopRewindOcr(): void {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
 /** Test seam: run one sweep synchronously and drive/inspect the pending latch. */
 export const __rewindOcrTestHooks = {
   backfill,

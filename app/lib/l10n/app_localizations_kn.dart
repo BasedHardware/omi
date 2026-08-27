@@ -9873,6 +9873,20 @@ class AppLocalizationsKn extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
+  String get chatScopeToday => 'ಇಂದು';
+
+  @override
+  String get chatScopeThisWeek => 'ಈ ವಾರ';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title ಕುರಿತು';
+  }
+
+  @override
+  String get askAboutThisConversation => 'ಇದರ ಕುರಿತು ಕೇಳಿ';
+
+  @override
   String get sendRawAudioToOmi => 'Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸಿ';
 
   @override
@@ -9884,4 +9898,48 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'ಡಯಾಗ್ನೋಸ್ಟಿಕ್ಸ್ ಹಂಚಿಕೊಳ್ಳಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get appDisabledTitle => 'ಈ ಆ್ಯಪ್ ನಿಷ್ಕ್ರಿಯಗೊಂಡಿದೆ ಮತ್ತು ಅನುಸ್ಥಾಪಿಸಲಾಗುವುದಿಲ್ಲ.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'ಇದರ ಎಂಡ್‌ಪಾಯಿಂಟ್ ಸತತ 72 ಗಂಟೆಗಳ ಕಾಲ ವಿಫಲವಾಯಿತು, ಆದ್ದರಿಂದ ರವಾನೆಗಳನ್ನು ನಿಲ್ಲಿಸಲಾಯಿತು.';
+
+  @override
+  String get appDisabledGeneric => 'ಇದನ್ನು Omi ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿತು.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'ಮೊದಲು ಎಂಡ್‌ಪಾಯಿಂಟ್ ಸರಿಪಡಿಸಿ — ಮರು-ಸಕ್ರಿಯಗೊಳಿಸುವಾಗ ಕಾನ್ಫಿಗರ್ ಮಾಡಿದ ಪ್ರತಿ URL ಅನ್ನು ಮತ್ತೆ ಪರಿಶೀಲಿಸಲಾಗುತ್ತದೆ.';
+
+  @override
+  String get appReEnable => 'ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಿ';
+
+  @override
+  String get appReEnableFailedTitle => 'ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get appReEnableFailedBody => 'ಈ ಆ್ಯಪ್ ಅನ್ನು ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date ರಂದು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'ಕೊನೆಯ ದೋಷ: $error';
+  }
+
+  @override
+  String get prerecordedTranscript => 'ಮುಂಚಿತವಾಗಿ ರೆಕಾರ್ಡ್';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ, ಆದ್ದರಿಂದ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ವರ್ಗಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು Pendant ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಿ.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant ನ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ ಮತ್ತು ಅದು ಇನ್ನೂ ರೆಕಾರ್ಡಿಂಗ್ ಮೋಡ್‌ನಲ್ಲಿದೆ, ಆದ್ದರಿಂದ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ವರ್ಗಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು Pendant ನ ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಿ.';
 }

@@ -146,6 +146,16 @@ def test_memory_enabled_off_blocks_intake_like_mode_off(service_mod, monkeypatch
     assert exc_info.value.detail == "Memory writes are globally paused"
 
 
+def test_prompt_cache_invalidation_also_invalidates_owner_rejection_feedback(service_mod, monkeypatch):
+    service = service_mod.MemoryService(db_client=_Db())
+    clear_rejections = MagicMock()
+    monkeypatch.setattr(service_mod, "clear_rejected_memory_feedback_cache", clear_rejections)
+
+    service._invalidate_prompt_cache("uid-test")
+
+    clear_rejections.assert_called_once_with("uid-test")
+
+
 def test_historical_adapter_uses_injected_firestore_client(service_mod, monkeypatch):
     db = _Db()
     service = service_mod.MemoryService(db_client=db)
@@ -197,7 +207,8 @@ def test_mixed_read_does_not_hydrate_canonical_identity_from_historical_stub(ser
     )
     service.history.read = MagicMock(return_value=[colliding_stub, legacy_stub])
 
-    def hydrate_page_stubs(_uid, records):
+    def hydrate_page_stubs(_uid, records, *, budget=None):
+        del budget
         assert [record.memory.id for record in records] == ["legacy"]
         return [_historical(service_mod, "legacy", content="legacy-full")]
 
@@ -406,6 +417,7 @@ def test_offset_merge_fetches_a_complete_bounded_prefix(service_mod):
         "offset": 0,
         "device_scope_request": None,
         "hydrate": False,
+        "budget": None,
     }
 
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime
 from typing import Any
 
 from google.api_core.exceptions import InvalidArgument
@@ -22,6 +23,7 @@ from utils.cloud_tasks import (
     is_listen_finalization_dispatch_enabled,
 )
 from utils.metrics import (
+    LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL,
     LISTEN_FINALIZATION_DEAD_LETTER_TOTAL,
     LISTEN_FINALIZATION_DURABLE_JOBS,
     LISTEN_FINALIZATION_JOB_STATUS,
@@ -37,6 +39,7 @@ from utils.conversations.meeting_receipt import (
 from utils.observability.journeys import (
     record_capture_finalization_reconciliation,
     record_capture_finalization_terminal,
+    record_conversation_finalization_client_terminal,
 )
 
 logger = logging.getLogger(__name__)
@@ -286,6 +289,138 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
     return result
 
 
+def is_byok_abandonment_sweep_enabled() -> bool:
+    """Gate the BYOK abandonment sweep; on by default.
+
+    A resumed BYOK job is reachable by no consumer -- the Cloud Tasks worker
+    refuses ``requires_byok`` and the reconciler filters on a
+    ``reconcile_after_at`` those paths delete -- so leaving the sweep off does
+    not hold the row in a recoverable state, it only defers its disposition
+    while the conversation stays in ``processing``. There is also no
+    environment that can rehearse it: dev holds zero BYOK jobs, so shipping
+    this dark would buy delay rather than evidence. The bounded age in
+    ``get_byok_abandoned_after`` is the real safety control; this switch exists
+    to stop the sweep, not to stage it.
+    """
+    return os.getenv('LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED', 'true').strip().lower() in {
+        '1',
+        'true',
+        'yes',
+        'on',
+    }
+
+
+def _record_byok_abandonment_journey(job: dict[str, Any]) -> None:
+    """Terminalize the journey for a job that will never be attempted again."""
+    try:
+        created_at = job.get('created_at')
+        record_capture_finalization_terminal('failure', created_at if isinstance(created_at, datetime) else None)
+        record_conversation_finalization_client_terminal('failure', job, issue_class='incomplete_attempt')
+    except Exception:
+        # The durable terminal is authoritative; a best-effort metric must never
+        # change it.
+        logger.exception('listen finalization byok abandonment metric failed')
+
+
+def reconcile_abandoned_byok_finalization_jobs(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int]:
+    """Give stranded BYOK finalization jobs an owner and a truthful terminal.
+
+    A ``requires_byok`` job is executable only inside a live pusher session that
+    presents the user's request-scoped keys. Both BYOK transitions
+    (``_resume_blocked_byok_job_txn`` and ``_mark_finalization_retryable_txn``)
+    delete ``reconcile_after_at`` by design, so the row is invisible to the
+    credential-free replay query, and ``_claim_finalization_job_txn`` separately
+    refuses ``requires_byok`` jobs for the Cloud Tasks worker. Once the session
+    ends the row is owned by nobody: it accumulates in ``queued`` forever, and
+    the conversation it binds can sit on ``processing`` forever with it.
+
+    This sweep is **disposition and visibility only**. It never replays a BYOK
+    finalization, never substitutes Omi platform credentials, and never touches a
+    ``blocked_byok`` row (that state is still legitimately waiting for a live
+    session, and it is already visible on its own gauge). An unownable row older
+    than ``get_byok_abandoned_after()`` is dead-lettered with the distinct
+    ``byok_session_abandoned`` failure code, and the bound conversation is closed
+    only when it is still ``processing`` and still bound to this exact job.
+
+    Work is bounded per invocation (fixed page size, capped scan) and eventual
+    coverage comes from a persisted, rotated CAS cursor, exactly like the stale
+    bare-``processing`` sweep. Terminal transitions move the projection shard
+    deltas, so the metric source of truth stays correct.
+    """
+    result: dict[str, int] = {'abandoned': 0, 'conversations_closed': 0, 'skipped': 0, 'error': 0}
+    if not is_byok_abandonment_sweep_enabled():
+        return result
+
+    abandoned_after = jobs_db.get_byok_abandoned_after()
+    try:
+        cursor = jobs_db.get_byok_abandonment_sweep_cursor(firestore_client=firestore_client)
+    except Exception:
+        logger.exception('byok abandonment sweep cursor read failed; sweeping from the top')
+        cursor = {'resume_after_path': None, 'generation': 0}
+    _path = cursor.get('resume_after_path')
+    resume_after_path: str | None = _path if isinstance(_path, str) else None
+    expected_generation = int(cursor.get('generation') or 0)
+
+    try:
+        sweep = jobs_db.get_abandoned_byok_job_candidates(
+            abandoned_after=abandoned_after,
+            limit=limit,
+            resume_after_path=resume_after_path,
+            firestore_client=firestore_client,
+        )
+    except Exception:
+        logger.exception('byok abandonment query failed')
+        LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='error').inc()
+        return result | {'error': 1}
+
+    try:
+        jobs_db.advance_byok_abandonment_sweep_cursor(
+            expected_generation,
+            None if sweep['exhausted'] else sweep['resume_after_path'],
+            firestore_client=firestore_client,
+        )
+    except Exception:
+        logger.exception('byok abandonment sweep cursor advance failed; coverage is still guaranteed')
+
+    for candidate in sweep['candidates']:
+        job_id = candidate.get('job_id')
+        if not isinstance(job_id, str) or not job_id:
+            result['skipped'] += 1
+            LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='skipped').inc()
+            continue
+        try:
+            disposition = jobs_db.abandon_byok_finalization_job(
+                job_id,
+                expected_status=str(candidate.get('status') or ''),
+                expected_dispatch_generation=int(candidate.get('dispatch_generation') or 1),
+                expected_lease_epoch=int(candidate.get('lease_epoch') or 0),
+                abandoned_after=abandoned_after,
+                firestore_client=firestore_client,
+            )
+        except Exception:
+            # An unexpected per-row failure is an error, distinct from the
+            # expected CAS fencing skip below.
+            logger.exception('byok abandonment failed for one job')
+            result['error'] += 1
+            LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='error').inc()
+            continue
+        if disposition['status'] != 'abandoned':
+            result['skipped'] += 1
+            LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='skipped').inc()
+            continue
+        result['abandoned'] += 1
+        if disposition['conversation_outcome'] == 'closed':
+            result['conversations_closed'] += 1
+            LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='abandoned_conversation_closed').inc()
+        else:
+            LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='abandoned_bookkeeping').inc()
+        _record_byok_abandonment_journey(candidate)
+
+    if result['abandoned']:
+        logger.info('byok finalization abandonment sweep: %s', result)
+    return result
+
+
 def final_attempt_failed(
     job_id: str, dispatch_generation: int, lease_epoch: int, retry_count: int, *, firestore_client: Any = None
 ) -> bool:
@@ -302,6 +437,8 @@ def final_attempt_failed(
             job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
             accepted_at = job.get('created_at') if job else None
             record_capture_finalization_terminal('failure', accepted_at)
+            if job is not None:
+                record_conversation_finalization_client_terminal('failure', job, issue_class='unknown')
         except Exception:
             # Dead-lettering is authoritative; a best-effort metric lookup must
             # never change its terminal outcome.

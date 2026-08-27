@@ -1,3 +1,0 @@
-{
-  "change": "Kept macOS release retries to at most one candidate per hour even while the previous build is still running"
-}

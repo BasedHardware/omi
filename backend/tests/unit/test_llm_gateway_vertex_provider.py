@@ -8,7 +8,12 @@ import pytest
 from llm_gateway.gateway import providers as provider_module
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.credentials import build_byok_credential_context, build_omi_managed_credential_context
-from llm_gateway.gateway.providers import ProviderFailure, VertexAccessTokenSupplier, VertexGeminiProvider
+from llm_gateway.gateway.providers import (
+    ProviderFailure,
+    VertexAccessTokenSupplier,
+    VertexGeminiProvider,
+    _vertex_request,
+)
 from llm_gateway.gateway.schemas import FailureClass, ProviderRef
 from llm_gateway.routers import dependencies
 from utils.executors import critical_executor
@@ -277,3 +282,123 @@ async def test_gateway_registry_uses_native_vertex_for_gemini():
     finally:
         await registry.aclose()
         dependencies.get_provider_registry.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# Multimodal content
+#
+# These exist because the Vertex translator used to run every message through
+# _text_content(), which keeps only `type == "text"` parts. An image attached to
+# a Gemini request was therefore dropped without a word, and the model answered
+# about content it had never been sent. utils/screen_frames/judge.py is a privacy
+# gate that decides whether a screenshot may leave the machine; a confident
+# verdict from a model that received no image is a fail-OPEN, because the judge's
+# fail-closed handling only triggers on errors.
+# ---------------------------------------------------------------------------
+
+_PIXEL = "iVBORw0KGgoAAAANSUhEUg=="
+
+
+def test_vertex_request_forwards_an_inline_image_instead_of_dropping_it():
+    payload = _vertex_request(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "is this safe to store?"},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{_PIXEL}"}},
+                    ],
+                }
+            ]
+        },
+    )
+
+    parts = payload["contents"][0]["parts"]
+    assert parts[0] == {"text": "is this safe to store?"}
+    assert parts[1] == {"inlineData": {"mimeType": "image/jpeg", "data": _PIXEL}}
+
+
+def test_vertex_request_refuses_a_remote_image_url_rather_than_answering_blind():
+    # Vertex cannot fetch an arbitrary https image the way OpenAI can. Silently
+    # dropping it would send the prompt alone.
+    with pytest.raises(ProviderFailure) as exc:
+        _vertex_request(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "image_url", "image_url": {"url": "https://example.com/a.jpg"}}],
+                    }
+                ]
+            },
+        )
+    assert exc.value.failure_class is FailureClass.CAPABILITY_MISMATCH
+
+
+def test_vertex_request_refuses_content_parts_it_cannot_represent():
+    with pytest.raises(ProviderFailure) as exc:
+        _vertex_request(
+            {"messages": [{"role": "user", "content": [{"type": "input_audio", "input_audio": {}}]}]},
+        )
+    assert exc.value.failure_class is FailureClass.CAPABILITY_MISMATCH
+
+
+def test_vertex_request_refuses_an_image_in_the_system_instruction():
+    with pytest.raises(ProviderFailure) as exc:
+        _vertex_request(
+            {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": [{"type": "image_url", "image_url": {"url": f"data:image/png;base64,{_PIXEL}"}}],
+                    },
+                    {"role": "user", "content": "hi"},
+                ]
+            },
+        )
+    assert exc.value.failure_class is FailureClass.CAPABILITY_MISMATCH
+
+
+def test_vertex_request_still_handles_plain_string_and_system_text():
+    payload = _vertex_request(
+        {
+            "messages": [
+                {"role": "system", "content": "be terse"},
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": [{"type": "text", "text": "hi"}]},
+            ]
+        },
+    )
+    assert payload["systemInstruction"]["parts"] == [{"text": "be terse"}]
+    assert payload["contents"][0] == {"role": "user", "parts": [{"text": "hello"}]}
+    assert payload["contents"][1] == {"role": "model", "parts": [{"text": "hi"}]}
+
+
+def test_vertex_request_accepts_a_data_url_with_rfc2397_parameters():
+    """`data:image/jpeg;charset=utf-8;base64,...` is a valid data URL and browsers
+    emit them. Rejecting it would be the mirror of the bug this module fixed:
+    refusing an image that can in fact be represented."""
+    payload = _vertex_request(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;charset=utf-8;base64,{_PIXEL}"}}
+                    ],
+                }
+            ]
+        }
+    )
+    assert payload["contents"][0]["parts"][0] == {"inlineData": {"mimeType": "image/png", "data": _PIXEL}}
+
+
+def test_vertex_request_never_emits_a_message_with_zero_parts():
+    """Vertex rejects a Content with an empty parts array, and the previous
+    text-only implementation always produced [{'text': ''}] here. An assistant
+    tool-call turn carries content=None, so this is reachable as soon as a
+    multi-turn Gemini feature exists."""
+    payload = _vertex_request({"messages": [{"role": "assistant", "content": None}, {"role": "user", "content": []}]})
+    assert payload["contents"][0] == {"role": "model", "parts": [{"text": ""}]}
+    assert payload["contents"][1] == {"role": "user", "parts": [{"text": ""}]}

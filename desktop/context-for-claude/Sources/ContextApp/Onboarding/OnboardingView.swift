@@ -1145,8 +1145,15 @@ struct OnboardingView: View {
         // Every "continue" goes through here, so the funnel is measured at the one place the
         // ordering lives. Ordinal only: the step *names* are product copy that changes every
         // release, and a funnel keyed on copy resets every release.
+        //
+        // **The total is this run's itinerary, not `allCases`.** A signed-in install never sees the
+        // sign-in card, so its itinerary is shorter *and* its indices skip that card's raw value —
+        // reporting 7 for every run put a permanent step in the funnel that a whole population could
+        // not reach, which reads as a cliff rather than as a card they were never shown. Recomputed
+        // on every transition for the same reason `advance()` recomputes it: `.signIn` deletes
+        // itself from the itinerary by succeeding, mid-run.
         ContextAnalytics.recordOnboardingStep(
-            index: next.rawValue, of: OnboardingStep.allCases.count)
+            index: next.rawValue, of: OnboardingStep.itinerary(signedIn: auth.isSignedIn).count)
         withAnimation(stepAnimation) { step = next }
         beginStep()
     }

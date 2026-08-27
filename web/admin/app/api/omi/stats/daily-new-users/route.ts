@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { getUserGrowthSeries, sliceSeries } from "@/lib/services/user-growth";
-import { getPayload, setPayload } from "@/lib/payload-cache";
+import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
@@ -28,12 +28,12 @@ export async function GET(request: NextRequest) {
 
     const cached = await getPayload<ReturnType<typeof sliceSeries>>(key);
     if (cached) {
-      return NextResponse.json(cached.data);
+      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
     }
 
     const payload = await computeDailyNewUsers(daysParam);
     await setPayload(key, payload);
-    return NextResponse.json(payload);
+    return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (error: any) {
     console.error("Daily new users error:", error);
     return NextResponse.json(

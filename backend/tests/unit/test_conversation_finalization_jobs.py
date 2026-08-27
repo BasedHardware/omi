@@ -102,7 +102,7 @@ def _admit_finalization(_conversation_data: dict) -> jobs.FinalizationAdmission:
 
 def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material():
     transaction = _Transaction()
-    conversation_ref = _conversation()
+    conversation_ref = _conversation({'client_platform': 'android'})
     collection = _Collection({})
 
     intent = jobs._create_or_get_finalization_intent_txn(
@@ -125,7 +125,7 @@ def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(
     assert job['dispatch_generation'] == 1
     assert job['status'] == 'queued'
     assert job['fanout_key'] == 'fanout-key'
-    assert job['fanout_status'] == 'pending'
+    assert (job['fanout_status'], job['client_platform']) == ('pending', 'android')
     forbidden = {'byok_keys', 'transcript', 'transcript_segments', 'authorization', 'raw_error'}
     assert forbidden.isdisjoint(job)
     assert transaction.updates[0][1]['status'] == 'processing'
@@ -934,29 +934,39 @@ def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregat
             return Ref()
 
     class JobQuery:
-        def where(self, field, operator, _value):
-            assert (field, operator) == ('reconcile_after_at', '<=')
+        def __init__(self):
+            self.filtered_statuses: list[str] = []
+
+        def where(self, *, filter):
+            assert (filter.field_path, filter.op_string) == ('status', '==')
+            self.filtered_statuses.append(filter.value)
+            return self
+
+        def order_by(self, field):
+            assert field == 'created_at'
             return self
 
         def limit(self, value):
-            assert value == 100
+            assert value == 1
             return self
 
         def stream(self):
             return iter(())
 
     projection = Projection()
+    job_query = JobQuery()
 
     class Client:
         def collection(self, name):
             if name == jobs.FINALIZATION_PROJECTION_COLLECTION:
                 return projection
             assert name == jobs.FINALIZATION_JOBS_COLLECTION
-            return JobQuery()
+            return job_query
 
     summary = jobs.get_finalization_job_summary(firestore_client=Client())
 
     assert len(projection.read_ids) == jobs.FINALIZATION_PROJECTION_SHARD_COUNT
+    assert sorted(job_query.filtered_statuses) == sorted(jobs.NONTERMINAL_JOB_STATUSES)
     assert summary == {
         'accepted': 8,
         'success': 1,
@@ -971,6 +981,64 @@ def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregat
         'terminal_unknown': 0,
         'oldest_nonterminal_age_seconds': 0.0,
     }
+
+
+def test_oldest_nonterminal_age_sees_jobs_that_carry_no_reconcile_after_at():
+    """A BYOK job is invisible to ``reconcile_after_at`` and must still age.
+
+    ``_resume_blocked_byok_job_txn`` and the BYOK retry path delete
+    ``reconcile_after_at`` outright, so the old due-page implementation reported
+    0 while those jobs sat unfinished indefinitely.  Asking ``status`` directly
+    is what makes them visible.
+    """
+
+    created_at = datetime.now(timezone.utc) - timedelta(days=30)
+
+    class Snapshot:
+        def __init__(self, data):
+            self.exists = data is not None
+            self._data = data
+
+        def to_dict(self):
+            return self._data
+
+    class Projection:
+        def document(self, doc_id):
+            class Ref:
+                def get(self):
+                    return Snapshot(None)
+
+            return Ref()
+
+    class JobQuery:
+        def __init__(self):
+            self._status: str | None = None
+
+        def where(self, *, filter):
+            self._status = filter.value
+            return self
+
+        def order_by(self, field):
+            return self
+
+        def limit(self, value):
+            return self
+
+        def stream(self):
+            if self._status != 'queued':
+                return iter(())
+            # No ``reconcile_after_at`` key at all — exactly the resumed BYOK shape.
+            return iter([Snapshot({'status': 'queued', 'requires_byok': True, 'created_at': created_at})])
+
+    class Client:
+        def collection(self, name):
+            if name == jobs.FINALIZATION_PROJECTION_COLLECTION:
+                return Projection()
+            return JobQuery()
+
+    summary = jobs.get_finalization_job_summary(firestore_client=Client())
+
+    assert summary['oldest_nonterminal_age_seconds'] > 29 * 24 * 3600
 
 
 class _BoundedReplayCollection:

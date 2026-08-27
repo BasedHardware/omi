@@ -70,7 +70,6 @@ jobs:
       - name: Decide whether the triggering commit can affect the backend deployment
         id: scope
         env:
-          GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
@@ -79,60 +78,13 @@ jobs:
             exit 1
           fi
 
-          # The scope checkout is intentionally shallow. A stale Release
-          # Eligibility result may be a green no-op only after two bounded,
-          # read-only GitHub API proofs bind the current main and comparison
-          # identities. Any API, JSON, or identity ambiguity falls through to
-          # the privileged current-main source-admission guard below.
-          api_base="${GITHUB_API_URL:-https://api.github.com}"
-          ref_path="$(mktemp)"
-          compare_path="$(mktemp)"
-          trap 'rm -f "$ref_path" "$compare_path"' EXIT
-          api_headers=(
-            -H "Authorization: Bearer $GH_TOKEN"
-            -H "Accept: application/vnd.github+json"
-            -H "X-GitHub-Api-Version: 2022-11-28"
-          )
-          ref_status="$(curl --silent --show-error --output "$ref_path" --write-out '%{http_code}' \
-            "${api_headers[@]}" \
-            "$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/main" || true)"
-          if [[ "$ref_status" != "200" ]] || ! main_sha="$(jq -er '
-            if .ref == "refs/heads/main" and .object.type == "commit" and (.object.sha | test("^[0-9a-f]{40}$"))
-            then .object.sha else error("unexpected main ref identity") end
-          ' "$ref_path" 2>/dev/null)"; then
-            echo "applies=true" >> "$GITHUB_OUTPUT"
-            {
-              echo "### Backend development deploy scope"
-              echo "In scope: supersession API proof was unavailable or ambiguous; preserving fail-closed source admission."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          compare_status="$(curl --silent --show-error --output "$compare_path" --write-out '%{http_code}' \
-            "${api_headers[@]}" \
-            "$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha" || true)"
-          if [[ "$compare_status" != "200" ]] || ! comparison="$(jq -er \
-            --arg release_sha "$RELEASE_SHA" \
-            --arg main_sha "$main_sha" '
-              if .base_commit.sha == $release_sha and .head_commit.sha == $main_sha and
-                (.status == "behind" or .status == "ahead" or .status == "identical" or .status == "diverged")
-              then .status else error("unexpected comparison identity") end
-            ' "$compare_path" 2>/dev/null)"; then
-            echo "applies=true" >> "$GITHUB_OUTPUT"
-            {
-              echo "### Backend development deploy scope"
-              echo "In scope: supersession API proof was unavailable or ambiguous; preserving fail-closed source admission."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if [[ "$comparison" == "behind" ]]; then
-            echo "applies=false" >> "$GITHUB_OUTPUT"
-            {
-              echo "### Backend development deploy superseded no-op"
-              echo "Green no-op: GitHub compare confirmed triggering SHA $RELEASE_SHA is behind current main $main_sha."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
+          # Supersession is deliberately NOT decided here any more. It used to
+          # green-no-op any triggering SHA that current main had moved past,
+          # which strands a backend change whenever an unrelated commit merges
+          # first: the backend commit no-ops for being behind, and the newer
+          # commit no-ops because its own diff is unrelated, so the change
+          # never deploys. Admission now resolves the newest eligible commit
+          # instead, which subsumes supersession without that hole.
           if ! parent_sha="$(git rev-parse "${RELEASE_SHA}^" 2>/dev/null)"; then
             # An unavailable parent is uncertain scope: retain the existing
             # exact-SHA admission and deployment path rather than skip.
@@ -175,6 +127,9 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository
     environment: development
     permissions:
+      # actions:read lists Release Eligibility proofs, exactly as the manual
+      # deploy lane's readiness job already does.
+      actions: 'read'
       contents: 'read'
     runs-on: ubuntu-latest
     outputs:
@@ -189,22 +144,69 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Verify Release Eligibility proof is current main
+      - name: Resolve and verify the newest proven main source
         id: admitted_source
         env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
           RELEASE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
-          checkout_sha="$(git rev-parse --verify HEAD)"
+
+          # Deploy the newest commit on main that carries a first-attempt,
+          # successful Release Eligibility proof, not the commit that happened
+          # to trigger this run. Concurrent runs then converge on one target
+          # instead of racing, and a revert can never be undone by a late run
+          # for the commit it reverted. This mirrors the proof lookup the
+          # manual deploy lane already performs.
+          api_base="${GITHUB_API_URL:-https://api.github.com}"
+          runs_path="$(mktemp)"
+          trap 'rm -f "$runs_path"' EXIT
+          # --fail makes an HTTP error a non-zero exit, which set -e turns into
+          # a failed admission. There is deliberately no status capture and no
+          # error suppression: an unreadable proof listing must refuse to
+          # deploy, never fall through to a weaker rule.
+          curl --silent --show-error --fail --output "$runs_path" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$api_base/repos/$GITHUB_REPOSITORY/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=success&per_page=50"
+
+          admitted_sha=''
+          while read -r candidate_sha candidate_attempt; do
+            [[ "$candidate_attempt" == "1" ]] || continue
+            [[ "$candidate_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+            git cat-file -e "${candidate_sha}^{commit}" 2>/dev/null || continue
+            if git merge-base --is-ancestor "$candidate_sha" "$main_sha"; then
+              admitted_sha="$candidate_sha"
+              break
+            fi
+          done < <(jq -r '.workflow_runs[] | "\(.head_sha) \(.run_attempt)"' "$runs_path")
+          if [[ -z "$admitted_sha" ]]; then
+            echo "::error title=No proven main source::No successful first-attempt Release Eligibility proof is reachable from current main."
+            exit 1
+          fi
+
+          if git merge-base --is-ancestor "$admitted_sha" "$main_sha"; then
+            sha_is_ancestor_of_main=true
+          else
+            sha_is_ancestor_of_main=false
+          fi
+          if git merge-base --is-ancestor "$RELEASE_SHA" "$admitted_sha"; then
+            trigger_is_ancestor_of_sha=true
+          else
+            trigger_is_ancestor_of_sha=false
+          fi
           python3 .github/scripts/verify_auto_backend_release_admission.py \
-            --sha "$RELEASE_SHA" \
+            --sha "$admitted_sha" \
+            --trigger-sha "$RELEASE_SHA" \
             --main-sha "$main_sha" \
-            --checkout-sha "$checkout_sha" \
-            --run-attempt "$RELEASE_RUN_ATTEMPT"
-          printf 'admitted_sha=%s\n' "$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+            --run-attempt "$RELEASE_RUN_ATTEMPT" \
+            --sha-is-ancestor-of-main "$sha_is_ancestor_of_main" \
+            --trigger-is-ancestor-of-sha "$trigger_is_ancestor_of_sha"
+          printf 'admitted_sha=%s\n' "$admitted_sha" >> "$GITHUB_OUTPUT"
 
       - name: Require read-only Firestore credentials
         env:

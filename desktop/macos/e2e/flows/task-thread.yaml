@@ -7,6 +7,11 @@ covers:
   # scenario-13-task-thread-e2e.sh opens the real TaskChatPanel for first,
   # second, and resumed workstream projections and captures each mounted UI.
   - desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift
+  # The panel the scenario opens is driven by TaskChatCoordinator: it resolves
+  # the workstream, mounts the thread, and sends into it. The first/second/
+  # resumed projections above are its behaviour.
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
 preconditions:
   - named_non_production_bundle_ui_lane
   - task_thread_scenario_13_fixture_available

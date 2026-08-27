@@ -79,13 +79,15 @@ final class OmiOnboardingSoundTests: XCTestCase {
   @MainActor
   private func makeController(
     output: FakeSoundOutput,
-    systemUISoundsEnabled: @escaping () -> Bool = { true }
+    systemUISoundsEnabled: @escaping () -> Bool = { true },
+    scheduleCap: @escaping (TimeInterval, @escaping @Sendable () -> Void) -> Void = { _, _ in }
   ) -> OmiSoundController {
     OmiSoundController(
       output: output,
       locator: OmiSoundAssetLocator(roots: [soundsDirectory]),
       systemUISoundsEnabled: systemUISoundsEnabled,
-      defaults: defaults)
+      defaults: defaults,
+      scheduleCap: scheduleCap)
   }
 
   // MARK: - Finding the files
@@ -319,5 +321,58 @@ final class OmiOnboardingSoundTests: XCTestCase {
     XCTAssertFalse(controller.isMusicPlaying)
     XCTAssertFalse(output.events.contains(.startLoop(.pad, 0)))
     XCTAssertEqual(defaults.object(forKey: OmiSoundController.musicEnabledDefaultsKey) as? Bool, true)
+  }
+
+  // MARK: - The bed is capped
+
+  /// The regression: the bed loops from one buffer with `.loops`, so nothing in the
+  /// cinematic ever stopped it and it played for the life of the process.
+  @MainActor
+  func testMusicFadesItselfOutWhenTheCapFires() throws {
+    try writeAllAssets()
+    let output = FakeSoundOutput()
+    var fire: (() -> Void)?
+    var scheduledDelay: TimeInterval?
+    let controller = makeController(
+      output: output,
+      scheduleCap: { delay, body in
+        scheduledDelay = delay
+        fire = body
+      })
+
+    controller.startMusic(fadeIn: 0)
+    XCTAssertTrue(controller.isMusicPlaying)
+    XCTAssertEqual(scheduledDelay, OmiSoundController.maxMusicDuration)
+    XCTAssertFalse(
+      output.events.contains(.stopLoop(OmiOnboardingMusic.defaultFadeOut)),
+      "the bed must not be cut before its allowance is spent")
+
+    fire?()
+
+    XCTAssertFalse(controller.isMusicPlaying)
+    XCTAssertTrue(output.events.contains(.stopLoop(OmiOnboardingMusic.defaultFadeOut)))
+  }
+
+  /// A cap left over from an earlier run must not cut a bed someone started since.
+  @MainActor
+  func testAStaleCapDoesNotStopALaterBed() throws {
+    try writeAllAssets()
+    let output = FakeSoundOutput()
+    var pending: [() -> Void] = []
+    let controller = makeController(
+      output: output, scheduleCap: { _, body in pending.append(body) })
+
+    controller.startMusic(fadeIn: 0)
+    controller.stopMusic(fadeOut: 0)
+    controller.startMusic(fadeIn: 0)
+
+    pending.first?()
+
+    XCTAssertTrue(controller.isMusicPlaying, "the first run's cap must not stop the second bed")
+  }
+
+  @MainActor
+  func testTheCapIsTenSeconds() {
+    XCTAssertEqual(OmiSoundController.maxMusicDuration, 10)
   }
 }

@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-08-19 (durable meeting receipt and reconciliation)
+> Last updated: 2026-08-23 (provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -17,7 +17,10 @@ Audio frames (`101`) require the four-byte opcode, an eight-byte timestamp, and
 PCM payload; JSON opcodes require an object payload, with transcript, finalization,
 and speaker-sample fields validated before they enter background queues. Malformed
 or unknown frames close the session with a protocol error instead of reaching
-application processing.
+application processing. The backend-to-Pusher WebSocket query also carries the
+bounded `client_kind` resolved from the listen connection headers. Pusher forwards
+that bounded value to webhook delivery and inline finalization journey metrics;
+it never forwards a raw client header as a metric label.
 
 Transcript, speaker-sample, audio-webhook, and private-cloud queues are bounded.
 Buffered audio also shares a per-session byte budget, so variable-size payloads
@@ -45,6 +48,14 @@ before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
 utterances before longer ones.
 
+Provider speaker labels are connection-local. Before a live segment enters a
+conversation, listen stamps the actual `stt_provider` and an opaque
+`speaker_id_scope`. The scope advances whenever the provider changes and is
+new for every client reconnect. A conversation-local allocator hydrates the
+persisted IDs, then maps `(speaker_id_scope, speaker label)` to the next small
+integer `speaker_id`. Therefore Deepgram `SPEAKER_0`, Modulate `SPEAKER_00`, and
+a reconnect that restarts either provider's numbering cannot share an identity.
+
 Pre-recorded STT results from providers such as Modulate and Parakeet are
 normalized before they are written as transcript segments. Consecutive entries
 from the same speaker may be merged when their gap is under 30 seconds, but no
@@ -54,6 +65,11 @@ before merging — each slice is at most 30 seconds — and its text is distribu
 evenly across those slices, so timestamps stay proportional to the text they
 carry. A slice is never emitted without text: an entry with fewer words than
 slices is split into as many slices as it has words.
+
+Post-processing stores the normalized result under the `prerecorded` transcript
+model and exposes that key through the transcript comparison API. The former
+`fal_whisperx` collection is a legacy read path only and is not the active
+post-processing output.
 
 Every `/v4/listen` stream receives a durable, user-scoped `recording_session`
 resource before it creates or resumes a conversation. A client-generated
@@ -125,6 +141,22 @@ STT segments or photos, the late write is fenced rather than recreating the
 terminal parent; the listen handler opens one fresh generation and replays that
 buffer once. The first-segment `started_at` value commits in that same content
 transaction, so this recovery cannot leave a timestamp-only write behind.
+
+Deleting an empty generation also sweeps its private-cloud audio, but only
+when that generation never registered any. Emptiness is decided from
+transcript segments, photos and `has_content`; `audio_files` is deliberately
+not part of the test, so a recording whose STT produced nothing while the
+provider was failing still reaches this delete with real audio registered on
+it. Those bytes are the last surviving copy of that recording and are kept, at
+the cost of leaving a prefix under `chunks/{uid}/{conversation_id}/` that no
+Firestore row points at any more — the bucket has no lifecycle rule there, so
+retained audio is retained until something reclaims it deliberately. Only a
+generation with no registered audio is swept, because nothing else could have
+referenced those chunks. The decision reads the snapshot the delete
+transaction actually removed rather than re-fetching the document: a fetch
+beforehand races the pusher's own registration write, and losing that race in
+the other direction would delete a recording that had just become
+referenceable.
 
 ## Capture-device provenance
 
@@ -311,6 +343,26 @@ sequenceDiagram
     end
 ```
 
+Before discard and structured extraction, the finalizer renders a separate
+segment-ID-labelled task transcript. A pure matcher marks evidence-backed
+English `Hey Omi` / `Hey Omie` / `Hey Omni` forms inline, including adjacent segments within
+two seconds and tokens welded to following words. The discard model still
+adjudicates whether a short marked utterance is meaningful, and the structured
+extractor still decides whether it is a concrete command; the marker never
+creates a task by itself.
+
+When and only when the matcher found a phrase, a separately framed,
+extended-reasoning classifier receives the full marked transcript, matched
+segment IDs, content-free extraction references, and speaker labels. Its
+validated discrete verdict and the extractor must agree before an intersecting
+item keeps `explicit_command`; rejection demotes the item to the confidence
+floor and review path. A `task_command` verdict can promote an intersecting
+non-explicit extraction, but it never synthesizes a missing item or changes
+capture confidence. Non-intersecting ambient items are untouched. Question
+verdicts are measured but deliberately produce nothing in v1 because the task
+extractor and capture policy have no question-routing destination. This path
+has no realtime wake-word state or notification surface.
+
 ### 2.1 Durable finalization ownership
 
 `conversation_finalization_jobs/{job_id}` is the finalization ledger. It is
@@ -460,8 +512,28 @@ sequenceDiagram
         Backend->>Backend: Set is_user=True on segments via speaker_to_person_map
     else Match is known person
         Backend-->>Client: {type: "speaker_label_suggestion", person_id, distance}
+    else No enrolled voiceprint matches
+        Backend->>Firestore: Persist speaker_identity_status=no_match
     end
 ```
+
+`is_user` remains the compatibility projection, while
+`speaker_identity_status` preserves its evidence state: `user`, `not_user`,
+`no_match`, or `unknown`. A failed enrollment match is `no_match`, not a
+confident `not_user`; downstream identity-sensitive consumers must keep those
+states distinct.
+
+Parakeet embedding diarization does not use the enrollment threshold. Short
+in-session clips use a clustering cosine-distance threshold of `0.60`, while
+voiceprint verification remains `0.45`. Clustering creates at most eight
+centroids per stream. After the cap, a miss is merged into its nearest
+centroid; the merge is reported as a degraded fallback (`omi_fallback_total`,
+`reason=capacity_full`, or a log line in the standalone Parakeet image) and
+the miss does not update that centroid's running mean, so a capped speaker
+cannot drag another speaker's centroid away. The segment is never dropped and
+no overflow speaker ID is invented. Backend-side defaults use
+`SPEAKER_CLUSTERING_THRESHOLD` / `SPEAKER_CLUSTERING_MAX_SPEAKERS`; the
+Parakeet service uses the `PARAKEET_`-prefixed equivalents.
 
 ## 5. Private Cloud Sync (Audio Upload)
 
@@ -499,7 +571,7 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 
 | Type | Format | Example |
 |------|--------|---------|
-| Transcripts | JSON array | `[{id, text, speaker, speaker_id, is_user, start, end}, ...]` |
+| Transcripts | JSON array | `[{id, text, speaker, speaker_id, speaker_id_scope, stt_provider, is_user, speaker_identity_status, start, end}, ...]` |
 | Events | JSON object | `{type: "...", ...}` |
 | Keepalive | Plain text | `"ping"` (not JSON — filter before parsing) |
 
@@ -532,7 +604,9 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 | `BG_DRAIN_TIMEOUT` | 30s | `pusher.py`, `routers/listen/contracts.py` | Grace period for background tasks to drain after disconnect before force-cancel |
 | `lifecycle_manager` poll | 5s | `routers/listen/conversations.py` | Check `finished_at` interval |
 | Pusher audio batch | 60s | pusher | GCS upload batch size |
-| Speaker match threshold | 0.45 | `routers/listen/speakers.py` | Cosine distance cutoff |
+| Speaker verification threshold | 0.45 | `utils/stt/speaker_embedding.py` | Enrolled voiceprint cosine-distance cutoff |
+| Speaker clustering threshold | 0.60 | `utils/stt/speaker_clustering.py`, `parakeet/speaker_math.py` | Short-clip in-session centroid cutoff |
+| Speaker clustering cap | 8 | `utils/stt/speaker_clustering.py`, `parakeet/speaker_math.py` | Merge misses to nearest centroid after capacity |
 | `PENDING_REQUEST_TIMEOUT` | 120s | `routers/listen/conversations.py` | Timeout before retrying a pending request |
 | `MAX_RETRIES_PER_REQUEST` | 3 | `routers/listen/conversations.py` | Max retries before keeping buffered |
 | `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | `utils/listen_pusher_session.py` | Reconnect attempts before DEGRADED |

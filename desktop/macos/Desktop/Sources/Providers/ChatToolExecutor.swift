@@ -1941,7 +1941,7 @@ class ChatToolExecutor {
         return authorizedOwnerChangedResult()
       }
 
-      if task.deleted == true {
+      if task.isRetired {
         return "Error: task '\(task.description)' has been deleted"
       }
 
@@ -1988,7 +1988,7 @@ class ChatToolExecutor {
         return authorizedOwnerChangedResult()
       }
 
-      if task.deleted == true {
+      if task.isRetired {
         return "Error: task '\(task.description)' is already deleted"
       }
 
@@ -2403,10 +2403,10 @@ class ChatToolExecutor {
     let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
     let granted = AXIsProcessTrustedWithOptions(options)
     if !granted {
-      _ = openPermissionPrivacySettings(
-        pane: "Privacy_Accessibility",
-        expectedOwnerID: expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
+      _ = PermissionDragGuidance.openAccessibilitySettings(
+        isAuthorized: {
+          isPermissionAuthorizationCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)
+        })
     }
   }
 

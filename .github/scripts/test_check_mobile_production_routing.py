@@ -41,6 +41,25 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
                     self.assertTrue(any("retired GKE desktop-backend ownership" in error for error in errors), errors)
                     retired_manifest.unlink()
 
+    def test_allows_stackdriver_observation_of_cloud_run_desktop_backend(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "codemagic.yaml").write_text(
+                (ROOT / "codemagic.yaml").read_text(encoding="utf-8"), encoding="utf-8"
+            )
+            observer = root / "backend/charts/monitoring/prometheus-stackdriver-exporter/prod_cloud_run.yaml"
+            observer.parent.mkdir(parents=True)
+            observer.write_text(
+                "prefix: prometheus.googleapis.com/omi_\n"
+                'filter: resource.labels.cluster="__run__" AND '
+                'resource.labels.namespace=one_of("backend","desktop-backend")\n',
+                encoding="utf-8",
+            )
+
+            errors = CHECKER.validate(root)
+
+        self.assertFalse(any("retired GKE desktop-backend ownership" in error for error in errors), errors)
+
     def test_allows_non_deployment_desktop_backend_fixture(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -49,9 +68,7 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
             )
             fixture = root / ".github/workflows/desktop_backend_images.yml"
             fixture.parent.mkdir(parents=True)
-            fixture.write_text(
-                'run: gcloud container images describe "desktop-backend"\n', encoding="utf-8"
-            )
+            fixture.write_text('run: gcloud container images describe "desktop-backend"\n', encoding="utf-8")
 
             errors = CHECKER.validate(root)
 
@@ -192,7 +209,9 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
     def test_rejects_mutated_desktop_production_identity_or_firestore_project(self) -> None:
         for source_path, fragments in CHECKER.REQUIRED_PRODUCTION_FRAGMENTS.items():
             for fragment in fragments:
-                with self.subTest(source_path=source_path, fragment=fragment), tempfile.TemporaryDirectory() as directory:
+                with self.subTest(
+                    source_path=source_path, fragment=fragment
+                ), tempfile.TemporaryDirectory() as directory:
                     root = Path(directory)
                     for relative_path in (*CHECKER.LEGACY_BETA_ROUTING_PATHS, *CHECKER.REQUIRED_PRODUCTION_FRAGMENTS):
                         target = root / relative_path

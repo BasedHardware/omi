@@ -17,6 +17,70 @@ enum ChatQueryErrorClass: String, Equatable, Sendable {
   case toolStall = "tool_stall"
   case transientNetwork = "transient_network"
   case unknown
+
+  /// Which subsystem a failed turn is attributed to. `error_class` is the
+  /// symptom a person saw; `root_cause` is the owner of the defect, and it is
+  /// what triage and churn analysis need to group on. Bounded by construction —
+  /// this never carries exception text.
+  var rootCause: ChatQueryRootCause {
+    switch self {
+    // Both auth and billing failures originate in the model provider account,
+    // not on the device. `provider_claude` is the value already published for
+    // `.authentication`; keep it so existing PostHog breakdowns stay valid.
+    case .authentication, .quota: return .providerClaude
+    case .agentError, .agentRuntime, .timeout, .toolStall: return .agentRuntime
+    case .bridgeUnavailable, .bridgeStartFailed: return .bridgeProcess
+    case .sessionSetup, .concurrentRequest: return .localSession
+    case .attachmentUpload: return .attachmentPipeline
+    case .browserExtensionMissing: return .browserExtension
+    case .encoding: return .requestEncoding
+    case .resourceExhausted: return .deviceResources
+    case .transientNetwork: return .network
+    case .unknown: return .unclassified
+    }
+  }
+
+  /// Bounded `error_code` for failures that reach analytics without a
+  /// `ChatQueryErrorDetail`. Only the bridge catch path in `ChatProvider`
+  /// supplies a detail, so without this every other terminal — timeouts, tool
+  /// stalls, session setup, bridge unavailability — arrives with no code at all
+  /// and the event cannot explain itself.
+  func fallbackErrorCode(watchdogFired: Bool) -> String {
+    switch self {
+    // The two timeouts have different owners: the watchdog is ours, the bridge
+    // timeout is the runtime's. Collapsing them loses the only actionable bit.
+    case .timeout: return watchdogFired ? "watchdog_timeout" : "bridge_timeout"
+    case .toolStall: return "tool_stall_abort"
+    case .sessionSetup: return "session_setup_failed"
+    case .bridgeUnavailable: return "bridge_unavailable"
+    case .bridgeStartFailed: return "bridge_start_failed"
+    case .browserExtensionMissing: return "browser_extension_missing"
+    case .attachmentUpload: return "attachment_upload_failed"
+    case .concurrentRequest: return "request_already_active"
+    case .encoding: return "encoding_failed"
+    case .resourceExhausted: return "out_of_memory"
+    case .transientNetwork: return "transient_network"
+    case .quota: return "quota_exceeded"
+    case .authentication: return "authentication"
+    case .agentError: return "agent_error"
+    case .agentRuntime: return "agent_runtime_failure"
+    case .unknown: return "unclassified"
+    }
+  }
+}
+
+/// Closed vocabulary for `chat_agent_error.root_cause`.
+enum ChatQueryRootCause: String, Equatable, Sendable {
+  case agentRuntime = "agent_runtime"
+  case attachmentPipeline = "attachment_pipeline"
+  case bridgeProcess = "bridge_process"
+  case browserExtension = "browser_extension"
+  case deviceResources = "device_resources"
+  case localSession = "local_session"
+  case network
+  case providerClaude = "provider_claude"
+  case requestEncoding = "request_encoding"
+  case unclassified
 }
 
 enum ChatQueryCancellationReason: String, Equatable, Sendable {
@@ -403,8 +467,12 @@ extension ChatQueryTelemetryEvent {
         "error_class": errorClass.rawValue,
         "partial_response": partialResponse,
         "watchdog_fired": watchdogFired,
+        // Populated for every failure, not only the ones that carry a detail.
+        "error_code": errorClass.fallbackErrorCode(watchdogFired: watchdogFired),
+        "root_cause": errorClass.rootCause.rawValue,
       ]
       if let detail {
+        // A detail is a strictly better code than the class fallback.
         properties["error_code"] = detail.errorCode
         if let retryable = detail.retryable { properties["retryable"] = retryable }
         if let failureCode = detail.failureCode { properties["failure_code"] = failureCode }
@@ -456,7 +524,6 @@ extension ChatQueryTelemetryEvent {
       properties["error"] = errorClass.rawValue
       if errorClass == .authentication {
         properties["turn_disposition"] = "auth_blocked"
-        properties["root_cause"] = "provider_claude"
       }
     }
     return ChatQueryAnalyticsPayload(eventName: eventName, properties: properties)

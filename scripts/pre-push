@@ -504,6 +504,7 @@ check_backend_typecheck_if_needed() {
 check_backend_unit_tests_if_needed() {
   local selected_count
   local original_selected_count
+  local changed_test_count
   local max_pre_push_tests
   local reason
   local file
@@ -572,8 +573,17 @@ check_backend_unit_tests_if_needed() {
     done
     if [ -s "$FAST_BACKEND_TESTS" ]; then
       sort -u "$FAST_BACKEND_TESTS" -o "$FAST_BACKEND_TESTS"
-      selected_count=$(wc -l < "$FAST_BACKEND_TESTS" | tr -d ' ')
-      echo "Selector requested $reason ($original_selected_count files; running $selected_count changed backend test file(s) instead; cap is $max_pre_push_tests)."
+      changed_test_count=$(wc -l < "$FAST_BACKEND_TESTS" | tr -d ' ')
+      if [ "$changed_test_count" -gt "$max_pre_push_tests" ]; then
+        head -n "$max_pre_push_tests" "$FAST_BACKEND_TESTS" > "$FAST_BACKEND_TESTS.capped"
+        mv "$FAST_BACKEND_TESTS.capped" "$FAST_BACKEND_TESTS"
+        selected_count=$(wc -l < "$FAST_BACKEND_TESTS" | tr -d ' ')
+        echo "Selector requested $reason ($original_selected_count files); the diff changes $changed_test_count backend test file(s), also over the cap of $max_pre_push_tests."
+        echo "Running the first $selected_count in sorted order; run cd backend && bash test.sh for the rest, or rely on CI."
+      else
+        selected_count="$changed_test_count"
+        echo "Selector requested $reason ($original_selected_count files; running $selected_count changed backend test file(s) instead; cap is $max_pre_push_tests)."
+      fi
       cp "$FAST_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS"
     else
       echo "Skipping broad backend unit suite in pre-push: $reason ($selected_count files; cap is $max_pre_push_tests)."

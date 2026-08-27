@@ -18,6 +18,7 @@ from utils.notifications import (
     sync_action_item_reminder,
 )
 from utils.conversations.render import format_local_time, resolve_display_tz
+from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 import logging
 
 logger = logging.getLogger(__name__)
@@ -183,6 +184,20 @@ def get_action_items_tool(
 
         traceback.print_exc()
         return f"Error: Configuration error - {str(config_error)}"
+
+    # Hard-scope: force conversation_id and intersect creation dates with chat_scope (#4515).
+    scope = chat_scope_from_config(configurable)
+    if scope and scope.get("conversation_id"):
+        scoped_cid = str(scope["conversation_id"])
+        if conversation_id and conversation_id != scoped_cid:
+            return (
+                f"Error: Chat is scoped to conversation {scoped_cid}. "
+                "Action items outside that conversation are unavailable."
+            )
+        conversation_id = scoped_cid
+    start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
+    if scope_err:
+        return f"Error: {scope_err}"
 
     # Cap at 500 per call
     if limit > 500:

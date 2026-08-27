@@ -224,9 +224,9 @@ struct RewindPage: View {
           let currentId = oldScreenshots[currentIndex].id,
           let newIndex = newScreenshots.firstIndex(where: { $0.id == currentId })
         {
-          // Same screenshot found in new array - adjust index
-          currentIndex = newIndex
-          // No need to reload frame - it's the same screenshot
+          currentIndex = RewindTimelineNavigation.sameFrameIndex(
+            old: oldScreenshots.count, new: newScreenshots.count, current: currentIndex, found: newIndex)
+          if currentIndex != newIndex { scheduleLoadCurrentFrame() }
         } else if !newScreenshots.isEmpty {
           // A viewport query may replace every sampled row. Stay near the same visible moment instead
           // of snapping to the newest capture in all of history.
@@ -773,6 +773,15 @@ struct RewindPage: View {
             // track are visibly the same stretch of the day.
             .overlay(frameShape.strokeBorder(frameBorderColor, lineWidth: 2))
             .shadow(color: .black.opacity(0.08), radius: 8)
+            // **The stage is a preview, not the frame.** It is fit to whatever the pane happens to
+            // be, which on a half-width window is a fraction of a 5120pt capture — enough to
+            // recognise the moment and not enough to read a line of it, which is the whole reason
+            // someone scrubbed to it. Clicking opens the real thing in Quick Look, at full
+            // resolution, with the rest of the day's frames behind the arrow keys.
+            .contentShape(frameShape)
+            .onTapGesture { openCurrentFrameFullSize() }
+            .help("Open this frame in Quick Look")
+            .contextMenu { Button("Quick Look", action: openCurrentFrameFullSize) }
         }
         .frame(width: geometry.size.width, height: geometry.size.height)
       } else {
@@ -813,6 +822,19 @@ struct RewindPage: View {
 
   private var frameShape: RoundedRectangle {
     RoundedRectangle(cornerRadius: 10, style: .continuous)
+  }
+
+  /// Hand the whole visible run to Quick Look, positioned on the frame that is on the stage.
+  ///
+  /// The run and not the single frame, because Quick Look steps left and right through whatever it
+  /// is given — so this makes the arrow keys walk the same sequence the track does, which is the
+  /// behaviour someone who opened a frame from a timeline already expects.
+  private func openCurrentFrameFullSize() {
+    let screenshots = activeScreenshots
+    guard screenshots.indices.contains(currentIndex) else { return }
+    let frames = screenshots.map { QuickLookFrame(screenshot: $0) }
+    ScreenFrameQuickLook.shared.present(
+      frames, startingAt: frames[currentIndex].id)
   }
 
   /// Nil is an honest outcome: with no frame resolved the border is a neutral hairline rather than an

@@ -77,6 +77,9 @@ environment_shared:
         MEETING_RECEIPT_RECONCILER_ENABLED:
           value: 'false'
           category: rollout
+        LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED:
+          value: 'true'
+          category: rollout
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'false'
           category: rollout
@@ -172,6 +175,13 @@ environment_shared:
         value: '{compute_project}'
       GCP_LOCATION:
         value: us-central1
+      PROMETHEUS_SIDECAR_PORT:
+        value: '9090'
+        category: telemetry
+    secrets:
+      METRICS_SECRET:
+        secret: METRICS_SECRET
+        version: latest
   cloud_run:
     network:
       flags:
@@ -255,7 +265,13 @@ environment_shared:
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
+          METRICS_SECRET:
+            secret: METRICS_SECRET
+            version: latest
         env:
+          PROMETHEUS_SIDECAR_PORT:
+            value: '9090'
+            category: telemetry
           # The conversation summary pipeline runs in two services: backend-listen
           # finalizes a live conversation, and this one runs process_conversation
           # inline for POST /v1/conversations/{id}/reprocess. Declaring the rollout

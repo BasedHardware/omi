@@ -8,12 +8,25 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Literal, TypedDict, cast
 
+from google.cloud.firestore_v1 import FieldFilter
+
 from database._client import get_firestore_client
 from database.chat_first_intents import INTENTS_COLLECTION
 
 DEFAULT_STALE_AFTER_HOURS = 48
 SCHEDULED_WEEKDAY_UTC = 0  # Monday
 SCHEDULED_HOUR_UTC = 14
+# The scheduled check runs weekly; a 14-day window is two report cycles. That
+# gives every intent that goes stale at least one full cycle in which a run is
+# guaranteed to see it (a 7-day window flush against a 7-day cadence would clip
+# documents at the boundary under any clock skew), plus a second cycle so a
+# genuinely-resolved problem is confirmed clear rather than blinking healthy
+# for exactly one week before the same class of drop reappears. It is also
+# comfortably longer than DEFAULT_STALE_AFTER_HOURS (48h): every intent inside
+# the window has already had its full staleness period to be decided, so
+# windowing never truncates an intent's chance to mature from in-flight to
+# dropped.
+HEALTH_CHECK_WINDOW_DAYS = 14
 HEALTH_LOG_MARKER = 'chat_first_materialization_health'
 DELIVERED = 'delivered'
 
@@ -23,6 +36,7 @@ logger = logging.getLogger(__name__)
 class MaterializationHealthReport(TypedDict):
     scope: str
     stale_after_hours: int
+    window_start: str | None
     delivered: int
     dropped: int
     in_flight: int
@@ -35,22 +49,52 @@ class MaterializationHealthReport(TypedDict):
 
 
 MaterializationHealthStatus = Literal['not_due', 'healthy', 'unhealthy', 'monitor_error']
-MaterializationHealthCollector = Callable[[str | None, int | None, int, datetime], MaterializationHealthReport]
+MaterializationHealthCollector = Callable[
+    [str | None, int | None, int, datetime, datetime | None], MaterializationHealthReport
+]
 
 
 def _documents(
     uid: str | None,
     limit: int | None,
+    min_created_at: datetime | None,
     *,
     firestore_client: Any = None,
 ) -> Iterator[Dict[str, Any]]:
-    """Stream intent documents without requiring a composite Firestore index."""
+    """Stream intent documents without requiring a composite Firestore index.
+
+    ``min_created_at``, when given, adds one ``created_at >=`` inequality
+    filter. A lone filter on a single field needs no explicit index -- it is
+    served by Firestore's automatic per-field index -- so this stays index-free
+    exactly like ``llm_usage.get_global_top_features``'s
+    ``collection_group("llm_usage").where("date", ">=", cutoff_id)``, the
+    existing precedent for a single-field range filter on a collection-group
+    query in this codebase. A *composite* (multi-field or field+order) shape
+    would need a registered index (see database/firestore_index_registry.py);
+    this query never grows past one filter, so it never needs one.
+
+    The filter also bounds the read itself: unfiltered, this was scanning
+    every intent ever written, with cost climbing in lockstep with the
+    collection's all-time size regardless of how much of it was recent.
+
+    Trade-off: Firestore excludes a document from a field filter's results
+    when that document is missing the field or holds a value of a different
+    type, independent of when the document was written. So a windowed scan
+    can never see a document with a missing or malformed ``created_at`` --
+    not "only an old one," but none, ever, no matter how fresh. That is an
+    acceptable gap here because ``ProactiveIntent.created_at`` is a required
+    field (models/chat_first.py), so a document missing it already bypassed
+    the normal write path; auditing for that class of corruption is what the
+    CLI's unwindowed run (``min_created_at=None``) is for.
+    """
 
     client = firestore_client or get_firestore_client()
     if uid:
         query: Any = client.collection('users').document(uid).collection(INTENTS_COLLECTION)
     else:
         query = client.collection_group(INTENTS_COLLECTION)
+    if min_created_at is not None:
+        query = query.where(filter=FieldFilter('created_at', '>=', min_created_at))
     if limit is not None:
         query = query.limit(limit)
     for snapshot in query.stream():
@@ -85,8 +129,16 @@ def summarize(
     scope: str,
     stale_after_hours: int,
     now: datetime,
+    window_start: datetime | None = None,
 ) -> MaterializationHealthReport:
-    """Bucket intent documents into delivered, dropped, in-flight, and malformed."""
+    """Bucket intent documents into delivered, dropped, in-flight, and malformed.
+
+    ``window_start`` is recorded on the report only -- it does not filter
+    ``documents`` here. The caller (``collect``) is responsible for having
+    already bounded the scan; this function just describes what period the
+    counts below cover, so a windowed and an all-time report never look alike
+    by accident.
+    """
 
     cutoff = now - timedelta(hours=stale_after_hours)
     delivered = 0
@@ -119,6 +171,7 @@ def summarize(
     return {
         'scope': scope,
         'stale_after_hours': stale_after_hours,
+        'window_start': window_start.isoformat() if window_start is not None else None,
         'delivered': delivered,
         'dropped': dropped,
         'in_flight': in_flight,
@@ -136,21 +189,26 @@ def collect(
     limit: int | None,
     stale_after_hours: int,
     now: datetime,
+    min_created_at: datetime | None = None,
     *,
     firestore_client: Any = None,
 ) -> MaterializationHealthReport:
     return summarize(
-        _documents(uid, limit, firestore_client=firestore_client),
+        _documents(uid, limit, min_created_at, firestore_client=firestore_client),
         scope=uid or 'all_accounts',
         stale_after_hours=stale_after_hours,
         now=now,
+        window_start=min_created_at,
     )
 
 
 def render(report: MaterializationHealthReport) -> str:
     rate = report['drop_rate']
+    window_start = report['window_start']
+    window_desc = 'all-time' if window_start is None else f'since {window_start}'
     lines = [
         f"scope                {report['scope']}",
+        f"window               {window_desc}",
         f"stale after          {report['stale_after_hours']}h",
         f"delivered            {report['delivered']}",
         f"dropped              {report['dropped']}",
@@ -187,6 +245,20 @@ def run_scheduled_check(
     must not let a clean result drift into "never." The log intentionally carries
     aggregate counts only; source labels and block payloads stay in the explicit
     operator CLI output.
+
+    The scan is windowed to the last HEALTH_CHECK_WINDOW_DAYS: an all-time scan
+    both grows its own read cost forever and, because nothing ever deletes an
+    intent document, latches this verdict unhealthy permanently after the first
+    drop -- there would be no way back to healthy even after the underlying
+    cause is fixed. Windowing bounds the read to recent volume and lets the
+    verdict describe the current period, so it can clear again once a drop
+    ages out of the window. It also makes ``drop_rate`` a rolling-window figure
+    instead of an all-time one that a burst of drops can no longer move once a
+    year of delivered intents has accumulated behind it. One known gap from
+    windowing: a document with a missing or malformed ``created_at`` is
+    invisible to this filtered scan regardless of how recently it was written
+    (see ``_documents``); that class of corruption is not what this check is
+    for and remains reachable through the CLI's unwindowed run.
     """
 
     checked_at = now or datetime.now(timezone.utc)
@@ -195,8 +267,9 @@ def run_scheduled_check(
     )
     if not is_scheduled_time(normalized):
         return 'not_due'
+    window_start = normalized - timedelta(days=HEALTH_CHECK_WINDOW_DAYS)
     try:
-        report = collector(None, None, DEFAULT_STALE_AFTER_HOURS, normalized)
+        report = collector(None, None, DEFAULT_STALE_AFTER_HOURS, normalized, window_start)
     except Exception as error:
         logger.error(
             '%s review=true status=monitor_error error_class=%s',
@@ -210,11 +283,12 @@ def run_scheduled_check(
     rate = report['drop_rate']
     log = logger.error if alarm else logger.info
     log(
-        '%s review=true alarm=%s status=%s stale_after_hours=%d delivered=%d dropped=%d '
+        '%s review=true alarm=%s status=%s window_days=%d stale_after_hours=%d delivered=%d dropped=%d '
         'in_flight=%d undated=%d decided=%d drop_rate=%s conversation_link_dropped=%d',
         HEALTH_LOG_MARKER,
         str(alarm).lower(),
         status,
+        HEALTH_CHECK_WINDOW_DAYS,
         report['stale_after_hours'],
         report['delivered'],
         report['dropped'],

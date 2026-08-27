@@ -409,6 +409,11 @@ class WalSyncs implements IWalSync {
 
   bool get isFlashPageSyncing => _flashPageSync.isSyncing;
 
+  /// Why the last flash-page drain pass stopped early (reset at the start of
+  /// each flash sync). Lets the UI distinguish "pendant is recording" from a
+  /// plain transfer lull instead of reporting silent success.
+  FlashSyncStallReason get flashStallReason => _flashPageSync.lastStallReason;
+
   /// Get conversation IDs accumulated so far from completed upload batches.
   /// Returns null if no sync is in progress or no batches have completed.
   SyncLocalFilesResponse? get accumulatedResponse => _phoneSync.accumulatedResponse;

@@ -2,6 +2,7 @@ import { getIdToken } from './firebase';
 import { getWebDeviceIdHash } from './clientDevice';
 import {
   invalidateCache,
+  invalidateCacheKey,
   invalidationPatterns,
   fetchWithCache,
   cacheKeys,
@@ -10,12 +11,14 @@ import {
 import type {
   Conversation,
   ConversationSearchResponse,
+  ConversationScreenFrameSet,
   ConversationStatus,
   ActionItem,
   Memory,
   MemoryCategory,
   MemoryVisibility,
   KnowledgeGraph,
+  ScreenFrameSharingUpdateRequest,
   ServerMessage,
   MessageChunk,
   MessageChunkType,
@@ -227,6 +230,78 @@ export async function deleteConversation(id: string): Promise<void> {
     method: 'DELETE',
   });
   invalidateCache(invalidationPatterns.conversations);
+}
+
+// =============================================================================
+// Meeting-note screenshots ("screen frames")
+// =============================================================================
+// Types come from the generated OpenAPI client (`@/types/conversation`
+// re-exports them). Route paths mirror the shared contract
+// (`data/reports/meeting-screenshots/DESIGN-sol.md` §1-2) exactly.
+
+/**
+ * Get the approved screenshot set (banner + strip) for a conversation.
+ * Uses the same fetch-with-cache idiom as `getConversation`; a short TTL
+ * balances against the frame set's signed URLs expiring after 60 minutes.
+ */
+export async function getConversationScreenFrames(
+  conversationId: string,
+): Promise<ConversationScreenFrameSet> {
+  return fetchWithCache<ConversationScreenFrameSet>(
+    cacheKeys.screenFrames(conversationId),
+    () =>
+      fetchWithAuth<ConversationScreenFrameSet>(
+        `/v1/conversations/${conversationId}/screenshots`,
+      ),
+    { ttl: CACHE_TTL.SHORT },
+  );
+}
+
+/**
+ * Delete a single screenshot. The server may promote another already-
+ * approved, already-persisted frame to banner (contract §8); the returned
+ * set is authoritative, so callers should replace their local state with it
+ * rather than trying to predict the promotion.
+ */
+export async function deleteScreenFrame(
+  conversationId: string,
+  frameId: string,
+): Promise<ConversationScreenFrameSet> {
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots/${frameId}`,
+    { method: 'DELETE' },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
+}
+
+/** Delete every screenshot for a conversation (banner + strip). */
+export async function deleteAllScreenFrames(
+  conversationId: string,
+): Promise<ConversationScreenFrameSet> {
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots`,
+    { method: 'DELETE' },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
+}
+
+/**
+ * Toggle whether this conversation's approved frames are visible on its
+ * public share link. Default for a new conversation is `enabled: true`.
+ */
+export async function patchScreenFrameSharing(
+  conversationId: string,
+  enabled: boolean,
+): Promise<ConversationScreenFrameSet> {
+  const body: ScreenFrameSharingUpdateRequest = { enabled };
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshot-sharing`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
 }
 
 /**
@@ -879,6 +954,8 @@ export async function sendMessageStream(
       id?: string;
       title?: string;
       summary?: string;
+      start_date?: string;
+      end_date?: string;
     } | null;
   },
 ): Promise<void> {
@@ -917,7 +994,15 @@ export async function sendMessageStream(
     body: JSON.stringify({
       text,
       file_ids: options?.fileIds || [],
-      context: options?.context || null,
+      context: options?.context
+        ? {
+            type: options.context.type === 'general' ? 'recap' : options.context.type,
+            id: options.context.id,
+            title: options.context.title,
+            start_date: options.context.start_date,
+            end_date: options.context.end_date,
+          }
+        : null,
     }),
   });
 
@@ -1312,6 +1397,38 @@ export async function updateApp(
 }
 
 /**
+ * Re-enable an app that the backend auto-disabled after webhook failures.
+ *
+ * Sends `disabled: false` explicitly — the backend re-enable branch reads an
+ * unset-exclusive payload, so omitting the field is a no-op rather than a
+ * failure. The endpoint re-checks every configured URL and rejects the request
+ * with a specific reason, so that detail is surfaced instead of the status code.
+ */
+export async function reEnableApp(appId: string): Promise<void> {
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const formData = new FormData();
+  formData.append('app_data', JSON.stringify({ id: appId, disabled: false }));
+
+  const response = await fetch(`${API_BASE_URL}/v1/apps/${appId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const detail = await response
+      .json()
+      .then((body) => body?.detail)
+      .catch(() => null);
+    throw new Error(detail || `Failed to re-enable app: ${response.status}`);
+  }
+}
+
+/**
  * Delete an app
  */
 export async function deleteApp(appId: string): Promise<void> {
@@ -1472,6 +1589,7 @@ import type {
   UserSubscriptionResponse,
   Person,
 } from '@/types/user';
+import { decodePlan, planGrantsPaidCapability } from '@/types/user';
 
 /**
  * Get user's primary language
@@ -1697,14 +1815,14 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
       '/v1/users/me/subscription',
     );
 
-    // Any paid tier counts as premium for UI gating (Manage vs Choose Plan).
-    // Plus / Unlimited arrive wired as 'unlimited'; Operator / Architect arrive
-    // as their real plan id now that web renders the full new catalog.
-    const paidPlans = ['unlimited', 'plus', 'unlimited_v2', 'operator', 'architect'];
+    const plan = decodePlan(response.subscription?.plan);
     const result: UserSubscription = {
-      plan: response.subscription?.plan || 'basic',
+      plan: plan.raw ?? '',
+      plan_identity: plan,
       status: response.subscription?.status || 'active',
-      is_unlimited: paidPlans.includes(response.subscription?.plan ?? ''),
+      // Unknown plans are deliberately excluded. A future wire value must not
+      // inherit paid capability merely because it is non-empty.
+      is_unlimited: planGrantsPaidCapability(plan),
       current_period_end: response.subscription?.current_period_end,
       stripe_subscription_id: response.subscription?.stripe_subscription_id,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,

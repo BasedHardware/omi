@@ -187,11 +187,11 @@ describe('provider registration', () => {
     expect(cap.provider?.cfg.apiKey).toBe('firebase-token-xyz')
   })
 
-  it('declares exactly omi-sonnet and omi-opus with zero client-side cost', () => {
+  it('declares exactly omi-sonnet with zero client-side cost', () => {
     const cap = makeFakePi()
     omiProvider(cap.pi)
     const models = cap.provider?.cfg.models as Array<Record<string, unknown>>
-    expect(models.map((m) => m.id)).toEqual(['omi-sonnet', 'omi-opus'])
+    expect(models.map((m) => m.id)).toEqual(['omi-sonnet'])
     for (const m of models) {
       expect(m.reasoning).toBe(true)
       expect(m.input).toEqual(['text', 'image'])
@@ -203,10 +203,10 @@ describe('provider registration', () => {
 })
 
 // ===========================================================================
-// BYOK all-or-nothing (NEW)
+// BYOK capability-scoped header gating
 // ===========================================================================
 describe('BYOK header gating', () => {
-  it('attaches all four X-BYOK-* headers only when all four env keys are present', () => {
+  it('attaches a header for every configured env key that is present', () => {
     process.env.OMI_BYOK_OPENAI = 'oa'
     process.env.OMI_BYOK_ANTHROPIC = 'an'
     process.env.OMI_BYOK_GEMINI = 'ge'
@@ -221,14 +221,18 @@ describe('BYOK header gating', () => {
     })
   })
 
-  it('attaches NO headers for a partial (3/4) BYOK set', () => {
+  it('attaches configured headers without requiring an unrelated Deepgram key', () => {
     process.env.OMI_BYOK_OPENAI = 'oa'
     process.env.OMI_BYOK_ANTHROPIC = 'an'
     process.env.OMI_BYOK_GEMINI = 'ge'
     // deepgram missing
     const cap = makeFakePi()
     omiProvider(cap.pi)
-    expect(cap.provider?.cfg.headers).toBeUndefined()
+    expect(cap.provider?.cfg.headers).toEqual({
+      'X-BYOK-OpenAI': 'oa',
+      'X-BYOK-Anthropic': 'an',
+      'X-BYOK-Gemini': 'ge'
+    })
   })
 
   it('attaches NO headers when no BYOK keys are present', () => {

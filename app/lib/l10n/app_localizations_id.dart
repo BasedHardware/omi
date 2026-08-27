@@ -9852,6 +9852,20 @@ class AppLocalizationsId extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
+  String get chatScopeToday => 'Hari ini';
+
+  @override
+  String get chatScopeThisWeek => 'Minggu ini';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Tentang: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Tanyakan tentang ini';
+
+  @override
   String get sendRawAudioToOmi => 'Kirim audio mentah ke Omi';
 
   @override
@@ -9863,4 +9877,48 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Tidak dapat membagikan diagnostik. Silakan coba lagi.';
+
+  @override
+  String get appDisabledTitle => 'Aplikasi ini dinonaktifkan dan tidak dapat dipasang.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Endpoint-nya gagal selama 72 jam berturut-turut, sehingga pengiriman dihentikan.';
+
+  @override
+  String get appDisabledGeneric => 'Aplikasi ini dinonaktifkan oleh Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Perbaiki endpoint terlebih dahulu — mengaktifkan kembali akan memeriksa ulang setiap URL yang dikonfigurasi.';
+
+  @override
+  String get appReEnable => 'Aktifkan kembali';
+
+  @override
+  String get appReEnableFailedTitle => 'Gagal mengaktifkan kembali';
+
+  @override
+  String get appReEnableFailedBody => 'Aplikasi ini tidak dapat diaktifkan kembali. Silakan coba lagi.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Dinonaktifkan pada $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Kesalahan terakhir: $error.';
+  }
+
+  @override
+  String get prerecordedTranscript => 'Prarekam';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant masih merekam, jadi audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Penyimpanan Pendant penuh dan masih dalam mode perekaman, sehingga audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.';
 }

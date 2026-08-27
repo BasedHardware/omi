@@ -9864,6 +9864,20 @@ class AppLocalizationsUk extends AppLocalizations {
   String get accountCutoverOpenStore => 'Відкрити магазин';
 
   @override
+  String get chatScopeToday => 'Сьогодні';
+
+  @override
+  String get chatScopeThisWeek => 'Цього тижня';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Про: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Запитати про це';
+
+  @override
   String get sendRawAudioToOmi => 'Надсилати необроблений звук до Omi';
 
   @override
@@ -9875,4 +9889,47 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Не вдалося поділитися діагностикою. Спробуйте ще раз.';
+
+  @override
+  String get appDisabledTitle => 'Цей застосунок вимкнено, і його не можна встановити.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Його endpoint не працював 72 години поспіль, тому доставку зупинено.';
+
+  @override
+  String get appDisabledGeneric => 'Його вимкнула Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Спершу виправте endpoint — повторне ввімкнення перевіряє кожну налаштовану URL-адресу.';
+
+  @override
+  String get appReEnable => 'Увімкнути знову';
+
+  @override
+  String get appReEnableFailedTitle => 'Не вдалося ввімкнути знову';
+
+  @override
+  String get appReEnableFailedBody => 'Не вдалося повторно ввімкнути цей застосунок. Спробуйте ще раз.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Вимкнено $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Остання помилка: $error.';
+  }
+
+  @override
+  String get prerecordedTranscript => 'Попередній запис';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant усе ще записує, тому збережене аудіо не можна передати. Натисніть кнопку Pendant, щоб зупинити запис, а потім синхронізуйте знову.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Пам\'ять Pendant заповнена, і він досі в режимі запису, тому збережене аудіо не можна передати. Натисніть кнопку Pendant, щоб зупинити запис, а потім синхронізуйте знову.';
 }

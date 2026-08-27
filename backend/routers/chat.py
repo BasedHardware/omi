@@ -66,6 +66,7 @@ from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
+from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_route
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils import share_links
 from utils.other import endpoints as auth, storage
@@ -83,7 +84,8 @@ from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
 from utils.observability import submit_langsmith_feedback
 from utils.observability.fallback import record_fallback
-from utils.observability.journeys import JourneyAttempt
+from utils.journey_metrics_contract import resolve_client_kind, resolve_client_kind_from_headers
+from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
 from utils.voice_duration_limiter import (
     compute_pcm_duration_ms,
     read_wav_duration_ms,
@@ -189,6 +191,25 @@ def _parse_context_keywords(raw: Optional[str]) -> List[str]:
         if len(keywords) >= 100:
             break
     return keywords
+
+
+def _mobile_chat_stream_succeeded(frame: str) -> bool:
+    """A mobile answer succeeds only at a terminal frame with renderable text."""
+
+    if not frame.startswith('done: '):
+        return False
+    try:
+        payload = json.loads(base64.b64decode(frame.removeprefix('done: ').strip()).decode('utf-8'))
+    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    answer = payload.get('text') if isinstance(payload, dict) else None
+    return isinstance(answer, str) and bool(answer.strip())
+
+
+def _mobile_chat_stream_failed(frame: str) -> bool:
+    """Typed in-band errors are failures even when a fallback done frame follows."""
+
+    return frame.lstrip().startswith('error: ')
 
 
 def filter_messages(messages, app_id):
@@ -338,24 +359,28 @@ def _record_chat_quota_question_best_effort(
         logger.exception('Failed to record chat quota question source=%s uid=%s', source, uid)
 
 
+def _required_chat_quota_provider() -> str | None:
+    # Direct agent chat consumes managed Anthropic unless an Anthropic BYOK key
+    # is on the request. Other BYOK providers must stay metered on this path.
+    return 'anthropic' if get_chat_agent_route() == CHAT_AGENT_ROUTE_DIRECT else None
+
+
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
     data: SendMessageRequest,
+    request: Request,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
-    # Hard cap: Free by question count, Architect by cost_usd. Operator enters
-    # overage mode silently. If exceeded, instead of raising 402 (which mobile
-    # clients render as a generic "having issues with the server" error), save
-    # a canned AI reply and emit it as an SSE `done:` chunk — matching the
-    # streaming contract this endpoint already uses — so mobile parses it like
-    # any other reply. Desktop pre-checks via /v1/users/me/usage-quota and
-    # never reaches here when over.
+    # Catalog hard-cap exhaustion is returned as a canned AI reply instead of a
+    # raw 402 (which older mobile clients render as a generic server error).
+    # Catalog overage plans return normally. Desktop pre-checks via
+    # /v1/users/me/usage-quota and never reaches this path when over.
     try:
-        enforce_chat_quota(uid, platform=x_app_platform)
+        enforce_chat_quota(uid, platform=x_app_platform, required_llm_provider=_required_chat_quota_provider())
     except HTTPException as exc:
         if exc.status_code != 402 or not isinstance(exc.detail, dict):
             raise
@@ -527,6 +552,10 @@ def send_message(
         return ai_message, ask_for_nps
 
     journey_attempt = JourneyAttempt('chat_response')
+    mobile_journey_attempt = ClientJourneyAttempt(
+        'mobile_chat',
+        resolve_client_kind_from_headers(request.headers),
+    )
 
     async def generate_stream():
         callback_data = {}
@@ -600,6 +629,7 @@ def send_message(
                 chat_session=chat_session,
                 context=data.context,
                 platform=x_app_platform,
+                client_kind=mobile_journey_attempt.client_kind,
             ):
                 if chunk:
                     if chunk.startswith('error: '):
@@ -652,7 +682,14 @@ def send_message(
             if not journey_attempt.finished:
                 journey_attempt.finish('failure' if stream_exhausted else 'cancelled')
 
-    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+    observed_stream = mobile_journey_attempt.observe_stream(
+        generate_stream(),
+        success_when=_mobile_chat_stream_succeeded,
+        failure_when=_mobile_chat_stream_failed,
+        failure_class='provider_error',
+        missing_success_class='empty_answer',
+    )
+    return StreamingResponse(observed_stream, media_type="text/event-stream")
 
 
 @router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=MessageReportResponse)
@@ -776,7 +813,7 @@ def create_voice_message_stream(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:message")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
-    enforce_chat_quota(uid, platform=x_app_platform)
+    enforce_chat_quota(uid, platform=x_app_platform, required_llm_provider=_required_chat_quota_provider())
 
     resolved_language = resolve_voice_message_language(uid, language)
     stt_provider, _, _stt_model = get_prerecorded_service(resolved_language)
@@ -1294,13 +1331,23 @@ async def transcribe_voice_message_stream(
     # A terminal provider failure after either audio handoff or finalization.
     stt_send_failed = False
     stt_drained = False
+    finalization_requested = False
+    client_disconnected = False
     usage_recorded = False
     # 30ms flush threshold for the live-STT transport (16-bit PCM = 2 bytes per sample per channel).
     bytes_per_second = sample_rate * channels * 2
     stt_buffer_flush_size = int(bytes_per_second * 0.03)
 
+    journey_attempt = ClientJourneyAttempt(
+        'realtime_voice',
+        resolve_client_kind(
+            x_app_platform=x_app_platform,
+            user_agent=websocket.headers.get('user-agent'),
+        ),
+    )
     stt_service, stt_language, stt_model = get_stt_service_for_language(language, surface=STTServingSurface.PTT)
     if stt_service is None or stt_language is None or stt_model is None:
+        journey_attempt.fail('dependency_unavailable')
         await websocket.close(code=1011, reason='Transcription service unavailable')
         return
     context_keywords = _parse_context_keywords(keywords)
@@ -1333,17 +1380,22 @@ async def transcribe_voice_message_stream(
 
     async def segment_sender():
         """Forward segments from the thread-safe queue to the WebSocket."""
-        nonlocal websocket_active
+        nonlocal client_disconnected, websocket_active
         while websocket_active:
             try:
                 segments = await asyncio.wait_for(segment_queue.get(), timeout=0.5)
                 if segments is _SENTINEL:
                     break
                 await websocket.send_json(segments)
+                if isinstance(segments, list) and any(
+                    isinstance(segment, dict) and str(segment.get('text') or '').strip() for segment in segments
+                ):
+                    journey_attempt.succeed()
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
                 logger.warning(f'transcribe-stream: segment_sender error uid={uid}: {e}')
+                client_disconnected = True
                 websocket_active = False
                 break
 
@@ -1354,6 +1406,7 @@ async def transcribe_voice_message_stream(
             return
         stt_send_failed = True
         websocket_active = False
+        journey_attempt.fail('provider_error')
         logger.error('event=ptt_transcription_stream outcome=provider_terminal_failure')
         try:
             await websocket.close(code=1011, reason='Transcription service unavailable')
@@ -1422,6 +1475,7 @@ async def transcribe_voice_message_stream(
             raise RuntimeError(f'Unsupported serving STT provider {stt_service!r}')
 
         if dg_socket is None:
+            journey_attempt.fail('dependency_unavailable')
             logger.error(
                 'transcribe-stream: failed to connect to STT provider uid=%s provider=%s', uid, stt_service.value
             )
@@ -1451,9 +1505,11 @@ async def transcribe_voice_message_stream(
                 await websocket.close(code=1008, reason=f'Idle timeout: no audio for {_WS_IDLE_TIMEOUT_S}s')
                 break
             except WebSocketDisconnect:
+                client_disconnected = True
                 break
 
             if message.get("type") == "websocket.disconnect":
+                client_disconnected = True
                 break
 
             # Handle text "finalize" message: flush remaining audio and await the provider's
@@ -1461,6 +1517,7 @@ async def transcribe_voice_message_stream(
             # Note: text frames do NOT reset the audio-idle timer.
             text_data = message.get("text")
             if text_data and text_data.strip() == "finalize":
+                finalization_requested = True
                 if dg_socket and not stt_send_failed:
                     if len(stt_audio_buffer) > 0:
                         if not await send_stt_audio_or_close(bytes(stt_audio_buffer)):
@@ -1512,7 +1569,7 @@ async def transcribe_voice_message_stream(
                 accepted_audio_bytes += len(chunk)
 
     except WebSocketDisconnect:
-        pass
+        client_disconnected = True
     except Exception as e:
         logger.error(f'transcribe-stream: error uid={uid}: {e}')
         await close_stt_failure()
@@ -1550,6 +1607,16 @@ async def transcribe_voice_message_stream(
                     await sender_task
                 except asyncio.CancelledError:
                     pass
+
+        if not journey_attempt.finished:
+            if client_disconnected:
+                journey_attempt.cancel()
+            elif stt_send_failed:
+                journey_attempt.fail('provider_error')
+            elif finalization_requested:
+                journey_attempt.fail('empty_answer')
+            else:
+                journey_attempt.cancel()
 
         del stt_audio_buffer
         parity_capture.persist()

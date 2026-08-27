@@ -1030,13 +1030,12 @@ export default function omiProvider(pi: ExtensionAPI): void {
   const baseUrl = process.env.OMI_API_BASE_URL || 'https://api.omi.me/v2'
   const apiKey = process.env.OMI_API_KEY || ''
 
-  // BYOK: the app sets OMI_BYOK_* env vars (all four, or none) when the user is
-  // on the free plan with their own provider keys. Attach them as X-BYOK-*
-  // headers on every request so the backend applies the request-level
-  // all-four-keys paywall exemption and routes inference through the user's own
-  // key. We only attach the complete set — the backend's has_all_byok_keys()
-  // requires all four to be present. (Env-var names match src/shared/byok.ts.)
+  // BYOK: the app sets OMI_BYOK_* env vars for the selected LLM provider and
+  // optional Deepgram key. Attach configured capabilities as X-BYOK-* headers
+  // so the backend applies the LLM BYOK quota exemption and routes inference
+  // through the selected provider key. (Env-var names match src/shared/byok.ts.)
   const byokMap: Array<[string, string]> = [
+    ['OMI_BYOK_OPENROUTER', 'X-BYOK-OpenRouter'],
     ['OMI_BYOK_OPENAI', 'X-BYOK-OpenAI'],
     ['OMI_BYOK_ANTHROPIC', 'X-BYOK-Anthropic'],
     ['OMI_BYOK_GEMINI', 'X-BYOK-Gemini'],
@@ -1047,10 +1046,10 @@ export default function omiProvider(pi: ExtensionAPI): void {
     const value = process.env[envName]
     if (value && value.length > 0) byokHeaders[headerName] = value
   }
-  const byokActive = Object.keys(byokHeaders).length === byokMap.length
+  const byokActive = Object.keys(byokHeaders).length > 0
   if (byokActive) {
     process.stderr.write(
-      `[omi-provider] BYOK active — attaching ${byokMap.length} X-BYOK headers\n`
+      `[omi-provider] BYOK active — attaching ${Object.keys(byokHeaders).length} X-BYOK headers\n`
     )
   }
 
@@ -1068,15 +1067,6 @@ export default function omiProvider(pi: ExtensionAPI): void {
         contextWindow: 200_000,
         maxTokens: 16_384,
         // Cost set to 0 client-side — tracked server-side by the backend.
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-      },
-      {
-        id: 'omi-opus',
-        name: 'Omi Opus',
-        reasoning: true,
-        input: ['text', 'image'],
-        contextWindow: 200_000,
-        maxTokens: 16_384,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
       }
     ]

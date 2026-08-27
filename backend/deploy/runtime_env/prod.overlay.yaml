@@ -8,6 +8,9 @@ overlay:
   gke:
     backend-listen:
       env:
+        REFERRAL_PUBLIC_BASE_URL:
+          value: https://omi.me
+          category: service_discovery
         ACCOUNT_DELETION_DISPATCH_MODE:
           value: cloud_tasks
           category: reliability

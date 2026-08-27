@@ -694,9 +694,25 @@ class AnalyticsManager {
 
   // MARK: - Chat Events
 
-  func chatMessageSent(messageLength: Int, hasSelectedAppContext: Bool = false, source: String) {
+  func chatMessageSent(
+    messageLength: Int, hasSelectedAppContext: Bool = false, source: String,
+    countsAsQuestion: Bool = true
+  ) {
     PostHogManager.shared.chatMessageSent(
       messageLength: messageLength, hasSelectedAppContext: hasSelectedAppContext, source: source)
+    // Every chat surface funnels through here, which makes it the one place
+    // that can count "questions asked" for the rating-prompt trigger. Callers
+    // pass countsAsQuestion: false for sends that are not a NEW accepted
+    // question (retries of a failed turn, busy no-op paths) so the one-time
+    // prompt trigger counts each logical question exactly once.
+    guard countsAsQuestion else { return }
+    Task { @MainActor in
+      RatingPromptManager.shared.recordQuestionAsked()
+    }
+  }
+
+  func desktopRatingSubmitted(rating: Int) {
+    PostHogManager.shared.desktopRatingSubmitted(rating: rating)
   }
 
   // MARK: - Search Events

@@ -71,6 +71,8 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         "backend/utils/sync/pipeline.py": "tests/unit/test_sync_v2.py",
         "backend/routers/transcribe.py": "tests/unit/test_listen_pipeline.py",
         "backend/config/prerecorded_stt.py": "tests/unit/test_parakeet_prerecorded.py",
+        "backend/config/plan_catalog.json": "tests/unit/test_plan_catalog_contract.py",
+        "backend/scripts/generate_plan_catalog.py": "tests/unit/test_plan_catalog_contract.py",
         "backend/scripts/validate-backend-runtime-env.py": "tests/unit/test_backend_runtime_env_validator.py",
         "backend/scripts/firebase_release_probe_token.py": "tests/unit/test_firebase_release_probe_token.py",
         "scripts/voice-provider-probe.sh": "tests/unit/test_voice_provider_probe.py",

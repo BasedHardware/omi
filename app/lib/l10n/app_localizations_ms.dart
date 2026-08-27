@@ -9867,6 +9867,20 @@ class AppLocalizationsMs extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
+  String get chatScopeToday => 'Hari ini';
+
+  @override
+  String get chatScopeThisWeek => 'Minggu ini';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Perihal: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Tanya tentang ini';
+
+  @override
   String get sendRawAudioToOmi => 'Hantar audio mentah ke Omi';
 
   @override
@@ -9878,4 +9892,48 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Tidak dapat berkongsi diagnostik. Sila cuba lagi.';
+
+  @override
+  String get appDisabledTitle => 'Apl ini dilumpuhkan dan tidak boleh dipasang.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Endpoint-nya gagal selama 72 jam berturut-turut, jadi penghantaran dihentikan.';
+
+  @override
+  String get appDisabledGeneric => 'Ia dilumpuhkan oleh Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Betulkan endpoint dahulu — pengaktifan semula akan menyemak semula setiap URL yang dikonfigurasikan.';
+
+  @override
+  String get appReEnable => 'Aktifkan semula';
+
+  @override
+  String get appReEnableFailedTitle => 'Gagal mengaktifkan semula';
+
+  @override
+  String get appReEnableFailedBody => 'Apl ini tidak dapat diaktifkan semula. Sila cuba lagi.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Dilumpuhkan pada $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Ralat terakhir: $error.';
+  }
+
+  @override
+  String get prerecordedTranscript => 'Pra-rakam';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant masih merakam, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Storan Pendant penuh dan ia masih dalam mod rakaman, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.';
 }

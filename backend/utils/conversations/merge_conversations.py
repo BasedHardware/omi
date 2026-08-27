@@ -37,7 +37,6 @@ from utils.other.storage import (
     list_audio_chunks,
     _get_storage_client,
     private_cloud_sync_bucket,
-    _get_extension_for_path,
 )
 import logging
 

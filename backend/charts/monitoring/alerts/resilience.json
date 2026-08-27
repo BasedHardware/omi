@@ -1069,5 +1069,571 @@
       "receiver": "Omi - Services Alerting (Telegram)"
     },
     "record": null
+  },
+  {
+    "uid": "omi-llm-gateway-invalid-requests",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "LLM Gateway",
+    "title": "LLM Gateway - clients rejected before routing",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(llm_gateway_request_rejections_total{error_class=\"invalid_request\"}[30m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  2
+                ],
+                "type": "gte"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "12",
+      "summary": "The gateway is rejecting client requests during validation, before a route is selected",
+      "threshold": ">= 2 invalid-request rejections in 30m, sustained 30m",
+      "user_impact": "Some Omi client population is very likely failing every attempt on this path while other clients look healthy.",
+      "scope": "The Omi LLM gateway request-validation path, ahead of provider routing.",
+      "verification": "Confirm the rejection count in the linked panel, then split production request logs by client user agent to identify which client population is affected.",
+      "safe_next_action": "Identify the rejected parameter and the client that sends it, then follow the documented gateway kill-switch runbook before changing gateway configuration.",
+      "runbook": "backend/docs/runbooks/silent-failure-detection.md"
+    },
+    "labels": {
+      "alert_identity": "omi-llm-gateway-invalid-requests",
+      "severity": "critical",
+      "instatus_component": "ai-chat",
+      "component": "llm-gateway",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-llm-gateway-lane-failure-ratio",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "LLM Gateway",
+    "title": "LLM Gateway - lane failing a large share of real requests",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (lane_id) (increase(llm_gateway_requests_total[1h]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) / clamp_min(sum by (lane_id) (increase(llm_gateway_requests_total[1h])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 20 && $B > 0.25",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-08-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "13",
+      "summary": "One gateway lane is failing more than a quarter of its real requests over an hour",
+      "threshold": "failure share > 0.25 with >= 20 real requests in 1h, per lane",
+      "user_impact": "The Omi capability served by this lane may be unavailable or degraded for the users who reach it.",
+      "scope": "A single production LLM gateway lane; other lanes are evaluated independently.",
+      "verification": "Confirm the failing lane and its provider rejection class in the linked panel before intervention.",
+      "safe_next_action": "Inspect the lane route configuration and provider status on the linked dashboard, then follow the documented gateway runbook.",
+      "runbook": "backend/docs/runbooks/silent-failure-detection.md"
+    },
+    "labels": {
+      "alert_identity": "omi-llm-gateway-lane-failure-ratio",
+      "severity": "critical",
+      "instatus_component": "ai-chat",
+      "component": "llm-gateway",
+      "impact": "product"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-llm-gateway-lane-zero-success",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "LLM Gateway",
+    "title": "LLM Gateway - lane has served no successful request",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (lane_id) (increase(llm_gateway_requests_total[6h]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (lane_id) (increase(llm_gateway_requests_total{outcome=\"success\"}[6h])) or sum by (lane_id) (increase(llm_gateway_requests_total[6h])) * 0",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 20 && $B < 1",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-08-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "13",
+      "summary": "A gateway lane has made at least 20 real attempts in six hours and completed none of them",
+      "threshold": "successful requests < 1 with >= 20 real attempts in 6h, per lane",
+      "user_impact": "The Omi capability served by this lane is very likely completely unavailable to every user who reaches it.",
+      "scope": "A single production LLM gateway lane; other lanes are evaluated independently.",
+      "verification": "Confirm in the linked panel that the lane has attempts but no successful outcome, and read its provider rejection class.",
+      "safe_next_action": "Inspect the lane route configuration and provider credentials on the linked dashboard, then follow the documented gateway runbook.",
+      "runbook": "backend/docs/runbooks/silent-failure-detection.md"
+    },
+    "labels": {
+      "alert_identity": "omi-llm-gateway-lane-zero-success",
+      "severity": "critical",
+      "instatus_component": "ai-chat",
+      "component": "llm-gateway",
+      "impact": "product"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-journey-signal-dead",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Journey outcomes - a journey stopped reporting while the platform serves traffic",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum by (journey) (increase(omi_journey_accepted_total{journey=~\"pusher_session|capture_finalization\"}[1h])) < bool 1) * on() group_left() (sum(increase(llm_gateway_requests_total[1h])) > bool 100)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1
+                ],
+                "type": "gte"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-21T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "14",
+      "summary": "A journey that normally reports every hour has reported nothing while the platform is demonstrably serving traffic",
+      "threshold": "0 accepted attempts for a journey in 1h while gateway requests exceed 100 in the same hour",
+      "user_impact": "Users may already be affected on this path with no other alert able to fire, because the evidence this journey's alerts depend on is missing.",
+      "scope": "The real-traffic journey counters that the Omi resilience alerts are built on.",
+      "verification": "Check whether the emitting service is still scraped and still running before assuming the user path itself is healthy.",
+      "safe_next_action": "Restore the metrics path for the affected service first; do not treat a missing journey signal as evidence that the user path is working.",
+      "runbook": "backend/docs/runbooks/silent-failure-detection.md"
+    },
+    "labels": {
+      "alert_identity": "omi-journey-signal-dead",
+      "severity": "critical",
+      "instatus_component": "observability",
+      "component": "observability",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
   }
 ]

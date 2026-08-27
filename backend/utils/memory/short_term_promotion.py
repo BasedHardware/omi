@@ -8,6 +8,7 @@ Short-term-to-Long-term transition and its graph assertion in one transaction.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
@@ -49,6 +50,8 @@ from utils.memory.memory_system import (
     resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
 )
 from utils.memory.short_term_lifecycle import ShortTermDisposition, effective_short_term_expiry
+
+logger = logging.getLogger(__name__)
 
 
 def _coerce_aware_utc(value: datetime) -> datetime:
@@ -274,8 +277,22 @@ def run_canonical_short_term_ttl_lifecycle(
             continue
         if was_created:
             created += 1
+            logger.warning(
+                "canonical_short_term_ttl_lifecycle: expired_without_recorded_disposition "
+                "uid=%s memory_id=%s run_id=%s",
+                uid,
+                item.memory_id,
+                run_id,
+            )
         else:
             existing += 1
+            logger.info(
+                "canonical_short_term_ttl_lifecycle: expired_with_recorded_disposition "
+                "uid=%s memory_id=%s run_id=%s",
+                uid,
+                item.memory_id,
+                run_id,
+            )
         if (
             disposition == ShortTermDisposition.reject_or_hide
             and item.status == MemoryItemStatus.active
@@ -306,6 +323,14 @@ def run_canonical_short_term_ttl_lifecycle(
                 db_client=client,
             )
             terminal += 1
+            logger.info(
+                "canonical_short_term_ttl_lifecycle: expired_terminal_disposition_applied "
+                "uid=%s memory_id=%s disposition=%s run_id=%s",
+                uid,
+                item.memory_id,
+                disposition.value,
+                run_id,
+            )
 
     return CanonicalShortTermLifecycleReport(
         uid=uid,

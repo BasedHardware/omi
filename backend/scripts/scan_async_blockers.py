@@ -76,6 +76,16 @@ SYNC_NETWORK_UTILITY_IMPORTS = {
     "utils.notifications": frozenset({"send_notification"}),
 }
 
+# asyncio entry points whose arguments must already be awaitables. Handing a call to one of
+# them is the same handoff as `await call()`: the coroutine is driven by the event loop, not
+# by the calling frame. Keep this list exact — a name outside it is not assumed to await.
+COROUTINE_HANDOFF_ASYNCIO_FUNCTIONS = frozenset(
+    {"as_completed", "ensure_future", "gather", "shield", "wait", "wait_for"}
+)
+# `create_task` is matched on the attribute alone because the receiver is either the asyncio
+# module or a TaskGroup/loop instance, and all three drive the argument on the event loop.
+COROUTINE_HANDOFF_METHODS = frozenset({"create_task"})
+
 
 def _node_lineno(node: ast.AST) -> int:
     """Best-effort line number for an arbitrary AST node."""
@@ -268,6 +278,67 @@ def _unmanaged_to_thread_calls(
     return calls
 
 
+def _awaited_call_ids(node: FunctionNode) -> Set[int]:
+    """Identities of the Call nodes that are the direct operand of an `await`.
+
+    Keyed on identity rather than line number: one line can hold both an awaited call and a
+    synchronous one, and only the awaited half is safe.
+    """
+    awaited: Set[int] = set()
+    for child in ast.walk(node):
+        if isinstance(child, ast.Await) and isinstance(child.value, ast.Call):
+            awaited.add(id(child.value))
+    return awaited
+
+
+def _coroutine_handoff_call_ids(node: FunctionNode) -> Set[int]:
+    """Identities of the Call nodes handed to asyncio to be awaited on the event loop.
+
+    `await asyncio.gather(load_a(), load_b())`, `asyncio.create_task(load())` and
+    `await asyncio.wait_for(load(), timeout=5)` are the ordinary ways to await more than one
+    coroutine, or to await one with a deadline. The inner call is not the direct operand of an
+    `await`, so `_awaited_call_ids` cannot see it, yet it blocks the calling frame no more than
+    a directly awaited call does: calling an `async def` only builds a coroutine object.
+
+    Only arguments written at the call site are covered — directly, unpacked with `*`, or as
+    elements of a literal list/tuple/set, which is how `asyncio.wait` and `as_completed` take
+    their awaitables. A name passed in from elsewhere stays outside this analysis, in keeping
+    with the rest of this scanner.
+    """
+    handed_off: Set[int] = set()
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call) or not _is_coroutine_handoff(child.func):
+            continue
+        for argument in [*child.args, *(keyword.value for keyword in child.keywords)]:
+            for candidate in _handed_off_operands(argument):
+                handed_off.add(id(candidate))
+    return handed_off
+
+
+def _is_coroutine_handoff(func: ast.expr) -> bool:
+    """True for `asyncio.<awaiting entry point>` and for any `<receiver>.create_task`."""
+    if not isinstance(func, ast.Attribute):
+        return False
+    if func.attr in COROUTINE_HANDOFF_METHODS:
+        return True
+    return (
+        isinstance(func.value, ast.Name)
+        and func.value.id == "asyncio"
+        and func.attr in COROUTINE_HANDOFF_ASYNCIO_FUNCTIONS
+    )
+
+
+def _handed_off_operands(argument: ast.expr) -> Iterator[ast.Call]:
+    """Yield the calls an argument hands over: itself, `*unpacked`, or literal collection items."""
+    if isinstance(argument, ast.Starred):
+        yield from _handed_off_operands(argument.value)
+    elif isinstance(argument, (ast.List, ast.Tuple, ast.Set)):
+        for element in argument.elts:
+            yield from _handed_off_operands(element)
+    elif isinstance(argument, ast.Call):
+        yield argument
+
+
 def _scan_function_body(
     node: FunctionNode,
     db_names: Set[str],
@@ -285,12 +356,20 @@ def _scan_function_body(
 
     offloaded = _get_offloaded_lines(node)
     nested = _collect_nested_func_lines(node)
+    awaited = _awaited_call_ids(node) | _coroutine_handoff_call_ids(node)
 
     for child in _walk_body(node):
         if not isinstance(child, ast.Call):
             continue
         line = child.lineno
         if line in offloaded or line in nested:
+            continue
+        # `await f()` yields to the event loop; it is the correct way to call an async
+        # helper, including the async accessors in `database.*`. Counting it as blocking
+        # made a correct fix unpushable and offered no way to say so — there is no
+        # allowlist or inline waiver in this scanner. The same holds when the coroutine
+        # reaches the loop through asyncio instead of a direct `await`.
+        if id(child) in awaited:
             continue
         body_call_lines.add(line)
         if isinstance(child.func, ast.Name):
