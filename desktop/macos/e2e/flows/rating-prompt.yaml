@@ -5,6 +5,7 @@ description: One-time desktop rating ask — due exactly at the 3rd question, st
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/RatingPrompt.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+CSAT.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge+RatingPrompt.swift
 preconditions:
   - automation_bridge_ready
