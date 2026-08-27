@@ -105,9 +105,7 @@ def test_a_pin_consumed_only_as_a_build_arg_counts_as_used():
     """
     var = _MODULE.COMPONENTS['python-base'][0]
     compose = {
-        'compose.base.yaml': '\n'.join(
-            line for line in COMPOSE['compose.base.yaml'].splitlines() if var not in line
-        )
+        'compose.base.yaml': '\n'.join(line for line in COMPOSE['compose.base.yaml'].splitlines() if var not in line)
         + f'\n      args:\n        PYTHON_BASE_IMAGE: ${{{var}:?pin missing}}'
     }
     assert _MODULE.check(PINS, compose, _values()) == []
