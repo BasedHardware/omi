@@ -2,6 +2,28 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.226",
+      "date": "2026-08-27",
+      "changes": [
+        "A single failed update check is now reported once instead of once per Sparkle callback",
+        "Fixed transparent and unresponsive left menus in the old Home design"
+      ]
+    },
+    {
+      "version": "0.12.225",
+      "date": "2026-08-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.224",
+      "date": "2026-08-27",
+      "changes": [
+        "Chat failures now report which subsystem they came from, so a failed answer can be diagnosed instead of just counted"
+      ]
+    },
+    {
       "version": "0.12.223",
       "date": "2026-08-27",
       "changes": [

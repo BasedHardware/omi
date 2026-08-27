@@ -9931,4 +9931,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Pra-rakam';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant masih merakam, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Storan Pendant penuh dan ia masih dalam mod rakaman, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.';
 }

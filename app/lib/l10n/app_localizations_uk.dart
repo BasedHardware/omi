@@ -9927,4 +9927,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Попередній запис';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant усе ще записує, тому збережене аудіо не можна передати. Натисніть кнопку Pendant, щоб зупинити запис, а потім синхронізуйте знову.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Пам\'ять Pendant заповнена, і він досі в режимі запису, тому збережене аудіо не можна передати. Натисніть кнопку Pendant, щоб зупинити запис, а потім синхронізуйте знову.';
 }

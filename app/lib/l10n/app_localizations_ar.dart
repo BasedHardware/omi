@@ -9847,4 +9847,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'مسجّل مسبقاً';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'لا يزال Pendant يسجّل، لذا لا يمكن نقل الصوت المخزّن عليه. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'ذاكرة Pendant ممتلئة وما زال في وضع التسجيل، لذا لا يمكن نقل الصوت المخزّن. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.';
 }

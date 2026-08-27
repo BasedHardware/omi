@@ -9906,4 +9906,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Esitallenne';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant tallentaa edelleen, joten tallennettua ääntä ei voi siirtää. Pysäytä tallennus painamalla Pendantin painiketta ja synkronoi sitten uudelleen.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendantin muisti on täynnä ja se on yhä äänitystilassa, joten tallennettua ääntä ei voi siirtää. Pysäytä äänitys painamalla Pendantin painiketta ja synkronoi sitten uudelleen.';
 }

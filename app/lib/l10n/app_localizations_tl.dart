@@ -9996,4 +9996,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Paunang-rekord';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Nagre-record pa rin ang Pendant, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.';
 }

@@ -9905,4 +9905,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'از پیش ضبط‌شده';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant هنوز در حال ضبط است، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'حافظه Pendant پر است و همچنان در حالت ضبط قرار دارد، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.';
 }

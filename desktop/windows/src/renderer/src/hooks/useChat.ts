@@ -45,6 +45,13 @@ import {
   parseChatEvidenceFromRecord,
   type ChatEvidenceReferenceEnvelope
 } from '../../../shared/knowledgeLedger'
+import { createChatQuotaGate, type ChatQuotaGate } from '../lib/chatQuotaGate'
+import { showUsageLimit } from '../lib/usageLimit'
+
+// Main-window pre-send quota gate (Mac AgentBridge.quotaExceeded parity).
+// Exported so UsageLimitTriggerHost can call sync() after each completed reply
+// to refresh the snapshot for the next send's check().
+export const mainChatQuotaGate: ChatQuotaGate = createChatQuotaGate()
 
 export type ChatMsg = {
   id?: string
@@ -1024,6 +1031,16 @@ export function useChat(): UseChat {
     // attachment-only sends); only a truly empty send is dropped. The file_ids
     // are drained from the pending list below.
     if ((!text.trim() && getPendingAttachments().length === 0) || sendingRef.current) return
+    // Pre-send quota gate (Mac AgentBridge.quotaExceeded parity). A signed-out
+    // user has no quota to gate; fail-open so a forced-reauth can't lock the send.
+    if (auth.currentUser) {
+      const verdict = await mainChatQuotaGate.check()
+      if (verdict.blocked) {
+        showUsageLimit('chat')
+        return
+      }
+      mainChatQuotaGate.recordQuery()
+    }
     const fromVoice = !!opts?.fromVoice
     setBusy(true)
     // Per-launch reset defers minting the next visible conversation until the

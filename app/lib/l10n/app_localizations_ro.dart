@@ -9952,4 +9952,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Preînregistrat';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant încă înregistrează, așa că sunetul stocat nu poate fi transferat. Apasă butonul Pendant pentru a opri înregistrarea, apoi sincronizează din nou.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Spațiul de stocare al Pendantului este plin și acesta este încă în modul de înregistrare, așa că audio-ul stocat nu poate fi transferat. Apăsați butonul Pendantului pentru a opri înregistrarea, apoi sincronizați din nou.';
 }

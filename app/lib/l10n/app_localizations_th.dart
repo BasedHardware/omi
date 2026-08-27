@@ -9848,4 +9848,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'บันทึกไว้ล่วงหน้า';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant ยังบันทึกอยู่ จึงไม่สามารถถ่ายโอนเสียงที่จัดเก็บไว้ได้ กดปุ่มของ Pendant เพื่อหยุดบันทึก แล้วซิงค์อีกครั้ง';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'พื้นที่จัดเก็บของ Pendant เต็มและยังอยู่ในโหมดบันทึกเสียง จึงไม่สามารถถ่ายโอนเสียงที่บันทึกไว้ได้ กดปุ่มของ Pendant เพื่อหยุดการบันทึก แล้วซิงค์อีกครั้ง';
 }

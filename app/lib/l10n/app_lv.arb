@@ -3232,5 +3232,7 @@
     "appReEnableFailedBody": "Šo lietotni neizdevās iespējot atkārtoti. Mēģiniet vēlreiz.",
     "appDisabledOn": "Atspējota {date}.",
     "appDisabledLastError": "Pēdējā kļūda: {error}.",
-    "prerecordedTranscript": "Iepriekš ierakstīts"
+    "prerecordedTranscript": "Iepriekš ierakstīts",
+    "pendantRecordingSyncBlocked": "Pendant joprojām ieraksta, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz.",
+    "pendantFullSyncBlocked": "Pendant atmiņa ir pilna, un tas joprojām ir ierakstīšanas režīmā, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz."
 }

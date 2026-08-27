@@ -10,6 +10,7 @@ from google.cloud.firestore_v1 import FieldFilter
 import database.action_items as action_items_db
 import database.chat as chat_db
 import database.conversations as conversations_db
+import database.memories as memories_db
 import database.task_recommendations as task_recommendations_db
 import routers.task_recommendations as task_recommendations_router
 from database.firestore_index_registry import (
@@ -24,6 +25,7 @@ from database.firestore_index_registry import (
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     INDEX_ONLY_REQUIREMENTS,
     MESSAGES_BY_APP_ORDERED_QUERY,
+    MESSAGES_BY_SESSION_ORDERED_QUERY,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
     RECENT_REJECTED_MEMORY_FEEDBACK_QUERY,
     REVIEW_QUEUE_BY_CONFLICT_QUERY,
@@ -644,9 +646,33 @@ def test_app_scoped_message_reads_have_a_declared_composite_index(monkeypatch, s
         assert _equality_plus_order_signature('messages', filters, orders) in declared
 
 
+def test_session_scoped_message_reads_have_a_declared_composite_index(monkeypatch):
+    """chat_session_id-filtered, created_at-descending message reads need a declared composite.
+
+    Regression for a self-host FailedPrecondition 400 on GET /v2/messages?chat_session_id=...:
+    a chat session's first page of messages hits this branch instead of the app-scoped one,
+    and it fails independently of it.
+    """
+    recorder = []
+    monkeypatch.setattr(chat_db, 'db', _StreamRecordingFirestore(recorder, collection_name='messages'))
+
+    chat_db.get_messages('index-contract-user', chat_session_id='some-session', limit=20)
+
+    compound = [(filters, orders) for filters, orders in recorder if orders and any(op == '==' for _, op in filters)]
+    assert compound, 'get_messages(chat_session_id=...) no longer builds an equality + created_at ordering chain'
+    declared = _declared_index_signatures()
+    for filters, orders in compound:
+        assert _equality_plus_order_signature('messages', filters, orders) in declared
+
+
 def test_messages_by_app_ordered_query_is_registered_for_the_messages_collection():
     assert MESSAGES_BY_APP_ORDERED_QUERY.collection_group == 'messages'
     assert MESSAGES_BY_APP_ORDERED_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
+
+
+def test_messages_by_session_ordered_query_is_registered_for_the_messages_collection():
+    assert MESSAGES_BY_SESSION_ORDERED_QUERY.collection_group == 'messages'
+    assert MESSAGES_BY_SESSION_ORDERED_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
 
 
 @pytest.mark.parametrize(
@@ -679,9 +705,66 @@ def test_default_conversation_list_reads_have_a_declared_composite_index(monkeyp
         assert _equality_plus_order_signature('conversations', filters, orders) in declared
 
 
+@pytest.mark.parametrize(
+    ('symbol', 'call'),
+    [
+        ('get_in_progress_conversation', lambda: conversations_db.get_in_progress_conversation('index-contract-user')),
+        ('get_action_items', lambda: conversations_db.get_action_items('index-contract-user', limit=20)),
+    ],
+)
+def test_conversations_status_ordered_reads_have_a_declared_composite_index(monkeypatch, symbol, call):
+    """Status-filtered, created_at-descending conversation reads need a declared composite.
+
+    Regression for a self-host FailedPrecondition 400 on the in-progress-conversation poll
+    and the action-items read: prod has this index only because it was created by hand, but
+    firestore_index_registry.py never declared it.
+    """
+    recorder = []
+    monkeypatch.setattr(conversations_db, 'db', _StreamRecordingFirestore(recorder, collection_name='conversations'))
+
+    call()
+
+    compound = [(filters, orders) for filters, orders in recorder if orders and any(op == '==' for _, op in filters)]
+    assert compound, f'{symbol} no longer builds a status equality + created_at ordering chain'
+    declared = _declared_index_signatures()
+    for filters, orders in compound:
+        assert _equality_plus_order_signature('conversations', filters, orders) in declared
+
+
 def test_conversations_active_ordered_query_is_registered_for_the_conversations_collection():
     assert CONVERSATIONS_ACTIVE_ORDERED_QUERY.collection_group == 'conversations'
     assert CONVERSATIONS_ACTIVE_ORDERED_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
+
+
+def test_default_memories_list_read_has_a_declared_composite_index():
+    """The bare scoring+created_at sort (no filters at all) still needs a composite.
+
+    Regression: get_memories' default path (no category/date filters, default
+    sort='scoring_desc') orders by two fields with zero `where` calls. Prod has this
+    index only because it was created by hand at some point.
+    """
+    recorder = []
+    memories_db.get_memories(
+        'index-contract-user', firestore_client=_StreamRecordingFirestore(recorder, collection_name='memories')
+    )
+
+    assert recorder, 'get_memories no longer streams a query for its default path'
+    filters, orders = recorder[0]
+    assert not filters
+    assert orders == (('scoring', 'DESCENDING'), ('created_at', 'DESCENDING'))
+    declared = _declared_index_signatures()
+    assert _equality_plus_order_signature('memories', filters, orders) in declared
+
+
+def test_conversations_and_memories_index_only_requirements_are_registered():
+    identifiers = {requirement.identifier: requirement for requirement in INDEX_ONLY_REQUIREMENTS}
+    for identifier in (
+        'conversations_status_created',
+        'conversations_discarded_status_created',
+        'memories_scoring_created',
+    ):
+        assert identifier in identifiers
+        assert identifiers[identifier].to_manifest() in firebase_index_manifest()['indexes']
 
 
 def test_query_source_paths_are_posix_canonical_on_every_host_platform():
