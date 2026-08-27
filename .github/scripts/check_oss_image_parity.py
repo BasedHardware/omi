@@ -42,6 +42,11 @@ COMPONENTS = {
     "mc": ("OMI_OSS_MC_IMAGE", "minio/mc:"),
     # TLS-terminating reverse proxies: compose only (Helm terminates at the Envoy Gateway).
     "nginx": ("OMI_OSS_NGINX_IMAGE", None),
+    # The Python base our backend image is BUILT from: a compose build-arg, not a service `image:`,
+    # and absent from Helm (the chart consumes the built image). Pinned here anyway, because a
+    # floating base tag is exactly the drift ADR-0055 exists to stop — it moved from 3.11.15 to
+    # 3.11.16 under us and made upstream's unit runner refuse to start.
+    "python-base": ("OMI_OSS_PYTHON_BASE_IMAGE", None),
 }
 
 # Whole value, not the first token: a `${VAR:?message}` reference contains spaces. Also matches the
@@ -51,6 +56,10 @@ _IMAGE_RE = re.compile(r'^\s*\w*[iI]mage:\s*["\']?(.+?)["\']?\s*$', re.MULTILINE
 _PIN_REF_RE = re.compile(r"^\$\{(OMI_OSS_[A-Z0-9_]+_IMAGE)(:[?-][^}]*)?\}$")
 # Images we build ourselves carry the release, not a pin (ADR-0054) — out of scope here.
 _OURS_RE = re.compile(r"^\$?\{?omi-oss-|^\$\{OMI_OSS_RELEASE")
+# Any pin reference, wherever it appears. A pin can be consumed by something that is not a service
+# `image:` — `PYTHON_BASE_IMAGE:` under `build.args` is one — and rule 4 must count that as usage or
+# it reports a live pin as dead.
+_ANY_PIN_REF_RE = re.compile(r"\$\{(OMI_OSS_[A-Z0-9_]+_IMAGE)(?::[?-][^}]*)?\}")
 
 
 def _parse_pins(text: str) -> dict[str, str]:
@@ -99,6 +108,7 @@ def check(pins_text: str, compose_texts: dict[str, str], values_text: str) -> li
     #    images, which carry the release instead). This is what makes compose drift impossible.
     used: set[str] = set()
     for fname, text in compose_texts.items():
+        used.update(_ANY_PIN_REF_RE.findall(text))
         for img in _images(text):
             ref = _PIN_REF_RE.match(img)
             if ref:

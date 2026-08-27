@@ -232,7 +232,12 @@ curl -fsS http://localhost:8000/v1/health
 
 1. **Private base image -> public.** `backend/Dockerfile` uses
    `gcr.io/based-hardware-dev/python:3.11-slim-forky` (private GCR, not pullable). The compose
-   overrides the build-arg `PYTHON_BASE_IMAGE=python:3.11-slim`. Risk: the "forky" image may carry
+   overrides the build-arg with `OMI_OSS_PYTHON_BASE_IMAGE` from `omi.oss.release.pins`, pinned to
+   the exact patch `backend/.python-version` names — `python:3.11.15-slim@sha256:…`. It must be that
+   patch, not the floating `python:3.11-slim`: `backend/scripts/run-unit-ci.sh` starts with a
+   preflight that compares `.venv`'s interpreter to `.python-version` and refuses to run the suite on
+   a mismatch. The floating tag drifted to 3.11.16 and made that gate unrunnable offline until the
+   pin landed. Risk: the "forky" image may carry
    patches/system-deps not replicated; the runtime stage installs `ffmpeg curl libjemalloc2`
    anyway. If build/boot surfaces missing deps, add them or authenticate to GCR.
 2. **`liblc3` compiled from git at build-time.** The Dockerfile does a `git clone` of google/liblc3
@@ -366,7 +371,7 @@ model page once and click *Agree and access*). Then:
 ```
 # Build the slim on-prem image (skips the redundant system CUDA — see "Diarizer image is slimmed" below):
 docker build -f backend/diarizer/Dockerfile -t omi-oss-diarizer:latest \
-  --build-arg PYTHON_BASE_IMAGE=python:3.11-slim --build-arg INSTALL_SYSTEM_CUDA=0 .
+  --build-arg PYTHON_BASE_IMAGE=python:3.11.15-slim --build-arg INSTALL_SYSTEM_CUDA=0 .
 docker run -d --name diarizer --network host --device nvidia.com/gpu=all \
   -e HUGGINGFACE_TOKEN=hf_xxx -e HF_HOME=/models/hf -v $MODELS:/models omi-oss-diarizer:latest
 docker run --rm --network host -e HOSTED_SPEAKER_EMBEDDING_API_URL=http://127.0.0.1:8080 \
@@ -478,7 +483,8 @@ Requirements and gotchas:
   passthrough; production STT/diarization/translation want the GPU.
 - **Parakeet base is on NGC:** `docker login nvcr.io` (free NVIDIA NGC account) before building —
   base `nvcr.io/nvidia/nemo:26.02`. NLLB uses a public CUDA base; diarizer's private base is
-  overridden to `python:3.11-slim` via the `PYTHON_BASE_IMAGE` build-arg (already set in compose).
+  overridden to the pinned `python:3.11.15-slim` via the `PYTHON_BASE_IMAGE` build-arg (already set in
+  compose, from `omi.oss.release.pins`).
 - **Diarizer image is slimmed on-prem via `INSTALL_SYSTEM_CUDA=0`** (build-arg, already set in
   compose). Upstream's Dockerfile installs a ~3GB CUDA 13.2 local-installer .deb on top of the base,
   but `torch==2.8.0`'s wheels already bundle the CUDA **12.8** runtime libraries (the `nvidia-*-cu12`

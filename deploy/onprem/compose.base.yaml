@@ -48,7 +48,7 @@ services:
         org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
       args:
         # override the repo's PRIVATE base image with a public one (see SELFHOST_NOTES, Risks)
-        PYTHON_BASE_IMAGE: python:3.11-slim
+        PYTHON_BASE_IMAGE: ${OMI_OSS_PYTHON_BASE_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     env_file:
       - ./backend.env.base
     # Defensive/parity mkdir of the runtime temp dirs before uvicorn — main.py DOES create them at import

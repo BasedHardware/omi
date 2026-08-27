@@ -59,3 +59,11 @@ OMI_OSS_NGINX_IMAGE=nginx:stable-alpine@sha256:97d490c12ba55b4946b01546d1c3ed324
 # only one deployment target uses it.
 OMI_OSS_POSTGRES_IMAGE=postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
 OMI_OSS_MC_IMAGE=minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+
+# --- Build base --------------------------------------------------------------------------------
+# The Python base our backend image is BUILT from. Upstream's Dockerfile defaults to a private GCR
+# mirror we cannot pull, so compose overrides the `PYTHON_BASE_IMAGE` build-arg with the public image.
+# It must be the exact patch `backend/.python-version` names (3.11.15): upstream's own unit runner
+# refuses to start on a mismatch ("Python version mismatch: expected 3.11.15 ... got 3.11.16"). The
+# floating `python:3.11-slim` tag drifted to 3.11.16 and silently made that gate unrunnable here.
+OMI_OSS_PYTHON_BASE_IMAGE=python:3.11.15-slim@sha256:90744cff8f32887f075c47d747a173ff333e9e98801667af93c357fa9f5e28ff

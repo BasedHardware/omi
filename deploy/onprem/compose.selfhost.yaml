@@ -172,7 +172,7 @@ services:
         org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
         org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
       args:
-        PYTHON_BASE_IMAGE: python:3.11-slim
+        PYTHON_BASE_IMAGE: ${OMI_OSS_PYTHON_BASE_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     profiles: ["chat"]
     command:
       - sh
@@ -359,7 +359,7 @@ services:
       dockerfile: backend/diarizer/Dockerfile
       args:
         # override the repo's PRIVATE base image with a public one (see SELFHOST_NOTES, Risks)
-        PYTHON_BASE_IMAGE: python:3.11-slim
+        PYTHON_BASE_IMAGE: ${OMI_OSS_PYTHON_BASE_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
         # skip the ~3GB system CUDA 13.2 install: torch bundles its own cu12.8 runtime libraries,
         # so on-prem needs only the host driver (via CDI). Halves the image (~24.8GB -> ~12.5GB).
         INSTALL_SYSTEM_CUDA: "0"

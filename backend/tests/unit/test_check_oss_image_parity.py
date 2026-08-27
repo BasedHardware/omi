@@ -97,6 +97,22 @@ def test_compose_only_component_must_actually_be_referenced():
     assert any('compose-only but no compose file references it' in p for p in problems), problems
 
 
+def test_a_pin_consumed_only_as_a_build_arg_counts_as_used():
+    """A pin can be consumed by a build-arg rather than a service `image:` (the Python base image).
+
+    Rule 4 must see that as usage; otherwise the check calls a live pin dead and the only way to
+    silence it is to stop pinning the thing.
+    """
+    var = _MODULE.COMPONENTS['python-base'][0]
+    compose = {
+        'compose.base.yaml': '\n'.join(
+            line for line in COMPOSE['compose.base.yaml'].splitlines() if var not in line
+        )
+        + f'\n      args:\n        PYTHON_BASE_IMAGE: ${{{var}:?pin missing}}'
+    }
+    assert _MODULE.check(PINS, compose, _values()) == []
+
+
 def test_the_real_repo_is_aligned():
     """The check as CI runs it — the tree in this commit must pass."""
     assert _MODULE.main() == 0
