@@ -2,6 +2,14 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.226",
+      "date": "2026-08-27",
+      "changes": [
+        "A single failed update check is now reported once instead of once per Sparkle callback",
+        "Fixed transparent and unresponsive left menus in the old Home design"
+      ]
+    },
+    {
       "version": "0.12.225",
       "date": "2026-08-27",
       "changes": [
