@@ -518,6 +518,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get doubleTap => 'Ketuk Ganda';
 
   @override
+  String get deviceButtonActions => 'Tindakan Tombol Perangkat';
+
+  @override
+  String get deviceButtonActionsDescription => 'Izinkan penekanan tombol mengontrol rekaman dan perintah suara';
+
+  @override
   String get ledBrightness => 'Kecerahan LED';
 
   @override

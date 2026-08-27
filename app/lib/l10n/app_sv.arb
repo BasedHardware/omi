@@ -164,6 +164,8 @@
     "modelNumber": "Modellnummer",
     "manufacturer": "Tillverkare",
     "doubleTap": "Dubbeltryck",
+    "deviceButtonActions": "Åtgärder för enhetsknappen",
+    "deviceButtonActionsDescription": "Tillåt att knapptryck styr inspelning och röstkommandon",
     "ledBrightness": "LED-ljusstyrka",
     "micGain": "Mikrofonförstärkning",
     "disconnect": "Koppla från",

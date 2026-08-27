@@ -520,6 +520,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get doubleTap => 'Dubbel tikken';
 
   @override
+  String get deviceButtonActions => 'Acties voor apparaatknop';
+
+  @override
+  String get deviceButtonActionsDescription => 'Sta toe dat knopdrukken opnames en spraakopdrachten bedienen';
+
+  @override
   String get ledBrightness => 'LED-helderheid';
 
   @override

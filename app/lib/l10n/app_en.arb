@@ -676,6 +676,14 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "Double Tap",
+    "deviceButtonActions": "Device Button Actions",
+    "@deviceButtonActions": {
+        "description": "Title of the master toggle for hardware button actions in device settings"
+    },
+    "deviceButtonActionsDescription": "Allow button presses to control recording and voice commands",
+    "@deviceButtonActionsDescription": {
+        "description": "Explains that the master device-button toggle controls recording and voice command actions"
+    },
     "@doubleTap": {
         "description": "Double tap action label"
     },

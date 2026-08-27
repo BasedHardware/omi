@@ -520,6 +520,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get doubleTap => 'Подвійне натискання';
 
   @override
+  String get deviceButtonActions => 'Дії кнопки пристрою';
+
+  @override
+  String get deviceButtonActionsDescription => 'Дозволити керувати записом і голосовими командами натисканням кнопки';
+
+  @override
   String get ledBrightness => 'Яскравість світлодіода';
 
   @override

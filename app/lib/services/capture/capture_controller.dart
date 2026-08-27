@@ -26,6 +26,7 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
+import 'package:omi/services/capture/device_button_policy.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/utils/audio/foreground.dart';
@@ -901,6 +902,11 @@ class CaptureController extends ChangeNotifier
           } else {
             return;
           }
+        }
+
+        if (!DeviceButtonPolicy.shouldHandleAction(enabled: SharedPreferencesUtil().deviceButtonEnabled)) {
+          Logger.debug('Device button action ignored: disabled in settings');
+          return;
         }
 
         // double tap

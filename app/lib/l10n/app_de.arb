@@ -164,6 +164,8 @@
     "modelNumber": "Modellnummer",
     "manufacturer": "Hersteller",
     "doubleTap": "Doppeltippen",
+    "deviceButtonActions": "Gerätetasten-Aktionen",
+    "deviceButtonActionsDescription": "Tastendrücke dürfen Aufnahme und Sprachbefehle steuern",
     "ledBrightness": "LED-Helligkeit",
     "micGain": "Mikrofonverstärkung",
     "disconnect": "Trennen",

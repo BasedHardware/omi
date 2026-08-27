@@ -164,6 +164,8 @@
     "modelNumber": "Číslo modelu",
     "manufacturer": "Výrobca",
     "doubleTap": "Dvojité ťuknutie",
+    "deviceButtonActions": "Akcie tlačidla zariadenia",
+    "deviceButtonActionsDescription": "Povoliť ovládanie nahrávania a hlasových príkazov stlačením tlačidla",
     "ledBrightness": "Jas LED",
     "micGain": "Zosilnenie mikrofónu",
     "disconnect": "Odpojiť",

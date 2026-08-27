@@ -164,6 +164,8 @@
     "modelNumber": "Mudeli number",
     "manufacturer": "Tootja",
     "doubleTap": "Topeltpuudutus",
+    "deviceButtonActions": "Seadme nupu toimingud",
+    "deviceButtonActionsDescription": "Luba nupuvajutustega juhtida salvestamist ja häälkäsklusi",
     "ledBrightness": "LED heledus",
     "micGain": "Mikrofoni võimendus",
     "disconnect": "Katkesta ühendus",

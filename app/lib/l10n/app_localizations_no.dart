@@ -519,6 +519,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get doubleTap => 'Dobbelttrykk';
 
   @override
+  String get deviceButtonActions => 'Handlinger for enhetsknapp';
+
+  @override
+  String get deviceButtonActionsDescription => 'Tillat at knappetrykk styrer opptak og talekommandoer';
+
+  @override
   String get ledBrightness => 'LED-lysstyrke';
 
   @override

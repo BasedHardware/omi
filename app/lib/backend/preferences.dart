@@ -271,6 +271,12 @@ class SharedPreferencesUtil {
 
   set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
 
+  // Master switch for user-configured button actions. Interactive onboarding
+  // still receives button events before this preference is applied.
+  bool get deviceButtonEnabled => getBool('deviceButtonEnabled', defaultValue: true);
+
+  set deviceButtonEnabled(bool value) => saveBool('deviceButtonEnabled', value);
+
   // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
   int get doubleTapAction => getInt('doubleTapAction');
 

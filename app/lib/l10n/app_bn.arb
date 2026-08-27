@@ -661,6 +661,8 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "দ্বিগুণ ট্যাপ",
+    "deviceButtonActions": "ডিভাইস বোতামের কার্যক্রম",
+    "deviceButtonActionsDescription": "বোতাম চাপ দিয়ে রেকর্ডিং ও ভয়েস কমান্ড নিয়ন্ত্রণের অনুমতি দিন",
     "@doubleTap": {
         "description": "Double tap action label"
     },

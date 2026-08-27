@@ -521,6 +521,13 @@ class AppLocalizationsRo extends AppLocalizations {
   String get doubleTap => 'Dublă apăsare';
 
   @override
+  String get deviceButtonActions => 'Acțiunile butonului dispozitivului';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'Permite apăsărilor butonului să controleze înregistrarea și comenzile vocale';
+
+  @override
   String get ledBrightness => 'Luminozitate LED';
 
   @override

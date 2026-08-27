@@ -164,6 +164,8 @@
     "modelNumber": "Numer modelu",
     "manufacturer": "Producent",
     "doubleTap": "Podwójne dotknięcie",
+    "deviceButtonActions": "Funkcje przycisku urządzenia",
+    "deviceButtonActionsDescription": "Zezwól, aby naciśnięcia przycisku sterowały nagrywaniem i poleceniami głosowymi",
     "ledBrightness": "Jasność LED",
     "micGain": "Wzmocnienie mikrofonu",
     "disconnect": "Rozłącz",

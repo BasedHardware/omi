@@ -164,6 +164,8 @@
     "modelNumber": "Номер на модела",
     "manufacturer": "Производител",
     "doubleTap": "Двойно докосване",
+    "deviceButtonActions": "Действия на бутона на устройството",
+    "deviceButtonActionsDescription": "Разрешаване на натисканията на бутона да управляват записа и гласовите команди",
     "ledBrightness": "Яркост на LED",
     "micGain": "Усилване на микрофон",
     "disconnect": "Прекъсни",

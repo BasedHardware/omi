@@ -509,6 +509,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get doubleTap => 'ダブルタップ';
 
   @override
+  String get deviceButtonActions => 'デバイスボタンの操作';
+
+  @override
+  String get deviceButtonActionsDescription => 'ボタン操作による録音と音声コマンドの制御を許可します';
+
+  @override
   String get ledBrightness => 'LED明るさ';
 
   @override

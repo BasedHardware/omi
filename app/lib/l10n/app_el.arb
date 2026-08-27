@@ -164,6 +164,8 @@
     "modelNumber": "Αριθμός μοντέλου",
     "manufacturer": "Κατασκευαστής",
     "doubleTap": "Διπλό Πάτημα",
+    "deviceButtonActions": "Ενέργειες κουμπιού συσκευής",
+    "deviceButtonActionsDescription": "Να επιτρέπεται ο έλεγχος της εγγραφής και των φωνητικών εντολών με το κουμπί",
     "ledBrightness": "Φωτεινότητα LED",
     "micGain": "Ενίσχυση Μικροφώνου",
     "disconnect": "Αποσύνδεση",

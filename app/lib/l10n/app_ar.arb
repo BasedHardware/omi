@@ -164,6 +164,8 @@
     "modelNumber": "رقم الطراز",
     "manufacturer": "الشركة المصنعة",
     "doubleTap": "نقرة مزدوجة",
+    "deviceButtonActions": "إجراءات زر الجهاز",
+    "deviceButtonActionsDescription": "السماح لضغطات الزر بالتحكم في التسجيل والأوامر الصوتية",
     "ledBrightness": "سطوع LED",
     "micGain": "تضخيم الميكروفون",
     "disconnect": "قطع الاتصال",

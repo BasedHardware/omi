@@ -523,6 +523,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get doubleTap => 'Doppeltippen';
 
   @override
+  String get deviceButtonActions => 'Gerätetasten-Aktionen';
+
+  @override
+  String get deviceButtonActionsDescription => 'Tastendrücke dürfen Aufnahme und Sprachbefehle steuern';
+
+  @override
   String get ledBrightness => 'LED-Helligkeit';
 
   @override

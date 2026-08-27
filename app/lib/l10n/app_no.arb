@@ -164,6 +164,8 @@
     "modelNumber": "Modellnummer",
     "manufacturer": "Produsent",
     "doubleTap": "Dobbelttrykk",
+    "deviceButtonActions": "Handlinger for enhetsknapp",
+    "deviceButtonActionsDescription": "Tillat at knappetrykk styrer opptak og talekommandoer",
     "ledBrightness": "LED-lysstyrke",
     "micGain": "Mikrofonforsterkning",
     "disconnect": "Koble fra",

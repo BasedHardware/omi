@@ -522,6 +522,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get doubleTap => 'Διπλό Πάτημα';
 
   @override
+  String get deviceButtonActions => 'Ενέργειες κουμπιού συσκευής';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'Να επιτρέπεται ο έλεγχος της εγγραφής και των φωνητικών εντολών με το κουμπί';
+
+  @override
   String get ledBrightness => 'Φωτεινότητα LED';
 
   @override

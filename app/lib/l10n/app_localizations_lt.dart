@@ -520,6 +520,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get doubleTap => 'Dvigubas bakstelėjimas';
 
   @override
+  String get deviceButtonActions => 'Įrenginio mygtuko veiksmai';
+
+  @override
+  String get deviceButtonActionsDescription => 'Leisti mygtuko paspaudimais valdyti įrašymą ir balso komandas';
+
+  @override
   String get ledBrightness => 'LED ryškumas';
 
   @override

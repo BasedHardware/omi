@@ -520,6 +520,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get doubleTap => 'Dvojité ťuknutie';
 
   @override
+  String get deviceButtonActions => 'Akcie tlačidla zariadenia';
+
+  @override
+  String get deviceButtonActionsDescription => 'Povoliť ovládanie nahrávania a hlasových príkazov stlačením tlačidla';
+
+  @override
   String get ledBrightness => 'Jas LED';
 
   @override

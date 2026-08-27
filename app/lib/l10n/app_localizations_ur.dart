@@ -518,6 +518,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get doubleTap => 'دوگنا تھپتھپائیں';
 
   @override
+  String get deviceButtonActions => 'ڈیوائس بٹن کی کارروائیاں';
+
+  @override
+  String get deviceButtonActionsDescription => 'بٹن دبانے سے ریکارڈنگ اور صوتی احکامات کنٹرول کرنے کی اجازت دیں';
+
+  @override
   String get ledBrightness => 'LED روشنی';
 
   @override

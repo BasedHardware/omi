@@ -164,6 +164,8 @@
     "modelNumber": "Nombor Model",
     "manufacturer": "Pengeluar",
     "doubleTap": "Ketik Dua Kali",
+    "deviceButtonActions": "Tindakan Butang Peranti",
+    "deviceButtonActionsDescription": "Benarkan tekanan butang mengawal rakaman dan arahan suara",
     "ledBrightness": "Kecerahan LED",
     "micGain": "Gandaan Mikrofon",
     "disconnect": "Putuskan Sambungan",

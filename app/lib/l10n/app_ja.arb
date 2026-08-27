@@ -163,6 +163,8 @@
     "modelNumber": "モデル番号",
     "manufacturer": "製造元",
     "doubleTap": "ダブルタップ",
+    "deviceButtonActions": "デバイスボタンの操作",
+    "deviceButtonActionsDescription": "ボタン操作による録音と音声コマンドの制御を許可します",
     "ledBrightness": "LED明るさ",
     "micGain": "マイクゲイン",
     "disconnect": "接続解除",

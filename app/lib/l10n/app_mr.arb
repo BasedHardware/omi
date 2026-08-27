@@ -661,6 +661,8 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "दुहेरी टॅप",
+    "deviceButtonActions": "डिव्हाइस बटण क्रिया",
+    "deviceButtonActionsDescription": "बटण दाबून रेकॉर्डिंग आणि व्हॉइस कमांड नियंत्रित करण्यास अनुमती द्या",
     "@doubleTap": {
         "description": "Double tap action label"
     },

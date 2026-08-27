@@ -661,6 +661,8 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "Double Tap",
+    "deviceButtonActions": "Mga Aksyon ng Button ng Device",
+    "deviceButtonActionsDescription": "Payagang kontrolin ng pagpindot sa button ang pag-record at mga voice command",
     "@doubleTap": {
         "description": "Double tap action label"
     },

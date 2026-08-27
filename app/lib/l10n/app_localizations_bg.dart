@@ -520,6 +520,13 @@ class AppLocalizationsBg extends AppLocalizations {
   String get doubleTap => 'Двойно докосване';
 
   @override
+  String get deviceButtonActions => 'Действия на бутона на устройството';
+
+  @override
+  String get deviceButtonActionsDescription =>
+      'Разрешаване на натисканията на бутона да управляват записа и гласовите команди';
+
+  @override
   String get ledBrightness => 'Яркост на LED';
 
   @override

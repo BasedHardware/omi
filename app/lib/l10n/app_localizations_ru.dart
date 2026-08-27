@@ -520,6 +520,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get doubleTap => 'Двойное нажатие';
 
   @override
+  String get deviceButtonActions => 'Действия кнопки устройства';
+
+  @override
+  String get deviceButtonActionsDescription => 'Разрешить управление записью и голосовыми командами с помощью кнопки';
+
+  @override
   String get ledBrightness => 'Яркость LED';
 
   @override
