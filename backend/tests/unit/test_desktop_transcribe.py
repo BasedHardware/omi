@@ -348,13 +348,18 @@ def _desktop_transcribe_isolation():
         # Stub transitive imports for utils.chat (avoid pulling in all of utils.llm etc.)
         # Do NOT stub utils.other.endpoints — it contains the @timeit decorator that must
         # be a real function (not MagicMock) or it corrupts decorated function signatures.
+        _utils_llm = ModuleType('utils.llm')
+        _utils_llm.__path__ = []
+        _utils_llm.__package__ = 'utils.llm'
+        sys.modules['utils.llm'] = _utils_llm
         for _ufull in [
-            'utils.llm',
             'utils.llm.memories',
             'utils.llm.persona',
             'utils.llm.chat',
             'utils.llm.goals',
             'utils.llm.usage_tracker',
+            'utils.llm.gateway_client',
+            'utils.llm.gateway_observability',
             'utils.conversations.process_conversation',
             'utils.notifications',
             'utils.other.storage',
@@ -372,6 +377,16 @@ def _desktop_transcribe_isolation():
             'models.goal',
         ]:
             sys.modules.setdefault(_ufull, MagicMock())
+        for _llm_child in (
+            'memories',
+            'persona',
+            'chat',
+            'goals',
+            'usage_tracker',
+            'gateway_client',
+            'gateway_observability',
+        ):
+            setattr(_utils_llm, _llm_child, sys.modules[f'utils.llm.{_llm_child}'])
 
         _utils_conversations_pkg = ModuleType('utils.conversations')
         _utils_conversations_pkg.__path__ = []

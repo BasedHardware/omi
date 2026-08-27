@@ -149,7 +149,7 @@ def test_over_quota_turn_in_a_named_session_carries_session_and_app(monkeypatch,
     added = []
     joined = []
 
-    def _enforce(uid, platform=None):
+    def _enforce(uid, platform=None, **_kwargs):
         raise HTTPException(
             status_code=402,
             detail={'error': 'quota_exceeded', 'plan': 'Free', 'unit': 'questions', 'limit': 30},
