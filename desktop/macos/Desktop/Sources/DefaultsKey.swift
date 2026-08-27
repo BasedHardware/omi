@@ -173,10 +173,18 @@ struct ScopedDefaultsKey {
     Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
   }
 
-  /// Per-prompt resolution of a remote (admin-authored) prompt: "answered" or
-  /// "dismissed". Absent = still eligible.
-  static func remotePromptResolution(promptId: String) -> Self {
-    Self(rawValue: "remotePrompt.resolution.v1.\(promptId)")
+  /// Per-prompt, per-account resolution of a remote (admin-authored) prompt:
+  /// "answered" or "dismissed". Absent = still eligible. Owner-scoped so one
+  /// account's answer never suppresses prompts for another account on the
+  /// same Mac (the #9821 account-switch-bleed class).
+  static func remotePromptResolution(promptId: String, ownerID: String) -> Self {
+    Self(rawValue: "remotePrompt.resolution.v2.\(ownerID).\(promptId)")
+  }
+
+  /// Owner-scoped rating-prompt state (count / submitted / dismissed /
+  /// historySeeded) — same bleed class as above.
+  static func ratingPrompt(_ field: String, ownerID: String) -> Self {
+    Self(rawValue: "ratingPrompt.v2.\(field).\(ownerID)")
   }
 
   static func taskInterruptionLedger(ownerID: String) -> Self {

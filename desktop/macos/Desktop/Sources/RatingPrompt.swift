@@ -35,6 +35,42 @@ final class RatingPromptManager: ObservableObject {
   private let defaults = UserDefaults.standard
   private var flagObserver: NSObjectProtocol?
   private var flagPollTask: Task<Void, Never>?
+  private var migratedOwners = Set<String>()
+
+  /// Injectable for tests; production scopes all prompt state to the signed-in
+  /// account so a switch never inherits another account's answers (#9821 class).
+  var ownerProvider: () -> String = { RuntimeOwnerIdentity.currentOwnerId() ?? "anonymous" }
+
+  private func scopedKey(_ field: String) -> ScopedDefaultsKey {
+    let owner = ownerProvider()
+    if !migratedOwners.contains(owner) {
+      migratedOwners.insert(owner)
+      migrateLegacyGlobalState(to: owner)
+    }
+    return .ratingPrompt(field, ownerID: owner)
+  }
+
+  /// The first shipped build stored this state device-globally; the account
+  /// signed in when the scoped build first runs inherits it (correct for the
+  /// overwhelmingly common single-account Mac, and prevents re-prompting
+  /// users who already answered), then the global keys are removed.
+  private func migrateLegacyGlobalState(to owner: String) {
+    let legacy: [(DefaultsKey, String)] = [
+      (.ratingPromptQuestionCount, "questionCount"),
+      (.ratingPromptSubmittedRating, "submittedRating"),
+      (.ratingPromptDismissed, "dismissed"),
+      (.ratingPromptHistorySeeded, "historySeeded"),
+    ]
+    for (globalKey, field) in legacy {
+      if let value = defaults.object(forKey: globalKey.rawValue) {
+        let scoped = ScopedDefaultsKey.ratingPrompt(field, ownerID: owner)
+        if defaults.object(forKey: scoped) == nil {
+          defaults.set(value, forKey: scoped)
+        }
+        defaults.removeObject(forKey: globalKey.rawValue)
+      }
+    }
+  }
 
   /// Injectable for tests; production reads the preloaded PostHog flag.
   var remoteDisableCheck: () -> Bool = {
@@ -59,19 +95,19 @@ final class RatingPromptManager: ObservableObject {
   }
 
   var questionCount: Int {
-    defaults.integer(forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+    defaults.object(forKey: scopedKey("questionCount")) as? Int ?? 0
   }
 
   var submittedRating: Int {
-    defaults.integer(forKey: DefaultsKey.ratingPromptSubmittedRating.rawValue)
+    defaults.object(forKey: scopedKey("submittedRating")) as? Int ?? 0
   }
 
   var isDismissed: Bool {
-    defaults.bool(forKey: DefaultsKey.ratingPromptDismissed.rawValue)
+    defaults.object(forKey: scopedKey("dismissed")) as? Bool ?? false
   }
 
   func recordQuestionAsked() {
-    defaults.set(questionCount + 1, forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+    defaults.set(questionCount + 1, forKey: scopedKey("questionCount"))
     refresh()
     // Remote prompts share the same accepted-question seam: only sends the
     // chat provider accepted reach here, so both counters agree by
@@ -85,7 +121,7 @@ final class RatingPromptManager: ObservableObject {
 
   func submit(rating: Int) {
     let clamped = min(max(rating, 1), 5)
-    defaults.set(clamped, forKey: DefaultsKey.ratingPromptSubmittedRating.rawValue)
+    defaults.set(clamped, forKey: scopedKey("submittedRating"))
     AnalyticsManager.shared.desktopRatingSubmitted(rating: clamped)
     thankYouRating = clamped
     refresh()
@@ -109,7 +145,7 @@ final class RatingPromptManager: ObservableObject {
   }
 
   func dismiss() {
-    defaults.set(true, forKey: DefaultsKey.ratingPromptDismissed.rawValue)
+    defaults.set(true, forKey: scopedKey("dismissed"))
     refresh()
   }
 
@@ -118,11 +154,11 @@ final class RatingPromptManager: ObservableObject {
   /// seed of the counter from server chat history. Fetch failure leaves the
   /// marker unset so the next launch retries.
   func seedFromHistoryIfNeeded() async {
-    guard !defaults.bool(forKey: DefaultsKey.ratingPromptHistorySeeded.rawValue) else { return }
+    guard !(defaults.object(forKey: scopedKey("historySeeded")) as? Bool ?? false) else { return }
     guard submittedRating == 0, !isDismissed,
       questionCount < RatingPromptPolicy.questionThreshold
     else {
-      defaults.set(true, forKey: DefaultsKey.ratingPromptHistorySeeded.rawValue)
+      defaults.set(true, forKey: scopedKey("historySeeded"))
       return
     }
     // Launch timing: auth/session may not be ready at first .task — retry a
@@ -144,11 +180,9 @@ final class RatingPromptManager: ObservableObject {
     let asked = history.filter { $0.sender == "human" }.count
     log("RatingPrompt: history seed fetched \(history.count) messages, \(asked) questions")
     if asked >= RatingPromptPolicy.questionThreshold {
-      defaults.set(
-        RatingPromptPolicy.questionThreshold,
-        forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+      defaults.set(RatingPromptPolicy.questionThreshold, forKey: scopedKey("questionCount"))
     }
-    defaults.set(true, forKey: DefaultsKey.ratingPromptHistorySeeded.rawValue)
+    defaults.set(true, forKey: scopedKey("historySeeded"))
     refresh()
   }
 
@@ -156,11 +190,12 @@ final class RatingPromptManager: ObservableObject {
   /// path can be exercised repeatedly on a dev bundle.
   func resetForTesting() {
     thankYouRating = nil
-    defaults.removeObject(forKey: DefaultsKey.ratingPromptHistorySeeded.rawValue)
-    defaults.removeObject(forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
-    defaults.removeObject(forKey: DefaultsKey.ratingPromptSubmittedRating.rawValue)
-    defaults.removeObject(forKey: DefaultsKey.ratingPromptDismissed.rawValue)
+    for field in ["historySeeded", "questionCount", "submittedRating", "dismissed"] {
+      defaults.removeObject(forKey: scopedKey(field))
+    }
     refresh()
+    // Allow migration to be exercised again after a test reset.
+    migratedOwners.removeAll()
   }
 
   var isRemotelyDisabled: Bool {
