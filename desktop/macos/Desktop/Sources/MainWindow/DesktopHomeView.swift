@@ -1156,7 +1156,11 @@ struct DesktopHomeView: View {
         RatingPromptBar()
         RemotePromptBar()
       }
-      .task {
+      .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "signed-out") {
+        // Re-runs on every owner transition (same pattern as the chat-first
+        // capability task): cached prompt state must swap accounts instantly.
+        RatingPromptManager.shared.ownerDidChange()
+        RemotePromptEngine.shared.ownerDidChange()
         RemotePromptEngine.shared.start()
         await RatingPromptManager.shared.seedFromHistoryIfNeeded()
       }
