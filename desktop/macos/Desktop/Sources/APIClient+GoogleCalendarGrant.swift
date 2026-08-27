@@ -10,17 +10,25 @@ import Foundation
 /// "Safe Storage" prompt. See issue #10459. This transport is the durable
 /// alternative — the backend already owns the token, so nothing on this machine
 /// needs to read a browser at all.
+/// The `app_key` path parameter for both integration routes. Kept as an
+/// interpolated value rather than baked into the literal because these are the
+/// templated `/v1/integrations/{app_key}` routes, not routes of their own —
+/// `test_desktop_rest_inventory` extracts the literal and matches it against the
+/// app-client OpenAPI spec, so a hardcoded key reads as a route the spec lacks.
+private let googleCalendarAppKey = "google_calendar"
+
 extension APIClient {
   /// Whether this account holds a live Google Calendar grant.
   func googleCalendarGrantConnected() async throws -> Bool {
-    let response: IntegrationConnectionResponse = try await get("v1/integrations/google_calendar")
+    let response: IntegrationConnectionResponse = try await get("v1/integrations/\(googleCalendarAppKey)")
     return response.connected
   }
 
   /// Google's consent URL for the Calendar grant. The backend owns the redirect
   /// and the CSRF state, so the desktop only has to open what it returns.
   func googleCalendarOAuthURL() async throws -> URL {
-    let response: IntegrationOAuthURLResponse = try await get("v1/integrations/google_calendar/oauth-url")
+    let response: IntegrationOAuthURLResponse = try await get(
+      "v1/integrations/\(googleCalendarAppKey)/oauth-url")
     guard let url = URL(string: response.authUrl) else { throw APIError.invalidResponse }
     return url
   }
