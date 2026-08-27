@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:async';
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -15,13 +14,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 class _FakeSyncs {
   FlashSyncStallReason flashStallReason = FlashSyncStallReason.none;
   SyncLocalFilesResponse? syncAllResult;
+  bool isStorageSyncing = false;
+  bool isSdCardSyncing = false;
   bool isFlashPageSyncing = false;
+  int syncAllCalls = 0;
   int offloadFlashPagesCalls = 0;
   Completer<void>? offloadCompleter;
 
   Future<List<Wal>> getAllWals() async => [];
 
-  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async => syncAllResult;
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    syncAllCalls++;
+    return syncAllResult;
+  }
 
   Future<void> offloadFlashPages() async {
     offloadFlashPagesCalls++;
@@ -151,6 +156,22 @@ void main() {
     walService.syncs.offloadCompleter!.complete();
     await Future.wait([first, second]);
     expect(provider.isFlashPageSyncing, isFalse);
+    provider.dispose();
+  });
+
+  test('coordinator drain stays contended for the full device-only offload', () async {
+    final walService = _FakeWalService();
+    walService.syncs.offloadCompleter = Completer<void>();
+    final provider = SyncProvider(walService: walService, uploadGate: _hermeticGate(), startBackgroundSync: false);
+    await provider.initialized;
+
+    final offload = provider.offloadLimitlessFlash();
+    final drain = await provider.drainEligibleWalsForTesting();
+
+    expect(drain.contended, isTrue);
+    expect(walService.syncs.syncAllCalls, 0);
+    walService.syncs.offloadCompleter!.complete();
+    await offload;
     provider.dispose();
   });
 }

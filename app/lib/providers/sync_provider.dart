@@ -437,7 +437,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<RecordingTransferDrainResult> _drainEligibleWals() async {
     if (_isDisposed || _syncState.isProcessing) return const RecordingTransferDrainResult.contended();
-    if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) {
+    if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing || isFlashPageSyncing) {
       return const RecordingTransferDrainResult.contended();
     }
 
@@ -600,8 +600,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool _isTransferSeamBusy() {
     if (_syncState.isProcessing) return true;
     final syncs = _walService.getSyncs();
-    return syncs.isStorageSyncing == true || syncs.isSdCardSyncing == true;
+    return syncs.isStorageSyncing == true || syncs.isSdCardSyncing == true || isFlashPageSyncing;
   }
+
+  @visibleForTesting
+  Future<RecordingTransferDrainResult> drainEligibleWalsForTesting() => _drainEligibleWals();
 
   Future<SyncLocalFilesResponse?> _performSync({
     required Future<SyncLocalFilesResponse?> Function() operation,

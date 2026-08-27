@@ -8,6 +8,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/sync_confirmation.dart';
 
 class LimitlessSyncCardWidget extends StatelessWidget {
   const LimitlessSyncCardWidget({super.key});
@@ -76,9 +77,15 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                     )
                   else if (presentation.canOffloadDevice)
                     ElevatedButton(
-                      onPressed: syncProvider.offloadLimitlessFlash,
+                      onPressed: () async {
+                        if (presentation.showsCloudProgress) {
+                          await syncProvider.offloadLimitlessFlash();
+                        } else if (await confirmSyncForCustomStt(context) && context.mounted) {
+                          await syncProvider.syncWals();
+                        }
+                      },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF16A34A),
+                        backgroundColor: Colors.deepPurple,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
