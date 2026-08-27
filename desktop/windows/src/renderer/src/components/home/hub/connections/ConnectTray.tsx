@@ -177,7 +177,11 @@ export function ConnectTray(props: ConnectTrayCallbacks): React.JSX.Element {
                   brand="chatgpt"
                   onClick={() => onOpenExport('chatgpt')}
                 />
-                <TrayTile title="OpenClaw" brand="openclaw" onClick={() => onOpenExport('openclaw')} />
+                <TrayTile
+                  title="OpenClaw"
+                  brand="openclaw"
+                  onClick={() => onOpenExport('openclaw')}
+                />
                 <TrayTile title="Hermes" brand="hermes" onClick={() => onOpenExport('hermes')} />
                 <TrayTile
                   title="More"

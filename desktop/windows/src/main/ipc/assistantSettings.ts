@@ -28,7 +28,8 @@ const WRITABLE_KEYS = [
   'focusNotificationsEnabled',
   'memoryEnabled',
   'glowOverlayEnabled',
-  'screenAnalysisEnabled'
+  'screenAnalysisEnabled',
+  'contextDirectorEnabled'
 ] as const satisfies readonly (keyof AppSettings)[]
 
 export type AssistantWritableKey = (typeof WRITABLE_KEYS)[number]
@@ -42,7 +43,8 @@ export function projectAssistantSettings(): AssistantSettingsView {
     focusNotificationsEnabled: s.focusNotificationsEnabled,
     memoryEnabled: s.memoryEnabled,
     glowOverlayEnabled: s.glowOverlayEnabled,
-    screenAnalysisEnabled: s.screenAnalysisEnabled
+    screenAnalysisEnabled: s.screenAnalysisEnabled,
+    contextDirectorEnabled: s.contextDirectorEnabled
   }
 }
 

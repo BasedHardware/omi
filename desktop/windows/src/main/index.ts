@@ -106,6 +106,7 @@ import {
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerAiUserProfileHandlers } from './ipc/aiUserProfile'
 import { registerTaskHandlers } from './ipc/tasks'
+import { registerDirectorHandlers } from './ipc/director'
 import { registerBackendDegradedIpc, resetBackendDegraded } from './observability/backendDegraded'
 import {
   resetPendingDeletes,
@@ -125,6 +126,7 @@ import { registerMemoryAssistant } from './assistants/memory/register'
 import { registerTaskAssistant, bringUpTaskEmbeddingIndex } from './assistants/tasks/register'
 import { startTaskPromotionService } from './assistants/tasks/promotionService'
 import { registerGoalGeneration } from './assistants/goals/register'
+import { registerDirectorAssistant } from './assistants/director/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import {
@@ -979,6 +981,8 @@ app.whenReady().then(async () => {
   // the engine reads the shared backend session (relayed by the renderer), reads
   // stay SQLite-only, and freshness comes from the throttled census sync below.
   registerTaskHandlers()
+  // Context director: device-id relay + recommendation-open binding channels.
+  registerDirectorHandlers()
   // 429-storm degraded-mode: pull channel so a window that mounts mid-storm can sync
   // the current state (the transitions themselves broadcast on `backend:degraded`).
   registerBackendDegradedIpc()
@@ -1243,6 +1247,11 @@ app.whenReady().then(async () => {
         // but the 30s debounce only promotes task 1) and promotes app-closed backlog on
         // sign-in. Unconditional (not taskEnabled-gated), matching Mac.
         { name: 'taskPromotion', run: () => startTaskPromotionService() },
+        // Context director: the fifth screen-watching peer. Registration is
+        // unconditional (frame tracking is a cheap field write); the bucket
+        // pipeline gates on `contextDirectorEnabled` (default OFF) and the
+        // legacy TCRS resurfacing path covers the flag-off world.
+        { name: 'directorAssistant', run: () => registerDirectorAssistant() },
         // Track 3 (Goals, Wave C): client-side goal auto-generation. NOT a coordinator
         // peer — it's a time-triggered job (no screen frames). Registers the manual
         // Suggest IPC and starts the periodic scheduler; both no-op until a session is

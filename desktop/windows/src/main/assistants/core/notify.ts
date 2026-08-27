@@ -91,6 +91,11 @@ export class NotificationThrottle {
     this.lastByAssistant.set(assistantId, now)
   }
 
+  /** The global clock's last presentation instant (null = never). */
+  lastGlobalNotificationAt(): number | null {
+    return this.lastGlobalAt
+  }
+
   /** Decide, and on an allow spend the budget. A bypassing (functional)
    *  notification does NOT spend it — it was never a proactive interruption. */
   tryAllow(input: ThrottleInput): ThrottleDecision {
@@ -116,6 +121,13 @@ export function setNotificationSnooze(untilMs: number | null): void {
 
 export function isNotificationSnoozed(now: number = Date.now()): boolean {
   return snoozedUntil !== null && now < snoozedUntil
+}
+
+/** When ANY proactive assistant last presented (the shared budget clock). The
+ *  director's reservation cooldown anchors on this so a suggestion or insight
+ *  toast holds the director's cooldown too (mac's cross-assistant anchor). */
+export function lastGlobalProactiveNotificationAt(): number | null {
+  return throttle.lastGlobalNotificationAt()
 }
 
 /** Would a proactive notification from `assistantId` be deliverable at all right

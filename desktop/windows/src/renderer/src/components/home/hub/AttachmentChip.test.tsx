@@ -25,7 +25,9 @@ describe('AttachmentChip', () => {
   })
 
   it('surfaces a failed upload in the title, so it is not a silent no-op', () => {
-    render(<AttachmentChip attachment={att({ name: 'x.pdf', status: 'failed' })} onRemove={() => {}} />)
+    render(
+      <AttachmentChip attachment={att({ name: 'x.pdf', status: 'failed' })} onRemove={() => {}} />
+    )
     expect(screen.getByText('x.pdf').getAttribute('title')).toMatch(/upload failed/i)
   })
 })

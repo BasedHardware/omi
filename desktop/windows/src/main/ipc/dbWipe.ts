@@ -52,7 +52,20 @@ export const USER_DATA_TABLES = [
   // these DELETEs, so they are deliberately absent (like rewind_frames_fts). DDL
   // lives in taskStore.ts, which dbWipe.test.ts's drift guard also scans.
   'action_items',
-  'staged_tasks'
+  'staged_tasks',
+  // --- Context director (bucket substrate; DDL in contextBucketSchema.ts) ---
+  // Every table derives from the user's screen activity or their proactive
+  // delivery history, so all of it goes on account switch.
+  'context_visits',
+  'context_buckets',
+  'bucket_versions',
+  'bucket_entries',
+  'bucket_facts',
+  'bucket_workstreams',
+  'proactive_candidates',
+  'subject_bindings',
+  'proactive_deliveries',
+  'context_bucket_migration_meta'
 ] as const
 
 // Minimal DB surface the wipe needs — satisfied by both better-sqlite3 (prod)

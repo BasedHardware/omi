@@ -45,7 +45,8 @@ const DEFAULTS: AssistantSettingsView = {
   focusNotificationsEnabled: true,
   memoryEnabled: false,
   glowOverlayEnabled: true,
-  screenAnalysisEnabled: true
+  screenAnalysisEnabled: true,
+  contextDirectorEnabled: false
 }
 
 let store: AssistantSettingsView

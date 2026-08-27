@@ -9,6 +9,7 @@ import {
   Trophy,
   Lightbulb,
   Sparkles,
+  Star,
   X
 } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
@@ -18,6 +19,9 @@ import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
 import { EmptyState } from '../components/ui/EmptyState'
 import { GenerateGoalsButton } from '../components/ui/GenerateGoalsButton'
 import { toast } from '../lib/toast'
+import { useDashboardIntelligence } from '../hooks/useDashboardIntelligence'
+import { dashboardIntelligence, focusedGoals } from '../lib/intelligence/dashboardStore'
+import { ModalShell } from '../components/conversations/ModalShell'
 import { goalEmoji } from '../lib/goalEmoji'
 import { isCompleted, progressColor, progressLabel, progressPct } from '../lib/goalVisuals'
 import { GoalCelebration } from '../components/goals/GoalCelebration'
@@ -75,6 +79,35 @@ export function Goals(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [filter, setFilter] = useState<'active' | 'completed' | 'all'>('active')
+  // Canonical focus (mac parity: the focused-goals subset). Bound only when the
+  // account is inside the intelligence rollout; legacy accounts see no stars.
+  const intelligence = useDashboardIntelligence()
+  const canonicalActive = intelligence.accountGeneration !== null
+  const focusedIds = useMemo(
+    () => new Set(focusedGoals(intelligence.goals).map((g) => g.goalId)),
+    [intelligence.goals]
+  )
+  const [focusBusyId, setFocusBusyId] = useState<string | null>(null)
+  const [replacementChoice, setReplacementChoice] = useState<string | null>(null)
+
+  const toggleFocus = useCallback(
+    async (goalId: string): Promise<void> => {
+      setFocusBusyId(goalId)
+      try {
+        const ok = focusedIds.has(goalId)
+          ? await dashboardIntelligence.unfocus(goalId)
+          : await dashboardIntelligence.focus(goalId, null)
+        // The full-set conflict opens the replacement dialog; every other
+        // failure gets a toast so the star's state never silently lies.
+        if (!ok && dashboardIntelligence.getState().focusReplacementGoalId === null) {
+          toast('Could not update the goal focus. Try again.')
+        }
+      } finally {
+        setFocusBusyId(null)
+      }
+    },
+    [focusedIds]
+  )
 
   const [composing, setComposing] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
@@ -361,6 +394,21 @@ export function Goals(): React.JSX.Element {
     return (
       <li key={g.id} className="surface-card group p-4">
         <div className="flex items-start gap-3">
+          {canonicalActive && (focusedIds.has(g.id) || !done) && (
+            <button
+              onClick={() => void toggleFocus(g.id)}
+              disabled={focusBusyId === g.id}
+              aria-label={focusedIds.has(g.id) ? 'Unfocus goal' : 'Focus goal'}
+              title={focusedIds.has(g.id) ? 'Unfocus' : 'Focus'}
+              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-all duration-200 ${
+                focusedIds.has(g.id)
+                  ? 'text-white'
+                  : 'text-white/25 opacity-0 hover:text-white/70 focus-visible:opacity-100 group-hover:opacity-100'
+              } ${focusBusyId === g.id ? 'opacity-50' : ''}`}
+            >
+              <Star className="h-3.5 w-3.5" fill={focusedIds.has(g.id) ? 'currentColor' : 'none'} />
+            </button>
+          )}
           <button
             onClick={() => void toggleComplete(g)}
             disabled={isBusy}
@@ -483,10 +531,74 @@ export function Goals(): React.JSX.Element {
 
   return (
     <div className="flex h-full flex-col">
+      {intelligence.focusReplacementGoalId !== null && (
+        <ModalShell
+          onClose={() => {
+            dashboardIntelligence.clearFocusReplacement()
+            setReplacementChoice(null)
+          }}
+          maxWidth="max-w-[380px]"
+          labelledBy="goals-page-replacement-title"
+        >
+          <div>
+            <h3
+              id="goals-page-replacement-title"
+              className="mb-2 text-[15px] font-semibold text-white"
+            >
+              Replace a focused goal
+            </h3>
+            <p className="mb-3 text-[12px] text-white/60">
+              Your focus set is full. Nothing is archived; the replaced goal moves back to the list.
+            </p>
+            <div className="mb-3 flex flex-col gap-1">
+              {focusedGoals(intelligence.goals).map((g) => (
+                <label key={g.goalId} className="flex items-center gap-2 text-[13px] text-white/85">
+                  <input
+                    type="radio"
+                    name="focus-replacement"
+                    checked={replacementChoice === g.goalId}
+                    onChange={() => setReplacementChoice(g.goalId)}
+                  />
+                  <span className="truncate">{g.title}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  dashboardIntelligence.clearFocusReplacement()
+                  setReplacementChoice(null)
+                }}
+                className="rounded-xl border border-white/10 px-3 py-1.5 text-xs font-medium text-white/70"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={replacementChoice === null}
+                onClick={() => {
+                  const target = intelligence.focusReplacementGoalId
+                  const choice = replacementChoice
+                  setReplacementChoice(null)
+                  if (target !== null && choice !== null) {
+                    void dashboardIntelligence.focus(target, choice)
+                  }
+                }}
+                className="rounded-xl bg-white/15 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+              >
+                Replace focus
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
       <PageHeader
         title="Goals"
         titleSlot={<TasksGoalsToggle />}
-        subtitle={loading ? 'Loading…' : `${activeCount} active · ${doneCount} completed`}
+        subtitle={
+          loading
+            ? 'Loading…'
+            : `${activeCount} active · ${doneCount} completed${canonicalActive ? ` · ${focusedIds.size} focused` : ''}`
+        }
         actions={
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-black/20 p-1">

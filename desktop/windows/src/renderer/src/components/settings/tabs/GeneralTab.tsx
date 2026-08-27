@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  Compass,
   LayoutDashboard,
   MessageSquarePlus,
   MessagesSquare,
@@ -26,6 +27,7 @@ export function GeneralTab(): React.JSX.Element {
       <AudioRecordingRow />
       <ActionAutomationRow />
       <ScreenAnalysisRow />
+      <ContextDirectorRow />
       <SettingRow
         icon={MessagesSquare}
         title="Chat history"
@@ -181,6 +183,36 @@ export function ScreenAnalysisRow(): React.JSX.Element {
       control={
         <Toggle on={!!on} onChange={change} disabled={on === null} label="Screen Analysis" />
       }
+    />
+  )
+}
+
+// Context Director (the bucket pipeline): visit tracking + screen extraction
+// into durable context buckets + director evaluations that can proactively
+// notify. Default OFF (ships dark, mirroring mac's beta-only rollout); sits
+// under the Screen Analysis master via the coordinator. Same scoped assistant
+// bridge + broadcast subscription as the row above.
+export function ContextDirectorRow(): React.JSX.Element {
+  const [on, setOn] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    void window.omi?.assistantsGetSettings?.().then((s) => setOn(s.contextDirectorEnabled))
+    return window.omi?.onAssistantSettingsChanged?.((s) => setOn(s.contextDirectorEnabled))
+  }, [])
+
+  const change = (next: boolean): void => {
+    setOn(next) // optimistic; the assistant re-reads the settings write
+    void window.omi?.assistantsSetSettings?.({ contextDirectorEnabled: next })
+  }
+
+  return (
+    <SettingRow
+      icon={Compass}
+      dot={on ? 'on' : 'off'}
+      title="Context Director"
+      subtitle="Builds durable context from your screen activity and decides when something is worth an interruption. Experimental; needs Screen Analysis on."
+      keywords="context director buckets proactive interruption experimental"
+      control={<Toggle on={!!on} onChange={change} disabled={on === null} label="Context Director" />}
     />
   )
 }

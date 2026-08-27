@@ -23,8 +23,11 @@ export function HubChatPanel(props: {
   // idea how to get back home (#10894), so the panel carries a close control.
   onDismiss: () => void
   children: React.ReactNode
+  /** Rendered under the empty-thread placeholder (mac parity: the chat-mode
+   *  rolling knows rows shown over an empty thread). */
+  emptyStateExtra?: React.ReactNode
 }): React.JSX.Element {
-  const { messages, sending, header, onDismiss, children } = props
+  const { messages, sending, header, onDismiss, children, emptyStateExtra } = props
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -71,6 +74,7 @@ export function HubChatPanel(props: {
               <p className="max-w-sm text-[13px] text-home-muted">
                 It can see your conversations, tasks, memories, and screen history.
               </p>
+              {emptyStateExtra && <div className="mt-4 w-full max-w-md">{emptyStateExtra}</div>}
             </div>
           ) : (
             <ChatMessages messages={messages} sending={sending} variant="main" />
