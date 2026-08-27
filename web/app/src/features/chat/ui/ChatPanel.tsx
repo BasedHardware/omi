@@ -4,22 +4,15 @@ import { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Sparkles, Trash2, Brain, Paperclip, ArrowLeft } from 'lucide-react';
 import { useChat as useChatContext } from './ChatContext';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
 import { InlineVoiceRecorder } from './VoiceRecorder';
-import { uploadChatFiles } from '@/features/chat/api';
 import { getChatApps } from '@/features/connectors';
 import type { App } from '@/features/connectors';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 import { ChatMarkdown } from './ChatMarkdown';
-
-interface FilePreviewItem {
-  file: File;
-  preview?: string;
-  uploading?: boolean;
-  uploadedId?: string;
-}
+import { useChatAttachments } from './useChatAttachments';
 
 // Quick prompts based on context
 function getQuickPrompts(contextType: string | undefined): string[] {
@@ -65,12 +58,20 @@ export function ChatPanel() {
   const [input, setInput] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
   const [selectedApp, setSelectedApp] = useState<App | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const {
+    selectedFiles,
+    isUploading,
+    fileInputRef,
+    handleFileSelect,
+    handleRemoveFile,
+    takeReadyFiles,
+    clear: clearAttachments,
+    hasReadyUpload,
+    atFileLimit,
+  } = useChatAttachments(selectedAppId ?? undefined);
 
   // Fetch app info when selectedAppId changes
   useEffect(() => {
@@ -107,70 +108,6 @@ export function ChatPanel() {
 
   const quickPrompts = getQuickPrompts(currentContext?.type);
 
-  // Handle file selection
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
-    // Limit to MAX_FILES
-    const availableSlots = MAX_FILES - selectedFiles.length;
-    const filesToAdd = files.slice(0, availableSlots);
-
-    // Create preview items
-    const newItems: FilePreviewItem[] = await Promise.all(
-      filesToAdd.map(async (file) => {
-        let preview: string | undefined;
-        if (file.type.startsWith('image/')) {
-          preview = URL.createObjectURL(file);
-        }
-        return { file, preview, uploading: true };
-      }),
-    );
-
-    setSelectedFiles((prev) => [...prev, ...newItems]);
-
-    // Upload files
-    setIsUploading(true);
-    try {
-      const uploadedFiles = await uploadChatFiles(filesToAdd);
-
-      // Update items with uploaded IDs
-      setSelectedFiles((prev) =>
-        prev.map((item) => {
-          const fileIndex = filesToAdd.indexOf(item.file);
-          const uploadedFile = fileIndex >= 0 ? uploadedFiles[fileIndex] : undefined;
-          if (uploadedFile) {
-            return { ...item, uploading: false, uploadedId: uploadedFile.id };
-          }
-          return item;
-        }),
-      );
-    } catch (err) {
-      console.error('Failed to upload files:', err);
-      // Remove failed uploads
-      setSelectedFiles((prev) => prev.filter((item) => !filesToAdd.includes(item.file)));
-    } finally {
-      setIsUploading(false);
-    }
-
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  // Remove file from selection
-  const handleRemoveFile = (index: number) => {
-    setSelectedFiles((prev) => {
-      const item = prev[index];
-      // Revoke object URL if it was an image
-      if (item.preview) {
-        URL.revokeObjectURL(item.preview);
-      }
-      return prev.filter((_, i) => i !== index);
-    });
-  };
-
   // Handle voice transcript - append to input and focus
   const handleVoiceTranscript = (transcript: string) => {
     setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
@@ -178,17 +115,10 @@ export function ChatPanel() {
   };
 
   const handleSend = async (text: string = input) => {
-    if (
-      (!text.trim() && !selectedFiles.some((item) => item.uploadedId)) ||
-      isLoading ||
-      isStreaming
-    )
-      return;
+    const uploadedFiles = takeReadyFiles();
+    if ((!text.trim() && uploadedFiles.length === 0) || isLoading || isStreaming) return;
 
-    // Get file IDs from uploaded files
-    const fileIds = selectedFiles
-      .filter((item) => item.uploadedId)
-      .map((item) => item.uploadedId as string);
+    const fileIds = uploadedFiles.map((file) => file.id);
 
     MixpanelManager.track('Chat Message Sent', {
       message_length: text.length,
@@ -197,8 +127,8 @@ export function ChatPanel() {
     });
 
     setInput('');
-    setSelectedFiles([]);
-    await sendMessage(text, fileIds, currentContext);
+    clearAttachments();
+    await sendMessage(text, fileIds, currentContext, uploadedFiles);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -219,10 +149,7 @@ export function ChatPanel() {
   };
 
   const canSend =
-    (input.trim() || selectedFiles.some((f) => f.uploadedId)) &&
-    !isLoading &&
-    !isStreaming &&
-    !isUploading;
+    (input.trim() || hasReadyUpload) && !isLoading && !isStreaming && !isUploading;
 
   return (
     <AnimatePresence>
@@ -462,7 +389,7 @@ export function ChatPanel() {
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={
-                        isLoading || isStreaming || selectedFiles.length >= MAX_FILES
+                        isLoading || isStreaming || atFileLimit
                       }
                       className={cn(
                         'p-2 rounded-lg flex-shrink-0',
@@ -470,11 +397,7 @@ export function ChatPanel() {
                         'disabled:opacity-50 disabled:cursor-not-allowed',
                         'transition-colors',
                       )}
-                      title={
-                        selectedFiles.length >= MAX_FILES
-                          ? `Max ${MAX_FILES} files`
-                          : 'Attach file'
-                      }
+                      title={atFileLimit ? `Max ${MAX_FILES} files` : 'Attach file'}
                     >
                       <Paperclip className="w-5 h-5" />
                     </button>

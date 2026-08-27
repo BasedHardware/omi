@@ -2,13 +2,15 @@
 
 import { X, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 import Image from '@tschk/moonshine-next/image';
+import type { MessageFile } from '@/types/conversation';
 import { cn } from '@/lib/utils';
 
-interface FilePreviewItem {
+export interface FilePreviewItem {
   file: File;
   preview?: string;
   uploading?: boolean;
   uploadedId?: string;
+  uploadedFile?: MessageFile;
 }
 
 interface FilePreviewProps {

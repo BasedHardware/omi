@@ -4,10 +4,10 @@ import { useRef, useState, useEffect, useImperativeHandle } from 'react';
 import { ArrowUp, Paperclip } from 'lucide-react';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
 import { InlineVoiceRecorder } from './VoiceRecorder';
-import { OmiPulseMark } from '@/components/ui/OmiPulseMark';
-import { uploadChatFiles } from '@/features/chat/api';
+import { OmiPulseMark } from '@/shared/ui/OmiPulseMark';
 import type { MessageFile } from '@/types/conversation';
 import { cn } from '@/lib/utils';
+import { useChatAttachments } from './useChatAttachments';
 
 /**
  * The ask bar: one pill that carries the text and every control that acts on
@@ -17,14 +17,6 @@ import { cn } from '@/lib/utils';
  * hub and the transcript rather than giving each mode its own, so this owns the
  * draft and upload state and reports only completed sends upward.
  */
-
-interface FilePreviewItem {
-  file: File;
-  preview?: string;
-  uploading?: boolean;
-  uploadedId?: string;
-  uploadedFile?: MessageFile;
-}
 
 export interface ChatComposerHandle {
   focus: () => void;
@@ -68,13 +60,18 @@ export function ChatComposer({
   ref,
 }: ChatComposerProps) {
   const [input, setInput] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
-  const [pendingUploadCount, setPendingUploadCount] = useState(0);
+  const {
+    selectedFiles,
+    isUploading,
+    fileInputRef,
+    pendingUploadCountRef,
+    handleFileSelect,
+    handleRemoveFile,
+    takeReadyFiles,
+    clear: clearAttachments,
+  } = useChatAttachments(appId);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const pendingUploadCountRef = useRef(0);
-  const isUploading = pendingUploadCount > 0;
 
   useImperativeHandle(ref, () => ({ focus: () => inputRef.current?.focus() }), []);
 
@@ -85,75 +82,6 @@ export function ChatComposer({
       inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 200)}px`;
     }
   }, [input]);
-
-  // Handle file selection
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
-    // Limit to MAX_FILES
-    const availableSlots = MAX_FILES - selectedFiles.length;
-    const filesToAdd = files.slice(0, availableSlots);
-
-    // Create preview items
-    const newItems: FilePreviewItem[] = filesToAdd.map((file) => {
-      let preview: string | undefined;
-      if (file.type.startsWith('image/')) {
-        preview = URL.createObjectURL(file);
-      }
-      return { file, preview, uploading: true };
-    });
-
-    setSelectedFiles((prev) => [...prev, ...newItems]);
-
-    // Upload files
-    pendingUploadCountRef.current += 1;
-    setPendingUploadCount((current) => current + 1);
-    try {
-      const uploadedFiles = await uploadChatFiles(filesToAdd, appId);
-
-      // Update items with uploaded IDs
-      setSelectedFiles((prev) =>
-        prev.map((item) => {
-          const fileIndex = filesToAdd.indexOf(item.file);
-          const uploadedFile = fileIndex >= 0 ? uploadedFiles[fileIndex] : undefined;
-          if (uploadedFile) {
-            return {
-              ...item,
-              uploading: false,
-              uploadedId: uploadedFile.id,
-              uploadedFile,
-            };
-          }
-          return item;
-        }),
-      );
-    } catch (err) {
-      console.error('Failed to upload files:', err);
-      // Remove failed uploads
-      setSelectedFiles((prev) => prev.filter((item) => !filesToAdd.includes(item.file)));
-    } finally {
-      pendingUploadCountRef.current = Math.max(0, pendingUploadCountRef.current - 1);
-      setPendingUploadCount((current) => Math.max(0, current - 1));
-    }
-
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  // Remove file from selection
-  const handleRemoveFile = (index: number) => {
-    setSelectedFiles((prev) => {
-      const item = prev[index];
-      // Revoke object URL if it was an image
-      if (item.preview) {
-        URL.revokeObjectURL(item.preview);
-      }
-      return prev.filter((_, i) => i !== index);
-    });
-  };
 
   // Handle voice transcript - append to input and focus
   const handleVoiceTranscript = (transcript: string) => {
@@ -172,12 +100,10 @@ export function ChatComposer({
       return;
 
     // Get file IDs from uploaded files
-    const uploadedFiles = selectedFiles.flatMap((item) =>
-      item.uploadedFile ? [item.uploadedFile] : [],
-    );
+    const uploadedFiles = takeReadyFiles();
 
     setInput('');
-    setSelectedFiles([]);
+    clearAttachments();
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
     }
