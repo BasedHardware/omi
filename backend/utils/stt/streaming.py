@@ -1214,11 +1214,15 @@ async def process_audio_modulate(
         'num_channels': '1',
     }
     if english_fast:
-        # This model accepts neither speaker_diarization nor partial_results, and
-        # rejects a language parameter. It emits partial_utterance by default and
-        # omits the speaker field, which _handle_utterance already maps to SPEAKER_00.
+        # The documented table for this model lists only api_key/audio_format/
+        # sample_rate/num_channels/endpointing, and its utterance payload carries no
+        # speaker field -- so diarization may be lost here and segments collapse to
+        # SPEAKER_00. The endpoint ignores the extra parameters rather than rejecting
+        # them, so they are still sent in case it honours them undocumented.
         path = MODULATE_ENGLISH_FAST_PATH
         params['endpointing'] = 'true'
+        params['speaker_diarization'] = 'true'
+        params['partial_results'] = 'true'
     else:
         path = MODULATE_MULTILINGUAL_PATH
         params['speaker_diarization'] = 'true'

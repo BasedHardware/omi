@@ -38,9 +38,13 @@ async def test_english_sessions_use_english_fast_model(language):
     uri = await _connect(language)
     assert streaming.MODULATE_ENGLISH_FAST_PATH in uri
     params = _params(uri)
+    assert params['endpointing'] == ['true']
+    # The model rejects a language parameter; it is English-only by construction.
     assert 'language' not in params
-    assert 'speaker_diarization' not in params
-    assert 'partial_results' not in params
+    # Undocumented for this model but ignored rather than rejected, so we ask for
+    # diarization in case it is honoured.
+    assert params['speaker_diarization'] == ['true']
+    assert params['partial_results'] == ['true']
 
 
 @pytest.mark.asyncio
