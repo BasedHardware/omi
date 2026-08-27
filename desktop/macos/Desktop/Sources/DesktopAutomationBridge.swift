@@ -3569,6 +3569,7 @@ final class DesktopAutomationActionRegistry {
 
     registerNotificationActions()
     registerRatingPromptActions()
+    registerRemotePromptActions()
     register(
       name: "rewind_settings_snapshot",
       summary: "Return Rewind settings retention and excluded-app counts"

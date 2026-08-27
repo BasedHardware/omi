@@ -170,6 +170,12 @@ struct ScopedDefaultsKey {
     Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
   }
 
+  /// Per-prompt resolution of a remote (admin-authored) prompt: "answered" or
+  /// "dismissed". Absent = still eligible.
+  static func remotePromptResolution(promptId: String) -> Self {
+    Self(rawValue: "remotePrompt.resolution.v1.\(promptId)")
+  }
+
   static func taskInterruptionLedger(ownerID: String) -> Self {
     Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
   }

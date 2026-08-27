@@ -76,6 +76,7 @@ from routers import (
     desktop_agent_vm,
     desktop_chat,
     desktop_core,
+    desktop_prompts,
     desktop_proxy,
     desktop_realtime,
     desktop_screen_crisp,
@@ -184,6 +185,7 @@ app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
 app.include_router(referrals.router)
+app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
 

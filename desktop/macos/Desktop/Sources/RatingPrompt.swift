@@ -73,6 +73,10 @@ final class RatingPromptManager: ObservableObject {
   func recordQuestionAsked() {
     defaults.set(questionCount + 1, forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
     refresh()
+    // Remote prompts share the same accepted-question seam: only sends the
+    // chat provider accepted reach here, so both counters agree by
+    // construction.
+    RemotePromptEngine.shared.recordQuestionAsked()
   }
 
   /// Rating just submitted this session — drives the thank-you state. 4-5
