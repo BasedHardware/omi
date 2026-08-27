@@ -6,6 +6,7 @@ Usage:
     python3 scripts/low_conv_high_transcription.py
 """
 
+import json
 import logging
 import os
 import sys
@@ -22,7 +23,7 @@ try:
     if os.getenv('SERVICE_ACCOUNT_JSON'):
         service_account_info = os.environ["SERVICE_ACCOUNT_JSON"]
         cred = credentials.Certificate(
-            eval(service_account_info) if service_account_info.startswith('{') else service_account_info
+            json.loads(service_account_info) if service_account_info.startswith('{') else service_account_info
         )
     else:
         cred = credentials.ApplicationDefault()
@@ -118,7 +119,9 @@ def main():
     print()
 
     # Per-bucket stats
-    print(f"  {'Bucket':<22} {'Users':<10} {'% Users':<10} {'Total Transcription':<22} {'% of Total':<12} {'Avg/User':<14}")
+    print(
+        f"  {'Bucket':<22} {'Users':<10} {'% Users':<10} {'Total Transcription':<22} {'% of Total':<12} {'Avg/User':<14}"
+    )
     print(f"  {'-'*22} {'-'*10} {'-'*10} {'-'*22} {'-'*12} {'-'*14}")
 
     for label in ['0 conversations', '1 conversation', '2-4 conversations', '<5 total', '5+ conversations']:

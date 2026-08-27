@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 import uuid
 from typing import List, Dict, Any, Union, Optional
-import hashlib
 import os
 import asyncio
 
@@ -61,7 +60,6 @@ from models.conversation import Conversation
 from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
 from utils.conversations.factory import deserialize_conversation, deserialize_conversations
 from models.other import Person, CreatePerson
-from models.shared import StatusResponse
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
 from datetime import datetime, time, timedelta

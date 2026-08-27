@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/models/audio_route.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/pages/phone_calls/call_duration_format.dart';
 
 class ActiveCallPage extends StatefulWidget {
   const ActiveCallPage({super.key});
@@ -160,14 +161,6 @@ class _CallInfoHeader extends StatelessWidget {
     required this.state,
   });
 
-  String _formatDuration(Duration d) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    if (d.inHours > 0) {
-      return '${twoDigits(d.inHours)}:${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}';
-    }
-    return '${twoDigits(d.inMinutes)}:${twoDigits(d.inSeconds.remainder(60))}';
-  }
-
   String _stateLabel(BuildContext context) {
     switch (state) {
       case PhoneCallState.connecting:
@@ -175,7 +168,7 @@ class _CallInfoHeader extends StatelessWidget {
       case PhoneCallState.ringing:
         return context.l10n.callStateRinging;
       case PhoneCallState.active:
-        return _formatDuration(duration);
+        return formatPhoneCallDuration(duration);
       case PhoneCallState.ended:
         return context.l10n.callStateEnded;
       case PhoneCallState.failed:

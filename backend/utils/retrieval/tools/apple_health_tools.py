@@ -116,7 +116,7 @@ def get_apple_health_steps_tool(
             try:
                 sync_dt = datetime.fromisoformat(last_synced.replace('Z', '+00:00'))
                 sync_info = f"\n\n(Data last synced: {sync_dt.strftime('%Y-%m-%d %H:%M')} UTC)"
-            except:
+            except (ValueError, TypeError):
                 pass
 
         result = f"Apple Health Step Data (Last {period_days} days):\n\n"
@@ -198,7 +198,7 @@ def get_apple_health_sleep_tool(
             try:
                 sync_dt = datetime.fromisoformat(last_synced.replace('Z', '+00:00'))
                 result += f"\n(Data last synced: {sync_dt.strftime('%Y-%m-%d %H:%M')} UTC)"
-            except:
+            except (ValueError, TypeError):
                 pass
 
         return result.strip()
@@ -258,7 +258,7 @@ def get_apple_health_heart_rate_tool(
             try:
                 sync_dt = datetime.fromisoformat(last_synced.replace('Z', '+00:00'))
                 result += f"\n(Data last synced: {sync_dt.strftime('%Y-%m-%d %H:%M')} UTC)"
-            except:
+            except (ValueError, TypeError):
                 pass
 
         return result.strip()
@@ -323,7 +323,7 @@ def get_apple_health_workouts_tool(
                 try:
                     start_dt = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc).astimezone(user_tz)
                     date_str = f" - {start_dt.strftime('%m/%d %I:%M %p')}"
-                except:
+                except (ValueError, TypeError, OSError, OverflowError):
                     pass
 
             result += f"{i}. {workout_type}{date_str}\n"
@@ -340,7 +340,7 @@ def get_apple_health_workouts_tool(
             try:
                 sync_dt = datetime.fromisoformat(last_synced.replace('Z', '+00:00'))
                 result += f"(Data last synced: {sync_dt.strftime('%Y-%m-%d %H:%M')} UTC)"
-            except:
+            except (ValueError, TypeError):
                 pass
 
         return result.strip()
@@ -457,7 +457,7 @@ def get_apple_health_summary_tool(
             try:
                 sync_dt = datetime.fromisoformat(last_synced.replace('Z', '+00:00'))
                 result += f"\n(Data last synced: {sync_dt.strftime('%Y-%m-%d %H:%M')} UTC)"
-            except:
+            except (ValueError, TypeError):
                 pass
 
         return result.strip()

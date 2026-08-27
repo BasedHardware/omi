@@ -122,7 +122,8 @@ def endpoint(uid: str, audio_file: UploadFile = File(...), segments: str = Form(
         result = classify_segments(audio_filename, profile_path, people, transcript_segments)
         # print(result)
         return result
-    except:
+    except Exception:
+        logger.warning("speech profile classification failed; returning default segments")
         return default
     finally:
         os.remove(profile_path)
