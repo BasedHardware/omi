@@ -20,6 +20,12 @@ struct ActionItemMetadataBox: @unchecked Sendable {
 class TasksStore: ObservableObject {
   static let shared = TasksStore()
 
+  /// Stable create key for a local SQLite row so launch retries of the same
+  /// unsynced insert do not mint duplicate backend tasks.
+  nonisolated static func actionItemCreateIdempotencyKey(localRowID: Int64) -> String {
+    "desktop-action-item:\(localRowID)"
+  }
+
   struct DashboardTaskSnapshot {
     let overdue: [TaskActionItem]
     let today: [TaskActionItem]
@@ -2444,6 +2450,7 @@ class TasksStore: ObservableObject {
           category: item.category,
           metadataBox: ActionItemMetadataBox(metadata),
           relevanceScore: item.relevanceScore,
+          idempotencyKey: Self.actionItemCreateIdempotencyKey(localRowID: localId),
           expectedOwnerId: ownerID,
           authorizationSnapshot: lease.authorizationSnapshot
         )
@@ -3113,6 +3120,7 @@ class TasksStore: ObservableObject {
             category: tags?.first,
             metadata: metadata,
             recurrenceRule: recurrenceRule,
+            idempotencyKey: Self.actionItemCreateIdempotencyKey(localRowID: localId),
             expectedOwnerId: lease.ownerID,
             authorizationSnapshot: lease.authorizationSnapshot
           )

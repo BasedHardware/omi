@@ -110,6 +110,60 @@ final class PushToTalkButtonTriggerTests: XCTestCase {
     }
   }
 
+  func testCancelRecordingControlIsOfferedOnlyWhileCapturing() {
+    XCTAssertTrue(PushToTalkManager.showsCancelRecordingControl(phase: .recording))
+    XCTAssertTrue(PushToTalkManager.showsCancelRecordingControl(phase: .lockedRecording))
+    XCTAssertTrue(PushToTalkManager.showsCancelRecordingControl(phase: .pendingLockDecision))
+    let hidden: [VoiceTurnPhase?] = [
+      .idle, .finalizing, .awaitingResponse, .awaitingTools, .awaitingJournal,
+      .playing(.nativeRealtime), .terminal(.cancelled), nil,
+    ]
+    for phase in hidden {
+      XCTAssertFalse(
+        PushToTalkManager.showsCancelRecordingControl(phase: phase),
+        "\(String(describing: phase)) must not show cancel.")
+    }
+  }
+
+  func testCancelWhileListeningEndsTheTurnWithoutFinalizing() {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualPushToTalkButtonScheduler())
+    let turnID = coordinator.begin(intent: .locked)
+    XCTAssertEqual(coordinator.activeTurn?.phase, .lockedRecording)
+
+    coordinator.publish(.cancel(turnID: turnID, reason: .cancelled))
+    XCTAssertNil(coordinator.activeTurn)
+    XCTAssertEqual(coordinator.model.lastTerminal?.turnID, turnID)
+    XCTAssertEqual(coordinator.model.lastTerminal?.reason, .cancelled)
+    XCTAssertEqual(
+      PushToTalkManager.clickAction(phase: coordinator.activeTurn?.phase),
+      .beginHandsFree,
+      "After cancel the mic must be ready to start a fresh recording.")
+  }
+
+  /// Cancel must trail the mic in the control cluster. Leading cancel shifts the
+  /// mic's hit target when it mounts, so the second click lands on cancel.
+  func testCancelRecordingControlTrailsTheMicInSourceLayout() throws {
+    // omi-test-quality: source-inspection -- static contract: cancel must trail
+    // mic in PushToTalkMicButton body so the mic hit target does not jump.
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/PushToTalkMicButton.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+    guard let bodyRange = source.range(of: "var body: some View") else {
+      return XCTFail("PushToTalkMicButton body missing")
+    }
+    let body = String(source[bodyRange.lowerBound...])
+    guard let micRange = body.range(of: "micButton"),
+      let cancelRange = body.range(of: "cancelButton")
+    else {
+      return XCTFail("micButton/cancelButton missing from body")
+    }
+    XCTAssertLessThan(
+      micRange.lowerBound, cancelRange.lowerBound,
+      "micButton must appear before cancelButton so the mic does not shift when cancel mounts.")
+  }
+
   // MARK: - Error path
 
   /// A blocked click must take the same usage-limit popup path the hotkey does.

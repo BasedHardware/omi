@@ -403,19 +403,32 @@ struct FloatingControlBarView: View {
         // `conversationView` replaces the normal notch waveform while
         // chat is open. Keep the recording/hint projection visible at
         // the bottom of that same surface instead of hiding PTT state.
-        voiceListeningView
-          .padding(.horizontal, OmiSpacing.md)
-          .frame(height: 42)
-          .background(Capsule().fill(Color.white.opacity(0.12)))
-          .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
-          .padding(.horizontal, notchSurfaceHorizontalInset + OmiSpacing.md)
-          .padding(.bottom, notchSurfaceBottomInset + 8)
-          .accessibilityIdentifier("floating_chat_ptt_recording")
-          .accessibilityLabel(
-            state.pttHintText.isEmpty ? "Recording voice message" : state.pttHintText
-          )
-          .allowsHitTesting(false)
-          .transition(.move(edge: .bottom).combined(with: .opacity))
+        HStack(spacing: OmiSpacing.sm) {
+          voiceListeningView
+          Button(action: { PushToTalkManager.shared.cancelListening() }) {
+            Image(systemName: "xmark")
+              .scaledFont(size: 11, weight: .bold)
+              .foregroundColor(.white.opacity(0.9))
+              .frame(width: 22, height: 22)
+              .background(Circle().fill(Color.white.opacity(0.18)))
+          }
+          .buttonStyle(.plain)
+          .help("Cancel recording")
+          .accessibilityLabel("Cancel voice recording")
+          .accessibilityIdentifier("floating_chat_ptt_cancel")
+        }
+        .padding(.horizontal, OmiSpacing.md)
+        .frame(height: 42)
+        .background(Capsule().fill(Color.white.opacity(0.12)))
+        .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
+        .padding(.horizontal, notchSurfaceHorizontalInset + OmiSpacing.md)
+        .padding(.bottom, notchSurfaceBottomInset + 8)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("floating_chat_ptt_recording")
+        .accessibilityLabel(
+          state.pttHintText.isEmpty ? "Recording voice message" : state.pttHintText
+        )
+        .transition(.move(edge: .bottom).combined(with: .opacity))
       }
     }
     .scaleEffect(
@@ -1274,11 +1287,24 @@ struct FloatingControlBarView: View {
         .padding(.vertical, 5)
         .transition(.opacity)
       } else if state.isVoiceListening {
-        voiceListeningView
-          .padding(.horizontal, 10)
-          .padding(.vertical, 5)
-          .frame(height: 42)
-          .transition(.opacity)
+        HStack(spacing: OmiSpacing.sm) {
+          voiceListeningView
+          Button(action: { PushToTalkManager.shared.cancelListening() }) {
+            Image(systemName: "xmark")
+              .scaledFont(size: 11, weight: .bold)
+              .foregroundColor(.white.opacity(0.9))
+              .frame(width: 22, height: 22)
+              .background(Circle().fill(Color.white.opacity(0.18)))
+          }
+          .buttonStyle(.plain)
+          .help("Cancel recording")
+          .accessibilityLabel("Cancel voice recording")
+          .accessibilityIdentifier("floating_pill_ptt_cancel")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .frame(height: 42)
+        .transition(.opacity)
       } else if allowsHoverExpansion {
         VStack(spacing: 1) {
           compactButton(title: "Open Omi", keys: shortcutSettings.askOmiShortcut.displayTokens) {

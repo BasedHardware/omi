@@ -11,6 +11,11 @@ import SwiftUI
 /// no "hold", so it takes the hands-free lane the double-tap shortcut already
 /// uses: click to start locked listening, click again to send.
 ///
+/// While listening, a separate cancel control discards the capture without
+/// sending so the user can re-record. Cancel sits *after* the mic so the mic's
+/// hit target does not jump when cancel appears — otherwise the second click
+/// lands on cancel and discards instead of sending.
+///
 /// **It renders on two grounds that are not the same colour**, and that is what its palette is built
 /// around. The main window's composer is light-pinned glass; the floating ask bar is the notch pill's
 /// black glass. Its first version was drawn in the legacy dark palette — a hardcoded `#FFFFFF`
@@ -28,38 +33,73 @@ struct PushToTalkMicButton: View {
   @ObservedObject private var usageLimiter = FloatingBarUsageLimiter.shared
   @ObservedObject private var shortcutSettings = ShortcutSettings.shared
 
-  @State private var isHovering = false
+  @State private var isHoveringMic = false
+  @State private var isHoveringCancel = false
 
   private var state: PushToTalkButtonState { manager.pushToTalkButtonState }
+  private var showsCancel: Bool {
+    PushToTalkManager.showsCancelRecordingControl(phase: manager.phase)
+  }
 
   var body: some View {
+    // Mic first, cancel trailing: the mic's leading edge stays fixed when cancel
+    // mounts, so "click again to send" still hits the mic.
+    HStack(spacing: OmiSpacing.xs) {
+      micButton
+      if showsCancel {
+        cancelButton
+      }
+    }
+  }
+
+  private var micButton: some View {
     Button(action: { manager.togglePushToTalkFromButton() }) {
       ZStack {
         // Green rather than the palette's accent: "on" has to read as on without a label, and this is
         // the one job `Ink.listeningGreen` exists for. The old white ring said nothing on a dark
         // surface and nothing at all on a light one.
-        Circle().fill(state == .listening ? Ink.listeningGreen.opacity(0.16) : hoverFill)
+        Circle().fill(state == .listening ? Ink.listeningGreen.opacity(0.16) : micHoverFill)
         glyph
       }
       .frame(width: diameter, height: diameter)
       .contentShape(Circle())
     }
     .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
+    .onHover { isHoveringMic = $0 }
     // Colour only, never scale — a control this size bouncing reads as a toy, and on a translucent
     // panel a scaling shape drags its own wash across the desktop behind it.
-    .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isHovering)
+    .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isHoveringMic)
     .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: state)
     .help(helpText)
     .accessibilityLabel(Text(accessibilityLabel))
+    .accessibilityIdentifier("push_to_talk_mic")
     // Deliberately never `.disabled` while blocked: a disabled button swallows
     // the click, and a blocked click must surface the usage-limit popup.
     .accessibilityAddTraits(state == .listening ? .isSelected : [])
   }
 
+  private var cancelButton: some View {
+    Button(action: { manager.cancelListening() }) {
+      Image(systemName: "xmark")
+        .scaledFont(size: glyphSize * 0.7, weight: .semibold)
+        .foregroundColor(idleTint)
+        .frame(width: diameter, height: diameter)
+        .contentShape(Circle())
+        .background(Circle().fill(isHoveringCancel ? Ink.rowFill : .clear))
+    }
+    .buttonStyle(.plain)
+    .onHover { isHoveringCancel = $0 }
+    .animation(
+      InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isHoveringCancel
+    )
+    .help("Cancel recording")
+    .accessibilityLabel("Cancel voice recording")
+    .accessibilityIdentifier("push_to_talk_cancel")
+  }
+
   /// Nothing at rest. A wash on `labelColor`, so it darkens the light composer and lightens the pill
   /// from one value.
-  private var hoverFill: Color { isHovering ? Ink.rowFill : .clear }
+  private var micHoverFill: Color { isHoveringMic ? Ink.rowFill : .clear }
 
   @ViewBuilder
   private var glyph: some View {
@@ -92,7 +132,7 @@ struct PushToTalkMicButton: View {
     case .idle:
       return "Ask by voice — click to start, click again to send (or hold \(shortcutLabel))"
     case .listening:
-      return "Stop and send (or press \(shortcutLabel))"
+      return "Stop and send (or press \(shortcutLabel)). Cancel discards without sending."
     case .committing:
       return "Sending your voice message…"
     case .blocked:

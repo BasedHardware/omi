@@ -523,6 +523,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
     resetPlaybackPipeline(clearMode: false)
     clearFloatingPillResponseGlowIfIdle()
+    VoiceResponsePlaybackMonitor.shared.refresh()
     return true
   }
 
@@ -555,6 +556,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       audioPlayer = player
       activePlayerFallbackText = fallbackText
       tracer?.end("tts_start")
+      VoiceResponsePlaybackMonitor.shared.refresh()
     } catch {
       // Don't drop the reply silently — speak this chunk with the system voice instead.
       log(
@@ -755,9 +757,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     if let lease = activePTTLease {
       VoiceTurnCoordinator.shared.publish(
         .responseActiveChanged(turnID: lease.turnID, active: active))
-      return
+    } else {
+      VoiceTurnCoordinator.shared.setUnscopedResponseActive(active)
     }
-    VoiceTurnCoordinator.shared.setUnscopedResponseActive(active)
+    VoiceResponsePlaybackMonitor.shared.refresh()
   }
 
   private func clearFloatingPillResponseGlowIfIdle() {
@@ -765,6 +768,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       finishActivePTTLeaseIfIdle()
       setFloatingPillResponseGlow(false)
     }
+    VoiceResponsePlaybackMonitor.shared.refresh()
   }
 
   private func acquirePTTLeaseIfNeeded(_ lane: VoiceOutputLane) -> VoiceOutputLease? {

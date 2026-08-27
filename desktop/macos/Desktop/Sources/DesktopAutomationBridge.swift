@@ -1429,7 +1429,8 @@ final class DesktopAutomationActionRegistry {
     }
 
     // Drive the real push-to-talk state machine headlessly (MIC-01). ptt_start begins
-    // capture like the shortcut key-down; ptt_stop finalizes like a long-hold release.
+    // capture like the shortcut key-down; ptt_stop finalizes like a long-hold release;
+    // ptt_cancel discards without sending (composer Cancel control).
     // Releasing with no mic audio exercises the empty-batch release path — it must end
     // the turn with a hint, not hang. Both hit the exact private startListening/finalize
     // the shortcut handler calls, so no synthetic key events or cursor are involved.
@@ -1445,6 +1446,13 @@ final class DesktopAutomationActionRegistry {
       summary: "Finalize the in-progress push-to-talk capture (mirrors a long-hold release)"
     ) { _ in
       PushToTalkManager.shared.endPushToTalkForAutomation()
+    }
+
+    register(
+      name: "ptt_cancel",
+      summary: "Cancel the in-progress push-to-talk capture without sending"
+    ) { _ in
+      PushToTalkManager.shared.cancelPushToTalkForAutomation()
     }
 
     // Manager-level PTT harness: this crosses the real shortcut lifecycle,

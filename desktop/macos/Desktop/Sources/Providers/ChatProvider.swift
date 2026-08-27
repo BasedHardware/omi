@@ -3258,6 +3258,8 @@ class ChatProvider: ObservableObject {
       log("ChatProvider: ignoring stop from non-owner turn")
       return false
     }
+    // Stop spoken audio with the agent turn so Stop never leaves TTS talking.
+    VoiceResponsePlayback.interrupt()
     return revokeActiveTurn(reason: reason)
   }
 

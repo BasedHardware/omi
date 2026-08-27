@@ -87,6 +87,7 @@ struct ChatInputView: View {
 
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @Environment(\.fontScale) private var fontScale
+  @ObservedObject private var voicePlayback = VoiceResponsePlaybackMonitor.shared
   @State private var isDropTargeted = false
   @State private var hasMarkedText = false
 
@@ -192,7 +193,19 @@ struct ChatInputView: View {
                 .foregroundColor(.red.opacity(0.8))
             }
             .buttonStyle(.plain)
+            .help("Stop response")
+            .accessibilityLabel("Stop response")
           }
+        } else if voicePlayback.isActive {
+          Button(action: { VoiceResponsePlayback.interrupt() }) {
+            Image(systemName: "speaker.slash.circle.fill")
+              .scaledFont(size: 24)
+              .foregroundColor(.red.opacity(0.8))
+          }
+          .buttonStyle(.plain)
+          .help("Stop speaking")
+          .accessibilityLabel("Stop speaking")
+          .accessibilityIdentifier("chat_input_stop_speaking")
         } else {
           Button(action: handleSubmit) {
             Image(systemName: "arrow.up.circle.fill")

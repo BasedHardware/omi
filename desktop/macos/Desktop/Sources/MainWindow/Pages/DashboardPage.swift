@@ -2249,6 +2249,7 @@ struct HomeAskBar: View {
   let onConnect: () -> Void
   let onActivate: () -> Void
 
+  @ObservedObject private var voicePlayback = VoiceResponsePlaybackMonitor.shared
   @State private var isHovering = false
   @State private var isDropTargeted = false
 
@@ -2318,10 +2319,15 @@ struct HomeAskBar: View {
 
         HomeAskBarTrailingControls(
           controls: HomeAskBarControls.resolve(
-            isSending: isSending, isStopping: isStopping, hasText: hasText, isFocused: isFocused),
+            isSending: isSending,
+            isStopping: isStopping,
+            hasText: hasText,
+            isFocused: isFocused,
+            isSpeaking: voicePlayback.isActive),
           isConnectActive: isConnectActive,
           onSend: handleSubmit,
           onStop: onStop,
+          onStopSpeaking: { VoiceResponsePlayback.interrupt() },
           onConnect: onConnect
         )
       }

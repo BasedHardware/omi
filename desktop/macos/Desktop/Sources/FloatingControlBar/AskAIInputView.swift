@@ -11,6 +11,7 @@ struct AskAIInputView: View {
   @State private var hasMarkedText = false
   @State private var attachments: [ChatAttachment] = []
   @State private var isDropTargeted = false
+  @ObservedObject private var voicePlayback = VoiceResponsePlaybackMonitor.shared
 
   var canClearVisibleConversation: Bool = false
   var onSend: ((String) -> Void)?
@@ -93,18 +94,30 @@ struct AskAIInputView: View {
         // pill's black glass, so the ladder here is white-on-black whatever the app's appearance is.
         PushToTalkMicButton(idleTint: NotchGlass.secondary)
 
-        Button(action: {
-          guard canSend else { return }
-          sendMessage()
-        }) {
-          Image(systemName: "arrow.up.circle.fill")
-            .scaledFont(size: 24)
-            .foregroundColor(
-              canSend ? NotchGlass.primary : NotchGlass.disabled
-            )
+        if voicePlayback.isActive {
+          Button(action: { VoiceResponsePlayback.interrupt() }) {
+            Image(systemName: "speaker.slash.circle.fill")
+              .scaledFont(size: 24)
+              .foregroundColor(NotchGlass.primary)
+          }
+          .buttonStyle(.plain)
+          .help("Stop speaking")
+          .accessibilityLabel("Stop speaking")
+          .accessibilityIdentifier("floating_ask_stop_speaking")
+        } else {
+          Button(action: {
+            guard canSend else { return }
+            sendMessage()
+          }) {
+            Image(systemName: "arrow.up.circle.fill")
+              .scaledFont(size: 24)
+              .foregroundColor(
+                canSend ? NotchGlass.primary : NotchGlass.disabled
+              )
+          }
+          .disabled(!canSend)
+          .buttonStyle(.plain)
         }
-        .disabled(!canSend)
-        .buttonStyle(.plain)
       }
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.md)

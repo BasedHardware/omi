@@ -103,6 +103,8 @@ actor APIClient {
   /// - Parameter requestTimeout: overrides the shared 30s transport timeout. Managed LLM
   ///   endpoints need a longer budget than a normal API call; without it a slow synthesis
   ///   is cancelled client-side while the backend is still producing the answer.
+  /// - Parameter idempotencyKey: when set, sent as `Idempotency-Key` so retries of the
+  ///   same logical create do not mint duplicate action items.
   func post<T: Decodable, B: Encodable>(
     _ endpoint: String,
     body: B,
@@ -112,7 +114,8 @@ actor APIClient {
     expectedOwnerId: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     allowsAuthRetry: Bool = true,
-    requestTimeout: TimeInterval? = nil
+    requestTimeout: TimeInterval? = nil,
+    idempotencyKey: String? = nil
   ) async throws -> T {
     var authPolicy = try resolvedRequestAuthPolicy(
       expectedOwnerId: expectedOwnerId,
@@ -134,6 +137,9 @@ actor APIClient {
       requireAuth: requireAuth,
       includeBYOK: includeBYOK,
       expectedAuthOwnerId: authOwnerId)
+    if let idempotencyKey {
+      request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+    }
     try validateExpectedOwner(authPolicy)
     request.httpBody = try transport.encoder.encode(body)
 

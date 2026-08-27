@@ -914,6 +914,20 @@ class PushToTalkManager: ObservableObject {
     return ["state": VoiceTurnCoordinator.phaseLabel(phase ?? .idle), "finalized": wasActive ? "true" : "false"]
   }
 
+  /// Discard an in-progress capture without sending — the same path the Cancel
+  /// control in the composer and floating overlay takes.
+  @discardableResult
+  func cancelPushToTalkForAutomation() -> [String: String] {
+    let wasActive = voiceTurnCoordinator.activeTurn?.phase.isRecording == true
+    if wasActive { cancelListening() }
+    automationCaptureBypass = false
+    return [
+      "state": VoiceTurnCoordinator.phaseLabel(phase ?? .idle),
+      "cancelled": wasActive ? "true" : "false",
+      "listening": voiceTurnCoordinator.activeTurn?.phase.isRecording == true ? "true" : "false",
+    ]
+  }
+
   private var finalizedMode: String = "hold"
 
   private func currentPTTMode() -> String {

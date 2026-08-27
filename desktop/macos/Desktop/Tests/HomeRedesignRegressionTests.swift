@@ -680,6 +680,20 @@ final class HomeAskBarControlsTests: XCTestCase {
     XCTAssertEqual(primary(isSending: true, hasText: true), .stop(isStopping: false))
   }
 
+  func testSpokenPlaybackReplacesSendWithStopSpeaking() {
+    XCTAssertEqual(
+      HomeAskBarControls.resolve(
+        isSending: false, isStopping: false, hasText: false, isFocused: false, isSpeaking: true
+      ).primary,
+      .stopSpeaking)
+    // An in-flight agent turn still owns Stop over stop-speaking.
+    XCTAssertEqual(
+      HomeAskBarControls.resolve(
+        isSending: true, isStopping: false, hasText: false, isFocused: false, isSpeaking: true
+      ).primary,
+      .stop(isStopping: false))
+  }
+
   func testConnectOnlyHoldsTheSlotWhileTheBarIsAtRest() {
     let resting = HomeAskBarControls.resolve(
       isSending: false, isStopping: false, hasText: false, isFocused: false)
