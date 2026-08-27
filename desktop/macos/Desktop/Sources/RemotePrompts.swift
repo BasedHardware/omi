@@ -43,6 +43,10 @@ final class RemotePromptEngine: ObservableObject {
 
   private(set) var specs: [RemotePromptSpec] = []
   private var pollTask: Task<Void, Never>?
+  /// Owner-fetch fence: bumped on every owner transition so an in-flight
+  /// fetch started for the previous account can never land its
+  /// audience-filtered payload after the switch.
+  private var fetchGeneration = 0
   private let defaults = UserDefaults.standard
   static let pollInterval: TimeInterval = 300
 
@@ -78,8 +82,13 @@ final class RemotePromptEngine: ObservableObject {
 
   func refreshFromServer() async {
     guard isSignedInCheck() else { return }
+    let generation = fetchGeneration
     do {
-      specs = try await fetch()
+      let fetched = try await fetch()
+      // A switch happened while this fetch was in flight — the result was
+      // filtered for the PREVIOUS owner's audience and must be discarded.
+      guard generation == fetchGeneration else { return }
+      specs = fetched
     } catch {
       // Fail closed to "no new prompts"; an already-visible prompt stays so a
       // transient network error does not flicker the bar away mid-answer.
@@ -114,6 +123,7 @@ final class RemotePromptEngine: ObservableObject {
   /// indefinitely). Nothing renders until an authenticated fetch for the new
   /// owner succeeds.
   func ownerDidChange() {
+    fetchGeneration += 1
     current = nil
     specs = []
     Task { await self.refreshFromServer() }

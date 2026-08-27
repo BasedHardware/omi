@@ -143,6 +143,55 @@ final class PromptStateAccountScopingTests: XCTestCase {
     await RemotePromptEngine.shared.refreshFromServer()
   }
 
+  func testDelayedFetchFromPreviousOwnerNeverLandsAfterSwitch() async {
+    let specA = RemotePromptSpec(
+      id: "a-delayed-banner", type: "banner", question: "Hey A", options: [],
+      ctaLabel: "Open", ctaURL: "https://omi.me", triggerKind: "app_launch", triggerCount: 0)
+    RemotePromptEngine.shared.isSignedInCheck = { true }
+    RatingPromptManager.shared.dismiss()
+    owner = "user-b"
+    RatingPromptManager.shared.dismiss()
+    owner = "user-a"
+
+    // A's fetch suspends until released; B's fetch returns nothing.
+    // An actor holds the gate so the fetch closure stays Sendable-clean.
+    actor Gate {
+      private var waiter: CheckedContinuation<Void, Never>?
+      func wait() async {
+        await withCheckedContinuation { waiter = $0 }
+      }
+      func open() {
+        waiter?.resume()
+        waiter = nil
+      }
+    }
+    let gate = Gate()
+    RemotePromptEngine.shared.fetch = {
+      if self.owner == "user-a" {
+        await gate.wait()
+        return [specA]
+      }
+      return []
+    }
+
+    // Start A's refresh; it parks awaiting the gate.
+    let inFlight = Task { await RemotePromptEngine.shared.refreshFromServer() }
+    await Task.yield()
+
+    // Switch to B while A's fetch is still in flight, then release it.
+    owner = "user-b"
+    RemotePromptEngine.shared.ownerDidChange()
+    await gate.open()
+    await inFlight.value
+
+    // A's stale audience-filtered payload must have been DISCARDED.
+    XCTAssertNil(RemotePromptEngine.shared.current)
+    XCTAssertFalse(RemotePromptEngine.shared.specs.contains(where: { $0.id == "a-delayed-banner" }))
+
+    RemotePromptEngine.shared.fetch = { [] }
+    await RemotePromptEngine.shared.refreshFromServer()
+  }
+
   func testLegacyGlobalStateMigratesToTheFirstAccountOnly() {
     UserDefaults.standard.set(4, forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
     UserDefaults.standard.set(true, forKey: DefaultsKey.ratingPromptDismissed.rawValue)
