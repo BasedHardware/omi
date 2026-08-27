@@ -143,12 +143,11 @@ final class PushToTalkButtonTriggerTests: XCTestCase {
   /// Cancel must trail the mic in the control cluster. Leading cancel shifts the
   /// mic's hit target when it mounts, so the second click lands on cancel.
   func testCancelRecordingControlTrailsTheMicInSourceLayout() throws {
-    // omi-test-quality: source-inspection -- static contract: cancel must trail
-    // mic in PushToTalkMicButton body so the mic hit target does not jump.
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/PushToTalkMicButton.swift")
+    // omi-test-quality: source-inspection -- static contract: cancel must trail mic in PushToTalkMicButton body so the mic hit target does not jump on mount
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
     guard let bodyRange = source.range(of: "var body: some View") else {
       return XCTFail("PushToTalkMicButton body missing")
