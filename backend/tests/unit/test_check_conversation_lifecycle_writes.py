@@ -39,6 +39,15 @@ def test_tripwire_rejects_the_public_generic_mutation_api():
     assert 'generic conversation lifecycle write' in errors[0]
 
 
+def test_tripwire_rejects_a_split_deferred_lifecycle_write():
+    errors = violations(
+        "conversations_db.update_conversation(uid, conversation_id, {'deferred': True})\n",
+        'backend/routers/conversations.py',
+    )
+    assert len(errors) == 1
+    assert 'generic conversation lifecycle write' in errors[0]
+
+
 def test_tripwire_rejects_a_pasted_back_finalization_admission():
     errors = violations(
         "jobs_db.create_or_get_finalization_intent(uid, conversation_id, requires_byok=False)\n",

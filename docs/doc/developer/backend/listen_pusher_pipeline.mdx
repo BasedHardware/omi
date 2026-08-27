@@ -284,6 +284,16 @@ sequenceDiagram
 
 This is the normal path when the client stays connected but stops speaking.
 
+Desktop can persist a transcript-only conversation as `processing` with
+`deferred=true` and postpone LLM enrichment until the first open. That first
+open claims the row with a Firestore transaction that clears `deferred`, sets
+`status=processing`, and renews `processing_admitted_at` together. The flag is
+the ownership fence: concurrent opens cannot both launch enrichment. If
+enrichment fails, the lifecycle service atomically publishes
+`status=completed, deferred=true`; the UI stops polling, and a later open can
+claim the row for one clean retry. Routers must not split either transition
+into independent field writes.
+
 **Key design rule (#6061):** Listen NEVER processes conversations locally.
 All conversation processing routes through pusher or the dedicated durable
 finalizer worker. Before either handoff, listen persists a Firestore

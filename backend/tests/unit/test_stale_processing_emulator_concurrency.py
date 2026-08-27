@@ -291,7 +291,50 @@ def test_deferred_reacquire_prevents_orphan_terminalization():
 
 
 # ---------------------------------------------------------------------------
-# 4. Unstampable (1 MiB) orphan: the server-owned update_time stands in for the
+# 4. Concurrent deferred reacquires: exactly one enrichment owner
+# ---------------------------------------------------------------------------
+
+
+def test_concurrent_deferred_reacquires_have_exactly_one_winner():
+    """Two simultaneous first opens must never launch duplicate enrichment."""
+    uid = 'test-race-user'
+    cid = 'deferred-double-open-conv-1'
+    _cleanup_conversation(uid, cid)
+
+    client = _client()
+    conv_ref = client.collection('users').document(uid).collection('conversations').document(cid)
+    conv_ref.set({'id': cid, 'status': 'processing', 'deferred': True})
+
+    results: list[bool] = []
+    errors: list[BaseException] = []
+    barrier = threading.Barrier(2)
+
+    def reacquire():
+        barrier.wait()
+        try:
+            results.append(jobs_db.reacquire_deferred_processing(uid, cid))
+        except Exception as error:
+            errors.append(error)
+
+    threads = [threading.Thread(target=reacquire) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=15)
+
+    assert not errors, f'unexpected emulator failures surfaced: {errors}'
+    assert sorted(results) == [False, True], f'exactly one open must own enrichment: {results}'
+
+    final_data = conv_ref.get().to_dict() or {}
+    assert final_data.get('status') == 'processing'
+    assert final_data.get('deferred') is False
+    assert final_data.get('processing_admitted_at') is not None
+
+    _cleanup_conversation(uid, cid)
+
+
+# ---------------------------------------------------------------------------
+# 5. Unstampable (1 MiB) orphan: the server-owned update_time stands in for the
 #    admission fence the document is too large to carry
 # ---------------------------------------------------------------------------
 

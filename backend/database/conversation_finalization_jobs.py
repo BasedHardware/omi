@@ -1691,29 +1691,60 @@ def renew_processing_lease(uid: str, conversation_id: str, *, firestore_client: 
 
 
 def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, now: datetime) -> bool:
-    """Atomically clear ``deferred`` and renew the admission lease.
+    """Atomically claim a deferred row and renew its admission lease.
 
-    This eliminates the window between clearing ``deferred`` and the first
-    heartbeat renewal where the orphan sweep could terminalize the row.  If
-    the row is no longer ``processing`` or was discarded, the transition
-    fails closed so a stale processor produces no derived side effects.
+    ``deferred=True`` is the compare-and-swap ownership token: concurrent
+    first opens may both observe it before this transaction, but only one can
+    clear it and launch enrichment. A completed deferred row represents an
+    earlier enrichment failure and is reopened for an explicit retry.
     """
     snapshot = conversation_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
-    if data.get('status') != 'processing' or data.get('discarded'):
+    if (
+        data.get('status') not in {'processing', 'completed'}
+        or data.get('discarded')
+        or data.get('deferred') is not True
+    ):
         return False
-    transaction.update(conversation_ref, {'deferred': False, 'processing_admitted_at': now})
+    transaction.update(
+        conversation_ref,
+        {'status': 'processing', 'deferred': False, 'processing_admitted_at': now},
+    )
     return True
 
 
 def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
-    """Atomically clear deferred and renew the admission lease in one transaction."""
+    """Atomically claim deferred ownership and renew the lease in one transaction."""
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_reacquire_deferred_processing_txn)
     return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
+
+
+def _recover_deferred_processing_failure_txn(transaction: Any, conversation_ref: Any) -> bool:
+    """Atomically publish a retryable terminal after deferred enrichment fails."""
+    snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    data = snapshot.to_dict() or {}
+    if (
+        data.get('status') not in {'processing', 'completed'}
+        or data.get('discarded')
+        or data.get('deferred') is not False
+    ):
+        return False
+    transaction.update(conversation_ref, {'status': 'completed', 'deferred': True})
+    return True
+
+
+def recover_deferred_processing_failure(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+    """Atomically re-arm deferred enrichment without exposing a stuck processing row."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_recover_deferred_processing_failure_txn)
+    return transactional(transaction, _conversation_ref(client, uid, conversation_id))
 
 
 def _job_last_activity_at(job: Mapping[str, Any]) -> datetime | None:

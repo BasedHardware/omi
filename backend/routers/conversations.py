@@ -198,10 +198,19 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
             try:
-                conversations_db.update_conversation(uid, conversation_id, {'deferred': True})
-                lifecycle_service.complete(uid, conversation_id)
+                recovered = lifecycle_service.recover_deferred_processing_failure(uid, conversation_id)
+                if not recovered:
+                    logger.warning(
+                        'lazy enrich recovery lost ownership uid=%s conv=%s',
+                        uid,
+                        conversation_id,
+                    )
             except Exception:
-                pass
+                logger.exception(
+                    'lazy enrich recovery failed uid=%s conv=%s',
+                    uid,
+                    conversation_id,
+                )
 
     submit_with_context(postprocess_executor, _run_enrichment)
     # Return immediately — still status=processing, no summary yet; the client polls for completion.

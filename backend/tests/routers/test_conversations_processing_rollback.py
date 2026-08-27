@@ -182,3 +182,41 @@ def test_deferred_enrichment_skips_when_reacquisition_fails(monkeypatch):
 
     time.sleep(0.2)  # Give any background task time to (not) run
     process_called.assert_not_called()
+
+
+def test_deferred_enrichment_failure_rearms_retry_through_lifecycle_owner(monkeypatch):
+    """A failed lazy enrichment must atomically become a retryable terminal.
+
+    The router must not split this lifecycle mutation across a raw database
+    write and a second status transition: that can strand a deferred row in
+    processing forever when either write fails.
+    """
+    import threading
+
+    recovered = threading.Event()
+    recovery = MagicMock(side_effect=lambda *_args: recovered.set() or True)
+    raw_update = MagicMock()
+
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service, 'recover_deferred_processing_failure', recovery, raising=False)
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'renew_processing_lease', lambda *_args: True)
+    monkeypatch.setattr(conversations_router.conversations_db, 'update_conversation', raw_update)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+    monkeypatch.setattr(
+        conversations_router,
+        'deserialize_conversation',
+        lambda _data: SimpleNamespace(id='deferred-conv-1', language='en', deferred=False),
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        'process_conversation',
+        MagicMock(side_effect=RuntimeError('enrichment unavailable')),
+    )
+
+    conversations_router._enrich_deferred_conversation(
+        'uid1', {'id': 'deferred-conv-1', 'status': 'processing', 'deferred': True, 'language': 'en'}
+    )
+
+    assert recovered.wait(timeout=10.0), 'deferred failure recovery did not run'
+    recovery.assert_called_once_with('uid1', 'deferred-conv-1')
+    raw_update.assert_not_called()
