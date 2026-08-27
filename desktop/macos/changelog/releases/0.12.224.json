@@ -1,0 +1,7 @@
+{
+  "version": "0.12.224",
+  "date": "2026-08-27",
+  "changes": [
+    "Chat failures now report which subsystem they came from, so a failed answer can be diagnosed instead of just counted"
+  ]
+}
