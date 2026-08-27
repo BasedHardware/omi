@@ -33,6 +33,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/core/app_shell.dart';
+import 'package:omi/env/backend_url_override.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
@@ -297,6 +298,9 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  // Persisted override must be live before auth resolution and product traffic.
+  // ServiceManager.init runs earlier and does not snapshot Env.apiBaseUrl.
+  BackendUrlOverride.restore(SharedPreferencesUtil().customBackendUrl);
   await PhysicalQualification.startupStage(
     'autoremove_default',
     SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault,
