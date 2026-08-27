@@ -84,6 +84,12 @@ export function HomePage() {
   const { ref: scrollRef, edges } = useScrollEdges<HTMLDivElement>();
   const live = useGeminiLive({ messages, onExchange: appendRealtimeExchange });
   const isLive = live.state !== 'idle';
+  const loadHistoryRef = useRef(loadHistory);
+  loadHistoryRef.current = loadHistory;
+  // Launch places Currents in view once. After that the reader owns the
+  // scroller: a later no-op loadHistory, a task/goal rerender, or a stream
+  // must not scrollIntoView the hub and yank them out of history.
+  const readerOwnsViewportRef = useRef(false);
 
   // Track the goal by id, not by value, so the sheet keeps showing live data
   // after an optimistic write replaces the object.
@@ -91,17 +97,23 @@ export function HomePage() {
 
   useEffect(() => {
     let active = true;
+    readerOwnsViewportRef.current = false;
     setExchangeStart(null);
-    void loadHistory().finally(() => {
-      if (!active) return;
-      window.requestAnimationFrame(() =>
-        currentsRef.current?.scrollIntoView?.({ block: 'start' }),
-      );
+    void loadHistoryRef.current().finally(() => {
+      if (!active || readerOwnsViewportRef.current) return;
+      window.requestAnimationFrame(() => {
+        if (!active || readerOwnsViewportRef.current) return;
+        currentsRef.current?.scrollIntoView?.({ block: 'start' });
+      });
     });
     return () => {
       active = false;
     };
-  }, [loadHistory, selectedAppId, selectedChatSessionId]);
+  }, [selectedAppId, selectedChatSessionId]);
+
+  const markReaderOwned = () => {
+    readerOwnsViewportRef.current = true;
+  };
 
   useEffect(() => {
     askRef.current?.focus();
@@ -158,7 +170,13 @@ export function HomePage() {
             edges.atBottom ? 'opacity-0' : 'opacity-100',
           )}
         />
-        <div ref={scrollRef} className="no-scrollbar h-full overflow-y-auto">
+        <div
+          ref={scrollRef}
+          className="no-scrollbar h-full overflow-y-auto [overflow-anchor:none]"
+          onWheel={markReaderOwned}
+          onTouchMove={markReaderOwned}
+          onPointerDown={markReaderOwned}
+        >
           {isLoading && messages.length === 0 ? (
             <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6 sm:py-6">
               <ChatTranscript

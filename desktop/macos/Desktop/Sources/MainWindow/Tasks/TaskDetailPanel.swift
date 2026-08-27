@@ -9,7 +9,6 @@ struct TaskDetailPanel: View {
   let onDismiss: () -> Void
   let onToggle: () -> Void
   let onEdit: () -> Void
-  let onInvestigate: (() -> Void)?
   let onOpenChat: (() -> Void)?
   let onIncrementIndent: (() -> Void)?
   let onDecrementIndent: (() -> Void)?
@@ -28,7 +27,6 @@ struct TaskDetailPanel: View {
     onDismiss: @escaping () -> Void,
     onToggle: @escaping () -> Void,
     onEdit: @escaping () -> Void,
-    onInvestigate: (() -> Void)? = nil,
     onOpenChat: (() -> Void)? = nil,
     onIncrementIndent: (() -> Void)? = nil,
     onDecrementIndent: (() -> Void)? = nil,
@@ -39,7 +37,6 @@ struct TaskDetailPanel: View {
     self.onDismiss = onDismiss
     self.onToggle = onToggle
     self.onEdit = onEdit
-    self.onInvestigate = onInvestigate
     self.onOpenChat = onOpenChat
     self.onIncrementIndent = onIncrementIndent
     self.onDecrementIndent = onDecrementIndent
@@ -232,11 +229,10 @@ struct TaskDetailPanel: View {
   @ViewBuilder
   private var contextSection: some View {
     let metadata = task.parsedMetadata ?? [:]
-    if task.contextSummary != nil || task.currentActivity != nil || task.agentPlan != nil
+    if task.contextSummary != nil || task.currentActivity != nil
       || metadata["context_summary"] as? String != nil
       || metadata["current_activity"] as? String != nil
       || metadata["reasoning"] as? String != nil
-      || metadata["agent_plan"] as? String != nil
     {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         sectionTitle("Context")
@@ -249,9 +245,6 @@ struct TaskDetailPanel: View {
           }
           if let reasoning = metadata["reasoning"] as? String, !reasoning.isEmpty {
             detailBlock("Reasoning", reasoning)
-          }
-          if let plan = task.agentPlan ?? metadata["agent_plan"] as? String, !plan.isEmpty {
-            detailBlock("Agent plan", String(plan.prefix(2000)))
           }
         }
       }
@@ -270,14 +263,6 @@ struct TaskDetailPanel: View {
         )
         actionButton(title: "Edit task", systemImage: "pencil", action: onEdit, identifier: "task-detail-edit")
 
-        if let onInvestigate {
-          actionButton(
-            title: "Execute with Omi",
-            systemImage: "sparkles",
-            action: onInvestigate,
-            identifier: "task-detail-execute"
-          )
-        }
         if let onOpenChat {
           actionButton(
             title: task.workstreamId == nil ? "Work on this with Omi" : "Open thread",

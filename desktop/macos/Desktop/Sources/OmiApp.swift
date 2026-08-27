@@ -318,6 +318,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     runStartupSystemMaintenance()
     pruneExpiredAgentToolOutputs()
+    // A Quick Look panel that was open when the app was force-quit or crashed left full-resolution
+    // screenshots in the temp directory, and its close handler never ran. This is the first moment
+    // anything of ours can take them off disk.
+    ScreenFrameQuickLook.purgeStaleScratch()
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
@@ -1372,8 +1376,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Stop transcription retry service
     TranscriptionRetryService.shared.stop()
 
-    // Stop recurring task scheduler
-    RecurringTaskScheduler.shared.stop()
     Task { await ContextWorkstreamReconciler.shared.stop() }
 
     // Finalize the active Rewind MP4 chunk while the app is still alive.

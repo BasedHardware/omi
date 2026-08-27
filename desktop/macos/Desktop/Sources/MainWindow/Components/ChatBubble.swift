@@ -356,7 +356,11 @@ struct ChatBubble: View {
 
   @ViewBuilder
   private func messageTextBubble(_ text: String) -> some View {
-    if presentation == .proactivePush {
+    if presentation == .proactivePush, let card = SuggestedTaskChatCard.parse(text) {
+      // A proposed task is actionable history, not a receipt: render the card
+      // that lets the reader put it in their list (I1).
+      ChatSuggestedTaskRow(card: card)
+    } else if presentation == .proactivePush {
       ChatProactivePushRow(
         text: text,
         kind: ChatContinuityInvariants.proactiveNotificationKind(message) ?? .general)

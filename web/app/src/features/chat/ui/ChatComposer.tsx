@@ -7,6 +7,7 @@ import { InlineVoiceRecorder } from './VoiceRecorder';
 import { OmiPulseMark } from '@/shared/ui/OmiPulseMark';
 import type { MessageFile } from '@/types/conversation';
 import { cn } from '@/lib/utils';
+import { shouldSubmitComposerKey } from '@/lib/chatComposerKey';
 import { useChatAttachments } from './useChatAttachments';
 
 /**
@@ -112,7 +113,7 @@ export function ChatComposer({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (shouldSubmitComposerKey(e)) {
       e.preventDefault();
       void handleSend();
     }

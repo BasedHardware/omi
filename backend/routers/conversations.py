@@ -10,8 +10,11 @@ import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
+from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_vector, delete_transcript_chunk_vectors
+import database.vector_db as vector_db
 from utils.other.storage import delete_conversation_audio_files
+from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
     BulkAssignSegmentsRequest,
@@ -28,6 +31,7 @@ from models.conversation import (
     SetConversationActionItemsStateRequest,
     SetConversationEventsStateRequest,
     TestPromptRequest,
+    TranscriptMatchSnippet,
     UpdateActionItemDescriptionRequest,
     UpdateSegmentTextRequest,
     UpdateSummaryRequest,
@@ -36,6 +40,11 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.render import conversation_to_dict
+from utils.conversations.mcp_transcript_search import (
+    attach_match_snippets_to_conversations,
+    merge_typesense_page_with_transcript_hits,
+    search_transcript_conversation_ids,
+)
 from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
@@ -53,6 +62,7 @@ from utils.conversations.process_conversation import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
+from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.retraction_scope import retraction_can_be_skipped
@@ -95,7 +105,9 @@ router = APIRouter()
 
 
 def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = conversations_db.get_conversation(
+        uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
+    )
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -201,8 +213,14 @@ class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
 
 
+class ConversationSearchItem(Conversation):
+    """Search hit: base conversation fields plus optional transcript match evidence."""
+
+    match_snippets: List[TranscriptMatchSnippet] = []
+
+
 class SearchConversationsResponse(BaseModel):
-    items: List[Conversation]
+    items: List[ConversationSearchItem]
     total_pages: int
     current_page: int
     per_page: int
@@ -924,6 +942,16 @@ def delete_conversation(
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
+    # Screen frames (meeting-note screenshots) are primary conversation
+    # content, not cascade-only derived data, so this runs unconditionally
+    # and synchronously — unlike audio_files above, a conversation typically
+    # carries at most 7 of these (contract §7 cap), so the GCS fan-out here
+    # is cheap. Must run before delete_conversation below: Firestore does
+    # not cascade subcollection deletes, and the GCS objects have no other
+    # cleanup path once the parent doc (and the frame_id it's keyed under)
+    # is gone.
+    delete_conversation_screen_frames(uid, conversation_id)
+
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)
@@ -1470,6 +1498,13 @@ def send_conversation_share_email(
         # successful dispatch can trigger the visibility rollback (a delivered
         # email keeps a live link).
         share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=to_dispatch)
+        # Viral-loop telemetry: summary shares feed the admin K-factor. Emitted
+        # only after the provider accepted, so the count is delivered shares.
+        emit_posthog_event(
+            uid,
+            'Conversation Summary Shared',
+            {'conversation_id': conversation_id, 'recipient_count': len(to_dispatch), 'channel': 'email'},
+        )
         try:
             conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
         except Exception:
@@ -1667,30 +1702,63 @@ def search_conversations_endpoint(
         )
     except ConversationSearchUnavailableError:
         raise HTTPException(status_code=503, detail="Search temporarily unavailable")
-    conversation_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
+    typesense_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
+    effective_page = search_results.get('current_page', 1)
+    effective_per_page = search_results.get('per_page', 10)
+    # Spoken-word hits (optional transcript-chunk index) are merged on page 1 only so
+    # Typesense pagination stays stable. Snippets still attach for every hydrated hit.
+    # Over-fetch candidates on page 1 so lock/speaker/date filters can still fill per_page
+    # without permanently dropping displaced Typesense hits that lost the merge race.
+    transcript_ids: List[str] = []
+    merge_cap = effective_per_page
+    if effective_page == 1 and (search_request.query or '').strip():
+        merge_cap = min(max(effective_per_page * 3, effective_per_page), 250)
+        transcript_ids = search_transcript_conversation_ids(
+            uid,
+            search_request.query,
+            limit=merge_cap,
+            starts_at=start_timestamp,
+            ends_at=end_timestamp,
+            search_transcript_chunks=vector_db.search_transcript_chunks,
+        )
+    conversation_ids = merge_typesense_page_with_transcript_hits(
+        typesense_ids,
+        transcript_ids,
+        page=effective_page,
+        per_page=merge_cap,
+    )
     conversations = conversations_db.get_conversations_by_id_without_photos(
         uid,
         conversation_ids,
         include_discarded=bool(search_request.include_discarded),
     )
+    # Preserve merge order (transcript-first on page 1); Firestore fetch may reshuffle.
+    by_id = {c.get('id'): c for c in conversations if c.get('id')}
+    conversations = [by_id[cid] for cid in conversation_ids if cid in by_id]
     # Typesense filters locked hits, but the index can lag Firestore. Re-check after hydration
     # so search never leaks that a locked conversation matched a query.
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     # Speaker filtering happens here, not in Typesense: the index has no transcript_segments field, so
     # asking Typesense for one 400'd and 500'd the request. The hydrated Firestore documents do carry
     # transcript_segments, so match against those.
+    # Date filter also re-applies here: transcript-chunk hits can arrive with one-sided chunk
+    # metadata gaps; keep them consistent with Typesense + exact-reference paths.
     conversations = [
         conversation
         for conversation in conversations
         if conversation_matches_speaker(conversation, search_request.speaker_id)
+        and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
     ]
+    # Attach grep-style transcript snippets (start/end for seek-to-moment) before list redaction
+    # clears segments on locked rows.
+    if (search_request.query or '').strip():
+        conversations = attach_match_snippets_to_conversations(conversations, search_request.query)
+    conversations = conversations[:effective_per_page]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
     # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
     # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.
-    effective_page = search_results.get('current_page', 1)
-    effective_per_page = search_results.get('per_page', 10)
     search_results['total_pages'] = effective_page + 1 if len(conversations) >= effective_per_page else effective_page
     return search_results
 

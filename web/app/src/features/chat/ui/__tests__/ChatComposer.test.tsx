@@ -249,3 +249,45 @@ describe('ChatComposer attachments', () => {
     );
   });
 });
+
+/**
+ * Enter means two different things while an IME is open.
+ *
+ * Typing Japanese, Chinese or Korean, the first Enter confirms the conversion
+ * candidate the IME is offering; only a later Enter is meant for the composer.
+ * The composer read `e.key === 'Enter' && !e.shiftKey` and sent on both, so
+ * confirming a kanji conversion sent the half-written message. macOS already
+ * draws the distinction — `ComposerKeyAction.resolve` reads `hasMarkedText`.
+ */
+describe('ChatComposer IME composition', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const typed = () => {
+    const onSend = vi.fn(async () => {});
+    render(<ChatComposer onSend={onSend} isStreaming={false} />);
+    const textarea = screen.getByPlaceholderText('Ask anything...');
+    fireEvent.change(textarea, { target: { value: '漢字' } });
+    return { onSend, textarea };
+  };
+
+  it('does not send while the IME is composing', () => {
+    const { onSend, textarea } = typed();
+    fireEvent.keyDown(textarea, { key: 'Enter', isComposing: true });
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('does not send on the legacy keyCode 229 composition keydown', () => {
+    // Engines without `isComposing` report every composition keydown as 229.
+    const { onSend, textarea } = typed();
+    fireEvent.keyDown(textarea, { key: 'Enter', keyCode: 229 });
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('sends on the Enter that follows a finished composition', async () => {
+    const { onSend, textarea } = typed();
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith('漢字', []));
+  });
+});

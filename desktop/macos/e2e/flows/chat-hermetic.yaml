@@ -57,6 +57,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/KernelTurnProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeJournalContracts.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeMessageKind.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
 preconditions:

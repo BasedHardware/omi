@@ -41,6 +41,18 @@ final class ChatStallWatchdogTests: XCTestCase {
       "An active tool owns its no-progress timeout before the generic bridge watchdog can fire")
   }
 
+  func testTurnActivityRefreshesTheSilentBridgeClock() throws {
+    let source = try chatProviderSource()
+    XCTAssertNotNil(
+      source.range(
+        of:
+          #"let\s+turnActivityHandler[\s\S]*?stallDetector\.step\([\s\S]*?kind:\s*\.other[\s\S]*?onTurnActivity:\s*turnActivityHandler"#,
+        options: .regularExpression
+      ),
+      "content-free runtime activity must refresh the detector and reach the active query"
+    )
+  }
+
   // MARK: - Source-invariant: the marker is set before interrupt() and consumed by the catch
 
   func testWatchdogMarksGenerationBeforeInterrupting() throws {

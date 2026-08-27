@@ -597,6 +597,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.payload["terminalStatus"] as? String, "succeeded")
   }
 
+  func testTurnActivityParsingPreservesRequestCorrelationWithoutContent() throws {
+    let message = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"turn_activity","phase":"running","protocolVersion":2,"requestId":"quiet-1","clientId":"client-1","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1"}"#
+      ))
+
+    XCTAssertEqual(message.kind, .turnActivity)
+    XCTAssertEqual(
+      message.requestKey,
+      AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "quiet-1")
+    )
+    XCTAssertEqual(message.payload["phase"] as? String, "running")
+    XCTAssertNil(message.payload["text"])
+  }
+
   func testCancelAckRoutesByRequestId() {
     let message = AgentRuntimeProcess.RuntimeMessage.parse(
       #"{"type":"cancel_ack","protocolVersion":2,"requestId":"cancel-me","clientId":"client-1","accepted":true,"dispatchAttempted":true,"adapterAcknowledged":false}"#
@@ -1149,10 +1164,12 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
   @MainActor
   func testUsableByokEnvironmentSuppressesAllKeysWhenOneProviderIsKnownBad() {
+    let savedSelectedProvider = UserDefaults.standard.string(forKey: .byokLLMProvider)
     let savedKeys = Dictionary(
       uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
         (provider, UserDefaults.standard.string(forKey: provider.storageKey))
       })
+    let savedFingerprints = APIKeyService.enrolledFingerprints()
     defer {
       for provider in BYOKProvider.allCases {
         if let saved = savedKeys[provider] ?? nil {
@@ -1162,12 +1179,25 @@ final class AgentRuntimeProcessTests: XCTestCase {
         }
       }
       CredentialHealthManager.shared.reset()
+      if let savedSelectedProvider {
+        UserDefaults.standard.set(savedSelectedProvider, forKey: .byokLLMProvider)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+      }
+      APIKeyService.persistEnrolledFingerprints(savedFingerprints)
     }
 
     for provider in BYOKProvider.allCases {
       UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
     }
+    UserDefaults.standard.set(BYOKLLMProvider.openai.rawValue, forKey: .byokLLMProvider)
     let openAIKey = APIKeyService.byokKey(.openai)!
+    // usableBYOKEnvironment() gates on isByokActive, which requires the
+    // selected provider's key to be enrolled (#11454's fingerprint contract),
+    // separately from the per-request health suppression this test exercises.
+    APIKeyService.persistEnrolledFingerprints([
+      BYOKProvider.openai.rawValue: APIKeyService.byokFingerprint(openAIKey)
+    ])
     CredentialHealthManager.shared.recordProviderFailure(
       .providerAuthFailed(provider: .openai, mode: .byok),
       provider: .openai,
@@ -1183,10 +1213,12 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
   @MainActor
   func testUsableByokEnvironmentIncludesAllKeysWhenAllProvidersAreUsable() {
+    let savedSelectedProvider = UserDefaults.standard.string(forKey: .byokLLMProvider)
     let savedKeys = Dictionary(
       uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
         (provider, UserDefaults.standard.string(forKey: provider.storageKey))
       })
+    let savedFingerprints = APIKeyService.enrolledFingerprints()
     defer {
       for provider in BYOKProvider.allCases {
         if let saved = savedKeys[provider] ?? nil {
@@ -1196,18 +1228,31 @@ final class AgentRuntimeProcessTests: XCTestCase {
         }
       }
       CredentialHealthManager.shared.reset()
+      if let savedSelectedProvider {
+        UserDefaults.standard.set(savedSelectedProvider, forKey: .byokLLMProvider)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+      }
+      APIKeyService.persistEnrolledFingerprints(savedFingerprints)
     }
 
     for provider in BYOKProvider.allCases {
       UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
     }
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    // usableBYOKEnvironment() gates on isByokActive, which requires the
+    // selected provider's key to be enrolled (#11454's fingerprint contract).
+    APIKeyService.persistEnrolledFingerprints([
+      BYOKProvider.openrouter.rawValue: APIKeyService.byokFingerprint("sk-agent-openrouter")
+    ])
 
     let result = AgentRuntimeProcess.usableBYOKEnvironment()
 
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openai)], "sk-agent-openai")
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .anthropic)], "sk-agent-anthropic")
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .gemini)], "sk-agent-gemini")
+    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openrouter)], "sk-agent-openrouter")
     XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .deepgram)], "sk-agent-deepgram")
+    XCTAssertNil(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openai)])
+    XCTAssertNil(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .anthropic)])
+    XCTAssertNil(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .gemini)])
     XCTAssertTrue(result.suppressedProviders.isEmpty)
   }
 

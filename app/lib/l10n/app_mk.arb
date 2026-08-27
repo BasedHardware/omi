@@ -10781,6 +10781,10 @@
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
     "accountCutoverOpenStore": "Otevřít obchod",
+    "chatScopeToday": "Денес",
+    "chatScopeThisWeek": "Оваа недела",
+    "chatScopeAbout": "За: {title}",
+    "askAboutThisConversation": "Прашај за ова",
     "sendRawAudioToOmi": "Испраќај необработено аудио до Omi",
     "sendRawAudioToOmiDescription": "Исклучете за да спречите испраќање необработено аудио до Omi. Транскриптите и податоците потребни за облачните функции сè уште може да се испраќаат до Omi.",
     "findDevice": "Пронајди",
@@ -10793,5 +10797,8 @@
     "appReEnableFailedTitle": "Повторното овозможување не успеа",
     "appReEnableFailedBody": "Оваа апликација не можеше повторно да се овозможи. Обидете се повторно.",
     "appDisabledOn": "Оневозможена на {date}.",
-    "appDisabledLastError": "Последна грешка: {error}."
+    "appDisabledLastError": "Последна грешка: {error}.",
+    "prerecordedTranscript": "Претходно снимено",
+    "pendantRecordingSyncBlocked": "Pendant сè уште снима, па складираното аудио не може да се пренесе. Притиснете го копчето на Pendant за да го запрете снимањето, а потоа синхронизирајте повторно.",
+    "pendantFullSyncBlocked": "Меморијата на Pendant е полна и тој сè уште е во режим на снимање, па зачуваното аудио не може да се пренесе. Притиснете го копчето на Pendant за да го запрете снимањето, а потоа синхронизирајте повторно."
 }

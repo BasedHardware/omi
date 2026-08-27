@@ -26,9 +26,25 @@ import { AudioPlayer, AudioPlayerRef } from './AudioPlayer';
 import { SummaryTab } from './SummaryTab';
 import { ActionItemsTab } from './ActionItemsTab';
 import { DetailSkeleton } from './DetailSkeleton';
+import { ConversationScreenFrameBanner } from './ConversationScreenFrameBanner';
+import { ConversationScreenFrameCarousel } from './ConversationScreenFrameCarousel';
+import { ScreenFrameLightbox } from './ScreenFrameLightbox';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
+import { useScreenFrames } from '@/hooks/useScreenFrames';
+import {
+  BANNER_LIGHTBOX_INDEX,
+  buildLightboxFrames,
+  resolveIndexAfterRemoval,
+  stripFrameLightboxIndex,
+} from '@/lib/screenFrames';
 import { formatConversationDate, conversationDurationSeconds } from '../model';
 import { usePeople } from '../usePeople';
-import { precacheConversationAudio, getConversationAudioUrls, updateSegmentText, reprocessConversation } from '../api';
+import {
+  precacheConversationAudio,
+  getConversationAudioUrls,
+  updateSegmentText,
+  reprocessConversation,
+} from '../api';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 import type {
   Conversation,
@@ -97,6 +113,77 @@ export function ConversationDetailPanel({
   const router = useRouter();
   const { people } = usePeople();
 
+  // Meeting-note screenshots: banner + carousel + lightbox state.
+  const screenFrames = useScreenFrames(conversationId);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [pendingFrameDelete, setPendingFrameDelete] = useState<
+    { kind: 'frame'; frameId: string } | { kind: 'all' } | null
+  >(null);
+  const [deletingFrameId, setDeletingFrameId] = useState<string | null>(null);
+  const [deletingAllFrames, setDeletingAllFrames] = useState(false);
+
+  // The lightbox steps through the banner (if any) plus the strip, in that
+  // order, as one list — see `@/lib/screenFrames` for why the banner isn't a
+  // disjoint sequence from the strip.
+  const lightboxFrames = buildLightboxFrames(screenFrames.frameSet);
+
+  // If that combined list shrinks (a delete just landed) while the lightbox
+  // is open, clamp its index into the new bounds or close it if nothing is
+  // left. Never guess *which* frame that lands on beyond clamping — see
+  // `@/lib/screenFrames` for why banner/strip promotion stays server-owned.
+  useEffect(() => {
+    const newLength = lightboxFrames.length;
+    setLightboxIndex((current) =>
+      current === null ? null : resolveIndexAfterRemoval(current, newLength),
+    );
+  }, [lightboxFrames.length]);
+
+  const openScreenFrameLightboxForStripIndex = useCallback(
+    (stripIndex: number) => {
+      setLightboxIndex(stripFrameLightboxIndex(screenFrames.frameSet, stripIndex));
+    },
+    [screenFrames.frameSet],
+  );
+
+  const openScreenFrameLightboxForBanner = useCallback(() => {
+    setLightboxIndex(BANNER_LIGHTBOX_INDEX);
+  }, []);
+
+  const closeScreenFrameLightbox = useCallback(() => {
+    setLightboxIndex(null);
+  }, []);
+
+  const requestDeleteScreenFrame = useCallback((frameId: string) => {
+    setPendingFrameDelete({ kind: 'frame', frameId });
+  }, []);
+
+  const requestDeleteAllScreenFrames = useCallback(() => {
+    setPendingFrameDelete({ kind: 'all' });
+  }, []);
+
+  const confirmPendingFrameDelete = useCallback(async () => {
+    const pending = pendingFrameDelete;
+    if (!pending) return;
+    setPendingFrameDelete(null);
+
+    if (pending.kind === 'frame') {
+      setDeletingFrameId(pending.frameId);
+      try {
+        await screenFrames.deleteFrame(pending.frameId);
+      } finally {
+        setDeletingFrameId(null);
+      }
+    } else {
+      setDeletingAllFrames(true);
+      try {
+        await screenFrames.deleteAll();
+        setLightboxIndex(null);
+      } finally {
+        setDeletingAllFrames(false);
+      }
+    }
+  }, [pendingFrameDelete, screenFrames]);
+
   // Refs holding the *currently displayed* conversation id and object, so async
   // completions (segment saves, reprocess) can (a) build optimistic updates from
   // the latest state and (b) bail out if the user switched conversations while a
@@ -118,6 +205,10 @@ export function ConversationDetailPanel({
     setTranscriptEdited(false);
     setIsReprocessing(false);
     setReprocessFailed(false);
+    setLightboxIndex(null);
+    setPendingFrameDelete(null);
+    setDeletingFrameId(null);
+    setDeletingAllFrames(false);
   }, [conversationId]);
 
   const isSavingSegments = saveBatch.total > saveBatch.done;
@@ -501,6 +592,24 @@ export function ConversationDetailPanel({
         </div>
       </div>
 
+      {/* Screenshot banner — renders nothing (and this wrapper isn't mounted)
+          when there's no approved banner frame, leaving the header above as
+          the only header treatment. */}
+      {screenFrames.frameSet?.banner && (
+        <div className="flex-shrink-0 px-4 pt-4 lg:px-6 lg:pt-6">
+          <ConversationScreenFrameBanner
+            frame={screenFrames.frameSet.banner}
+            title={structured.title || 'Untitled Conversation'}
+            dateLabel={
+              conversation.started_at
+                ? formatConversationDate(conversation.started_at)
+                : undefined
+            }
+            onClick={openScreenFrameLightboxForBanner}
+          />
+        </div>
+      )}
+
       {/* Tabs */}
       {enabledTabs.length > 0 && (
         <div className="flex-shrink-0 px-4 lg:px-6 py-3 border-b border-bg-tertiary">
@@ -546,15 +655,25 @@ export function ConversationDetailPanel({
             transition={{ duration: 0.15 }}
           >
             {activeTab === 'summary' && structured.overview && (
-              <SummaryTab
-                overview={structured.overview}
-                category={structured.category}
-                conversationId={conversationId}
-                appResults={conversation.apps_results || []}
-                suggestedAppIds={conversation.suggested_summarization_apps || []}
-                onGenerateComplete={onConversationUpdate}
-                geolocation={geolocation}
-              />
+              <>
+                <SummaryTab
+                  overview={structured.overview}
+                  category={structured.category}
+                  conversationId={conversationId}
+                  appResults={conversation.apps_results || []}
+                  suggestedAppIds={conversation.suggested_summarization_apps || []}
+                  onGenerateComplete={onConversationUpdate}
+                  geolocation={geolocation}
+                />
+                <ConversationScreenFrameCarousel
+                  frames={screenFrames.frameSet?.strip ?? []}
+                  onFrameClick={openScreenFrameLightboxForStripIndex}
+                  onRequestDeleteFrame={requestDeleteScreenFrame}
+                  onRequestDeleteAll={requestDeleteAllScreenFrames}
+                  deletingFrameId={deletingFrameId}
+                  className="mt-6"
+                />
+              </>
             )}
 
             {activeTab === 'actions' && hasActionItems && (
@@ -698,6 +817,48 @@ export function ConversationDetailPanel({
             setShowTagSheet(true);
           }
         }}
+      />
+
+      {/* Screenshot lightbox — steps through the banner (if any) plus the
+          strip as one ordered list; see `openScreenFrameLightboxForBanner`
+          / `openScreenFrameLightboxForStripIndex` above. */}
+      <ScreenFrameLightbox
+        open={lightboxIndex !== null}
+        frames={lightboxFrames}
+        index={lightboxIndex ?? 0}
+        onIndexChange={setLightboxIndex}
+        onClose={closeScreenFrameLightbox}
+        onRequestDeleteFrame={requestDeleteScreenFrame}
+        deletingFrameId={deletingFrameId}
+      />
+
+      {/* Screenshot delete confirmation — shared by the carousel's hover-X
+          and the lightbox's delete button. A modal confirm (rather than the
+          inline two-step reveal used for conversation delete in
+          ConversationActionsMenu) because the trigger is a ~24px hover
+          affordance on a 128px-wide thumbnail with no room for inline
+          "Delete this? [Cancel] [Delete]" text. */}
+      <ConfirmDialog
+        open={pendingFrameDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingFrameDelete(null);
+        }}
+        title={
+          pendingFrameDelete?.kind === 'all'
+            ? 'Delete all screenshots?'
+            : 'Delete screenshot?'
+        }
+        description={
+          pendingFrameDelete?.kind === 'all'
+            ? "This removes every screenshot from this conversation. This can't be undone."
+            : "This screenshot will be permanently removed. This can't be undone."
+        }
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => {
+          void confirmPendingFrameDelete();
+        }}
+        isLoading={deletingAllFrames}
       />
     </div>
   );

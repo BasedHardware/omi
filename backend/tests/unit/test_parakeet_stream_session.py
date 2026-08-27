@@ -342,6 +342,35 @@ class TestStreamSessionSpeaker:
             result = session._assign_speaker(_make_pcm(1.0), 0.0, 1.0)
         assert result == "SPEAKER_0"
 
+    def test_clustering_merges_to_nearest_after_eight_speakers(self):
+        session = sh.StreamSession(sample_rate=16000)
+        embeddings = iter(np.eye(9, dtype=np.float32))
+
+        with patch.object(session, '_get_embedding', side_effect=lambda _wav: next(embeddings)):
+            assigned = [session._assign_speaker(_make_pcm(1.0), 0.0, 1.0) for _ in range(9)]
+
+        assert assigned[:8] == [f"SPEAKER_{index}" for index in range(8)]
+        assert assigned[8] == "SPEAKER_0"
+        assert len(session._spk_centroids) == 8
+
+    def test_cap_merge_keeps_the_winning_centroid_undrifted(self):
+        # The standalone Parakeet image mirrors the backend clustering policy;
+        # its tests pin the mirror. A cap-forced merge must not feed the missed
+        # embedding into the winning centroid's running mean, or the ninth
+        # speaker drags the first speaker's centroid toward itself and chains
+        # further misattributions.
+        session = sh.StreamSession(sample_rate=16000)
+        embeddings = [np.eye(9, dtype=np.float32)[index] for index in range(9)]
+        stream = iter(embeddings + [embeddings[0]])
+
+        with patch.object(session, '_get_embedding', side_effect=lambda _wav: next(stream)):
+            assigned = [session._assign_speaker(_make_pcm(1.0), 0.0, 1.0) for _ in range(9)]
+            again = session._assign_speaker(_make_pcm(1.0), 0.0, 1.0)
+
+        assert assigned[8] == "SPEAKER_0"
+        np.testing.assert_array_equal(np.asarray(session._spk_centroids[0]).reshape(-1), embeddings[0])
+        assert again == "SPEAKER_0"
+
 
 class TestStreamSessionVADParams:
 

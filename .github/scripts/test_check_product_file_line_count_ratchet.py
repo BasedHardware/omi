@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import subprocess
 import sys
 import tempfile
@@ -53,8 +55,16 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
         return self.git("rev-parse", "HEAD").stdout.strip()
 
     def evaluate(self, base: str, changed: set[str], body: str = "") -> list[str]:
+        return self.evaluate_with_warnings(base, changed, body)[0]
+
+    def evaluate_with_warnings(self, base: str, changed: set[str], body: str = "") -> tuple[list[str], str]:
+        """Return fatal failures alongside anything the check merely warned about."""
+
         exceptions, parse_failures = RATCHET.parse_exceptions(body)
-        return parse_failures + RATCHET.evaluate_changes(self.root, base, changed, exceptions)
+        stream = io.StringIO()
+        with contextlib.redirect_stdout(stream):
+            failures = RATCHET.evaluate_changes(self.root, base, changed, exceptions)
+        return parse_failures + failures, stream.getvalue()
 
     def test_rejects_oversized_growth_with_exact_suggestion(self) -> None:
         relative = "backend/routers/large.py"
@@ -144,19 +154,16 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
         self.assertEqual(len(failures), 1)
         self.assertIn("grew from 1500 to 1510", failures[0])
 
-    def test_rejects_malformed_duplicate_mismatched_and_unused_exceptions(self) -> None:
+    def test_rejects_malformed_and_duplicate_exceptions(self) -> None:
         growing = "backend/routers/growing.py"
-        unchanged = "backend/routers/unchanged.py"
         self.write_source(growing, 1500)
-        self.write_source(unchanged, 1600)
         base = self.commit_base()
         self.write_source(growing, 1510)
         body = "\n".join(
             [
                 "Line-Count-Exception: malformed",
-                f"Line-Count-Exception: {growing} | 1499 -> 1510 | Wrong base count is rejected.",
-                f"Line-Count-Exception: {growing} | 1500 -> 1510 | Duplicate declaration is rejected.",
-                f"Line-Count-Exception: {unchanged} | 1600 -> 1601 | Copied stale approval is rejected.",
+                f"Line-Count-Exception: {growing} | 1500 -> 1510 | First declaration is the binding one.",
+                f"Line-Count-Exception: {growing} | 1500 -> 1600 | Duplicate declaration is rejected.",
             ]
         )
 
@@ -164,8 +171,79 @@ class ProductFileLineCountRatchetTests(unittest.TestCase):
 
         self.assertTrue(any("malformed" in failure for failure in failures))
         self.assertTrue(any("duplicate" in failure for failure in failures))
-        self.assertTrue(any("diff is 1500 -> 1510" in failure for failure in failures))
-        self.assertTrue(any("unchanged source" in failure for failure in failures))
+
+    def test_base_drift_keeps_a_correct_declaration_valid(self) -> None:
+        """The target branch moving must not invalidate an unchanged authored delta."""
+
+        relative = "backend/routers/drifting.py"
+        # The author declared 1600 -> 1610 against the base they branched from; the target branch
+        # has since grown by five lines, so the same edit now reads as 1605 -> 1615.
+        self.write_source(relative, 1605)
+        base = self.commit_base()
+        self.write_source(relative, 1615)
+        body = f"Line-Count-Exception: {relative} | 1600 -> 1610 | Extracted helper keeps the owner readable."
+
+        self.assertEqual(self.evaluate(base, {relative}, body), [])
+
+    def test_growth_beyond_the_declared_allowance_still_fails(self) -> None:
+        relative = "backend/routers/overrun.py"
+        self.write_source(relative, 1605)
+        base = self.commit_base()
+        self.write_source(relative, 1620)
+        body = f"Line-Count-Exception: {relative} | 1600 -> 1610 | Extracted helper keeps the owner readable."
+
+        failures = self.evaluate(base, {relative}, body)
+
+        self.assertEqual(len(failures), 1)
+        self.assertIn("declares growth of 10 line(s)", failures[0])
+        self.assertIn("grows 15 line(s)", failures[0])
+        self.assertIn("(1605 -> 1620)", failures[0])
+
+    def test_actual_growth_below_the_declared_allowance_passes(self) -> None:
+        relative = "backend/routers/shrunken.py"
+        self.write_source(relative, 1600)
+        base = self.commit_base()
+        self.write_source(relative, 1605)
+        body = f"Line-Count-Exception: {relative} | 1600 -> 1620 | Declared allowance was trimmed before review."
+
+        self.assertEqual(self.evaluate(base, {relative}, body), [])
+
+    def test_unused_exception_for_unchanged_source_warns_instead_of_failing(self) -> None:
+        """The target branch can absorb the edit, stranding a previously mandatory declaration."""
+
+        growing = "backend/routers/growing.py"
+        absorbed = "backend/routers/absorbed.py"
+        self.write_source(growing, 1500)
+        self.write_source(absorbed, 1600)
+        base = self.commit_base()
+        self.write_source(growing, 1510)
+        body = "\n".join(
+            [
+                f"Line-Count-Exception: {growing} | 1500 -> 1510 | Extracted helper keeps the owner readable.",
+                f"Line-Count-Exception: {absorbed} | 1600 -> 1620 | Target branch absorbed an equivalent edit.",
+            ]
+        )
+
+        failures, warnings = self.evaluate_with_warnings(base, {growing}, body)
+
+        self.assertEqual(failures, [])
+        self.assertIn("WARN", warnings)
+        self.assertIn(f"unused exception for unchanged source {absorbed}", warnings)
+
+    def test_unused_exception_for_a_still_listed_source_warns_instead_of_failing(self) -> None:
+        """The real absorbed-edit shape: `base...head` keeps the path in the changed list."""
+
+        absorbed = "backend/routers/absorbed.py"
+        self.write_source(absorbed, 1600)
+        base = self.commit_base()
+        body = f"Line-Count-Exception: {absorbed} | 1600 -> 1620 | Target branch absorbed an equivalent edit."
+
+        failures, warnings = self.evaluate_with_warnings(base, {absorbed}, body)
+
+        self.assertEqual(failures, [])
+        self.assertIn("WARN", warnings)
+        self.assertIn(f"unused exception for {absorbed}", warnings)
+        self.assertIn("do not require approval", warnings)
 
     def test_excludes_tests_generated_and_vendored_paths(self) -> None:
         excluded = [

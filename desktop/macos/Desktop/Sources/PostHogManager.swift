@@ -207,6 +207,11 @@ class PostHogManager {
     return PostHogSDK.shared.getFeatureFlag(flag)
   }
 
+  /// The SDK's own flag-delivery signal (posted on the main queue after the
+  /// initial preload and after every reload) — re-exported so observers get a
+  /// compile-checked symbol instead of a raw notification-name string.
+  static var featureFlagsDidLoad: Notification.Name { PostHogSDK.didReceiveFeatureFlags }
+
   /// Reload feature flags
   func reloadFeatureFlags() {
     guard isInitialized else { return }
@@ -682,6 +687,15 @@ extension PostHogManager {
       "Feedback Submitted",
       properties: [
         "feedback_length": feedbackLength
+      ])
+  }
+
+  func desktopRatingSubmitted(rating: Int) {
+    track(
+      "Desktop Rating Submitted",
+      properties: [
+        "rating": rating,
+        "trigger": "third_question",
       ])
   }
 

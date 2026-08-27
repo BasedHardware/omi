@@ -4796,6 +4796,16 @@ class ChatProvider: ObservableObject {
           self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
         }
       }
+      let turnActivityHandler: AgentClient.TurnActivityHandler = { [weak self] in
+        callbackQueue.submit { @MainActor [weak self] in
+          guard let self else { return }
+          let transitions = await stallDetector.step(
+            kind: .other,
+            atMs: ChatProvider.monotonicNowMs()
+          )
+          self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+        }
+      }
       let thinkingDeltaHandler: AgentClient.ThinkingDeltaHandler = { [weak self] text in
         callbackQueue.submit { @MainActor [weak self] in
           guard let self else { return }
@@ -4957,6 +4967,7 @@ class ChatProvider: ObservableObject {
           reasoningEffort: turnOwner.reasoningEffort,
           onTextDelta: textDeltaHandler,
           onToolActivity: toolActivityHandler,
+          onTurnActivity: turnActivityHandler,
           onThinkingDelta: thinkingDeltaHandler,
           onToolResultDisplay: toolResultDisplayHandler,
           onAuthRequired: { [weak self] methods, authUrl in
@@ -5615,11 +5626,12 @@ class ChatProvider: ObservableObject {
   /// was accepted into the timeline. Preflight failures leave it untouched,
   /// and typing a new draft while acceptance is pending is never overwritten.
   @discardableResult
-  func sendMainDraft(_ text: String) async -> String? {
+  func sendMainDraft(_ text: String, onAccepted: (@MainActor () -> Void)? = nil) async -> String? {
     let submittedRevision = composerDraft.revision
     return await sendMessage(
       text,
       onAccepted: { [weak self] in
+        onAccepted?()
         guard let self,
           self.composerDraft.revision == submittedRevision,
           self.draftText == text

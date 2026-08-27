@@ -131,7 +131,7 @@ import {
   startRewindForegroundCaptureTrigger,
   stopRewindForegroundCaptureTrigger
 } from './rewind/foregroundCaptureTrigger'
-import { startRewindOcr } from './rewind/ocrService'
+import { startRewindOcr, stopRewindOcr } from './rewind/ocrService'
 import { startRewindEmbedding } from './rewind/embeddingService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { startOrphanSweep } from './rewind/orphanSweep'
@@ -1531,6 +1531,10 @@ app.on('will-quit', () => {
   automationBridge.dispose()
   stopAutomationTargetTracker()
   stopRewindForegroundCaptureTrigger()
+  // Stop the Rewind OCR backfill sweep BEFORE disposing the helper below — a
+  // tick firing after dispose() would otherwise lazily respawn a fresh helper
+  // that nothing is left to kill, orphaning it past app exit.
+  stopRewindOcr()
   // Kill the long-running OCR/window-info helper subprocess. Without this it
   // outlives the app on every quit, so orphaned omi-*-ocr-helper.exe processes
   // pile up across launches (no production dispose() call site before this).

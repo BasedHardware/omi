@@ -9882,6 +9882,20 @@ class AppLocalizationsHu extends AppLocalizations {
   String get accountCutoverOpenStore => 'Áruház megnyitása';
 
   @override
+  String get chatScopeToday => 'Ma';
+
+  @override
+  String get chatScopeThisWeek => 'Ezen a héten';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Erről: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Kérdezz erről';
+
+  @override
   String get sendRawAudioToOmi => 'Nyers hang küldése az Ominak';
 
   @override
@@ -9926,4 +9940,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Utolsó hiba: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Előre rögzített';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'A Pendant még mindig felvételt készít, ezért a tárolt hang nem vihető át. Nyomd meg a Pendant gombját a felvétel leállításához, majd szinkronizálj újra.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra.';
 }

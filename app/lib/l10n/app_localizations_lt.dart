@@ -9861,6 +9861,20 @@ class AppLocalizationsLt extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otwórz sklep';
 
   @override
+  String get chatScopeToday => 'Šiandien';
+
+  @override
+  String get chatScopeThisWeek => 'Šią savaitę';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Apie: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Paklausti apie tai';
+
+  @override
   String get sendRawAudioToOmi => 'Siųsti neapdorotą garsą į Omi';
 
   @override
@@ -9905,4 +9919,15 @@ class AppLocalizationsLt extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Paskutinė klaida: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Išankstinis įrašas';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant vis dar įrašinėja, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite dar kartą.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant atmintis pilna ir jis vis dar įrašymo režime, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite iš naujo.';
 }

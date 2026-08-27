@@ -1149,6 +1149,10 @@ struct DesktopHomeView: View {
         // Goal completion celebration overlay
         GoalCelebrationView()
       }
+      .overlay(alignment: .bottom) {
+        // One-time rating ask, due after the user's 3rd question.
+        RatingPromptBar()
+      }
       .overlay {
         if !usesChatFirstShell && showTryAskingPopup {
           let suggestions = PostOnboardingPromptSuggestions.suggestions()
@@ -1320,26 +1324,24 @@ struct DesktopHomeView: View {
   @ViewBuilder
   private var sidebarSlot: some View {
     if showsPrimarySidebar {
-      ZStack {
-        SidebarView(
-          selectedIndex: $selectedIndex,
-          isCollapsed: $isSidebarCollapsed,
-          memoryDestinationRawValue: $memoryDestinationRawValue,
-          appState: appState
-        )
-        .opacity(isInSettings ? 0 : 1)
-        .allowsHitTesting(!isInSettings)
-        if isInSettings { settingsSidebar }
+      LegacySidebarSurface {
+        ZStack {
+          SidebarView(
+            selectedIndex: $selectedIndex,
+            isCollapsed: $isSidebarCollapsed,
+            memoryDestinationRawValue: $memoryDestinationRawValue,
+            appState: appState
+          )
+          .opacity(isInSettings ? 0 : 1)
+          .allowsHitTesting(!isInSettings)
+          if isInSettings { settingsSidebar }
+        }
       }
-      .fixedSize(horizontal: true, vertical: false)
-      .clipped()
     }
   }
 
-  /// The settings section list. In the glass shell it belongs *inside* the Settings panel rather than
-  /// beside the whole window: the window has no ground, so a nav column left outside the panel is a
-  /// list of controls floating on the user's wallpaper. It needs no surface of its own — its
-  /// `Ink.rowFill` is already a wash meant to read as a shaded part of the glass it sits on.
+  /// The settings section list. Modern settings hosts it inside the page panel; legacy Home hosts the
+  /// whole sidebar slot on `LegacySidebarSurface`, so this view always inherits a glass ground.
   private var settingsSidebar: some View {
     SettingsSidebar(
       selectedSection: $selectedSettingsSection,

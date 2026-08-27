@@ -688,6 +688,99 @@ def test_process_mentor_proactive_notification_sends():
     mock_send.assert_called()
 
 
+def _pass_all_three_steps():
+    """Configure mock_llm_mini so gate, generate and critic all approve."""
+    results = [
+        RelevanceResult(
+            is_relevant=True,
+            relevance_score=0.85,
+            reasoning="User is skipping gym despite their 3x/week goal.",
+            context_summary="User discussing skipping exercise.",
+        ),
+        NotificationDraft(
+            notification_text="You've been skipping gym — remember your 3x/week goal!",
+            reasoning="User's goal is 'Exercise 3x per week' and they mentioned skipping today.",
+            confidence=0.82,
+            category="goal_connection",
+        ),
+        ValidationResult(approved=True, reasoning="Concrete, tied to a goal and the current action."),
+    ]
+    call_count = [0]
+
+    def side_effect_structured_output(model_class):
+        parser = MagicMock()
+        parser.invoke = MagicMock(return_value=results[min(call_count[0], len(results) - 1)])
+        call_count[0] += 1
+        return parser
+
+    mock_llm_mini.with_structured_output = MagicMock(side_effect=side_effect_structured_output)
+
+
+def test_mentor_past_context_survives_embedding_failure():
+    """A failing embedding provider must not also drop the recent-conversations context.
+
+    Semantic search and recent-by-time are separate sources: the first needs an embedding
+    provider and a vector store, the second needs neither. When they shared one try/except,
+    one embedding error (missing key, quota, outage) silently stripped both.
+    """
+    _setup_app_integrations_stubs()
+    _pass_all_three_steps()
+
+    mock_generate_embedding.side_effect = RuntimeError("no embedding provider configured")
+    mock_get_convos.reset_mock()
+    mock_get_convos.return_value = [{'id': 'conv-1', 'is_locked': False}]
+    mock_convos_to_string.reset_mock()
+    mock_convos_to_string.return_value = 'yesterday: user talked about the gym'
+
+    try:
+        result = app_int._process_mentor_proactive_notification(
+            "uid_embed_fail", [{"text": "I'll skip the gym today", "is_user": True}]
+        )
+    finally:
+        mock_generate_embedding.side_effect = None
+        mock_get_convos.return_value = []
+        mock_convos_to_string.return_value = ''
+
+    assert result is not None
+    # The recent-conversations fetch ran and its result was rendered for the prompt.
+    mock_get_convos.assert_called()
+    mock_convos_to_string.assert_called()
+
+
+def test_mentor_vector_context_survives_recent_conversations_failure():
+    """The mirror case: a failing recent-by-time fetch must not discard the vector hits.
+
+    The rendering step runs after both sources, so under the shared try/except a
+    conversations-store error thrown by the second source also threw away the
+    semantically relevant conversations the first source had already collected.
+    """
+    _setup_app_integrations_stubs()
+    _pass_all_three_steps()
+
+    mock_query_vectors.return_value = ['conv-vector-1']
+    mock_get_convos_by_id.return_value = [{'id': 'conv-vector-1', 'is_locked': False}]
+    mock_get_convos.reset_mock()
+    mock_get_convos.side_effect = RuntimeError("conversations store unavailable")
+    mock_convos_to_string.reset_mock()
+    mock_convos_to_string.return_value = 'last week: user set a 3x/week gym goal'
+
+    try:
+        result = app_int._process_mentor_proactive_notification(
+            "uid_convos_fail", [{"text": "I'll skip the gym today", "is_user": True}]
+        )
+    finally:
+        mock_query_vectors.return_value = []
+        mock_get_convos_by_id.return_value = []
+        mock_get_convos.side_effect = None
+        mock_convos_to_string.return_value = ''
+
+    assert result is not None
+    # The vector-search hit was still rendered into the prompt context.
+    mock_deserialize_convos.assert_called()
+    assert mock_deserialize_convos.call_args[0][0] == [{'id': 'conv-vector-1', 'is_locked': False}]
+    mock_convos_to_string.assert_called()
+
+
 def test_process_mentor_proactive_notification_gate_rejects():
     """_process_mentor_proactive_notification should return None when gate rejects."""
     _setup_app_integrations_stubs()

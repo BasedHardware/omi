@@ -9874,6 +9874,20 @@ class AppLocalizationsBe extends AppLocalizations {
   String get accountCutoverOpenStore => 'Открыть магазин';
 
   @override
+  String get chatScopeToday => 'Сёння';
+
+  @override
+  String get chatScopeThisWeek => 'Гэты тыдзень';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Пра: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Спытаць пра гэта';
+
+  @override
   String get sendRawAudioToOmi => 'Адпраўляць неапрацаванае аўдыя ў Omi';
 
   @override
@@ -9917,4 +9931,15 @@ class AppLocalizationsBe extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Апошняя памылка: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Папярэдне запісанае';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant усё яшчэ запісвае, таму захаваны гук нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а потым сінхранізуйце зноў.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Памяць Pendant запоўнена, і ён усё яшчэ ў рэжыме запісу, таму захаванае аўдыя нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а затым сінхранізуйце зноў.';
 }

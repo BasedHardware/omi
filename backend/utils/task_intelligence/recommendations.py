@@ -416,6 +416,10 @@ def _build_subjects(
         )
         evidence = _valid_evidence(candidate.get('evidence_refs'), device_id=context.device_id if context else None)
         candidate_status = str(candidate.get('status') or CandidateStatus.pending.value)
+        # A suggestion the user did not act on expires; the Suggested surface stops
+        # showing it. Recommending it here would resurrect it on a second surface --
+        # the same dead end the task-mutation skip above avoids.
+        unexpired = not candidates_db.stored_candidate_has_lapsed(candidate, now=now)
         subjects.append(
             _subject(
                 kind=kind,
@@ -427,7 +431,7 @@ def _build_subjects(
                 evidence=evidence,
                 facts=facts,
                 is_open=candidate_status == CandidateStatus.pending.value,
-                unexpired=True,
+                unexpired=unexpired,
                 recent_material_activity=_recent(candidate.get('created_at'), now),
                 material_token=':'.join((candidate_status, _iso_token(candidate.get('created_at')))),
                 quality_eligible=ownership_confidence >= MINIMUM_CAPTURE_CONFIDENCE,

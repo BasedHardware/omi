@@ -9842,6 +9842,20 @@ class AppLocalizationsFa extends AppLocalizations {
   String get accountCutoverOpenStore => 'فتح المتجر';
 
   @override
+  String get chatScopeToday => 'امروز';
+
+  @override
+  String get chatScopeThisWeek => 'این هفته';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'درباره: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'درباره این بپرسید';
+
+  @override
   String get sendRawAudioToOmi => 'ارسال صدای خام به Omi';
 
   @override
@@ -9885,4 +9899,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'آخرین خطا: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'از پیش ضبط‌شده';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant هنوز در حال ضبط است، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'حافظه Pendant پر است و همچنان در حالت ضبط قرار دارد، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.';
 }

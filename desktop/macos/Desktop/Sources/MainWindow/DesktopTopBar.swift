@@ -57,7 +57,7 @@ struct DesktopTopBar: View {
     memoriesViewModel.memories.filter { $0.createdAt > sinceDate }.count
   }
   private var newTasks: Int {
-    tasksStore.tasks.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
+    tasksStore.tasks.filter { $0.createdAt > sinceDate && !$0.isRetired }.count
   }
 
   private var badges: TopNavigationDestinationBadges {
@@ -108,6 +108,11 @@ struct DesktopTopBar: View {
     .zIndex(1)
     .sheet(isPresented: $showingReferral) {
       ReferralSheetView()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .openReferralSheet)) { _ in
+      // The rating prompt's refer-a-friend proposal opens the same sheet as
+      // the top bar's own Refer control.
+      showingReferral = true
     }
   }
 

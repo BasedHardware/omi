@@ -12,6 +12,23 @@ import XCTest
 /// enabled is the one case that falls back to a native system banner so the
 /// notification is never fully silenced.
 final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
+  /// Runtime owner authorization is process-wide and fails closed on an
+  /// out-of-band `authUserId` write, staying revoked for every later suite in
+  /// the xctest process. The two owner-seeding tests below therefore establish
+  /// their owner through the production transition boundary, and restore runs
+  /// in `tearDown` rather than a `defer` so a failed assertion cannot leave the
+  /// authority revoked for whatever runs next.
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture?
+
+  override func setUp() async throws {
+    ownerFixture = await RuntimeOwnerAuthorityTestFixture()
+  }
+
+  override func tearDown() async throws {
+    await ownerFixture?.restore()
+    ownerFixture = nil
+  }
+
   func testPreviewsAndBarEnabledShowsPreviewWithNoForcedBanner() {
     XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
@@ -166,11 +183,9 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   /// `presentContextDirectorNotification` makes this call return `.queued` from the
   /// banner path instead of `.suppressed`, failing the test.
   @MainActor
-  func testDirectorDeliveryWithDisabledCategoryToggleIsSuppressedAtTheEntryPoint() throws {
+  func testDirectorDeliveryWithDisabledCategoryToggleIsSuppressedAtTheEntryPoint() async throws {
     let defaults = UserDefaults.standard
     let pinnedKeys = [
-      DefaultsKey.authUserId.rawValue,
-      DefaultsKey.automationOwnerOverride.rawValue,
       NotificationService.masterEnabledDefaultsKey,
       NotificationService.frequencyDefaultsKey,
       DefaultsKey.desktopIsPaywalled.rawValue,
@@ -192,8 +207,8 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     }
 
     let owner = "owner-category-gate-\(UUID().uuidString)"
-    defaults.set(owner, forKey: DefaultsKey.authUserId.rawValue)
-    defaults.removeObject(forKey: DefaultsKey.automationOwnerOverride.rawValue)
+    let fixture = try XCTUnwrap(ownerFixture)
+    await fixture.establish(authOwnerID: owner)
     defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
     defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
     defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)
@@ -228,11 +243,9 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   /// host cannot perform, failing the test; with the gate present they return
   /// before any surface and leave the presentation ledger untouched.
   @MainActor
-  func testGoalAndMeetingProducersHonorTheirCategoryTogglesAtTheSharedBoundary() throws {
+  func testGoalAndMeetingProducersHonorTheirCategoryTogglesAtTheSharedBoundary() async throws {
     let defaults = UserDefaults.standard
     let pinnedKeys = [
-      DefaultsKey.authUserId.rawValue,
-      DefaultsKey.automationOwnerOverride.rawValue,
       NotificationService.masterEnabledDefaultsKey,
       NotificationService.frequencyDefaultsKey,
       DefaultsKey.desktopIsPaywalled.rawValue,
@@ -256,8 +269,8 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     }
 
     let owner = "owner-producer-gate-\(UUID().uuidString)"
-    defaults.set(owner, forKey: DefaultsKey.authUserId.rawValue)
-    defaults.removeObject(forKey: DefaultsKey.automationOwnerOverride.rawValue)
+    let fixture = try XCTUnwrap(ownerFixture)
+    await fixture.establish(authOwnerID: owner)
     defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
     defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
     defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)

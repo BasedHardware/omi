@@ -9871,6 +9871,20 @@ class AppLocalizationsPl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otwórz sklep';
 
   @override
+  String get chatScopeToday => 'Dzisiaj';
+
+  @override
+  String get chatScopeThisWeek => 'W tym tygodniu';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'O: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Zapytaj o to';
+
+  @override
   String get sendRawAudioToOmi => 'Wysyłaj surowy dźwięk do Omi';
 
   @override
@@ -9915,4 +9929,15 @@ class AppLocalizationsPl extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Ostatni błąd: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Wstępnie nagrane';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant wciąż nagrywa, więc zapisany dźwięk nie może zostać przesłany. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pamięć Pendanta jest pełna i wciąż jest on w trybie nagrywania, więc zapisanego dźwięku nie można przenieść. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie.';
 }

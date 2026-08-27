@@ -191,8 +191,8 @@ enum TaskFilterTag: String, CaseIterable, Identifiable, Hashable {
     switch self {
     case .todo: return !task.completed
     case .done: return task.completed
-    case .removedByAI: return task.deleted == true && task.deletedBy != "user"
-    case .removedByMe: return task.deleted == true && task.deletedBy == "user"
+    case .removedByAI: return task.isRetired && task.deletedBy != "user"
+    case .removedByMe: return task.isRetired && task.deletedBy == "user"
     case .last7Days:
       let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
       if let dueAt = task.dueAt {
@@ -2545,10 +2545,10 @@ class TasksViewModel: ObservableObject {
     guard !statusTags.isEmpty else { return tasks }
 
     return tasks.filter { task in
-      if statusTags.contains(.removedByAI) && task.deleted == true && task.deletedBy != "user" { return true }
-      if statusTags.contains(.removedByMe) && task.deleted == true && task.deletedBy == "user" { return true }
+      if statusTags.contains(.removedByAI) && task.isRetired && task.deletedBy != "user" { return true }
+      if statusTags.contains(.removedByMe) && task.isRetired && task.deletedBy == "user" { return true }
       if statusTags.contains(.done) && task.completed { return true }
-      if statusTags.contains(.todo) && !task.completed && task.deleted != true { return true }
+      if statusTags.contains(.todo) && !task.completed && !task.isRetired { return true }
       return false
     }
   }
@@ -3225,7 +3225,7 @@ class TasksViewModel: ObservableObject {
         priority: task.priority,
         metadata: task.metadata,
         category: task.category,
-        deleted: task.deleted,
+        deleted: task.isRetired,
         deletedBy: task.deletedBy,
         deletedAt: task.deletedAt,
         deletedReason: task.deletedReason,
@@ -3381,7 +3381,7 @@ class TasksViewModel: ObservableObject {
 
 struct TasksPage: View {
   @ObservedObject var viewModel: TasksViewModel
-  @StateObject private var suggestedStore = SuggestedTasksStore()
+  @ObservedObject private var suggestedStore = SuggestedTasksStore.shared
   var chatProvider: ChatProvider?
 
   // Chat panel state
@@ -3494,11 +3494,6 @@ struct TasksPage: View {
             viewModel.editingTaskId = taskDetailTask.id
             closeTaskDetailPanel()
           },
-          onInvestigate: taskDetailTask.completed
-            ? nil
-            : {
-              investigateTask(taskDetailTask)
-            },
           onOpenChat: chatProvider != nil && TaskAgentSettings.shared.isChatEnabled
             ? {
               closeTaskDetailPanel()
@@ -3610,17 +3605,10 @@ struct TasksPage: View {
   }
 
   /// Start a background AI investigation for a task (no panel opens)
-  private func investigateTask(_ task: TaskActionItem) {
-    log("TaskChat: investigateTask called for task \(task.id)")
-    Task {
-      await chatCoordinator.investigateInBackground(for: task)
-    }
-  }
-
   /// Open chat for a task
   private func openChatForTask(_ task: TaskActionItem) {
     log(
-      "TaskChat: openChatForTask called for task \(task.id) (deleted=\(task.deleted ?? false), completed=\(task.completed))"
+      "TaskChat: openChatForTask called for task \(task.id) (retired=\(task.isRetired), completed=\(task.completed))"
     )
     viewModel.detailPanelTaskID = nil
     if !showChatPanel {
@@ -4312,21 +4300,27 @@ struct TasksPage: View {
     ScrollViewReader { proxy in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          // Show tasks grouped by due-date category (Today, Tomorrow, Later, No Deadline)
-          if !viewModel.showCompleted && !viewModel.isMultiSelectMode {
-            SuggestedTasksSection(
-              store: suggestedStore,
-              isExpanded: $suggestionsSectionExpanded,
-              onCanonicalChange: {
-                await viewModel.loadTasks()
-              },
-              onCompleteCreatedTask: { taskID in
-                await viewModel.completeNewlyCreatedTask(id: taskID)
-              }
-            )
+          // Show tasks grouped by due-date category (Today, Tomorrow, Later, No Deadline).
+          // Multi-select keeps this grouping: selecting tasks must not reshuffle the
+          // list out from under the user. Only the row's selection control changes.
+          if !viewModel.showCompleted {
+            if !viewModel.isMultiSelectMode {
+              SuggestedTasksSection(
+                store: suggestedStore,
+                isExpanded: $suggestionsSectionExpanded,
+                onCanonicalChange: {
+                  await viewModel.loadTasks()
+                },
+                onCompleteCreatedTask: { taskID in
+                  await viewModel.completeNewlyCreatedTask(id: taskID)
+                }
+              )
+            }
 
             // Inline creation at top (Cmd+N)
-            if viewModel.isInlineCreating && viewModel.inlineCreateAfterTaskId == nil {
+            if !viewModel.isMultiSelectMode && viewModel.isInlineCreating
+              && viewModel.inlineCreateAfterTaskId == nil
+            {
               InlineTaskCreationRow(
                 text: $inlineCreateText,
                 isFocused: $inlineCreateFocused,
@@ -4368,7 +4362,6 @@ struct TasksPage: View {
                   onClearTodayDeadlines: { await viewModel.clearTodayDeadlinesForIncompleteTasks() },
                   onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled)
                     ? { task in openChatForTask(task) } : nil,
-                  onInvestigate: { task in investigateTask(task) },
                   onSelect: { task in selectTask(task) },
                   onOpenDetails: { task in openTaskDetailPanel(for: task) },
                   onHover: { viewModel.hoveredTaskId = $0 },
@@ -4434,7 +4427,7 @@ struct TasksPage: View {
               .id("inline-create-top-flat")
             }
 
-            // Flat list for other sort options, completed view, or multi-select mode
+            // Flat list for the completed view and other flat sort options.
             ForEach(viewModel.displayTasks) { task in
               VStack(spacing: 0) {
                 TaskRow(
@@ -4457,7 +4450,6 @@ struct TasksPage: View {
                   onDecrementIndent: { viewModel.decrementIndent(for: $0) },
                   onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled)
                     ? { task in openChatForTask(task) } : nil,
-                  onInvestigate: { task in investigateTask(task) },
                   onSelect: { task in selectTask(task) },
                   onOpenDetails: { task in openTaskDetailPanel(for: task) },
                   onHover: { viewModel.hoveredTaskId = $0 },
@@ -4651,7 +4643,6 @@ struct TaskCategorySection: View {
   var onMoveTaskBeforeTarget: ((TaskActionItem, String, TaskCategory) -> Void)?
   var onClearTodayDeadlines: (() async -> Void)?
   var onOpenChat: ((TaskActionItem) -> Void)?
-  var onInvestigate: ((TaskActionItem) -> Void)?
   var onSelect: ((TaskActionItem) -> Void)?
   var onOpenDetails: ((TaskActionItem) -> Void)?
   var onHover: ((String?) -> Void)?
@@ -4794,8 +4785,10 @@ struct TaskCategorySection: View {
           }
       }
 
-      // Tasks in category with drag-and-drop reordering
-      if !isMultiSelectMode && !isCollapsed {
+      // Tasks in category with drag-and-drop reordering.
+      // Rendered in multi-select too, so selection keeps the category grouping;
+      // TaskDragDropModifier below is disabled while selecting.
+      if !isCollapsed {
         LazyVStack(spacing: OmiSpacing.sm) {
           ForEach(visibleTasks) { task in
             VStack(spacing: 0) {
@@ -4815,7 +4808,6 @@ struct TaskCategorySection: View {
                   onIncrementIndent: onIncrementIndent,
                   onDecrementIndent: onDecrementIndent,
                   onOpenChat: onOpenChat,
-                  onInvestigate: onInvestigate,
                   onSelect: onSelect,
                   onOpenDetails: onOpenDetails,
                   onHover: onHover,
@@ -4849,7 +4841,7 @@ struct TaskCategorySection: View {
                 ))
 
               // Inline creation row after this task
-              if isInlineCreating && inlineCreateAfterTaskId == task.id {
+              if !isMultiSelectMode && isInlineCreating && inlineCreateAfterTaskId == task.id {
                 InlineTaskCreationRow(
                   text: $inlineCreateText,
                   isFocused: $inlineCreateFocused,
@@ -5210,7 +5202,6 @@ struct TaskRow: View {
   var onIncrementIndent: ((String) -> Void)?
   var onDecrementIndent: ((String) -> Void)?
   var onOpenChat: ((TaskActionItem) -> Void)?
-  var onInvestigate: ((TaskActionItem) -> Void)?
   var onSelect: ((TaskActionItem) -> Void)?
   var onOpenDetails: ((TaskActionItem) -> Void)?
   var onHover: ((String?) -> Void)?
@@ -5506,7 +5497,7 @@ struct TaskRow: View {
 
   /// Whether this task is soft-deleted
   private var isDeletedTask: Bool {
-    task.deleted == true
+    task.isRetired
   }
 
   private var taskRowContent: some View {
@@ -5759,28 +5750,6 @@ struct TaskRow: View {
         isDetailPanelPresented: isTaskDetailPanelActive
       ) {
         HStack(spacing: OmiSpacing.xxs) {
-          // Execute is an explicit work intent and stays in the same
-          // durable task-backed thread as chat/investigate.
-          if !task.completed {
-            Button {
-              onInvestigate?(task)
-            } label: {
-              HStack(spacing: OmiSpacing.hairline) {
-                Image(systemName: "sparkles")
-                  .font(.system(size: 9, weight: .bold))
-                Text("Execute")
-                  .scaledFont(size: OmiType.micro, weight: .semibold)
-              }
-              .foregroundColor(Ink.surface)
-              .padding(.horizontal, OmiSpacing.sm)
-              .padding(.vertical, OmiSpacing.xxs)
-              .background(Ink.primary)
-              .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .help("Spawn an agent to do this")
-          }
-
           // Add date button (shown on hover when no due date)
           if task.dueAt == nil && !task.completed {
             Button {

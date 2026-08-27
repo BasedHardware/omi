@@ -1,0 +1,7 @@
+{
+  "version": "0.12.217",
+  "date": "2026-08-25",
+  "changes": [
+    "Added a one-time in-app rating prompt: after your 3rd question, a closable bar asks how you'd rate Omi Desktop (1-5 stars)."
+  ]
+}

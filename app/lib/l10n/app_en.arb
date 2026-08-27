@@ -11635,6 +11635,27 @@
     "@accountCutoverOpenStore": {
         "description": "Button that opens the app store for a required cutover upgrade"
     },
+    "chatScopeToday": "Today",
+    "@chatScopeToday": {
+        "description": "Chat timeframe scope chip for today"
+    },
+    "chatScopeThisWeek": "This week",
+    "@chatScopeThisWeek": {
+        "description": "Chat timeframe scope chip for this week"
+    },
+    "chatScopeAbout": "About: {title}",
+    "@chatScopeAbout": {
+        "description": "Chat scope chip when asking about a specific conversation",
+        "placeholders": {
+            "title": {
+                "type": "String"
+            }
+        }
+    },
+    "askAboutThisConversation": "Ask about this",
+    "@askAboutThisConversation": {
+        "description": "Tooltip for Ask button on conversation detail"
+    },
     "sendRawAudioToOmi": "Send raw audio to Omi",
     "@sendRawAudioToOmi": {
         "description": "Toggle label controlling whether Custom STT raw audio is also sent to Omi"
@@ -11698,5 +11719,17 @@
                 "example": "HTTP 307"
             }
         }
+    },
+    "prerecordedTranscript": "Prerecorded",
+    "@prerecordedTranscript": {
+        "description": "Tab label for the prerecorded conversation transcript"
+    },
+    "pendantRecordingSyncBlocked": "Your Pendant is still recording, so its stored audio can't be transferred. Press the Pendant's button to stop recording, then sync again.",
+    "@pendantRecordingSyncBlocked": {
+        "description": "Shown when offline sync stalls because the Limitless Pendant is actively recording; it cannot serve stored audio until recording stops"
+    },
+    "pendantFullSyncBlocked": "Your Pendant's storage is full and it's still in recording mode, so its stored audio can't be transferred. Press the Pendant's button to stop recording, then sync again.",
+    "@pendantFullSyncBlocked": {
+        "description": "Shown when offline sync stalls because the Limitless Pendant's flash storage is full; a full pendant stays armed in recording mode and serves no stored audio until recording is stopped"
     }
 }

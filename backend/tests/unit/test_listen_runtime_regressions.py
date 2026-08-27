@@ -296,6 +296,17 @@ async def test_bootstrap_sends_first_onboarding_question_before_any_audio(monkey
     assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
 
 
+def test_allocator_sentinel_matches_the_onboarding_handler_reservation():
+    # The allocator reserves OMI_SPEAKER_ID_SENTINEL so a long session with
+    # many provider transitions can never allocate 99 to a real speaker. That
+    # reservation is only meaningful while it equals the value onboarding
+    # actually stamps its question segments with, so pin the two together.
+    # (This file already owns the heavy utils.onboarding import chain.)
+    from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
+
+    assert OMI_SPEAKER_ID_SENTINEL == OnboardingHandler.OMI_SPEAKER_ID
+
+
 @pytest.mark.anyio
 async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selection(monkeypatch):
     import routers.listen.runtime as runtime_module
@@ -543,6 +554,7 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
             self.end = data['end']
             self.speech_profile_processed = data['speech_profile_processed']
             self.is_user = False
+            self.speaker_id = data.get('speaker_id')
 
         def model_dump(self):
             return {'id': self.id, 'text': self.text}
@@ -597,6 +609,7 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
     processor.photo_buffer = deque()
     processor.cache = SimpleNamespace(get=cache_get)
     processor.current_session_segments = {}
+    processor.speaker_id_allocator = SimpleNamespace(hydrate=lambda _segments: None, assign=lambda _segment: None)
     processor._update_live_conversation = update
     processor._translate = no_op
     processor._speaker_detection = no_op

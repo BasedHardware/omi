@@ -9836,6 +9836,20 @@ class AppLocalizationsEt extends AppLocalizations {
   String get accountCutoverOpenStore => 'Avaa kauppa';
 
   @override
+  String get chatScopeToday => 'Täna';
+
+  @override
+  String get chatScopeThisWeek => 'Sel nädalal';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Teave: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Küsi selle kohta';
+
+  @override
   String get sendRawAudioToOmi => 'Saada töötlemata heli Omisse';
 
   @override
@@ -9879,4 +9893,15 @@ class AppLocalizationsEt extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Viimane viga: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Eelsalvestatud';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant salvestab endiselt, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja sünkrooni uuesti.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendanti mälu on täis ja see on endiselt salvestusrežiimis, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja seejärel sünkrooni uuesti.';
 }

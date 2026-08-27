@@ -9764,6 +9764,20 @@ class AppLocalizationsHe extends AppLocalizations {
   String get accountCutoverOpenStore => 'פתחו חנות';
 
   @override
+  String get chatScopeToday => 'היום';
+
+  @override
+  String get chatScopeThisWeek => 'השבוע הזה';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'אודות: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'שאל על זה';
+
+  @override
   String get sendRawAudioToOmi => 'שליחת שמע גולמי ל-Omi';
 
   @override
@@ -9806,4 +9820,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'השגיאה האחרונה: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'הוקלט מראש';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'ה-Pendant עדיין מקליט, ולכן לא ניתן להעביר את השמע השמור בו. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ואז סנכרנו שוב.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'האחסון של ה-Pendant מלא והוא עדיין במצב הקלטה, ולכן לא ניתן להעביר את השמע השמור. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ולאחר מכן סנכרנו שוב.';
 }

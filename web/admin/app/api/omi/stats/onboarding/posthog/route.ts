@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
-import { getPayload, setPayload } from '@/lib/payload-cache';
-import { withRowLimit } from '@/lib/posthog';
+import { getPayload, setPayload, withFreshness } from '@/lib/payload-cache';
+import { POSTHOG_SERVED_MAX_ROWS, withRowLimit } from '@/lib/posthog';
+import {
+  ALL_EVENT_NAMES,
+  ENTRY_EVENT_NAME,
+  computeFunnelSteps,
+} from '@/lib/onboarding-funnel';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 3600;
 
@@ -18,89 +23,9 @@ class PostHogError extends Error {
   }
 }
 
-const STEP_DEFINITIONS = [
-  { key: 'name', label: 'Name', eventNames: ['Onboarding Step Name Completed'] },
-  { key: 'language', label: 'Language', eventNames: ['Onboarding Step Language Completed'] },
-  { key: 'trust', label: 'Trust', eventNames: ['Onboarding Step Trust Completed'] },
-  {
-    key: 'screen_recording',
-    label: 'Screen Recording',
-    eventNames: [
-      'Onboarding Step ScreenRecording Completed',
-      'Onboarding Step ScreenRecording_Skipped Completed',
-    ],
-  },
-  {
-    key: 'full_disk_access',
-    label: 'Full Disk Access',
-    eventNames: [
-      'Onboarding Step FullDiskAccess Completed',
-      'Onboarding Step FullDiskAccess_Skipped Completed',
-    ],
-  },
-  {
-    key: 'file_scan',
-    label: 'File Scan',
-    eventNames: ['Onboarding Step FileScan Completed', 'Onboarding Step FileScan_Skipped Completed'],
-  },
-  {
-    key: 'microphone',
-    label: 'Microphone',
-    eventNames: ['Onboarding Step Microphone Completed', 'Onboarding Step Microphone_Skipped Completed'],
-  },
-  {
-    key: 'notifications',
-    label: 'Notifications',
-    eventNames: [
-      'Onboarding Step Notifications Completed',
-      'Onboarding Step Notifications_Skipped Completed',
-    ],
-  },
-  {
-    key: 'accessibility',
-    label: 'Accessibility',
-    eventNames: [
-      'Onboarding Step Accessibility Completed',
-      'Onboarding Step Accessibility_Skipped Completed',
-    ],
-  },
-  {
-    key: 'automation',
-    label: 'Automation',
-    eventNames: ['Onboarding Step Automation Completed', 'Onboarding Step Automation_Skipped Completed'],
-  },
-  {
-    key: 'floating_bar_shortcut',
-    label: 'Floating Bar Shortcut',
-    eventNames: [
-      'Onboarding Step FloatingBarShortcut Completed',
-      'Onboarding Step FloatingBarShortcut_Skipped Completed',
-    ],
-  },
-  {
-    key: 'floating_bar',
-    label: 'Floating Bar',
-    eventNames: ['Onboarding Step FloatingBar Completed', 'Onboarding Step FloatingBar_Skipped Completed'],
-  },
-  {
-    key: 'voice_shortcut',
-    label: 'Voice Shortcut',
-    eventNames: ['Onboarding Step VoiceShortcut Completed', 'Onboarding Step VoiceShortcut_Skipped Completed'],
-  },
-  {
-    key: 'voice_demo',
-    label: 'Voice Demo',
-    eventNames: ['Onboarding Step VoiceDemo Completed', 'Onboarding Step VoiceDemo_Skipped Completed'],
-  },
-  { key: 'research', label: 'Research', eventNames: ['Onboarding Step Research Completed'] },
-  { key: 'goal', label: 'Goal', eventNames: ['Onboarding Step Goal Completed'] },
-  {
-    key: 'tasks',
-    label: 'Tasks',
-    eventNames: ['Onboarding Step Tasks Completed', 'Onboarding Step Tasks_Skipped Completed'],
-  },
-  { key: 'completed', label: 'Completed', eventNames: ['Onboarding Completed'] },
-];
+// The funnel's step list and ordering live in @/lib/onboarding-funnel, whose
+// source of truth is desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift.
+// Renaming, adding, or removing a step there must be mirrored in that file.
 
 export async function computeOnboarding(days: number) {
     const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
@@ -111,8 +36,9 @@ export async function computeOnboarding(days: number) {
       throw new Error('PostHog credentials not configured');
     }
 
-    const eventNames = STEP_DEFINITIONS.flatMap((step) => step.eventNames);
-    const escapedEventNames = eventNames.map((name) => `'${name.replace(/'/g, "\\'")}'`).join(', ');
+    const escapedEventNames = ALL_EVENT_NAMES.map(
+      (name) => `'${name.replace(/'/g, "\\'")}'`
+    ).join(', ');
     const url = `${host}/api/projects/${projectId}/query/`;
 
     const body = {
@@ -132,7 +58,7 @@ export async function computeOnboarding(days: number) {
                 AND properties.$os = 'macOS'
               GROUP BY actor_id
             )
-            WHERE first_event_name = 'Onboarding Step Name Completed'
+            WHERE first_event_name = '${ENTRY_EVENT_NAME}'
               AND first_event_at >= now() - INTERVAL ${days} DAY
           )
           SELECT
@@ -143,7 +69,7 @@ export async function computeOnboarding(days: number) {
             AND properties.$os = 'macOS'
             AND COALESCE(person_id, distinct_id) IN (SELECT actor_id FROM entrant_actors)
           GROUP BY actor_id, event
-          LIMIT 10000
+          LIMIT ${POSTHOG_SERVED_MAX_ROWS}
         `),
       },
     };
@@ -167,46 +93,10 @@ export async function computeOnboarding(days: number) {
     const raw = await response.json();
     const rows = Array.isArray(raw.results) ? raw.results : [];
 
-    const eventToStepIndex = new Map<string, number>();
-    STEP_DEFINITIONS.forEach((step, index) => {
-      step.eventNames.forEach((eventName) => eventToStepIndex.set(eventName, index));
-    });
-
-    const actorSteps = new Map<string, Set<number>>();
-
-    for (const row of rows) {
-      const actorId = row[0];
-      const eventName = row[1];
-      const stepIndex = eventToStepIndex.get(eventName);
-      if (!actorId || stepIndex == null) continue;
-
-      const completed = actorSteps.get(actorId) ?? new Set<number>();
-      completed.add(stepIndex);
-      actorSteps.set(actorId, completed);
-    }
-
-    const usersByStep = new Array<number>(STEP_DEFINITIONS.length).fill(0);
-
-    for (const completedSteps of Array.from(actorSteps.values())) {
-      let furthestSequentialStep = -1;
-      for (let stepIndex = 0; stepIndex < STEP_DEFINITIONS.length; stepIndex++) {
-        if (!completedSteps.has(stepIndex)) break;
-        furthestSequentialStep = stepIndex;
-      }
-
-      for (let stepIndex = 0; stepIndex <= furthestSequentialStep; stepIndex++) {
-        usersByStep[stepIndex] += 1;
-      }
-    }
-
-    const totalUsers = usersByStep[0] ?? 0;
-    const steps = STEP_DEFINITIONS.map((step, index) => ({
-      key: step.key,
-      label: step.label,
-      users: usersByStep[index],
-      completionRate:
-        totalUsers > 0 ? Math.round((usersByStep[index] / totalUsers) * 10000) / 100 : 0,
-    }));
+    // The grouped query is capped at the served ceiling; a result sitting at the
+    // cap means actor x event rows were dropped and the funnel undercounts.
+    const truncated = rows.length >= POSTHOG_SERVED_MAX_ROWS;
+    const { totalUsers, steps } = computeFunnelSteps(rows);
 
     return {
       days,
@@ -214,6 +104,7 @@ export async function computeOnboarding(days: number) {
       methodology:
         'First-ever entrants into the current macOS onboarding flow, using users whose earliest recorded onboarding event is Name inside the selected window.',
       steps,
+      truncated,
     };
 }
 
@@ -228,12 +119,12 @@ export async function GET(request: NextRequest) {
   try {
     const cached = await getPayload<Awaited<ReturnType<typeof computeOnboarding>>>(key);
     if (cached) {
-      return NextResponse.json(cached.data);
+      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
     }
 
     const payload = await computeOnboarding(days);
     await setPayload(key, payload);
-    return NextResponse.json(payload);
+    return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (error) {
     if (error instanceof PostHogError) {
       return NextResponse.json({ error: `PostHog API error: ${error.status}` }, { status: 502 });

@@ -9911,6 +9911,20 @@ class AppLocalizationsTa extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
+  String get chatScopeToday => 'இன்று';
+
+  @override
+  String get chatScopeThisWeek => 'இந்த வாரம்';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title பற்றி';
+  }
+
+  @override
+  String get askAboutThisConversation => 'இதைப் பற்றி கேள்';
+
+  @override
   String get sendRawAudioToOmi => 'மூல ஆடியோவை Omi-க்கு அனுப்பவும்';
 
   @override
@@ -9955,4 +9969,15 @@ class AppLocalizationsTa extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'கடைசி பிழை: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'முன் பதிவு';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant இன்னும் பதிவு செய்து கொண்டிருக்கிறது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant பொத்தானை அழுத்தி, பிறகு மீண்டும் ஒத்திசைக்கவும்.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant-இன் சேமிப்பகம் நிரம்பிவிட்டது, அது இன்னும் பதிவு பயன்முறையில் உள்ளது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant-இன் பொத்தானை அழுத்தி, பின்னர் மீண்டும் ஒத்திசைக்கவும்.';
 }

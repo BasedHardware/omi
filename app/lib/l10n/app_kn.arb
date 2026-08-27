@@ -10781,6 +10781,10 @@
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
     "accountCutoverOpenStore": "स्टोर खोलें",
+    "chatScopeToday": "ಇಂದು",
+    "chatScopeThisWeek": "ಈ ವಾರ",
+    "chatScopeAbout": "{title} ಕುರಿತು",
+    "askAboutThisConversation": "ಇದರ ಕುರಿತು ಕೇಳಿ",
     "sendRawAudioToOmi": "Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸಿ",
     "sendRawAudioToOmiDescription": "Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸುವುದನ್ನು ತಡೆಯಲು ಇದನ್ನು ಆಫ್ ಮಾಡಿ. ಪ್ರತಿಲಿಪಿಗಳು ಮತ್ತು ಕ್ಲೌಡ್ ವೈಶಿಷ್ಟ್ಯಗಳಿಗೆ ಅಗತ್ಯವಾದ ಡೇಟಾವನ್ನು ಇನ್ನೂ Omi ಗೆ ಕಳುಹಿಸಬಹುದು.",
     "findDevice": "ಹುಡುಕಿ",
@@ -10793,5 +10797,8 @@
     "appReEnableFailedTitle": "ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಲಿಲ್ಲ",
     "appReEnableFailedBody": "ಈ ಆ್ಯಪ್ ಅನ್ನು ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "appDisabledOn": "{date} ರಂದು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ.",
-    "appDisabledLastError": "ಕೊನೆಯ ದೋಷ: {error}"
+    "appDisabledLastError": "ಕೊನೆಯ ದೋಷ: {error}",
+    "prerecordedTranscript": "ಮುಂಚಿತವಾಗಿ ರೆಕಾರ್ಡ್",
+    "pendantRecordingSyncBlocked": "Pendant ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ, ಆದ್ದರಿಂದ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ವರ್ಗಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು Pendant ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಿ.",
+    "pendantFullSyncBlocked": "Pendant ನ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ ಮತ್ತು ಅದು ಇನ್ನೂ ರೆಕಾರ್ಡಿಂಗ್ ಮೋಡ್‌ನಲ್ಲಿದೆ, ಆದ್ದರಿಂದ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ವರ್ಗಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು Pendant ನ ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಿ."
 }

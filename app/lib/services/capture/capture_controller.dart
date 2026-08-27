@@ -28,6 +28,7 @@ import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
+import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -187,7 +188,8 @@ class CaptureController extends ChangeNotifier
     Future<void> Function()? inProgressConversationLoader,
     Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
-        _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
+        _conversationLocationCapture = conversationLocationCapture ??
+            ConversationLocationCapture(onNewlyGranted: _startAndroidLocationForegroundTask),
         _inProgressConversationLoader = inProgressConversationLoader,
         _audioCodecLoader = audioCodecLoader {
     // Restore a persisted device mute so it survives an app kill/restart. When
@@ -198,6 +200,12 @@ class CaptureController extends ChangeNotifier
       onConnectionStateChanged(isConnected);
     });
     BleBridge.instance.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
+  }
+
+  static Future<void> _startAndroidLocationForegroundTask() async {
+    if (!Platform.isAndroid) return;
+    await ForegroundUtil.initializeForegroundService();
+    await ForegroundUtil.startForegroundTask();
   }
 
   // True while the audio session is interrupted (phone call, Siri, alarm).
@@ -1470,11 +1478,6 @@ class CaptureController extends ChangeNotifier
   }
 
   streamRecording() async {
-    // The backend snapshots its cached location when finalizing a conversation.
-    // Complete this bounded update before any live or batch capture path can
-    // create/finalize that conversation.
-    await _conversationLocationCapture.captureAndUpload();
-
     // Mode is fixed for the whole session at start. On iOS and Android the phone
     // mic can capture Transcribe Later (batch) audio: explicitly when the user
     // enabled it, or automatically as an offline fallback when there is no
@@ -1486,6 +1489,12 @@ class CaptureController extends ChangeNotifier
     );
     if (mode != PhoneMicSessionMode.live) {
       await _startPhoneMicBatch(auto: mode == PhoneMicSessionMode.batchAuto);
+      if (_phoneMicBatchActive) {
+        // Product: recording is the tap; location is metadata. Do not hold
+        // record-start for the OS location dialog. Location PATCHes when the
+        // grant/fix lands.
+        unawaited(_conversationLocationCapture.captureAndUpload());
+      }
       return;
     }
 
@@ -1537,6 +1546,11 @@ class CaptureController extends ChangeNotifier
             onStalled: _onMicStalled,
             onInterruption: _onMicInterruption,
           );
+      // Product: recording is the tap; location is metadata. Do not hold
+      // RecordingState.initialising for the OS location dialog, and do not
+      // prompt location before the microphone. Location still PATCHes when
+      // the grant/fix lands.
+      unawaited(_conversationLocationCapture.captureAndUpload());
     } catch (e, st) {
       // Typed native failures (permission_denied, engine_start_failed, ...) or
       // mic contention — fail visibly instead of recording silence.
@@ -1668,9 +1682,12 @@ class CaptureController extends ChangeNotifier
 
     bool wasPaused = _isPaused;
 
-    // Ensure even very short device recordings have a location in Redis before
-    // the backend is able to finalize their conversation.
-    await _conversationLocationCapture.captureAndUpload();
+    // Product: recording is the tap; location is metadata. Do not block
+    // device connect/start on the OS location dialog. Location still PATCHes
+    // when the grant/fix lands; a short conversation can miss coords.
+    // HomePage calls this with device == null on every entry — check-only so
+    // a fresh install cannot hit deniedForever before the user records.
+    unawaited(_conversationLocationCapture.captureAndUpload(promptIfDenied: device != null));
 
     await _resetStateVariables();
     await _resetState();
@@ -1830,6 +1847,12 @@ class CaptureController extends ChangeNotifier
 
   void _startInProgressConversationRefresh() {
     if (!_canRefreshInProgressConversation || segments.isNotEmpty || photos.isNotEmpty) return;
+    // The socket calls this on every connect. If a cycle is already running, leave it
+    // alone: restarting it resets the attempt counter, so a connection that reconnects
+    // more often than the give-up window keeps this polling
+    // GET /v1/conversations?...&statuses=in_progress forever instead of ever
+    // reaching the cap.
+    if (_inProgressConversationRefreshTimer?.isActive ?? false) return;
 
     _stopInProgressConversationRefresh();
     _inProgressConversationRefreshAttempts = 0;
@@ -1837,6 +1860,15 @@ class CaptureController extends ChangeNotifier
       _refreshInProgressConversationTick();
     });
   }
+
+  @visibleForTesting
+  void startInProgressConversationRefreshForTesting() => _startInProgressConversationRefresh();
+
+  @visibleForTesting
+  bool get inProgressConversationRefreshActiveForTesting => _inProgressConversationRefreshTimer?.isActive ?? false;
+
+  @visibleForTesting
+  int get inProgressConversationRefreshAttemptsForTesting => _inProgressConversationRefreshAttempts;
 
   void _stopInProgressConversationRefresh() {
     _inProgressConversationRefreshTimer?.cancel();
@@ -2300,9 +2332,9 @@ class CaptureController extends ChangeNotifier
 
     if (segments.isEmpty && !_isLoadingInProgressConversation) {
       _isLoadingInProgressConversation = true;
-      // Refresh the location at the first transcript without relying on the
-      // long-lived foreground-task isolate. This is fail-open and does not
-      // delay segment processing.
+      // Product: recording is the tap; location is metadata. Refresh at the
+      // first transcript without relying on the long-lived foreground-task
+      // isolate. Fail-open: do not delay segment processing.
       unawaited(_conversationLocationCapture.captureAndUpload());
       try {
         if (_inProgressConversationLoader != null) {

@@ -10781,6 +10781,10 @@
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
     "accountCutoverOpenStore": "स्टोर खोलें",
+    "chatScopeToday": "ఈ రోజు",
+    "chatScopeThisWeek": "ఈ వారం",
+    "chatScopeAbout": "{title} గురించి",
+    "askAboutThisConversation": "దీని గురించి అడగండి",
     "sendRawAudioToOmi": "ముడి ఆడియోను Omiకి పంపండి",
     "sendRawAudioToOmiDescription": "ముడి ఆడియో Omiకి పంపబడకుండా ఉండటానికి దీన్ని ఆఫ్ చేయండి. ట్రాన్స్‌క్రిప్ట్‌లు మరియు క్లౌడ్ ఫీచర్లకు అవసరమైన డేటా ఇప్పటికీ Omiకి పంపబడవచ్చు.",
     "findDevice": "కనుగొనండి",
@@ -10793,5 +10797,8 @@
     "appReEnableFailedTitle": "తిరిగి ప్రారంభించలేకపోయాము",
     "appReEnableFailedBody": "ఈ యాప్‌ను తిరిగి ప్రారంభించలేకపోయాము. దయచేసి మళ్లీ ప్రయత్నించండి.",
     "appDisabledOn": "{date} న నిలిపివేయబడింది.",
-    "appDisabledLastError": "చివరి లోపం: {error}"
+    "appDisabledLastError": "చివరి లోపం: {error}",
+    "prerecordedTranscript": "ముందుగా రికార్డ్ చేసినది",
+    "pendantRecordingSyncBlocked": "Pendant ఇంకా రికార్డ్ చేస్తోంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయలేము. రికార్డింగ్ ఆపడానికి Pendant బటన్ నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.",
+    "pendantFullSyncBlocked": "Pendant నిల్వ నిండిపోయింది మరియు అది ఇంకా రికార్డింగ్ మోడ్‌లో ఉంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయడం సాధ్యం కాదు. రికార్డింగ్ ఆపడానికి Pendant బటన్‌ను నొక్కి, ఆపై మళ్లీ సింక్ చేయండి."
 }

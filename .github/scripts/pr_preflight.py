@@ -87,7 +87,7 @@ def format_failure_class_suggest(payload: dict) -> str:
             "",
             "<!-- A `fix:` commit is in this diff. Choose manually: this command does not infer a class from paths or diffs.",
             "Before opening the PR, inspect a relevant class with `scripts/failure-class explain FC-<slug> --format json`; replace `none` only if an existing class applies, or use `new` for a genuinely new class.",
-            "Available classes:",
+            _candidate_heading(payload),
         ]
     )
     for candidate in payload.get("advisory_candidates", []):
@@ -95,6 +95,24 @@ def format_failure_class_suggest(payload: dict) -> str:
             lines.append(f"- {candidate['id']}: {candidate['violated_contract']}")
     lines.extend(["-->", ""])
     return "\n".join(lines)
+
+
+def _candidate_heading(payload: dict) -> str:
+    """Label the candidate list honestly.
+
+    `failure-class prepare` lists the classes whose advisory scope_hints overlap the
+    change, falling back to the whole registry when none match. Calling a narrowed list
+    "Available classes" would imply the others do not apply, which is a classification
+    the CLI does not make.
+    """
+    shown = payload.get("candidates_shown")
+    total = payload.get("candidates_total")
+    if isinstance(shown, int) and isinstance(total, int) and shown < total:
+        return (
+            f"Classes whose scope_hints overlap this change ({shown} of {total}; advisory only "
+            "— run `scripts/failure-class prepare --all-candidates` for the rest):"
+        )
+    return "Available classes:"
 
 
 def resolve_pr_metadata(

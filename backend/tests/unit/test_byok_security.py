@@ -22,7 +22,7 @@ os.environ.setdefault('DEEPGRAM_API_KEY', 'dg-test-fake-for-unit-tests')
 os.environ.setdefault('GOOGLE_API_KEY', 'goog-test-fake-for-unit-tests')
 os.environ.setdefault('ANTHROPIC_API_KEY', 'ant-test-fake-for-unit-tests')
 
-from testing.import_isolation import AutoMockModule, stub_modules
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 warnings.filterwarnings('ignore', message='.*stream_options.*')
 
@@ -79,6 +79,11 @@ def _byok_isolation():
         # per-test fast-unit CPU-time guard doesn't charge cold-start cost to the
         # first cache-routing test. Uses a distinct key so no assertion is affected.
         from utils.llm.clients import _cached_openai_chat
+
+        # Force a fresh load against the stubs: another test module may already have
+        # imported the real utils.subscription (and bound the real database._client),
+        # so a plain `import` would reuse the cached module and bypass the fakes.
+        load_module_fresh('utils.subscription', str(_BACKEND / 'utils' / 'subscription.py'))
 
         _cached_openai_chat('gpt-4.1-mini', 'sk-warmup-timing-guard-not-asserted', {})
         yield
@@ -326,11 +331,14 @@ class TestGeminiKeyNotInUrl:
 
 
 class TestChatQuotaBYOKBypass:
-    @patch('utils.subscription.get_byok_key')
+    @patch('utils.subscription.has_validated_byok_keys', return_value=True)
+    @patch('utils.subscription.get_byok_keys', return_value={'openai': 'sk-user'})
     @patch('utils.subscription.users_db')
-    def test_enforce_chat_quota_bypasses_for_byok_with_openai_key(self, mock_users_db, mock_get_key):
+    @patch('utils.subscription.is_trial_paywalled', return_value=False)
+    def test_enforce_chat_quota_bypasses_for_validated_openai_key(
+        self, _mock_paywalled, mock_users_db, _mock_keys, _mock_validated
+    ):
         mock_users_db.is_byok_active.return_value = True
-        mock_get_key.side_effect = lambda p: 'sk-openai' if p == 'openai' else None
         from utils.subscription import enforce_chat_quota
 
         enforce_chat_quota('byok-user-uid')
@@ -406,6 +414,81 @@ class TestChatQuotaBYOKBypass:
             enforce_chat_quota('non-byok-uid')
         assert exc_info.value.status_code == 402
 
+    @patch('utils.subscription.has_validated_byok_keys', return_value=False)
+    @patch('utils.subscription.get_byok_key')
+    @patch('utils.subscription.users_db')
+    @patch('utils.subscription.get_chat_quota_snapshot')
+    def test_enforce_chat_quota_does_not_bypass_on_unvalidated_raw_header(
+        self, mock_snapshot, mock_users_db, mock_get_key, _mock_not_validated
+    ):
+        """Raw LLM header presence alone must never bypass the quota gate.
+
+        The reviewer's gate: the paywall/chat-quota bypass must be tied to a
+        *validated* enrollment, not to any non-empty LLM BYOK header. Even when
+        a raw OpenAI header is present and the user is BYOK-active, an
+        unvalidated request (has_validated_byok_keys() == False) must still hit
+        the 402 quota gate.
+        """
+        from models.users import PlanType
+
+        mock_users_db.is_byok_active.return_value = True
+        mock_get_key.side_effect = lambda p: 'sk-raw-but-unvalidated' if p == 'openai' else None
+        mock_snapshot.return_value = {
+            'plan': PlanType.basic,
+            'unit': 'questions',
+            'used': 31,
+            'limit': 30,
+            'allowed': False,
+            'reset_at': '2026-05-01',
+        }
+        from fastapi import HTTPException
+        from utils.subscription import enforce_chat_quota
+
+        with pytest.raises(HTTPException) as exc_info:
+            enforce_chat_quota('unvalidated-header-uid')
+        assert exc_info.value.status_code == 402
+
+    @patch('utils.subscription.get_customer_firestore_client', return_value='customer-fs')
+    @patch('utils.subscription.has_validated_byok_keys', return_value=True)
+    @patch('utils.subscription.get_byok_key')
+    @patch('utils.subscription.users_db')
+    @patch('utils.subscription.get_chat_quota_snapshot')
+    def test_enforce_desktop_chat_quota_requires_anthropic(
+        self, mock_snapshot, mock_users_db, mock_get_key, _mock_validated, _mock_fs
+    ):
+        from fastapi import HTTPException
+        from models.users import PlanType
+        from utils.subscription import enforce_desktop_chat_quota
+
+        mock_users_db.is_byok_active.return_value = True
+        mock_get_key.side_effect = lambda p: 'sk-or' if p == 'openrouter' else None
+        mock_snapshot.return_value = {
+            'plan': PlanType.basic,
+            'unit': 'questions',
+            'used': 31,
+            'limit': 30,
+            'allowed': False,
+            'reset_at': '2026-05-01',
+        }
+        with pytest.raises(HTTPException) as exc_info:
+            enforce_desktop_chat_quota('or-only-uid', platform='macos')
+        assert exc_info.value.status_code == 402
+
+    @patch('utils.subscription.get_customer_firestore_client', return_value='customer-fs')
+    @patch('utils.subscription.has_validated_byok_keys', return_value=True)
+    @patch('utils.subscription.get_byok_key')
+    @patch('utils.subscription.users_db')
+    @patch('utils.subscription.is_trial_paywalled', return_value=False)
+    def test_enforce_desktop_chat_quota_bypasses_for_anthropic(
+        self, _mock_paywalled, mock_users_db, mock_get_key, _mock_validated, _mock_fs
+    ):
+        from utils.subscription import enforce_desktop_chat_quota
+
+        mock_users_db.is_byok_active.return_value = True
+        mock_get_key.side_effect = lambda p: 'sk-ant' if p == 'anthropic' else None
+        enforce_desktop_chat_quota('anthropic-uid', platform='macos')
+        mock_users_db.is_byok_active.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # 7. Transcription credit BYOK bypass
@@ -454,10 +537,10 @@ class TestTranscriptionCreditBYOKBypass:
 
 
 class TestBYOKHeadersConstant:
-    def test_headers_has_all_four_providers(self):
+    def test_headers_has_all_supported_providers(self):
         from utils.byok import BYOK_HEADERS
 
-        assert set(BYOK_HEADERS.keys()) == {'openai', 'anthropic', 'gemini', 'deepgram'}
+        assert set(BYOK_HEADERS.keys()) == {'openai', 'anthropic', 'gemini', 'openrouter', 'deepgram'}
 
     def test_headers_are_lowercase(self):
         from utils.byok import BYOK_HEADERS
@@ -529,17 +612,25 @@ class TestBYOKActivationValidation:
         assert result == {"active": True}
         mock_users_db.set_byok_active.assert_called_once_with('test-uid', fps)
 
-    def test_missing_provider_rejects(self):
+    def test_stt_only_activation_rejects(self):
         from fastapi import HTTPException
         from routers.users import BYOKActivateRequest, activate_byok_endpoint
 
-        fps = self._valid_fingerprints()
-        del fps['deepgram']
-        data = BYOKActivateRequest(fingerprints=fps)
+        data = BYOKActivateRequest(fingerprints={'deepgram': hashlib.sha256(b'dg').hexdigest()})
         with pytest.raises(HTTPException) as exc_info:
             activate_byok_endpoint(data, uid='test-uid')
         assert exc_info.value.status_code == 400
-        assert 'deepgram' in str(exc_info.value.detail)
+        assert 'LLM' in str(exc_info.value.detail)
+
+    @patch('routers.users.users_db')
+    def test_openrouter_only_activation_persists_fingerprint(self, mock_users_db):
+        from routers.users import BYOKActivateRequest, activate_byok_endpoint
+
+        fingerprints = {'openrouter': hashlib.sha256(b'or-key').hexdigest()}
+        assert activate_byok_endpoint(BYOKActivateRequest(fingerprints=fingerprints), uid='test-uid') == {
+            "active": True
+        }
+        mock_users_db.set_byok_active.assert_called_once_with('test-uid', fingerprints)
 
     def test_unknown_provider_rejects(self):
         from fastapi import HTTPException
@@ -604,10 +695,253 @@ class TestBYOKActivationValidation:
 
     def test_production_constants_match(self):
         """Verify the test regex matches the production regex."""
-        from routers.users import _SHA256_HEX_RE as prod_re, _BYOK_REQUIRED_PROVIDERS as prod_providers
+        from routers.users import _BYOK_ALLOWED_PROVIDERS as prod_providers, _SHA256_HEX_RE as prod_re
 
         assert prod_re.pattern == _SHA256_HEX_RE.pattern
-        assert prod_providers == {'openai', 'anthropic', 'gemini', 'deepgram'}
+        assert prod_providers == {'openai', 'anthropic', 'gemini', 'openrouter', 'deepgram'}
+
+
+class TestBYOKSubscriptionEntitlements:
+    def test_llm_only_byok_keeps_the_transcription_limit(self, monkeypatch):
+        from models.users import PlanLimits, PlanType, Subscription
+        from routers import users
+
+        subscription = Subscription(plan=PlanType.basic)
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
+        monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
+        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
+        monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
+        monkeypatch.setattr(
+            users,
+            'get_plan_limits',
+            lambda _plan: PlanLimits(transcription_seconds=37, words_transcribed=50, insights_gained=3),
+        )
+        monkeypatch.setattr(users, 'get_plan_features', lambda _plan, simplified: [])
+        monkeypatch.setattr(users, 'should_show_new_plans', lambda _platform, _version: True)
+        monkeypatch.setattr(users, 'get_monthly_usage_for_subscription', lambda _uid: {})
+        monkeypatch.setattr(users, 'get_paid_plan_definitions', lambda: [])
+        monkeypatch.setattr(users, 'has_ever_purchased', lambda _uid, _subscription: False, raising=False)
+        monkeypatch.setattr(users, 'filter_plans_for_user', lambda _definitions, _plan, **_kwargs: [])
+        monkeypatch.setattr(users, 'should_hide_subscription_ui', lambda _uid, _platform, _version: False)
+        monkeypatch.setattr(
+            users,
+            'get_phone_call_quota_snapshot',
+            lambda _uid: MagicMock(to_client_dict=lambda: {'has_access': False, 'is_paid': False}),
+        )
+        monkeypatch.setattr(
+            users,
+            'get_chat_quota_snapshot',
+            lambda _uid, platform: {'used': 0, 'unit': 'questions', 'limit': 30, 'allowed': True, 'reset_at': None},
+        )
+        monkeypatch.setattr(users, 'neo_grandfather_until', lambda _subscription: None)
+        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version: plan)
+
+        response = users.get_user_subscription_endpoint(uid='llm-byok-user')
+
+        assert response.subscription.plan == PlanType.basic
+        assert response.transcription_seconds_limit == 37
+
+    def test_validated_llm_byok_gets_unlimited_subscription(self, monkeypatch):
+        from models.users import PlanType
+        from routers import users
+
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
+
+        response = users.get_user_subscription_endpoint(uid='validated-byok-user')
+
+        assert response.subscription.plan == PlanType.unlimited
+        assert response.subscription.features == ['byok']
+
+    def test_validated_deepgram_only_does_not_unlock_chat_unlimited(self, monkeypatch):
+        from models.users import PlanLimits, PlanType, Subscription
+        from routers import users
+
+        subscription = Subscription(plan=PlanType.basic)
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
+        monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
+        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
+        monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
+        monkeypatch.setattr(
+            users,
+            'get_plan_limits',
+            lambda _plan: PlanLimits(transcription_seconds=37, words_transcribed=50, insights_gained=3),
+        )
+        monkeypatch.setattr(users, 'get_plan_features', lambda _plan, simplified: [])
+        monkeypatch.setattr(users, 'should_show_new_plans', lambda _platform, _version: True)
+        monkeypatch.setattr(users, 'get_monthly_usage_for_subscription', lambda _uid: {})
+        monkeypatch.setattr(users, 'get_paid_plan_definitions', lambda: [])
+        monkeypatch.setattr(users, 'has_ever_purchased', lambda _uid, _subscription: False, raising=False)
+        monkeypatch.setattr(users, 'filter_plans_for_user', lambda _definitions, _plan, **_kwargs: [])
+        monkeypatch.setattr(users, 'should_hide_subscription_ui', lambda _uid, _platform, _version: False)
+        monkeypatch.setattr(
+            users,
+            'get_phone_call_quota_snapshot',
+            lambda _uid: MagicMock(to_client_dict=lambda: {'has_access': False, 'is_paid': False}),
+        )
+        monkeypatch.setattr(
+            users,
+            'get_chat_quota_snapshot',
+            lambda _uid, platform: {'used': 0, 'unit': 'questions', 'limit': 30, 'allowed': True, 'reset_at': None},
+        )
+        monkeypatch.setattr(users, 'neo_grandfather_until', lambda _subscription: None)
+        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version: plan)
+
+        response = users.get_user_subscription_endpoint(uid='deepgram-only-user')
+
+        assert response.subscription.plan == PlanType.basic
+        assert response.transcription_seconds_limit == 37
+
+    def test_usage_quota_requires_validated_llm_capability(self, monkeypatch):
+        from models.users import PlanType
+        from routers import users
+
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
+        monkeypatch.setattr(
+            users,
+            'get_chat_quota_snapshot',
+            lambda _uid, platform=None, **_kwargs: {
+                'plan': PlanType.basic,
+                'used': 4,
+                'unit': 'questions',
+                'limit': 30,
+                'allowed': True,
+                'reset_at': None,
+            },
+        )
+
+        response = users.get_user_chat_usage_quota(uid='deepgram-only-user')
+        assert response.plan_type == PlanType.basic.value
+        assert response.limit == 30
+
+        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
+        response = users.get_user_chat_usage_quota(uid='llm-byok-user')
+        assert response.plan_type == PlanType.unlimited.value
+        assert response.limit is None
+        assert response.allowed is True
+
+
+class TestRequestHasLLMByokKey:
+    def test_accepts_openrouter_and_gemini(self, monkeypatch):
+        from utils import subscription
+
+        monkeypatch.setattr(subscription, 'has_validated_byok_keys', lambda: True)
+        monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'openrouter': 'or-key'})
+        assert subscription.request_has_llm_byok_key() is True
+        monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'gemini': 'gm-key'})
+        assert subscription.request_has_llm_byok_key() is True
+        monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'deepgram': 'dg-key'})
+        assert subscription.request_has_llm_byok_key() is False
+
+    def test_requires_validated_context(self, monkeypatch):
+        from utils import subscription
+
+        monkeypatch.setattr(subscription, 'has_validated_byok_keys', lambda: False)
+        monkeypatch.setattr(subscription, 'get_byok_keys', lambda: {'openai': 'sk'})
+        assert subscription.request_has_llm_byok_key() is False
+
+    def test_quota_snapshot_accepts_required_llm_provider(self, monkeypatch):
+        from models.users import PlanType
+        from utils import subscription
+
+        monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *args, **kwargs: False)
+        monkeypatch.setattr(subscription.users_db, 'get_user_valid_subscription', lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            subscription.user_usage_db,
+            'get_monthly_chat_usage',
+            lambda *args, **kwargs: {'questions': 1, 'cost_usd': 0.0, 'reset_at': None},
+        )
+        snapshot = subscription.get_chat_quota_snapshot('uid', required_llm_provider='anthropic')
+        assert snapshot['plan'] == PlanType.basic
+        assert snapshot['unit'] == 'questions'
+
+
+class TestBYOKMiddlewareValidation:
+    @staticmethod
+    def _request(headers, path='/v1/test'):
+        from starlette.requests import Request
+
+        return Request(
+            {
+                'type': 'http',
+                'method': 'GET',
+                'path': path,
+                'headers': [(key.lower().encode(), value.encode()) for key, value in headers.items()],
+                'query_string': b'',
+                'scheme': 'http',
+                'server': ('testserver', 80),
+                'client': ('testclient', 1234),
+                'http_version': '1.1',
+            }
+        )
+
+    def test_validated_keys_survive_async_middleware_boundary(self, monkeypatch):
+        from utils.byok import BYOKMiddleware, get_byok_keys, has_validated_byok_keys
+
+        async def run_blocking(_executor, function, *args):
+            if function.__name__ == 'verify_token':
+                return 'middleware-user'
+            if function.__name__ == '_validated_byok_keys':
+                return args[1], None
+            return function(*args)
+
+        monkeypatch.setattr('utils.byok.run_blocking', run_blocking)
+        middleware = BYOKMiddleware(MagicMock())
+        request = self._request({'Authorization': 'Bearer token', 'X-BYOK-OpenAI': 'sk-valid'})
+
+        async def call_next(_request):
+            assert has_validated_byok_keys()
+            assert get_byok_keys() == {'openai': 'sk-valid'}
+            return 'ok'
+
+        assert __import__('asyncio').run(middleware.dispatch(request, call_next)) == 'ok'
+
+    def test_mismatched_keys_are_rejected_before_route(self, monkeypatch):
+        from utils.byok import BYOKMiddleware
+
+        async def run_blocking(_executor, function, *args):
+            if function.__name__ == 'verify_token':
+                return 'middleware-user'
+            return {}, 'BYOK key fingerprint mismatch for provider: openai'
+
+        monkeypatch.setattr('utils.byok.run_blocking', run_blocking)
+        middleware = BYOKMiddleware(MagicMock())
+        request = self._request({'Authorization': 'Bearer token', 'X-BYOK-OpenAI': 'sk-invalid'})
+        called = False
+
+        async def call_next(_request):
+            nonlocal called
+            called = True
+            return 'unreachable'
+
+        response = __import__('asyncio').run(middleware.dispatch(request, call_next))
+
+        assert response.status_code == 403
+        assert not called
+
+    def test_mismatched_keys_reach_byok_recovery_routes_without_keys(self, monkeypatch):
+        from utils.byok import BYOKMiddleware, get_byok_keys
+
+        async def run_blocking(_executor, function, *args):
+            if function.__name__ == 'verify_token':
+                return 'middleware-user'
+            return {}, 'BYOK key fingerprint mismatch for provider: openai'
+
+        monkeypatch.setattr('utils.byok.run_blocking', run_blocking)
+        middleware = BYOKMiddleware(MagicMock())
+        request = self._request(
+            {'Authorization': 'Bearer token', 'X-BYOK-OpenAI': 'sk-invalid'},
+            path='/v1/users/me/subscription',
+        )
+
+        async def call_next(_request):
+            assert get_byok_keys() == {}
+            return 'recovery'
+
+        assert __import__('asyncio').run(middleware.dispatch(request, call_next)) == 'recovery'
 
 
 # ---------------------------------------------------------------------------
@@ -685,25 +1019,114 @@ class TestCacheRouting:
         assert isinstance(client, stub_client)
         assert client.model_name == 'gpt-4.1-mini'
 
-    def test_openrouter_gemini_byok_routes_to_gemini_direct(self, monkeypatch):
-        """OpenRouter BYOK for Gemini models reroutes to Gemini direct endpoint."""
-        from utils.llm.clients import _GEMINI_OPENAI_BASE_URL
+    def test_anthropic_byok_routes_generic_features_through_the_user_key(self, monkeypatch):
+        from utils.llm import clients
+
+        client = MagicMock()
+        create_client = MagicMock(return_value=client)
+        monkeypatch.setattr(clients, '_cached_anthropic_chat', create_client)
+        monkeypatch.setattr(
+            clients, 'get_byok_key', lambda provider: 'sk-ant-user-key' if provider == 'anthropic' else None
+        )
+        monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
+        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
+
+        assert clients.get_llm('memories') is client
+        create_client.assert_called_once()
+        assert create_client.call_args.args[:2] == ('claude-sonnet-4-6', 'sk-ant-user-key')
+        assert create_client.call_args.args[2]['timeout'] == 120
+        assert 'request_timeout' not in create_client.call_args.args[2]
+
+    def test_anthropic_byok_strips_openai_stream_options(self, monkeypatch):
+        """ChatAnthropic must not receive OpenAI-only stream_options, even streaming."""
+        from utils.llm import clients
+
+        client = MagicMock()
+        create_client = MagicMock(return_value=client)
+        monkeypatch.setattr(clients, '_cached_anthropic_chat', create_client)
+        monkeypatch.setattr(
+            clients, 'get_byok_key', lambda provider: 'sk-ant-user-key' if provider == 'anthropic' else None
+        )
+        monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
+        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
+
+        assert clients.get_llm('memories', streaming=True) is client
+        create_client.assert_called_once()
+        ctor_kwargs = create_client.call_args.args[2]
+        assert 'stream_options' not in ctor_kwargs
+        assert ctor_kwargs['streaming'] is True
+
+    def test_openrouter_gemini_byok_routes_through_openrouter(self, monkeypatch):
+        """OpenRouter BYOK keeps Gemini models on the OpenRouter endpoint."""
 
         clients, stub_client, _constructor = self._stub_openai_constructor(monkeypatch)
 
         client = clients._create_byok_client('gemini-3-flash-preview', 'openrouter', 'AIza-byok-key')
         assert isinstance(client, stub_client)
-        # Must use Gemini base URL, not OpenRouter
-        assert client.openai_api_base == _GEMINI_OPENAI_BASE_URL
-        # Must use the bare model name for Gemini direct API
-        assert client.model_name == 'gemini-3-flash-preview'
+        # Must use OpenRouter's compatible endpoint.
+        assert client.openai_api_base == 'https://openrouter.ai/api/v1'
+        # OpenRouter requires its Google model namespace.
+        assert client.model_name == 'google/gemini-3-flash-preview'
 
-    def test_non_gemini_openrouter_returns_none(self):
-        """Non-Gemini OpenRouter models have no BYOK support — returns None."""
+    def test_non_gemini_openrouter_creates_client(self):
+        """OpenRouter BYOK supports non-Gemini models through its compatible API."""
         from utils.llm.clients import _create_byok_client
 
         result = _create_byok_client('anthropic/claude-3.5-sonnet', 'openrouter', 'sk-or-key')
-        assert result is None
+        assert result is not None
+
+    def test_legacy_openai_key_never_pairs_with_gemini_resolved_model(self, monkeypatch):
+        """A legacy OpenAI key must not be paired with a Gemini-resolved model.
+
+        'followup' resolves to a Gemini model in the BYOK QoS profile. When only a
+        legacy OpenAI key is present (no Gemini key), the fallback must select the
+        OpenAI-compatible fallback model — never hand the OpenAI credential to the
+        resolved Gemini model, which would be an incompatible model/provider
+        request at the provider.
+        """
+        from utils.llm import clients
+
+        create_client = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr(clients, '_create_byok_client', create_client)
+        # Only a legacy Gemini-resolved feature, but only an OpenAI key is attached.
+        monkeypatch.setattr(
+            clients, 'get_byok_key', lambda provider: 'sk-legacy-openai' if provider == 'openai' else None
+        )
+        monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
+        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
+
+        assert clients.get_llm('followup') is not None
+        args = create_client.call_args.args
+        assert args[0] == 'gpt-4o-mini', f"model must be OpenAI fallback, got {args[0]}"
+        assert args[1] == 'openai', f"provider must stay openai, got {args[1]}"
+        assert args[2] == 'sk-legacy-openai'
+
+    def test_byok_profile_takes_precedence_over_openrouter_fallback(self, monkeypatch):
+        """Profile-specific BYOK route wins over OpenRouter preference.
+
+        'followup' has a Gemini BYOK QoS profile entry. When the user has
+        BOTH an OpenRouter key AND a Gemini key, the Gemini profile route
+        must be used — OpenRouter must not hijack the feature-specific route.
+        """
+        from utils.llm import clients
+
+        create_client = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr(clients, '_create_byok_client', create_client)
+        monkeypatch.setattr(
+            clients,
+            'get_byok_key',
+            lambda provider: (
+                'sk-or-key' if provider == 'openrouter' else ('AIza-gemini-key' if provider == 'gemini' else None)
+            ),
+        )
+        monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
+        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
+
+        assert clients.get_llm('followup') is not None
+        args = create_client.call_args.args
+        assert 'gemini' in args[0], f"model must be Gemini, got {args[0]}"
+        assert args[1] == 'gemini', f"provider must be gemini, got {args[1]}"
+        assert args[2] == 'AIza-gemini-key', f"key must be Gemini BYOK key, got {args[2]}"
 
 
 # ---------------------------------------------------------------------------
@@ -744,12 +1167,12 @@ class TestMiddlewareIsolation:
 
 
 class TestQuotaBoundaryTests:
-    @patch('utils.subscription.get_byok_key')
+    @patch('utils.subscription.has_validated_byok_keys', return_value=True)
+    @patch('utils.subscription.get_byok_keys', return_value={'anthropic': 'sk-ant-user'})
     @patch('utils.subscription.users_db')
-    def test_chat_quota_bypasses_with_anthropic_key_only(self, mock_users_db, mock_get_key):
+    def test_chat_quota_bypasses_with_validated_anthropic_key_only(self, mock_users_db, _mock_keys, _mock_validated):
         """Anthropic-only BYOK should also bypass chat quota."""
         mock_users_db.is_byok_active.return_value = True
-        mock_get_key.side_effect = lambda p: 'sk-ant-byok' if p == 'anthropic' else None
         from utils.subscription import enforce_chat_quota
 
         enforce_chat_quota('anthropic-byok-uid')  # Should not raise
@@ -855,19 +1278,15 @@ class TestBYOKFingerprintValidation:
 
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
-    def test_missing_header_raises_403(self, mock_get_state):
+    def test_legacy_enrollment_allows_a_capability_scoped_header(self, mock_get_state):
         """BYOK-active user sends some headers but missing a provider → 403."""
-        from fastapi import HTTPException
         from utils.byok import _byok_ctx, validate_byok_request
 
         mock_get_state.return_value = self._mock_byok_state()
         # Send only openai key — this is a broken BYOK attempt (partial headers)
         token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
         try:
-            with pytest.raises(HTTPException) as exc_info:
-                validate_byok_request('byok-uid')
-            assert exc_info.value.status_code == 403
-            assert 'missing' in exc_info.value.detail
+            validate_byok_request('byok-uid')
         finally:
             _byok_ctx.reset(token)
 
@@ -960,18 +1379,42 @@ class TestBYOKFingerprintValidation:
 
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
-    def test_partial_headers_when_byok_active_raises_403(self, mock_get_state):
+    def test_empty_fingerprint_entry_does_not_pass_a_key(self, mock_get_state):
+        """An enrolled provider with an empty/null stored fingerprint must NOT
+        pass an unverified request key into the context.
+
+        The reviewer's gate: filter on a VALID stored fingerprint, not mere
+        provider membership. A request key for a provider whose stored
+        fingerprint is empty/null must be dropped exactly like an unenrolled
+        provider, so it never reaches the provider clients.
+        """
+        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+
+        state = self._mock_byok_state()
+        state['fingerprints']['openai'] = ''
+        mock_get_state.return_value = state
+
+        keys = dict(self._valid_request_keys)
+        token = _byok_ctx.set(keys)
+        try:
+            validate_byok_request('empty-fp-uid')
+            exposed = get_byok_keys()
+            assert 'openai' not in exposed, "empty-fingerprint openai key must not be used"
+            assert set(exposed) == set(state['fingerprints']) - {'openai'}
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_partial_headers_when_byok_active_stay_available(self, mock_get_state):
         """BYOK-active user sending SOME but not all headers → 403 (incomplete BYOK attempt)."""
-        from fastapi import HTTPException
         from utils.byok import _byok_ctx, validate_byok_request
 
         mock_get_state.return_value = self._mock_byok_state()
         # Send only openai key, missing the rest — this is a broken BYOK attempt, not mobile
         token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
         try:
-            with pytest.raises(HTTPException) as exc_info:
-                validate_byok_request('byok-uid')
-            assert exc_info.value.status_code == 403
+            validate_byok_request('byok-uid')
         finally:
             _byok_ctx.reset(token)
 
@@ -1047,8 +1490,7 @@ class TestBYOKFingerprintValidation:
         token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
         try:
             error = validate_byok_websocket('byok-uid')
-            assert error is not None
-            assert 'missing' in error
+            assert error is None
         finally:
             _byok_ctx.reset(token)
 
@@ -1168,7 +1610,7 @@ class TestWSAuthDependencyBYOK:
         return ws
 
     @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
-    @patch('utils.other.endpoints.validate_byok_websocket', return_value=None)
+    @patch('utils.other.endpoints.validate_byok_websocket_keys', return_value=({'openai': 'sk-test'}, None))
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
     def test_ws_listen_with_byok_headers_validates(self, _mock_auth, mock_validate, _mock_deletion):
         import asyncio
@@ -1177,10 +1619,10 @@ class TestWSAuthDependencyBYOK:
         ws = self._make_ws({'x-byok-openai': 'sk-test'})
         uid = asyncio.run(get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok'))
         assert uid == 'ws-uid'
-        mock_validate.assert_called_once_with('ws-uid')
+        mock_validate.assert_called_once_with('ws-uid', {'openai': 'sk-test'})
 
     @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
-    @patch('utils.other.endpoints.validate_byok_websocket', return_value=None)
+    @patch('utils.other.endpoints.validate_byok_websocket_keys', return_value=({}, None))
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
     def test_ws_listen_no_headers_passes(self, _mock_auth, mock_validate, _mock_deletion):
         import asyncio
@@ -1189,10 +1631,10 @@ class TestWSAuthDependencyBYOK:
         ws = self._make_ws({})
         uid = asyncio.run(get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok'))
         assert uid == 'ws-uid'
-        mock_validate.assert_called_once()
+        mock_validate.assert_called_once_with('ws-uid', {})
 
     @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
-    @patch('utils.other.endpoints.validate_byok_websocket', return_value='fingerprint mismatch')
+    @patch('utils.other.endpoints.validate_byok_websocket_keys', return_value=({}, 'fingerprint mismatch'))
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
     def test_ws_listen_validation_failure_raises_4003(self, _mock_auth, _mock_validate, _mock_deletion):
         import asyncio
@@ -1203,6 +1645,23 @@ class TestWSAuthDependencyBYOK:
         with pytest.raises(WebSocketException) as exc_info:
             asyncio.run(get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok'))
         assert exc_info.value.code == 4003
+
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
+    @patch('utils.other.endpoints.validate_byok_websocket_keys', return_value=({'openai': 'sk-good'}, None))
+    @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
+    def test_ws_listen_installs_only_validated_byok_keys(self, _mock_auth, _mock_validate, _mock_deletion):
+        import asyncio
+        from utils.byok import get_byok_keys, has_validated_byok_keys
+        from utils.other.endpoints import get_current_user_uid_ws_listen
+
+        ws = self._make_ws({'x-byok-openai': 'sk-good', 'x-byok-deepgram': 'rejected'})
+
+        async def authenticate_and_assert_context():
+            await get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok')
+            assert get_byok_keys() == {'openai': 'sk-good'}
+            assert has_validated_byok_keys()
+
+        asyncio.run(authenticate_and_assert_context())
 
 
 class TestActivationCacheInvalidation:

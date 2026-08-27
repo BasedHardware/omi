@@ -75,7 +75,7 @@ enum PTTContextVocabularyProvider {
       switch await screenCaptureService.captureWindowCGImage(windowID: windowID) {
       case .success(let image):
         activeWindowImage = image
-      case .windowGone, .failed:
+      case .windowGone, .permissionDeclined, .failed:
         activeWindowImage = nil
       }
     } else {

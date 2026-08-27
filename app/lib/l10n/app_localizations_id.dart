@@ -9852,6 +9852,20 @@ class AppLocalizationsId extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
+  String get chatScopeToday => 'Hari ini';
+
+  @override
+  String get chatScopeThisWeek => 'Minggu ini';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Tentang: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Tanyakan tentang ini';
+
+  @override
   String get sendRawAudioToOmi => 'Kirim audio mentah ke Omi';
 
   @override
@@ -9896,4 +9910,15 @@ class AppLocalizationsId extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Kesalahan terakhir: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Prarekam';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant masih merekam, jadi audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Penyimpanan Pendant penuh dan masih dalam mode perekaman, sehingga audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.';
 }

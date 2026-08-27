@@ -54,9 +54,22 @@ final class LocalTranscriptionService: @unchecked Sendable {
   private let speakerLabel: String
   private let speakerId: Int
   private let sampleRate = 16000
-  /// Window length transcribed at a time. Not real-time — gives a ~10 s "lag" like the user wants.
+  /// Longest stretch transcribed at once. A window also closes early when the speaker
+  /// pauses — see `silenceTailSeconds` — so this is the ceiling, not the cadence.
   private let windowSeconds = 10.0
   private var windowSamples: Int { Int(Double(sampleRate) * windowSeconds) }
+  /// Trailing quiet that ends a window early. Without it a window only closes on the fixed
+  /// 10 s boundary, so a short spoken command waits for wherever it happens to land in that
+  /// window — measured live at 1.1 s / 6.2 s / 7.7 s for three identical utterances, i.e. ~5 s
+  /// expected and ~10 s worst case. That is the whole of the wake word's latency on Apple
+  /// Silicon, where `STTSessionState.resolveMode` picks this on-device path by default.
+  private let silenceTailSeconds = 0.6
+  /// Speech must be at least this long before a pause can close the window, so ordinary
+  /// room noise blips don't emit fragments. Also keeps every emitted window ≥ 1 s, which the
+  /// system-audio music classifier needs for a stable verdict.
+  private let minUtteranceSeconds = 1.0
+  /// Noise floor shared with `drain`'s own silence check.
+  private static let speechFloor: Float = 0.004
 
   private var asrManager: AsrManager?
   private var onSegments: SegmentsHandler?
@@ -127,7 +140,9 @@ final class LocalTranscriptionService: @unchecked Sendable {
 
     pumpTask = Task { [weak self] in
       while !Task.isCancelled {
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        // 0.5 s, not 1 s: with pause-closed windows the tick is now the floor on how
+        // soon a finished utterance can be transcribed, not just a poll for a full window.
+        try? await Task.sleep(nanoseconds: 500_000_000)
         await self?.drain(force: false)
       }
     }
@@ -189,11 +204,29 @@ final class LocalTranscriptionService: @unchecked Sendable {
     guard
       let snapshot = lock.withLock({
         guard isReady, let manager = asrManager, !isFlushing else { return nil as DrainSnapshot? }
+        // Drop silence sitting ahead of the first speech, advancing the cursor over it so
+        // absolute timestamps stay exact. Otherwise quiet counts against the 10 s cap and
+        // the window fills partway through the next sentence — observed live cutting
+        // "Omi, what time is it now" down to "Now". Now the cap can only be reached by
+        // 10 s of continuous talking, where a cut is unavoidable anyway.
+        let lead = Self.leadingSilenceSamples(buffer, chunk: sampleRate / 10, keep: 2)
+        if lead > 0 {
+          buffer.removeFirst(lead)
+          emittedSeconds += Double(lead) / Double(sampleRate)
+        }
         let available = buffer.count
-        // On force (stop/finish) flush whatever is left, even a sub-window tail; otherwise wait for a full window.
-        let ready = available >= windowSamples || (force && available > 0)
+        // Three ways a window closes: it filled, the speaker paused, or the session is
+        // stopping. On force (stop/finish) flush whatever is left, even a sub-window tail.
+        let endpointed = Self.isEndpointed(
+          buffer,
+          tailSamples: Int(Double(sampleRate) * silenceTailSeconds),
+          minSamples: Int(Double(sampleRate) * minUtteranceSeconds)
+        )
+        let ready = available >= windowSamples || endpointed || (force && available > 0)
         guard ready else { return nil }
-        let take = force ? available : windowSamples
+        // A pause-closed window takes the whole buffer: the boundary is the silence itself,
+        // so leaving a remainder would just split the next utterance at an arbitrary point.
+        let take = (force || endpointed) ? available : windowSamples
         let window = Array(buffer.prefix(take))
         buffer.removeFirst(take)
         let startSec = emittedSeconds
@@ -212,8 +245,8 @@ final class LocalTranscriptionService: @unchecked Sendable {
     // speaker playback and ate real (quieter) microphone speech — users saw "nothing
     // transcribed". A low floor lets normal mic speech through; hallucinations on near-silence
     // are filtered below by the model's own confidence score instead.
-    let rms = (snapshot.window.reduce(Float(0)) { $0 + $1 * $1 } / Float(snapshot.window.count)).squareRoot()
-    guard rms > 0.004 else { return }
+    let rms = Self.rms(snapshot.window)
+    guard rms > Self.speechFloor else { return }
 
     // Music/video gate: don't turn songs, TV, or videos playing through *system audio* into
     // "conversations" — only real conversations/calls should be transcribed. Applied to the
@@ -268,6 +301,55 @@ final class LocalTranscriptionService: @unchecked Sendable {
     } catch {
       logError("LocalTranscriptionService: transcribe failed", error: error)
     }
+  }
+
+  static func rms(_ samples: ArraySlice<Float>) -> Float {
+    guard !samples.isEmpty else { return 0 }
+    return (samples.reduce(Float(0)) { $0 + $1 * $1 } / Float(samples.count)).squareRoot()
+  }
+
+  static func rms(_ samples: [Float]) -> Float { rms(samples[...]) }
+
+  /// True when the buffer holds a real utterance followed by `tailSamples` of quiet — the
+  /// speaker finished, so the window can close now instead of at the next fixed boundary.
+  ///
+  /// `minSamples` is measured in *voiced* audio, not buffer length. Whole-buffer RMS would
+  /// admit a window that is mostly quiet with one blip in it, and Parakeet answers those with
+  /// a hallucinated word: a 1.1 s window at rms 0.0067 decoded to "Yeah." live. Requiring a
+  /// second of actual speech separates that cleanly — real commands carried 2.4–2.9 s of it.
+  static func isEndpointed(_ buffer: [Float], tailSamples: Int, minSamples: Int) -> Bool {
+    guard tailSamples > 0, buffer.count > tailSamples else { return false }
+    let split = buffer.count - tailSamples
+    guard rms(buffer[split...]) <= speechFloor else { return false }
+    return voicedSamples(buffer[..<split], chunk: max(1, tailSamples / 6)) >= minSamples
+  }
+
+  /// Total audio above the noise floor, counted in `chunk`-sized steps.
+  static func voicedSamples(_ samples: ArraySlice<Float>, chunk: Int) -> Int {
+    guard chunk > 0 else { return 0 }
+    var voiced = 0
+    var index = samples.startIndex
+    while index + chunk <= samples.endIndex {
+      if rms(samples[index..<(index + chunk)]) > speechFloor { voiced += chunk }
+      index += chunk
+    }
+    return voiced
+  }
+
+  /// Samples of silence at the head of the buffer, scanned in `chunk`-sized steps, leaving
+  /// `keep` chunks of lead-in so the window never starts flush against the first phoneme.
+  /// Returns 0 when the buffer opens with speech, and stops at the first speech chunk — a
+  /// pause *between* utterances is never trimmed, only quiet before any of them.
+  static func leadingSilenceSamples(_ buffer: [Float], chunk: Int, keep: Int) -> Int {
+    guard chunk > 0 else { return 0 }
+    var silent = 0
+    var index = 0
+    while index + chunk <= buffer.count {
+      if rms(buffer[index..<(index + chunk)]) > speechFloor { break }
+      silent += 1
+      index += chunk
+    }
+    return max(0, silent - keep) * chunk
   }
 
   /// Classify a 16 kHz mono window as music/singing (vs speech) using Apple's on-device

@@ -9873,6 +9873,20 @@ class AppLocalizationsKn extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
+  String get chatScopeToday => 'ಇಂದು';
+
+  @override
+  String get chatScopeThisWeek => 'ಈ ವಾರ';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title ಕುರಿತು';
+  }
+
+  @override
+  String get askAboutThisConversation => 'ಇದರ ಕುರಿತು ಕೇಳಿ';
+
+  @override
   String get sendRawAudioToOmi => 'Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸಿ';
 
   @override
@@ -9917,4 +9931,15 @@ class AppLocalizationsKn extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'ಕೊನೆಯ ದೋಷ: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'ಮುಂಚಿತವಾಗಿ ರೆಕಾರ್ಡ್';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ, ಆದ್ದರಿಂದ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ವರ್ಗಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು Pendant ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಿ.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant ನ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ ಮತ್ತು ಅದು ಇನ್ನೂ ರೆಕಾರ್ಡಿಂಗ್ ಮೋಡ್‌ನಲ್ಲಿದೆ, ಆದ್ದರಿಂದ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ವರ್ಗಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು Pendant ನ ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಿ.';
 }

@@ -9834,6 +9834,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accountCutoverOpenStore => 'Open store';
 
   @override
+  String get chatScopeToday => 'Today';
+
+  @override
+  String get chatScopeThisWeek => 'This week';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'About: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Ask about this';
+
+  @override
   String get sendRawAudioToOmi => 'Send raw audio to Omi';
 
   @override
@@ -9876,4 +9890,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Last error: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Prerecorded';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Your Pendant is still recording, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
 }

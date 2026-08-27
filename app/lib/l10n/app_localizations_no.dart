@@ -9841,6 +9841,20 @@ class AppLocalizationsNo extends AppLocalizations {
   String get accountCutoverOpenStore => 'Öppna butik';
 
   @override
+  String get chatScopeToday => 'I dag';
+
+  @override
+  String get chatScopeThisWeek => 'Denne uken';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Om: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Spør om dette';
+
+  @override
   String get sendRawAudioToOmi => 'Send rå lyd til Omi';
 
   @override
@@ -9883,4 +9897,15 @@ class AppLocalizationsNo extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Siste feil: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Forhåndsinnspilt';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant tar fortsatt opp, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Lagringen på Pendant er full, og den er fortsatt i opptaksmodus, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.';
 }

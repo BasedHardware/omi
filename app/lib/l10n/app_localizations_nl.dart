@@ -9869,6 +9869,20 @@ class AppLocalizationsNl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Store openen';
 
   @override
+  String get chatScopeToday => 'Vandaag';
+
+  @override
+  String get chatScopeThisWeek => 'Deze week';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Over: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Hiernaar vragen';
+
+  @override
   String get sendRawAudioToOmi => 'Onbewerkte audio naar Omi sturen';
 
   @override
@@ -9912,4 +9926,15 @@ class AppLocalizationsNl extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Laatste fout: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Vooraf opgenomen';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Je Pendant is nog aan het opnemen, dus de opgeslagen audio kan niet worden overgezet. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer opnieuw.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'De opslag van je Pendant is vol en hij staat nog in de opnamemodus, dus de opgeslagen audio kan niet worden overgedragen. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer daarna opnieuw.';
 }

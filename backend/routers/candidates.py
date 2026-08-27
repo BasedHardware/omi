@@ -41,7 +41,7 @@ IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1,
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 SUGGESTED_CANDIDATE_LIMIT = 5
 SUGGESTED_CANDIDATE_RAW_LIMIT = 500
-SUGGESTED_CANDIDATE_FRESHNESS = candidates_db.PENDING_CANDIDATE_REUSE_WINDOW
+SUGGESTED_CANDIDATE_TTL = candidates_db.SUGGESTION_TTL
 
 
 def _require_candidate_write_control(uid: str, account_generation: int) -> None:
@@ -104,7 +104,7 @@ def _has_suggested_candidate_shape(
     created_at = candidate.created_at
     if created_at.tzinfo is None:
         return False
-    return not enforce_freshness or created_at >= now - SUGGESTED_CANDIDATE_FRESHNESS
+    return not enforce_freshness or not candidates_db.candidate_has_lapsed(candidate, now=now)
 
 
 def _is_suggested_candidate(candidate: CandidateRecord, *, now: datetime) -> bool:

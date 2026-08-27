@@ -29,6 +29,11 @@ r: Any = redis.Redis(
     health_check_interval=30,
 )
 
+# Longer than the 10-minute max approval TTL (contract §5) plus clock-skew
+# slack, so a jti cannot become reusable while its approval could still be
+# considered valid by a verifier with a slow clock.
+APPROVAL_JTI_CONSUME_TTL_SECONDS = 900
+
 
 T = TypeVar("T")
 
@@ -344,6 +349,13 @@ def get_cached_signed_url(blob_path: str) -> str:
     return signed_url.decode()
 
 
+def delete_cached_signed_url(blob_path: str) -> None:
+    """Evict a cached signed URL. Callers deleting the underlying blob must call
+    this too — a delete that leaves a still-live cached signed URL handing out
+    reads of a (now 404ing, or worse, since-overwritten) object is a bug."""
+    r.delete(f'urls:{blob_path}')
+
+
 def cache_user_geolocation(uid: str, geolocation: Dict[str, Any]) -> None:
     # Unset optional fields are dropped rather than serialized as JSON ``null``.
     # This key is written by the API tier and read by pusher, which deploys on its
@@ -503,6 +515,41 @@ def get_proactive_noti_sent_at(uid: str, app_id: str) -> Optional[int]:
 
 def get_proactive_noti_sent_at_ttl(uid: str, app_id: str) -> int:
     return r.ttl(f'{uid}:{app_id}:proactive_noti_sent_at')
+
+
+PROACTIVE_MESSAGE_CHANNEL = 'proactive_message:listen'
+
+
+@try_catch_decorator
+def publish_proactive_message(
+    uid: str, app_id: str, title: str, message: str, conversation_id: Optional[str] = None
+) -> None:
+    payload = {
+        'uid': uid,
+        'app_id': app_id,
+        'title': title,
+        'message': message,
+        'conversation_id': conversation_id,
+    }
+    r.publish(PROACTIVE_MESSAGE_CHANNEL, json.dumps(payload))
+
+
+_async_redis_client: Optional[Any] = None
+
+
+async def get_async_redis_client() -> Any:
+    global _async_redis_client
+    if _async_redis_client is None:
+        import redis.asyncio as _asyncio_redis
+
+        _async_redis_client = _asyncio_redis.Redis(
+            host=cast(str, _redis_host),
+            port=int(_redis_port_env) if _redis_port_env is not None else 6379,
+            username='default',
+            password=os.getenv('REDIS_DB_PASSWORD'),
+            decode_responses=True,
+        )
+    return _async_redis_client
 
 
 @try_catch_decorator
@@ -1190,3 +1237,61 @@ def try_acquire_conversation_goal_lock(uid: str, conversation_id: str, ttl: int 
     """Idempotency lock: one goal extraction per conversation. Returns True if acquired."""
     result = r.set(f'users:{uid}:conv_goal_lock:{conversation_id}', '1', ex=ttl, nx=True)
     return result is not None
+
+
+# ******************************************************
+# ************ SCREEN FRAME EGRESS (contract §5/§6) *****
+# ******************************************************
+
+
+def try_consume_screen_frame_jti(jti: str, ttl: int = APPROVAL_JTI_CONSUME_TTL_SECONDS) -> bool:
+    """Atomically consume a one-use approval jti. Returns True the first time a
+    given jti is seen, False on any replay. This is the writer's sole replay
+    defense (contract §5: "atomically consume jti (Redis SETNX with TTL)
+    before writing") — it must run before any bytes are written to GCS.
+    """
+    result = r.set(f'screen_frame:jti:{jti}', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def reserve_screen_frame_adjudication_attempt(
+    uid: str, purpose: str, attempt_id: str, fingerprint: str, ttl: int = 86400
+) -> Optional[str]:
+    """Atomically claim an (uid, purpose, attempt_id) idempotency slot.
+
+    Returns None if this is the first time this attempt has been seen (the
+    caller now owns processing it and must call
+    store_screen_frame_adjudication_response when done). Returns the
+    previously-stored fingerprint otherwise, so the caller can tell an
+    identical retry (same fingerprint — replay the stored response) from a
+    genuinely different request reusing the same attempt_id (different
+    fingerprint — 409).
+    """
+    key = f'screen_frame:adjudication:{uid}:{purpose}:{attempt_id}'
+    payload = _serialize_cache_value({'fingerprint': fingerprint, 'response': None})
+    claimed = r.set(key, payload, ex=ttl, nx=True)
+    if claimed:
+        return None
+    existing = _deserialize_cache_value(r.get(key))
+    if not isinstance(existing, dict):
+        return None
+    return existing.get('fingerprint')
+
+
+def get_screen_frame_adjudication_response(uid: str, purpose: str, attempt_id: str) -> Any:
+    """Return the stored response for a completed attempt, or None if the
+    attempt is unknown or still in flight (reserved but not yet stored)."""
+    key = f'screen_frame:adjudication:{uid}:{purpose}:{attempt_id}'
+    existing = _deserialize_cache_value(r.get(key))
+    if not isinstance(existing, dict):
+        return None
+    return existing.get('response')
+
+
+def store_screen_frame_adjudication_response(
+    uid: str, purpose: str, attempt_id: str, fingerprint: str, response: Any, ttl: int = 86400
+) -> None:
+    """Record the finished response for an attempt already reserved above."""
+    key = f'screen_frame:adjudication:{uid}:{purpose}:{attempt_id}'
+    payload = _serialize_cache_value({'fingerprint': fingerprint, 'response': response})
+    r.set(key, payload, ex=ttl)

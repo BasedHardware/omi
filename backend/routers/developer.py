@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from enum import Enum
 from typing import List, Literal, Optional
@@ -13,6 +14,7 @@ import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
 from database._client import db
+from database.firestore_read_metrics import FirestoreReadSite
 
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
@@ -40,6 +42,7 @@ from dependencies import (
     get_auth_with_conversation_detail_read,
     get_auth_with_conversations_read,
     get_uid_with_conversations_read,
+    get_uid_with_conversations_read_ask,
     get_uid_with_conversations_write,
     get_developer_memory_default_memory_batch_write_context,
     get_developer_memory_default_memory_read_context,
@@ -56,6 +59,14 @@ from utils.notifications import send_action_item_data_message, sync_action_item_
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.location import resolve_geolocation
+from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
+from utils.conversations.mcp_transcript_search import (
+    merge_summary_and_transcript_ids,
+    resolve_mcp_conversation_search_ids,
+)
+import database.vector_db as vector_db
+from utils.conversations.factory import deserialize_conversations
+from utils.llm.chat import qa_rag
 from utils.conversations.meeting_receipt import (
     projected_meeting_treatment_eligible,
     record_and_persist_finalized_meeting_receipt,
@@ -1206,6 +1217,114 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     return folders_db.get_folders(uid)
 
 
+class DeveloperAskRequest(BaseModel):
+    question: str = Field(
+        min_length=1, max_length=1000, description="A natural-language question about the user's life/conversations"
+    )
+    limit: int = Field(
+        default=5, ge=1, le=10, description="How many of the most relevant conversations to ground the answer on"
+    )
+    timezone: str = Field(default="UTC", description="IANA timezone used to resolve relative dates in the answer")
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        value = value.strip()
+        if not value or len(value) > 64:
+            raise ValueError("timezone must be a valid IANA timezone")
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("timezone must be a valid IANA timezone") from exc
+        return value
+
+
+class DeveloperAskSource(BaseModel):
+    id: str
+    title: str
+    created_at: Optional[datetime] = None
+
+
+class DeveloperAskResponse(BaseModel):
+    answer: str
+    sources: List[DeveloperAskSource]
+
+
+_ASK_NO_CONTEXT = "I couldn't find any of your conversations relevant to that question."
+
+
+def _ask_context_from_conversations(conversations: List[Conversation]) -> str:
+    blocks: List[str] = []
+    for c in conversations:
+        title = ((c.structured.title if c.structured else None) or "Untitled").strip()
+        overview = ((c.structured.overview if c.structured else None) or "").strip()
+        transcript = " ".join((getattr(s, "text", "") or "") for s in c.transcript_segments).strip()[:3000]
+        date = c.created_at.date().isoformat() if c.created_at else ""
+        blocks.append(f'Conversation "{title}" ({date})\nSummary: {overview}\nTranscript: {transcript}')
+    return "\n\n---\n\n".join(blocks)
+
+
+@router.post(
+    "/v1/dev/user/ask",
+    response_model=DeveloperAskResponse,
+    tags=["Conversations"],
+    operation_id="ask",
+)
+def ask_conversations(request: DeveloperAskRequest, uid: str = Depends(get_uid_with_conversations_read_ask)):
+    """
+    Answer a natural-language question grounded in the user's own conversations.
+
+    Semantically searches the user's conversations for the question, then synthesizes a
+    cited answer from the most relevant ones — the same retrieval + RAG the chat surface
+    uses, exposed for headless / Developer-API callers (CLI, CI, scripts). Read-only:
+    it never writes; discarded conversations are excluded from retrieval and locked
+    conversations are re-checked on the authoritative record before any go to the LLM.
+    """
+    question = request.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="question must not be empty")
+
+    # Exclude discarded conversations from retrieval (the search default includes
+    # them), so a deleted/discarded conversation is never fed into the LLM.
+    try:
+        results = search_conversations(uid, question, per_page=request.limit, include_discarded=False)
+    except ConversationSearchUnavailableError as exc:
+        raise HTTPException(status_code=503, detail="Search temporarily unavailable") from exc
+    items = results.get("items", []) if isinstance(results, dict) else []
+    summary_ids = [item["id"] for item in items if item.get("id")]
+    transcript_ids = resolve_mcp_conversation_search_ids(
+        uid,
+        question,
+        limit=request.limit,
+        query_vectors=lambda *args, **kwargs: [],
+        search_transcript_chunks=vector_db.search_transcript_chunks,
+    )
+    conversation_ids = merge_summary_and_transcript_ids(transcript_ids, summary_ids, request.limit)
+    if not conversation_ids:
+        return DeveloperAskResponse(answer=_ASK_NO_CONTEXT, sources=[])
+
+    # Re-check is_locked on the authoritative Firestore records: the search index's
+    # is_locked can lag, so a stale hit could otherwise leak a locked conversation
+    # into the answer. Mirrors the post-hydration filter in /v1/conversations/search.
+    raw_conversations = [
+        c for c in conversations_db.get_conversations_by_id(uid, conversation_ids) if not c.get('is_locked')
+    ]
+    conversations = deserialize_conversations(raw_conversations)
+    if not conversations:
+        return DeveloperAskResponse(answer=_ASK_NO_CONTEXT, sources=[])
+
+    answer = qa_rag(uid, question, _ask_context_from_conversations(conversations), cited=True, tz=request.timezone)
+    sources = [
+        DeveloperAskSource(
+            id=c.id,
+            title=((c.structured.title if c.structured else None) or "Untitled").strip(),
+            created_at=c.created_at,
+        )
+        for c in conversations
+    ]
+    return DeveloperAskResponse(answer=answer, sources=sources)
+
+
 @router.get(
     "/v1/dev/user/conversations",
     response_model=List[Conversation],
@@ -1552,7 +1671,9 @@ def _create_conversation_from_segments(
     conversation_id = None
     if request.client_session_id:
         conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
-        existing_conversation = conversations_db.get_conversation(uid, conversation_id)
+        existing_conversation = conversations_db.get_conversation(
+            uid, conversation_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
+        )
         if existing_conversation:
             if _is_stale_from_segments_claim(
                 existing_conversation, request.client_session_id, datetime.now(timezone.utc)

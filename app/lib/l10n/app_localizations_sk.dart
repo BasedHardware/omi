@@ -9835,6 +9835,20 @@ class AppLocalizationsSk extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
+  String get chatScopeToday => 'Dnes';
+
+  @override
+  String get chatScopeThisWeek => 'Tento týždeň';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'O: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Opýtať sa na to';
+
+  @override
   String get sendRawAudioToOmi => 'Odosielať nespracovaný zvuk do Omi';
 
   @override
@@ -9878,4 +9892,15 @@ class AppLocalizationsSk extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Posledná chyba: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Prednahraté';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant stále nahráva, takže uložený zvuk nie je možné preniesť. Stlačením tlačidla na Pendante zastavte nahrávanie a potom synchronizujte znova.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Úložisko Pendantu je plné a stále je v režime nahrávania, takže uložený zvuk nemožno preniesť. Stlačením tlačidla na Pendante zastavte nahrávanie a potom znova synchronizujte.';
 }

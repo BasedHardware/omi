@@ -3215,6 +3215,10 @@
     "accountCutoverMigrationInProgressMessage": "Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.",
     "accountCutoverMigrationRollbackMessage": "Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.",
     "accountCutoverOpenStore": "Avaa kauppa",
+    "chatScopeToday": "Tänään",
+    "chatScopeThisWeek": "Tällä viikolla",
+    "chatScopeAbout": "Aihe: {title}",
+    "askAboutThisConversation": "Kysy tästä",
     "sendRawAudioToOmi": "Lähetä käsittelemätön ääni Omille",
     "sendRawAudioToOmiDescription": "Poista käytöstä, jotta käsittelemätöntä ääntä ei lähetetä Omille. Litterointeja ja pilviominaisuuksien tarvitsemia tietoja voidaan silti lähettää Omille.",
     "findDevice": "Etsi",
@@ -3227,5 +3231,8 @@
     "appReEnableFailedTitle": "Käyttöönotto epäonnistui",
     "appReEnableFailedBody": "Tätä sovellusta ei voitu ottaa uudelleen käyttöön. Yritä uudelleen.",
     "appDisabledOn": "Poistettu käytöstä {date}.",
-    "appDisabledLastError": "Viimeisin virhe: {error}."
+    "appDisabledLastError": "Viimeisin virhe: {error}.",
+    "prerecordedTranscript": "Esitallenne",
+    "pendantRecordingSyncBlocked": "Pendant tallentaa edelleen, joten tallennettua ääntä ei voi siirtää. Pysäytä tallennus painamalla Pendantin painiketta ja synkronoi sitten uudelleen.",
+    "pendantFullSyncBlocked": "Pendantin muisti on täynnä ja se on yhä äänitystilassa, joten tallennettua ääntä ei voi siirtää. Pysäytä äänitys painamalla Pendantin painiketta ja synkronoi sitten uudelleen."
 }

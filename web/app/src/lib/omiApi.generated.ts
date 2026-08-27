@@ -1099,6 +1099,7 @@ export interface Conversation {
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
   processing_memory_id?: string | null;
+  screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
   starred?: boolean;
   started_at: string | null;
@@ -1214,6 +1215,75 @@ export interface ConversationPhoto {
 
 export interface ConversationRecordingResponse {
   has_recording: boolean;
+}
+
+export interface ConversationScreenFrame {
+  caption: string;
+  captured_at: string;
+  content_url: string;
+  focal_region?: NormalizedRect | null;
+  ground: ScreenFrameGround;
+  height: number;
+  id: string;
+  labels: Array<string>;
+  rank: number;
+  role: "banner" | "strip";
+  source_badge?: "code" | "browser" | "document" | "slides" | "product" | null;
+  thumbnail_url: string;
+  url_expires_at: string;
+  width: number;
+}
+
+export interface ConversationScreenFrameSet {
+  adjudicated_at?: string | null;
+  banner?: ConversationScreenFrame | null;
+  revision: number;
+  strip?: Array<ConversationScreenFrame>;
+}
+
+export interface ConversationSearchItem {
+  app_id?: string | null;
+  apps_results?: Array<AppResult>;
+  audio_files?: Array<AudioFile>;
+  calendar_event?: CalendarEventLink | null;
+  call_id?: string | null;
+  client_device_id?: string | null;
+  client_platform?: string | null;
+  conversation_audio?: ConversationAudio | null;
+  created_at: string;
+  data_protection_level?: string | null;
+  deferred?: boolean;
+  discarded?: boolean;
+  external_data?: Record<string, unknown> | null;
+  finished_at: string | null;
+  folder_id?: string | null;
+  geolocation?: Geolocation | null;
+  id: string;
+  imported?: boolean;
+  is_locked?: boolean;
+  language?: string | null;
+  match_snippets?: Array<TranscriptMatchSnippet>;
+  meeting_dedup_speech_s?: number | null;
+  meeting_duration_s?: number | null;
+  meeting_treatment_eligible?: boolean;
+  meeting_treatment_reason?: string | null;
+  photos?: Array<ConversationPhoto>;
+  plugins_results?: Array<PluginResult>;
+  private_cloud_sync_enabled?: boolean;
+  processing_conversation_id?: string | null;
+  processing_memory_id?: string | null;
+  screenshot_sharing_enabled?: boolean;
+  source?: ConversationSource | null;
+  starred?: boolean;
+  started_at: string | null;
+  status?: ConversationStatus | null;
+  structured: Structured;
+  suggested_summarization_apps?: Array<string>;
+  transcript_segments?: Array<TranscriptSegment>;
+  transcript_segments_compressed?: boolean | null;
+  updated_at?: string | null;
+  uses_custom_stt?: boolean;
+  visibility?: ConversationVisibility;
 }
 
 export type ConversationSource = "friend" | "omi" | "fieldy" | "bee" | "plaud" | "frame" | "friend_com" | "apple_watch" | "phone" | "phone_call" | "desktop" | "openglass" | "screenpipe" | "workflow" | "sdcard" | "external_integration" | "limitless" | "rayban_meta" | "onboarding" | "unknown";
@@ -1923,7 +1993,7 @@ export interface FullConversation {
   finished_at: string | null;
   id: string;
   language?: string | null;
-  match_snippets?: Array<TranscriptMatchSnippet>;
+  match_snippets?: Array<routers__mcp__TranscriptMatchSnippet>;
   started_at: string | null;
   structured: SimpleStructured;
   transcript_segments?: Array<SimpleTranscriptSegment>;
@@ -2600,6 +2670,13 @@ export interface NormalizedContextSnapshot {
   snapshot_id: string;
 }
 
+export interface NormalizedRect {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
 export interface NotificationSettingsResponse {
   enabled: boolean;
   frequency: number;
@@ -2687,7 +2764,9 @@ export interface OverageInfoResponse {
 }
 
 export interface PageContext {
+  end_date?: string | null;
   id?: string | null;
+  start_date?: string | null;
   title?: string | null;
   type: "conversation" | "task" | "memory" | "recap";
 }
@@ -3049,9 +3128,55 @@ export interface ScreenActivitySyncRequest {
   rows: Array<ScreenActivityRow>;
 }
 
+export interface ScreenFrameAdjudicationRequest {
+  attempt_id: string;
+  candidates: Array<ScreenFrameCandidateIn>;
+  purpose: "meeting_note_v1";
+  schema_version: 1;
+  subject: ScreenFrameSubjectIn;
+}
+
+export interface ScreenFrameAdjudicationResponse {
+  attempt_id: string;
+  frame_set: ConversationScreenFrameSet;
+  outcome: "committed" | "no_approved_frames";
+}
+
+export interface ScreenFrameCandidateIn {
+  bytes_base64: string;
+  captured_at: string;
+  client_frame_id: string;
+  declared_height: number;
+  declared_width: number;
+  mime_type: "image/jpeg" | "image/png";
+  sha256_base64: string;
+}
+
+export interface ScreenFrameGround {
+  is_neutral: boolean;
+  stops: Array<string>;
+}
+
+export interface ScreenFrameSettings {
+  meeting_note_screenshots_enabled: boolean;
+}
+
+export interface ScreenFrameSettingsUpdateRequest {
+  meeting_note_screenshots_enabled: boolean;
+}
+
+export interface ScreenFrameSharingUpdateRequest {
+  enabled: boolean;
+}
+
+export interface ScreenFrameSubjectIn {
+  id: string;
+  kind: "conversation";
+}
+
 export interface SearchConversationsResponse {
   current_page: number;
-  items: Array<Conversation>;
+  items: Array<ConversationSearchItem>;
   per_page: number;
   total_pages: number;
 }
@@ -3212,6 +3337,7 @@ export interface SharedConversationResponse {
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
   processing_memory_id?: string | null;
+  screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
   starred?: boolean;
   started_at: string | null;
@@ -3257,7 +3383,7 @@ export interface SimpleConversation {
   finished_at: string | null;
   id: string;
   language?: string | null;
-  match_snippets?: Array<TranscriptMatchSnippet>;
+  match_snippets?: Array<routers__mcp__TranscriptMatchSnippet>;
   started_at: string | null;
   structured: SimpleStructured;
 }
@@ -4139,6 +4265,16 @@ export interface routers__focus_sessions__ScreenActivityRow {
   [key: string]: unknown;
 }
 
+export interface routers__mcp__TranscriptMatchSnippet {
+  end?: number | null;
+  end_ms?: number | null;
+  segment_id?: string | null;
+  speaker_id?: number | null;
+  start?: number | null;
+  start_ms?: number | null;
+  text: string;
+}
+
 export interface routers__memories__BatchMemoriesRequest {
   memories: Array<Memory>;
 }
@@ -4322,6 +4458,9 @@ export interface OmiApiSchemas {
   "ConversationMutationResponse": ConversationMutationResponse;
   "ConversationPhoto": ConversationPhoto;
   "ConversationRecordingResponse": ConversationRecordingResponse;
+  "ConversationScreenFrame": ConversationScreenFrame;
+  "ConversationScreenFrameSet": ConversationScreenFrameSet;
+  "ConversationSearchItem": ConversationSearchItem;
   "ConversationSource": ConversationSource;
   "ConversationStatus": ConversationStatus;
   "ConversationStatusResponse": ConversationStatusResponse;
@@ -4514,6 +4653,7 @@ export interface OmiApiSchemas {
   "MoveConversationRequest": MoveConversationRequest;
   "NormalizedContextMatch": NormalizedContextMatch;
   "NormalizedContextSnapshot": NormalizedContextSnapshot;
+  "NormalizedRect": NormalizedRect;
   "NotificationSettingsResponse": NotificationSettingsResponse;
   "OAuthUrlResponse": OAuthUrlResponse;
   "OfflineQueueInstruction": OfflineQueueInstruction;
@@ -4578,6 +4718,14 @@ export interface OmiApiSchemas {
   "ScreenActivityRow": ScreenActivityRow;
   "ScreenActivitySummaryResponse": ScreenActivitySummaryResponse;
   "ScreenActivitySyncRequest": ScreenActivitySyncRequest;
+  "ScreenFrameAdjudicationRequest": ScreenFrameAdjudicationRequest;
+  "ScreenFrameAdjudicationResponse": ScreenFrameAdjudicationResponse;
+  "ScreenFrameCandidateIn": ScreenFrameCandidateIn;
+  "ScreenFrameGround": ScreenFrameGround;
+  "ScreenFrameSettings": ScreenFrameSettings;
+  "ScreenFrameSettingsUpdateRequest": ScreenFrameSettingsUpdateRequest;
+  "ScreenFrameSharingUpdateRequest": ScreenFrameSharingUpdateRequest;
+  "ScreenFrameSubjectIn": ScreenFrameSubjectIn;
   "SearchConversationsResponse": SearchConversationsResponse;
   "SearchRequest": SearchRequest;
   "SearchedMemory": SearchedMemory;
@@ -4730,6 +4878,7 @@ export interface OmiApiSchemas {
   "WorkstreamUpdate": WorkstreamUpdate;
   "WrappedStatusResponse": WrappedStatusResponse;
   "routers__focus_sessions__ScreenActivityRow": routers__focus_sessions__ScreenActivityRow;
+  "routers__mcp__TranscriptMatchSnippet": routers__mcp__TranscriptMatchSnippet;
   "routers__memories__BatchMemoriesRequest": routers__memories__BatchMemoriesRequest;
   "routers__memories__BatchMemoriesResponse": routers__memories__BatchMemoriesResponse;
   "routers__payment__PricingOption": routers__payment__PricingOption;
@@ -5913,6 +6062,48 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/conversations/{conversation_id}/screenshot-sharing": {
+    patch: {
+      operationId: "update_conversation_screenshot_sharing_v1_conversations__conversation_id__screenshot_sharing_patch";
+      responses: {
+        "200": ConversationScreenFrameSet;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/screenshots": {
+    get: {
+      operationId: "get_conversation_screenshots_v1_conversations__conversation_id__screenshots_get";
+      responses: {
+        "200": ConversationScreenFrameSet;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_all_conversation_screenshots_v1_conversations__conversation_id__screenshots_delete";
+      responses: {
+        "200": ConversationScreenFrameSet;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/screenshots/{frame_id}": {
+    delete: {
+      operationId: "delete_conversation_screenshot_v1_conversations__conversation_id__screenshots__frame_id__delete";
+      responses: {
+        "200": ConversationScreenFrameSet;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/conversations/{conversation_id}/segments/assign-bulk": {
     patch: {
       operationId: "assign_segments_bulk_v1_conversations__conversation_id__segments_assign_bulk_patch";
@@ -5972,6 +6163,17 @@ export interface OmiApiPaths {
       operationId: "get_shared_conversation_by_id_v1_conversations__conversation_id__shared_get";
       responses: {
         "200": SharedConversationResponse;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/shared/screenshots": {
+    get: {
+      operationId: "get_shared_conversation_screenshots_v1_conversations__conversation_id__shared_screenshots_get";
+      responses: {
+        "200": ConversationScreenFrameSet;
+        "401": void;
         "404": void;
         "422": HTTPValidationError;
       };
@@ -7286,6 +7488,34 @@ export interface OmiApiPaths {
       operationId: "sync_screen_activity_v1_screen_activity_sync_post";
       responses: {
         "200": Record<string, number>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/screen-frame-egress/adjudications": {
+    post: {
+      operationId: "adjudicate_screen_frames_v1_screen_frame_egress_adjudications_post";
+      responses: {
+        "200": ScreenFrameAdjudicationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/screen-frame-egress/settings": {
+    get: {
+      operationId: "get_screen_frame_settings_v1_screen_frame_egress_settings_get";
+      responses: {
+        "200": ScreenFrameSettings;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "update_screen_frame_settings_v1_screen_frame_egress_settings_patch";
+      responses: {
+        "200": ScreenFrameSettings;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -11178,6 +11408,84 @@ export async function reprocess_conversation_v1_conversations__conversation_id__
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function update_conversation_screenshot_sharing_v1_conversations__conversation_id__screenshot_sharing_patch(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ScreenFrameSharingUpdateRequest, init?: OmiApiClientInit): Promise<ConversationScreenFrameSet> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/screenshot-sharing`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_conversation_screenshots_v1_conversations__conversation_id__screenshots_get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ConversationScreenFrameSet> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/screenshots`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function delete_all_conversation_screenshots_v1_conversations__conversation_id__screenshots_delete(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ConversationScreenFrameSet> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/screenshots`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function delete_conversation_screenshot_v1_conversations__conversation_id__screenshots__frame_id__delete(path: { conversation_id: string, frame_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ConversationScreenFrameSet> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/screenshots/${path.frame_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function assign_segments_bulk_v1_conversations__conversation_id__segments_assign_bulk_patch(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: BulkAssignSegmentsRequest, init?: OmiApiClientInit): Promise<Conversation> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/segments/assign-bulk`;
@@ -11285,6 +11593,21 @@ export async function get_conversation_share_recipients_v1_conversations__conver
 export async function get_shared_conversation_by_id_v1_conversations__conversation_id__shared_get(path: { conversation_id: string }, init?: OmiApiClientInit): Promise<SharedConversationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/shared`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_shared_conversation_screenshots_v1_conversations__conversation_id__shared_screenshots_get(path: { conversation_id: string }, init?: OmiApiClientInit): Promise<ConversationScreenFrameSet> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/shared/screenshots`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
@@ -13738,6 +14061,67 @@ export async function sync_screen_activity_v1_screen_activity_sync_post(header: 
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function adjudicate_screen_frames_v1_screen_frame_egress_adjudications_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ScreenFrameAdjudicationRequest, init?: OmiApiClientInit): Promise<ScreenFrameAdjudicationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/screen-frame-egress/adjudications`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_screen_frame_settings_v1_screen_frame_egress_settings_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ScreenFrameSettings> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/screen-frame-egress/settings`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function update_screen_frame_settings_v1_screen_frame_egress_settings_patch(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ScreenFrameSettingsUpdateRequest, init?: OmiApiClientInit): Promise<ScreenFrameSettings> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/screen-frame-egress/settings`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
     headers: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
@@ -16858,4 +17242,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 406 client methods generated.
+// Total: 414 client methods generated.

@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
+from database.firestore_read_metrics import FirestoreReadSite
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
@@ -24,7 +25,7 @@ from models.users import PlanType
 from utils.analytics import billable_transcription_seconds, record_usage
 from utils.apps import is_audio_bytes_app_enabled
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
-from utils.byok import extract_byok_from_websocket, get_byok_keys, set_byok_keys
+from utils.byok import get_byok_keys
 from utils.client_device import resolve_client_device_from_headers
 from utils.journey_metrics_contract import resolve_client_kind_from_headers
 from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
@@ -74,6 +75,8 @@ from .conversations import LiveConversationController
 from .persistence import ListenPersistence
 from .parity_capture import ListenParityCapture
 from .receiver import ListenReceiver
+from .registry import register as register_listen_session
+from .registry import unregister as unregister_listen_session
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
@@ -281,7 +284,6 @@ class ListenSessionRuntime:
         if not self.request.uid:
             await self.request.websocket.close(code=1008, reason='Bad uid')
             return False
-        set_byok_keys(extract_byok_from_websocket(self.request.websocket))
         if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
             await self.request.websocket.send_json(
                 FreemiumThresholdReachedEvent(remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT).to_json()
@@ -645,6 +647,7 @@ class ListenSessionRuntime:
     async def run(self) -> None:
         if not await self._admit() or not await self._bootstrap():
             return
+        register_listen_session(self)
         try:
             self.receiver.initialize_decoders()
         except Exception as error:
@@ -731,6 +734,7 @@ class ListenSessionRuntime:
                     logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
 
     async def _teardown_components(self) -> None:
+        unregister_listen_session(self)
         self.state.shutdown_event.set()
         self.task_supervisor.end_session()
         owner_persistence_blocked = self.request.owner_persistence_blocked.is_set()
@@ -772,7 +776,10 @@ class ListenSessionRuntime:
                     await self.conversations.process_conversation(conversation_id)
                 else:
                     conversation = await self.persistence.call(
-                        conversations_db.get_conversation, self.request.uid, conversation_id
+                        conversations_db.get_conversation,
+                        self.request.uid,
+                        conversation_id,
+                        read_site=FirestoreReadSite.LISTEN_RUNTIME_TEARDOWN,
                     )
                     finalization_reason = getattr(self.state, 'finalization_reason', None)
                     if conversation and finalization_reason:

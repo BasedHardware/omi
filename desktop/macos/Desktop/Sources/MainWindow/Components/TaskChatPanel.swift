@@ -95,11 +95,14 @@ struct TaskChatPanel: View {
             // Input area
             ChatInputView(
               onSend: { text in
-                AnalyticsManager.shared.chatMessageSent(messageLength: text.count, source: "task_chat")
                 Task {
                   await taskState.sendMessage(
                     text,
-                    taskContext: coordinator.activeContextPacket
+                    taskContext: coordinator.activeContextPacket,
+                    onAccepted: {
+                      AnalyticsManager.shared.chatMessageSent(
+                        messageLength: text.count, source: "task_chat")
+                    }
                   )
                   await coordinator.refreshActiveThread()
                 }
