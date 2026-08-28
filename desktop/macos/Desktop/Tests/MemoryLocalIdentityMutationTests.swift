@@ -68,6 +68,27 @@ final class MemoryLocalIdentityMutationTests: XCTestCase {
     XCTAssertEqual(backendRequestIDs, [server.id])
   }
 
+  /// The backlog query behind sync repair: a row whose backend create failed has
+  /// no backendId, and it is the only kind that must be re-sent.
+  func testUnsyncedLocalMemoriesReturnsOnlyRowsTheBackendNeverReceived() async throws {
+    let stranded = try await insertLocalMemory(content: "never reached the backend")
+    try await MemoryStorage.shared.syncServerMemories([makeMemory(id: "memory-synced")])
+
+    let backlog = try await MemoryStorage.shared.unsyncedLocalMemories(limit: 20)
+
+    XCTAssertEqual(backlog.map(\.id), [stranded.id])
+    XCTAssertEqual(backlog.first?.content, "never reached the backend")
+    XCTAssertNil(backlog.first?.backendId)
+
+    let deleted = try await insertLocalMemory(content: "unsynced but deleted")
+    try await MemoryStorage.shared.deleteMemory(surfacedId: "local_\(deleted.id ?? -1)")
+    let afterDelete = try await MemoryStorage.shared.unsyncedLocalMemories(limit: 20)
+    XCTAssertEqual(afterDelete.map(\.id), [stranded.id], "a deleted row must never be re-sent")
+
+    let unbounded = try await MemoryStorage.shared.unsyncedLocalMemories(limit: 0)
+    XCTAssertTrue(unbounded.isEmpty, "a non-positive bound must fetch nothing")
+  }
+
   private func insertLocalMemory(content: String) async throws -> MemoryRecord {
     try await MemoryStorage.shared.insertLocalMemory(MemoryRecord(content: content))
   }
