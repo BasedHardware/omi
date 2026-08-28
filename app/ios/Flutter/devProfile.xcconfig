@@ -1,4 +1,4 @@
-#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile-dev.xcconfig"
 #include "Generated.xcconfig"
 #include "Base.xcconfig"
 #include "Custom.xcconfig"
@@ -6,5 +6,7 @@
 ASSET_PREFIX=dev
 BUNDLE_NAME=Omi Dev
 BUNDLE_DISPLAY_NAME=Omi Dev
+APP_BUNDLE_IDENTIFIER=com.friend-app-with-wearable.ios12.development
+FRAMEWORK_SEARCH_PATHS=$(inherited) "$(PODS_CONFIGURATION_BUILD_DIR)"
 AUTH_CALLBACK_SCHEME=omi-dev
 INFOPLIST_FILE=Runner/Info-Dev.plist
