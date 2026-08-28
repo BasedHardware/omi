@@ -19,11 +19,21 @@ class ValidatedChatCompletionRequest:
     forwarded_params: Mapping[str, Any]
 
 
+@dataclass(frozen=True)
+class ValidatedEmbeddingRequest:
+    model: str
+    inputs: tuple[str, ...]
+    task_type: str | None = None
+    title: str | None = None
+
+
+MAX_EMBEDDING_INPUTS = 2048
 CONTROL_PARAMS = frozenset({'model', 'messages', 'response_format', 'stream', 'tools', 'tool_choice'})
 GATEWAY_LOCAL_PARAMS = frozenset({'metadata'})
 FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
     {
         'frequency_penalty',
+        'google',
         'logit_bias',
         'logprobs',
         'max_completion_tokens',
@@ -42,6 +52,11 @@ FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
         'user',
     }
 )
+
+# The OpenAI SDK's `extra_body` convention flattens provider-specific options
+# into top-level JSON fields, so the `google` key is the pass-through carrier
+# for per-request Gemini options (e.g. thinking budget) on the OpenAI-shaped
+# surface; providers that do not understand it ignore it.
 
 
 def validate_chat_completion_request(
@@ -68,6 +83,48 @@ def validate_chat_completion_request(
         messages=tuple(messages),
         response_format=response_format,
         forwarded_params=forwarded_params,
+    )
+
+
+def validate_embedding_request(request: Mapping[str, Any], lane: LaneConfig) -> ValidatedEmbeddingRequest:
+    """Validate an OpenAI-shaped embeddings request for an embeddings lane."""
+    model = request.get('model')
+    if not isinstance(model, str) or not model.strip():
+        raise GatewayInvalidRequestError('model is required', param='model')
+
+    raw_input = request.get('input')
+    inputs: list[str] = []
+    if isinstance(raw_input, str):
+        inputs = [raw_input]
+    elif isinstance(raw_input, list):
+        for index, item in enumerate(raw_input):
+            if not isinstance(item, str) or not item:
+                raise GatewayInvalidRequestError('input items must be non-empty strings', param=f'input[{index}]')
+            inputs.append(item)
+    else:
+        raise GatewayInvalidRequestError('input must be a string or a list of strings', param='input')
+    if not inputs or len(inputs) > MAX_EMBEDDING_INPUTS:
+        raise GatewayInvalidRequestError(
+            f'input must contain between 1 and {MAX_EMBEDDING_INPUTS} items', param='input'
+        )
+
+    unsupported = sorted(set(request.keys()) - {'model', 'input', 'task_type', 'title', 'metadata'})
+    if unsupported:
+        raise GatewayInvalidRequestError(f'unsupported embeddings parameter: {unsupported[0]}', param=unsupported[0])
+    task_type = request.get('task_type')
+    if task_type is not None and (not isinstance(task_type, str) or not task_type.strip()):
+        raise GatewayInvalidRequestError('task_type must be a non-empty string', param='task_type')
+    title = request.get('title')
+    if title is not None and (not isinstance(title, str) or not title.strip()):
+        raise GatewayInvalidRequestError('title must be a non-empty string', param='title')
+    normalized_task_type = task_type.strip() if isinstance(task_type, str) else None
+    normalized_title = title.strip() if isinstance(title, str) else None
+
+    return ValidatedEmbeddingRequest(
+        model=model.strip(),
+        inputs=tuple(inputs),
+        task_type=normalized_task_type,
+        title=normalized_title,
     )
 
 
@@ -108,12 +165,22 @@ def _validate_text_content(content: object, *, param: str) -> None:
         return
 
     raise GatewayCapabilityMismatchError(
-        'only text or image_url message content is supported for this lane', param=param
+        'only text, image_url, or file message content is supported for this lane', param=param
     )
 
 
 def _is_supported_content_part(part: object) -> bool:
-    return _is_text_content_part(part) or _is_image_url_content_part(part)
+    return _is_text_content_part(part) or _is_image_url_content_part(part) or _is_file_content_part(part)
+
+
+def _is_file_content_part(part: object) -> bool:
+    if not isinstance(part, Mapping):
+        return False
+    typed_part = cast(Mapping[str, object], part)
+    if typed_part.get('type') != 'file':
+        return False
+    file_ref = typed_part.get('file')
+    return isinstance(file_ref, Mapping) and isinstance(cast(Mapping[str, object], file_ref).get('file_id'), str)
 
 
 def _is_text_content_part(part: object) -> bool:
@@ -146,6 +213,15 @@ def _validate_response_format(value: object, lane: LaneConfig) -> Mapping[str, A
 
     response_format = cast(Mapping[str, Any], value)
     response_format_type = response_format.get('type')
+    if response_format_type == StructuredOutputMode.JSON_OBJECT.value:
+        # Gemini's responseMimeType=application/json without a schema maps to
+        # json_object; it carries no schema so nothing further to validate.
+        if lane.capabilities.structured_output == StructuredOutputMode.NONE:
+            raise GatewayCapabilityMismatchError(
+                'lane does not support structured output',
+                param='response_format',
+            )
+        return response_format
     if response_format_type != StructuredOutputMode.JSON_SCHEMA.value:
         raise GatewayCapabilityMismatchError(
             'only json_schema structured output is supported for this lane',
