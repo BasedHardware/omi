@@ -1,0 +1,3 @@
+{
+  "change": "Tagging a speaker with a name now works everywhere: conversations opened from Memories or the Dashboard were missing the tap-to-name control, and recent recordings that hadn't finished syncing failed with \"Couldn't assign this speaker\""
+}

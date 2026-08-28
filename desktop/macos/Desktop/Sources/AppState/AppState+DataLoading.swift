@@ -243,6 +243,16 @@ extension AppState {
   }
 
   /// Assigns segments to a person or user via bulk API
+  /// When a backend bulk-assign fails, only "the conversation does not exist
+  /// there yet" may fall back to a local-first assignment — any other failure
+  /// (auth, validation, server error) must surface to the user, because the
+  /// backend HAS the conversation and rejected the change.
+  enum SpeakerAssignmentFallbackPolicy {
+    static func keepsAssignmentLocally(statusCode: Int) -> Bool {
+      statusCode == 404
+    }
+  }
+
   func assignSpeakerToSegments(
     conversationId: String,
     segmentIds: [String],
@@ -257,36 +267,72 @@ extension AppState {
         personId: personId
       )
       log("People: Assigned \(segmentIds.count) segments in conversation \(conversationId)")
-      // Update in-memory conversations list so the prop is fresh on next open
-      let idSet = Set(segmentIds)
-      if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
-        for segIdx in conversations[idx].transcriptSegments.indices
-        where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
-          let old = conversations[idx].transcriptSegments[segIdx]
-          conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
-            id: old.id,
-            backendId: old.backendId,
-            text: old.text,
-            speaker: old.speaker,
-            isUser: isUser,
-            personId: isUser ? nil : personId,
-            start: old.start,
-            end: old.end,
-            translations: old.translations
-          )
-        }
+    } catch let APIError.httpError(statusCode, _)
+      where SpeakerAssignmentFallbackPolicy.keepsAssignmentLocally(statusCode: statusCode)
+    {
+      // The conversation has not reached the backend yet (a pending local session,
+      // or one recovering from local fallback data). The assignment is still the
+      // user's decision: keep it locally — the finalization sync uploads every
+      // segment's person_id/is_user with the conversation itself, so the backend
+      // converges once the session syncs. Failing here surfaced as the
+      // "Couldn't assign this speaker" report on Beta.
+      log("People: Conversation \(conversationId) not on backend yet; keeping speaker assignment local")
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "speaker_assignment",
+        from: "backend_bulk_assign",
+        to: "local_store",
+        reason: "conversation_not_synced",
+        outcome: .degraded
+      )
+      applySpeakerAssignmentLocally(
+        conversationId: conversationId, segmentIds: segmentIds, personId: personId, isUser: isUser)
+      return true
+    } catch {
+      logError("People: Failed to assign segments", error: error)
+      return false
+    }
+    applySpeakerAssignmentLocally(
+      conversationId: conversationId, segmentIds: segmentIds, personId: personId, isUser: isUser)
+    return true
+  }
+
+  /// The client-side half of a speaker assignment: the in-memory conversation list
+  /// (so the label is fresh on next open) and the local SQLite cache (so it
+  /// survives restarts, and so a not-yet-synced session carries the assignment to
+  /// the backend when it finalizes).
+  private func applySpeakerAssignmentLocally(
+    conversationId: String,
+    segmentIds: [String],
+    personId: String?,
+    isUser: Bool
+  ) {
+    // Update in-memory conversations list so the prop is fresh on next open
+    let idSet = Set(segmentIds)
+    if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
+      for segIdx in conversations[idx].transcriptSegments.indices
+      where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
+        let old = conversations[idx].transcriptSegments[segIdx]
+        conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
+          id: old.id,
+          backendId: old.backendId,
+          text: old.text,
+          speaker: old.speaker,
+          isUser: isUser,
+          personId: isUser ? nil : personId,
+          start: old.start,
+          end: old.end,
+          translations: old.translations
+        )
       }
-      // Also update local SQLite cache so changes persist across app restarts
+    }
+    // Also update local SQLite cache so changes persist across app restarts
+    Task {
       try? await TranscriptionStorage.shared.updateSegmentSpeakerAssignment(
         backendConversationId: conversationId,
         segmentIds: segmentIds,
         personId: personId,
         isUser: isUser
       )
-      return true
-    } catch {
-      logError("People: Failed to assign segments", error: error)
-      return false
     }
   }
 

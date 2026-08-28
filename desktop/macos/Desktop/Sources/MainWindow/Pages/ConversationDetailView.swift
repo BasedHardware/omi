@@ -42,11 +42,12 @@ struct ConversationDetailView: View {
   var onDelete: (() -> Void)?
   var onTitleUpdated: ((String) -> Void)?
 
-  // People (speaker naming)
-  var people: [Person] = []
-  var onFetchPeople: (() async -> Void)?
-  var onCreatePerson: ((String) async -> Person?)?
-  var onAssignSpeaker: ((String, [String], String?, Bool) async -> Bool)?
+  // People (speaker naming). Owned here, not injected: every surface that can
+  // present a conversation detail — Conversations, Memories, Dashboard citations —
+  // must offer the same speaker assignment. Requiring callers to thread closures
+  // left two of the three entry points with dead, un-tappable speaker labels
+  // ("impossible to assign speakers" reports).
+  private var people: [Person] { AppState.current?.people ?? [] }
   @ObservedObject private var automation = ConversationDetailAutomationState.shared
 
   @StateObject private var appProvider = AppProvider()
@@ -237,7 +238,7 @@ struct ConversationDetailView: View {
       preferredSummaryAppId =
         UserDefaults.standard.string(forKey: .preferredSummarizationAppId).flatMap { $0.isEmpty ? nil : $0 }
       await appProvider.fetchApps()
-      await onFetchPeople?()
+      await AppState.current?.fetchPeople()
       AnalyticsManager.shared.conversationDetailOpened(conversationId: conversation.id)
 
       // All detail reads go through the repository. It can paint a complete
@@ -302,17 +303,17 @@ struct ConversationDetailView: View {
         allSegments: displayConversation.transcriptSegments,
         people: people,
         onSave: { personId, isUser, segmentIndices in
-          guard let onAssignSpeaker else { return false }
+          guard let appState = AppState.current else { return false }
 
           let assignment = Self.assignmentMetadata(
             for: segmentIndices,
             in: displayConversation.transcriptSegments
           )
-          let success = await onAssignSpeaker(
-            conversation.id,
-            assignment.targets,
-            personId,
-            isUser
+          let success = await appState.assignSpeakerToSegments(
+            conversationId: conversation.id,
+            segmentIds: assignment.targets,
+            personId: personId,
+            isUser: isUser
           )
           guard success else { return false }
 
@@ -326,7 +327,7 @@ struct ConversationDetailView: View {
           updateDisplayedConversation(segmentIndices: segmentIndices, isUser: isUser, personId: personId)
           return true
         },
-        onCreatePerson: onCreatePerson,
+        onCreatePerson: { name in await AppState.current?.createPerson(name: name) },
         onDismiss: {
           selectedSegmentForNaming = nil
         }
@@ -833,7 +834,7 @@ struct ConversationDetailView: View {
         segment: segment,
         isUser: segment.isUser,
         personName: segment.personId.flatMap { peopleDict[$0]?.name },
-        onSpeakerTapped: segment.isUser || onAssignSpeaker == nil
+        onSpeakerTapped: segment.isUser
           ? nil
           : {
             selectedSegmentForNaming = segment
