@@ -26,9 +26,9 @@ longer admission authority and are not read:
 The allowlist bypasses the flag and still admits when PostHog is down. A
 known-false or absent `jit-processing-v1` is `disabled` for everyone else.
 Provider timeouts, missing configuration, and malformed values stay
-`unknown` and fail closed for non-allowlist users. Ledger migration, daily
-sweep cohort membership, trigger snapshots, and prompt/mirror snapshots all
-use the same `permits_work` helper.
+`unknown` and fail closed for non-allowlist users. Ledger migration, the
+daily-sweep job cohort authorizer, trigger snapshots, and prompt/mirror
+snapshots all use the same `permits_work` helper.
 
 Fully known answers may be cached per authenticated UID for at most 30
 seconds; unknown/error answers use a short negative cache. Query parameters

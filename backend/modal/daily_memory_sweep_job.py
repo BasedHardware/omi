@@ -16,10 +16,11 @@ import firebase_admin
 
 from database._client import db as default_db_client
 from database.notifications import get_user_time_zone
+from utils.jit_rollout import JITDecisionStage, TriState, resolve_jit_rollout_sync
 from utils.memory.daily_memory_sweep import (
+    DailySweepCohortDecision,
     daily_memory_sweep_authority_from_environment,
     firestore_daily_sweep_source_provider,
-    read_daily_memory_sweep_cohort_assignment,
     reconcile_daily_memory_sweep_timezone,
     run_daily_memory_sweep_scheduler,
 )
@@ -31,6 +32,17 @@ from utils.memory.daily_memory_sweep_inventory import (
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def jit_admission_cohort_authorizer(uid: str, _cohort_name: str = "") -> DailySweepCohortDecision:
+    """Admit sweep users with the same JIT helper as processing and ledger paths."""
+
+    decision = resolve_jit_rollout_sync(uid, stage=JITDecisionStage.READ_ONLY)
+    if decision.permits_work:
+        return DailySweepCohortDecision.enabled
+    if decision.effective == TriState.UNKNOWN:
+        return DailySweepCohortDecision.unavailable
+    return DailySweepCohortDecision.disabled
 
 
 def _init_firebase() -> None:
@@ -84,7 +96,7 @@ def run_daily_memory_sweep_job() -> None:
             uid, local_date, control, db_client=default_db_client, timezone_name=kwargs.get("timezone_name", "UTC")
         ),
         timezone_resolver=lambda uid: get_user_time_zone(uid) or "UTC",
-        cohort_authorizer=read_daily_memory_sweep_cohort_assignment,
+        cohort_authorizer=jit_admission_cohort_authorizer,
         timezone_reconciler=timezone_reconciler,
         authority=authority,
         max_users=400,

@@ -33,6 +33,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from dataclasses import dataclass, field
 import atexit
+import importlib
 import os
 import re
 import threading
@@ -76,7 +77,6 @@ from utils.memory.knowledge_ledger import (
 )
 from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.memory_authority import validate_uid_for_memory_path
-from utils.jit_rollout import JITDecisionStage, TriState, resolve_jit_rollout_sync
 from utils.memory.jit_trigger_contract import compile_trigger_condition
 
 # These budgets are deliberately separate from the canonical write budget.  A
@@ -306,16 +306,33 @@ def read_daily_memory_sweep_cohort_assignment(
     if not normalized_uid or not normalized_flag:
         return DailySweepCohortDecision.unavailable
     # Tests and the maintenance adaptor inject a read-only resolver.  The
-    # production fallback is the shared JIT admission helper so sweep cohort
-    # membership cannot diverge from processing, ledger, or trigger gates.
+    # production fallback is lazy so importing this module never constructs a
+    # client or performs network I/O.  No identify/capture call is made and
+    # the user id comes only from the server-side inventory.
     reader = resolver
     if reader is None:
-        decision = resolve_jit_rollout_sync(normalized_uid, stage=JITDecisionStage.READ_ONLY)
-        if decision.permits_work:
-            return DailySweepCohortDecision.enabled
-        if decision.effective == TriState.UNKNOWN:
+        api_key = (os.getenv("POSTHOG_PROJECT_API_KEY") or os.getenv("POSTHOG_API_KEY") or "").strip()
+        host = (os.getenv("POSTHOG_HOST") or "https://app.posthog.com").strip()
+        if not api_key or not host:
             return DailySweepCohortDecision.unavailable
-        return DailySweepCohortDecision.disabled
+        try:
+            posthog_module = importlib.import_module("posthog")
+            client_type = getattr(posthog_module, "Posthog")
+            timeout = float(os.getenv(DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_ENV, "3"))
+            if timeout <= 0 or timeout > 10:
+                return DailySweepCohortDecision.unavailable
+            client_key = (api_key, host, timeout)
+            with _POSTHOG_CLIENTS_LOCK:
+                reader = _POSTHOG_CLIENTS.get(client_key)
+                if reader is None:
+                    reader = client_type(
+                        project_api_key=api_key,
+                        host=host,
+                        feature_flags_request_timeout_seconds=timeout,
+                    )
+                    _POSTHOG_CLIENTS[client_key] = reader
+        except Exception:
+            return DailySweepCohortDecision.unavailable
     try:
         get_flag = getattr(reader, "get_feature_flag", None)
         if callable(get_flag):
