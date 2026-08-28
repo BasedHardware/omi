@@ -250,8 +250,13 @@ final class QueryShellTests: XCTestCase {
       PagePanelFirstRowMetrics.topPadding,
       "Brain pills must not sit closer to the panel edge than the other page controls")
     XCTAssertEqual(
+      PagePanelFirstRowMetrics.bottomPadding,
+      0,
+      "the first row must not stack a second gap before its content")
+    XCTAssertEqual(
       BrainSectionPageMetrics.navigationBottomPadding,
-      PagePanelFirstRowMetrics.bottomPadding)
+      PagePanelVerticalRhythm.rowGap,
+      "Brain navigation owns the single gap before its refinement row")
     XCTAssertEqual(BrainSectionPageMetrics.navigationHeight, 44)
     XCTAssertGreaterThanOrEqual(QueryShellLayout.chipHeight, 28)
     XCTAssertLessThan(QueryShellLayout.panelHeaderSpacing, 8)
