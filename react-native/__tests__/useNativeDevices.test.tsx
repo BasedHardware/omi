@@ -345,6 +345,70 @@ test('keeps uploading after snapshot events and serializes overlapping appends',
   ).toHaveLength(2);
 });
 
+test('drains queued audio before completing a session', async () => {
+  let resolveOpen: () => void = () => undefined;
+  const appendGates: Array<() => void> = [];
+  const order: string[] = [];
+  mockBackend.request.mockImplementation(async (request: {path: string}) => {
+    if (request.path === '/v1/device-sessions') {
+      await new Promise<void>(resolve => {
+        resolveOpen = resolve;
+      });
+      return sessionResponse(201);
+    }
+    if (request.path.endsWith('/audio')) {
+      order.push('audio');
+      await new Promise<void>(resolve => {
+        appendGates.push(resolve);
+      });
+      return sessionResponse(200, {byteCount: 3, chunkCount: 1});
+    }
+    order.push('complete');
+    return sessionResponse(200, {state: 'complete', endedAt: 2});
+  });
+
+  const hook = await renderHook();
+  await ReactTestRenderer.act(async () => {
+    emitNative({
+      type: 'audio',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'AQID',
+    });
+    emitNative({
+      type: 'audio',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'BAUG',
+    });
+  });
+  await ReactTestRenderer.act(async () => {
+    resolveOpen();
+    await waitFor(() => appendGates.length === 1);
+  });
+
+  let disconnectDone = false;
+  await ReactTestRenderer.act(async () => {
+    hook
+      .latest()
+      .toggleDevice('omi-1', true)
+      .then(() => {
+        disconnectDone = true;
+      });
+  });
+  expect(disconnectDone).toBe(false);
+  expect(order).toEqual(['audio']);
+
+  await ReactTestRenderer.act(async () => {
+    appendGates.shift()?.();
+    await waitFor(() => appendGates.length === 1);
+    appendGates.shift()?.();
+    await waitFor(() => order.includes('complete'));
+  });
+  expect(order).toEqual(['audio', 'audio', 'complete']);
+  expect(disconnectDone).toBe(true);
+});
+
 test('completes a session that opens after disconnect', async () => {
   let resolveOpen: () => void = () => undefined;
   mockBackend.request.mockImplementation(async (request: {path: string}) => {
@@ -380,19 +444,26 @@ test('completes a session that opens after disconnect', async () => {
 
   await ReactTestRenderer.act(async () => {
     resolveOpen();
-    await Promise.resolve();
-    await Promise.resolve();
+    await waitFor(() =>
+      mockBackend.request.mock.calls.some(([request]) =>
+        request.path.endsWith('/complete'),
+      ),
+    );
   });
+  const paths = mockBackend.request.mock.calls.map(([request]) => request.path);
+  expect(paths).toContain(
+    '/v1/device-sessions/11111111-2222-3333-4444-555555555555/audio',
+  );
+  expect(paths).toContain(
+    '/v1/device-sessions/11111111-2222-3333-4444-555555555555/complete',
+  );
   expect(
-    mockBackend.request.mock.calls.some(
-      ([request]) =>
-        request.path ===
-        '/v1/device-sessions/11111111-2222-3333-4444-555555555555/complete',
+    paths.indexOf(
+      '/v1/device-sessions/11111111-2222-3333-4444-555555555555/audio',
     ),
-  ).toBe(true);
-  expect(
-    mockBackend.request.mock.calls.some(([request]) =>
-      request.path.endsWith('/audio'),
+  ).toBeLessThan(
+    paths.indexOf(
+      '/v1/device-sessions/11111111-2222-3333-4444-555555555555/complete',
     ),
-  ).toBe(false);
+  );
 });

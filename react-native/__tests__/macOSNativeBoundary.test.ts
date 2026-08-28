@@ -416,6 +416,15 @@ test('exposes a real OmiNative CoreBluetooth module instead of a hardware stub',
   expect(source).toContain('timeoutSeconds');
   expect(source).toContain('self.scanResolve = resolve');
   expect(source).toContain('self.connectResolve = resolve');
+  const connectStart = source.indexOf('RCT_REMAP_METHOD(connectDevice');
+  const connectSource = source.slice(
+    connectStart,
+    source.indexOf('RCT_REMAP_METHOD(disconnectDevice', connectStart),
+  );
+  expect(connectSource).toContain('cancelPeripheralConnection:existing');
+  expect(source).toContain(
+    'self.connectedPeripheral != nil && self.connectedPeripheral != peripheral',
+  );
   expect(source).toContain('characteristic.isNotifying');
   expect(source).toContain('self.audioNotifying ? @"recording" : @"idle"');
   const scanStart = source.indexOf('RCT_REMAP_METHOD(startScan');

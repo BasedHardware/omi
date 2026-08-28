@@ -61,67 +61,96 @@ export function useNativeDevices() {
   const nativeSnapshotRef = useRef<PlatformNativeSnapshot | null>(null);
   const sessionRef = useRef<string | null>(null);
   const openingRef = useRef(false);
-  const flushingRef = useRef(false);
+  const flushPromiseRef = useRef<Promise<void> | null>(null);
   const cancelledRef = useRef(false);
   const pendingAudioRef = useRef<Uint8Array[]>([]);
 
   nativeSnapshotRef.current = nativeSnapshot;
 
-  const finishSession = useCallback(async () => {
-    cancelledRef.current = true;
-    const sessionId = sessionRef.current;
-    sessionRef.current = null;
-    pendingAudioRef.current = [];
-    if (sessionId === null || omiBackend === undefined || omiBackend === null) {
-      return;
-    }
-    try {
-      await completeDeviceSession(omiBackend, sessionId);
-    } catch {
-      return;
-    }
-  }, []);
-
   const flushPendingAudio = useCallback(async (sessionId: string) => {
-    if (
-      flushingRef.current ||
-      omiBackend === undefined ||
-      omiBackend === null
-    ) {
+    if (omiBackend === undefined || omiBackend === null) {
       return;
     }
-    flushingRef.current = true;
-    try {
+    if (flushPromiseRef.current !== null) {
+      await flushPromiseRef.current;
+      if (
+        pendingAudioRef.current.length > 0 &&
+        sessionRef.current === sessionId
+      ) {
+        await flushPendingAudio(sessionId);
+      }
+      return;
+    }
+    const work = (async () => {
       while (
         pendingAudioRef.current.length > 0 &&
-        !cancelledRef.current &&
         sessionRef.current === sessionId
       ) {
         const chunk = pendingAudioRef.current.shift();
         if (chunk === undefined) {
           break;
         }
-        try {
-          await appendDeviceSessionAudio(omiBackend, sessionId, chunk);
-        } catch {
-          return;
-        }
+        await appendDeviceSessionAudio(omiBackend, sessionId, chunk);
       }
+    })();
+    flushPromiseRef.current = work;
+    try {
+      await work;
+    } catch {
+      return;
     } finally {
-      flushingRef.current = false;
+      if (flushPromiseRef.current === work) {
+        flushPromiseRef.current = null;
+      }
     }
     if (
       pendingAudioRef.current.length > 0 &&
-      !cancelledRef.current &&
       sessionRef.current === sessionId
     ) {
       await flushPendingAudio(sessionId);
     }
   }, []);
 
+  const finishSession = useCallback(async () => {
+    if (omiBackend === undefined || omiBackend === null) {
+      cancelledRef.current = true;
+      sessionRef.current = null;
+      pendingAudioRef.current = [];
+      return;
+    }
+    const sessionId = sessionRef.current;
+    if (sessionId === null) {
+      cancelledRef.current = true;
+      return;
+    }
+    try {
+      await flushPendingAudio(sessionId);
+    } catch {
+      return;
+    }
+    if (sessionRef.current !== sessionId) {
+      return;
+    }
+    sessionRef.current = null;
+    pendingAudioRef.current = [];
+    cancelledRef.current = true;
+    try {
+      await completeDeviceSession(omiBackend, sessionId);
+    } catch {
+      return;
+    }
+  }, [flushPendingAudio]);
+
   const persistAudio = useCallback(
     async (event: Extract<OmiNativeEvent, {type: 'audio'}>) => {
       if (omiBackend === undefined || omiBackend === null) {
+        return;
+      }
+      if (
+        cancelledRef.current &&
+        sessionRef.current === null &&
+        !openingRef.current
+      ) {
         return;
       }
       pendingAudioRef.current.push(bytesFromBase64(event.payloadBase64));

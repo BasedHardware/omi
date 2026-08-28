@@ -185,6 +185,11 @@ RCT_REMAP_METHOD(connectDevice,
   self.audioNotifying = NO;
   self.codec = nil;
   self.connectionState = @"connecting";
+  CBPeripheral *existing = self.connectedPeripheral;
+  if (existing != nil && existing != peripheral) {
+    existing.delegate = nil;
+    [self.central cancelPeripheralConnection:existing];
+  }
   self.connectedPeripheral = peripheral;
   peripheral.delegate = self;
   self.connectResolve = resolve;
@@ -223,6 +228,10 @@ RCT_REMAP_METHOD(disconnectDevice,
 }
 
 - (void)centralManager:(CBCentralManager *)central didConnectPeripheral:(CBPeripheral *)peripheral {
+  if (self.connectedPeripheral != nil && self.connectedPeripheral != peripheral) {
+    [central cancelPeripheralConnection:peripheral];
+    return;
+  }
   self.connectionState = @"connected";
   self.lastEvent = @"Connected to Omi";
   peripheral.delegate = self;
@@ -239,6 +248,9 @@ RCT_REMAP_METHOD(disconnectDevice,
 - (void)centralManager:(CBCentralManager *)central
 didFailToConnectPeripheral:(CBPeripheral *)peripheral
                  error:(NSError *)error {
+  if (self.connectedPeripheral != nil && self.connectedPeripheral != peripheral) {
+    return;
+  }
   self.connectionState = @"disconnected";
   self.connectedPeripheral = nil;
   self.audioNotifying = NO;
@@ -255,6 +267,9 @@ didFailToConnectPeripheral:(CBPeripheral *)peripheral
 - (void)centralManager:(CBCentralManager *)central
 didDisconnectPeripheral:(CBPeripheral *)peripheral
                  error:(NSError *)error {
+  if (self.connectedPeripheral != nil && self.connectedPeripheral != peripheral) {
+    return;
+  }
   self.connectionState = @"disconnected";
   self.connectedPeripheral = nil;
   self.audioNotifying = NO;

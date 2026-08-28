@@ -27,6 +27,32 @@ test('android scan keeps the connected device and serializes GATT writes', () =>
   );
 });
 
+test('android registers a credential-bearing OmiBackend transport', () => {
+  const backend = readFileSync(
+    resolve(
+      __dirname,
+      '../android/app/src/main/java/com/rnruntime/OmiBackendModule.kt',
+    ),
+    'utf8',
+  );
+  const pack = readFileSync(
+    resolve(
+      __dirname,
+      '../android/app/src/main/java/com/rnruntime/OmiNativePackage.kt',
+    ),
+    'utf8',
+  );
+  expect(backend).toContain('override fun getName() = "OmiBackend"');
+  expect(backend).toContain('https://api.omi.me');
+  expect(backend).toContain('OMI_LOCAL_API_TOKEN');
+  expect(backend).toContain('OMI_LOCAL_API_CLIENT_ID');
+  expect(backend).toContain('x-omi-client-id');
+  expect(backend).toContain('Bearer ');
+  expect(backend).not.toContain('workers.dev');
+  expect(backend).toContain('Android generation streaming is unavailable');
+  expect(pack).toContain('OmiBackendModule(reactContext)');
+});
+
 test('public native hardware surface does not advertise unimplemented adapters', () => {
   const source = require('node:fs').readFileSync(
     require('node:path').resolve(__dirname, '../src/omiNativeTypes.ts'),
