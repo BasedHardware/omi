@@ -631,7 +631,6 @@ final class OmiBleManager: NSObject {
         }
         discoveredServices.removeValue(forKey: peripheralUuid)
         readyNotified.remove(peripheralUuid)
-        pairingRecoveryInFlight.remove(peripheralUuid)
 
         // Clean up pending completions
         let completionKeys = readCompletions.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
@@ -735,6 +734,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let uuid = peripheralUuidString(peripheral)
         let isManual = manuallyDisconnected.contains(uuid)
         let pairingLost = (error as? CBError)?.code == .peerRemovedPairingInformation
+            || pairingRecoveryInFlight.remove(uuid) != nil
         NSLog("[OmiBle] didFailToConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
 
@@ -767,6 +767,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let uuid = peripheralUuidString(peripheral)
         let isManual = manuallyDisconnected.contains(uuid)
         let pairingLost = (error as? CBError)?.code == .peerRemovedPairingInformation
+            || pairingRecoveryInFlight.remove(uuid) != nil
         NSLog("[OmiBle] didDisconnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
 
@@ -872,6 +873,10 @@ extension OmiBleManager: CBPeripheralDelegate {
         let uuid = peripheralUuidString(peripheral)
         guard let service = characteristic.service else { return }
 
+        if OmiBleConnectionPolicy.requiresPairingRecovery(error) {
+            beginPairingRecovery(for: peripheral, uuid: uuid)
+        }
+
         let serviceUuid = fullUuidString(service.uuid)
         let charUuid = fullUuidString(characteristic.uuid)
         let key = "\(uuid):\(serviceUuid):\(charUuid)".lowercased()
@@ -944,20 +949,29 @@ extension OmiBleManager: CBPeripheralDelegate {
             }
         }
 
-        if OmiBleConnectionPolicy.requiresPairingRecovery(error), pairingRecoveryInFlight.insert(uuid).inserted {
-            NSLog("[OmiBle] GATT authentication failed for \(uuid); pairing recovery required")
-            manuallyDisconnected.insert(uuid)
-            flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: "pairing_lost") { _ in }
-            centralManager.cancelPeripheralConnection(peripheral)
+        if OmiBleConnectionPolicy.requiresPairingRecovery(error) {
+            beginPairingRecovery(for: peripheral, uuid: uuid)
         }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+        let uuid = peripheralUuidString(peripheral)
         let charUuid = fullUuidString(characteristic.uuid)
         if let error = error {
             NSLog("[OmiBle] Failed to update notification state for \(charUuid): \(error.localizedDescription)")
+            if OmiBleConnectionPolicy.requiresPairingRecovery(error) {
+                beginPairingRecovery(for: peripheral, uuid: uuid)
+            }
         } else {
             NSLog("[OmiBle] Notification state updated for \(charUuid): isNotifying=\(characteristic.isNotifying)")
         }
+    }
+
+    private func beginPairingRecovery(for peripheral: CBPeripheral, uuid: String) {
+        guard pairingRecoveryInFlight.insert(uuid).inserted else { return }
+        NSLog("[OmiBle] GATT authentication failed for \(uuid); pairing recovery required")
+        manuallyDisconnected.insert(uuid)
+        flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: "pairing_lost") { _ in }
+        centralManager.cancelPeripheralConnection(peripheral)
     }
 }

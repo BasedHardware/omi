@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:collection/collection.dart';
@@ -19,6 +21,9 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
+
+@visibleForTesting
+Future<void> retryOfflineSavedDevice(Future<void> Function() connect) => connect();
 
 class FoundDevices extends StatefulWidget {
   final bool isFromOnboarding;
@@ -121,6 +126,27 @@ class _FoundDevicesState extends State<FoundDevices> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.errorConnectingAppleWatch(e.toString())), backgroundColor: Colors.red),
       );
+    }
+  }
+
+  Future<void> _connectFoundDevice(BtDevice device, OnboardingProvider provider) async {
+    if (device.type == DeviceType.appleWatch) {
+      await _handleAppleWatchOnboarding(device, provider);
+    } else if (device.type == DeviceType.raybanMeta) {
+      await _handleRayBanMetaOnboarding(device, provider);
+    } else {
+      await provider.handleTap(
+        device: device,
+        isFromOnboarding: widget.isFromOnboarding,
+        goNext: widget.goNext,
+      );
+
+      if (!mounted) return;
+
+      if (provider.isConnected) {
+        final connectedDevice = provider.deviceProvider?.connectedDevice ?? device;
+        await _showFirmwareWarningIfNeeded(connectedDevice);
+      }
     }
   }
 
@@ -330,31 +356,17 @@ class _FoundDevicesState extends State<FoundDevices> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(context.l10n.offline),
-                      action: SnackBarAction(label: context.l10n.retry, onPressed: () {}),
+                      action: SnackBarAction(
+                        label: context.l10n.retry,
+                        onPressed: () {
+                          unawaited(retryOfflineSavedDevice(() => _connectFoundDevice(device, provider)));
+                        },
+                      ),
                     ),
                   );
                   return;
                 }
-                if (device.type == DeviceType.appleWatch) {
-                  await _handleAppleWatchOnboarding(device, provider);
-                } else if (device.type == DeviceType.raybanMeta) {
-                  await _handleRayBanMetaOnboarding(device, provider);
-                } else {
-                  // Handle other devices
-                  await provider.handleTap(
-                    device: device,
-                    isFromOnboarding: widget.isFromOnboarding,
-                    goNext: widget.goNext,
-                  );
-
-                  if (!mounted) return;
-
-                  // Show firmware warning after successful connection
-                  if (provider.isConnected) {
-                    final connectedDevice = provider.deviceProvider?.connectedDevice ?? device;
-                    await _showFirmwareWarningIfNeeded(connectedDevice);
-                  }
-                }
+                await _connectFoundDevice(device, provider);
               }
             : null,
         child: Container(
