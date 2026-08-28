@@ -972,6 +972,128 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertTrue(drained.model.turn?.pendingToolCallIDs.contains(callID) == true)
   }
 
+  func testChatLaneThenStandardToolKeepsLongestPendingToolsDeadline() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    var model = reduce(
+      startingModel,
+      .providerResponseStarted(turnID: turnID, sessionID: sessionID, responseID: responseID)
+    ).model
+    let chatReservation = reserveIdentity(model, turnID: turnID)
+    let chatCall = VoiceToolCallID("ask-higher-model")
+    model =
+      reducer.reduce(
+        chatReservation.model,
+        .toolStartedScoped(
+          turnID: turnID, identity: chatReservation.identity, callID: chatCall)
+      ).model
+    model =
+      reducer.reduce(
+        model,
+        .toolDeadlineClassSelectedScoped(
+          turnID: turnID,
+          identity: chatReservation.identity,
+          callID: chatCall,
+          deadlineClass: .chatLane)
+      ).model
+
+    let standardReservation = reserveIdentity(model, turnID: turnID)
+    let standardCall = VoiceToolCallID("screenshot")
+    let startedStandard = reducer.reduce(
+      standardReservation.model,
+      .toolStartedScoped(
+        turnID: turnID, identity: standardReservation.identity, callID: standardCall))
+
+    XCTAssertEqual(startedStandard.model.turn?.toolDeadlineClasses[chatCall], .chatLane)
+    XCTAssertEqual(startedStandard.model.turn?.toolDeadlineClasses[standardCall], .standard)
+    XCTAssertTrue(
+      startedStandard.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .pendingTools, after: 180)))
+    XCTAssertFalse(
+      startedStandard.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .pendingTools, after: 30)))
+  }
+
+  func testStandardThenChatLaneToolReschedulesAggregateToChatLaneDeadline() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    var model = reduce(
+      startingModel,
+      .providerResponseStarted(turnID: turnID, sessionID: sessionID, responseID: responseID)
+    ).model
+    let standardReservation = reserveIdentity(model, turnID: turnID)
+    let standardCall = VoiceToolCallID("screenshot")
+    let startedStandard = reducer.reduce(
+      standardReservation.model,
+      .toolStartedScoped(
+        turnID: turnID, identity: standardReservation.identity, callID: standardCall))
+    XCTAssertTrue(
+      startedStandard.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .pendingTools, after: 30)))
+
+    let chatReservation = reserveIdentity(startedStandard.model, turnID: turnID)
+    let chatCall = VoiceToolCallID("ask-higher-model")
+    model =
+      reducer.reduce(
+        chatReservation.model,
+        .toolStartedScoped(
+          turnID: turnID, identity: chatReservation.identity, callID: chatCall)
+      ).model
+    let selected = reducer.reduce(
+      model,
+      .toolDeadlineClassSelectedScoped(
+        turnID: turnID,
+        identity: chatReservation.identity,
+        callID: chatCall,
+        deadlineClass: .chatLane))
+
+    XCTAssertEqual(selected.model.turn?.toolDeadlineClasses[standardCall], .standard)
+    XCTAssertEqual(selected.model.turn?.toolDeadlineClasses[chatCall], .chatLane)
+    XCTAssertTrue(
+      selected.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .pendingTools, after: 180)))
+  }
+
+  func testFinishingChatLaneToolRestoresStandardPendingToolsDeadline() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    var model = reduce(
+      startingModel,
+      .providerResponseStarted(turnID: turnID, sessionID: sessionID, responseID: responseID)
+    ).model
+    let chatReservation = reserveIdentity(model, turnID: turnID)
+    let chatCall = VoiceToolCallID("ask-higher-model")
+    model =
+      reducer.reduce(
+        chatReservation.model,
+        .toolStartedScoped(
+          turnID: turnID, identity: chatReservation.identity, callID: chatCall)
+      ).model
+    model =
+      reducer.reduce(
+        model,
+        .toolDeadlineClassSelectedScoped(
+          turnID: turnID,
+          identity: chatReservation.identity,
+          callID: chatCall,
+          deadlineClass: .chatLane)
+      ).model
+    let standardReservation = reserveIdentity(model, turnID: turnID)
+    let standardCall = VoiceToolCallID("screenshot")
+    model =
+      reducer.reduce(
+        standardReservation.model,
+        .toolStartedScoped(
+          turnID: turnID, identity: standardReservation.identity, callID: standardCall)
+      ).model
+
+    let finishedChat = reducer.reduce(
+      model,
+      .toolFinishedScoped(
+        turnID: turnID, identity: chatReservation.identity, callID: chatCall))
+    XCTAssertEqual(finishedChat.model.turn?.pendingToolCallIDs, [standardCall])
+    XCTAssertTrue(
+      finishedChat.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .pendingTools, after: 30)))
+  }
+
   func testProviderFinishDuringToolWaitRequiresPostToolContinuationBeforeJournal() throws {
     let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
     let callID = VoiceToolCallID("pending")

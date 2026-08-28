@@ -1009,6 +1009,48 @@ struct RealtimeChatLaneInvocationGate: Equatable {
   }
 }
 
+/// Binds a voice companion query to one bridge request id so a delayed interrupt
+/// cannot cancel a later typed chat turn.
+struct RealtimeChatLaneInterruptBinding: Equatable {
+  private(set) var boundIdentity: String?
+  private(set) var pendingInterruptIdentity: String?
+  private(set) var activeRequestId: String?
+
+  mutating func bind(_ identity: String) {
+    guard !identity.isEmpty else { return }
+    boundIdentity = identity
+  }
+
+  mutating func unbind(_ identity: String) {
+    guard boundIdentity == identity else { return }
+    boundIdentity = nil
+    if pendingInterruptIdentity == identity {
+      pendingInterruptIdentity = nil
+    }
+    activeRequestId = nil
+  }
+
+  mutating func beginRequest(_ requestId: String) -> Bool {
+    guard !requestId.isEmpty else { return false }
+    activeRequestId = requestId
+    if let boundIdentity, pendingInterruptIdentity == boundIdentity {
+      return false
+    }
+    return true
+  }
+
+  mutating func requestInterrupt(_ identity: String) -> String? {
+    pendingInterruptIdentity = identity
+    guard boundIdentity == identity else { return nil }
+    return activeRequestId
+  }
+
+  mutating func finishRequest(_ requestId: String) {
+    guard activeRequestId == requestId else { return }
+    activeRequestId = nil
+  }
+}
+
 /// State management for chat functionality with Claude Agent SDK
 /// Uses hybrid architecture: Swift → Claude Agent (via Node.js bridge) for AI, Backend for persistence + context
 @MainActor
@@ -2062,17 +2104,29 @@ class ChatProvider: ObservableObject {
       throw RealtimeChatLaneError.revoked
     }
 
-    let result = try await resolvedAgentClient().query(
-      prompt: ChatPromptBuilder.currentTimePrompt(for: prompt),
-      session: kernelContext.session,
-      surface: surface,
-      mode: chatMode.rawValue,
-      expectedContext: kernelContext.snapshot.freshness,
-      reasoningEffort: ChatTurnOwner.mainChat.reasoningEffort,
-      onTextDelta: { _ in },
-      onToolActivity: { _, _, _, _ in },
-      onThinkingDelta: { _ in }
-    )
+    let client = resolvedAgentClient()
+    await client.bindRealtimeChatLaneInterrupt(invocationID)
+    let result: AgentClient.QueryResult
+    do {
+      result = try await client.query(
+        prompt: ChatPromptBuilder.currentTimePrompt(for: prompt),
+        session: kernelContext.session,
+        surface: surface,
+        mode: chatMode.rawValue,
+        expectedContext: kernelContext.snapshot.freshness,
+        reasoningEffort: ChatTurnOwner.mainChat.reasoningEffort,
+        onTextDelta: { _ in },
+        onToolActivity: { _, _, _, _ in },
+        onThinkingDelta: { _ in }
+      )
+      await client.unbindRealtimeChatLaneInterrupt(invocationID)
+    } catch {
+      await client.unbindRealtimeChatLaneInterrupt(invocationID)
+      if case BridgeError.stopped = error {
+        throw RealtimeChatLaneError.revoked
+      }
+      throw error
+    }
     guard runtimeOwnerId == expectedOwnerID else { throw RealtimeChatLaneError.ownerChanged }
     guard realtimeChatLaneInvocationGate.accepts(invocationID) else {
       throw RealtimeChatLaneError.revoked
@@ -2086,9 +2140,9 @@ class ChatProvider: ObservableObject {
   /// Revokes only the exact voice companion query. The gate remains occupied
   /// until that query unwinds, so its interrupt cannot touch a newer typed turn.
   func cancelActiveRealtimeChatLaneInvocation() {
-    guard realtimeChatLaneInvocationGate.revokeActive() != nil else { return }
+    guard let identity = realtimeChatLaneInvocationGate.revokeActive() else { return }
     let client = resolvedAgentClient()
-    Task { await client.interrupt() }
+    Task { await client.interruptRealtimeChatLane(identity: identity) }
   }
 
   private static func queryAttachments(_ attachments: [ChatAttachment]) -> [AgentQueryAttachment] {

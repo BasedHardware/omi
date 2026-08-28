@@ -36,6 +36,27 @@ final class HubSystemInstructionTests: XCTestCase {
     XCTAssertFalse(gate.finish("voice-tool-1"))
   }
 
+  func testRealtimeChatLaneInterruptIgnoresStaleIdentityAfterOldResultWins() {
+    var binding = RealtimeChatLaneInterruptBinding()
+    binding.bind("voice-tool-1")
+    XCTAssertTrue(binding.beginRequest("request-a"))
+    XCTAssertEqual(binding.requestInterrupt("voice-tool-1"), "request-a")
+
+    binding.finishRequest("request-a")
+    binding.unbind("voice-tool-1")
+
+    XCTAssertTrue(binding.beginRequest("request-b"))
+    XCTAssertNil(binding.requestInterrupt("voice-tool-1"))
+    XCTAssertEqual(binding.activeRequestId, "request-b")
+  }
+
+  func testRealtimeChatLaneInterruptRejectsNewRequestWhenPending() {
+    var binding = RealtimeChatLaneInterruptBinding()
+    binding.bind("voice-tool-1")
+    XCTAssertNil(binding.requestInterrupt("voice-tool-1"))
+    XCTAssertFalse(binding.beginRequest("request-a"))
+  }
+
   @MainActor
   func testRealtimeChatLaneRejectsWrongOwnerBeforeStartingTheBridge() async {
     let ownerFixture = RuntimeOwnerAuthorityTestFixture()

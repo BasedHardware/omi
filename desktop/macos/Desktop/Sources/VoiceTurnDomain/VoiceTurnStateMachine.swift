@@ -366,6 +366,7 @@ package struct VoiceTurn: Equatable, Sendable {
   package var responseID: VoiceResponseID?
   package var pendingToolCallIDs: Set<VoiceToolCallID>
   package var toolEffectIdentities: [VoiceToolCallID: VoiceEffectIdentity]
+  package var toolDeadlineClasses: [VoiceToolCallID: VoiceToolDeadlineClass]
   package var screenEvidenceProtocol: VoiceScreenEvidenceProtocolToken?
   package var activeLease: VoiceOutputLease?
   package var providerFinished: Bool
@@ -399,6 +400,7 @@ package struct VoiceTurn: Equatable, Sendable {
     route = .undecided
     pendingToolCallIDs = []
     toolEffectIdentities = [:]
+    toolDeadlineClasses = [:]
     screenEvidenceProtocol = nil
     providerFinished = false
     postToolContinuationRequired = false
@@ -1633,10 +1635,11 @@ struct VoiceTurnReducer {
       model.turn?.reservedEffectIdentities.remove(identity)
       model.turn?.toolEffectIdentities[callID] = identity
       model.turn?.pendingToolCallIDs.insert(callID)
+      model.turn?.toolDeadlineClasses[callID] = .standard
       model.turn?.postToolContinuationRequired = true
       model.turn?.phase = .awaitingTools
       cancel(.providerResponse, in: &model, effects: &effects)
-      schedule(.pendingTools, after: deadlines.pendingTools, in: &model, effects: &effects)
+      reschedulePendingToolsDeadline(in: &model, effects: &effects)
 
     case .toolDeadlineClassSelectedScoped(_, let identity, let callID, let deadlineClass):
       guard turn.toolEffectIdentities[callID] == identity,
@@ -1646,10 +1649,8 @@ struct VoiceTurnReducer {
         stale(&model, event: event, effects: &effects)
         return VoiceTurnReduction(model: model, effects: effects)
       }
-      cancel(.pendingTools, in: &model, effects: &effects)
-      let pendingToolDeadline =
-        deadlineClass == .chatLane ? deadlines.chatLaneTool : deadlines.pendingTools
-      schedule(.pendingTools, after: pendingToolDeadline, in: &model, effects: &effects)
+      model.turn?.toolDeadlineClasses[callID] = deadlineClass
+      reschedulePendingToolsDeadline(in: &model, effects: &effects)
 
     case .authoritativeLocalResultAcceptedScoped(_, let identity, let callID, let kind):
       guard turn.toolEffectIdentities[callID] == identity,
@@ -1729,6 +1730,7 @@ struct VoiceTurnReducer {
       }
       model.turn?.pendingToolCallIDs.remove(callID)
       model.turn?.toolEffectIdentities.removeValue(forKey: callID)
+      model.turn?.toolDeadlineClasses.removeValue(forKey: callID)
       if model.turn?.pendingToolCallIDs.isEmpty == true {
         cancel(.pendingTools, in: &model, effects: &effects)
         if model.turn?.screenEvidenceProtocol != nil {
@@ -1754,6 +1756,8 @@ struct VoiceTurnReducer {
           schedule(
             .providerResponse, after: deadlines.providerResponse, in: &model, effects: &effects)
         }
+      } else {
+        reschedulePendingToolsDeadline(in: &model, effects: &effects)
       }
 
     case .playbackStartedScoped(_, let lease):
@@ -2200,6 +2204,29 @@ struct VoiceTurnReducer {
     effects.append(.scheduleDeadline(turnID: turnID, deadline: deadline, after: interval))
   }
 
+  private func reschedulePendingToolsDeadline(
+    in model: inout VoiceTurnModel,
+    effects: inout [VoiceTurnEffect]
+  ) {
+    guard let turn = model.turn, !turn.pendingToolCallIDs.isEmpty else {
+      cancel(.pendingTools, in: &model, effects: &effects)
+      return
+    }
+    cancel(.pendingTools, in: &model, effects: &effects)
+    schedule(
+      .pendingTools,
+      after: pendingToolsInterval(for: turn),
+      in: &model,
+      effects: &effects)
+  }
+
+  private func pendingToolsInterval(for turn: VoiceTurn) -> TimeInterval {
+    let usesChatLane = turn.pendingToolCallIDs.contains {
+      turn.toolDeadlineClasses[$0] == .chatLane
+    }
+    return usesChatLane ? deadlines.chatLaneTool : deadlines.pendingTools
+  }
+
   private func cancel(
     _ deadline: VoiceTurnDeadline,
     in model: inout VoiceTurnModel,
@@ -2266,6 +2293,7 @@ struct VoiceTurnReducer {
     effects.append(.terminal(record))
     turn.deadlines.removeAll()
     turn.pendingToolCallIDs.removeAll()
+    turn.toolDeadlineClasses.removeAll()
     turn.screenEvidenceProtocol = nil
     turn.activeLease = nil
     turn.providerOutputSuppressed = false
