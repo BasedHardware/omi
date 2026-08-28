@@ -43,6 +43,10 @@ final class FormWatcher {
   private var sweepTimer: Timer?
   private var activationObserver: (any NSObjectProtocol)?
   private var subscribers: [String: (FormScanReason) -> Void] = [:]
+  /// Called on the raw event, ahead of the debounce. Presenting a card has to wait for a
+  /// page to settle; taking one away does not, and a card left over a tab the user has
+  /// already left is the one thing this must never do.
+  private var immediateSubscribers: [String: () -> Void] = [:]
 
   /// Registered on the application element, which is where an app posts events for its
   /// whole tree. Apps implement different subsets; a rejected registration is normal and
@@ -59,9 +63,30 @@ final class FormWatcher {
   private init() {}
 
   func subscribe(_ id: String, onScan: @escaping (FormScanReason) -> Void) {
-    let wasIdle = subscribers.isEmpty
+    let wasIdle = isIdle
     subscribers[id] = onScan
     guard wasIdle else { return }
+    startMachinery()
+  }
+
+  /// Watch the same events without the debounce. Used to retire a card the moment its
+  /// context goes away; never to put one up.
+  func subscribeImmediate(_ id: String, onEvent: @escaping () -> Void) {
+    let wasIdle = isIdle
+    immediateSubscribers[id] = onEvent
+    guard wasIdle else { return }
+    startMachinery()
+  }
+
+  func unsubscribeImmediate(_ id: String) {
+    immediateSubscribers[id] = nil
+    guard isIdle else { return }
+    stopMachinery()
+  }
+
+  private var isIdle: Bool { subscribers.isEmpty && immediateSubscribers.isEmpty }
+
+  private func startMachinery() {
 
     activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
       forName: NSWorkspace.didActivateApplicationNotification,
@@ -84,7 +109,11 @@ final class FormWatcher {
 
   func unsubscribe(_ id: String) {
     subscribers[id] = nil
-    guard subscribers.isEmpty else { return }
+    guard isIdle else { return }
+    stopMachinery()
+  }
+
+  private func stopMachinery() {
     debounceTask?.cancel()
     debounceTask = nil
     sweepTimer?.invalidate()
@@ -102,8 +131,15 @@ final class FormWatcher {
     }
   }
 
+  private func broadcastImmediate() {
+    for onEvent in immediateSubscribers.values {
+      onEvent()
+    }
+  }
+
   private func handleAppActivation() {
     retargetObserver()
+    broadcastImmediate()
     // An app switch is the strongest signal there is; it skips the debounce so the card
     // for a form the user just came back to is not a second late.
     debounceTask?.cancel()
@@ -112,6 +148,7 @@ final class FormWatcher {
   }
 
   private func handleAccessibilityEvent() {
+    broadcastImmediate()
     debounceTask?.cancel()
     debounceTask = Task { [weak self] in
       try? await Task.sleep(for: Self.debounce)

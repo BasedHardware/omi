@@ -47,7 +47,10 @@ actor MessageDraftAssistant: ProactiveAssistant {
   private let maxRememberedDrafts = 40
 
   /// The window the card on screen belongs to; leaving it takes the card away.
-  private var cardWindowKey: FormWindowKey?
+  /// The context the card on screen belongs to. Not the window: a browser keeps one
+  /// window across every tab, and a draft written for one conversation must not still be
+  /// on screen over the next.
+  private var cardContext: PanelContext?
   private var isEvaluating = false
 
   /// The last refusal logged, so a quiet screen writes one line, not one per sweep.
@@ -75,6 +78,10 @@ actor MessageDraftAssistant: ProactiveAssistant {
       FormWatcher.shared.subscribe(identifier) { reason in
         Task { await self.evaluate(reason: reason) }
       }
+      // Offering waits for the screen to settle; taking the card away does not.
+      FormWatcher.shared.subscribeImmediate(identifier) {
+        Task { await self.retireCardIfUserLeft() }
+      }
     }
   }
 
@@ -95,7 +102,7 @@ actor MessageDraftAssistant: ProactiveAssistant {
     guard await isEnabled else { return }
 
     guard let key = await MainActor.run(body: { FormFieldScanner.frontWindowKey() }) else { return }
-    await retireCardIfUserLeft(currentWindow: key)
+    await retireCardIfUserLeft()
 
     let excluded = await MainActor.run {
       // The same list the user curated for live suggestions: "do not watch me in this
@@ -122,7 +129,7 @@ actor MessageDraftAssistant: ProactiveAssistant {
         && MessageDraftCardController.shared.fingerprint == snapshot.fingerprint
     }
     guard !alreadyMine else {
-      cardWindowKey = key
+      cardContext = await MainActor.run { PanelContext.front() }
       await MainActor.run { MessageDraftCardController.shared.ensureVisiblePlacement() }
       return
     }
@@ -146,7 +153,7 @@ actor MessageDraftAssistant: ProactiveAssistant {
     log(
       "MessageDraft: offering in \(snapshot.context.appName) "
         + "surface=\(snapshot.surface.displayName) reason=\(reason.rawValue)")
-    cardWindowKey = key
+    cardContext = await MainActor.run { PanelContext.front() }
     let restored = drafts.last(where: { $0.fingerprint == snapshot.fingerprint })?.draft
     await MainActor.run {
       MessageDraftCardController.shared.present(
@@ -177,15 +184,121 @@ actor MessageDraftAssistant: ProactiveAssistant {
     log("MessageDraft: gate=\(reason) app=\(key.appName)")
   }
 
-  private func retireCardIfUserLeft(currentWindow: FormWindowKey) async {
-    guard let cardWindowKey, cardWindowKey != currentWindow else { return }
-    self.cardWindowKey = nil
+  private func retireCardIfUserLeft() async {
+    guard let cardContext else { return }
+    let stillThere = await MainActor.run {
+      PanelContext.front().map { $0.matches(cardContext, grain: .context) } ?? true
+    }
+    guard !stillThere else { return }
+    self.cardContext = nil
     await MainActor.run { MessageDraftCardController.shared.dismiss() }
   }
 
   private func recordDecline(_ fingerprint: String) {
     declined.insert(fingerprint)
     log("MessageDraft: declined")
+  }
+
+  // MARK: - On demand
+
+  /// Draft the message because the user asked out loud, and put it on a voice panel.
+  ///
+  /// The offer card exists to ask permission; being asked *is* the permission, so this
+  /// goes straight to the model, with the panel up and pending while it writes. When no
+  /// compose box is focused there is still a request to answer — the window in front
+  /// becomes the context and the draft lands on the panel, which is the only surface a
+  /// spoken answer has to leave something behind on.
+  func draftOnDemand(context: String) async -> String {
+    guard RuntimeOwnerIdentity.currentOwnerId() != nil else { return "No signed-in Omi account." }
+    let scanned = await MainActor.run { MessageComposeScanner.scanFocusedCompose() }.snapshot
+    let fallback = scanned == nil ? await frontWindowSnapshot() : nil
+    guard let snapshot = scanned ?? fallback else {
+      return "No window in front to draft from."
+    }
+
+    let title = scanned == nil ? "Draft" : "Draft for \(snapshot.surface.displayName)"
+    let work = CancellableWork()
+    await MainActor.run {
+      PanelSession.present(
+        title: title,
+        subtitle: "Writing your message\u{2026}",
+        fields: [
+          CloudConnectorCopyField(
+            id: "draft-body", label: "", value: "", masksValue: false, wraps: true,
+            isPending: true)
+        ],
+        // A draft is about the conversation in front of the user, so it leaves with it.
+        // Its liveness is the context alone: re-running the compose gate would take the
+        // panel away the moment they paste the draft into the box it was written for.
+        grain: .context,
+        origin: .requested,
+        onCancel: { work.cancel() }
+      )
+    }
+
+    log("MessageDraft: on-demand panel pending for \(snapshot.surface.displayName)")
+
+    log("MessageDraft: on-demand panel pending for \(snapshot.surface.displayName)")
+
+    do {
+      let result = try await work.run {
+        await self.generate(context: context, refining: nil, snapshot: snapshot)
+      }
+      guard await !work.isCancelled else { return "Cancelled." }
+      switch result {
+      case .failure(let error):
+        _ = await MainActor.run { PanelSession.dismiss() }
+        if case MessageDraftError.budgetSpent = error {
+          return "Message drafting has spent its budget for today."
+        }
+        return "Could not write the draft."
+      case .success(let draft):
+        var fields: [CloudConnectorCopyField] = []
+        if let subject = draft.subject, !subject.isEmpty {
+          fields.append(
+            CloudConnectorCopyField(
+              id: "draft-subject", label: "Subject", value: subject, masksValue: false))
+        }
+        fields.append(
+          CloudConnectorCopyField(
+            id: "draft-body", label: "", value: draft.body, masksValue: false, wraps: true))
+        await MainActor.run {
+          PanelSession.update(subtitle: "Copy it with the button.", fields: fields)
+        }
+        log("MessageDraft: on-demand draft on screen, \(draft.body.count) chars")
+        return "Draft is on screen to copy."
+      }
+    } catch {
+      return "Cancelled."
+    }
+  }
+
+  /// The frontmost window described in compose terms, for a draft asked for somewhere
+  /// with no compose box. Nothing is focused and nothing is typed — the window title and
+  /// the screenshot taken at generate time are the whole context, which is exactly what
+  /// the user can see while asking.
+  private func frontWindowSnapshot() async -> MessageComposeSnapshot? {
+    await MainActor.run {
+      guard let app = NSWorkspace.shared.frontmostApplication,
+        app.processIdentifier != ProcessInfo.processInfo.processIdentifier
+      else { return nil }
+      let info = ScreenCaptureService.getActiveWindowInfo()
+      let appName = app.localizedName ?? ""
+      return MessageComposeSnapshot(
+        context: MessageComposeContext(
+          appName: appName,
+          windowTitle: info.windowTitle ?? "",
+          focusedRole: "",
+          focusedLabel: "",
+          focusedValue: "",
+          isSecure: false,
+          pageURL: ""
+        ),
+        surface: .nativeApp(appName),
+        windowFrame: nil,
+        windowID: info.windowID
+      )
+    }
   }
 
   // MARK: - Drafting
@@ -358,7 +471,7 @@ actor MessageDraftAssistant: ProactiveAssistant {
   func clearPendingWork() async {}
 
   func stop() async {
-    cardWindowKey = nil
+    cardContext = nil
     await MainActor.run {
       FormWatcher.shared.unsubscribe(identifier)
       MessageDraftCardController.shared.dismiss()

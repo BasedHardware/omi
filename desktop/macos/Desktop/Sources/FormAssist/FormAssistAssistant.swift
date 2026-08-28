@@ -107,54 +107,6 @@ private struct FormAssistModelResponse: Decodable {
   let fills: [FormAssistFill]
 }
 
-/// Owns the one form-assist card on screen, so leaving the form takes it away without
-/// closing a card some other surface put up in the meantime.
-@MainActor
-private enum FormAssistCard {
-  private static var showing: String?
-
-  static var canPresent: Bool {
-    (showing != nil || !CloudConnectorGuidanceOverlay.shared.isPresenting)
-      && !MessageDraftCardController.shared.isPresenting
-  }
-
-  /// The form the card on screen is for, or nil when it is not ours / not up. Presenting
-  /// rebuilds the panel, which throws away where the user dragged it — so the periodic
-  /// sweep must be able to see that this exact form is already on screen.
-  static func isShowing(_ fingerprint: String) -> Bool {
-    showing == fingerprint && CloudConnectorGuidanceOverlay.shared.isPresenting
-  }
-
-  static func present(
-    fingerprint: String,
-    title: String,
-    subtitle: String,
-    fields: [CloudConnectorCopyField],
-    near anchor: CGRect?
-  ) {
-    showing = fingerprint
-    let overlay = CloudConnectorGuidanceOverlay.shared
-    let screen = NSScreen.screens.first { $0.frame.intersects(anchor ?? .zero) } ?? NSScreen.main
-    let maxHeight = screen.map {
-      FormAssistCardPlacement.maxCardHeight(visibleFrame: $0.visibleFrame)
-    }
-    let size = overlay.fieldCopyCardSize(
-      title: title, subtitle: subtitle, fieldCount: fields.count, maxHeight: maxHeight)
-    let placement = screen.map {
-      FormAssistCardPlacement.frame(cardSize: size, visibleFrame: $0.visibleFrame)
-    }
-    overlay.presentFieldCopyCard(
-      title: title, subtitle: subtitle, fields: fields, near: anchor, at: placement,
-      maxHeight: maxHeight)
-  }
-
-  static func dismissIfMine() {
-    guard showing != nil else { return }
-    showing = nil
-    CloudConnectorGuidanceOverlay.shared.dismiss()
-  }
-}
-
 /// Offers what Omi already knows about the user when they are filling in a form.
 ///
 /// The expensive step is the model call that maps field labels to memories, and it is
@@ -179,13 +131,12 @@ actor FormAssistAssistant: ProactiveAssistant {
   /// The window the last scan looked at, and how many times in a row it has turned out
   /// to hold no form. The periodic sweep uses this to stop re-walking a window it has
   /// already read — the walk is the only part of a quiet screen that costs anything.
+  /// The form whose offer is on screen, so stopping this surface takes its own card away
+  /// and nobody else's.
+  private var lastOfferedFingerprint: String?
   private var lastWindowKey: FormWindowKey?
   private var barrenScans = 0
   private static let barrenScanLimit = 2
-
-  /// The window the card on screen belongs to, so leaving the form takes it away and
-  /// staying on the form does not.
-  private var cardWindowKey: FormWindowKey?
 
   /// A page load fires several triggers at once, and the model call outlives all of
   /// them. Without this the same form is answered two or three times in parallel.
@@ -241,7 +192,6 @@ actor FormAssistAssistant: ProactiveAssistant {
     guard await isEnabled else { return }
 
     guard let key = await MainActor.run(body: { FormFieldScanner.frontWindowKey() }) else { return }
-    await retireCardIfUserLeft(currentWindow: key)
 
     if key != lastWindowKey {
       lastWindowKey = key
@@ -287,7 +237,7 @@ actor FormAssistAssistant: ProactiveAssistant {
       return
     }
     barrenScans = 0
-    guard await MainActor.run(body: { !FormAssistCard.isShowing(snapshot.fingerprint) }) else {
+    guard await MainActor.run(body: { !PanelSession.isShowingForm(snapshot.fingerprint) }) else {
       return
     }
 
@@ -295,8 +245,8 @@ actor FormAssistAssistant: ProactiveAssistant {
       // Already answered. Re-show what it produced, or stay quiet if it produced nothing
       // — either way this form costs no more model calls and no more log noise.
       guard !previous.result.fills.isEmpty else { return }
-      guard await MainActor.run(body: { FormAssistCard.canPresent }) else { return }
-      await deliver(previous.result, fingerprint: snapshot.fingerprint, windowKey: key)
+      guard await MainActor.run(body: { PanelSession.canPresentAmbient }) else { return }
+      await deliver(previous.result, fingerprint: snapshot.fingerprint)
       return
     }
 
@@ -305,7 +255,7 @@ actor FormAssistAssistant: ProactiveAssistant {
         + "fillable=\(snapshot.emptyFields.count) submit=\(snapshot.hasSubmitButton) "
         + "reason=\(reason.rawValue)")
 
-    guard await MainActor.run(body: { FormAssistCard.canPresent }) else {
+    guard await MainActor.run(body: { PanelSession.canPresentAmbient }) else {
       log("FormAssist: another card is on screen")
       return
     }
@@ -336,18 +286,149 @@ actor FormAssistAssistant: ProactiveAssistant {
         log("FormAssist: nothing to offer for \(snapshot.emptyFields.count) fields in \(snapshot.appName)")
         return
       }
-      await deliver(result, fingerprint: snapshot.fingerprint, windowKey: key)
+      await deliver(result, fingerprint: snapshot.fingerprint)
     } catch {
       logError("FormAssist: fill resolution failed", error: error)
     }
   }
 
-  /// The card belongs to one window. Moving to a different one takes it away; staying on
-  /// the form — even while typing, which changes nothing about the window — keeps it.
-  private func retireCardIfUserLeft(currentWindow: FormWindowKey) async {
-    guard let cardWindowKey, cardWindowKey != currentWindow else { return }
-    self.cardWindowKey = nil
-    await MainActor.run { FormAssistCard.dismissIfMine() }
+  // MARK: - On demand
+
+  /// Answer the form on screen because the user asked out loud, and fill the panel in as
+  /// the answers arrive.
+  ///
+  /// The gate, the cooldown, the barren-scan memory and the already-offered cache are all
+  /// there to decide whether to *interrupt* someone. None of them applies once the user
+  /// has asked: a form that failed the eligibility bar is still the form they mean. The
+  /// daily budget stays, because it exists to bound a stuck retry loop, not the user —
+  /// and it is handed back if they close the card before the answers land.
+  ///
+  /// The panel goes up before the model call, not after it. Answering a form takes
+  /// several seconds; without the pending rows on screen that is several seconds of
+  /// nothing happening, which reads as broken rather than busy.
+  func assistOnDemand(context: String) async -> String {
+    guard RuntimeOwnerIdentity.currentOwnerId() != nil else { return "No signed-in Omi account." }
+    guard await MainActor.run(body: { AXIsProcessTrusted() }) else {
+      return "Omi needs Accessibility permission to read the form."
+    }
+    guard let snapshot = await MainActor.run(body: { FormFieldScanner.scanFrontmostWindow() }),
+      !snapshot.emptyFields.isEmpty
+    else { return "No form with empty fields is in front of you." }
+
+    let now = Date()
+    evaluationsToday = evaluationsToday.filter { Calendar.current.isDate($0, inSameDayAs: now) }
+    guard evaluationsToday.count < dailyEvaluationBudget else {
+      return "Form assist has spent its budget for today."
+    }
+    evaluationsToday.append(now)
+    lastEvaluationAt = now
+
+    let roster = snapshot.emptyFields
+    let work = CancellableWork()
+    await MainActor.run {
+      PanelSession.present(
+        title: "\(snapshot.appName) form",
+        subtitle: "Reading your memories\u{2026}",
+        fields: Self.panelFields(roster: roster, fills: [:], answered: []),
+        grain: .context,
+        origin: .requested,
+        formFingerprint: snapshot.fingerprint,
+        onCancel: { work.cancel() }
+      )
+    }
+
+    func abandon(_ message: String) -> String {
+      if !evaluationsToday.isEmpty { evaluationsToday.removeLast() }
+      return message
+    }
+    func cancelled() async -> Bool { await work.isCancelled }
+
+    log(
+      "FormAssist: on-demand panel pending with \(roster.count) fields in \(snapshot.appName)"
+        + (context.isEmpty ? "" : " context=\(context.count) chars"))
+
+    let memories = await recallMemories(for: snapshot)
+    guard await !cancelled() else { return abandon("Cancelled.") }
+    guard !memories.isEmpty else {
+      _ = await MainActor.run { PanelSession.dismiss() }
+      return abandon("Omi has no memories that could answer this form.")
+    }
+    await MainActor.run { PanelSession.update(subtitle: "Writing your answers\u{2026}") }
+
+    do {
+      let image = await windowImage(windowID: snapshot.windowID)
+      guard await !cancelled() else { return abandon("Cancelled.") }
+      let rows = try await work.run {
+        try await self.resolveRows(
+          snapshot: snapshot, memories: memories, image: image, userContext: context,
+          onFacts: { facts in
+            let byLabel = Dictionary(facts.map { ($0.label, $0) }, uniquingKeysWith: { first, _ in first })
+            await MainActor.run {
+              PanelSession.update(
+                fields: Self.panelFields(
+                  roster: roster, fills: byLabel, answered: Set(byLabel.keys)))
+            }
+          })
+      }
+      guard await !cancelled() else { return abandon("Cancelled.") }
+      guard rows.contains(where: { $0.fill != nil }) else {
+        _ = await MainActor.run { PanelSession.dismiss() }
+        return "Nothing Omi knows answers the \(roster.count) fields on this form."
+      }
+      let filled = rows.filter { $0.fill != nil }.count
+      await MainActor.run {
+        PanelSession.update(
+          subtitle: "\(filled) of \(rows.count) fields from your memories. "
+            + "Copy each into \(snapshot.appName).",
+          fields: Self.finalFields(rows: rows))
+      }
+      log(
+        "FormAssist: on-demand panel with \(filled) of \(rows.count) fields in "
+          + "\(snapshot.appName)")
+      return "Put \(filled) field\(filled == 1 ? "" : "s") on screen to copy."
+    } catch is CancellationError {
+      return abandon("Cancelled.")
+    } catch {
+      logError("FormAssist: on-demand fill resolution failed", error: error)
+      _ = await MainActor.run { PanelSession.dismiss() }
+      return "Could not read the form."
+    }
+  }
+
+  /// Every field the user can act on, in tab order: answered ones show their value,
+  /// unanswered ones show a spinner, and the ones Omi will not touch say so straight
+  /// away rather than pretending to work on them.
+  private static func panelFields(
+    roster: [FormField],
+    fills: [String: FormAssistFill],
+    answered: Set<String>
+  ) -> [CloudConnectorCopyField] {
+    roster.enumerated().map { index, field in
+      let sensitive = FormAssistSensitiveFields.isSensitive(field.label)
+      let fill = fills[field.label]
+      return CloudConnectorCopyField(
+        id: "form-\(index)",
+        label: fill?.kind == .draft ? "\(field.label) (draft)" : field.label,
+        value: fill?.value ?? "",
+        hint: sensitive ? "skipped" : nil,
+        masksValue: false,
+        wraps: fill?.kind == .draft,
+        isPending: !sensitive && fill == nil && !answered.contains(field.label)
+      )
+    }
+  }
+
+  private static func finalFields(rows: [FormAssistRow]) -> [CloudConnectorCopyField] {
+    rows.enumerated().map { index, row in
+      CloudConnectorCopyField(
+        id: "form-\(index)",
+        label: row.fill?.kind == .draft ? "\(row.label) (draft)" : row.label,
+        value: row.fill?.value ?? "",
+        hint: row.hint,
+        masksValue: false,
+        wraps: row.fill?.kind == .draft
+      )
+    }
   }
 
   /// The screenshot the model judges alongside the field labels. Best effort: a form is
@@ -407,7 +488,9 @@ actor FormAssistAssistant: ProactiveAssistant {
   private func resolveRows(
     snapshot: FormSnapshot,
     memories: [String],
-    image: Data?
+    image: Data?,
+    userContext: String = "",
+    onFacts: (@Sendable ([FormAssistFill]) async -> Void)? = nil
   ) async throws -> [FormAssistRow] {
     // The roster the card shows is every empty field, in the order the user tabs
     // through them. Only the answerable subset is worth a model call.
@@ -422,11 +505,20 @@ actor FormAssistAssistant: ProactiveAssistant {
     let prose = answerable.filter(\.wantsProse).map(\.label)
     let facts = answerable.filter { !$0.wantsProse }.map(\.label)
 
-    async let factFills = ask(.fact, labels: facts, snapshot: snapshot, memories: memories, image: image)
-    async let draftFills = ask(.draft, labels: prose, snapshot: snapshot, memories: memories, image: image)
+    async let factFills = ask(
+      .fact, labels: facts, snapshot: snapshot, memories: memories, image: image,
+      userContext: userContext)
+    async let draftFills = ask(
+      .draft, labels: prose, snapshot: snapshot, memories: memories, image: image,
+      userContext: userContext)
+
+    // Facts come back first and prose is the slow half. Reporting them as they land is
+    // what lets the card fill in row by row instead of sitting blank until both finish.
+    let resolvedFacts = try await factFills
+    await onFacts?(resolvedFacts)
 
     return FormAssistFillPolicy.rows(
-      try await factFills + draftFills,
+      resolvedFacts + (try await draftFills),
       forFields: roster.map(\.label),
       minConfidence: minConfidence,
       minDraftConfidence: minDraftConfidence)
@@ -440,7 +532,8 @@ actor FormAssistAssistant: ProactiveAssistant {
     labels: [String],
     snapshot: FormSnapshot,
     memories: [String],
-    image: Data?
+    image: Data?,
+    userContext: String = ""
   ) async throws -> [FormAssistFill] {
     guard !labels.isEmpty else { return [] }
     log(
@@ -460,6 +553,15 @@ actor FormAssistAssistant: ProactiveAssistant {
 
       == WHAT OMI KNOWS ABOUT THIS USER ==
       \(memories.map { "- \($0)" }.joined(separator: "\n"))
+      \(userContext.isEmpty
+        ? ""
+        : """
+
+          == WHAT THE USER JUST ASKED FOR ==
+          \(userContext)
+          This is the user's own instruction about this form, said out loud just now. It
+          outranks anything above it, including a value you would otherwise have chosen.
+          """)
       """
 
     let systemPrompt = kind == .draft ? Self.draftPrompt : Self.factPrompt
@@ -596,11 +698,7 @@ actor FormAssistAssistant: ProactiveAssistant {
     await deliver(result, fingerprint: result.appName)
   }
 
-  private func deliver(
-    _ result: FormAssistResult,
-    fingerprint: String,
-    windowKey: FormWindowKey? = nil
-  ) async {
+  private func deliver(_ result: FormAssistResult, fingerprint: String) async {
     guard !result.fills.isEmpty else { return }
     // An account switch between the model call and the card must not put one user's
     // details on another user's screen.
@@ -608,28 +706,30 @@ actor FormAssistAssistant: ProactiveAssistant {
       log("FormAssist: no signed-in owner, card withheld")
       return
     }
-
-    let fields = result.rows.map { row in
-      CloudConnectorCopyField(
-        id: row.label,
-        label: row.fill?.kind == .draft ? "\(row.label) (draft)" : row.label,
-        value: row.fill?.value ?? "",
-        hint: row.hint,
-        masksValue: false
-      )
+    // The model call outlives the eligibility check that started it, and a panel the
+    // user asked for out loud can go up while it runs. Ownership is decided here, at the
+    // last moment before the card would replace it.
+    guard await MainActor.run(body: { PanelSession.canPresentAmbient }) else {
+      log("FormAssist: card withheld, a requested panel is on screen")
+      return
     }
+
+    let fields = Self.finalFields(rows: result.rows)
     let filled = result.fills.count
     log("FormAssist: offering \(filled) of \(fields.count) fields in \(result.appName)")
-    cardWindowKey = windowKey
+    lastOfferedFingerprint = fingerprint
 
     await MainActor.run {
-      FormAssistCard.present(
-        fingerprint: fingerprint,
+      PanelSession.present(
         title: "Omi can fill this",
         subtitle: "\(filled) of \(fields.count) fields from your memories. "
           + "Copy each into \(result.appName).",
         fields: fields,
-        near: result.windowFrame
+        grain: .context,
+        origin: .ambient,
+        formFingerprint: fingerprint,
+        // An offer the user never asked for should not sit there all day.
+        autoDismissAfter: CloudConnectorGuidanceOverlay.fieldCopyCardLifetime
       )
     }
   }
@@ -639,10 +739,13 @@ actor FormAssistAssistant: ProactiveAssistant {
   }
 
   func stop() async {
-    cardWindowKey = nil
+    let offered = lastOfferedFingerprint
+    lastOfferedFingerprint = nil
     await MainActor.run {
       FormWatcher.shared.unsubscribe(identifier)
-      FormAssistCard.dismissIfMine()
+      // Only this surface's own offer goes; a panel the user asked for is not ours to
+      // close because monitoring stopped.
+      if let offered { PanelSession.dismissForm(offered) }
     }
   }
 }

@@ -354,10 +354,41 @@ final class FormAssistCredentialRatioTests: XCTestCase {
   }
 }
 
-/// The card is about the fields underneath it, so it goes where no form puts them.
+/// The card is about the fields underneath it, so it goes where no form puts them —
+/// the top-right corner of the window it answers, and of the display when there is no
+/// window to anchor to.
 final class FormAssistCardPlacementTests: XCTestCase {
   private let screen = CGRect(x: 0, y: 0, width: 1512, height: 950)
   private let card = CGSize(width: 460, height: 216)
+
+  /// The remembered position is the user's, so it is honoured; anything that no longer
+  /// lands on the display is not a position and the default corner takes over.
+  func testARememberedOffsetMovesTheCard() {
+    let frame = FormAssistCardPlacement.frame(
+      cardSize: card, visibleFrame: screen, offset: CGSize(width: -300, height: -200))
+    let corner = FormAssistCardPlacement.frame(cardSize: card, visibleFrame: screen)
+    XCTAssertEqual(frame.maxX, corner.maxX - 300)
+    XCTAssertEqual(frame.maxY, corner.maxY - 200)
+    XCTAssertTrue(screen.contains(frame))
+  }
+
+  func testASmallOffsetIsClampedInsteadOfLeavingTheScreen() {
+    let frame = FormAssistCardPlacement.frame(
+      cardSize: card, visibleFrame: screen, offset: CGSize(width: 60, height: 60))
+    XCTAssertTrue(screen.contains(frame))
+  }
+
+  func testAnOffsetForABiggerDisplayFallsBackToTheCorner() {
+    let frame = FormAssistCardPlacement.frame(
+      cardSize: card, visibleFrame: screen, offset: CGSize(width: -2_400, height: -1_400))
+    XCTAssertEqual(frame, FormAssistCardPlacement.frame(cardSize: card, visibleFrame: screen))
+  }
+
+  func testNoOffsetIsTheTopRightCorner() {
+    XCTAssertEqual(
+      FormAssistCardPlacement.frame(cardSize: card, visibleFrame: screen, offset: nil),
+      FormAssistCardPlacement.frame(cardSize: card, visibleFrame: screen))
+  }
 
   func testSitsInTheTopRightCorner() {
     let frame = FormAssistCardPlacement.frame(cardSize: card, visibleFrame: screen)

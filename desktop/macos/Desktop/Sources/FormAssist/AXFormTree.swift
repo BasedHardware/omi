@@ -105,6 +105,34 @@ enum AXFormTree {
 
   /// The URL of the web page an element lives in, from its nearest AXWebArea ancestor.
   /// Bounded parent walk; empty when the element is not web content or AX withholds it.
+  /// The URL of the web area inside a window, found by walking down from the window
+  /// itself. `pageURL(of:)` walks up from whatever has focus, which answers nothing after
+  /// a tab click: switching tabs leaves no focused element to start from. Bounded on both
+  /// depth and breadth — a web area sits a few containers below the window, and this runs
+  /// on every sweep while a panel is up.
+  static func pageURL(inWindow window: AXUIElement) -> String {
+    var frontier = [window]
+    for _ in 0..<maxWebAreaDepth {
+      var next: [AXUIElement] = []
+      for element in frontier {
+        if stringAttribute(element, "AXRole") == "AXWebArea" {
+          guard let raw = rawAttribute(element, "AXURL") else { continue }
+          if let url = (raw as? URL)?.absoluteString, !url.isEmpty { return url }
+          continue
+        }
+        next += elementArrayAttribute(element, "AXChildren").prefix(maxWebAreaBreadth)
+        if next.count >= maxWebAreaNodes { break }
+      }
+      guard !next.isEmpty else { return "" }
+      frontier = Array(next.prefix(maxWebAreaNodes))
+    }
+    return ""
+  }
+
+  private static let maxWebAreaDepth = 8
+  private static let maxWebAreaBreadth = 24
+  private static let maxWebAreaNodes = 96
+
   static func pageURL(of element: AXUIElement) -> String {
     var current: AXUIElement? = element
     for _ in 0..<15 {

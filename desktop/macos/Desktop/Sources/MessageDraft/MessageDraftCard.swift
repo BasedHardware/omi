@@ -67,6 +67,7 @@ final class MessageDraftCardController: ObservableObject {
   @Published private(set) var state: MessageDraftCardState = .prompt
   private(set) var fingerprint: String?
   private var window: NSPanel?
+  private var moveObserver: (any NSObjectProtocol)?
   private var targetWindowFrame: CGRect?
   private var appDisplayName = ""
   private var onGenerate: ((String, MessageDraft?) async -> Result<MessageDraft, Error>)?
@@ -116,9 +117,19 @@ final class MessageDraftCardController: ObservableObject {
     panel.setFrame(placementFrame(size: currentSize()), display: false)
     panel.orderFrontRegardless()
     window = panel
+    moveObserver = NotificationCenter.default.addObserver(
+      forName: NSWindow.didMoveNotification, object: panel, queue: .main
+    ) { [weak panel] _ in
+      MainActor.assumeIsolated {
+        guard let panel, let visible = panel.screen?.visibleFrame else { return }
+        PanelPlacementStore.record(panelFrame: panel.frame, visibleFrame: visible)
+      }
+    }
   }
 
   func dismiss() {
+    if let moveObserver { NotificationCenter.default.removeObserver(moveObserver) }
+    moveObserver = nil
     window?.close()
     window = nil
     fingerprint = nil
@@ -202,7 +213,8 @@ final class MessageDraftCardController: ObservableObject {
 
   private func placementFrame(size: CGSize) -> CGRect {
     guard let visible = placementScreen?.visibleFrame else { return CGRect(origin: .zero, size: size) }
-    return FormAssistCardPlacement.frame(cardSize: size, visibleFrame: visible)
+    return FormAssistCardPlacement.frame(
+      cardSize: size, visibleFrame: visible, offset: PanelPlacementStore.offset)
   }
 }
 
