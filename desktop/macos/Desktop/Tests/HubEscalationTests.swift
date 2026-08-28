@@ -4,6 +4,26 @@ import XCTest
 @testable import Omi_Computer
 
 final class HubEscalationTests: XCTestCase {
+  func testSlowToolAcknowledgementsUseNaturalUserFacingLanguage() throws {
+    XCTAssertEqual(
+      RealtimeSlowToolAcknowledgementKind(toolName: HubTool.thinkDeeper.rawValue),
+      .deeperThinking)
+    XCTAssertEqual(
+      RealtimeSlowToolAcknowledgementKind(toolName: HubTool.webSearch.rawValue),
+      .publicWebSearch)
+    XCTAssertNil(RealtimeSlowToolAcknowledgementKind(toolName: HubTool.getTasks.rawValue))
+
+    let phrases = RealtimeSlowToolAcknowledgementKind.allCases.flatMap(\.phrases)
+    XCTAssertGreaterThanOrEqual(phrases.count, 8)
+    for phrase in phrases {
+      let normalized = phrase.lowercased()
+      XCTAssertFalse(normalized.contains("higher model"))
+      XCTAssertFalse(normalized.contains("another model"))
+      XCTAssertFalse(normalized.contains("send that over"))
+      XCTAssertFalse(normalized.contains("delegate"))
+    }
+  }
+
   func testPromptKeepsToolContextUserScoped() {
     let prompt = RealtimeHubTools.escalationUserPrompt(
       query: "What's the best plan?",

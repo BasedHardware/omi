@@ -192,7 +192,7 @@ final class HubSystemInstructionTests: XCTestCase {
       "If the user asks to use/ask OpenClaw",
       "Resolve relative dates",
       "list_agent_sessions first",
-      "Call ask_higher_model when",
+      "Call think_deeper when",
       "spawn_agent proposes background work",
     ] {
       XCTAssertFalse(instr.contains(forbidden), "surface prompt must not own rule: \(forbidden)")
@@ -231,9 +231,9 @@ final class HubSystemInstructionTests: XCTestCase {
     XCTAssertEqual(parameters?["required"] as? [String], ["query"])
   }
 
-  func testRealtimeHigherModelToolOwnsQualityBiasedSelectionPolicy() {
+  func testRealtimeDeeperThinkingToolOwnsQualityBiasedSelectionPolicy() {
     let tool = RealtimeHubTools.openAITools.first {
-      ($0["name"] as? String) == HubTool.askHigherModel.rawValue
+      ($0["name"] as? String) == HubTool.thinkDeeper.rawValue
     }
     let description = tool?["description"] as? String ?? ""
     let instruction = RealtimeHubTools.systemInstruction()
@@ -245,8 +245,14 @@ final class HubSystemInstructionTests: XCTestCase {
     XCTAssertTrue(description.contains("If unsure whether deeper thought would improve the answer, call it"))
     XCTAssertTrue(description.contains("Skip only chit-chat"))
     XCTAssertTrue(description.contains("call web_search first and pass its result as context"))
-    XCTAssertTrue(description.contains("request-specific wait-line"))
-    XCTAssertTrue(description.contains("without answering first"))
+    XCTAssertTrue(description.contains("without speaking a wait-line or answer first"))
+    XCTAssertTrue(description.contains("app acknowledges the delay as soon as the tool is accepted"))
+    XCTAssertTrue(description.contains("Never describe internal model, tool, delegation, or routing choices"))
+    XCTAssertFalse(description.lowercased().contains("higher model"))
+    XCTAssertTrue(description.contains("do not add a delayed status line"))
+    XCTAssertTrue(instruction.contains("think_deeper and web_search tool cards are exceptions"))
+    XCTAssertTrue(instruction.contains("call either one silently and immediately"))
+    XCTAssertTrue(instruction.contains("Do not repeat that acknowledgement"))
     XCTAssertTrue(instruction.contains("Keep latency low for simple requests"))
     XCTAssertTrue(instruction.contains("Never skip a tool call required by its declaration"))
     XCTAssertFalse(instruction.contains("prefer answering directly when you can"))

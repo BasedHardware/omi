@@ -22,7 +22,7 @@ enum HubTool: String {
   case requestPermission = "request_permission"
   case getTasks = "get_tasks"
   case createCalendarEvent = "create_calendar_event"
-  case askHigherModel = "ask_higher_model"
+  case thinkDeeper = "think_deeper"
   case webSearch = "web_search"
   case screenshot = "screenshot"
   case reportScreenObservation = "report_screen_observation"
@@ -612,8 +612,8 @@ enum GeneratedRealtimeTools {
   },
   {
     "type": "function",
-    "name": "ask_higher_model",
-    "description": "Use Omi's full Chat model and tools to think deeply before answering, then return a spoken answer. ALWAYS call this tool before answering when the user says 'think carefully', 'think about this', 'go deep', 'reason it out', 'take your time', 'don't just guess', or 'what should I do', or otherwise asks for advice, tradeoffs, a multi-step plan, or reconsideration of a weak answer. A short, vague, or first-turn request still counts: call the tool with the question as given instead of answering or asking a clarifying question first. Also call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. If unsure whether deeper thought would improve the answer, call it. Skip only chit-chat, short confirmations, obvious stable facts, or a single fast realtime tool that fully answers the request. When current public facts and judgment are both needed, call web_search first and pass its result as context here. Give a brief request-specific wait-line and call immediately without answering first. Speak the returned conclusion faithfully.",
+    "name": "think_deeper",
+    "description": "Take more time and use Omi's full answer capabilities before replying. ALWAYS call this tool before answering when the user says 'think carefully', 'think about this', 'go deep', 'reason it out', 'take your time', 'don't just guess', or 'what should I do', or otherwise asks for advice, tradeoffs, a multi-step plan, or reconsideration of a weak answer. A short, vague, or first-turn request still counts: call the tool with the question as given instead of answering or asking a clarifying question first. Also call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. If unsure whether deeper thought would improve the answer, call it. Skip only chit-chat, short confirmations, obvious stable facts, or a single fast realtime tool that fully answers the request. When current public facts and judgment are both needed, call web_search first and pass its result as context here. Call immediately without speaking a wait-line or answer first: the app acknowledges the delay as soon as the tool is accepted. Never describe internal model, tool, delegation, or routing choices, and never say the request is being sent elsewhere. When the result arrives, speak only its conclusion faithfully; do not add a delayed status line.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -634,7 +634,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "web_search",
-    "description": "Search Omi's live public-web retrieval lane and receive a grounded answer to speak. You MUST call this tool for current public information such as weather, news, prices, scores, schedules, releases, or officeholders, and whenever the user explicitly asks you to search, browse, look something up online, verify a public fact, or cite sources. Before calling it, say a short varied heads-up such as 'let me look that up'; do not answer before the tool returns. Never say that you lack web search, internet access, or real-time data. If the tool itself fails, say the lookup failed. Read the returned answer faithfully, with only light adjustments for natural speech.",
+    "description": "Search Omi's live public-web retrieval lane and receive a grounded answer to speak. You MUST call this tool for current public information such as weather, news, prices, scores, schedules, releases, or officeholders, and whenever the user explicitly asks you to search, browse, look something up online, verify a public fact, or cite sources. Call immediately without speaking a heads-up or answer first: the app acknowledges the lookup as soon as the tool is accepted. Never say that you lack web search, internet access, or real-time data. If the tool itself fails, say the lookup failed. When the result arrives, read only the returned answer faithfully, with light adjustments for natural speech; do not add a delayed status line.",
     "parameters": {
       "type": "object",
       "properties": {

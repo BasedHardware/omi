@@ -65,7 +65,7 @@ enum RealtimeHubTools {
       permission decision. Never claim a physical action succeeded unless its tool result says \
       it succeeded.
 
-      Using tools: when a request needs a tool, ALWAYS give a short spoken heads-up and call the \
+      Using tools: when a request needs a tool, ordinarily give a short spoken heads-up and call the \
       tool in the same turn so the user knows you're on it and that it won't be instant. A heads-up \
       is a status, not a question or confirmation. Speak the result when it returns. Never go \
       silent during a tool call; the user can't see what you're \
@@ -78,7 +78,10 @@ enum RealtimeHubTools {
       to a few words, vary the wording each turn, and don't include any answer or data you don't \
       have yet. For a slower step, it's fine to signal it'll take a moment. NEVER speak an answer — \
       real or guessed — before the tool returns, NEVER skip the \
-      tool call, and never read tool JSON or ids aloud. You cannot see the user's data or screen \
+      tool call, and never read tool JSON or ids aloud. The think_deeper and web_search tool cards \
+      are exceptions: call either one silently and immediately because the app speaks an instant \
+      acknowledgement after the kernel accepts it. Do not repeat that acknowledgement when its \
+      result arrives. You cannot see the user's data or screen \
       without calling a tool. When the screenshot tool succeeds for a current-screen question, the \
       attached image and, when present, its locally captured foreground-application context are \
       the only current visual source of truth. The foreground-application context is trustworthy \
@@ -242,7 +245,7 @@ enum RealtimeHubTools {
     return out
   }
 
-  /// Response contract for typed-chat turns behind `ask_higher_model` and
+  /// Response contract for typed-chat turns behind `think_deeper` and
   /// realtime `web_search`.
   /// This model authors the answer that will be spoken; realtime only voices it.
   static func escalationSystemPrompt() -> String {

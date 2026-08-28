@@ -7,7 +7,7 @@ import VoiceTurnDomain
 extension RealtimeHubController {
   // MARK: - Tools
 
-  /// ask_higher_model — run the question through the same kernel session,
+  /// think_deeper — run the question through the same kernel session,
   /// model selection, and tool surface as typed Chat. Returns its final text
   /// for the realtime provider to speak faithfully.
   func escalateToHigherModel(
@@ -20,7 +20,7 @@ extension RealtimeHubController {
       prompt: RealtimeHubTools.escalationUserPrompt(query: query, toolContext: toolContext),
       invocationID: invocationID,
       ownerID: ownerID,
-      toolName: HubTool.askHigherModel.rawValue,
+      toolName: HubTool.thinkDeeper.rawValue,
       failureMessage: "I ran into an error reaching the model.")
   }
 

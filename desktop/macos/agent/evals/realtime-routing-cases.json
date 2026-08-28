@@ -2,49 +2,49 @@
   {
     "id": "explicit-think-minimal",
     "prompt": "Think carefully: should I take a new job?",
-    "expected": ["ask_higher_model"],
+    "expected": ["think_deeper"],
     "kind": "hard"
   },
   {
     "id": "explicit-think-hard",
     "prompt": "Think carefully and really reason this out: should I take a new job? Don't just guess.",
-    "expected": ["ask_higher_model"],
+    "expected": ["think_deeper"],
     "kind": "hard"
   },
   {
     "id": "first-turn-advice",
     "prompt": "What should I do about a manager who keeps taking credit for my work without damaging my career?",
-    "expected": ["ask_higher_model"],
+    "expected": ["think_deeper"],
     "kind": "hard"
   },
   {
     "id": "brief-what-should-i-do",
     "prompt": "What should I do about my career?",
-    "expected": ["ask_higher_model"],
+    "expected": ["think_deeper"],
     "kind": "hard"
   },
   {
     "id": "consequential-tradeoff",
     "prompt": "Help me weigh quitting now to start a company versus staying six months to vest. Consider money, risk, timing, and relationships.",
-    "expected": ["ask_higher_model"],
+    "expected": ["think_deeper"],
     "kind": "hard"
   },
   {
     "id": "personal-synthesis",
     "prompt": "Use what you know about my work, goals, and recent conversations to tell me which project I should prioritize this quarter.",
-    "expected": ["ask_higher_model"],
+    "expected": ["think_deeper"],
     "kind": "hard"
   },
   {
     "id": "weak-answer-pushback",
     "prompt": "That answer was shallow. Reconsider it, go deep, and give me a genuinely thoughtful recommendation.",
-    "expected": ["ask_higher_model"],
+    "expected": ["think_deeper"],
     "kind": "hard"
   },
   {
     "id": "multi-step-plan",
     "prompt": "Build me a multi-step plan to negotiate an offer, choose a start date, and leave my current team well.",
-    "expected": ["ask_higher_model"],
+    "expected": ["think_deeper"],
     "kind": "hard"
   },
   {
@@ -86,7 +86,7 @@
   {
     "id": "complex-creative",
     "prompt": "Develop a launch narrative for a privacy-first wearable, including positioning tradeoffs, audience objections, and a three-phase campaign.",
-    "expected": ["ask_higher_model"],
+    "expected": ["think_deeper"],
     "kind": "hard"
   }
 ]

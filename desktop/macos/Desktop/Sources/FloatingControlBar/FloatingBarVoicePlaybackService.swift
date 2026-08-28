@@ -11,6 +11,41 @@ private final class UtteranceBox: @unchecked Sendable {
   init(_ value: AVSpeechUtterance) { self.value = value }
 }
 
+/// User-facing acknowledgement is selected from the admitted slow tool, never
+/// from transcript text. This keeps the kernel as the only routing authority
+/// while ensuring the user hears something immediately after admission.
+enum RealtimeSlowToolAcknowledgementKind: String, CaseIterable, Sendable {
+  case deeperThinking = "deeper-thinking"
+  case publicWebSearch = "public-web-search"
+
+  init?(toolName: String) {
+    switch HubTool(rawValue: toolName) {
+    case .thinkDeeper: self = .deeperThinking
+    case .webSearch: self = .publicWebSearch
+    default: return nil
+    }
+  }
+
+  var phrases: [String] {
+    switch self {
+    case .deeperThinking:
+      return [
+        "Let me think that through.",
+        "Give me a moment to think that through.",
+        "Let me dig into that.",
+        "I'll take a closer look.",
+      ]
+    case .publicWebSearch:
+      return [
+        "Let me look that up.",
+        "I'll check the latest on that.",
+        "Let me verify that.",
+        "Checking the latest now.",
+      ]
+    }
+  }
+}
+
 @MainActor
 final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
   static let shared = FloatingBarVoicePlaybackService()
@@ -483,6 +518,45 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
   }
 
+  /// Speak the accepted slow-tool acknowledgement without waiting on realtime
+  /// provider audio. A prewarmed selected-voice clip is preferred; on a cold
+  /// cache the system voice starts immediately while the selected-voice cache
+  /// is populated for the next turn.
+  func speakRealtimeSlowToolAcknowledgement(_ kind: RealtimeSlowToolAcknowledgementKind) {
+    if VoiceTurnCoordinator.shared.activeTurnID != nil,
+      acquirePTTLeaseIfNeeded(.deterministicAgentAck) == nil
+    {
+      return
+    }
+    guard let phrase = kind.phrases.randomElement() else { return }
+    setFloatingPillResponseGlow(true)
+    let mode = currentMode ?? resolvePlaybackMode()
+    currentMode = mode
+
+    switch mode {
+    case .openAI(let voiceID, let instructions):
+      if let cached = Self.cachedRealtimeSlowToolAcknowledgementAudio(
+        kind: kind,
+        text: phrase,
+        voiceID: voiceID,
+        instructions: instructions)
+      {
+        startPlayback(cached, fallbackText: phrase)
+      } else {
+        enqueueSystemSpeech(phrase)
+        Task {
+          _ = try? await Self.cachedOrSynthesizedRealtimeSlowToolAcknowledgementAudio(
+            kind: kind,
+            text: phrase,
+            voiceID: voiceID,
+            instructions: instructions)
+        }
+      }
+    case .systemVoice:
+      enqueueSystemSpeech(phrase)
+    }
+  }
+
   func prewarmBackgroundAgentKickoffPhrases() {
     // Synthesis needs an authenticated backend call; signed out it can only fail — and at launch
     // it walked the main thread into the auth fence while a restore held it (#11374).
@@ -501,6 +575,32 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
             "FloatingBarVoicePlaybackService: background agent kickoff cache prewarm failed: \(error.localizedDescription)"
           )
           return
+        }
+      }
+    }
+  }
+
+  func prewarmRealtimeSlowToolAcknowledgementPhrases() {
+    guard AuthService.shared.isSignedIn else { return }
+    let mode = currentMode ?? resolvePlaybackMode()
+    currentMode = mode
+    guard case .openAI(let voiceID, let instructions) = mode else { return }
+
+    Task {
+      for kind in RealtimeSlowToolAcknowledgementKind.allCases {
+        for phrase in kind.phrases {
+          do {
+            _ = try await Self.cachedOrSynthesizedRealtimeSlowToolAcknowledgementAudio(
+              kind: kind,
+              text: phrase,
+              voiceID: voiceID,
+              instructions: instructions)
+          } catch {
+            log(
+              "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement cache prewarm failed: \(error.localizedDescription)"
+            )
+            return
+          }
         }
       }
     }
@@ -998,6 +1098,64 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     return DesktopLocalProfile.applicationSupportURL()
       .appendingPathComponent("VoicePhraseCache", isDirectory: true)
       .appendingPathComponent("background-agent-kickoff-v1", isDirectory: true)
+      .appendingPathComponent("\(fingerprint).mp3")
+  }
+
+  private nonisolated static func cachedOrSynthesizedRealtimeSlowToolAcknowledgementAudio(
+    kind: RealtimeSlowToolAcknowledgementKind,
+    text: String,
+    voiceID: String,
+    instructions: String
+  ) async throws -> Data {
+    let cacheURL = realtimeSlowToolAcknowledgementCacheURL(
+      kind: kind,
+      text: text,
+      voiceID: voiceID,
+      instructions: instructions)
+    if let cached = try? Data(contentsOf: cacheURL), !cached.isEmpty {
+      return cached
+    }
+
+    let audio = try await synthesizeOpenAISpeech(
+      text: text,
+      voiceID: voiceID,
+      instructions: instructions)
+    try FileManager.default.createDirectory(
+      at: cacheURL.deletingLastPathComponent(),
+      withIntermediateDirectories: true)
+    try audio.write(to: cacheURL, options: [.atomic])
+    return audio
+  }
+
+  private nonisolated static func cachedRealtimeSlowToolAcknowledgementAudio(
+    kind: RealtimeSlowToolAcknowledgementKind,
+    text: String,
+    voiceID: String,
+    instructions: String
+  ) -> Data? {
+    let url = realtimeSlowToolAcknowledgementCacheURL(
+      kind: kind,
+      text: text,
+      voiceID: voiceID,
+      instructions: instructions)
+    guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
+    return data
+  }
+
+  private nonisolated static func realtimeSlowToolAcknowledgementCacheURL(
+    kind: RealtimeSlowToolAcknowledgementKind,
+    text: String,
+    voiceID: String,
+    instructions: String
+  ) -> URL {
+    let fingerprint = SHA256.hash(
+      data: Data("\(kind.rawValue)\n\(voiceID)\n\(instructions)\n\(text)".utf8)
+    )
+    .map { String(format: "%02x", $0) }
+    .joined()
+    return DesktopLocalProfile.applicationSupportURL()
+      .appendingPathComponent("VoicePhraseCache", isDirectory: true)
+      .appendingPathComponent("realtime-slow-tool-v1", isDirectory: true)
       .appendingPathComponent("\(fingerprint).mp3")
   }
 

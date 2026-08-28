@@ -1728,6 +1728,10 @@ struct VoiceTurnReducer {
         stale(&model, event: event, effects: &effects)
         return VoiceTurnReduction(model: model, effects: effects)
       }
+      // The result is about to be delivered back to the provider, so the
+      // deterministic slow-tool acknowledgement has completed its job. Allow
+      // the post-tool continuation to speak the actual answer.
+      model.turn?.providerOutputSuppressed = false
       model.turn?.pendingToolCallIDs.remove(callID)
       model.turn?.toolEffectIdentities.removeValue(forKey: callID)
       model.turn?.toolDeadlineClasses.removeValue(forKey: callID)
@@ -1808,8 +1812,10 @@ struct VoiceTurnReducer {
         return VoiceTurnReduction(model: model, effects: effects)
       }
       cancel(.playbackDrain, in: &model, effects: &effects)
+      let drainedLane = turn.activeLease?.lane
       model.turn?.activeLease = nil
-      model.turn?.providerOutputSuppressed = false
+      model.turn?.providerOutputSuppressed =
+        drainedLane == .deterministicAgentAck && !turn.pendingToolCallIDs.isEmpty
       if completionFencesSatisfied(model.turn) {
         terminate(&model, reason: .success, effects: &effects)
       } else if !turn.pendingToolCallIDs.isEmpty {

@@ -44,6 +44,25 @@ extension RealtimeHubController {
     responseGlowGate.clearImmediately()
   }
 
+  /// Slow-tool acknowledgements replace any speculative provider wait-line.
+  /// The admitted tool identity selects the canned phrase; transcript text is
+  /// never inspected here. Filler already has a dedicated yielding policy.
+  func prepareVoiceOutputForDeterministicSlowToolAcknowledgement() {
+    guard let activeLease = VoiceTurnCoordinator.shared.outputSnapshot.activeLease else {
+      assistantText = ""
+      return
+    }
+    switch activeLease.lane {
+    case .nativeRealtime, .selectedVoiceFallback, .systemVoiceFallback:
+      takeOverVoiceOutputForAuthoritativeLocalResult()
+    case .filler, .deterministicAgentAck, .deterministicScreenEvidence:
+      break
+    }
+    // A provider-authored pre-tool status must not be journaled beside the
+    // final answer even when it raced ahead of the function call.
+    assistantText = ""
+  }
+
   func acquireVoiceOutput(_ lane: VoiceOutputLane, reason: String) -> VoiceOutputLease? {
     guard let turnID = VoiceTurnCoordinator.shared.activeTurnID else {
       log(

@@ -972,6 +972,44 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertTrue(drained.model.turn?.pendingToolCallIDs.contains(callID) == true)
   }
 
+  func testDeterministicSlowToolAckSuppressesLateProviderStatusUntilToolFinishes() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    var model = reduce(
+      startingModel,
+      .providerResponseStarted(turnID: turnID, sessionID: sessionID, responseID: responseID)
+    ).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    let callID = VoiceToolCallID("think-deeper")
+    model =
+      reducer.reduce(
+        reservation.model,
+        .toolStartedScoped(
+          turnID: turnID,
+          identity: reservation.identity,
+          callID: callID)
+      ).model
+
+    let lease = VoiceOutputLease(
+      id: VoiceLeaseID(),
+      turnID: turnID,
+      lane: .deterministicAgentAck)
+    model = reduce(model, .playbackStarted(turnID: turnID, lease: lease)).model
+    XCTAssertTrue(model.turn?.providerOutputSuppressed == true)
+
+    model = reduce(model, .playbackDrained(turnID: turnID, leaseID: lease.id)).model
+    XCTAssertEqual(model.turn?.phase, .awaitingTools)
+    XCTAssertTrue(model.turn?.providerOutputSuppressed == true)
+
+    let finished = reducer.reduce(
+      model,
+      .toolFinishedScoped(
+        turnID: turnID,
+        identity: reservation.identity,
+        callID: callID))
+    XCTAssertFalse(finished.model.turn?.providerOutputSuppressed == true)
+    XCTAssertEqual(finished.model.turn?.phase, .awaitingResponse)
+  }
+
   func testChatLaneThenStandardToolKeepsLongestPendingToolsDeadline() throws {
     let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
     var model = reduce(

@@ -510,6 +510,15 @@ extension RealtimeHubController {
     guard let tool = HubTool(rawValue: command.canonicalToolName) else {
       return .failed(Self.authorizedRealtimeToolError(code: "unsupported_realtime_tool"))
     }
+    // The runtime has now authorized this exact invocation. Acknowledge only
+    // here—not when the provider merely proposes the function call—so rejected
+    // tools never claim that work has started.
+    if let acknowledgement = RealtimeSlowToolAcknowledgementKind(
+      toolName: command.canonicalToolName)
+    {
+      prepareVoiceOutputForDeterministicSlowToolAcknowledgement()
+      FloatingBarVoicePlaybackService.shared.speakRealtimeSlowToolAcknowledgement(acknowledgement)
+    }
     switch tool {
     case .getTasks:
       await TasksStore.shared.loadDashboardTasks(expectedOwnerID: command.ownerID)
@@ -526,7 +535,7 @@ extension RealtimeHubController {
       if !today.isEmpty { output += "Due today (\(today.count)):\n\(list(today))\n" }
       return .succeeded(output.isEmpty ? "No tasks overdue or due today." : output)
 
-    case .askHigherModel:
+    case .thinkDeeper:
       let query = (command.input["query"] as? String) ?? turnTranscript
       let toolContext = (command.input["context"] as? String) ?? ""
       return await escalateToHigherModel(
@@ -849,7 +858,7 @@ extension RealtimeHubController {
         turnID: turnID,
         identity: toolIdentity,
         callID: VoiceToolCallID(callId)))
-    if name == HubTool.askHigherModel.rawValue || name == HubTool.webSearch.rawValue {
+    if name == HubTool.thinkDeeper.rawValue || name == HubTool.webSearch.rawValue {
       VoiceTurnCoordinator.shared.publish(
         .toolDeadlineClassSelectedScoped(
           turnID: turnID,

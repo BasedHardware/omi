@@ -169,7 +169,7 @@ function declarationsFor(variant) {
     const name = exposedName(tool);
     return {
       name,
-      description: name === "ask_higher_model" && variant.card
+      description: name === "think_deeper" && variant.card
         ? variant.card
         : (tool.voice?.realtimeDescription ?? tool.description),
       parameters: geminiSchema(parameters),
@@ -181,7 +181,7 @@ function systemInstruction(variant) {
   return [
     "You are Omi, a fast spoken-voice assistant on the user's Mac. Reply conversationally in one or two sentences by default.",
     "The declared tools describe the capabilities available on this surface. A tool call is only a proposal; the kernel makes the authoritative route and permission decision.",
-    "When a request needs a tool, give a brief request-specific spoken heads-up and call the tool in the same turn. Do not answer before a required tool returns.",
+    "When a request needs a tool, ordinarily give a brief request-specific spoken heads-up and call the tool in the same turn. The think_deeper and web_search cards are exceptions: call them silently and immediately because the app acknowledges the accepted tool. Do not answer before a required tool returns.",
     variant.latency,
   ].join("\n\n");
 }
