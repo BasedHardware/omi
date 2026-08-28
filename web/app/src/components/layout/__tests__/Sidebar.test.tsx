@@ -31,6 +31,14 @@ vi.mock('@/components/notifications/NotificationContext', () => ({
   useNotificationContext: () => ({
     toggleNotificationCenter: vi.fn(),
     unreadCount: notificationState.unreadCount,
+    // NotificationList (rendered by the mobile menu rail) reads these too.
+    notifications: [],
+    permission: 'granted',
+    isSupported: true,
+    navigateToNotification: vi.fn(),
+    markAsRead: vi.fn(),
+    clearNotification: vi.fn(),
+    getAppImage: vi.fn(),
   }),
 }));
 
