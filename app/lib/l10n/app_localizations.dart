@@ -5193,6 +5193,24 @@ abstract class AppLocalizations {
   /// **'Search results'**
   String get searchResults;
 
+  /// Button on a conversation's action item that adds it to the task list
+  ///
+  /// In en, this message translates to:
+  /// **'Add to Tasks'**
+  String get addToTasks;
+
+  /// Confirmation shown after an action item has been added to the task list
+  ///
+  /// In en, this message translates to:
+  /// **'Added'**
+  String get addedToTasks;
+
+  /// Error shown when adding an action item to the task list fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t add to tasks. Try again.'**
+  String get addToTasksFailed;
+
   /// Section header for action items
   ///
   /// In en, this message translates to:

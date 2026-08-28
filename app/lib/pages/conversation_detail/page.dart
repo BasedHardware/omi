@@ -23,6 +23,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/chat/page.dart';
+import 'package:omi/pages/conversation_detail/widgets/add_to_tasks_button.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -1946,6 +1947,14 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
                           ),
                         ),
                       ),
+                      // Capture is suggestion-only (INV-TASK-2): an extracted item reaches the
+                      // task list only through an explicit user gesture. macOS has that gesture;
+                      // mobile did not, so a phone suggestion could never become a task.
+                      if (!isCompleted)
+                        AddToTasksButton(
+                          description: actionItem.description,
+                          conversationId: widget.conversationId,
+                        ),
                     ],
                   ),
                 ),

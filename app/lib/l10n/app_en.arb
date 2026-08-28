@@ -3026,6 +3026,18 @@
     "@searchResults": {
         "description": "Badge label for search results section"
     },
+    "addToTasks": "Add to Tasks",
+    "@addToTasks": {
+        "description": "Button on a conversation's action item that adds it to the task list"
+    },
+    "addedToTasks": "Added",
+    "@addedToTasks": {
+        "description": "Confirmation shown after an action item has been added to the task list"
+    },
+    "addToTasksFailed": "Couldn't add to tasks. Try again.",
+    "@addToTasksFailed": {
+        "description": "Error shown when adding an action item to the task list fails"
+    },
     "actionItems": "Action Items",
     "@actionItems": {
         "description": "Section header for action items"

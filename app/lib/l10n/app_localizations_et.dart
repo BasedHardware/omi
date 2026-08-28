@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -2677,6 +2678,15 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get searchResults => 'Otsingutulemused';
+
+  @override
+  String get addToTasks => 'Add to Tasks';
+
+  @override
+  String get addedToTasks => 'Added';
+
+  @override
+  String get addToTasksFailed => 'Couldn\'t add to tasks. Try again.';
 
   @override
   String get actionItems => 'Tegevused';
