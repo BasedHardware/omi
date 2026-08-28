@@ -13,6 +13,47 @@ final class ChatPromptsTests: XCTestCase {
     )
   }
 
+  func testDesktopChatSQLGuidanceLocalizesTimestampResultsExactlyOnce() {
+    let prompt = ChatPrompts.desktopChat
+
+    XCTAssertTrue(prompt.contains("MIN(timestamp) AS firstSeenAt, MAX(timestamp) AS lastSeenAt"))
+    XCTAssertTrue(prompt.contains("Select raw timestamp and camelCase *At columns"))
+    XCTAssertTrue(prompt.contains("execute_sql converts those result cells once"))
+    XCTAssertFalse(prompt.contains("MIN(time(timestamp, 'localtime'))"))
+    XCTAssertFalse(prompt.contains("When displaying dates/times from query results to the user, convert them"))
+  }
+
+  func testDesktopChatSQLGuidanceComparesUTCColumnsToUTCBounds() {
+    let prompt = ChatPrompts.desktopChat
+
+    XCTAssertTrue(prompt.contains("datetime('now', 'localtime', 'start of day', '-1 day', 'utc')"))
+    XCTAssertTrue(prompt.contains("datetime('now', 'localtime', 'start of day', 'utc')"))
+    XCTAssertTrue(prompt.contains("timestamp >= datetime('now', '-1 day')"))
+    XCTAssertFalse(prompt.contains("datetime('now', 'start of day', '-1 day', 'localtime')"))
+    XCTAssertFalse(prompt.contains("datetime('now', 'start of day', 'localtime')"))
+    XCTAssertFalse(prompt.contains("timestamp >= datetime('now', '-1 day', 'localtime')"))
+  }
+
+  func testDesktopChatSQLDayBoundsKeepLocalCalendarWindowsInUTC() {
+    XCTAssertEqual(
+      DesktopChatSQLTime.localDayStartAsUTC(daysAgo: 1),
+      "datetime('now', 'localtime', 'start of day', '-1 day', 'utc')"
+    )
+    XCTAssertEqual(
+      DesktopChatSQLTime.exclusiveEndAsUTC(daysAgo: 1),
+      "datetime('now', 'localtime', 'start of day', 'utc')"
+    )
+    XCTAssertEqual(
+      DesktopChatSQLTime.localDayStartAsUTC(daysAgo: 0),
+      "datetime('now', 'localtime', 'start of day', 'utc')"
+    )
+    XCTAssertEqual(DesktopChatSQLTime.exclusiveEndAsUTC(daysAgo: 0), "datetime('now')")
+    XCTAssertEqual(
+      DesktopChatSQLTime.localDayStartAsUTC(daysAgo: -1),
+      DesktopChatSQLTime.localDayStartAsUTC(daysAgo: 0)
+    )
+  }
+
   func testExplicitScreenShareRequestUsesCanonicalScreenRecordingPermissionTool() {
     let desktopPrompt = ChatPromptBuilder.buildDesktopChat(userName: "Taylor")
 

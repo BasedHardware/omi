@@ -87,25 +87,25 @@ struct ChatPrompts {
     -- Daily totals only (for counts/time breakdowns; use get_work_context for "what was I doing" — use -1 day for yesterday, -7 day for past week):
     -- Q1: App usage
     SELECT appName, COUNT(*) as count, ROUND(COUNT(*) * 10.0 / 60, 1) as minutes,
-    MIN(time(timestamp, 'localtime')) as first_seen, MAX(time(timestamp, 'localtime')) as last_seen
-    FROM screenshots WHERE timestamp >= datetime('now', 'start of day', '-1 day', 'localtime')
-    AND timestamp < datetime('now', 'start of day', 'localtime')
+    MIN(timestamp) AS firstSeenAt, MAX(timestamp) AS lastSeenAt
+    FROM screenshots WHERE timestamp >= datetime('now', 'localtime', 'start of day', '-1 day', 'utc')
+    AND timestamp < datetime('now', 'localtime', 'start of day', 'utc')
     AND appName IS NOT NULL AND appName != '' GROUP BY appName ORDER BY count DESC
     -- Q2: Conversations
     SELECT title, overview, emoji, startedAt, finishedAt,
     ROUND((julianday(finishedAt) - julianday(startedAt)) * 1440, 1) as duration_min
-    FROM transcription_sessions WHERE startedAt >= datetime('now', 'start of day', '-1 day', 'localtime')
-    AND startedAt < datetime('now', 'start of day', 'localtime') AND deleted = 0 AND discarded = 0
+    FROM transcription_sessions WHERE startedAt >= datetime('now', 'localtime', 'start of day', '-1 day', 'utc')
+    AND startedAt < datetime('now', 'localtime', 'start of day', 'utc') AND deleted = 0 AND discarded = 0
     ORDER BY startedAt DESC
     -- Q3: Tasks
     SELECT description, completed, priority FROM action_items
-    WHERE createdAt >= datetime('now', 'start of day', '-1 day', 'localtime')
-    AND createdAt < datetime('now', 'start of day', 'localtime') AND deleted = 0
+    WHERE createdAt >= datetime('now', 'localtime', 'start of day', '-1 day', 'utc')
+    AND createdAt < datetime('now', 'localtime', 'start of day', 'utc') AND deleted = 0
     ORDER BY createdAt DESC
 
     -- Bounded OCR preview for explicit low-level inspection only; recent-work retrieval belongs to get_work_context:
     SELECT timestamp, appName, windowTitle, substr(ocrText, 1, 200) as preview
-    FROM screenshots WHERE timestamp >= datetime('now', '-1 day', 'localtime')
+    FROM screenshots WHERE timestamp >= datetime('now', '-1 day')
     ORDER BY timestamp DESC LIMIT 20
 
     -- Active tasks:
@@ -130,12 +130,14 @@ struct ChatPrompts {
     WHERE s.deleted = 0 AND seg.text LIKE '%keyword%'
     GROUP BY s.id ORDER BY s.startedAt DESC LIMIT 10
 
-    -- Time in user's timezone: use datetime('now', 'localtime') or datetime('now', '-N hours', 'localtime')
-    -- "yesterday": datetime('now', 'start of day', '-1 day', 'localtime') to datetime('now', 'start of day', 'localtime')
+    -- Local calendar bounds expressed as UTC instants (UTC column versus UTC bound):
+    -- "today" start: datetime('now', 'localtime', 'start of day', 'utc')
+    -- "yesterday": datetime('now', 'localtime', 'start of day', '-1 day', 'utc') to datetime('now', 'localtime', 'start of day', 'utc')
+    -- last N hours: datetime('now', '-N hours')
     -- FTS search: SELECT * FROM screenshots WHERE id IN (SELECT rowid FROM screenshots_fts WHERE screenshots_fts MATCH 'keyword')
 
     **Timezone handling:**
-    All timestamps in the database are stored in UTC. When displaying dates/times from query results to the user, convert them to {user_name}'s timezone ({tz}). When filtering by date/time in WHERE clauses, use datetime('now', 'localtime') which SQLite handles automatically.
+    All timestamps in the database are stored in UTC. Select raw timestamp and camelCase *At columns without wrapping them in time(..., 'localtime') or datetime(..., 'localtime'); execute_sql converts those result cells once to {user_name}'s timezone ({tz}) and includes an explicit zone. Quote the converted tool output as-is. When filtering a local calendar day, compute local midnight first and convert that boundary back to UTC with datetime('now', 'localtime', 'start of day', ..., 'utc').
     </tools>
 
     <initiative>
@@ -755,6 +757,22 @@ struct ChatPrompts {
     Full DDL for any table: SELECT sql FROM sqlite_master WHERE name='table_name'
     """
 
+}
+
+enum DesktopChatSQLTime {
+  /// SQLite stores chat-visible DATETIME columns as UTC-naive text. Build local
+  /// calendar boundaries, then convert them back to UTC before comparison.
+  static func localDayStartAsUTC(daysAgo: Int) -> String {
+    let clampedDaysAgo = max(0, daysAgo)
+    guard clampedDaysAgo > 0 else {
+      return "datetime('now', 'localtime', 'start of day', 'utc')"
+    }
+    return "datetime('now', 'localtime', 'start of day', '-\(clampedDaysAgo) day', 'utc')"
+  }
+
+  static func exclusiveEndAsUTC(daysAgo: Int) -> String {
+    max(0, daysAgo) == 0 ? "datetime('now')" : localDayStartAsUTC(daysAgo: 0)
+  }
 }
 
 // MARK: - Prompt Builder
