@@ -723,9 +723,9 @@ struct SettingsContentView: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
       selectedSection = .advanced
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-        highlightedSettingId = "advanced.taskassistant"
-      }
+      // The Task Assistant pane is hidden (HIDDEN DELIBERATELY, Nik 2026-08-25), so
+      // there is no advanced.taskassistant card to highlight — highlighting a missing
+      // target scrolled to nothing, which is how the pane got "fixed back" once before.
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
       selectedSection = .floatingBar

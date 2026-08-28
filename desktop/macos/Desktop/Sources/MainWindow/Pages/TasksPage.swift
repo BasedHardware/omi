@@ -3912,7 +3912,10 @@ struct TasksPage: View {
           chatToggleButton
         }
         addTaskButton
-        taskSettingsButton
+        // HIDDEN DELIBERATELY (Nik, 2026-08-25): the gear deep-linked to the Task
+        // Assistant pane, which is hidden from Settings — a visible control must not
+        // open Advanced and highlight a pane that no longer renders.
+        // taskSettingsButton
       }
     }
     .padding(.horizontal, OmiSpacing.lg)
