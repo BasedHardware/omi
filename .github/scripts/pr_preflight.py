@@ -74,6 +74,18 @@ def current_branch(root: Path) -> str:
     ).stdout.strip()
 
 
+def configure_output_streams() -> None:
+    """Keep direct Windows preflight output UTF-8 and non-fatal."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        options = {"errors": "backslashreplace"}
+        if os.name == "nt":
+            options["encoding"] = "utf-8"
+        reconfigure(**options)
+
+
 def changed_files(root: Path, base: str, head: str) -> list[str]:
     output = run_git(
         root,
@@ -213,6 +225,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    configure_output_streams()
     args = parse_args()
     if bool(args.repository) != bool(args.pr_number):
         print("FAIL: --repository and --pr-number must be supplied together", file=sys.stderr)

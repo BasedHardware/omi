@@ -527,12 +527,13 @@ class LaunchContractTests(unittest.TestCase):
         self.assertEqual(log, "路径🚀\n")
 
     @unittest.skipUnless(os.name == "nt", "native Windows Git encoding contract")
-    def test_pr_preflight_handles_utf8_git_worktree_path_without_utf8_mode(self) -> None:
+    def test_pr_preflight_emits_utf8_from_unicode_branch_without_utf8_mode(self) -> None:
         git = shutil.which("git")
         self.assertIsNotNone(git)
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "repo-\u96ea"
+            unicode_branch = "分支-🚀"
             root.mkdir()
             subprocess.run(
                 [git, "init", "--quiet"],
@@ -557,9 +558,10 @@ class LaunchContractTests(unittest.TestCase):
                 check=True,
                 capture_output=True,
             )
+            subprocess.run([git, "branch", unicode_branch], cwd=root, check=True, capture_output=True)
             env = os.environ.copy()
             env["PYTHONUTF8"] = "0"
-            env["PYTHONIOENCODING"] = "utf-8"
+            env.pop("PYTHONIOENCODING", None)
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -567,7 +569,7 @@ class LaunchContractTests(unittest.TestCase):
                     "--base",
                     "HEAD",
                     "--head",
-                    "HEAD",
+                    unicode_branch,
                     "--list",
                 ],
                 cwd=root,
@@ -580,6 +582,7 @@ class LaunchContractTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stdout)
         self.assertIn("PR preflight:", completed.stdout)
+        self.assertIn(f"head={unicode_branch}", completed.stdout)
 
 
 if __name__ == "__main__":
