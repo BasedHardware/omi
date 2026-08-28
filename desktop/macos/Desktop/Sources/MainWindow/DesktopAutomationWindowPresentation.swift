@@ -5,6 +5,11 @@ private struct AutomationWindowObjectBox: @unchecked Sendable {
   let value: Any?
 }
 
+/// Windows that are the product surface itself — proactive cards the user must see to
+/// use the feature — as opposed to app UI that automation hides out of the way.
+/// Conforming window classes are never parked, dimmed, or made click-through.
+protocol AutomationPresentationExemptWindow: AnyObject {}
+
 enum DesktopAutomationUIPresentationMode: String, CaseIterable, Sendable {
   case normal
   case quiet
@@ -260,6 +265,7 @@ enum DesktopAutomationWindowPresentation {
   }
 
   private static func isEligible(_ window: NSWindow) -> Bool {
+    guard !(window is AutomationPresentationExemptWindow) else { return false }
     guard !window.title.hasPrefix("Item-"), window.frame.width > 8, window.frame.height > 8 else {
       return false
     }

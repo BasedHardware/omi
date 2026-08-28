@@ -54,7 +54,7 @@ enum MessageDraftCardMetrics {
 
 /// A borderless panel that can take keystrokes without activating Omi, which is what
 /// lets the user type into "Add context" while their mail client stays the active app.
-private final class MessageDraftPanel: NSPanel {
+private final class MessageDraftPanel: NSPanel, AutomationPresentationExemptWindow {
   override var canBecomeKey: Bool { true }
 }
 
@@ -67,6 +67,7 @@ final class MessageDraftCardController: ObservableObject {
   @Published private(set) var state: MessageDraftCardState = .prompt
   private(set) var fingerprint: String?
   private var window: NSPanel?
+  private var targetWindowFrame: CGRect?
   private var appDisplayName = ""
   private var onGenerate: ((String, MessageDraft?) async -> Result<MessageDraft, Error>)?
   private var onDecline: (() -> Void)?
@@ -83,12 +84,14 @@ final class MessageDraftCardController: ObservableObject {
   func present(
     fingerprint: String,
     appDisplayName: String,
+    targetWindowFrame: CGRect? = nil,
     restore: MessageDraft? = nil,
     onGenerate: @escaping (String, MessageDraft?) async -> Result<MessageDraft, Error>,
     onDecline: @escaping () -> Void
   ) {
     dismiss()
     self.fingerprint = fingerprint
+    self.targetWindowFrame = targetWindowFrame
     self.appDisplayName = appDisplayName
     self.onGenerate = onGenerate
     self.onDecline = onDecline
@@ -160,18 +163,45 @@ final class MessageDraftCardController: ObservableObject {
     var frame = window.frame
     frame.origin.y = top - size.height
     frame.size = size
+    if let visible = placementScreen?.visibleFrame, !visible.contains(frame) {
+      frame = FormAssistCardPlacement.frame(cardSize: size, visibleFrame: visible)
+    }
     window.setFrame(frame, display: true)
   }
 
+  /// Whatever moved the card off the visible screen — a drag, a display change — the
+  /// next sweep puts it back where an offer belongs.
+  func ensureVisiblePlacement() {
+    guard let window else { return }
+    guard let visible = placementScreen?.visibleFrame else { return }
+    guard !visible.contains(window.frame) else { return }
+    log("MessageDraftCard: re-placing off-screen card from \(window.frame)")
+    window.setFrame(placementFrame(size: currentSize()), display: true)
+  }
+
+  /// The screen the conversation is on — the card must appear where the user is
+  /// looking, which is not always the screen holding the key window.
+  private var placementScreen: NSScreen? {
+    if let target = targetWindowFrame,
+      let best = NSScreen.screens.max(by: {
+        $0.frame.intersection(target).height * $0.frame.intersection(target).width
+          < $1.frame.intersection(target).height * $1.frame.intersection(target).width
+      }), best.frame.intersects(target)
+    {
+      return best
+    }
+    return NSScreen.main ?? NSScreen.screens.first
+  }
+
   private func currentSize() -> CGSize {
-    let screen = NSScreen.main ?? NSScreen.screens.first
-    let maxHeight = screen.map { FormAssistCardPlacement.maxCardHeight(visibleFrame: $0.visibleFrame) } ?? 400
+    let maxHeight =
+      placementScreen.map { FormAssistCardPlacement.maxCardHeight(visibleFrame: $0.visibleFrame) }
+      ?? 400
     return MessageDraftCardMetrics.size(state: state, maxHeight: maxHeight)
   }
 
   private func placementFrame(size: CGSize) -> CGRect {
-    let screen = NSScreen.main ?? NSScreen.screens.first
-    guard let visible = screen?.visibleFrame else { return CGRect(origin: .zero, size: size) }
+    guard let visible = placementScreen?.visibleFrame else { return CGRect(origin: .zero, size: size) }
     return FormAssistCardPlacement.frame(cardSize: size, visibleFrame: visible)
   }
 }

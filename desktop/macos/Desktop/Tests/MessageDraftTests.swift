@@ -11,11 +11,12 @@ final class MessageComposeGateTests: XCTestCase {
     role: String = "AXTextArea",
     label: String = "Message body",
     value: String = "",
-    secure: Bool = false
+    secure: Bool = false,
+    pageURL: String = ""
   ) -> MessageComposeContext {
     MessageComposeContext(
       appName: app, windowTitle: title, focusedRole: role,
-      focusedLabel: label, focusedValue: value, isSecure: secure)
+      focusedLabel: label, focusedValue: value, isSecure: secure, pageURL: pageURL)
   }
 
   // MARK: Surface
@@ -42,6 +43,33 @@ final class MessageComposeGateTests: XCTestCase {
     XCTAssertEqual(
       MessageComposeGate.surface(appName: "Arc", windowTitle: "Telegram Web"),
       .webApp("Telegram"))
+  }
+
+  func testWebSurfaceIsRecognizedByURLWhenTheTitleIsTheChatName() {
+    // Telegram Web renames the page to the open conversation; the URL still says
+    // where the user is. Measured live in Safari on 2026-08-28.
+    XCTAssertEqual(
+      MessageComposeGate.surface(
+        appName: "Safari", windowTitle: "David Zhang",
+        pageURL: "https://web.telegram.org/a/#693180290"),
+      .webApp("Telegram"))
+    XCTAssertEqual(
+      MessageComposeGate.surface(
+        appName: "Google Chrome", windowTitle: "Inbox",
+        pageURL: "https://mail.google.com/mail/u/0/#inbox"),
+      .webApp("Gmail"))
+  }
+
+  func testOrdinaryURLIsNotASurface() {
+    XCTAssertNil(
+      MessageComposeGate.surface(
+        appName: "Safari", windowTitle: "Front Page",
+        pageURL: "https://news.ycombinator.com/"))
+    // A messaging host must match the whole host, not a lookalike suffix.
+    XCTAssertNil(
+      MessageComposeGate.surface(
+        appName: "Safari", windowTitle: "Front Page",
+        pageURL: "https://evilweb.telegram.org/a/"))
   }
 
   func testBrowserOnAnOrdinarySiteIsNotASurface() {
@@ -156,7 +184,7 @@ final class MessageDraftPromptBuilderTests: XCTestCase {
     MessageComposeSnapshot(
       context: MessageComposeContext(
         appName: "Mail", windowTitle: "Re: Contract", focusedRole: "AXTextArea",
-        focusedLabel: "Message body", focusedValue: "", isSecure: false),
+        focusedLabel: "Message body", focusedValue: "", isSecure: false, pageURL: ""),
       surface: .nativeApp("Mail"), windowFrame: nil, windowID: nil)
   }
 
@@ -169,6 +197,21 @@ final class MessageDraftPromptBuilderTests: XCTestCase {
     XCTAssertTrue(prompt.contains("Re: Contract"))
     XCTAssertTrue(prompt.contains("Works at Datasaur"))
     XCTAssertTrue(prompt.contains("screenshot"))
+  }
+
+  func testUserIdentityReachesTheModel() {
+    let prompt = MessageDraftPromptBuilder.prompt(
+      snapshot: snapshot, userContext: "", refining: nil, memories: [], hasImage: false,
+      userName: "Yash Katipally", userEmail: "yash@example.com")
+    XCTAssertTrue(prompt.contains("WHO THE USER IS"))
+    XCTAssertTrue(prompt.contains("Yash Katipally"))
+    XCTAssertTrue(prompt.contains("yash@example.com"))
+  }
+
+  func testAnonymousUserGetsNoIdentitySection() {
+    let prompt = MessageDraftPromptBuilder.prompt(
+      snapshot: snapshot, userContext: "", refining: nil, memories: [], hasImage: false)
+    XCTAssertFalse(prompt.contains("WHO THE USER IS"))
   }
 
   func testNoInstructionAsksForTheWaitingReply() {

@@ -103,6 +103,21 @@ enum AXFormTree {
     return CGRect(origin: point, size: size)
   }
 
+  /// The URL of the web page an element lives in, from its nearest AXWebArea ancestor.
+  /// Bounded parent walk; empty when the element is not web content or AX withholds it.
+  static func pageURL(of element: AXUIElement) -> String {
+    var current: AXUIElement? = element
+    for _ in 0..<15 {
+      guard let el = current else { return "" }
+      if stringAttribute(el, "AXRole") == "AXWebArea" {
+        guard let raw = rawAttribute(el, "AXURL") else { return "" }
+        return (raw as? URL)?.absoluteString ?? ""
+      }
+      current = elementAttribute(el, "AXParent")
+    }
+    return ""
+  }
+
   static func rawAttribute(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var raw: CFTypeRef?
     guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success else {

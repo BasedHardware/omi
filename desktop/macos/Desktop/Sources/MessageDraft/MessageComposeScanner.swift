@@ -13,6 +13,9 @@ struct MessageComposeContext: Sendable, Equatable {
   let focusedLabel: String
   let focusedValue: String
   let isSecure: Bool
+  /// The frontmost page's URL when the surface is a browser, read from the focused
+  /// element's AXWebArea ancestor. Empty for native apps or when AX withholds it.
+  let pageURL: String
 }
 
 /// What the frontmost window looks like when the compose gate says yes.
@@ -74,9 +77,22 @@ enum MessageComposeGate {
     "safari", "chrome", "arc", "firefox", "brave", "edge", "opera", "vivaldi", "orion", "dia",
   ]
 
-  /// Messaging sites as their tab titles name them. A Gmail tab is "Inbox — Gmail", a
-  /// WhatsApp Web tab is "WhatsApp"; the browser puts the site's own name in the title,
-  /// which is the one signal available without reading the URL.
+  /// Messaging sites by URL host — the authoritative signal. Titles lie the moment a
+  /// chat opens: Telegram Web renames the page to the conversation ("David Zhang"),
+  /// which is why a title-only match never fires there.
+  private static let webHosts: [(host: String, name: String)] = [
+    ("mail.google.com", "Gmail"),
+    ("web.whatsapp.com", "WhatsApp"),
+    ("web.telegram.org", "Telegram"),
+    ("app.slack.com", "Slack"),
+    ("outlook.live.com", "Outlook"),
+    ("outlook.office.com", "Outlook"),
+    ("mail.proton.me", "Proton Mail"),
+    ("messages.google.com", "Google Messages"),
+  ]
+
+  /// Title fallback for when the URL is unreadable. A Gmail tab is "Inbox — Gmail"; the
+  /// site's name usually survives in the title even when the page renames itself.
   private static let webApps: [(term: String, name: String)] = [
     ("gmail", "Gmail"),
     ("whatsapp", "WhatsApp"),
@@ -91,23 +107,37 @@ enum MessageComposeGate {
     "search", "address", "url", "find", "filter", "location",
   ]
 
-  static func surface(appName: String, windowTitle: String) -> Surface? {
+  static func isBrowser(_ appName: String) -> Bool {
+    let app = appName.lowercased()
+    return browsers.contains(where: { app.contains($0) })
+  }
+
+  static func surface(appName: String, windowTitle: String, pageURL: String = "") -> Surface? {
     let app = appName.lowercased()
     if let match = messagingApps.first(where: { app.contains($0.term) }) {
       // "Mail" must not swallow "Mailplane"-style browser names; the app list matches
       // whole products, so a browser is checked first and wins.
-      if !browsers.contains(where: { app.contains($0) }) {
+      if !isBrowser(appName) {
         return .nativeApp(match.name)
       }
     }
-    guard browsers.contains(where: { app.contains($0) }) else { return nil }
+    guard isBrowser(appName) else { return nil }
+    if let host = URL(string: pageURL)?.host?.lowercased(),
+      let match = webHosts.first(where: { host == $0.host || host.hasSuffix("." + $0.host) })
+    {
+      return .webApp(match.name)
+    }
     let title = windowTitle.lowercased()
     guard let match = webApps.first(where: { title.contains($0.term) }) else { return nil }
     return .webApp(match.name)
   }
 
   static func decide(_ context: MessageComposeContext) -> Decision {
-    guard surface(appName: context.appName, windowTitle: context.windowTitle) != nil else {
+    guard
+      surface(
+        appName: context.appName, windowTitle: context.windowTitle, pageURL: context.pageURL
+      ) != nil
+    else {
       return .notMessaging
     }
     let role = context.focusedRole.lowercased()
@@ -158,11 +188,19 @@ enum MessageComposeScanner {
     let axTitle = window.map { AXFormTree.stringAttribute($0, "AXTitle") } ?? ""
     let windowTitle = axTitle.isEmpty ? (info.windowTitle ?? "") : axTitle
 
-    guard let surface = MessageComposeGate.surface(appName: appName, windowTitle: windowTitle)
+    // Browsers can't be judged by title alone — a messaging site may have renamed the
+    // page to the conversation — so their verdict waits for the focused element's URL.
+    let isBrowser = MessageComposeGate.isBrowser(appName)
+    guard isBrowser || MessageComposeGate.surface(appName: appName, windowTitle: windowTitle) != nil
     else { return .refused(MessageComposeGate.Decision.notMessaging.rawValue) }
 
     guard let focused = AXFormTree.elementAttribute(appElement, "AXFocusedUIElement")
     else { return .refused("no-focused-element") }
+    let pageURL = isBrowser ? AXFormTree.pageURL(of: focused) : ""
+    guard
+      let surface = MessageComposeGate.surface(
+        appName: appName, windowTitle: windowTitle, pageURL: pageURL)
+    else { return .refused(MessageComposeGate.Decision.notMessaging.rawValue) }
     let node = AXFormTree.node(from: focused)
     let label =
       [node.title, node.placeholder, node.description, node.help]
@@ -175,7 +213,8 @@ enum MessageComposeScanner {
       focusedRole: node.role,
       focusedLabel: label,
       focusedValue: node.value,
-      isSecure: node.role.lowercased().contains("secure")
+      isSecure: node.role.lowercased().contains("secure"),
+      pageURL: pageURL
     )
     let decision = MessageComposeGate.decide(context)
     guard decision == .eligible else { return .refused(decision.rawValue) }

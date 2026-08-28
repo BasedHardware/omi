@@ -123,6 +123,7 @@ actor MessageDraftAssistant: ProactiveAssistant {
     }
     guard !alreadyMine else {
       cardWindowKey = key
+      await MainActor.run { MessageDraftCardController.shared.ensureVisiblePlacement() }
       return
     }
 
@@ -151,6 +152,7 @@ actor MessageDraftAssistant: ProactiveAssistant {
       MessageDraftCardController.shared.present(
         fingerprint: snapshot.fingerprint,
         appDisplayName: snapshot.surface.displayName,
+        targetWindowFrame: snapshot.windowFrame,
         restore: restored,
         onGenerate: { [weak self] context, refining in
           guard let self else {
@@ -210,13 +212,18 @@ actor MessageDraftAssistant: ProactiveAssistant {
     // The screenshot is taken at ✓, not at offer time: the conversation the draft
     // answers is whatever is on screen the moment the user says yes.
     let image = await windowImage(windowID: snapshot.windowID)
+    let identity = await MainActor.run {
+      (name: AuthService.shared.displayName, email: AuthState.shared.userEmail ?? "")
+    }
     let memories = await recallMemories()
     let prompt = MessageDraftPromptBuilder.prompt(
       snapshot: snapshot,
       userContext: context,
       refining: refining,
       memories: memories,
-      hasImage: image != nil
+      hasImage: image != nil,
+      userName: identity.name,
+      userEmail: identity.email
     )
     log(
       "MessageDraft: drafting for \(snapshot.surface.displayName) "
@@ -309,6 +316,13 @@ actor MessageDraftAssistant: ProactiveAssistant {
       built, when they are free — comes from here or from the thread, never from
       imagination.
 
+    First work out which side of the conversation is the user. You are given their
+    name and email. In chat apps the user's own messages are the ones aligned right
+    (or highlighted); the other person's are on the left. In email threads, match
+    sender names and addresses against the user's. The draft is ALWAYS the user's
+    next message TO the other side — never the other person's voice, and never a
+    reply to something the user themself said last unless they are following up.
+
     Write in the user's voice, matched to the medium:
     - A chat message is short, plain, and unsigned. No "I hope this finds you well."
     - An email gets a subject, a greeting if the thread uses one, and a sign-off with
@@ -359,7 +373,9 @@ enum MessageDraftPromptBuilder {
     userContext: String,
     refining: MessageDraft?,
     memories: [String],
-    hasImage: Bool
+    hasImage: Bool,
+    userName: String = "",
+    userEmail: String = ""
   ) -> String {
     var sections: [String] = []
     sections.append(
@@ -372,6 +388,17 @@ enum MessageDraftPromptBuilder {
         : "No screenshot available; go by the window title and the instruction.")
       """
     )
+
+    if !userName.isEmpty || !userEmail.isEmpty {
+      sections.append(
+        """
+        == WHO THE USER IS ==
+        \(userName.isEmpty ? "" : "Name: \(userName)\n")\(userEmail.isEmpty ? "" : "Email: \(userEmail)\n")\
+        The draft is this person's next message. Messages from anyone else in the
+        thread are the other side, to be replied to.
+        """
+      )
+    }
 
     let instruction = userContext.trimmingCharacters(in: .whitespacesAndNewlines)
     sections.append(
