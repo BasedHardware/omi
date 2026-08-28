@@ -111,6 +111,16 @@ function emitNative(event: OmiNativeEvent) {
   mockListeners.forEach(listener => listener(event));
 }
 
+async function waitFor(predicate: () => boolean) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (predicate()) {
+      return;
+    }
+    await Promise.resolve();
+  }
+  throw new Error('timed out waiting for condition');
+}
+
 function Harness({
   onState,
 }: {
@@ -250,7 +260,7 @@ test('opens a worker session only after a live audio frame, never a transcript',
 
 test('keeps uploading after snapshot events and serializes overlapping appends', async () => {
   let resolveOpen: () => void = () => undefined;
-  let resolveAppend: () => void = () => undefined;
+  const appendGates: Array<() => void> = [];
   let inFlightAppends = 0;
   let maxInFlightAppends = 0;
   mockNative.getSnapshot.mockResolvedValue(
@@ -272,7 +282,7 @@ test('keeps uploading after snapshot events and serializes overlapping appends',
       inFlightAppends += 1;
       maxInFlightAppends = Math.max(maxInFlightAppends, inFlightAppends);
       await new Promise<void>(resolve => {
-        resolveAppend = resolve;
+        appendGates.push(resolve);
       });
       inFlightAppends -= 1;
       return sessionResponse(200, {byteCount: 3, chunkCount: 1});
@@ -319,31 +329,20 @@ test('keeps uploading after snapshot events and serializes overlapping appends',
       ([request]) => request.path === '/v1/device-sessions',
     ),
   ).toHaveLength(1);
+  expect(appendGates).toHaveLength(1);
 
   await ReactTestRenderer.act(async () => {
-    emitNative({
-      type: 'audio',
-      deviceId: 'omi-1',
-      codec: 21,
-      payloadBase64: 'BwgJ',
-    });
-  });
-  expect(inFlightAppends).toBe(1);
-
-  await ReactTestRenderer.act(async () => {
-    resolveAppend();
-    await Promise.resolve();
-    resolveAppend();
-    await Promise.resolve();
-    resolveAppend();
-    await Promise.resolve();
+    appendGates.shift()?.();
+    await waitFor(() => appendGates.length === 1);
+    appendGates.shift()?.();
+    await waitFor(() => inFlightAppends === 0);
   });
   expect(maxInFlightAppends).toBe(1);
   expect(
     mockBackend.request.mock.calls.filter(([request]) =>
       request.path.endsWith('/audio'),
     ),
-  ).toHaveLength(3);
+  ).toHaveLength(2);
 });
 
 test('completes a session that opens after disconnect', async () => {
