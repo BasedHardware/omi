@@ -619,7 +619,7 @@ final class NotchTopReanchorTests: XCTestCase {
     // the hosting view's min-size constraint — top edge 240pt offscreen.
     let grown = NSRect(x: 816, y: 1263, width: 430, height: 307)
     let anchored = FloatingControlBarGeometry.notchTopReanchoredFrame(
-      frame: grown, screenFrame: screen, isResizable: false, isUserDragging: false)
+      frame: grown, screenFrame: screen, isResizable: false, isUserDragging: false, isConversationOpen: false)
     XCTAssertEqual(anchored, NSRect(x: 809, y: 1023, width: 430, height: 307))
     XCTAssertEqual(anchored?.maxY, screen.maxY)
   }
@@ -628,18 +628,18 @@ final class NotchTopReanchorTests: XCTestCase {
     let idle = NSRect(x: 828, y: 1263, width: 392, height: 67)
     XCTAssertNil(
       FloatingControlBarGeometry.notchTopReanchoredFrame(
-        frame: idle, screenFrame: screen, isResizable: false, isUserDragging: false))
+        frame: idle, screenFrame: screen, isResizable: false, isUserDragging: false, isConversationOpen: false))
   }
 
   func testUserControlledWindowsAreNeverFought() {
     let grown = NSRect(x: 816, y: 900, width: 430, height: 307)
     XCTAssertNil(
       FloatingControlBarGeometry.notchTopReanchoredFrame(
-        frame: grown, screenFrame: screen, isResizable: true, isUserDragging: false),
+        frame: grown, screenFrame: screen, isResizable: true, isUserDragging: false, isConversationOpen: false),
       "a resizable conversation panel is the user's to size")
     XCTAssertNil(
       FloatingControlBarGeometry.notchTopReanchoredFrame(
-        frame: grown, screenFrame: screen, isResizable: false, isUserDragging: true),
+        frame: grown, screenFrame: screen, isResizable: false, isUserDragging: true, isConversationOpen: false),
       "a drag in progress must not be yanked back")
   }
 
@@ -647,14 +647,26 @@ final class NotchTopReanchorTests: XCTestCase {
     let grown = NSRect(x: 0, y: 0, width: 430, height: 307)
     XCTAssertNil(
       FloatingControlBarGeometry.notchTopReanchoredFrame(
-        frame: grown, screenFrame: .zero, isResizable: false, isUserDragging: false))
+        frame: grown, screenFrame: .zero, isResizable: false, isUserDragging: false, isConversationOpen: false))
   }
 
   func testSubPointDriftIsNotChurned() {
     let nearlyAnchored = NSRect(x: 828, y: 1262.7, width: 392, height: 67)
     XCTAssertNil(
       FloatingControlBarGeometry.notchTopReanchoredFrame(
-        frame: nearlyAnchored, screenFrame: screen, isResizable: false, isUserDragging: false),
+        frame: nearlyAnchored, screenFrame: screen, isResizable: false, isUserDragging: false, isConversationOpen: false
+      ),
       "epsilon keeps AppKit rounding from causing a setFrame loop")
+  }
+
+  func testOpenConversationSurfaceIsNeverFought() {
+    // The Spaces-transition regression: a user-resized chat frame is content,
+    // not chrome — re-anchoring it snaps the user's window to the screen top.
+    let userChatFrame = NSRect(x: 240, y: 420, width: 640, height: 520)
+    XCTAssertNil(
+      FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: userChatFrame, screenFrame: screen, isResizable: false, isUserDragging: false,
+        isConversationOpen: true),
+      "an open conversation surface owns its frame")
   }
 }

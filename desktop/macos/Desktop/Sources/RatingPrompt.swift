@@ -176,7 +176,7 @@ final class RatingPromptManager: ObservableObject {
   /// Injectable for tests; production asks the backend for the owner's own
   /// messages, owner-asserted end to end (expectedOwnerId). Assigned in init
   /// (APIClient is actor-isolated, so it cannot be a property default).
-  var historyFetch: ((String) async throws -> [ChatMessageDB])!
+  var historyFetch: (String) async throws -> [ChatMessageDB]
   /// Injectable for tests; production reads the real auth state.
   var isSignedInCheck: () -> Bool = { AuthState.shared.isSignedIn }
 
