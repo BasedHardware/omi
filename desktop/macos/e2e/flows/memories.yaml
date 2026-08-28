@@ -92,7 +92,7 @@ steps:
 
   - id: S4
     name: Verify conversation list features
-    do: "Check for Select and Quick Note buttons at the top. Verify conversation entries show title, date, duration, and star icon. Check for 'Load older conversations' at the bottom if scrolled down."
+    do: "Open the More menu and verify Select conversations is available. Verify conversation entries show title, date, duration, and star icon. Check for 'Load older conversations' at the bottom if scrolled down."
     expect:
       interactive_count: { min: 3 }
 

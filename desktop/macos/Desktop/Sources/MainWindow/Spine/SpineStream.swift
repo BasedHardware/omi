@@ -115,7 +115,8 @@ struct SpineStream: View {
     GeometryReader { proxy in
       HStack(spacing: 0) {
         if proxy.size.width >= SpineLayout.railBreakpoint {
-          SpineRailColumn(store: store, viewport: viewport, collapse: collapse)
+          SpineRailColumn(
+            store: store, viewport: viewport, collapse: collapse, request: request)
           Rectangle().fill(Ink.separator).frame(width: 1)
         }
         Group {
@@ -392,6 +393,7 @@ private struct SpineRailColumn: View {
   @ObservedObject var store: SpineStore
   @ObservedObject var viewport: SpineViewport
   let collapse: SpineDayCollapse
+  let request: QueryShellRequest
 
   /// The day the rail describes.
   ///
@@ -414,13 +416,26 @@ private struct SpineRailColumn: View {
     return viewport.hour
   }
 
+  /// The rail remains a timeline navigator while the list narrows. Its capture histogram and
+  /// screen-moment total therefore describe the complete day, not just the matching rows. Say so in
+  /// the scope line; otherwise a search for a memory can make "1,204 screen moments" look like a
+  /// result count for the memory search.
+  private var railDayTitle: String {
+    guard request.isFiltering, let title = day?.title, !title.isEmpty else {
+      return day?.title ?? ""
+    }
+    return "\(title) · full day"
+  }
+
   var body: some View {
     SpineHourRail(
       density: dayID.map(store.density(for:)) ?? Array(repeating: 0, count: 24),
       currentHour: currentHour,
       momentCount: dayID.flatMap(store.momentCount(for:)),
-      dayTitle: day?.title ?? "",
-      conversationCount: day?.conversationCount ?? 0
+      dayTitle: railDayTitle,
+      // Filtered results no longer carry the complete day's conversation count. The footer is
+      // supplementary context, so omit it rather than pairing a full-day rail with a filtered noun.
+      conversationCount: request.isFiltering ? 0 : (day?.conversationCount ?? 0)
     )
   }
 }

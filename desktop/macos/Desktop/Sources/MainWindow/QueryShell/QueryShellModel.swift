@@ -323,19 +323,17 @@ enum QueryShellRoute: Equatable, CaseIterable, Sendable {
   /// The established page that owns this destination. Never a shell-local surface (INV-NAV-1).
   var navItem: SidebarNavItem {
     switch self {
-    case .conversation, .memories, .brainMap: return .conversations
-    case .rewind: return .rewind
+    case .conversation, .memories, .brainMap, .rewind: return .conversations
     }
   }
 
-  /// Which of the Memory hub's own three views to select on arrival, for the three that share its
-  /// page. `nil` means the destination is a page of its own.
+  /// Which Brain view to select on arrival.
   var memoryDestination: MemoryHubDestination? {
     switch self {
     case .conversation: return .conversations
     case .memories: return .memories
     case .brainMap: return .brainMap
-    case .rewind: return nil
+    case .rewind: return .rewind
     }
   }
 }
@@ -413,18 +411,19 @@ enum QueryShellLayout {
 
   // The hero bar.
 
-  /// Roomy: this is a place to type, not a control strip.
-  static let barMinHeight: CGFloat = 64
-  static let barPaddingHorizontal: CGFloat = 18
-  static let barPaddingVertical: CGFloat = 12
+  /// Search is a persistent utility, not a hero. Keep it large enough to scan
+  /// and focus while returning the vertical space to the page it filters.
+  static let barMinHeight: CGFloat = 48
+  static let barPaddingHorizontal: CGFloat = 14
+  static let barPaddingVertical: CGFloat = 6
   /// The animated mark at the leading edge.
-  static let markDiameter: CGFloat = 26
-  /// The push-to-talk disc. Larger than the composer's 32 because it is the bar's only round target.
-  static let micDiameter: CGFloat = 38
+  static let markDiameter: CGFloat = 22
+  /// The push-to-talk disc. Larger than the compact in-panel controls because it is the bar's only round target.
+  static let micDiameter: CGFloat = 32
 
   /// Between the hero row's controls. It is set at the query face, so it can afford more air than
   /// the chat row inside the panel, which uses `OmiSpacing.sm`.
-  static let heroRowSpacing: CGFloat = 14
+  static let heroRowSpacing: CGFloat = 10
 
   /// The glyph the hero's two quiet controls share — the paperclip and the mic, which are the same
   /// kind of thing and must not be two sizes.
@@ -438,7 +437,7 @@ enum QueryShellLayout {
   /// The query's point size. Visibly larger than every other run on the surface, and deliberately
   /// under `Font.inkDisplayThreshold` (22) so it resolves to the reading face rather than the display
   /// one — a search field is type you read, not a headline.
-  static let queryFontSize: CGFloat = 21
+  static let queryFontSize: CGFloat = 17
 
   // The composer inside the bar.
   //
@@ -449,16 +448,16 @@ enum QueryShellLayout {
   // one line is and where it stops.
 
   /// One laid-out line of the query face — `NSLayoutManager.defaultLineHeight` for
-  /// `NSFont.systemFont(ofSize: 21)`, measured rather than estimated. `QueryComposerTests` checks it
+  /// `NSFont.systemFont(ofSize: 17)`, measured rather than estimated. `QueryComposerTests` checks it
   /// against the platform every run, because the ceiling below is a whole number of these and an
   /// approximate line height shows as a sixth line half-drawn at the bottom edge of the glass.
-  static let composerLineHeight: CGFloat = 24
+  static let composerLineHeight: CGFloat = 20
 
   /// The text container's breathing room, top and bottom.
   static let composerInsetVertical: CGFloat = 6
 
   /// **The resting height is the height it always was.** One line plus its insets is 37, which the
-  /// 38 pt push-to-talk disc beside it already sets — so an empty bar is exactly as tall as before
+  /// 32 pt push-to-talk disc beside it already sets — so an empty bar is exactly as tall as before
   /// (`barMinHeight`) and nothing on the surface moves until there is a second line to show.
   static var composerMinHeight: CGFloat { composerLineHeight + composerInsetVertical * 2 }
 
@@ -491,7 +490,7 @@ enum QueryShellLayout {
   /// paperclip frame, a 28 pt text pill and a 38 pt mic disc, each drawn in a different visual
   /// language. Three loud controls at three sizes is not a cluster, it is a queue — and the loudest
   /// of them was the least important. One diameter, and only one of them filled.
-  static let panelComposerControlDiameter: CGFloat = 32
+  static let panelComposerControlDiameter: CGFloat = 28
 
   /// The one glyph size the quiet controls share, so the paperclip and the mic read as the same
   /// kind of thing rather than as two unrelated icons that happened to land beside each other.
@@ -499,7 +498,7 @@ enum QueryShellLayout {
 
   /// **The text's breathing room, chosen so one line is exactly a control tall.**
   ///
-  /// `(32 − 17) / 2`. It is derived rather than picked because when one laid-out line of the chat
+  /// `(28 − 17) / 2`. It is derived rather than picked because when one laid-out line of the chat
   /// face is the same height as the disc beside it, the row's baseline and the glyphs' centres
   /// coincide — at rest and at the ceiling, whichever way the row aligns. A round number here buys a
   /// permanent point or two of vertical drift between the reader's own words and the button that
@@ -512,7 +511,7 @@ enum QueryShellLayout {
   /// than from a declared row height, which is what keeps the padding symmetric: the placeholder
   /// starts this far in from the fill's leading edge, the send disc ends this far from its trailing
   /// one, and there is the same air above and below.
-  static let panelComposerShellInset: CGFloat = 10
+  static let panelComposerShellInset: CGFloat = 7
 
   static var panelComposerMinEditorHeight: CGFloat {
     panelComposerLineHeight + panelComposerInsetVertical * 2
@@ -542,7 +541,7 @@ enum QueryShellLayout {
 
   /// **The air between the pill and the panel holding it**, so the composer reads as an object
   /// *inside* the panel rather than as the panel's own bottom edge. On top of the panel's padding
-  /// this leaves 22 pt at the sides and 16 pt underneath.
+  /// this leaves 20 pt at the sides and 14 pt underneath.
   static let panelComposerEdgeInset: CGFloat = OmiSpacing.xs
   static let panelComposerBottomInset: CGFloat = OmiSpacing.xxs
 
@@ -565,12 +564,12 @@ enum QueryShellLayout {
   // The results panel.
 
   static let panelPaddingHorizontal: CGFloat = 16
-  static let panelPaddingTop: CGFloat = 14
-  static let panelPaddingBottom: CGFloat = 12
+  static let panelPaddingTop: CGFloat = 10
+  static let panelPaddingBottom: CGFloat = 10
   /// Between the `Filter ›` row and the chips under it.
-  static let panelHeaderSpacing: CGFloat = 10
+  static let panelHeaderSpacing: CGFloat = 6
   static let chipSpacing: CGFloat = 6
-  static let chipHeight: CGFloat = 26
+  static let chipHeight: CGFloat = 28
 
   /// The floor under the panel body, so an empty result set is still a panel and not a sliver.
   static let minimumBodyHeight: CGFloat = 120

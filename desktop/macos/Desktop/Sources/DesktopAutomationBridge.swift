@@ -3599,7 +3599,8 @@ final class DesktopAutomationActionRegistry {
       NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
       return [
         "posted": "navigateToRewindNotes",
-        "expected_tab_index": "\(SidebarNavItem.rewind.rawValue)",
+        "expected_tab_index": "\(SidebarNavItem.conversations.rawValue)",
+        "expected_memory_destination": "\(MemoryHubDestination.rewind.rawValue)",
       ]
     }
 

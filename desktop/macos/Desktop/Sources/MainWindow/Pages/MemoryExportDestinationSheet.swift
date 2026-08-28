@@ -5,29 +5,42 @@ import SwiftUI
 
 struct ExportsSection: View {
   let statuses: [MemoryExportDestination: MemoryExportStatus]
+  var searchText = ""
   let onSelectDestination: (MemoryExportDestination) -> Void
 
   // Claude/Claude Code and ChatGPT/Codex each share one choice. Their setup
   // sheets keep the cloud and CLI paths distinct without making this list uneven.
   private var entries: [(destination: MemoryExportDestination, title: String?, subtitle: String?, description: String?)]
   {
-    MemoryExportDestination.allCases.compactMap { d in
-      switch d {
-      case .claudeCode, .codex:
-        return nil
-      case .claude:
-        return (
-          .claude, "Claude / Claude Code", nil,
-          "Claude Code (CLI) or Claude cloud — choose in setup."
-        )
-      case .chatgpt:
-        return (
-          .chatgpt, "ChatGPT / Codex", "ChatGPT app or Codex CLI",
-          "Add Omi in ChatGPT or connect Codex locally — choose in setup."
-        )
-      default:
-        return (d, nil, nil, nil)
+    let allEntries: [(destination: MemoryExportDestination, title: String?, subtitle: String?, description: String?)] =
+      MemoryExportDestination.allCases.compactMap { d in
+        switch d {
+        case .claudeCode, .codex:
+          return nil
+        case .claude:
+          return (
+            .claude, "Claude / Claude Code", nil,
+            "Claude Code (CLI) or Claude cloud — choose in setup."
+          )
+        case .chatgpt:
+          return (
+            .chatgpt, "ChatGPT / Codex", "ChatGPT app or Codex CLI",
+            "Add Omi in ChatGPT or connect Codex locally — choose in setup."
+          )
+        default:
+          return (d, nil, nil, nil)
+        }
       }
+
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return allEntries }
+    return allEntries.filter { entry in
+      let destination = entry.destination
+      return [
+        entry.title ?? destination.title,
+        entry.subtitle ?? destination.subtitle,
+        entry.description ?? destination.description,
+      ].contains { $0.localizedCaseInsensitiveContains(query) }
     }
   }
 
@@ -69,20 +82,27 @@ struct ExportsSection: View {
         .scaledFont(size: OmiType.heading, weight: .semibold)
         .foregroundColor(Ink.primary)
 
-      LazyVGrid(
-        columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
-        alignment: .leading,
-        spacing: OmiSpacing.md
-      ) {
-        ForEach(entries, id: \.destination.id) { entry in
-          MemoryExportRow(
-            destination: entry.destination,
-            titleOverride: entry.title,
-            subtitleOverride: entry.subtitle,
-            descriptionOverride: entry.description,
-            status: status(for: entry.destination)
-          ) {
-            onSelectDestination(entry.destination)
+      if entries.isEmpty {
+        Text("No exports match “\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))”.")
+          .scaledFont(size: OmiType.body)
+          .foregroundStyle(Ink.secondary)
+          .padding(.vertical, OmiSpacing.md)
+      } else {
+        LazyVGrid(
+          columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
+          alignment: .leading,
+          spacing: OmiSpacing.md
+        ) {
+          ForEach(entries, id: \.destination.id) { entry in
+            MemoryExportRow(
+              destination: entry.destination,
+              titleOverride: entry.title,
+              subtitleOverride: entry.subtitle,
+              descriptionOverride: entry.description,
+              status: status(for: entry.destination)
+            ) {
+              onSelectDestination(entry.destination)
+            }
           }
         }
       }

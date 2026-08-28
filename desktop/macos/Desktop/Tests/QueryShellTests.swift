@@ -227,14 +227,34 @@ final class QueryShellTests: XCTestCase {
 
   // MARK: - The gap
 
-  /// The single most important number on the surface: two panels 12 pt apart read as two objects,
+  /// The single most important number on the surface: two panels keep a compact real gap,
   /// the same two at 0 read as one slab with a rule through it.
   func testTheTwoPanelsKeepRealAirBetweenThemAndShareOneCorner() {
-    XCTAssertEqual(QueryShellLayout.panelGap, 12)
+    XCTAssertEqual(QueryShellLayout.panelGap, 8)
     XCTAssertEqual(
       QueryShellLayout.panelGap, RewindSearchLayout.panelGap,
       "one product, one opinion about how far apart its glass sits")
     XCTAssertEqual(QueryShellLayout.panelCornerRadius, InkGlass.cornerRadius)
+  }
+
+  func testSharedSearchAndBrainChromeUseTheCompactDensityContract() {
+    XCTAssertEqual(QueryShellLayout.barMinHeight, 48)
+    XCTAssertEqual(RewindSearchLayout.barHeight, QueryShellLayout.barMinHeight)
+    XCTAssertEqual(RewindSearchMetrics.queryFontSize, QueryShellLayout.queryFontSize)
+    XCTAssertEqual(
+      PagePanelFirstRowMetrics.topPadding,
+      QueryShellLayout.panelPaddingTop,
+      "list and catalog toolbars must start where Activity's first row starts")
+    XCTAssertEqual(
+      BrainSectionPageMetrics.navigationTopPadding,
+      PagePanelFirstRowMetrics.topPadding,
+      "Brain pills must not sit closer to the panel edge than the other page controls")
+    XCTAssertEqual(
+      BrainSectionPageMetrics.navigationBottomPadding,
+      PagePanelFirstRowMetrics.bottomPadding)
+    XCTAssertEqual(BrainSectionPageMetrics.navigationHeight, 44)
+    XCTAssertGreaterThanOrEqual(QueryShellLayout.chipHeight, 28)
+    XCTAssertLessThan(QueryShellLayout.panelHeaderSpacing, 8)
   }
 
   /// Both panels sit in the top bar's lane, or the surface reads as three objects that missed
@@ -499,20 +519,15 @@ final class QueryShellTests: XCTestCase {
     XCTAssertEqual(QueryShellRoute.conversation.navItem, .conversations)
     XCTAssertEqual(QueryShellRoute.memories.navItem, .conversations)
     XCTAssertEqual(QueryShellRoute.brainMap.navItem, .conversations)
-    XCTAssertEqual(QueryShellRoute.rewind.navItem, .rewind)
+    XCTAssertEqual(QueryShellRoute.rewind.navItem, .conversations)
   }
 
-  /// The three hub routes must each select a *different* one of the hub's own views, and Rewind must
-  /// select none — writing a Memory-hub destination on the way to Rewind is how the hub ends up on
-  /// whichever view the last unrelated navigation happened to leave behind.
-  func testTheThreeHubRoutesSelectTheHubsOwnThreeViews() {
+  /// Each route into Brain must select the peer view that owns its content.
+  func testTheBrainRoutesSelectTheirOwnViews() {
     XCTAssertEqual(
       QueryShellRoute.allCases.compactMap(\.memoryDestination),
-      [.conversations, .memories, .brainMap],
-      "Home's hub routes no longer cover the hub's three views one-for-one")
-    XCTAssertNil(
-      QueryShellRoute.rewind.memoryDestination,
-      "a page of its own must not write the Memory hub's destination on the way there")
+      [.conversations, .memories, .brainMap, .rewind],
+      "Home's Brain routes no longer select their peer views one-for-one")
 
     for route in QueryShellRoute.allCases {
       guard let hubView = route.memoryDestination else { continue }

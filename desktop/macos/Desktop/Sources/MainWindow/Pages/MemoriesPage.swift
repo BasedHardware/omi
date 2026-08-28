@@ -1894,30 +1894,55 @@ class MemoriesViewModel: ObservableObject {
 
 struct MemoriesPage: View {
   @ObservedObject var viewModel: MemoriesViewModel
+  var brainDestination: MemoryHubDestination? = nil
+  var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
   @State private var showCategoryFilter = false
   @State private var categorySearchText = ""
   @State private var pendingSelectedTags: Set<MemoryTag> = []
   @State private var showManagementMenu = false
 
   var body: some View {
-    Group {
-      if let conversation = viewModel.linkedConversation {
-        // Show conversation detail view
-        ConversationDetailView(
-          conversation: conversation,
-          onBack: { viewModel.dismissConversation() }
-        )
-      } else {
-        // Main memories view
-        mainMemoriesView
-      }
+    pageSurface
+      .glassContent()
+  }
+
+  @ViewBuilder
+  private var pageSurface: some View {
+    if let brainDestination, let onSelectBrainDestination {
+      BrainSectionPageLayout(
+        selected: brainDestination,
+        onSelect: onSelectBrainDestination,
+        search: {
+          QuerySearchBar(
+            text: $viewModel.searchText,
+            accessibilityID: "memories-search-field",
+            placeholder: "Search memories…"
+          )
+        },
+        content: { pageContent }
+      )
+    } else {
+      pageContent
     }
-    .glassContent()
+  }
+
+  @ViewBuilder
+  private var pageContent: some View {
+    if let conversation = viewModel.linkedConversation {
+      // Show conversation detail view
+      ConversationDetailView(
+        conversation: conversation,
+        onBack: { viewModel.dismissConversation() }
+      )
+    } else {
+      // Main memories view
+      mainMemoriesView
+    }
   }
 
   private var memoriesColumn: some View {
     VStack(spacing: 0) {
-      // Header (includes search, filters, and action buttons)
+      // Compact query/actions row. Brain navigation already identifies the page.
       header
 
       // Content
@@ -1925,6 +1950,8 @@ struct MemoriesPage: View {
         loadingView
       } else if let error = viewModel.errorMessage {
         errorView(error)
+      } else if hasActiveMemoryQueryScope && viewModel.filteredMemories.isEmpty {
+        noResultsView
       } else if viewModel.memories.isEmpty {
         emptyState
       } else if viewModel.filteredMemories.isEmpty {
@@ -2072,42 +2099,31 @@ struct MemoriesPage: View {
 
   // MARK: - Header
   private var header: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      HStack(alignment: .firstTextBaseline) {
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text("Memories")
-            .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundStyle(Ink.primary)
-          Text("What Omi has learned and saved for you")
-            .scaledFont(size: OmiType.caption)
-            .foregroundStyle(Ink.secondary)
-        }
-        Spacer()
-      }
-
-      // A pill row and a text field cannot share one line in a narrow column.
-      // The pills hold their intrinsic width so their own labels stay readable,
-      // which used to leave the search field squeezed to "Sea" whenever the
-      // detail panel was open. Below the width where both fit, the search field
-      // takes its own line instead of being the thing that loses.
-      ViewThatFits(in: .horizontal) {
-        HStack(spacing: OmiSpacing.sm) {
-          searchField.frame(minWidth: 200)
-          filterControls
-        }
-
-        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-          searchField
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      if brainDestination != nil {
+        memoriesQueryToolbar
+          .pagePanelFirstRowInsets()
+      } else {
+        // A pill row and a text field cannot share one line in a narrow column.
+        // The pills hold their intrinsic width so their own labels stay readable,
+        // which used to leave the search field squeezed to "Sea" whenever the
+        // detail panel was open. Below the width where both fit, the search field
+        // takes its own line instead of being the thing that loses.
+        ViewThatFits(in: .horizontal) {
           HStack(spacing: OmiSpacing.sm) {
-            filterControls
-            Spacer(minLength: 0)
+            searchField.frame(minWidth: 200)
+            memoriesQueryToolbar
+          }
+
+          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+            searchField
+            memoriesQueryToolbar
           }
         }
+        .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
+        .padding(.vertical, OmiSpacing.xs)
       }
     }
-    .padding(.horizontal, OmiSpacing.xxl)
-    .padding(.top, OmiSpacing.lg)
-    .padding(.bottom, OmiSpacing.md)
     .alert("Delete Default Memories?", isPresented: $viewModel.showingDeleteAllConfirmation) {
       Button("Cancel", role: .cancel) {}
       Button("Delete Default Memories", role: .destructive) {
@@ -2130,137 +2146,163 @@ struct MemoriesPage: View {
     )
   }
 
+  private var memoriesQueryToolbar: some View {
+    PageQueryToolbar(
+      refinement: {
+        filterControls
+      },
+      activeFilters: {
+        ActivePageFilterStrip(filters: activeMemoryFilters, onClearAll: clearMemoryFilters)
+      },
+      actions: {
+        HStack(spacing: OmiSpacing.sm) {
+          Button {
+            viewModel.showingAddMemory = true
+          } label: {
+            PageQueryActionLabel(icon: "plus", title: "Add Memory", isPrimary: true)
+          }
+          .buttonStyle(.plain)
+          .help("Add a memory")
+          .accessibilityIdentifier("memories-add-memory")
+
+          Button {
+            showManagementMenu = true
+          } label: {
+            PageQueryActionLabel(icon: "ellipsis", title: "More")
+          }
+          .buttonStyle(.plain)
+          .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
+            managementMenuPopover
+          }
+          .help("More memory actions")
+          .accessibilityIdentifier("memories-more-actions")
+        }
+      }
+    )
+  }
+
   @ViewBuilder
   private var filterControls: some View {
-    if viewModel.canonicalLifecycleExposed {
-      // Layer filter dropdown. Default is product default access: Short-term + Long-term.
-      Menu {
-        ForEach(MemoryLayerFilter.allCases) { filter in
-          Button {
-            viewModel.selectedLayerFilter = filter
-          } label: {
-            HStack {
-              Text(filter.displayName)
-              if viewModel.selectedLayerFilter == filter {
-                Image(systemName: "checkmark")
+    Menu {
+      if viewModel.canonicalLifecycleExposed {
+        Section("Lifecycle") {
+          ForEach(MemoryLayerFilter.allCases) { filter in
+            Button {
+              viewModel.selectedLayerFilter = filter
+            } label: {
+              HStack {
+                Text(filter.displayName)
+                if viewModel.selectedLayerFilter == filter {
+                  Image(systemName: "checkmark")
+                }
               }
             }
+            .help(filter.description)
           }
-          .help(filter.description)
         }
-      } label: {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(
-            systemName: viewModel.selectedLayerFilter == .archive
-              ? "archivebox" : "clock.badge.checkmark"
-          )
-          .scaledFont(size: OmiType.caption)
-          // Pills keep their intrinsic width so the search field absorbs
-          // the squeeze. Without this the detail panel narrows the column
-          // and "Default" wraps to "Defa / ult" inside its own pill.
-          Text(viewModel.selectedLayerFilter.displayName)
-            .scaledFont(
-              size: OmiType.body,
-              weight: viewModel.selectedLayerFilter == .defaultAccess ? .regular : .medium
-            )
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
-          Image(systemName: "chevron.down")
-            .scaledFont(size: OmiType.micro)
+      }
+
+      Section("Source") {
+        Button {
+          viewModel.filterThisDeviceOnly.toggle()
+        } label: {
+          Label(
+            viewModel.filterThisDeviceOnly ? "All devices" : "This device",
+            systemImage: "desktopcomputer")
         }
-        .foregroundColor(
-          viewModel.selectedLayerFilter == .defaultAccess
-            ? Ink.secondary : Ink.primary
-        )
-        .padding(.horizontal, OmiSpacing.md)
-        .frame(minHeight: 44)
-        .glassChip(isActive: viewModel.selectedLayerFilter != .defaultAccess)
       }
-      .menuStyle(.button)
-      .buttonStyle(.plain)
-      .help("Default shows Short-term + Long-term. Archive is explicit.")
-    }
 
-    Button {
-      viewModel.filterThisDeviceOnly.toggle()
-    } label: {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: "desktopcomputer")
-          .scaledFont(size: OmiType.caption)
-        Text("This device")
-          .scaledFont(
-            size: OmiType.body, weight: viewModel.filterThisDeviceOnly ? .medium : .regular
-          )
-          .lineLimit(1)
-          .fixedSize(horizontal: true, vertical: false)
+      Section("Type") {
+        Button {
+          pendingSelectedTags = viewModel.selectedTags
+          categorySearchText = ""
+          // Let the menu dismiss before presenting its anchored popover.
+          DispatchQueue.main.async {
+            showCategoryFilter = true
+          }
+        } label: {
+          Label(
+            viewModel.selectedTags.isEmpty ? "Choose types…" : "Change types…",
+            systemImage: "tag")
+        }
       }
-      .foregroundColor(
-        viewModel.filterThisDeviceOnly ? Ink.primary : Ink.secondary
-      )
-      .padding(.horizontal, OmiSpacing.md)
-      .frame(minHeight: 44)
-      .glassChip(isActive: viewModel.filterThisDeviceOnly)
-    }
-    .buttonStyle(.plain)
-    .help("Show memories captured on this Mac")
 
-    // Category filter dropdown
-    Button {
-      pendingSelectedTags = viewModel.selectedTags
-      categorySearchText = ""
-      showCategoryFilter = true
-    } label: {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: "line.3.horizontal.decrease")
-          .scaledFont(size: OmiType.caption)
-        Text(categoryFilterLabel)
-          .scaledFont(
-            size: OmiType.body, weight: viewModel.selectedTags.isEmpty ? .regular : .medium
-          )
-          .lineLimit(1)
-          .fixedSize(horizontal: true, vertical: false)
-        Image(systemName: "chevron.down")
-          .scaledFont(size: OmiType.micro)
+      if memoryActiveFilterCount > 0 {
+        Divider()
+        Button("Clear all filters", action: clearMemoryFilters)
       }
-      .foregroundColor(
-        viewModel.selectedTags.isEmpty ? Ink.secondary : Ink.primary
-      )
-      .padding(.horizontal, OmiSpacing.md)
-      .frame(minHeight: 44)
-      .glassChip(isActive: !viewModel.selectedTags.isEmpty)
+    } label: {
+      PageQueryControlLabel(
+        icon: "line.3.horizontal.decrease",
+        dimension: "Filter",
+        value: memoryActiveFilterCount == 0 ? "None" : "\(memoryActiveFilterCount)",
+        isActive: memoryActiveFilterCount > 0)
     }
+    .menuStyle(.button)
     .buttonStyle(.plain)
     .popover(isPresented: $showCategoryFilter, arrowEdge: .bottom) {
       categoryFilterPopover
     }
+    .help("Filter memories by lifecycle, source, or type")
+    .accessibilityIdentifier("memories-filter-menu")
+  }
 
-    // Add Memory button (icon only)
-    Button {
-      viewModel.showingAddMemory = true
-    } label: {
-      Image(systemName: "plus")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.surface)
-        .frame(width: 44, height: 44)
-        .background(Capsule(style: .continuous).fill(Ink.primary))
-    }
-    .buttonStyle(.plain)
-    .help("Add Memory")
+  private var memoryActiveFilterCount: Int {
+    let lifecycle =
+      viewModel.canonicalLifecycleExposed && viewModel.selectedLayerFilter != .defaultAccess ? 1 : 0
+    return lifecycle + (viewModel.filterThisDeviceOnly ? 1 : 0) + viewModel.selectedTags.count
+  }
 
-    // Management menu
-    Button {
-      showManagementMenu = true
-    } label: {
-      Image(systemName: "ellipsis")
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundColor(Ink.secondary)
-        .frame(width: 44, height: 44)
-        .glassChip()
+  private var activeMemoryFilters: [PageActiveFilter] {
+    let hasLifecycleFilter =
+      viewModel.canonicalLifecycleExposed
+      && viewModel.selectedLayerFilter != .defaultAccess
+    var filters: [PageActiveFilter] = []
+
+    if hasLifecycleFilter {
+      filters.append(
+        PageActiveFilter(
+          id: "lifecycle", title: viewModel.selectedLayerFilter.displayName,
+          onRemove: { viewModel.selectedLayerFilter = .defaultAccess }))
     }
-    .buttonStyle(.plain)
-    .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
-      managementMenuPopover
+
+    if viewModel.filterThisDeviceOnly {
+      filters.append(
+        PageActiveFilter(
+          id: "device", title: "This device",
+          onRemove: { viewModel.filterThisDeviceOnly = false }))
     }
+
+    filters.append(
+      contentsOf: viewModel.selectedTags.sorted { $0.displayName < $1.displayName }.map { tag in
+        PageActiveFilter(id: "tag-\(tag.id)", title: tag.displayName) {
+          viewModel.selectedTags.remove(tag)
+        }
+      })
+
+    return filters
+  }
+
+  private func clearMemoryFilters() {
+    if viewModel.canonicalLifecycleExposed {
+      viewModel.selectedLayerFilter = .defaultAccess
+    }
+    if viewModel.filterThisDeviceOnly {
+      viewModel.filterThisDeviceOnly = false
+    }
+    if !viewModel.selectedTags.isEmpty {
+      viewModel.selectedTags = []
+    }
+  }
+
+  /// A scoped request is not an empty account. This intentionally includes
+  /// lifecycle and device scope even though `MemoriesViewModel.isInFilteredMode`
+  /// excludes them for pagination routing.
+  private var hasActiveMemoryQueryScope: Bool {
+    !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      || viewModel.selectedLayerFilter != .defaultAccess
+      || viewModel.filterThisDeviceOnly
+      || !viewModel.selectedTags.isEmpty
   }
 
   // MARK: - Filter Bar
@@ -2564,7 +2606,7 @@ struct MemoriesPage: View {
         // previously embedded at the top of the memory list too; a second entry
         // point to the same surface only competed with the memories the page
         // exists to show.
-        LazyVStack(spacing: OmiSpacing.sm) {
+        LazyVStack(spacing: 0) {
           ForEach(viewModel.filteredMemories) { memory in
             MemoryCardView(
               memory: memory,
@@ -2724,26 +2766,55 @@ struct MemoriesPage: View {
         .scaledFont(size: 36)
         .foregroundColor(Ink.secondary)
 
-      Text("No Results")
+      Text("No matching memories")
         .scaledFont(size: OmiType.heading, weight: .semibold)
         .foregroundColor(Ink.primary)
 
-      Text("Try a different search or filter")
+      Text(memoryNoResultsDescription)
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.secondary)
+        .multilineTextAlignment(.center)
 
-      if !viewModel.selectedTags.isEmpty {
-        Button {
-          viewModel.selectedTags.removeAll()
-        } label: {
-          Text("Clear Filters")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(Ink.secondary)
+      HStack(spacing: OmiSpacing.sm) {
+        if !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          Button {
+            viewModel.searchText = ""
+          } label: {
+            PageQueryActionLabel(icon: "xmark.circle", title: "Clear search", isPrimary: true)
+          }
+          .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+
+        if hasActiveMemoryFilterScope {
+          Button {
+            clearMemoryFilters()
+          } label: {
+            PageQueryActionLabel(icon: "line.3.horizontal.decrease.circle", title: "Clear filters")
+          }
+          .buttonStyle(.plain)
+        }
       }
+      .fixedSize(horizontal: false, vertical: true)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .accessibilityIdentifier("memories-filtered-empty")
+  }
+
+  private var hasActiveMemoryFilterScope: Bool {
+    viewModel.selectedLayerFilter != .defaultAccess
+      || viewModel.filterThisDeviceOnly
+      || !viewModel.selectedTags.isEmpty
+  }
+
+  private var memoryNoResultsDescription: String {
+    let hasSearch = !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    if hasSearch && hasActiveMemoryFilterScope {
+      return "Nothing matches your search and active filters."
+    }
+    if hasSearch {
+      return "Nothing matches your search. Try a different term."
+    }
+    return "Nothing matches the selected filters."
   }
 
   private var loadingView: some View {
@@ -2859,7 +2930,7 @@ private struct MemoryCardView: View {
 
   var body: some View {
     Button(action: onTap) {
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         HStack(alignment: .top, spacing: OmiSpacing.sm) {
           Group {
             if memory.content.hasPrefix("[Protected") || memory.content.hasPrefix("[Encrypted") {
@@ -2928,12 +2999,16 @@ private struct MemoryCardView: View {
           }
         }
       }
-      .padding(.horizontal, OmiSpacing.lg)
-      .padding(.vertical, OmiSpacing.md)
-      .glassCard(
-        cornerRadius: OmiChrome.controlRadius,
-        emphasized: isHovered || isNewlyCreated
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.xs)
+      .background(
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+          .fill(isHovered || isNewlyCreated ? Ink.rowFillHover : Color.clear)
       )
+      .overlay(alignment: .bottom) {
+        GlassSeparator()
+          .padding(.leading, OmiSpacing.md)
+      }
       .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
     }
     .buttonStyle(.plain)
