@@ -256,6 +256,7 @@ jobs:
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
             METRICS_SECRET=METRICS_SECRET:latest
+            POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest
 
       # See desktop_backend_prod.yml: the expectation is rendered from the
       # manifest so it cannot drift from the values actually deployed.

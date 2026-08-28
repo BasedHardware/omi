@@ -36,6 +36,7 @@ import {
   __resetOmiPipeForTest,
   omiRequestIdFromRelayContext,
   omiReasoningEffortFromRelayContext,
+  omiBuiltInToolPolicyFromRelayContext,
   applyOmiProviderHeaders,
   OMI_CHAT_CONTRACT_VERSION,
 } from "./index.ts";
@@ -65,6 +66,13 @@ test("reasoning effort relay: strict two-token allowlist", () => {
   assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"max"}'), undefined);
   assert.equal(omiReasoningEffortFromRelayContext('{"requestId":"req_1"}'), undefined);
   assert.equal(omiReasoningEffortFromRelayContext("not json"), undefined);
+});
+
+test("built-in tool authority requires an explicit kernel default token", () => {
+  assert.equal(omiBuiltInToolPolicyFromRelayContext('{"builtInToolPolicy":"default"}'), "default");
+  assert.equal(omiBuiltInToolPolicyFromRelayContext('{"builtInToolPolicy":"read_only"}'), "read_only");
+  assert.equal(omiBuiltInToolPolicyFromRelayContext('{"builtInToolPolicy":"spoof"}'), "read_only");
+  assert.equal(omiBuiltInToolPolicyFromRelayContext("not json"), "read_only");
 });
 
 test("provider headers always advertise the versioned chat contract", () => {
@@ -933,6 +941,20 @@ test("inspectToolCall: denies edit of /System file", () => {
 test("inspectToolCall: passthrough for read even on /etc", () => {
   // Reading /etc/hosts is harmless (and pi may legitimately need to do so).
   assert.equal(inspectToolCall(readEvent("/etc/hosts")), null);
+});
+
+test("inspectToolCall: read-only service authority blocks adapter mutations even in YOLO", () => {
+  const previous = process.env.OMI_YOLO_MODE;
+  process.env.OMI_YOLO_MODE = "1";
+  try {
+    assert.ok(inspectToolCall(bashEvent("ls -la"), "read_only"));
+    assert.ok(inspectToolCall(writeEvent("/tmp/allowed-in-chat"), "read_only"));
+    assert.ok(inspectToolCall(editEvent("/tmp/allowed-in-chat"), "read_only"));
+    assert.equal(inspectToolCall(readEvent("/etc/hosts"), "read_only"), null);
+  } finally {
+    if (previous === undefined) delete process.env.OMI_YOLO_MODE;
+    else process.env.OMI_YOLO_MODE = previous;
+  }
 });
 
 test("inspectToolCall: passthrough for unknown custom tools", () => {

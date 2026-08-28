@@ -119,13 +119,12 @@ backend-sync (main.py, Cloud Run)
   ├── ──────► Cloud Tasks queue `account-deletion` ──► POST /v1/users/account-deletion-wipes/run (OIDC, same service)
   └── ──────► Cloud Tasks queue `conversation-finalization` ──► POST /v1/conversation-finalization-jobs/run (OIDC, same service)
 
-notifications-job (modal/job.py)  [cron]
-memory-maintenance-job (modal/memory_maintenance_job.py)  [cron]
+Cron jobs: notifications (`modal/job.py`), memory maintenance (`modal/memory_maintenance_job.py`), and frame retention (`modal/frame_request_retention_job.py`).
 ```
 
-Helm charts: `backend/charts/{backend-listen,backend-secrets,deepgram-self-hosted,diarizer,llm-gateway,monitoring,nllb-translation,parakeet,pusher,vad}/`.
+Helm charts: `backend/charts/`.
 
-Serving STT provider/surface policy and canonical model order are owned exclusively by `config/stt_provider_policy.py`; deployment values are validated against it.
+STT provider/surface policy and model order live in `config/stt_provider_policy.py`; deployment validates it.
 
 - **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Live STT prefers Deepgram (`DEEPGRAM_API_KEY`), falling back to Modulate then Parakeet; self-hosted Deepgram replaces the hosted endpoint when `DEEPGRAM_SELF_HOSTED_*` is set (`utils/stt/streaming.py`). Calls NLLB translation when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected (`utils/translation.py`).
 - **hosted MCP OAuth** (`routers/mcp_sse.py`) — Provider-neutral OAuth for `/v1/mcp/sse`. Configure public or confidential clients with `MCP_OAUTH_CLIENTS_JSON`; allowlist the exact connector callback URI from the provider. The temporary `MCP_OAUTH_CHATGPT_*` envs still define the legacy confidential ChatGPT test client, and `MCP_OAUTH_PUBLIC_*` can expose a no-secret PKCE public client. Also set `MCP_AUTHORIZATION_SERVER_URL`, optional `MCP_RESOURCE_URL`, and token TTL env vars.

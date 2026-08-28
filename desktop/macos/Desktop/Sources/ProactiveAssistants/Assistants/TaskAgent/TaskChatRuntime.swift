@@ -311,8 +311,12 @@ enum TaskChatRuntime {
       authorizationSnapshot: authorizationSnapshot
     )
     try requireCurrent(authorizationSnapshot)
+    // Same wrap main chat applies (ChatProvider.query): the task context packet carries
+    // due_at ISO strings, and the agent resolves "Friday"/"next week" against the host
+    // clock. The block rides in the user turn; nothing downstream hashes the prompt into
+    // a cached system prefix (SCA-358).
     return try await bridge.query(
-      prompt: prompt,
+      prompt: ChatPromptBuilder.currentTimePrompt(for: prompt),
       session: session,
       surface: surface,
       mode: routing.runMode,

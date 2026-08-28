@@ -519,6 +519,12 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       terminal?.result == .networkUnavailable
       || (terminal == nil
         && checkAttemptTracker.lastCompletedWasExpectedAutomaticOffline(for: diagnostics))
+    // Sparkle delivers `didAbortWithError` more than once per check. The
+    // authoritative terminal is deduplicated by consuming the attempt identity;
+    // the legacy event has no identity, so it needs the same guard or one failed
+    // check is reported once per callback.
+    let isDuplicateFailureCallback =
+      terminal == nil && checkAttemptTracker.isDuplicateOfLastTerminal(diagnostics)
     // Always drop a quiet-moment wait on abort so the deferred install cannot
     // fire after we clear progress flags (stale "Update waiting…" / surprise relaunch).
     discardDeferredInstall()
@@ -555,11 +561,18 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         logSync("Sparkle: Installation failed (error 4005), will retry on next check")
       }
 
+      if isDuplicateFailureCallback {
+        logSync("Sparkle: Ignoring duplicate update check failure callback for analytics")
+      }
+
       // Keep the legacy diagnostic event for existing dashboards. The new
       // `Update Check Completed` event is the authoritative denominator and is
-      // emitted at most once by the tracker above.
+      // emitted at most once by the tracker above; the legacy event now honours
+      // the same one-terminal-per-check contract.
       Task { @MainActor in
-        AnalyticsManager.shared.updateCheckFailed(diagnostics: diagnostics)
+        if !isDuplicateFailureCallback {
+          AnalyticsManager.shared.updateCheckFailed(diagnostics: diagnostics)
+        }
         self.viewModel?.lastUpdateFailure = diagnostics
         self.viewModel?.updateRestartImminent = false
         self.viewModel?.updateDeferredForActiveRecording = false

@@ -77,6 +77,8 @@ interface FakeAdapterOptions {
    *  (the adapter-returned failure path — payload.failure.userMessage, no
    *  errorMessage), rather than throwing. */
   fail?: string
+  /** Additive evidence envelope carried in the adapter result JSON. */
+  evidence?: Record<string, unknown>
 }
 
 let nativeSessionCounter = 0
@@ -172,7 +174,8 @@ function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
         terminalStatus: 'succeeded',
         inputTokens: 10,
         outputTokens: 20,
-        costUsd: 0.01
+        costUsd: 0.01,
+        ...(options.evidence ? { evidence: options.evidence } : {})
       }
     },
     async cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult> {
@@ -336,6 +339,17 @@ describe('projectKernelEvent', () => {
 
 describe('runMainChatTurn', () => {
   it('streams projected events in order and resolves with the final outcome', async () => {
+    const evidence = {
+      schema_version: 1,
+      references: [
+        {
+          id: 'conversation-1',
+          kind: 'conversation_summary',
+          state: 'available',
+          conversation_id: 'conversation-1'
+        }
+      ]
+    }
     const adapter = fakeAdapter({
       stream: () => [
         { type: 'text_delta', text: 'Hello ' },
@@ -343,7 +357,8 @@ describe('runMainChatTurn', () => {
         { type: 'tool_activity', name: 'search', status: 'started', toolUseId: 't1' },
         { type: 'tool_activity', name: 'search', status: 'completed', toolUseId: 't1' }
       ],
-      reply: () => 'Hello world'
+      reply: () => 'Hello world',
+      evidence
     })
     const kernel = newKernel(adapter)
     const events: MainChatEvent[] = []
@@ -358,6 +373,16 @@ describe('runMainChatTurn', () => {
       ok: true,
       terminalStatus: 'succeeded',
       text: 'Hello world',
+      evidence: {
+        schemaVersion: 1,
+        references: [
+          expect.objectContaining({
+            id: 'conversation-1',
+            kind: 'conversation_summary',
+            state: 'available'
+          })
+        ]
+      },
       requestId: 'req-1'
     })
     expect(result.runId).toBeTruthy()

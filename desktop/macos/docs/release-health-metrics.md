@@ -187,7 +187,12 @@ the release-evidence layer (`#9523`) will consume.
   a real update-service outage is not masked. A manual check while offline remains
   `failed` so the user receives feedback. The legacy
   `Update Check Failed` event remains diagnostic-only and MUST NOT be used as a
-  denominator or user-impact rate.
+  denominator or user-impact rate. It now honours the same one-terminal-per-check
+  contract: Sparkle re-delivers `didAbortWithError` for a single check, and until
+  2026-08 the legacy event fired once per callback (3x–47x the authoritative
+  `result = failed` count on builds 0.12.187–0.12.212). Historical `Update Check
+  Failed` volume before that fix is inflated and must not be compared against
+  post-fix builds.
 - **Denominator:** distinct started attempts. Missing terminals are a separate
   instrumentation-health defect (`callback_missing` when the next Sparkle-admitted
   check closes a stale identity). Starts are recorded only at Sparkle's serialized

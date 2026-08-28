@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_admission import valid_required_processing_receipt
@@ -35,6 +35,7 @@ from models.product_memory import (
     MemoryItemStatus,
     MemoryTier,
     ProcessingState,
+    normalized_memory_content_key,
 )
 from utils.memory.short_term_lifecycle import default_short_term_expiry
 
@@ -71,6 +72,65 @@ class ApplyStatus(str, Enum):
     invalid_patch = "invalid_patch"
 
 
+class WriterMode(str, Enum):
+    """Authoritative memory-writer state for one user.
+
+    Transition modes are deliberate stop-the-world fences for ordinary memory
+    writers.  Account deletion and privacy enforcement are separate
+    authorities and must not be routed through this admission state.
+    """
+
+    compatibility = "compatibility"
+    transitioning_to_ledger = "transitioning_to_ledger"
+    ledger = "ledger"
+    transitioning_to_compatibility = "transitioning_to_compatibility"
+
+
+class MemoryWriterClass(str, Enum):
+    compatibility = "compatibility"
+    ledger = "ledger"
+    user = "user"
+
+
+class WriterAdmissionError(RuntimeError):
+    """The requested writer class is not admitted by the current control mode."""
+
+
+def require_writer_admitted(
+    control: "MemoryControlState",
+    writer_class: MemoryWriterClass,
+    *,
+    allow_ledger_migration: bool = False,
+) -> None:
+    """Raise unless the writer owns the stable mode or explicit migration seam."""
+    try:
+        requested = MemoryWriterClass(writer_class)
+    except ValueError as exc:
+        raise WriterAdmissionError("unknown memory writer class") from exc
+
+    if requested == MemoryWriterClass.user and control.writer_mode in {
+        WriterMode.compatibility,
+        WriterMode.ledger,
+    }:
+        return
+    if control.writer_mode == WriterMode.compatibility:
+        if requested == MemoryWriterClass.compatibility:
+            return
+        if requested == MemoryWriterClass.ledger and allow_ledger_migration:
+            return
+    elif control.writer_mode == WriterMode.ledger and requested == MemoryWriterClass.ledger:
+        return
+    elif (
+        control.writer_mode == WriterMode.transitioning_to_ledger
+        and requested == MemoryWriterClass.ledger
+        and allow_ledger_migration
+    ):
+        return
+    raise WriterAdmissionError(
+        f"{requested.value} writer is not admitted while writer mode is {control.writer_mode.value}"
+    )
+
+
 class MemoryOutboxEventType(str, Enum):
     projection_sync = "projection_sync"
     vector_sync = "vector_sync"
@@ -91,6 +151,11 @@ class MemoryControlState(BaseModel):
     head_commit_id: str
     account_generation: int
     source_generation: int
+    writer_mode: WriterMode = WriterMode.compatibility
+    writer_epoch: int = 0
+    writer_transition_owner: Optional[str] = None
+    ledger_migration_migrated_count: int = 0
+    ledger_migration_adjudicated_count: int = 0
     commit_sequence: int = 0
     projection_watermark_commit_id: Optional[str] = None
     projection_watermark_sequence: int = 0
@@ -112,6 +177,9 @@ class MemoryControlState(BaseModel):
     @field_validator(
         "account_generation",
         "source_generation",
+        "writer_epoch",
+        "ledger_migration_migrated_count",
+        "ledger_migration_adjudicated_count",
         "commit_sequence",
         "projection_watermark_sequence",
         "legacy_backfill_processed_count",
@@ -121,6 +189,30 @@ class MemoryControlState(BaseModel):
         if value < 0:
             raise ValueError("control counters must be nonnegative")
         return value
+
+    @field_validator("writer_epoch", mode="before")
+    @classmethod
+    def validate_writer_epoch_is_an_integer(cls, value: Any) -> Any:
+        # Writer epochs are CAS fences.  Coercing strings or booleans would let
+        # a malformed control document accidentally participate in a cutover.
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError("writer_epoch must be an integer")
+        return value
+
+    @model_validator(mode="after")
+    def validate_writer_transition_owner(self) -> "MemoryControlState":
+        transitioning = self.writer_mode in {
+            WriterMode.transitioning_to_ledger,
+            WriterMode.transitioning_to_compatibility,
+        }
+        owner = (self.writer_transition_owner or "").strip()
+        if transitioning and not owner:
+            raise ValueError("transitioning writer mode requires an owner")
+        if not transitioning and self.writer_transition_owner is not None:
+            raise ValueError("stable writer mode cannot retain a transition owner")
+        if self.writer_transition_owner is not None and self.writer_transition_owner != owner:
+            raise ValueError("writer transition owner must not contain surrounding whitespace")
+        return self
 
     @field_validator("last_promotion_run_at", "last_consolidation_run_at", "legacy_backfill_completed_at", "updated_at")
     @classmethod
@@ -387,6 +479,7 @@ def _materialize_memory_item(
         status=status,
         processing_state=processing_state,
         content=patch.memory_text,
+        normalized_content_key=normalized_memory_content_key(patch.memory_text),
         evidence=evidence,
         source_state=SourceState.active,
         sensitivity_labels=[],
@@ -406,6 +499,17 @@ def _materialize_memory_item(
         subject_entity_id=patch.subject_entity_id,
         predicate=patch.predicate,
         arguments=dict(patch.arguments or {}),
+        ledger_schema_version=patch.ledger_schema_version,
+        kind=patch.kind,
+        subject_scope=patch.subject_scope,
+        slot=patch.slot,
+        body=patch.body,
+        valid_from=patch.valid_from or now,
+        valid_to=patch.valid_to,
+        curation_weight=patch.curation_weight,
+        trigger_condition=dict(patch.trigger_condition or {}),
+        intent_backed=patch.intent_backed,
+        write_reason=patch.write_reason,
     )
 
 
@@ -462,6 +566,7 @@ def _apply_update_memory_item(
         "status": status,
         "processing_state": processing_state,
         "content": content,
+        "normalized_content_key": normalized_memory_content_key(content),
         "evidence": evidence or existing.evidence,
         "updated_at": now,
         "expires_at": expires_at,
@@ -487,6 +592,21 @@ def _apply_update_memory_item(
         updates["visibility"] = patch.target_visibility
     if patch.target_user_asserted is not None:
         updates["user_asserted"] = patch.target_user_asserted
+    for ledger_key in (
+        "ledger_schema_version",
+        "kind",
+        "subject_scope",
+        "slot",
+        "body",
+        "valid_from",
+        "valid_to",
+        "curation_weight",
+        "trigger_condition",
+        "intent_backed",
+        "write_reason",
+    ):
+        if ledger_key in patch.model_fields_set:
+            updates[ledger_key] = getattr(patch, ledger_key)
     if extra_updates:
         updates.update(extra_updates)
     if patch.clear_graph_assertion:
@@ -577,7 +697,11 @@ def _coerce_iso_timestamp(value: str, *, field: str) -> Optional[datetime]:
 
 
 def apply_long_term_patch_transaction(
-    *, control_state: MemoryControlState, operation: MemoryOperation, patch_payload: Dict[str, Any]
+    *,
+    control_state: MemoryControlState,
+    operation: MemoryOperation,
+    patch_payload: Dict[str, Any],
+    allow_trigger_feedback_arguments: bool = False,
 ) -> ApplyResult:
     """Pure transaction skeleton for Milestone 3.
 
@@ -608,7 +732,12 @@ def apply_long_term_patch_transaction(
     ):
         if optional_key in raw:
             extra_item_updates[optional_key] = raw.pop(optional_key)
-    for timestamp_key in ("last_corroborated_at", "captured_at", "updated_at", "expires_at"):
+    for timestamp_key in (
+        "last_corroborated_at",
+        "captured_at",
+        "updated_at",
+        "expires_at",
+    ):
         if timestamp_key in extra_item_updates and isinstance(extra_item_updates[timestamp_key], str):
             coerced = _coerce_iso_timestamp(extra_item_updates[timestamp_key], field=timestamp_key)
             if coerced is None:
@@ -648,6 +777,16 @@ def apply_long_term_patch_transaction(
             control_state=control_state,
             operation=operation,
             reason="patch evidence_ids do not match operation evidence_ids",
+        )
+    if (
+        patch.ledger_schema_version == "knowledge_ledger.v1"
+        and operation.operation_type != MemoryOperationType.ledger_mutation
+    ):
+        return ApplyResult(
+            status=ApplyStatus.invalid_patch,
+            control_state=control_state,
+            operation=operation,
+            reason="knowledge ledger writes require ledger_mutation authority",
         )
     if (
         _operation_digest_for_patch(
@@ -835,7 +974,12 @@ def apply_long_term_patch_transaction(
                 )
             )
             explicit_short_term_demotion = patch.target_tier == MemoryTier.short_term and patch.clear_graph_assertion
-            if semantic_change and not explicit_short_term_demotion and not graph_enrichment:
+            if (
+                semantic_change
+                and not explicit_short_term_demotion
+                and not graph_enrichment
+                and not allow_trigger_feedback_arguments
+            ):
                 return ApplyResult(
                     status=ApplyStatus.invalid_patch,
                     control_state=control_state,
@@ -989,12 +1133,43 @@ def apply_long_term_patch_transaction(
                     operation=operation,
                     reason=f"superseded target is not active: {superseded_id}",
                 )
+            if patch.ledger_schema_version == "knowledge_ledger.v1":
+                if existing_superseded.ledger_schema_version != "knowledge_ledger.v1":
+                    return ApplyResult(
+                        status=ApplyStatus.invalid_patch,
+                        control_state=control_state,
+                        operation=operation,
+                        reason="knowledge ledger amendment may supersede only ledger rows",
+                    )
+                if (
+                    existing_superseded.kind != patch.kind
+                    or existing_superseded.subject_scope != patch.subject_scope
+                    or existing_superseded.subject_entity_id != patch.subject_entity_id
+                ):
+                    return ApplyResult(
+                        status=ApplyStatus.invalid_patch,
+                        control_state=control_state,
+                        operation=operation,
+                        reason="knowledge ledger amendment must preserve kind and subject identity",
+                    )
+            superseded_at = max(datetime.now(timezone.utc), existing_superseded.updated_at)
+            if patch.ledger_schema_version == "knowledge_ledger.v1":
+                superseded_at = max(
+                    superseded_at,
+                    memory_item.valid_from or memory_item.captured_at,
+                    existing_superseded.valid_from or existing_superseded.captured_at,
+                )
             superseded_item = existing_superseded.model_copy(
                 update={
                     "canonical_memory_id": memory_item.memory_id,
                     "status": MemoryItemStatus.superseded,
                     "superseded_by": memory_item.memory_id,
-                    "updated_at": max(datetime.now(timezone.utc), existing_superseded.updated_at),
+                    "updated_at": superseded_at,
+                    "valid_to": (
+                        superseded_at
+                        if patch.ledger_schema_version == "knowledge_ledger.v1"
+                        else existing_superseded.valid_to
+                    ),
                     "ledger_commit_id": commit_id,
                     "ledger_sequence": next_control.commit_sequence,
                     "version": existing_superseded.version + 1,

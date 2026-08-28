@@ -5,7 +5,17 @@ from cachetools import TTLCache
 
 from database._client import db as firestore_db
 from database.auth import get_user_name
+from models.knowledge_ledger_policy import (
+    PLAYBOOK_HANDLE_CHARACTER_LIMIT,
+    PLAYBOOK_INDEX_CHARACTER_BUDGET,
+    PROFILE_CHARACTER_BUDGET,
+    normalize_playbook_handle,
+    render_bounded_profile,
+)
 from models.memories import Memory, MemoryDB
+from models.product_memory import MemoryKind, MemorySubjectScope
+from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
+from utils.memory.knowledge_ledger_migration import read_ledger_migration_completion
 from utils.memory.memory_service import MemoryService
 import logging
 
@@ -33,6 +43,42 @@ def clear_prompt_data_cache(uid: Optional[str] = None) -> None:
 
 def get_prompt_memories(uid: str) -> Tuple[Any, str]:
     user_name, baseline_memories, user_made_memories, generated_memories = get_prompt_data(uid)
+    all_memories = baseline_memories + user_made_memories + generated_memories
+    ledger_memories = [memory for memory in all_memories if memory.ledger_schema_version == LEDGER_SCHEMA_VERSION]
+    if ledger_memories:
+        ledger_context = _render_ledger_prompt_context(user_name, ledger_memories)
+        legacy_baseline = [row for row in baseline_memories if row.ledger_schema_version != LEDGER_SCHEMA_VERSION]
+        legacy_user_made = [row for row in user_made_memories if row.ledger_schema_version != LEDGER_SCHEMA_VERSION]
+        legacy_generated = [row for row in generated_memories if row.ledger_schema_version != LEDGER_SCHEMA_VERSION]
+        has_legacy_rows = bool(legacy_baseline or legacy_user_made or legacy_generated)
+        # A partial migration must never make unreconciled legacy knowledge
+        # disappear merely because the first ledger row exists. Only the
+        # explicit, fail-closed per-user completion proof plus a zero-legacy
+        # snapshot retires this bridge. The second check protects against a
+        # stale marker or a legacy writer that was not actually fenced.
+        if read_ledger_migration_completion(uid, db_client=firestore_db) is not None and not has_legacy_rows:
+            return user_name, ledger_context
+        legacy_context = _render_legacy_prompt_context(
+            user_name,
+            legacy_baseline,
+            legacy_user_made,
+            legacy_generated,
+        )
+        return user_name, ledger_context + "\nMigration compatibility context:\n" + legacy_context
+    return user_name, _render_legacy_prompt_context(
+        user_name,
+        baseline_memories,
+        user_made_memories,
+        generated_memories,
+    )
+
+
+def _render_legacy_prompt_context(
+    user_name: Optional[str],
+    baseline_memories: List[MemoryDB],
+    user_made_memories: List[MemoryDB],
+    generated_memories: List[MemoryDB],
+) -> str:
     memories_str = ''
     if baseline_memories:
         memories_str += (
@@ -46,7 +92,59 @@ def get_prompt_memories(uid: str) -> Tuple[Any, str]:
         memories_str += (
             f'\n\n{user_name} also shared the following about self: \n{Memory.get_memories_as_str(user_made_memories)}'
         )
-    return user_name, memories_str + '\n'
+    return memories_str + '\n'
+
+
+def _bounded_lines(lines: List[str], budget: int) -> str:
+    rendered: List[str] = []
+    used = 0
+    for line in lines:
+        separator = 1 if rendered else 0
+        if used + separator + len(line) > budget:
+            continue
+        rendered.append(line)
+        used += separator + len(line)
+    return '\n'.join(rendered)
+
+
+def _render_ledger_prompt_context(user_name: Optional[str], rows: List[MemoryDB]) -> str:
+    """Render only current slotted self-facts and playbook handles."""
+    facts = [
+        row
+        for row in rows
+        if row.kind == MemoryKind.fact
+        and row.subject_scope == MemorySubjectScope.primary_user
+        and row.intent_backed
+        and row.user_review is not False
+        and row.invalid_at is None
+        and row.slot
+        and row.content.strip()
+    ]
+    profile = render_bounded_profile(facts, character_budget=PROFILE_CHARACTER_BUDGET)
+    playbooks = [
+        row
+        for row in rows
+        if row.kind == MemoryKind.document
+        and row.subject_scope == MemorySubjectScope.primary_user
+        and row.user_review is not False
+        and row.invalid_at is None
+        and row.content.strip()
+    ]
+    playbooks.sort(key=lambda row: (-row.curation_weight, row.content, row.id))
+    playbook_index = _bounded_lines(
+        [
+            f"{row.id}: {normalize_playbook_handle(row.content)[:PLAYBOOK_HANDLE_CHARACTER_LIMIT]}"
+            for row in playbooks
+            if normalize_playbook_handle(row.content)
+        ],
+        PLAYBOOK_INDEX_CHARACTER_BUDGET,
+    )
+    sections = [f"Current profile for {user_name or 'the user'}:\n{profile or '(no current slotted facts)'}"]
+    if playbook_index:
+        sections.append(
+            "Available playbooks (call read_playbook for the body; do not infer it from the title):\n" + playbook_index
+        )
+    return '\n\n'.join(sections) + '\n'
 
 
 def safe_create_memory(memory_data: Dict[str, Any]) -> MemoryDB:

@@ -57,6 +57,7 @@ from models.shared import StatusResponse
 from utils.conversations.process_conversation import (
     AppUsageAttribution,
     process_conversation,
+    run_first_open_derived_work,
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -84,6 +85,7 @@ from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.product_telemetry import emit_product_event
+from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
 from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
@@ -207,6 +209,40 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     # Return immediately — still status=processing, no summary yet; the client polls for completion.
     conversation['deferred'] = False
     return conversation
+
+
+def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
+    """Claim once and run in the background; failure remains retryable."""
+    conversation_id = conversation.get('id')
+    if not conversation_id or not conversation.get('jit_first_open'):
+        return
+    try:
+        token = conversations_db.claim_authorized_first_open_work(uid, conversation_id, conversation.get('source'))
+    except Exception as error:
+        logger.warning('JIT first-open claim failed uid=%s conv=%s: %s', uid, conversation_id, error)
+        return
+    if token is None:
+        return
+
+    def _run() -> None:
+        succeeded = False
+        try:
+            latest = conversations_db.get_conversation(uid, conversation_id)
+            if latest is None:
+                raise RuntimeError('conversation disappeared before first-open work')
+            run_first_open_derived_work(uid, latest, token)
+            succeeded = True
+        except Exception as error:
+            logger.exception('JIT first-open worker failed uid=%s conv=%s: %s', uid, conversation_id, error)
+        finally:
+            try:
+                conversations_db.finish_first_open_work(uid, conversation_id, token, succeeded=succeeded)
+            except Exception as error:
+                logger.exception(
+                    'JIT first-open lease finalization failed uid=%s conv=%s: %s', uid, conversation_id, error
+                )
+
+    submit_with_context(postprocess_executor, _run)
 
 
 class ProcessConversationRequest(BaseModel):
@@ -679,6 +715,8 @@ def get_conversation_by_id(
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred'):
         conversation = _enrich_deferred_conversation(uid, conversation)
+    else:
+        _dispatch_first_open_work(uid, conversation)
     return conversation
 
 
@@ -889,7 +927,9 @@ def patch_conversation_segment_text(
 @router.get(
     "/v1/conversations/{conversation_id}/photos", response_model=List[ConversationPhoto], tags=['conversations']
 )
-def get_conversation_photos(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_conversation_photos(
+    conversation_id: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "frame_requests:read"))
+):
     _get_valid_conversation_by_id(uid, conversation_id)
     return conversations_db.get_conversation_photos(uid, conversation_id)
 
@@ -917,14 +957,11 @@ def delete_conversation(
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
 
     if cascade:
-        # Delete associated memories and action items before removing the conversation doc
-        # so a partial failure cannot orphan derived data.
+        # Delete associated memories and action items first so partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
         memory_service = MemoryService(db_client=db_client)
-        # Retraction is fenced with canonical intake (MEMORY_MODE). Skipping it
-        # when there is provably nothing to retract keeps delete working while
-        # the fence is closed; anything real still raises rather than orphaning
-        # live memories against a deleted conversation.
+        # Retraction is fenced with canonical intake; skip only when there is provably nothing to retract.
+        # Any real memory still raises instead of being orphaned by conversation deletion.
         if not retraction_can_be_skipped(uid, conversation_id, memory_service=memory_service, db_client=db_client):
             try:
                 memory_service.retract_conversation_memories(uid, conversation_id)
@@ -952,7 +989,8 @@ def delete_conversation(
     # is gone.
     delete_conversation_screen_frames(uid, conversation_id)
 
-    conversations_db.delete_conversation(uid, conversation_id)
+    delete_conversation_and_frame_evidence(uid, conversation_id)
+
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)
 

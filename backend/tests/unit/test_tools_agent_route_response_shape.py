@@ -197,6 +197,7 @@ def loaded_route_modules(monkeypatch):
     agentic_mod = types.ModuleType('utils.retrieval.agentic')
     agentic_mod.agent_config_context = types.SimpleNamespace(set=MagicMock())
     agentic_mod.CORE_TOOLS = []
+    agentic_mod.JIT_ONLY_TOOL_NAMES = frozenset()
     monkeypatch.setitem(sys.modules, 'utils.retrieval.agentic', agentic_mod)
 
     memories_service_mod = types.ModuleType('utils.retrieval.tool_services.memories')

@@ -1923,6 +1923,137 @@ describe("kernel conversation journal", () => {
     fixture.store.close();
   });
 
+  // Characterization of the accept/reject boundary the desktop failed-turn
+  // fallback runs into. The Swift side reconstructs a failure notice and asks
+  // the journal to record it; whether that survives relaunch depends entirely
+  // on whether the runtime already terminalized the row.
+  it("rejects a late failure notice on a pre-terminalized empty failed turn but accepts one on a live turn", () => {
+    const fixture = newSurface("main_chat", "chat", "failure-notice");
+    const notice = "Omi's AI service declined this request.";
+
+    // (1) REJECT — the runtime discarded the turn first (user Stop, watchdog,
+    // owner revocation, or a throw escaping the run), leaving an empty
+    // `failed` row. This is the state the Swift fallback is written for.
+    const cancelledRun = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_notice_cancelled",
+      clientId: "main-chat",
+      requestId: "failure-notice-cancelled",
+      status: "cancelled",
+      mode: "act",
+    });
+    const cancelledAttempt = fixture.store.insertAttempt({
+      attemptId: "att_notice_cancelled",
+      runId: cancelledRun.runId,
+      attemptNo: 1,
+      status: "cancelled",
+      adapterId: "fake",
+      adapterInstanceId: "fake:notice-cancelled",
+    });
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-notice-discarded",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "",
+      contentBlocks: [],
+      producingRunId: cancelledRun.runId,
+      producingAttemptId: cancelledAttempt.attemptId,
+      createdAtMs: 50,
+    });
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-notice-discarded",
+      producingRunId: cancelledRun.runId,
+      producingAttemptId: cancelledAttempt.attemptId,
+      disposition: "discard",
+      nowMs: 51,
+    });
+
+    // The `journal_update_turn` route Swift takes when it has no correlated
+    // terminal result. (`index.ts` refuses it even earlier, because the turn
+    // carries a producing run id at all.)
+    expect(() => assertPublicJournalUpdatePolicy(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-notice-discarded",
+      status: "failed",
+      content: notice,
+    })).toThrow(/rejects every public update/i);
+
+    // And the terminalize route cannot re-terminalize it with new material.
+    expect(() => terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-notice-discarded",
+      producingRunId: cancelledRun.runId,
+      producingAttemptId: cancelledAttempt.attemptId,
+      disposition: "accept",
+      content: notice,
+      nowMs: 52,
+    })).toThrow(/already terminalized with different canonical material/i);
+
+    // So the durable row stays the empty `failed` placeholder that the desktop
+    // journal projection deletes on the next refresh — the notice is lost.
+    expect(fixture.store.getRow(
+      "SELECT status, content FROM conversation_turns WHERE turn_id = ?",
+      ["turn-notice-discarded"],
+    )).toEqual({ status: "failed", content: "" });
+
+    // (2) ACCEPT — an ordinary upstream failure never pre-terminalizes, so the
+    // same notice reaches durable storage through the terminalize route.
+    const failedRun = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_notice_failed",
+      clientId: "main-chat",
+      requestId: "failure-notice-failed",
+      status: "failed",
+      mode: "act",
+    });
+    const failedAttempt = fixture.store.insertAttempt({
+      attemptId: "att_notice_failed",
+      runId: failedRun.runId,
+      attemptNo: 1,
+      status: "failed",
+      adapterId: "fake",
+      adapterInstanceId: "fake:notice-failed",
+    });
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-notice-live",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "",
+      contentBlocks: [],
+      producingRunId: failedRun.runId,
+      producingAttemptId: failedAttempt.attemptId,
+      createdAtMs: 60,
+    });
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-notice-live",
+      producingRunId: failedRun.runId,
+      producingAttemptId: failedAttempt.attemptId,
+      disposition: "accept",
+      content: notice,
+      nowMs: 61,
+    });
+
+    expect(fixture.store.getRow(
+      "SELECT status, content FROM conversation_turns WHERE turn_id = ?",
+      ["turn-notice-live"],
+    )).toEqual({ status: "failed", content: notice });
+    fixture.store.close();
+  });
+
   it("rolls back the first visible turn when the second exchange turn is rejected", () => {
     const fixture = newSurface("main_chat", "chat", "atomic-exchange");
     recordJournalTurn(fixture.store, {

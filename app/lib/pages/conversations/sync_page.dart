@@ -17,6 +17,7 @@ import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/sync_confirmation.dart';
+import 'widgets/sync_error_card.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
@@ -618,30 +619,9 @@ class _SyncPageState extends State<SyncPage> {
   }
 
   Widget _buildSyncErrorCard(SyncProvider syncProvider) {
-    final errorMessage = syncProvider.syncError!;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              _formatErrorMessage(context, errorMessage),
-              style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          statusActionPill(context.l10n.retry, Colors.redAccent, () => syncProvider.retrySync()),
-        ],
-      ),
+    return SyncErrorCard(
+      message: _formatErrorMessage(context, syncProvider.syncError!),
+      onRetry: () => syncProvider.retrySync(),
     );
   }
 

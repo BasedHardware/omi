@@ -2047,6 +2047,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get memoryDeleted => 'Anı Silindi.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Geri Al';
 
   @override
@@ -9914,4 +9917,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Önceden kaydedilmiş';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant hâlâ kayıt yapıyor, bu yüzden depolanan ses aktarılamıyor. Kaydı durdurmak için Pendant\'ın düğmesine basın, ardından yeniden senkronize edin.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant\'ın depolama alanı dolu ve hâlâ kayıt modunda olduğu için kayıtlı ses aktarılamıyor. Kaydı durdurmak için Pendant\'ın düğmesine basın, ardından yeniden senkronize edin.';
 }

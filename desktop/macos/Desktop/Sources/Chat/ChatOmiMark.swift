@@ -47,10 +47,6 @@ enum ChatOmiMarkPlacement {
   /// object needs, not a margin of its own.
   static let markGutter: CGFloat = markSize + OmiSpacing.sm
 
-  static func finalAssistantMessageID(in messages: [ChatMessage]) -> String? {
-    messages.last(where: { $0.sender == .ai })?.id
-  }
-
   static func rowHeight(showsMark: Bool) -> CGFloat {
     showsMark ? reservedRowHeight : 0
   }
