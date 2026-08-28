@@ -74,7 +74,7 @@ const TASK_WRITE_TOOLS = new Set([
   "set_user_preferences",
   "complete_onboarding",
 ]);
-const MEMORY_WRITE_TOOLS = new Set(["create_memory"]);
+const MEMORY_WRITE_TOOLS = new Set(["create_memory", "create_memories"]);
 const SCREEN_IMAGE_TOOLS = new Set(["get_screenshot", "look_at_frame", "capture_screen"]);
 const SCREEN_SUMMARY_TOOLS = new Set(["semantic_search", "get_work_context"]);
 // Coordinator policy classifies this as a production user-approved operation;

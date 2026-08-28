@@ -184,8 +184,12 @@ enum DesktopCapabilityRegistry {
       when: !available(taskWriteTools).isEmpty
     )
     append(
-      "User explicitly asks to remember/save -> create_memory with a clean standalone fact.",
+      "User asks you to remember/save one thing -> create_memory with a clean standalone fact.",
       when: has("create_memory")
+    )
+    append(
+      "User asks you to remember a document, a profile, or everything they just shared -> create_memories with one clean fact per item.",
+      when: has("create_memories")
     )
     let taskCompletionTools = ["complete_task", "delete_task"]
     append(

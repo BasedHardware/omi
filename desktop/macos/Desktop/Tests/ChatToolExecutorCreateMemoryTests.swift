@@ -136,96 +136,15 @@ final class ChatToolExecutorCreateMemoryTests: XCTestCase {
     XCTAssertNil(ChatToolExecutor.memoryCreationInput(["content": String(repeating: "a", count: 1001)]))
   }
 
-  func testExplicitIntentIsLimitedToTypedDesktopChat() {
-    XCTAssertTrue(
-      ChatToolExecutor.isExplicitMemorySaveIntent(
-        userText: "Please remember that I prefer tea.",
-        surfaceKind: "main_chat")
-    )
-    XCTAssertTrue(
-      ChatToolExecutor.isExplicitMemorySaveIntent(
-        userText: "Remember I prefer tea.",
-        surfaceKind: "main_chat")
-    )
-    XCTAssertTrue(
-      ChatToolExecutor.isExplicitMemorySaveIntent(
-        userText: "Save this as a memory.",
-        surfaceKind: "floating_chat")
-    )
-    XCTAssertFalse(
-      ChatToolExecutor.isExplicitMemorySaveIntent(
-        userText: "I prefer tea.",
-        surfaceKind: "main_chat")
-    )
-    XCTAssertFalse(
-      ChatToolExecutor.isExplicitMemorySaveIntent(
-        userText: "Please remember that I prefer tea.",
-        surfaceKind: "realtime_voice")
-    )
-    XCTAssertFalse(
-      ChatToolExecutor.isExplicitMemorySaveIntent(
-        userText: "Please do not remember this.",
-        surfaceKind: "main_chat")
-    )
-    XCTAssertFalse(
-      ChatToolExecutor.isExplicitMemorySaveIntent(
-        userText: "Do you remember that I prefer tea?",
-        surfaceKind: "main_chat")
-    )
+  func testMemoryWritesAreLimitedToTypedDesktopChatSurfaces() {
+    XCTAssertTrue(ChatToolExecutor.isTypedChatMemorySurface("main_chat"))
+    XCTAssertTrue(ChatToolExecutor.isTypedChatMemorySurface("floating_chat"))
+    XCTAssertFalse(ChatToolExecutor.isTypedChatMemorySurface("realtime_voice"))
+    XCTAssertFalse(ChatToolExecutor.isTypedChatMemorySurface("task_chat"))
+    XCTAssertFalse(ChatToolExecutor.isTypedChatMemorySurface(nil))
   }
 
-  func testMemorySaveIntentCorpusMatchesRuntimePolicy() throws {
-    let corpus = try Self.loadMemorySaveIntentCorpus()
-    for prompt in corpus.authorized {
-      XCTAssertTrue(
-        ChatToolExecutor.isExplicitMemorySaveIntent(userText: prompt, surfaceKind: "main_chat"),
-        "expected authorized save intent: \(prompt)")
-      XCTAssertTrue(
-        ChatToolExecutor.isExplicitMemorySaveIntent(userText: prompt, surfaceKind: "floating_chat"),
-        "expected authorized floating-chat save intent: \(prompt)")
-    }
-    for prompt in corpus.unauthorized {
-      XCTAssertFalse(
-        ChatToolExecutor.isExplicitMemorySaveIntent(userText: prompt, surfaceKind: "main_chat"),
-        "expected unauthorized save intent: \(prompt)")
-    }
-  }
-
-  func testExecutorRejectsInferredMemoryWithoutCallingBackend() async {
-    let client = APIClient(session: URLSession(configuration: .ephemeral))
-    let result = await ChatToolExecutor.execute(
-      ToolCall(
-        name: "create_memory",
-        arguments: ["content": "I prefer tea."],
-        thoughtSignature: nil),
-      originatingSurfaceRef: .mainChat(chatId: "test"),
-      originatingUserText: "I prefer tea.",
-      expectedOwnerID: "create-memory-tool-owner",
-      backendAPIClient: client)
-
-    XCTAssertTrue(result.contains("explicit_user_intent_required"), result)
-  }
-
-  func testExecutorRejectsUngroundedMemoryContentWithoutCallingBackend() async {
-    let client = APIClient(session: URLSession(configuration: .ephemeral))
-    let result = await ChatToolExecutor.execute(
-      ToolCall(
-        name: "create_memory",
-        arguments: ["content": "David loves coffee."],
-        thoughtSignature: nil),
-      originatingSurfaceRef: .mainChat(chatId: "test"),
-      originatingUserText: "Please remember that I prefer tea.",
-      expectedOwnerID: "create-memory-tool-owner",
-      backendAPIClient: client)
-
-    XCTAssertTrue(result.contains("memory_content_not_user_supplied"), result)
-    XCTAssertFalse(
-      ChatToolExecutor.isMemoryContentGroundedInUserRequest(
-        content: "David loves coffee.",
-        userText: "Please remember that I prefer tea."))
-  }
-
-  func testExecutorAcceptsRewrittenContentWhenSaveIntentIsPresent() async throws {
+  func testExecutorSavesARewrittenFactFromTypedChat() async throws {
     CreateMemoryRequestCapture.reset()
     setenv("OMI_PYTHON_API_URL", "http://create-memory-contract-test:9001", 1)
     defer {
@@ -247,7 +166,6 @@ final class ChatToolExecutorCreateMemoryTests: XCTestCase {
       expectedOwnerID: "create-memory-tool-owner",
       backendAPIClient: client)
 
-    XCTAssertFalse(result.contains("memory_content_not_user_supplied"), result)
     XCTAssertEqual(CreateMemoryRequestCapture.count(), 1)
     let body = try XCTUnwrap(CreateMemoryRequestCapture.requestBody())
     let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
@@ -255,37 +173,7 @@ final class ChatToolExecutorCreateMemoryTests: XCTestCase {
     XCTAssertTrue(result.contains(#""memory_id":"memory-1""#), result)
   }
 
-  func testExecutorAcceptsParaphrasedProactivityMemory() async throws {
-    CreateMemoryRequestCapture.reset()
-    setenv("OMI_PYTHON_API_URL", "http://create-memory-contract-test:9001", 1)
-    defer {
-      unsetenv("OMI_PYTHON_API_URL")
-      CreateMemoryRequestCapture.reset()
-    }
-    let configuration = URLSessionConfiguration.ephemeral
-    configuration.protocolClasses = [CreateMemoryRequestCapture.self]
-    let client = APIClient(session: URLSession(configuration: configuration))
-    await client.setCreateMemoryTestAuthHeader("Bearer create-memory-tool-owner-token")
-
-    let result = await ChatToolExecutor.execute(
-      ToolCall(
-        name: "create_memory",
-        arguments: ["content": "David is currently testing proactivity in Omi"],
-        thoughtSignature: nil),
-      originatingSurfaceRef: .mainChat(chatId: "test"),
-      originatingUserText: "Please remember that I am currently testing proactivity in Omi",
-      expectedOwnerID: "create-memory-tool-owner",
-      backendAPIClient: client)
-
-    XCTAssertFalse(result.contains("memory_content_not_user_supplied"), result)
-    XCTAssertEqual(CreateMemoryRequestCapture.count(), 1)
-    let body = try XCTUnwrap(CreateMemoryRequestCapture.requestBody())
-    let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
-    XCTAssertEqual(payload["content"] as? String, "David is currently testing proactivity in Omi")
-    XCTAssertTrue(result.contains(#""memory_id":"memory-1""#), result)
-  }
-
-  func testExecutorRejectsRealtimeVoiceSurfaceEvenWithSaveIntent() async {
+  func testExecutorRejectsRealtimeVoiceSurface() async {
     let client = APIClient(session: URLSession(configuration: .ephemeral))
     let result = await ChatToolExecutor.execute(
       ToolCall(
@@ -297,10 +185,10 @@ final class ChatToolExecutorCreateMemoryTests: XCTestCase {
       expectedOwnerID: "create-memory-tool-owner",
       backendAPIClient: client)
 
-    XCTAssertTrue(result.contains("explicit_user_intent_required"), result)
+    XCTAssertTrue(result.contains("typed_chat_surface_required"), result)
   }
 
-  func testExecutorRejectsDelegatedFloatingPillEvenWithExplicitText() async {
+  func testExecutorRejectsDelegatedFloatingPillScope() async {
     let client = APIClient(session: URLSession(configuration: .ephemeral))
     let result = await ChatToolExecutor.execute(
       ToolCall(
@@ -313,7 +201,7 @@ final class ChatToolExecutorCreateMemoryTests: XCTestCase {
       expectedOwnerID: "create-memory-tool-owner",
       backendAPIClient: client)
 
-    XCTAssertTrue(result.contains("explicit_user_intent_required"), result)
+    XCTAssertTrue(result.contains("typed_chat_surface_required"), result)
   }
 
   func testMemoryCreationReceiptIncludesExplicitServerLayerOnly() throws {
@@ -424,16 +312,77 @@ final class ChatToolExecutorCreateMemoryTests: XCTestCase {
     XCTAssertFalse(result.contains(#""saved":false"#), result)
   }
 
-  private struct MemorySaveIntentCorpus: Decodable {
-    let authorized: [String]
-    let unauthorized: [String]
+  func testMemoriesCreationInputBoundsDeduplicatesAndCaps() {
+    XCTAssertEqual(
+      ChatToolExecutor.memoriesCreationInput([
+        "facts": ["  Prefers tea.  ", "Prefers tea.", "", String(repeating: "a", count: 1001), "Works in Swift."]
+      ]),
+      ["Prefers tea.", "Works in Swift."])
+    XCTAssertNil(ChatToolExecutor.memoriesCreationInput(["facts": []]))
+    XCTAssertNil(ChatToolExecutor.memoriesCreationInput(["content": "Prefers tea."]))
+    let overflow = (0..<40).map { "Fact number \($0)." }
+    XCTAssertEqual(
+      ChatToolExecutor.memoriesCreationInput(["facts": overflow])?.count,
+      ChatToolExecutor.memoriesCreationMaxFacts)
   }
 
-  private static func loadMemorySaveIntentCorpus() throws -> MemorySaveIntentCorpus {
-    let testFile = URL(fileURLWithPath: #filePath)
-    let desktopDir = testFile.deletingLastPathComponent().deletingLastPathComponent()
-    let macOSDir = desktopDir.deletingLastPathComponent()
-    let url = macOSDir.appendingPathComponent("agent/tests/fixtures/memory-save-intent-corpus.json")
-    return try JSONDecoder().decode(MemorySaveIntentCorpus.self, from: Data(contentsOf: url))
+  /// The write this tool exists for: many distilled facts reach the backend in
+  /// one owner-bound batch request rather than one request per fact.
+  func testBatchExecutorSavesEveryFactInOneOwnerBoundRequest() async throws {
+    CreateMemoryRequestCapture.reset()
+    setenv("OMI_PYTHON_API_URL", "http://create-memories-contract-test:9001", 1)
+    defer {
+      unsetenv("OMI_PYTHON_API_URL")
+      CreateMemoryRequestCapture.reset()
+    }
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [CreateMemoryRequestCapture.self]
+    let client = APIClient(session: URLSession(configuration: configuration))
+    await client.setCreateMemoryTestAuthHeader("Bearer create-memory-tool-owner-token")
+
+    let result = await ChatToolExecutor.execute(
+      ToolCall(
+        name: "create_memories",
+        arguments: ["facts": ["Prefers tea.", "Works in Swift."]],
+        thoughtSignature: nil),
+      originatingSurfaceRef: .mainChat(chatId: "test"),
+      expectedOwnerID: "create-memory-tool-owner",
+      backendAPIClient: client)
+
+    // One owner-bound request per fact through /v3/memories: the batch route
+    // answers 503 for this write in production.
+    XCTAssertEqual(CreateMemoryRequestCapture.count(), 2)
+    let request = try XCTUnwrap(CreateMemoryRequestCapture.request())
+    XCTAssertEqual(request.httpMethod, "POST")
+    XCTAssertEqual(request.url?.path, "/v3/memories")
+    XCTAssertEqual(
+      request.value(forHTTPHeaderField: "Authorization"),
+      "Bearer create-memory-tool-owner-token")
+    let body = try XCTUnwrap(CreateMemoryRequestCapture.requestBody())
+    let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    // `manual` is the wire marker for user_asserted; a batch save carries the
+    // same authority as the single write.
+    XCTAssertEqual(payload["category"] as? String, "manual")
+    XCTAssertEqual(payload["visibility"] as? String, "private")
+    XCTAssertTrue(result.contains(#""saved_count":2"#), result)
+  }
+
+  func testBatchExecutorRejectsNonTypedChatSurfaceWithoutCallingBackend() async {
+    CreateMemoryRequestCapture.reset()
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [CreateMemoryRequestCapture.self]
+    let client = APIClient(session: URLSession(configuration: configuration))
+
+    let result = await ChatToolExecutor.execute(
+      ToolCall(
+        name: "create_memories",
+        arguments: ["facts": ["Prefers tea."]],
+        thoughtSignature: nil),
+      originatingSurfaceRef: .realtimeVoice(chatId: "test"),
+      expectedOwnerID: "create-memory-tool-owner",
+      backendAPIClient: client)
+
+    XCTAssertTrue(result.contains("typed_chat_surface_required"), result)
+    XCTAssertEqual(CreateMemoryRequestCapture.count(), 0)
   }
 }

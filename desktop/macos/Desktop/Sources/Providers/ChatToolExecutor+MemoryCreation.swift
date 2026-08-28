@@ -15,138 +15,18 @@ extension ChatToolExecutor {
     return MemoryCreationInput(content: content)
   }
 
-  /// Direct memory writes are limited to a typed main/floating desktop chat
-  /// turn whose user text contains an affirmative save request. Runtime
-  /// surfaces such as voice, task chat, onboarding, delegated work, and
-  /// background runs fail closed because they cannot establish that intent.
-  nonisolated static func isExplicitMemorySaveIntent(
-    userText: String?,
-    surfaceKind: String?
-  ) -> Bool {
-    guard let surfaceKind, ["main_chat", "floating_chat"].contains(surfaceKind) else { return false }
-    guard let userText else { return false }
-    let text = userText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    guard !text.isEmpty else { return false }
-
-    // Keep this validator in lockstep with hasExplicitMemorySaveIntent in
-    // desktop/macos/agent/src/runtime/external-surface-tool-policy.ts:
-    // negations, recall questions, and assistant-authored suggestions are not
-    // authorization for a write. Shared cases live in
-    // agent/tests/fixtures/memory-save-intent-corpus.json.
-    let negativePattern =
-      #"(?:\b(?:don't|do not|never|no longer|without|not to)\b[^.!?]{0,96}\b(?:remember|save|store|keep)\b|\b(?:remember|save|store|keep)\b[^.!?]{0,96}\b(?:not|never)\b)"#
-    guard text.range(of: negativePattern, options: .regularExpression) == nil else { return false }
-
-    if text.contains("?") {
-      let politeCommand =
-        text.range(
-          of: #"\bplease\b[^.!?]*\b(?:remember|save|store|keep)\b"#,
-          options: .regularExpression) != nil
-        || text.range(
-          of: #"^(?:hey\s+)?(?:please\s+)?(?:remember|save|store|keep)\b"#,
-          options: .regularExpression) != nil
-      if !politeCommand,
-        text.range(of: #"\b(?:remember|save|store|keep)\b"#, options: .regularExpression) != nil
-      {
-        return false
-      }
-    }
-
-    let passiveMentionPattern =
-      #"\b(?:should|could|would)\s+(?:remember|save|store|keep)\b|\b(?:ability|able)\s+to\s+(?:remember|save|store|keep)\b"#
-    guard text.range(of: passiveMentionPattern, options: .regularExpression) == nil else { return false }
-
-    let thirdPartyCommandPattern =
-      #"\b(?:ask|tell|have|get|let|want|need)\s+(?!you\b)\w+(?:\s+\w+){0,2}\s+to\s+(?:remember|save|store|keep)\b"#
-    guard text.range(of: thirdPartyCommandPattern, options: .regularExpression) == nil else { return false }
-
-    let directCommandPattern = #"^(?:hey\s+)?(?:please\s+)?(?:remember|save|store|keep)\b"#
-    let sentenceCommandPattern = #"(?:^|[.!?,;]\s+)(?:please\s+)?(?:remember|save|store|keep)\b"#
-    let delegatedCommandPattern = #"\b(?:want|need|ask)\s+(?:you\s+)?to\s+(?:please\s+)?(?:remember|save|store|keep)\b"#
-    let rememberThatCommandPattern = #"(?:^|[.!?,;]\s+)(?:please\s+)?remember\s+that\b"#
-    let anaphoricCommandPattern =
-      #"\b(?:remember|save|store|keep)\s+(?:this|it|my|our|the following)\b"#
-    let memoryPhrasePattern =
-      #"\b(?:add this to memory|create a memory|make this a memory|save to memory|save as a memory|store(?:\s+this)? in memory|keep in mind(?:\s+that)?)\b"#
-    let hasCommand =
-      text.range(of: directCommandPattern, options: .regularExpression) != nil
-      || text.range(of: sentenceCommandPattern, options: .regularExpression) != nil
-      || text.range(of: delegatedCommandPattern, options: .regularExpression) != nil
-      || text.range(of: rememberThatCommandPattern, options: .regularExpression) != nil
-      || text.range(of: anaphoricCommandPattern, options: .regularExpression) != nil
-      || text.range(of: memoryPhrasePattern, options: .regularExpression) != nil
-    guard hasCommand else { return false }
-    return text.range(
-      of: #"\b(?:i|we|you|they)\s+(?:remember|save|store|keep)\b"#,
-      options: .regularExpression) == nil
+  /// Memory writes belong to a typed desktop chat turn whose owner is present.
+  /// Voice, task chat, onboarding, delegated work, and background runs fail
+  /// closed: nothing there establishes that this user asked for a memory.
+  /// Whether the turn actually asked for one is the model's judgment, stated in
+  /// the tool description — this executor does not pattern-match the phrasing.
+  nonisolated static func isTypedChatMemorySurface(_ surfaceKind: String?) -> Bool {
+    guard let surfaceKind else { return false }
+    return ["main_chat", "floating_chat"].contains(surfaceKind)
   }
 
-  /// Memory writes may paraphrase the user's fact, but the content must still
-  /// be grounded in this turn. Verbatim spans pass; anaphoric-only commands
-  /// ("remember this") carry no extractable fact here; otherwise a meaningful
-  /// token overlap is required so invented facts cannot ride explicit save intent.
-  nonisolated static func isMemoryContentGroundedInUserRequest(content: String, userText: String?) -> Bool {
-    guard let userText else { return false }
-    let normalizedContent = normalizeMemoryText(content)
-    let normalizedUserText = normalizeMemoryText(userText)
-    guard !normalizedContent.isEmpty, !normalizedUserText.isEmpty else { return false }
-    if " \(normalizedUserText) ".contains(" \(normalizedContent) ") { return true }
-    if isAnaphoricOnlyMemoryCommand(userText) { return true }
-
-    let contentTokens = memoryGroundingTokens(content)
-    guard !contentTokens.isEmpty else { return false }
-    let promptTokens = Set(memoryGroundingTokens(userText))
-    let overlap = contentTokens.filter { promptTokens.contains($0) }
-    let required =
-      contentTokens.count <= 2
-      ? 1
-      : max(2, Int(ceil(Double(contentTokens.count) * 0.5)))
-    return overlap.count >= required
-  }
-
-  private nonisolated static func isAnaphoricOnlyMemoryCommand(_ prompt: String) -> Bool {
-    let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    let hasDeicticCommand =
-      text.range(of: #"\b(?:remember|save|store|keep)\s+(?:this|that|it)\b"#, options: .regularExpression) != nil
-      || text.range(of: #"\b(?:add this to memory|make this a memory)\b"#, options: .regularExpression) != nil
-    guard hasDeicticCommand else { return false }
-    return memoryGroundingTokens(stripMemoryCommandPhrases(text)).count < 2
-  }
-
-  private nonisolated static func stripMemoryCommandPhrases(_ text: String) -> String {
-    var stripped = text
-    let replacements: [(String, String)] = [
-      (#"^(?:hey\s+)?(?:please\s+)?(?:remember|save|store|keep)\b[:\s]*"#, ""),
-      (#"\b(?:want|need|ask)\s+you\s+to\s+(?:please\s+)?(?:remember|save|store|keep)\b[:\s]*"#, ""),
-      (#"\b(?:remember|save|store|keep)\s+(?:that|this|it|my|our|the following)\b[:\s,]*"#, ""),
-      (
-        #"\b(?:add this to memory|create a memory|make this a memory|save to memory|save as a memory|store(?:\s+this)? in memory|keep in mind(?:\s+that)?)\b[:\s]*"#,
-        ""
-      ),
-    ]
-    for (pattern, replacement) in replacements {
-      stripped = stripped.replacingOccurrences(
-        of: pattern,
-        with: replacement,
-        options: .regularExpression)
-    }
-    return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
-  }
-
-  private nonisolated static let memoryGroundingStopWords: Set<String> = [
-    "a", "an", "and", "as", "at", "be", "been", "being", "but", "for", "from", "had", "has",
-    "have", "hey", "i", "im", "in", "is", "it", "me", "my", "of", "on", "or", "please", "that",
-    "the", "this", "to", "was", "were", "with", "you", "your",
-    "keep", "remember", "save", "store",
-  ]
-
-  private nonisolated static func memoryGroundingTokens(_ value: String) -> [String] {
-    normalizeMemoryText(value)
-      .split(separator: " ")
-      .map(String.init)
-      .filter { $0.count > 1 && !memoryGroundingStopWords.contains($0) }
-  }
-
+  /// Fold whitespace and case so two phrasings of the same fact collapse to one
+  /// batch entry.
   private nonisolated static func normalizeMemoryText(_ value: String) -> String {
     value
       .precomposedStringWithCompatibilityMapping
@@ -156,6 +36,55 @@ extension ChatToolExecutor {
       .joined()
       .split(whereSeparator: \.isWhitespace)
       .joined(separator: " ")
+  }
+
+  /// Upper bound on one batch save. A document worth remembering is a few dozen
+  /// facts; beyond that the model is dumping the source rather than distilling it.
+  nonisolated static let memoriesCreationMaxFacts = 25
+
+  /// Normalize the batch input the same way the single write normalizes
+  /// `content`: trim, bound each fact, drop duplicates, and cap the batch.
+  nonisolated static func memoriesCreationInput(_ arguments: [String: Any]) -> [String]? {
+    guard let rawFacts = arguments["facts"] as? [Any] else { return nil }
+    var seen = Set<String>()
+    var facts: [String] = []
+    for raw in rawFacts {
+      guard let text = raw as? String else { continue }
+      let fact = text.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !fact.isEmpty, fact.count <= 1000 else { continue }
+      guard seen.insert(normalizeMemoryText(fact)).inserted else { continue }
+      facts.append(fact)
+      if facts.count == memoriesCreationMaxFacts { break }
+    }
+    return facts.isEmpty ? nil : facts
+  }
+
+  /// A partial save is reported as one: the model must be able to tell the user
+  /// how many of their facts actually landed.
+  nonisolated static func memoriesCreationReceipt(
+    savedIDs: [String],
+    requestedCount: Int,
+    failed: Bool
+  ) -> String {
+    var payload: [String: Any] = [
+      "ok": true,
+      "saved": true,
+      "saved_count": savedIDs.count,
+      "requested_count": requestedCount,
+      "memory_ids": savedIDs,
+      "message": "Memories saved; their lifecycle is managed by Omi.",
+    ]
+    if failed {
+      payload["message"] =
+        "Saved \(savedIDs.count) of \(requestedCount); the rest could not be saved. Tell the user what was kept."
+    }
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "{\"ok\":true,\"saved\":true,\"saved_count\":\(savedIDs.count)}"
+    }
+    return json
   }
 
   nonisolated static func memoryCreationReceipt(_ memory: ServerMemory) -> String {
@@ -198,36 +127,119 @@ extension ChatToolExecutor {
     return (400..<500).contains(statusCode) && ![408, 409, 429].contains(statusCode)
   }
 
-  static func executeCreateMemory(
+  /// A chat-tool write lands in the backend projection only; the memories page
+  /// reads its own cache and would otherwise keep showing a list without it.
+  private nonisolated static func announceMemoryWrite() {
+    Task { @MainActor in
+      NotificationCenter.default.post(name: .memoriesDidChange, object: nil)
+    }
+  }
+
+  private nonisolated static func memorySurfaceRejection(
+    surface: AgentSurfaceReference?,
+    clientScope: String?
+  ) -> String? {
+    guard isTypedChatMemorySurface(surface?.surfaceKind), clientScope == nil else {
+      return [
+        #"{"ok":false,"error":{"code":"typed_chat_surface_required","message":"Memory writes are only "#,
+        #"available in the user's own typed desktop chat."}}"#,
+      ].joined()
+    }
+    return nil
+  }
+
+  static func executeCreateMemories(
     _ arguments: [String: Any],
-    originatingUserText: String?,
     originatingSurface: AgentSurfaceReference?,
     originatingClientScope: String?,
     expectedOwnerID: String?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
     api: APIClient
   ) async -> String {
-    guard
-      isExplicitMemorySaveIntent(
-        userText: originatingUserText,
-        surfaceKind: originatingSurface?.surfaceKind),
-      originatingClientScope == nil
-    else {
+    if let rejection = memorySurfaceRejection(
+      surface: originatingSurface,
+      clientScope: originatingClientScope)
+    {
+      return rejection
+    }
+    guard let facts = memoriesCreationInput(arguments) else {
       return [
-        #"{"ok":false,"error":{"code":"explicit_user_intent_required","message":"Memory writes require "#,
-        #"an explicit typed request to remember or save something."}}"#,
+        #"{"ok":false,"error":{"code":"invalid_memory_content","message":"facts must hold 1-"#,
+        #"\#(memoriesCreationMaxFacts) non-empty items of at most 1000 characters."}}"#,
       ].joined()
+    }
+    guard
+      let expectedOwnerID,
+      let authorizationSnapshot,
+      isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)
+    else { return authorizedOwnerChangedResult() }
+
+    // Each fact goes through the single-memory endpoint. `/v3/memories/batch`
+    // answers 503 for this write in production (backend#: chat batch save), and
+    // a bounded chat save is a couple of dozen requests, not the thousands the
+    // batch route exists to collapse.
+    var savedIDs: [String] = []
+    var lastError: Error?
+    for fact in facts {
+      guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
+        return authorizedOwnerChangedResult()
+      }
+      do {
+        // `.manual` is what marks a memory user-asserted on the backend, which
+        // decides its authority in conflict resolution. These facts came from an
+        // explicit save request, exactly like the single write's.
+        let memory = try await api.createMemory(
+          content: fact,
+          visibility: "private",
+          category: .manual,
+          tags: [],
+          expectedOwnerId: expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot,
+          allowsAuthRetry: false)
+        savedIDs.append(memory.id)
+      } catch {
+        lastError = error
+        log("Create memories tool failed on one fact: \(error.localizedDescription)")
+        // Stop at the first failure: the rest would hit the same backend, and a
+        // long retry storm buys nothing. What did save is still reported.
+        break
+      }
+    }
+
+    guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
+      return authorizedOwnerChangedResult()
+    }
+    if !savedIDs.isEmpty {
+      announceMemoryWrite()
+      return memoriesCreationReceipt(
+        savedIDs: savedIDs,
+        requestedCount: facts.count,
+        failed: lastError != nil)
+    }
+    guard let lastError else { return memorySaveFailureResult() }
+    return isDefiniteMemorySaveRejection(lastError)
+      ? memorySaveFailureResult()
+      : memorySaveStatusUnknownResult()
+  }
+
+  static func executeCreateMemory(
+    _ arguments: [String: Any],
+    originatingSurface: AgentSurfaceReference?,
+    originatingClientScope: String?,
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
+    api: APIClient
+  ) async -> String {
+    if let rejection = memorySurfaceRejection(
+      surface: originatingSurface,
+      clientScope: originatingClientScope)
+    {
+      return rejection
     }
     guard let input = memoryCreationInput(arguments) else {
       return [
         #"{"ok":false,"error":{"code":"invalid_memory_content","message":"content must be 1-1000 "#,
         #"non-whitespace characters."}}"#,
-      ].joined()
-    }
-    guard isMemoryContentGroundedInUserRequest(content: input.content, userText: originatingUserText) else {
-      return [
-        #"{"ok":false,"error":{"code":"memory_content_not_user_supplied","message":"Memory content must appear in "#,
-        #"the current typed user request."}}"#,
       ].joined()
     }
     guard
@@ -248,6 +260,7 @@ extension ChatToolExecutor {
       guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
         return authorizedOwnerChangedResult()
       }
+      announceMemoryWrite()
       return memoryCreationReceipt(memory)
     } catch {
       guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {

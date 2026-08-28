@@ -455,18 +455,39 @@ enum GeneratedToolCapabilities {
       title: "Create Memory",
       latency: .fastNetwork,
       surfaces: Set([.desktopChat]),
-      summary: "Save one explicitly requested fact or preference to short-term memory.",
+      summary: "Save one fact the user asked you to remember to short-term memory.",
       bullets: [
-      "Use only when the user explicitly and affirmatively asks you to remember or save something.",
-      "Pass a clean standalone fact: strip the command and lightly clean pronouns. Do not invent names, dates, or facts the user did not ask to persist, and do not infer from the rest of the chat.",
-      "Do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
+      "Use whenever the user asks you to remember, save, or keep something, however they phrase it.",
+      "Pass a clean standalone fact: strip the command and lightly clean pronouns. Save only what the user supplied.",
+      "For more than one fact — a document, a profile, everything the user just shared — call create_memories once instead of calling this repeatedly.",
+      "Do not call for a passing statement of fact, a question about what you remember, or a request not to remember something.",
       "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
-      "When the current user message explicitly and affirmatively asks Omi to remember or save something, call this tool with a clean standalone fact.",
-      "Strip the command (for example, 'Please remember that I prefer tea' → 'I prefer tea'). Light rewrite and pronoun cleanup are OK; do not invent names, dates, or facts the user did not ask to persist.",
-      "Do not infer from the rest of the chat, and do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
-      "Confirm the save in one line. Never tell the user about validators or internal save rules.",
+      "Call this whenever the user asks you to remember, save, or keep something — any phrasing counts, including a trailing 'and save this' or a request pointing at what they just sent.",
+      "Strip the command and save the fact itself. Light rewrite and pronoun cleanup are fine; save only what the user supplied, and never invent names, dates, or details they did not give you.",
+      "For more than one fact — a document, a profile, everything the user just shared — call create_memories once with the whole list instead of calling this repeatedly.",
+      "Confirm the save in one line. You decide whether the turn asked for a save; never ask the user to rephrase a save request, and never describe internal save rules.",
       "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
       "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory."
+    ]
+    ),
+    Capability(
+      toolName: "create_memories",
+      title: "Create Memories",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Save several facts the user asked you to remember to short-term memory in one call.",
+      bullets: [
+      "Use when the user asks you to remember a document, an attachment, a profile, or everything they just shared.",
+      "Split the source into one clean standalone fact per item; do not pack a whole document into one fact.",
+      "Every fact must come from what the user supplied in this turn or the material they pointed at; do not infer or embellish.",
+      "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
+      "Use this instead of many create_memory calls when the user asks to remember a document, an attachment, or everything they just shared, however they phrase the request.",
+      "Split the source into one clean standalone fact per item. Do not pack a whole document into one fact.",
+      "Every fact must come from what the user supplied or the material they pointed at; do not infer, embellish, or add facts they did not ask to persist.",
+      "Skip contact details, secrets, and anything the user asked you not to keep.",
+      "Confirm with the number saved in one line. You decide whether the turn asked for a save; never ask the user to rephrase a save request, and never describe internal save rules.",
+      "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
+      "The receipt reports how many the server saved; if it is fewer than you sent, say so. Do not claim a memory was promoted to long-term memory."
     ]
     ),
     Capability(

@@ -414,11 +414,25 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["desktop_chat"],
     capabilityDoc: doc(
       "Create Memory",
-      "Save one explicitly requested fact or preference to short-term memory.",
+      "Save one fact the user asked you to remember to short-term memory.",
       [
-        "Use only when the user explicitly and affirmatively asks you to remember or save something.",
-        "Pass a clean standalone fact: strip the command and lightly clean pronouns. Do not invent names, dates, or facts the user did not ask to persist, and do not infer from the rest of the chat.",
-        "Do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
+        "Use whenever the user asks you to remember, save, or keep something, however they phrase it.",
+        "Pass a clean standalone fact: strip the command and lightly clean pronouns. Save only what the user supplied.",
+        "For more than one fact — a document, a profile, everything the user just shared — call create_memories once instead of calling this repeatedly.",
+        "Do not call for a passing statement of fact, a question about what you remember, or a request not to remember something.",
+        "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
+      ],
+    ),
+  },
+  create_memories: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Create Memories",
+      "Save several facts the user asked you to remember to short-term memory in one call.",
+      [
+        "Use when the user asks you to remember a document, an attachment, a profile, or everything they just shared.",
+        "Split the source into one clean standalone fact per item; do not pack a whole document into one fact.",
+        "Every fact must come from what the user supplied in this turn or the material they pointed at; do not infer or embellish.",
         "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
       ],
     ),
@@ -1076,13 +1090,14 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "create_memory",
     label: "Create Memory",
     description:
-      "Save one explicitly requested fact or preference to short-term memory as a clean standalone fact. Call only after an explicit affirmative user command such as 'remember this' or 'save this'. Strip the command and lightly clean pronouns; do not invent facts. Never call for a mere statement, a question, or a negative request such as 'do not remember this'.",
+      "Save one fact the user asked you to remember to short-term memory, as a clean standalone sentence. Call it whenever the user asks for something to be remembered, saved, or kept, however they phrase it. Strip the command and lightly clean pronouns; save only what the user supplied. Do not call for a passing statement, a question about memory, or a request not to remember something.",
     promptSnippet: "create_memory - Save one explicitly requested fact or preference to short-term memory",
     promptGuidelines: [
-      "When the current user message explicitly and affirmatively asks Omi to remember or save something, call this tool with a clean standalone fact.",
-      "Strip the command (for example, 'Please remember that I prefer tea' → 'I prefer tea'). Light rewrite and pronoun cleanup are OK; do not invent names, dates, or facts the user did not ask to persist.",
-      "Do not infer from the rest of the chat, and do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
-      "Confirm the save in one line. Never tell the user about validators or internal save rules.",
+      "Call this whenever the user asks you to remember, save, or keep something — any phrasing counts, including a trailing 'and save this' or a request pointing at what they just sent.",
+      "Strip the command and save the fact itself. Light rewrite and pronoun cleanup are fine; save only what the user supplied, and never invent names, dates, or details they did not give you.",
+      "For more than one fact — a document, a profile, everything the user just shared — call create_memories once with the whole list instead of calling this repeatedly.",
+      "Do not call for a passing statement of fact, a question about what you remember, or a request not to remember something.",
+      "Confirm the save in one line. You decide whether the turn asked for a save; never ask the user to rephrase a save request, and never describe internal save rules.",
       "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
       "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory.",
     ],
@@ -1092,7 +1107,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
         content: {
           type: "string",
           description:
-            "A clean standalone fact to save as a short-term memory. Strip the remember/save command; light rewrite is OK. Do not invent facts.",
+            "One clean standalone fact to save as a short-term memory. Strip the remember/save command; light rewrite is OK. Save only what the user supplied.",
         },
       },
       ["content"],
@@ -1104,6 +1119,43 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     runtimePreconditions: [
       "Requires the coordinator's typed desktop chat surface and authenticated backend access.",
       "The Swift executor selects the new short-term-memory endpoint and legacy-memory fallback as supported by the installed app/backend.",
+    ],
+    adapters: piAndStdio("typedChatCoordinatorOnly"),
+  },
+  {
+    name: "create_memories",
+    label: "Create Memories",
+    description:
+      "Save several facts the user asked you to remember to short-term memory in one call. Use instead of repeated create_memory when the user asks to remember a document, a profile, or everything they just shared. Each fact is one clean standalone sentence drawn from what the user supplied; do not invent facts.",
+    promptSnippet: "create_memories - Save several facts the user asked you to remember",
+    promptGuidelines: [
+      "Use this instead of many create_memory calls when the user asks to remember a document, an attachment, or everything they just shared, however they phrase the request.",
+      "Split the source into one clean standalone fact per item. Do not pack a whole document into one fact.",
+      "Every fact must come from what the user supplied or the material they pointed at; do not infer, embellish, or add facts they did not ask to persist.",
+      "Skip contact details, secrets, and anything the user asked you not to keep.",
+      "Confirm with the number saved in one line. You decide whether the turn asked for a save; never ask the user to rephrase a save request, and never describe internal save rules.",
+      "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
+      "The receipt reports how many the server saved; if it is fewer than you sent, say so. Do not claim a memory was promoted to long-term memory.",
+    ],
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        facts: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "One clean standalone fact per element, at most 25. Strip the remember/save command; light rewrite is OK. Do not invent facts.",
+        },
+      },
+      ["facts"],
+    ),
+    annotations: { ...localWrite, idempotentHint: false },
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires the coordinator's typed desktop chat surface and authenticated backend access.",
+      "Writes through the batch memory endpoint in a single request; partial success is reported as the saved count.",
     ],
     adapters: piAndStdio("typedChatCoordinatorOnly"),
   },

@@ -60,16 +60,20 @@ describe("desktop tool policy", () => {
     expect(result.decision).toBe("dispatch_required");
   });
 
-  it("classifies create_memory as an approved coordinator write", () => {
-    const result = evaluateDesktopToolPolicy({
-      toolName: "create_memory",
-      selectedBundles: ["desktop.memories.write"],
-      userExplicitMutation: true,
-    });
+  it("classifies both memory writes as approved coordinator writes", () => {
+    // A memory tool missing from MEMORY_WRITE_TOOLS declares no bundle at all,
+    // which the policy denies outright — the batch write must stay listed.
+    for (const toolName of ["create_memory", "create_memories"]) {
+      const result = evaluateDesktopToolPolicy({
+        toolName,
+        selectedBundles: ["desktop.memories.write"],
+        userExplicitMutation: true,
+      });
 
-    expect(result.requiredBundles).toEqual(["desktop.memories.write"]);
-    expect(result.decision).toBe("dispatch_required");
-    expect(result.descriptor.readOnly).toBe(false);
+      expect(result.requiredBundles, toolName).toEqual(["desktop.memories.write"]);
+      expect(result.decision, toolName).toBe("dispatch_required");
+      expect(result.descriptor.readOnly, toolName).toBe(false);
+    }
   });
 
   it("requires dispatch for external sends and denies unselected bundles", () => {

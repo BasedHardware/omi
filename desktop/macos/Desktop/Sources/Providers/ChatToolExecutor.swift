@@ -294,10 +294,18 @@ class ChatToolExecutor {
         authorizationSnapshot: currentOwnerAuthorizationSnapshot,
         api: backendAPIClient)
 
+    case .createMemories:
+      return await executeCreateMemories(
+        toolCall.arguments,
+        originatingSurface: originatingSurfaceRef,
+        originatingClientScope: originatingClientScope,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot,
+        api: backendAPIClient)
+
     case .createMemory:
       return await executeCreateMemory(
         toolCall.arguments,
-        originatingUserText: originatingUserText,
         originatingSurface: originatingSurfaceRef,
         originatingClientScope: originatingClientScope,
         expectedOwnerID: expectedOwnerID,
