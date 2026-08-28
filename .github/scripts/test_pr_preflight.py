@@ -23,6 +23,7 @@ from pr_metadata import (
     extract_merged_pr_number,
     load_from_api,
     load_from_event_file,
+    load_from_gh,
     resolve_main_push_body,
 )
 from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, run_git, select_checks
@@ -41,6 +42,26 @@ class FakeResponse(io.BytesIO):
 
 
 class MetadataTests(unittest.TestCase):
+    def test_gh_loader_decodes_current_metadata_as_utf8(self) -> None:
+        payload = json.dumps(
+            {
+                "number": 10823,
+                "body": "packaged entry → debug → ms",
+                "updatedAt": "2026-08-28T07:45:46Z",
+                "labels": [{"name": "workflow-review"}],
+            },
+            ensure_ascii=False,
+        )
+        completed = subprocess.CompletedProcess(args=["gh"], returncode=0, stdout=payload, stderr="")
+
+        with patch("pr_metadata.subprocess.run", return_value=completed) as run:
+            metadata = load_from_gh(REPO_ROOT)
+
+        self.assertEqual(metadata.body, "packaged entry → debug → ms")
+        self.assertEqual(metadata.labels, ("workflow-review",))
+        _, kwargs = run.call_args
+        self.assertEqual(kwargs.get("encoding"), "utf-8")
+
     def test_api_loader_uses_current_body_and_records_provenance(self) -> None:
         captured = {}
 
