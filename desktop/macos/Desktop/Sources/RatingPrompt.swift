@@ -271,6 +271,11 @@ final class RatingPromptManager: ObservableObject {
 
 // MARK: - View
 
+enum RatingPromptButtonStyle {
+  static let referralKind: OmiButtonStyle.Kind = .primary
+  static let referralSize: OmiButtonStyle.Size = .compact
+}
+
 /// Closable sticky bar pinned to the bottom of the main window asking
 /// "How would you rate Omi Desktop?" with 1–5 stars.
 struct RatingPromptBar: View {
@@ -329,9 +334,10 @@ struct RatingPromptBar: View {
         Button("Refer a friend") {
           manager.referFriend()
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.small)
-        .tint(.primary)
+        .buttonStyle(
+          OmiButtonStyle(
+            RatingPromptButtonStyle.referralKind,
+            size: RatingPromptButtonStyle.referralSize))
       }
 
       closeButton { manager.closeThankYou() }

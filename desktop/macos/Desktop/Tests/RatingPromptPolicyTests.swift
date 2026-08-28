@@ -1,3 +1,4 @@
+import OmiTheme
 import XCTest
 
 @testable import Omi_Computer
@@ -28,5 +29,12 @@ final class RatingPromptPolicyTests: XCTestCase {
     XCTAssertFalse(
       RatingPromptPolicy.shouldShow(
         questionCount: 3, submittedRating: 0, dismissed: false, remotelyDisabled: true))
+  }
+
+  func testReferralButtonUsesReadableSharedPrimaryStyle() {
+    XCTAssertEqual(RatingPromptButtonStyle.referralKind, .primary)
+    XCTAssertEqual(RatingPromptButtonStyle.referralSize, .compact)
+    XCTAssertEqual(OmiButtonStyle.fill(.primary, pressed: false), Ink.primary)
+    XCTAssertEqual(OmiButtonStyle.label(.primary), Ink.surface)
   }
 }
