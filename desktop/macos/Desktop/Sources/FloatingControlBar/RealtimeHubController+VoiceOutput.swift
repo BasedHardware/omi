@@ -13,6 +13,19 @@ extension RealtimeHubController {
         self.realtimePlaybackEpoch = playbackEpoch
       }
     }
+    player.onPlaybackProgress = { [weak self, weak player] progress in
+      Task { @MainActor in
+        guard let self, let player, self.pcmPlayer === player,
+          player.playbackQueueGeneration == progress.queueGeneration,
+          let lease = VoiceTurnCoordinator.shared.outputSnapshot.activeLease,
+          lease.lane == .nativeRealtime
+        else { return }
+        _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
+        if progress.isIdle {
+          log("StreamingPCMPlayer: physical playback tail drained")
+        }
+      }
+    }
     player.onPlaybackIdle = { [weak self] playbackEpoch in
       Task { @MainActor in
         guard let self, self.realtimePlaybackEpoch == playbackEpoch else { return }

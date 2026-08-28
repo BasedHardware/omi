@@ -514,10 +514,13 @@ extension RealtimeHubController {
     // here—not when the provider merely proposes the function call—so rejected
     // tools never claim that work has started.
     if let acknowledgement = RealtimeSlowToolAcknowledgementKind(
-      toolName: command.canonicalToolName)
+      toolName: command.canonicalToolName),
+      let acknowledgementProvider = sessionProvider
     {
       prepareVoiceOutputForDeterministicSlowToolAcknowledgement()
-      FloatingBarVoicePlaybackService.shared.speakRealtimeSlowToolAcknowledgement(acknowledgement)
+      FloatingBarVoicePlaybackService.shared.speakRealtimeSlowToolAcknowledgement(
+        acknowledgement,
+        provider: acknowledgementProvider)
     }
     switch tool {
     case .getTasks:
@@ -770,11 +773,9 @@ extension RealtimeHubController {
     }
     audioReceivedThisTurn = true
     realtimePlaybackEpoch = pcmPlayer.playbackEpoch
-    // The reducer's drain deadline is an inactivity watchdog. Refresh it only
-    // after this exact PCM chunk reached the player, so long healthy native
-    // replies are not cut off at a fixed duration while a stalled stream still
-    // fails closed.
-    _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
+    // Network arrival is not physical playback progress: Gemini can deliver a
+    // long tail faster than AVAudioPlayerNode renders it. StreamingPCMPlayer's
+    // fenced `.dataPlayedBack` callback refreshes the inactivity watchdog.
     responseGlowGate.markPlaybackActive(lease: lease)
   }
 

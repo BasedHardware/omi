@@ -1733,16 +1733,49 @@ final class VoiceTurnReducerTests: XCTestCase {
     let playing = reduce(awaiting, .playbackStarted(turnID: turnID, lease: requestedLease)).model
     let lease = try XCTUnwrap(playing.turn?.activeLease)
 
-    let refreshed = reducer.reduce(
-      playing,
-      .playbackProgressScoped(turnID: turnID, identity: lease.identity, leaseID: lease.id))
+    var model = playing
+    for _ in 0..<3 {
+      let refreshed = reducer.reduce(
+        model,
+        .playbackProgressScoped(turnID: turnID, identity: lease.identity, leaseID: lease.id))
 
-    XCTAssertEqual(refreshed.model.turn?.phase, .playing(.nativeRealtime))
-    XCTAssertEqual(refreshed.model.turn?.activeLease, lease)
-    XCTAssertEqual(refreshed.model.staleEventCount, playing.staleEventCount)
-    XCTAssertTrue(
-      refreshed.effects.contains(
-        .scheduleDeadline(turnID: turnID, deadline: .playbackDrain, after: reducer.deadlines.playbackDrain)))
+      XCTAssertEqual(refreshed.model.turn?.phase, .playing(.nativeRealtime))
+      XCTAssertEqual(refreshed.model.turn?.activeLease, lease)
+      XCTAssertEqual(refreshed.model.staleEventCount, playing.staleEventCount)
+      XCTAssertTrue(
+        refreshed.effects.contains(
+          .scheduleDeadline(
+            turnID: turnID,
+            deadline: .playbackDrain,
+            after: reducer.deadlines.playbackDrain)))
+      XCTAssertTrue(refreshed.model.turn?.deadlines.contains(.playbackDrain) == true)
+      model = refreshed.model
+    }
+  }
+
+  func testPlaybackDrainWithoutProgressFailsClosed() throws {
+    let (awaiting, turnID, _, _) = awaitingHubResponse()
+    let requestedLease = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    let playing = reduce(awaiting, .playbackStarted(turnID: turnID, lease: requestedLease)).model
+    let lease = try XCTUnwrap(playing.turn?.activeLease)
+
+    let failed = reduce(
+      playing,
+      .deadlineFired(turnID: turnID, deadline: .playbackDrain))
+
+    XCTAssertEqual(failed.model.turn?.phase, .terminal(.playbackFailed))
+    XCTAssertNil(failed.model.turn?.activeLease)
+    XCTAssertTrue(failed.effects.contains(where: \.isTerminal))
+
+    let lateProgress = reducer.reduce(
+      failed.model,
+      .playbackProgressScoped(
+        turnID: turnID,
+        identity: lease.identity,
+        leaseID: lease.id))
+    XCTAssertEqual(lateProgress.model.turn?.phase, .terminal(.playbackFailed))
+    XCTAssertEqual(lateProgress.model.staleEventCount, failed.model.staleEventCount + 1)
+    XCTAssertFalse(lateProgress.effects.contains(where: \.isTerminal))
   }
 
   func testCompetingPlaybackLeaseIsRejectedAsInvalidTransition() {
@@ -1818,6 +1851,53 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(drained.model.turn?.phase, .awaitingResponse)
     XCTAssertNil(drained.model.lastTerminal)
     XCTAssertTrue(drained.model.turn?.deadlines.contains(.providerResponse) == true)
+
+    let providerFinished = reduce(
+      drained.model,
+      .providerTurnFinished(
+        turnID: turnID,
+        sessionID: sessionID,
+        responseID: responseID))
+    XCTAssertEqual(providerFinished.model.turn?.providerFinished, true)
+    XCTAssertEqual(providerFinished.model.turn?.phase, .awaitingJournal)
+
+    let journalAccepted = acceptJournal(providerFinished.model)
+    XCTAssertEqual(journalAccepted.model.turn?.phase, .terminal(.success))
+    XCTAssertEqual(journalAccepted.effects.filter(\.isTerminal).count, 1)
+  }
+
+  func testStalePlaybackProgressAfterLeaseReplacementCannotRefreshNewLease() throws {
+    let (awaiting, turnID, _, _) = awaitingHubResponse()
+    let firstRequestedLease = VoiceOutputLease(
+      id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    var model = reduce(awaiting, .playbackStarted(turnID: turnID, lease: firstRequestedLease)).model
+    let firstLease = try XCTUnwrap(model.turn?.activeLease)
+
+    model = reduce(model, .playbackDrained(turnID: turnID, leaseID: firstLease.id)).model
+    XCTAssertEqual(model.turn?.phase, .awaitingResponse)
+
+    let secondRequestedLease = VoiceOutputLease(
+      id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    model = reduce(model, .playbackStarted(turnID: turnID, lease: secondRequestedLease)).model
+    let secondLease = try XCTUnwrap(model.turn?.activeLease)
+    let staleCount = model.staleEventCount
+
+    let stale = reducer.reduce(
+      model,
+      .playbackProgressScoped(
+        turnID: turnID,
+        identity: firstLease.identity,
+        leaseID: firstLease.id))
+
+    XCTAssertEqual(stale.model.turn?.phase, .playing(.nativeRealtime))
+    XCTAssertEqual(stale.model.turn?.activeLease, secondLease)
+    XCTAssertEqual(stale.model.staleEventCount, staleCount + 1)
+    XCTAssertFalse(
+      stale.effects.contains(
+        .scheduleDeadline(
+          turnID: turnID,
+          deadline: .playbackDrain,
+          after: reducer.deadlines.playbackDrain)))
   }
 
   func testCleanupFromEveryNonIdlePhaseConvergesToTerminalThenReset() {
