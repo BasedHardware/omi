@@ -23,6 +23,11 @@ enum FormScanReason: String, Sendable {
 /// field, a web area finished loading, the layout changed) and cost nothing while the
 /// screen is still. The periodic pass is the net under them: notification support varies
 /// by app, so nothing here is allowed to be the only way a form is found.
+///
+/// One observer, several listeners: form assist and message-draft assist both want these
+/// exact moments, and macOS charges per AXObserver, not per interested party. Subscribers
+/// are keyed so each surface can leave without tearing the watcher out from under the
+/// others; the machinery runs only while someone is subscribed.
 @MainActor
 final class FormWatcher {
   static let shared = FormWatcher()
@@ -37,7 +42,7 @@ final class FormWatcher {
   private var debounceTask: Task<Void, Never>?
   private var sweepTimer: Timer?
   private var activationObserver: (any NSObjectProtocol)?
-  private var onScan: ((FormScanReason) -> Void)?
+  private var subscribers: [String: (FormScanReason) -> Void] = [:]
 
   /// Registered on the application element, which is where an app posts events for its
   /// whole tree. Apps implement different subsets; a rejected registration is normal and
@@ -53,9 +58,10 @@ final class FormWatcher {
 
   private init() {}
 
-  func start(onScan: @escaping (FormScanReason) -> Void) {
-    guard self.onScan == nil else { return }
-    self.onScan = onScan
+  func subscribe(_ id: String, onScan: @escaping (FormScanReason) -> Void) {
+    let wasIdle = subscribers.isEmpty
+    subscribers[id] = onScan
+    guard wasIdle else { return }
 
     activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
       forName: NSWorkspace.didActivateApplicationNotification,
@@ -69,15 +75,16 @@ final class FormWatcher {
 
     sweepTimer = Timer.scheduledTimer(withTimeInterval: Self.sweepInterval, repeats: true) { _ in
       MainActor.assumeIsolated {
-        FormWatcher.shared.onScan?(.periodic)
+        FormWatcher.shared.broadcast(.periodic)
       }
     }
 
     retargetObserver()
   }
 
-  func stop() {
-    onScan = nil
+  func unsubscribe(_ id: String) {
+    subscribers[id] = nil
+    guard subscribers.isEmpty else { return }
     debounceTask?.cancel()
     debounceTask = nil
     sweepTimer?.invalidate()
@@ -89,13 +96,19 @@ final class FormWatcher {
     tearDownObserver()
   }
 
+  private func broadcast(_ reason: FormScanReason) {
+    for onScan in subscribers.values {
+      onScan(reason)
+    }
+  }
+
   private func handleAppActivation() {
     retargetObserver()
     // An app switch is the strongest signal there is; it skips the debounce so the card
     // for a form the user just came back to is not a second late.
     debounceTask?.cancel()
     debounceTask = nil
-    onScan?(.appSwitch)
+    broadcast(.appSwitch)
   }
 
   private func handleAccessibilityEvent() {
@@ -103,7 +116,7 @@ final class FormWatcher {
     debounceTask = Task { [weak self] in
       try? await Task.sleep(for: Self.debounce)
       guard !Task.isCancelled else { return }
-      self?.onScan?(.accessibilityEvent)
+      self?.broadcast(.accessibilityEvent)
     }
   }
 

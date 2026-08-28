@@ -113,7 +113,10 @@ private struct FormAssistModelResponse: Decodable {
 private enum FormAssistCard {
   private static var showing: String?
 
-  static var canPresent: Bool { showing != nil || !CloudConnectorGuidanceOverlay.shared.isPresenting }
+  static var canPresent: Bool {
+    (showing != nil || !CloudConnectorGuidanceOverlay.shared.isPresenting)
+      && !MessageDraftCardController.shared.isPresenting
+  }
 
   /// The form the card on screen is for, or nil when it is not ours / not up. Presenting
   /// rebuilds the panel, which throws away where the user dragged it — so the periodic
@@ -215,7 +218,7 @@ actor FormAssistAssistant: ProactiveAssistant {
   /// precisely; the watcher's periodic sweep is the net under apps that post none.
   func startWatching() async {
     await MainActor.run {
-      FormWatcher.shared.start { reason in
+      FormWatcher.shared.subscribe(identifier) { reason in
         Task { await self.evaluate(reason: reason) }
       }
     }
@@ -253,6 +256,15 @@ actor FormAssistAssistant: ProactiveAssistant {
       SuggestionAssistantSettings.shared.isAppExcluded(key.appName)
     }
     guard !excluded else {
+      barrenScans += 1
+      return
+    }
+
+    // Messaging windows belong to message-draft assist. A Mail compose window is To,
+    // Cc and Subject — exactly form-shaped — and two cards racing for the same window
+    // would each be right by their own gate.
+    guard MessageComposeGate.surface(appName: key.appName, windowTitle: key.windowTitle) == nil
+    else {
       barrenScans += 1
       return
     }
@@ -629,7 +641,7 @@ actor FormAssistAssistant: ProactiveAssistant {
   func stop() async {
     cardWindowKey = nil
     await MainActor.run {
-      FormWatcher.shared.stop()
+      FormWatcher.shared.unsubscribe(identifier)
       FormAssistCard.dismissIfMine()
     }
   }
