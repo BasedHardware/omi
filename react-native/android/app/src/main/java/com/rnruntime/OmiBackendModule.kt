@@ -27,6 +27,8 @@ private data class BackendPolicy(
   val token: String,
   val clientId: String,
   val kind: CredentialKind,
+  val captureUrl: URI? = null,
+  val captureOriginRequired: Boolean = false,
 )
 
 class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
@@ -78,8 +80,10 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
         putNull("retryAfterSeconds")
       }
     }
-    val url = URL(policy.url.toURL(), path)
-    if (!sameOrigin(url, policy.url.toURL())) {
+    val base = requestBaseURL(policy, path)
+      ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Native HTTP configuration is unavailable")
+    val url = URL(base.toURL(), path)
+    if (!sameOrigin(url, base.toURL())) {
       throw TransportException("OMI_HTTP_INVALID_REQUEST", "Native HTTP request is unavailable or invalid")
     }
     val connection = (url.openConnection() as HttpURLConnection).apply {
@@ -89,7 +93,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       doInput = true
       setRequestProperty("authorization", "Bearer ${policy.token}")
       setRequestProperty("x-omi-contract-version", CONTRACT_VERSION)
-      if (policy.kind != CredentialKind.Cloud) {
+      if (policy.kind != CredentialKind.Cloud || !isCloudHost(url.host)) {
         setRequestProperty("x-omi-client-id", policy.clientId)
       }
       if (body != null) {
@@ -138,12 +142,50 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     }
     val cloud = environment["OMI_CLOUD_API_TOKEN"].orEmpty().ifEmpty { environment["OMI_API_TOKEN"].orEmpty() }
     if (cloud.isEmpty()) return null
+    val v5URL = environment["OMI_V5_BACKEND_URL"].orEmpty()
     return BackendPolicy(
       url = URI(CLOUD_ORIGIN),
       token = cloud,
       clientId = "omi-android",
       kind = CredentialKind.Cloud,
+      captureOriginRequired = v5URL.isNotEmpty(),
+      captureUrl = if (v5URL.isNotEmpty()) validatedV5URL(v5URL) else null,
     )
+  }
+
+  private fun isCloudHost(host: String?): Boolean {
+    return host?.lowercase(Locale.US) == "api.omi.me"
+  }
+
+  private fun isAllowedV5Host(host: String): Boolean {
+    val normalized = host.lowercase(Locale.US)
+    val loopback = normalized == "localhost" || normalized == "127.0.0.1" || normalized == "::1"
+    if (loopback || isCloudHost(normalized)) return true
+    return normalized.endsWith(".workers.dev") && normalized.length > ".workers.dev".length
+  }
+
+  private fun isCaptureBackendPath(path: String): Boolean {
+    val route = runCatching { URI(path).path }.getOrNull() ?: path
+    return route == "/v1/device-sessions" || route.startsWith("/v1/device-sessions/")
+  }
+
+  private fun requestBaseURL(policy: BackendPolicy, path: String): URI? {
+    if (isCaptureBackendPath(path) && policy.captureOriginRequired) {
+      return policy.captureUrl
+    }
+    return policy.url
+  }
+
+  private fun validatedV5URL(value: String): URI? {
+    val url = runCatching { URI(value) }.getOrNull() ?: return null
+    if (url.scheme?.lowercase(Locale.US) != "https") return null
+    val host = url.host?.lowercase(Locale.US) ?: return null
+    if (url.userInfo != null || !url.query.isNullOrEmpty() || !url.fragment.isNullOrEmpty()) return null
+    if (url.path.isNotEmpty() && url.path != "/") return null
+    if (!isAllowedV5Host(host)) return null
+    val loopback = host == "localhost" || host == "127.0.0.1" || host == "::1"
+    if (!loopback && url.port != -1 && url.port != 443) return null
+    return url
   }
 
   private fun localBaseURL(value: String, developmentBackend: String): URI? {

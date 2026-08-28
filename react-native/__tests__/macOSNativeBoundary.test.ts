@@ -98,6 +98,11 @@ test('pairs the macOS backend origin and credentials in one validated policy', (
   expect(source).toContain('firebase-rest-tokens');
   expect(source).toContain('kSecUseAuthenticationUIFail');
   expect(source).toContain('environment[@"OMI_LOCAL_BACKEND_URL"]');
+  expect(source).toContain('environment[@"OMI_V5_BACKEND_URL"]');
+  expect(source).toContain('OmiValidatedV5URL');
+  expect(source).toContain('OmiIsCaptureBackendPath');
+  expect(source).toContain('OmiRequestBaseURL');
+  expect(source).toContain('.workers.dev');
   expect(source).toContain('environment[@"OMI_DEV_BACKEND"]');
   expect(source).toContain('http://127.0.0.1:8787');
   expect(source).toContain('NSURL URLWithString:@"http://127.0.0.1:4851"');

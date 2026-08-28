@@ -15,6 +15,8 @@ typedef NS_ENUM(NSInteger, OmiBackendCredentialKind) {
 
 @interface OmiBackendPolicy : NSObject
 @property(nonatomic, strong) NSURL *url;
+@property(nonatomic, strong) NSURL *captureURL;
+@property(nonatomic) BOOL captureOriginRequired;
 @property(nonatomic, copy) NSString *token;
 @property(nonatomic, copy) NSString *clientId;
 @property(nonatomic) OmiBackendCredentialKind kind;
@@ -32,6 +34,43 @@ static BOOL OmiIsLoopbackHost(NSString *host) {
 
 static BOOL OmiIsCloudHost(NSString *host) {
   return [host.lowercaseString isEqualToString:@"api.omi.me"];
+}
+
+static BOOL OmiIsAllowedV5Host(NSString *host) {
+  NSString *normalized = host.lowercaseString;
+  if (OmiIsLoopbackHost(normalized) || OmiIsCloudHost(normalized)) return YES;
+  return [normalized hasSuffix:@".workers.dev"] &&
+      normalized.length > [@".workers.dev" length];
+}
+
+static BOOL OmiIsCaptureBackendPath(NSString *path) {
+  NSURLComponents *components = [NSURLComponents componentsWithString:path];
+  NSString *route = components.path;
+  return [route isEqualToString:@"/v1/device-sessions"] ||
+      [route hasPrefix:@"/v1/device-sessions/"];
+}
+
+static NSURL *OmiValidatedV5URL(NSString *value) {
+  NSURL *url = value.length > 0 ? [NSURL URLWithString:value] : nil;
+  BOOL validPath = url.path.length == 0 || [url.path isEqualToString:@"/"];
+  if (url == nil || ![url.scheme.lowercaseString isEqualToString:@"https"] ||
+      url.host.length == 0 || url.user.length > 0 || url.password.length > 0 ||
+      !validPath || url.query.length > 0 || url.fragment.length > 0 ||
+      !OmiIsAllowedV5Host(url.host)) {
+    return nil;
+  }
+  if (!OmiIsLoopbackHost(url.host)) {
+    NSInteger port = url.port != nil ? url.port.integerValue : 443;
+    if (port != 443) return nil;
+  }
+  return url;
+}
+
+static NSURL *OmiRequestBaseURL(OmiBackendPolicy *policy, NSString *path) {
+  if (OmiIsCaptureBackendPath(path) && policy.captureOriginRequired) {
+    return policy.captureURL;
+  }
+  return policy.url;
 }
 
 static NSURL *OmiValidatedURL(NSString *value, BOOL requireLoopback) {
@@ -257,6 +296,11 @@ static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSStr
   policy.token = [cloud copy];
   policy.clientId = @"omi-macos";
   policy.kind = OmiBackendCredentialKindCloud;
+  NSString *v5URL = environment[@"OMI_V5_BACKEND_URL"];
+  if (v5URL.length > 0) {
+    policy.captureOriginRequired = YES;
+    policy.captureURL = OmiValidatedV5URL(v5URL);
+  }
   return policy;
 }
 
@@ -275,7 +319,8 @@ static BOOL OmiApplyAuthorization(NSMutableURLRequest *request, OmiBackendPolicy
   if (!OmiBackendPolicyIsValid(policy)) return NO;
   [request setValue:[NSString stringWithFormat:@"Bearer %@", policy.token]
       forHTTPHeaderField:@"authorization"];
-  if (policy.kind != OmiBackendCredentialKindCloud) {
+  if (policy.kind != OmiBackendCredentialKindCloud ||
+      !OmiIsCloudHost(request.URL.host)) {
     [request setValue:policy.clientId forHTTPHeaderField:@"x-omi-client-id"];
   }
   return YES;
@@ -540,8 +585,9 @@ RCT_REMAP_METHOD(request,
     reject(@"OMI_HTTP_INVALID_REQUEST", @"Native HTTP request is invalid", nil);
     return;
   }
-  if (!OmiBackendPolicyIsValid(policy) ||
-      ![schemes containsObject:policy.url.scheme.lowercaseString]) {
+  NSURL *baseURL = OmiRequestBaseURL(policy, path);
+  if (!OmiBackendPolicyIsValid(policy) || baseURL == nil ||
+      ![schemes containsObject:baseURL.scheme.lowercaseString]) {
     reject(@"OMI_HTTP_UNCONFIGURED", @"Native HTTP configuration is unavailable", nil);
     return;
   }
@@ -549,15 +595,15 @@ RCT_REMAP_METHOD(request,
     resolve(OmiDevelopmentBackendUnsupportedResponse(requestId));
     return;
   }
-  NSURL *url = [NSURL URLWithString:path relativeToURL:policy.url].absoluteURL;
-  NSInteger basePort = policy.url.port != nil
-      ? policy.url.port.integerValue
-      : ([policy.url.scheme.lowercaseString isEqualToString:@"https"] ? 443 : 80);
+  NSURL *url = [NSURL URLWithString:path relativeToURL:baseURL].absoluteURL;
+  NSInteger basePort = baseURL.port != nil
+      ? baseURL.port.integerValue
+      : ([baseURL.scheme.lowercaseString isEqualToString:@"https"] ? 443 : 80);
   NSInteger requestPort = url.port != nil
       ? url.port.integerValue
       : ([url.scheme.lowercaseString isEqualToString:@"https"] ? 443 : 80);
-  BOOL schemeMatches = url != nil && [url.scheme caseInsensitiveCompare:policy.url.scheme] == NSOrderedSame;
-  BOOL hostMatches = url != nil && [url.host caseInsensitiveCompare:policy.url.host] == NSOrderedSame;
+  BOOL schemeMatches = url != nil && [url.scheme caseInsensitiveCompare:baseURL.scheme] == NSOrderedSame;
+  BOOL hostMatches = url != nil && [url.host caseInsensitiveCompare:baseURL.host] == NSOrderedSame;
   BOOL portMatches = url != nil && requestPort == basePort;
   if (!schemeMatches || !hostMatches || !portMatches) {
     reject(@"OMI_HTTP_INVALID_REQUEST", @"Native HTTP request is unavailable or invalid", nil);
