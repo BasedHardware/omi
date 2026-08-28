@@ -87,7 +87,7 @@ def _collect_wire_backed_type_names() -> list[str]:
     for path in sorted(APP_SCHEMA_DIR.rglob('*.dart')):
         if path.name.endswith('.g.dart') or path.name.endswith('.gen.dart'):
             continue
-        text = path.read_text()
+        text = path.read_text(encoding='utf-8')
         names.update(typedef_re.findall(text))
         names.update(adapter_re.findall(text))
     return sorted(names, key=len, reverse=True)  # longest first for alternation
@@ -250,7 +250,7 @@ class AppOperationManifestItem:
 
 
 def scan_dart_schema_file(path: Path) -> DartSchemaFile:
-    text = path.read_text()
+    text = path.read_text(encoding='utf-8')
     return DartSchemaFile(
         path=path,
         classes=CLASS_RE.findall(text),
@@ -316,8 +316,8 @@ def scan_dart_decode_sites() -> list[DartDecodeSite]:
     for path in paths:
         if path.name.endswith('.gen.dart') or path.name.endswith('.g.dart') or path in LOCAL_NON_REST_SCHEMA_FILES:
             continue
-        lines = path.read_text().splitlines()
-        functions = _function_ranges(path.read_text())
+        lines = path.read_text(encoding='utf-8').splitlines()
+        functions = _function_ranges(path.read_text(encoding='utf-8'))
         for index, line in enumerate(lines, start=1):
             stripped = line.strip()
             if not stripped or stripped.startswith('//') or not RAW_DECODE_RE.search(line):
@@ -746,7 +746,7 @@ def _mask_dart_comments(text: str) -> str:
 def scan_app_routes() -> list[AppRoute]:
     routes: list[AppRoute] = []
     for path in sorted(APP_API_DIR.glob('*.dart')):
-        original_text = path.read_text()
+        original_text = path.read_text(encoding='utf-8')
         text = _mask_dart_comments(original_text)
         functions = _function_ranges(original_text)
         env_routes = _scan_marker_route_occurrences(text, 'Env.apiBaseUrl', must_start_with='v')
@@ -800,14 +800,14 @@ def scan_app_routes() -> list[AppRoute]:
 def load_openapi_schema_names(path: Path) -> list[str]:
     if not path.exists():
         return []
-    spec = json.loads(path.read_text())
+    spec = json.loads(path.read_text(encoding='utf-8'))
     return sorted(spec.get('components', {}).get('schemas', {}).keys())
 
 
 def load_openapi_paths(path: Path) -> list[str]:
     if not path.exists():
         return []
-    spec = json.loads(path.read_text())
+    spec = json.loads(path.read_text(encoding='utf-8'))
     return sorted(spec.get('paths', {}).keys())
 
 
@@ -877,7 +877,7 @@ def operation_request_schema_name(operation: dict[str, Any]) -> str | None:
 def load_openapi_operations(path: Path) -> list[OpenApiOperation]:
     if not path.exists():
         return []
-    spec = json.loads(path.read_text())
+    spec = json.loads(path.read_text(encoding='utf-8'))
     operations = []
     for route, methods in spec.get('paths', {}).items():
         for method, operation in methods.items():

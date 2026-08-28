@@ -18,7 +18,7 @@ MESSAGE_ADAPTER = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'message.dar
 
 
 def package_free_message_adapter_source() -> str:
-    source = MESSAGE_ADAPTER.read_text()
+    source = MESSAGE_ADAPTER.read_text(encoding='utf-8')
     source = source.replace("import 'package:collection/collection.dart';\n", '')
     source = source.replace(
         "import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;\n",
@@ -174,9 +174,11 @@ void main() {
     with tempfile.TemporaryDirectory(prefix='omi-dart-wire-check-') as temp_dir:
         temp_path = Path(temp_dir)
         shutil.copyfile(MESSAGES_WIRE, temp_path / 'messages_wire.g.dart')
-        (temp_path / 'message_adapter.dart').write_text(package_free_message_adapter_source())
+        (temp_path / 'message_adapter.dart').write_text(
+            package_free_message_adapter_source(), encoding='utf-8', newline='\n'
+        )
         script = temp_path / 'wire_hardening_check.dart'
-        script.write_text(source)
+        script.write_text(source, encoding='utf-8', newline='\n')
         result = subprocess.run(
             [dart, str(script)],
             cwd=ROOT_DIR,

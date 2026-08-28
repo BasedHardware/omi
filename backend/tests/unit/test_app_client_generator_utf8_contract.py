@@ -5,13 +5,25 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 TEXT_IO_SURFACES = (
+    'backend/scripts/check_app_client_openapi_compatibility.py',
+    'backend/scripts/export_openapi.py',
     'backend/scripts/generate_dart_models.py',
     'backend/scripts/generate_swift_openapi_types.py',
     'backend/scripts/generate_ts_openapi_types.py',
+    'backend/scripts/inventory_app_client_schemas.py',
+    'backend/scripts/run_dart_wire_hardening_check.py',
     'backend/tests/unit/test_app_client_dart_generator.py',
     'backend/tests/unit/test_app_client_generator_utf8_contract.py',
+    'backend/tests/unit/test_app_client_openapi_compatibility.py',
+    'backend/tests/unit/test_app_client_schema_inventory.py',
     'backend/tests/unit/test_app_client_swift_generator.py',
     'backend/tests/unit/test_app_client_ts_generator.py',
+    'backend/tests/unit/test_assistant_settings_response_models.py',
+    'backend/tests/unit/test_desktop_rest_inventory.py',
+    'backend/tests/unit/test_dev_ask_endpoint.py',
+    'backend/tests/unit/test_flutter_rest_inventory.py',
+    'backend/tests/unit/test_integration_public_contract.py',
+    'backend/tests/unit/test_windows_rest_inventory.py',
 )
 
 
@@ -22,7 +34,7 @@ def _declares_utf8(call: ast.Call) -> bool:
     )
 
 
-def test_app_client_generator_path_text_io_declares_utf8():
+def test_openapi_contract_path_text_io_declares_utf8():
     violations: list[str] = []
 
     for relative_path in TEXT_IO_SURFACES:
