@@ -21,6 +21,11 @@ class CsatConfigResponse(BaseModel):
     revision: int
 
 
+class CsatRatingReceipt(BaseModel):
+    id: str
+    created: bool
+
+
 class CsatRatingRequest(BaseModel):
     platform: str
     app_version: str = ''
@@ -40,11 +45,11 @@ def get_csat_config(
     return CsatConfigResponse(**csat.get_product_config())
 
 
-@router.post('/v1/csat/ratings', status_code=201)
+@router.post('/v1/csat/ratings', response_model=CsatRatingReceipt, status_code=201)
 def submit_csat_rating(
     payload: CsatRatingRequest,
     uid: str = Depends(auth.get_current_user_uid),
-) -> JSONResponse:
+):
     if payload.platform not in csat.PLATFORMS:
         raise HTTPException(status_code=400, detail=f'platform must be one of {sorted(csat.PLATFORMS)}')
     if not 1 <= payload.score <= 5:
@@ -65,4 +70,4 @@ def submit_csat_rating(
     if not created:
         # One rating per user per platform; the existing answer stands.
         return JSONResponse(status_code=409, content={'id': doc_id, 'created': False})
-    return JSONResponse(status_code=201, content={'id': doc_id, 'created': True})
+    return CsatRatingReceipt(id=doc_id, created=True)
