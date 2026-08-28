@@ -3914,8 +3914,11 @@ struct TasksPage: View {
         addTaskButton
         // HIDDEN DELIBERATELY (Nik, 2026-08-25): the gear deep-linked to the Task
         // Assistant pane, which is hidden from Settings — a visible control must not
-        // open Advanced and highlight a pane that no longer renders.
-        // taskSettingsButton
+        // open Advanced and highlight a pane that no longer renders. The policy is
+        // the testable seam; do not inline `true` here.
+        if HiddenSettingsSurfacesPolicy.tasksHeaderShowsSettingsGear {
+          taskSettingsButton
+        }
       }
     }
     .padding(.horizontal, OmiSpacing.lg)

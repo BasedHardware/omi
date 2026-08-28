@@ -723,9 +723,14 @@ struct SettingsContentView: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
       selectedSection = .advanced
-      // The Task Assistant pane is hidden (HIDDEN DELIBERATELY, Nik 2026-08-25), so
-      // there is no advanced.taskassistant card to highlight — highlighting a missing
-      // target scrolled to nothing, which is how the pane got "fixed back" once before.
+      // The highlight target rides HiddenSettingsSurfacesPolicy: while the Task
+      // Assistant pane is hidden this is nil, because highlighting a card that does
+      // not render scrolls to nothing — how the pane got "fixed back" once before.
+      if let target = HiddenSettingsSurfacesPolicy.taskSettingsHighlight {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+          highlightedSettingId = target
+        }
+      }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
       selectedSection = .floatingBar

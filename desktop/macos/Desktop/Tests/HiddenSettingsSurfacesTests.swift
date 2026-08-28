@@ -36,4 +36,35 @@ final class HiddenSettingsSurfacesTests: XCTestCase {
       XCTAssertTrue(ids.contains(kept), "\(kept) is still rendered and must stay searchable")
     }
   }
+
+  // MARK: - The production seams
+
+  /// The Tasks-page header consults this policy for the gear. Restoring the gear
+  /// requires flipping the value this test owns — that is the point.
+  func testTasksHeaderDoesNotShowTheSettingsGear() {
+    XCTAssertFalse(HiddenSettingsSurfacesPolicy.tasksHeaderShowsSettingsGear)
+  }
+
+  /// `.navigateToTaskSettings` highlights whatever this returns; while the Task
+  /// Assistant pane is hidden it must be nil — a highlight that targets a card
+  /// that does not render scrolls to nothing.
+  func testTaskSettingsDeepLinkHighlightsNothingWhileThePaneIsHidden() {
+    XCTAssertNil(HiddenSettingsSurfacesPolicy.taskSettingsHighlight)
+  }
+
+  /// The general rule the highlight rides on: a deep-link may never highlight a
+  /// hidden card, and passes visible ones through untouched.
+  func testDeepLinksNeverHighlightHiddenCards() {
+    for hidden in HiddenSettingsSurfacesPolicy.hiddenSettingIds {
+      XCTAssertNil(HiddenSettingsSurfacesPolicy.highlightIfVisible(hidden))
+    }
+    XCTAssertEqual(HiddenSettingsSurfacesPolicy.highlightIfVisible("advanced.goals"), "advanced.goals")
+  }
+
+  /// The policy's hidden set and the search index must agree: every policy-hidden
+  /// id is absent from search.
+  func testSearchIndexAgreesWithThePolicy() {
+    let searchable = Set(SettingsSearchItem.allSearchableItems.map(\.settingId))
+    XCTAssertTrue(searchable.isDisjoint(with: HiddenSettingsSurfacesPolicy.hiddenSettingIds))
+  }
 }
