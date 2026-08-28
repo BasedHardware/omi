@@ -47,6 +47,14 @@ final class OmiBleManager: NSObject {
     /// Tracks peripherals that have connected at least once (for reconnection counting).
     private var everConnected: Set<String> = []
 
+    /// Characteristic discovery callbacks arrive once per service and may overlap.
+    /// Emit device-ready exactly once for each physical connection.
+    private var readyNotified: Set<String> = []
+
+    /// Suppresses duplicate recovery callbacks while CoreBluetooth tears down a
+    /// link whose protected characteristic rejected the current bond.
+    private var pairingRecoveryInFlight: Set<String> = []
+
     /// Most recent RSSI sample per peripheral, captured in didReadRSSI. Used to
     /// annotate disconnect events so we can tell range/interference-driven drops
     /// apart from disconnects with healthy signal.
@@ -622,6 +630,8 @@ final class OmiBleManager: NSObject {
             isRssiStreamingEnabled = false
         }
         discoveredServices.removeValue(forKey: peripheralUuid)
+        readyNotified.remove(peripheralUuid)
+        pairingRecoveryInFlight.remove(peripheralUuid)
 
         // Clean up pending completions
         let completionKeys = readCompletions.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
@@ -713,6 +723,8 @@ extension OmiBleManager: CBCentralManagerDelegate {
             backfillTimeToReconnect(uuid: uuid)
         }
         everConnected.insert(uuid)
+        readyNotified.remove(uuid)
+        pairingRecoveryInFlight.remove(uuid)
         connectionStartTimes[uuid] = Int64(Date().timeIntervalSince1970 * 1000)
 
         peripheral.delegate = self
@@ -814,7 +826,7 @@ extension OmiBleManager: CBPeripheralDelegate {
         guard let services = peripheral.services else { return }
         let allDiscovered = services.allSatisfy { $0.characteristics != nil }
 
-        if allDiscovered {
+        if allDiscovered, readyNotified.insert(uuid).inserted {
             let bleServices = services.map { svc in
                 BleService(
                     uuid: self.fullUuidString(svc.uuid),
@@ -931,10 +943,16 @@ extension OmiBleManager: CBPeripheralDelegate {
                 completion(.success(()))
             }
         }
+
+        if OmiBleConnectionPolicy.requiresPairingRecovery(error), pairingRecoveryInFlight.insert(uuid).inserted {
+            NSLog("[OmiBle] GATT authentication failed for \(uuid); pairing recovery required")
+            manuallyDisconnected.insert(uuid)
+            flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: "pairing_lost") { _ in }
+            centralManager.cancelPeripheralConnection(peripheral)
+        }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
-        let uuid = peripheralUuidString(peripheral)
         let charUuid = fullUuidString(characteristic.uuid)
         if let error = error {
             NSLog("[OmiBle] Failed to update notification state for \(charUuid): \(error.localizedDescription)")
