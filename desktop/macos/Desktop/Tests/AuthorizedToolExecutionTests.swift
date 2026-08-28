@@ -312,6 +312,24 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     )
   }
 
+  /// The kernel hashes with `JSON.stringify`, which never escapes "/".
+  /// `JSONSerialization` escapes it by default, so before `.withoutEscapingSlashes`
+  /// every authorized tool input carrying a URL, a path, or "AI/ML" was rejected
+  /// as an input-hash mismatch while slash-free inputs went through.
+  /// Expected value produced by `stableJsonStringify` in
+  /// agent/src/runtime/kernel-support.ts over the same object.
+  func testCanonicalInputHashMatchesKernelForSlashBearingInput() throws {
+    let input: [String: Any] = [
+      "facts": ["AI/ML engineer at example.com/team", "plain fact"],
+      "content": "https://omi.me/x",
+    ]
+
+    XCTAssertEqual(
+      try AuthorizedToolExecution.inputHash(for: input),
+      "sha256:e2fe63b2dd26a315bd2527c1d94c5cd41d7c72073ecd4f29dff37651019ebeec"
+    )
+  }
+
   private func payload(
     toolName: String = "get_memories",
     overrides: [String: Any] = [:]

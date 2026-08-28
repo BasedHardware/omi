@@ -208,13 +208,19 @@ struct AuthorizedToolExecution: @unchecked Sendable {
       chatFirstControlGeneration: chatFirstControlGeneration)
   }
 
+  /// Must produce byte-identical canonical JSON to `stableJsonStringify` in
+  /// agent/src/runtime/kernel-support.ts, which hashes the authorized input on
+  /// the runtime side. `JSONSerialization` escapes "/" as "\/" by default and
+  /// `JSON.stringify` never does, so without `.withoutEscapingSlashes` every
+  /// tool input containing a slash — a URL, a path, "AI/ML" — hashes
+  /// differently here and is rejected as an input-hash mismatch.
   static func inputHash(for input: [String: Any]) throws -> String {
     guard JSONSerialization.isValidJSONObject(input) else {
       throw Rejection.malformed
     }
     let canonical = try JSONSerialization.data(
       withJSONObject: input,
-      options: [.sortedKeys])
+      options: [.sortedKeys, .withoutEscapingSlashes])
     let digest = SHA256.hash(data: canonical)
       .map { String(format: "%02x", $0) }
       .joined()
