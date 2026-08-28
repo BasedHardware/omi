@@ -126,7 +126,7 @@ surfaces:
     test_guardrail_coverage: backend/tests/unit/test_chat_file_gateway_surface.py and backend/tests/unit/test_chat_file_completions.py
   - surface: file_chat_completions
     code_path: backend/utils/other/chat_file.py:FileChatTool
-    current_provider_model: gateway lane omi:auto:file-chat-documents (openai/gpt-4.1 file parts for PDFs; gpt-5.6-luna remains image-only); direct OpenAI only when OMI_LLM_GATEWAY_FEATURE_MODE is off
+    current_provider_model: gateway lane omi:auto:file-chat-documents (openai/gpt-5.6-luna file parts for PDFs); direct OpenAI only when OMI_LLM_GATEWAY_FEATURE_MODE is off
     request_shape: file upload purpose=user_data, streaming chat completion file input parts
     gateway_lane_capability_needed: generated omi:auto:file-chat-documents lane with OpenAI file content parts
     migration_status: gateway_routed_file_chat; Assistants/Threads retired after the 2026-08-26 sunset; OpenAI Files upload/download stays direct by design; BYOK OpenAI is not used (same company-owned file_id namespace as vision)

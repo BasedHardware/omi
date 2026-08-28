@@ -27,14 +27,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Images stay on the live-verified vision lane. PDF file parts use gpt-4.1: official
-# Chat Completions file-input examples document that model; gpt-5.6-luna is verified
-# for image_url only and is not pinned for an untested file-part contract.
-# In gateway feature mode both lanes are omi:auto:file-chat-* gateway lanes, so the
+# Images stay on the live-verified vision lane (image_url). PDF file parts stay on
+# a separate documents lane because the request shape differs ({type:file,file:{file_id}}).
+# Live probe 2026-08-28 confirmed gpt-5.6-luna accepts that file-part contract, so both
+# lanes pin Luna. In gateway feature mode both are omi:auto:file-chat-* lanes, so the
 # model call lands in the gateway ledger; OpenAI Files upload/download stays direct
 # (file bytes/file_id lifecycle, no model tokens).
 _FILE_CHAT_VISION_MODEL = "gpt-5.6-luna"
-_FILE_CHAT_DOCUMENT_MODEL = "gpt-4.1"
+_FILE_CHAT_DOCUMENT_MODEL = "gpt-5.6-luna"
 _FILE_CHAT_COMPLETION_TOKENS = 2048
 
 

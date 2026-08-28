@@ -287,6 +287,7 @@ class TestModelQosProfiles:
             'persona_chat_premium',
             'desktop_proactive_reasoning',
             'file_chat_vision',
+            'file_chat_documents',
         }
         nano_features = {
             'conv_app_select',
@@ -301,9 +302,6 @@ class TestModelQosProfiles:
         expected_openai = {
             **{feature: ('gpt-5.6-luna', 'openai') for feature in luna_features},
             **{feature: ('gpt-5-nano', 'openai') for feature in nano_features},
-            # PDF file-parts are documented on gpt-4.1; the vision lane stays
-            # on the live-verified luna image_url contract.
-            'file_chat_documents': ('gpt-4.1', 'openai'),
         }
 
         for profile_name, profile in MODEL_QOS_PROFILES.items():
@@ -326,7 +324,6 @@ class TestModelQosProfiles:
         expected = {
             'gpt-5.6-luna',
             'gpt-5-nano',
-            'gpt-4.1',
             'claude-sonnet-4-6',
             'gemini-2.5-flash-lite',
             'gemini-3-flash-preview',
@@ -1044,7 +1041,6 @@ class TestBYOKProfile:
         expected = {
             'gpt-5.6-luna',
             'gpt-5-nano',
-            'gpt-4.1',
             'claude-sonnet-4-6',
             'gemini-2.5-flash-lite',
             'gemini-3-flash-preview',

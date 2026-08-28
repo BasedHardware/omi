@@ -128,6 +128,7 @@ def test_sync_completion_uses_gateway_client_under_gateway_mode(monkeypatch):
     assert result == 'ok'
     kwargs = gateway_client.chat.completions.create.call_args.kwargs
     assert kwargs['model'] == FILE_CHAT_DOCUMENTS_AUTO_LANE_ID
+    assert 'max_completion_tokens' in kwargs
     assert kwargs['extra_headers'][LLM_GATEWAY_USER_UID_HEADER] == 'uid-1'
     assert kwargs['extra_headers'][LLM_GATEWAY_USAGE_FEATURE_HEADER] == 'file_chat_documents'
 
