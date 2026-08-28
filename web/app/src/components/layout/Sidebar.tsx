@@ -83,6 +83,8 @@ const navItems: NavItem[] = navItemsFor('sidebar').map((item) => ({
   href: item.href,
   icon: <item.icon className="h-5 w-5" />,
 }));
+const bottomBarHrefs = new Set(navItemsFor('bottom-bar').map((item) => item.href));
+const mobileMenuDestinations = navItems.filter((item) => !bottomBarHrefs.has(item.href));
 
 // Settings menu items for user dropdown.
 // The icon map is total over SettingsSectionId, so adding a settings section
@@ -503,12 +505,43 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         {/* Middle section. Desktop: the destination rail. Mobile: the menu
             bottom-bar button opens this surface for notifications and account,
-            so destinations (owned by the bottom bar there) are replaced by the
-            notification list. */}
+            so destinations owned by the bottom bar are replaced by the
+            notification list. Sidebar-only destinations stay here. */}
         <div className="min-h-0 flex-1 overflow-hidden">
           {!isDesktop ? (
-            <div className="h-full pt-2">
-              <NotificationList />
+            <div className="flex h-full min-h-0 flex-col">
+              {mobileMenuDestinations.length > 0 && (
+                <nav className="space-y-1 px-2 py-2">
+                  {mobileMenuDestinations.map((item) => {
+                    const isActive = pathname === item.href;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={onClose}
+                        className={cn(
+                          'relative flex items-center gap-3 rounded-chip px-[18px] py-3',
+                          'transition-colors duration-150',
+                          isActive
+                            ? 'text-bg-primary'
+                            : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
+                        )}
+                      >
+                        {isActive && (
+                          <span className="absolute inset-0 rounded-chip bg-text-primary" />
+                        )}
+                        <span className="relative z-10 flex-shrink-0">{item.icon}</span>
+                        <span className="relative z-10 whitespace-nowrap font-medium">
+                          {item.label}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </nav>
+              )}
+              <div className="min-h-0 flex-1 pt-2">
+                <NotificationList onNavigate={onClose} />
+              </div>
             </div>
           ) : (
             <div className="h-full overflow-y-auto overflow-x-hidden">

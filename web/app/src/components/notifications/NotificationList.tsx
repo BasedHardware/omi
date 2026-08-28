@@ -48,7 +48,7 @@ function groupNotificationsByDate(notifications: OmiNotification[]) {
  * open/close chrome — so the side panel and the mobile menu rail render the
  * exact same list.
  */
-export function NotificationList() {
+export function NotificationList({ onNavigate }: { onNavigate?: () => void }) {
   const {
     notifications,
     permission,
@@ -110,7 +110,10 @@ export function NotificationList() {
                       <NotificationItem
                         key={notification.id}
                         notification={notification}
-                        onClick={() => navigateToNotification(notification)}
+                        onClick={() => {
+                          navigateToNotification(notification);
+                          onNavigate?.();
+                        }}
                         onMarkAsRead={() => markAsRead(notification.id)}
                         onClear={() => clearNotification(notification.id)}
                         appImage={getAppImage(appId)}

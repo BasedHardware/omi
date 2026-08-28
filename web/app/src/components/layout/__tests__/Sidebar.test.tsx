@@ -25,15 +25,25 @@ vi.mock('@/components/auth/AuthProvider', () => ({
     signOut: vi.fn(),
   }),
 }));
+const mockNavigateToNotification = vi.fn();
+let notificationFixtures: Array<{
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  timestamp: string;
+  read: boolean;
+}> = [];
+
 vi.mock('@/components/notifications/NotificationContext', () => ({
   useNotificationContext: () => ({
     toggleNotificationCenter: vi.fn(),
     unreadCount: 0,
     // NotificationList (rendered by the mobile menu rail) reads these too.
-    notifications: [],
+    notifications: notificationFixtures,
     permission: 'granted',
     isSupported: true,
-    navigateToNotification: vi.fn(),
+    navigateToNotification: mockNavigateToNotification,
     markAsRead: vi.fn(),
     clearNotification: vi.fn(),
     getAppImage: vi.fn(),
@@ -43,6 +53,7 @@ vi.mock('@/components/notifications/NotificationContext', () => ({
 beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
+  notificationFixtures = [];
   reducedMotion = false;
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
   Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 });
@@ -138,5 +149,38 @@ describe('macOS promotion dismissal', () => {
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 430));
     });
+  });
+});
+
+describe('mobile menu rail', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+  });
+
+  it('lists Memories so the page stays reachable without the bottom bar', async () => {
+    render(<Sidebar isOpen onClose={vi.fn()} />);
+
+    const memories = await screen.findByRole('link', { name: /Memories/ });
+    expect(memories).toHaveAttribute('href', '/memories');
+  });
+
+  it('closes the rail when a notification is tapped', async () => {
+    notificationFixtures = [
+      {
+        id: 'n1',
+        type: 'announcement',
+        title: 'New announcement',
+        body: 'Something happened',
+        timestamp: new Date().toISOString(),
+        read: false,
+      },
+    ];
+    const onClose = vi.fn();
+    render(<Sidebar isOpen onClose={onClose} />);
+
+    fireEvent.click(await screen.findByText('New announcement'));
+
+    expect(mockNavigateToNotification).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
