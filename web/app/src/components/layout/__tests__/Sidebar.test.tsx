@@ -26,7 +26,18 @@ vi.mock('@/components/auth/AuthProvider', () => ({
   }),
 }));
 vi.mock('@/components/notifications/NotificationContext', () => ({
-  useNotificationContext: () => ({ toggleNotificationCenter: vi.fn(), unreadCount: 0 }),
+  useNotificationContext: () => ({
+    toggleNotificationCenter: vi.fn(),
+    unreadCount: 0,
+    // NotificationList (rendered by the mobile menu rail) reads these too.
+    notifications: [],
+    permission: 'granted',
+    isSupported: true,
+    navigateToNotification: vi.fn(),
+    markAsRead: vi.fn(),
+    clearNotification: vi.fn(),
+    getAppImage: vi.fn(),
+  }),
 }));
 
 beforeEach(() => {

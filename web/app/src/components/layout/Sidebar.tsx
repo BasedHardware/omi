@@ -7,14 +7,9 @@ import { usePathname } from '@tschk/moonshine-next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import {
-  GanttChartSquare,
-  House,
   LayoutGrid,
-  ListChecks,
   CalendarDays,
-  Brain,
   LogOut,
-  Menu,
   X,
   PanelLeftClose,
   PanelLeft,
@@ -50,7 +45,9 @@ function DiscordIcon({ className }: { className?: string }) {
 }
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useNotificationContext } from '@/components/notifications/NotificationContext';
+import { NotificationList } from '@/components/notifications/NotificationList';
 import { cn } from '@/lib/utils';
+import { navItemsFor } from '@/lib/navigation';
 import { SETTINGS_SECTIONS, type SettingsSectionId } from '@/lib/settingsSections';
 import { PROFILE_MENU_MAX_HEIGHT } from '@/lib/profileMenu';
 import { ConfettiBurst } from '@/components/ui/ConfettiBurst';
@@ -79,31 +76,13 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
-// Order mirrors the desktop rail (`SidebarNavItem.mainItems`): Home, then
-// Conversations, Memories, Tasks, then the surfaces web adds on top. Chat has
-// no row of its own on either client — it is what Home opens into.
-const navItems: NavItem[] = [
-  {
-    label: 'Home',
-    href: '/home',
-    icon: <House className="w-5 h-5" />,
-  },
-  {
-    label: 'Conversations',
-    href: '/conversations',
-    icon: <GanttChartSquare className="w-5 h-5" />,
-  },
-  {
-    label: 'Memories',
-    href: '/memories',
-    icon: <Brain className="w-5 h-5" />,
-  },
-  {
-    label: 'Tasks',
-    href: '/tasks',
-    icon: <ListChecks className="w-5 h-5" />,
-  },
-];
+// Rendered from the shared navigation config (`src/lib/navigation.ts`), so the
+// rail and the mobile bottom bar cannot drift apart.
+const navItems: NavItem[] = navItemsFor('sidebar').map((item) => ({
+  label: item.label,
+  href: item.href,
+  icon: <item.icon className="h-5 w-5" />,
+}));
 
 // Settings menu items for user dropdown.
 // The icon map is total over SettingsSectionId, so adding a settings section
@@ -144,7 +123,7 @@ function MenuRow({
   );
   const content = (
     <>
-      <Icon className="w-4 h-4 flex-shrink-0" />
+      <Icon className="h-4 w-4 flex-shrink-0" />
       <span className="whitespace-nowrap text-sm">{label}</span>
     </>
   );
@@ -184,7 +163,7 @@ function ProfileMenuRows({
 }) {
   return (
     <>
-      <div className="p-2 space-y-0.5">
+      <div className="space-y-0.5 p-2">
         <MenuRow
           href="/connectors"
           icon={Puzzle}
@@ -202,7 +181,7 @@ function ProfileMenuRows({
         ))}
       </div>
 
-      <div className="border-t border-stroke/60 p-2 space-y-0.5">
+      <div className="space-y-0.5 border-t border-stroke/60 p-2">
         <MenuRow
           href="https://omi.me/download"
           icon={Download}
@@ -228,12 +207,12 @@ function ProfileMenuRows({
         <button
           onClick={onSignOut}
           className={cn(
-            'w-full flex items-center gap-3 rounded-card px-3 py-2',
-            'text-red-400/80 hover:text-red-400 hover:bg-red-500/[0.08]',
+            'flex w-full items-center gap-3 rounded-card px-3 py-2',
+            'text-red-400/80 hover:bg-red-500/[0.08] hover:text-red-400',
             'transition-colors',
           )}
         >
-          <LogOut className="w-4 h-4 flex-shrink-0" />
+          <LogOut className="h-4 w-4 flex-shrink-0" />
           <span className="whitespace-nowrap text-sm">Sign Out</span>
         </button>
       </div>
@@ -370,7 +349,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            // Sits above the bottom bar (z-40): when the menu is open the
+            // bar must read as background, not as tappable chrome.
+            className="fixed inset-0 z-[60] bg-black/50 lg:hidden"
             onClick={onClose}
           />
         )}
@@ -390,9 +371,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           // The rail sits on the raw window; the inset content pane is the
           // only card, so it carries no fill or divider of its own on desktop.
           'bg-bg-secondary lg:bg-transparent',
-          'flex flex-col flex-shrink-0',
-          // Mobile: fixed overlay with slide transition
-          'fixed top-0 left-0 bottom-0 z-50',
+          'flex flex-shrink-0 flex-col',
+          // Mobile: fixed overlay with slide transition. The rail and its
+          // backdrop sit above every chrome layer that stays mounted behind
+          // them — most importantly the bottom bar (z-40) and the chat
+          // bubble — so an open menu visually owns the whole screen.
+          'fixed bottom-0 left-0 top-0 z-[70]',
           // Desktop animates its width to match the macOS rail
           // (.omiAnimation(.easeInOut(duration: 0.2))); mobile slides instead.
           // Deliberately NOT overflow-hidden: the collapsed profile menu opens
@@ -408,7 +392,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             itself. They share the nav's horizontal padding so they read as one
             column of icons with the destinations below, rather than as a
             separate toolbar. */}
-        <div className="overflow-hidden px-2 pt-6 pb-3">
+        <div className="overflow-hidden px-2 pb-3 pt-6">
           {/* Expanded, the mark and the two shell controls share one line.
               Collapsed there is not room for both — two 36px controls do not
               fit in a 56px column — so they stack under the mark. */}
@@ -450,32 +434,37 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 showText ? 'flex-row items-center' : 'flex-col items-center',
               )}
             >
-              <button
-                onClick={toggleNotificationCenter}
-                className={cn(
-                  'flex items-center justify-center p-2 rounded-element transition-colors',
-                  'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
-                )}
-                title="Notifications"
-                aria-label="Notifications"
-              >
-                <div className="relative">
-                  <Bell className="w-5 h-5" />
-                  {unreadCount > 0 && (
-                    <span
-                      className={cn(
-                        'absolute -top-2.5 -right-2.5',
-                        'min-w-[18px] h-[18px] px-1',
-                        'flex items-center justify-center',
-                        'bg-red-500 text-white text-[10px] font-bold',
-                        'rounded-full',
-                      )}
-                    >
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </span>
+              {/* Bell opens the notifications panel. On mobile the menu rail
+                  shows the notification list itself, so the bell would be a
+                  second door to the room you are standing in. */}
+              {isDesktop && (
+                <button
+                  onClick={toggleNotificationCenter}
+                  className={cn(
+                    'flex items-center justify-center rounded-element p-2 transition-colors',
+                    'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
                   )}
-                </div>
-              </button>
+                  title="Notifications"
+                  aria-label="Notifications"
+                >
+                  <div className="relative">
+                    <Bell className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <span
+                        className={cn(
+                          'absolute -right-2.5 -top-2.5',
+                          'h-[18px] min-w-[18px] px-1',
+                          'flex items-center justify-center',
+                          'bg-red-500 text-[10px] font-bold text-white',
+                          'rounded-full',
+                        )}
+                      >
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              )}
 
               {/* Collapse sits beside the bell and stays visible. Revealing it
                   on hover meant it could not be found without already knowing
@@ -484,16 +473,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <button
                   onClick={handleToggleExpand}
                   className={cn(
-                    'flex items-center justify-center p-2 rounded-element transition-colors',
+                    'flex items-center justify-center rounded-element p-2 transition-colors',
                     'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
                   )}
                   title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
                   aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
                 >
                   {isExpanded ? (
-                    <PanelLeftClose className="w-5 h-5" />
+                    <PanelLeftClose className="h-5 w-5" />
                   ) : (
-                    <PanelLeft className="w-5 h-5" />
+                    <PanelLeft className="h-5 w-5" />
                   )}
                 </button>
               )}
@@ -502,69 +491,80 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               {!isDesktop && (
                 <button
                   onClick={onClose}
-                  className="p-2 rounded-element hover:bg-bg-tertiary transition-colors"
+                  className="rounded-element p-2 transition-colors hover:bg-bg-tertiary"
                   aria-label="Close menu"
                 >
-                  <X className="w-5 h-5 text-text-secondary" />
+                  <X className="h-5 w-5 text-text-secondary" />
                 </button>
               )}
             </div>
           </div>
         </div>
 
-        {/* Scrollable middle section */}
-        <div className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto">
-          <nav className="space-y-1 px-2 py-2">
-            {navItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href === '/conversations' &&
-                  pathname?.startsWith('/conversations'));
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => {
-                    if (!isDesktop) onClose();
-                  }}
-                  title={!showText ? item.label : undefined}
-                  className={cn(
-                    // One layout for both states. Swapping between a centred
-                    // icon and an icon-plus-label row makes the icon jump at
-                    // the moment the width starts moving; holding the row
-                    // still and letting the label fade out under the clip is
-                    // what makes the collapse read as one motion.
-                    'relative flex items-center gap-3 rounded-chip px-[18px] py-3',
-                    'transition-colors duration-150',
-                    isActive
-                      ? 'text-bg-primary'
-                      : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
-                  )}
-                >
-                  {/* One shared pill for the whole nav: framer-motion matches it
+        {/* Middle section. Desktop: the destination rail. Mobile: the menu
+            bottom-bar button opens this surface for notifications and account,
+            so destinations (owned by the bottom bar there) are replaced by the
+            notification list. */}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {!isDesktop ? (
+            <div className="h-full pt-2">
+              <NotificationList />
+            </div>
+          ) : (
+            <div className="h-full overflow-y-auto overflow-x-hidden">
+              <nav className="space-y-1 px-2 py-2">
+                {navItems.map((item) => {
+                  const isActive =
+                    pathname === item.href ||
+                    (item.href === '/conversations' &&
+                      pathname?.startsWith('/conversations'));
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => {
+                        if (!isDesktop) onClose();
+                      }}
+                      title={!showText ? item.label : undefined}
+                      className={cn(
+                        // One layout for both states. Swapping between a centred
+                        // icon and an icon-plus-label row makes the icon jump at
+                        // the moment the width starts moving; holding the row
+                        // still and letting the label fade out under the clip is
+                        // what makes the collapse read as one motion.
+                        'relative flex items-center gap-3 rounded-chip px-[18px] py-3',
+                        'transition-colors duration-150',
+                        isActive
+                          ? 'text-bg-primary'
+                          : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
+                      )}
+                    >
+                      {/* One shared pill for the whole nav: framer-motion matches it
                       across rows by layoutId, so selecting a page slides the
                       fill rather than cross-fading two of them. */}
-                  {isActive && (
-                    <motion.span
-                      layoutId="sidebar-active-pill"
-                      transition={{ type: 'spring', stiffness: 520, damping: 42 }}
-                      className="absolute inset-0 rounded-chip bg-text-primary"
-                    />
-                  )}
-                  <span className="flex-shrink-0 relative z-10">{item.icon}</span>
-                  <span
-                    className={cn(
-                      'relative z-10 whitespace-nowrap font-medium',
-                      'transition-opacity duration-150',
-                      showText ? 'opacity-100 delay-75' : 'opacity-0',
-                    )}
-                  >
-                    {item.label}
-                  </span>
-                </Link>
-              );
-            })}
-          </nav>
+                      {isActive && (
+                        <motion.span
+                          layoutId="sidebar-active-pill"
+                          transition={{ type: 'spring', stiffness: 520, damping: 42 }}
+                          className="absolute inset-0 rounded-chip bg-text-primary"
+                        />
+                      )}
+                      <span className="relative z-10 flex-shrink-0">{item.icon}</span>
+                      <span
+                        className={cn(
+                          'relative z-10 whitespace-nowrap font-medium',
+                          'transition-opacity duration-150',
+                          showText ? 'opacity-100 delay-75' : 'opacity-0',
+                        )}
+                      >
+                        {item.label}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+          )}
         </div>
 
         {/* Platform-aware app download banner */}
@@ -610,7 +610,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                         }
                       : { type: 'spring', stiffness: 520, damping: 26 }
                   }
-                  className={cn('relative px-3 pt-2 pb-2', !showText && 'px-2')}
+                  className={cn('relative px-3 pb-2 pt-2', !showText && 'px-2')}
                 >
                   {bannerBursting && <ConfettiBurst />}
                   <div className="relative">
@@ -625,9 +625,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     >
                       <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
                         {isMac ? (
-                          <AppleLogo className="w-4 h-4 text-text-tertiary" />
+                          <AppleLogo className="h-4 w-4 text-text-tertiary" />
                         ) : (
-                          <Smartphone className="w-4 h-4 text-text-tertiary" />
+                          <Smartphone className="h-4 w-4 text-text-tertiary" />
                         )}
                       </div>
                       {showText && (
@@ -752,7 +752,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             >
               <>
                 {/* Name & email */}
-                <div className="flex-1 min-w-0 text-left">
+                <div className="min-w-0 flex-1 text-left">
                   <p className="truncate whitespace-nowrap text-sm font-medium text-text-primary">
                     {user?.displayName || 'User'}
                   </p>
@@ -798,21 +798,5 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
       </aside>
     </>
-  );
-}
-
-// Mobile menu button component
-export function MobileMenuButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'lg:hidden p-2 rounded-lg',
-        'hover:bg-bg-tertiary transition-colors',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
-      )}
-    >
-      <Menu className="w-6 h-6 text-text-secondary" />
-    </button>
   );
 }
