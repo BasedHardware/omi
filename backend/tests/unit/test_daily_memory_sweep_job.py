@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from utils.jit_rollout import JITDecisionStage, TriState
 from utils.memory import daily_memory_sweep as sweep
 from utils.memory.daily_memory_sweep_inventory import DailySweepUIDInventoryPage
 
@@ -125,6 +127,28 @@ def test_authority_resolution_failure_exits_before_inventory(monkeypatch, daily_
     assert inventory_calls == []
 
 
+def test_jit_admission_cohort_authorizer_uses_shared_permits_work(monkeypatch, daily_memory_sweep_job):
+    job = daily_memory_sweep_job
+    calls = []
+
+    def resolve(uid, *, stage, force_refresh=False):
+        calls.append((uid, stage, force_refresh))
+        return SimpleNamespace(
+            permits_work=uid == "uid-on",
+            effective=TriState.UNKNOWN if uid == "uid-unknown" else TriState.DISABLED,
+        )
+
+    monkeypatch.setattr(job, "resolve_jit_rollout_sync", resolve)
+    assert job.jit_admission_cohort_authorizer("uid-on", "ignored") is sweep.DailySweepCohortDecision.enabled
+    assert job.jit_admission_cohort_authorizer("uid-off", "ignored") is sweep.DailySweepCohortDecision.disabled
+    assert job.jit_admission_cohort_authorizer("uid-unknown") is sweep.DailySweepCohortDecision.unavailable
+    assert calls == [
+        ("uid-on", JITDecisionStage.READ_ONLY, False),
+        ("uid-off", JITDecisionStage.READ_ONLY, False),
+        ("uid-unknown", JITDecisionStage.READ_ONLY, False),
+    ]
+
+
 def test_open_authority_preserves_inventory_scheduler_and_commit_flow(monkeypatch, daily_memory_sweep_job):
     job = daily_memory_sweep_job
     db_client = object()
@@ -149,17 +173,21 @@ def test_open_authority_preserves_inventory_scheduler_and_commit_flow(monkeypatc
         "bounded_daily_memory_sweep_uid_inventory",
         lambda *_args, **_kwargs: inventory_calls.append(True) or page,
     )
-    monkeypatch.setattr(
-        job,
-        "run_daily_memory_sweep_scheduler",
-        lambda **kwargs: scheduler_uids.append(tuple(kwargs["uid_inventory"])) or summary,
-    )
+    observed = {}
+
+    def capture_scheduler(**kwargs):
+        observed.update(kwargs)
+        scheduler_uids.append(tuple(kwargs["uid_inventory"]))
+        return summary
+
+    monkeypatch.setattr(job, "run_daily_memory_sweep_scheduler", capture_scheduler)
     monkeypatch.setattr(job, "commit_daily_memory_sweep_uid_inventory", lambda *_args, **kwargs: commits.append(kwargs))
 
     job.run_daily_memory_sweep_job()
 
     assert inventory_calls == [True]
     assert scheduler_uids == [("uid-open",)]
+    assert observed["cohort_authorizer"] is job.jit_admission_cohort_authorizer
     assert commits == [
         {
             "completed_uids": ("uid-open",),

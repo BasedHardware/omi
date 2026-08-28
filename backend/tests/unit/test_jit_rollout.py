@@ -17,7 +17,11 @@ from utils.memory.jit_trigger_contract import DEFAULT_TRIGGER_RUNTIME_POLICY
 from utils.memory.jit_trigger_snapshot import AuthoritativeTriggerRow, AuthoritativeTriggerSnapshot
 from utils import jit_rollout as authority_module
 from utils.jit_rollout import (
+    JIT_ADMISSION_ALLOWLIST,
+    JIT_DAILY_SWEEP_FLAG_KEY,
+    JIT_KILL_SWITCH_FLAG_KEY,
     JIT_LEDGER_MIGRATION_FLAG_KEY,
+    JIT_PROCESSING_FLAG_KEY,
     JITDecisionReason,
     JITDecisionStage,
     JITErrorClass,
@@ -26,6 +30,9 @@ from utils.jit_rollout import (
     PostHogJITFlagProvider,
     TriState,
     UNKNOWN_JIT_ROLLOUT_CACHE_SECONDS,
+    resolve_jit_ledger_migration_rollout,
+    resolve_jit_rollout,
+    resolve_jit_rollout_sync,
 )
 from utils.executors import run_blocking, sync_executor
 from utils.other.endpoints import get_current_user_uid
@@ -43,26 +50,35 @@ class _Clock:
         return self.now
 
 
+_ALLOWLIST_UID = next(iter(JIT_ADMISSION_ALLOWLIST))
+_OTHER_ALLOWLIST_UID = next(uid for uid in JIT_ADMISSION_ALLOWLIST if uid != _ALLOWLIST_UID)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ('rollout', 'kill_switch', 'expected', 'reason'),
+    ('rollout', 'provider_reason', 'expected', 'reason'),
     [
-        (TriState.ENABLED, TriState.DISABLED, TriState.ENABLED, JITDecisionReason.ROLLOUT_ENABLED),
-        (TriState.DISABLED, TriState.DISABLED, TriState.DISABLED, JITDecisionReason.ROLLOUT_DISABLED),
-        (TriState.ENABLED, TriState.ENABLED, TriState.DISABLED, JITDecisionReason.KILL_SWITCH_ENABLED),
-        (TriState.UNKNOWN, TriState.DISABLED, TriState.UNKNOWN, JITDecisionReason.FLAG_ABSENT),
-        (TriState.ENABLED, TriState.UNKNOWN, TriState.UNKNOWN, JITDecisionReason.FLAG_ABSENT),
+        (TriState.ENABLED, JITDecisionReason.EVALUATED, TriState.ENABLED, JITDecisionReason.ROLLOUT_ENABLED),
+        (TriState.DISABLED, JITDecisionReason.EVALUATED, TriState.DISABLED, JITDecisionReason.ROLLOUT_DISABLED),
+        (TriState.DISABLED, JITDecisionReason.FLAG_ABSENT, TriState.DISABLED, JITDecisionReason.FLAG_ABSENT),
+        (TriState.UNKNOWN, JITDecisionReason.PROVIDER_TIMEOUT, TriState.UNKNOWN, JITDecisionReason.PROVIDER_TIMEOUT),
+        (
+            TriState.UNKNOWN,
+            JITDecisionReason.MALFORMED_RESPONSE,
+            TriState.UNKNOWN,
+            JITDecisionReason.MALFORMED_RESPONSE,
+        ),
     ],
 )
-async def test_authority_requires_known_rollout_true_and_known_kill_false(
+async def test_authority_admits_only_known_true_exposure_flag(
     rollout,
-    kill_switch,
+    provider_reason,
     expected,
     reason,
 ):
     async def provider(uid: str) -> JITFlagEvaluation:
         assert uid == 'named-user'
-        return JITFlagEvaluation(rollout, kill_switch, JITDecisionReason.FLAG_ABSENT)
+        return JITFlagEvaluation(rollout, TriState.ENABLED, provider_reason)
 
     decision = await JITRolloutAuthority(provider).resolve(
         'named-user',
@@ -71,6 +87,7 @@ async def test_authority_requires_known_rollout_true_and_known_kill_false(
 
     assert decision.effective == expected
     assert decision.reason == reason
+    assert decision.kill_switch == TriState.DISABLED
     assert decision.permits_work is (expected == TriState.ENABLED)
 
 
@@ -170,42 +187,37 @@ class _FakePostHog:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ('flags', 'rollout', 'kill_switch', 'reason', 'error_class'),
+    ('flags', 'rollout', 'reason', 'error_class'),
     [
         (
-            {'jit-processing-v1': True, 'jit-processing-kill-switch-v1': False},
-            TriState.ENABLED,
-            TriState.DISABLED,
-            JITDecisionReason.EVALUATED,
-            JITErrorClass.NONE,
-        ),
-        (
-            {'jit-processing-v1': False, 'jit-processing-kill-switch-v1': True},
-            TriState.DISABLED,
+            {JIT_PROCESSING_FLAG_KEY: True, JIT_KILL_SWITCH_FLAG_KEY: True, JIT_LEDGER_MIGRATION_FLAG_KEY: False},
             TriState.ENABLED,
             JITDecisionReason.EVALUATED,
             JITErrorClass.NONE,
         ),
         (
-            {'jit-processing-v1': True},
-            TriState.ENABLED,
-            TriState.UNKNOWN,
+            {JIT_PROCESSING_FLAG_KEY: False, JIT_KILL_SWITCH_FLAG_KEY: False},
+            TriState.DISABLED,
+            JITDecisionReason.EVALUATED,
+            JITErrorClass.NONE,
+        ),
+        (
+            {JIT_KILL_SWITCH_FLAG_KEY: False, JIT_DAILY_SWEEP_FLAG_KEY: True},
+            TriState.DISABLED,
             JITDecisionReason.FLAG_ABSENT,
             JITErrorClass.ABSENT,
         ),
         (
-            {'jit-processing-v1': 'enabled', 'jit-processing-kill-switch-v1': False},
+            {JIT_PROCESSING_FLAG_KEY: 'enabled'},
             TriState.UNKNOWN,
-            TriState.DISABLED,
             JITDecisionReason.MALFORMED_RESPONSE,
             JITErrorClass.MALFORMED,
         ),
     ],
 )
-async def test_posthog_provider_parses_only_exact_boolean_flags(
+async def test_posthog_provider_parses_only_the_exposure_flag(
     flags,
     rollout,
-    kill_switch,
     reason,
     error_class,
 ):
@@ -215,48 +227,93 @@ async def test_posthog_provider_parses_only_exact_boolean_flags(
     result = await provider('authenticated-user')
 
     assert client.uids == ['authenticated-user']
-    assert result == JITFlagEvaluation(rollout, kill_switch, reason, error_class)
+    assert result == JITFlagEvaluation(rollout, TriState.DISABLED, reason, error_class)
 
 
 @pytest.mark.asyncio
-async def test_general_jit_rollout_does_not_authorize_ledger_migration():
+async def test_retired_flags_do_not_change_admission():
     client = _FakePostHog(
         {
-            'jit-processing-v1': True,
+            JIT_PROCESSING_FLAG_KEY: True,
+            JIT_KILL_SWITCH_FLAG_KEY: True,
             JIT_LEDGER_MIGRATION_FLAG_KEY: False,
-            'jit-processing-kill-switch-v1': False,
+            JIT_DAILY_SWEEP_FLAG_KEY: False,
         }
     )
-    provider = PostHogJITFlagProvider(
-        client_factory=lambda: client,
-        rollout_flag_key=JIT_LEDGER_MIGRATION_FLAG_KEY,
-    )
+    authority = JITRolloutAuthority(PostHogJITFlagProvider(client_factory=lambda: client))
 
-    result = await provider('qa-owner')
+    decision = await authority.resolve('named-user', stage=JITDecisionStage.READ_ONLY)
 
-    assert result.rollout == TriState.DISABLED
-    assert result.kill_switch == TriState.DISABLED
-    assert result.reason == JITDecisionReason.EVALUATED
+    assert decision.permits_work is True
+    assert decision.effective == TriState.ENABLED
+    assert decision.kill_switch == TriState.DISABLED
 
 
 @pytest.mark.asyncio
-async def test_absent_ledger_migration_flag_fails_off_even_when_general_rollout_is_enabled():
-    provider = PostHogJITFlagProvider(
-        client_factory=lambda: _FakePostHog(
-            {
-                'jit-processing-v1': True,
-                'jit-processing-kill-switch-v1': False,
-            }
-        ),
-        rollout_flag_key=JIT_LEDGER_MIGRATION_FLAG_KEY,
+async def test_allowlist_uid_is_enabled_when_flag_is_false_missing_or_timed_out():
+    async def provider(_uid: str) -> JITFlagEvaluation:
+        raise AssertionError('allowlist admission must not call PostHog')
+
+    authority = JITRolloutAuthority(provider)
+    for uid in (_ALLOWLIST_UID, _OTHER_ALLOWLIST_UID):
+        decision = await authority.resolve(uid, stage=JITDecisionStage.READ_ONLY)
+        assert decision.permits_work is True
+        assert decision.effective == TriState.ENABLED
+        assert decision.reason == JITDecisionReason.ROLLOUT_ENABLED
+
+
+@pytest.mark.asyncio
+async def test_non_allowlist_uid_follows_exposure_flag_and_fails_closed_on_timeout():
+    states = iter(
+        [
+            JITFlagEvaluation(TriState.DISABLED, TriState.DISABLED, JITDecisionReason.EVALUATED),
+            JITFlagEvaluation(
+                TriState.DISABLED, TriState.DISABLED, JITDecisionReason.FLAG_ABSENT, JITErrorClass.ABSENT
+            ),
+            JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED),
+            JITFlagEvaluation(
+                TriState.UNKNOWN, TriState.UNKNOWN, JITDecisionReason.PROVIDER_TIMEOUT, JITErrorClass.TIMEOUT
+            ),
+            JITFlagEvaluation(
+                TriState.UNKNOWN, TriState.UNKNOWN, JITDecisionReason.MALFORMED_RESPONSE, JITErrorClass.MALFORMED
+            ),
+        ]
     )
 
-    result = await provider('qa-owner')
+    async def provider(_uid: str) -> JITFlagEvaluation:
+        return next(states)
 
-    assert result.rollout == TriState.UNKNOWN
-    assert result.kill_switch == TriState.DISABLED
-    assert result.reason == JITDecisionReason.FLAG_ABSENT
-    assert result.error_class == JITErrorClass.ABSENT
+    authority = JITRolloutAuthority(provider)
+    disabled = await authority.resolve('stranger', stage=JITDecisionStage.READ_ONLY)
+    absent = await JITRolloutAuthority(provider).resolve('stranger', stage=JITDecisionStage.READ_ONLY)
+    enabled = await JITRolloutAuthority(provider).resolve('stranger', stage=JITDecisionStage.READ_ONLY)
+    timed_out = await JITRolloutAuthority(provider).resolve('stranger', stage=JITDecisionStage.READ_ONLY)
+    malformed = await JITRolloutAuthority(provider).resolve('stranger', stage=JITDecisionStage.READ_ONLY)
+
+    assert disabled.effective == TriState.DISABLED and disabled.permits_work is False
+    assert absent.effective == TriState.DISABLED and absent.permits_work is False
+    assert enabled.effective == TriState.ENABLED and enabled.permits_work is True
+    assert timed_out.effective == TriState.UNKNOWN and timed_out.permits_work is False
+    assert malformed.effective == TriState.UNKNOWN and malformed.permits_work is False
+
+
+@pytest.mark.asyncio
+async def test_public_helpers_share_one_allowlist_and_one_exposure_flag(monkeypatch):
+    async def provider(_uid: str) -> JITFlagEvaluation:
+        return JITFlagEvaluation(TriState.DISABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
+
+    monkeypatch.setattr(authority_module, '_authority', JITRolloutAuthority(provider))
+    monkeypatch.setattr(authority_module, '_sync_authority', JITRolloutAuthority(provider))
+
+    allowlisted = await resolve_jit_rollout(_ALLOWLIST_UID, stage=JITDecisionStage.READ_ONLY)
+    stranger = await resolve_jit_rollout('stranger', stage=JITDecisionStage.READ_ONLY)
+    ledger = await resolve_jit_ledger_migration_rollout('stranger', stage=JITDecisionStage.INGRESS)
+    sync_allowlisted = resolve_jit_rollout_sync(_ALLOWLIST_UID, stage=JITDecisionStage.READ_ONLY)
+
+    assert allowlisted.permits_work is True
+    assert stranger.permits_work is False
+    assert ledger.permits_work is False
+    assert sync_allowlisted.permits_work is True
 
 
 @pytest.mark.asyncio
@@ -335,8 +392,8 @@ async def test_trigger_snapshot_final_refresh_bypasses_stale_posthog_call(monkey
             if self.calls == 1:
                 started.set()
                 release.wait(1)
-                return {'jit-processing-v1': True, 'jit-processing-kill-switch-v1': False}
-            return {'jit-processing-v1': True, 'jit-processing-kill-switch-v1': True}
+                return {JIT_PROCESSING_FLAG_KEY: True, JIT_KILL_SWITCH_FLAG_KEY: False}
+            return {JIT_PROCESSING_FLAG_KEY: False, JIT_KILL_SWITCH_FLAG_KEY: True}
 
     client = SequencedPostHog()
     provider = PostHogJITFlagProvider(timeout_seconds=1, client_factory=lambda: client)
@@ -600,15 +657,7 @@ def test_trigger_snapshot_serializes_exhaustive_action_receipt(monkeypatch):
     assert observed == [False, True]
 
 
-@pytest.mark.parametrize(
-    ('rollout', 'kill_switch'),
-    [
-        (TriState.DISABLED, TriState.DISABLED),
-        (TriState.ENABLED, TriState.ENABLED),
-    ],
-    ids=['rollout-disabled-during-scan', 'kill-switch-enabled-during-scan'],
-)
-def test_trigger_snapshot_final_authority_fence_discards_scan_after_disable_or_kill(monkeypatch, rollout, kill_switch):
+def test_trigger_snapshot_final_authority_fence_discards_scan_after_disable(monkeypatch):
     observed: list[bool] = []
 
     async def resolve(uid: str, *, stage: JITDecisionStage, force_refresh: bool = False):
@@ -617,7 +666,7 @@ def test_trigger_snapshot_final_authority_fence_discards_scan_after_disable_or_k
         evaluation = (
             JITFlagEvaluation(TriState.ENABLED, TriState.DISABLED, JITDecisionReason.EVALUATED)
             if not force_refresh
-            else JITFlagEvaluation(rollout, kill_switch, JITDecisionReason.EVALUATED)
+            else JITFlagEvaluation(TriState.DISABLED, TriState.ENABLED, JITDecisionReason.EVALUATED)
         )
         return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
 
@@ -848,13 +897,13 @@ def test_proactivity_reservation_force_refreshes_paid_authority_and_uses_authent
     assert observed['uid'] == 'owner'
 
 
-def test_proactivity_reservation_does_no_mutation_when_killed(monkeypatch):
+def test_proactivity_reservation_does_no_mutation_when_rollout_is_off(monkeypatch):
     async def resolve(*_args, **_kwargs):
-        evaluation = JITFlagEvaluation(TriState.ENABLED, TriState.ENABLED, JITDecisionReason.EVALUATED)
+        evaluation = JITFlagEvaluation(TriState.DISABLED, TriState.ENABLED, JITDecisionReason.EVALUATED)
         return authority_module._effective_decision(evaluation, cache_hit=False, cache_ttl_seconds=20)
 
     async def no_write(*_args, **_kwargs):
-        pytest.fail('kill switch must block reservation writes')
+        pytest.fail('disabled rollout must block reservation writes')
 
     monkeypatch.setattr(jit_rollout, 'resolve_jit_rollout', resolve)
     monkeypatch.setattr(jit_rollout, 'run_blocking', no_write)

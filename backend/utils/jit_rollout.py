@@ -2,8 +2,12 @@
 
 This module owns a read-only control-plane decision.  It deliberately has no
 client input other than the Firebase-authenticated UID supplied by the router.
-Missing configuration, absent or malformed flags, provider errors, and
-timeouts all remain ``unknown`` and therefore cannot activate product work.
+
+Admission is one PostHog exposure flag plus a code-owned two-UID allowlist
+that bypasses the flag.  A known-false or absent flag is off.  Provider
+timeouts, missing configuration, and malformed values stay ``unknown`` and
+cannot admit a non-allowlist user.  The allowlist still admits when PostHog
+is down.
 """
 
 # LIFECYCLE: permanent
@@ -28,8 +32,17 @@ from utils.executors import run_blocking
 logger = logging.getLogger(__name__)
 
 JIT_PROCESSING_FLAG_KEY = 'jit-processing-v1'
+# Retired admission keys. Kept as names so tests can prove they no longer
+# authorize work. Do not read them for permits_work.
 JIT_LEDGER_MIGRATION_FLAG_KEY = 'jit-processing-ledger-migration-v1'
 JIT_KILL_SWITCH_FLAG_KEY = 'jit-processing-kill-switch-v1'
+JIT_DAILY_SWEEP_FLAG_KEY = 'daily-memory-sweep-v1'
+JIT_ADMISSION_ALLOWLIST = frozenset(
+    {
+        'vi7SA9ckQCe4ccobWNxlbdcNdC23',
+        '9OqYLlKJv4hmeYpIhwJcHBR975i2',
+    }
+)
 MAX_JIT_ROLLOUT_CACHE_SECONDS = 30.0
 DEFAULT_JIT_ROLLOUT_CACHE_SECONDS = 20.0
 # Unknown/error snapshots are cached only this briefly: long enough that a
@@ -151,24 +164,47 @@ class _CacheEntry:
     expires_at: float
 
 
+def is_jit_admission_allowlisted(uid: str) -> bool:
+    """Return True when the authenticated Firebase UID bypasses the exposure flag."""
+
+    return uid.strip() in JIT_ADMISSION_ALLOWLIST
+
+
+def _allowlisted_decision(*, cache_hit: bool = False, cache_ttl_seconds: int = 0) -> JITRolloutDecision:
+    return JITRolloutDecision(
+        rollout=TriState.ENABLED,
+        kill_switch=TriState.DISABLED,
+        effective=TriState.ENABLED,
+        reason=JITDecisionReason.ROLLOUT_ENABLED,
+        error_class=JITErrorClass.NONE,
+        cache_hit=cache_hit,
+        cache_ttl_seconds=cache_ttl_seconds,
+    )
+
+
 def _effective_decision(
     evaluation: JITFlagEvaluation, *, cache_hit: bool, cache_ttl_seconds: int
 ) -> JITRolloutDecision:
-    if evaluation.kill_switch == TriState.ENABLED:
-        effective = TriState.DISABLED
-        reason = JITDecisionReason.KILL_SWITCH_ENABLED
-    elif evaluation.rollout == TriState.DISABLED:
-        effective = TriState.DISABLED
-        reason = JITDecisionReason.ROLLOUT_DISABLED
-    elif evaluation.rollout == TriState.ENABLED and evaluation.kill_switch == TriState.DISABLED:
+    # Kill-switch / ledger-migration / daily-sweep flags are not admission
+    # authority. A known-false or absent exposure flag is off. Unknown is
+    # reserved for genuine provider, timeout, configuration, or malformed
+    # failures so those states fail closed for non-allowlist users.
+    if evaluation.rollout == TriState.ENABLED:
         effective = TriState.ENABLED
         reason = JITDecisionReason.ROLLOUT_ENABLED
+    elif evaluation.rollout == TriState.DISABLED:
+        effective = TriState.DISABLED
+        reason = (
+            evaluation.reason
+            if evaluation.reason == JITDecisionReason.FLAG_ABSENT
+            else JITDecisionReason.ROLLOUT_DISABLED
+        )
     else:
         effective = TriState.UNKNOWN
         reason = evaluation.reason
     return JITRolloutDecision(
         rollout=evaluation.rollout,
-        kill_switch=evaluation.kill_switch,
+        kill_switch=TriState.DISABLED,
         effective=effective,
         reason=reason,
         error_class=evaluation.error_class,
@@ -207,6 +243,10 @@ class JITRolloutAuthority:
     ) -> JITRolloutDecision:
         if not uid.strip():
             raise ValueError('authenticated uid is required')
+        if is_jit_admission_allowlisted(uid):
+            decision = _allowlisted_decision()
+            self._record(decision, stage=stage, latency_ms=0)
+            return decision
         started_at = self._monotonic()
         now = started_at
         if not force_refresh:
@@ -233,7 +273,7 @@ class JITRolloutAuthority:
         # authorize work, so this cannot extend an outage into an
         # authorization — it only stops a fleet with absent flags from paying
         # one uncached provider call per request.
-        complete = evaluation.rollout != TriState.UNKNOWN and evaluation.kill_switch != TriState.UNKNOWN
+        complete = evaluation.rollout != TriState.UNKNOWN
         entry_ttl = self._ttl_seconds if complete else min(UNKNOWN_JIT_ROLLOUT_CACHE_SECONDS, self._ttl_seconds)
         self._cache[uid] = _CacheEntry(evaluation=evaluation, expires_at=finished_at + entry_ttl)
         self._cache.move_to_end(uid)
@@ -263,7 +303,7 @@ class JITRolloutAuthority:
 
 
 class PostHogJITFlagProvider:
-    """Read both server-owned PostHog flags in one bounded decide request."""
+    """Read the single server-owned PostHog exposure flag in one bounded decide request."""
 
     def __init__(
         self,
@@ -351,9 +391,10 @@ class PostHogJITFlagProvider:
     async def force_refresh(self, uid: str) -> JITFlagEvaluation:
         """Read flags independently of any stale same-owner coalesced call."""
 
-        # A final authority fence must not join a request that started before a
-        # kill switch changed. Keep the bulkhead and provider timeout, but use a
-        # fresh in-flight task rather than the normal same-UID coalescer.
+        # A final authority fence must not join a request that started before
+        # the exposure flag changed. Keep the bulkhead and provider timeout,
+        # but use a fresh in-flight task rather than the normal same-UID
+        # coalescer.
         return await self._resolve_uncached(uid, asyncio.Event())
 
     async def _resolve_uncached(self, uid: str, control_done: asyncio.Event) -> JITFlagEvaluation:
@@ -428,17 +469,22 @@ class PostHogJITFlagProvider:
                 JITErrorClass.PROVIDER,
             )
 
-        rollout = _flag_state(variants, self._rollout_flag_key)
-        kill_switch = _flag_state(variants, JIT_KILL_SWITCH_FLAG_KEY)
-        if rollout == TriState.UNKNOWN or kill_switch == TriState.UNKNOWN:
-            reason = (
-                JITDecisionReason.FLAG_ABSENT
-                if (self._rollout_flag_key not in variants or JIT_KILL_SWITCH_FLAG_KEY not in variants)
-                else JITDecisionReason.MALFORMED_RESPONSE
+        if self._rollout_flag_key not in variants:
+            return JITFlagEvaluation(
+                TriState.DISABLED,
+                TriState.DISABLED,
+                JITDecisionReason.FLAG_ABSENT,
+                JITErrorClass.ABSENT,
             )
-            error_class = JITErrorClass.ABSENT if reason == JITDecisionReason.FLAG_ABSENT else JITErrorClass.MALFORMED
-            return JITFlagEvaluation(rollout, kill_switch, reason, error_class)
-        return JITFlagEvaluation(rollout, kill_switch, JITDecisionReason.EVALUATED)
+        rollout = _flag_state(variants, self._rollout_flag_key)
+        if rollout == TriState.UNKNOWN:
+            return JITFlagEvaluation(
+                TriState.UNKNOWN,
+                TriState.DISABLED,
+                JITDecisionReason.MALFORMED_RESPONSE,
+                JITErrorClass.MALFORMED,
+            )
+        return JITFlagEvaluation(rollout, TriState.DISABLED, JITDecisionReason.EVALUATED)
 
 
 def _flag_state(flags: Mapping[str, Any], key: str) -> TriState:
@@ -451,9 +497,6 @@ def _flag_state(flags: Mapping[str, Any], key: str) -> TriState:
 
 
 _authority = JITRolloutAuthority(PostHogJITFlagProvider())
-_ledger_migration_authority = JITRolloutAuthority(
-    PostHogJITFlagProvider(rollout_flag_key=JIT_LEDGER_MIGRATION_FLAG_KEY)
-)
 
 # Synchronous callers (conversation finalization threads, the FastAPI sync
 # threadpool, first-open workers) must never share asyncio primitives or
@@ -499,6 +542,8 @@ def resolve_jit_rollout_sync(
 ) -> JITRolloutDecision:
     """Loop-confined resolution for non-async callers; unavailable states fail closed."""
 
+    if is_jit_admission_allowlisted(uid):
+        return _allowlisted_decision()
     try:
         future = asyncio.run_coroutine_threadsafe(
             _sync_authority.resolve(uid, stage=stage, force_refresh=force_refresh),
@@ -521,6 +566,8 @@ async def resolve_jit_rollout(
     stage: JITDecisionStage,
     force_refresh: bool = False,
 ) -> JITRolloutDecision:
+    if is_jit_admission_allowlisted(uid):
+        return _allowlisted_decision()
     return await _authority.resolve(uid, stage=stage, force_refresh=force_refresh)
 
 
@@ -530,9 +577,9 @@ async def resolve_jit_ledger_migration_rollout(
     stage: JITDecisionStage,
     force_refresh: bool = False,
 ) -> JITRolloutDecision:
-    """Resolve the independent, default-off authority for migration/cutover writes."""
+    """Same admission helper as processing; the retired migration flag is ignored."""
 
-    return await _ledger_migration_authority.resolve(uid, stage=stage, force_refresh=force_refresh)
+    return await resolve_jit_rollout(uid, stage=stage, force_refresh=force_refresh)
 
 
 __all__ = [
@@ -540,12 +587,17 @@ __all__ = [
     'JITDecisionReason',
     'JITErrorClass',
     'JITFlagEvaluation',
+    'JIT_ADMISSION_ALLOWLIST',
+    'JIT_DAILY_SWEEP_FLAG_KEY',
+    'JIT_KILL_SWITCH_FLAG_KEY',
     'JIT_LEDGER_MIGRATION_FLAG_KEY',
+    'JIT_PROCESSING_FLAG_KEY',
     'JITRolloutAuthority',
     'JITRolloutDecision',
     'PostHogJITFlagProvider',
     'TriState',
     'close_posthog_control_plane',
+    'is_jit_admission_allowlisted',
     'resolve_jit_ledger_migration_rollout',
     'resolve_jit_rollout',
     'resolve_jit_rollout_sync',
