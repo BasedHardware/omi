@@ -1,4 +1,4 @@
-import {NativeModules} from 'react-native';
+import {NativeEventEmitter, NativeModules} from 'react-native';
 
 import type {
   BluetoothState,
@@ -6,11 +6,13 @@ import type {
   OmiAuth,
   OmiBackend,
   OmiNative,
+  OmiNativeEvent,
 } from './omiNativeTypes';
 
 export type {
   BluetoothState,
   CaptureMode,
+  ConnectionPhase,
   Device,
   NativeHttpMethod,
   NativeHttpRequest,
@@ -21,6 +23,7 @@ export type {
   OmiAuthSignInResult,
   OmiAuthSignOutResult,
   OmiNative,
+  OmiNativeEvent,
 } from './omiNativeTypes';
 
 export type PlatformNativeSnapshot = NativeSnapshot;
@@ -37,6 +40,18 @@ export function browserScanErrorMessage(_error: unknown): string | null {
 
 export function resolveOmiNative(nativeModule: OmiNative | null | undefined) {
   return {adapter: nativeModule, installed: nativeModule != null};
+}
+
+export function subscribeOmiNativeEvents(
+  listener: (event: OmiNativeEvent) => void,
+): () => void {
+  const nativeModule = NativeModules.OmiNative;
+  if (nativeModule == null) {
+    return () => undefined;
+  }
+  const emitter = new NativeEventEmitter(nativeModule);
+  const subscription = emitter.addListener('omiNativeEvent', listener);
+  return () => subscription.remove();
 }
 
 export function resolveOmiBackend(nativeModule: OmiBackend | null | undefined) {

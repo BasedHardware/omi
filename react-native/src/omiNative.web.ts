@@ -29,6 +29,7 @@ import type {
 
 export type {
   CaptureMode,
+  ConnectionPhase,
   Device,
   NativeHttpMethod,
   NativeHttpRequest,
@@ -37,6 +38,7 @@ export type {
   OmiAuthSignInResult,
   OmiAuthSignOutResult,
   OmiBackend,
+  OmiNativeEvent,
 } from './omiNativeTypes';
 
 type WebBluetoothState = BrowserCapabilitySnapshot['bluetooth'];
@@ -134,6 +136,7 @@ function browserSnapshot(
     bluetooth: snapshot.bluetooth,
     capture: 'idle',
     captureMode: 'stream',
+    connectedDeviceId: null,
     devices: [],
     lastEvent:
       snapshot.bluetooth === 'unsupported'
@@ -150,6 +153,7 @@ function browserSnapshot(
         ? 'unsupported'
         : 'unknown',
     notifications: 'unknown',
+    phase: 'disconnected',
   };
 }
 
@@ -159,23 +163,11 @@ export function createWebNativeAdapter(
   const browserCapabilities = createBrowserCapabilityAdapter(environment);
 
   return {
-    capturePhoto: async () => ({accepted: false, reason: 'unsupported'}),
     connectDevice: unsupportedOperationAsync('Omi device capture'),
     disconnectDevice: unsupportedOperationAsync('Omi device capture'),
-    endPhoneCall: unsupportedOperationAsync('Phone calls'),
-    getAudioRoute: async () => 'browser',
-    getBatteryHistory: async () => [],
     getBluetoothState: async () => browserCapabilities.snapshot().bluetooth,
-    getCameraStatus: async () => ({
-      available: false,
-      permission: 'unsupported',
-    }),
-    getDeviceDiagnostics: async () => ({}),
     getSnapshot: async () =>
       browserSnapshot(await browserCapabilities.refresh()),
-    getWatchStatus: async () => ({battery: 0, paired: false, reachable: false}),
-    getWifiNetwork: async () => ({connected: false, ssid: ''}),
-    readCharacteristic: unsupportedOperationAsync('Omi device capture'),
     requestPermissions: async () => {
       const result = await browserCapabilities.checkMicrophone();
       return {
@@ -183,14 +175,6 @@ export function createWebNativeAdapter(
         notifications: 'unknown' as const,
       };
     },
-    setBackgroundMode: unsupportedOperationAsync('Background mode'),
-    setNotificationOnKillService: unsupportedOperationAsync(
-      'Kill-service notifications',
-    ),
-    setPhoneCallAudio: unsupportedOperationAsync('Phone calls'),
-    startCapture: unsupportedOperationAsync('Omi capture'),
-    startPhoneCall: unsupportedOperationAsync('Phone calls'),
-    startRssiStreaming: unsupportedOperationAsync('Omi device capture'),
     startScan: async () => {
       const result = await browserCapabilities.chooseBluetoothDevice();
       if (!result.ok) {
@@ -198,12 +182,7 @@ export function createWebNativeAdapter(
       }
       return [];
     },
-    stopCapture: unsupportedOperationAsync('Omi capture'),
-    stopRssiStreaming: unsupportedOperationAsync('Omi device capture'),
     stopScan: unsupportedOperationAsync('Omi device capture'),
-    subscribeCharacteristic: unsupportedOperationAsync('Omi device capture'),
-    unsubscribeCharacteristic: unsupportedOperationAsync('Omi device capture'),
-    writeCharacteristic: unsupportedOperationAsync('Omi device capture'),
   };
 }
 
@@ -332,3 +311,9 @@ export const omiAuth = browserAuth;
 export const omiNative = browserNative;
 export const isNativeBackendInstalled = true;
 export const isNativeModuleInstalled = true;
+
+export function subscribeOmiNativeEvents(
+  _listener: (event: import('./omiNativeTypes').OmiNativeEvent) => void,
+): () => void {
+  return () => undefined;
+}

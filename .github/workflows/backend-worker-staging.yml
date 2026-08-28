@@ -24,9 +24,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
       # Worker typechecking imports workspace packages whose declaration output is
-      # intentionally not checked in. Build them before invoking worker-local gates.
+      # intentionally not checked in. Build those packages only — the root
+      # `bun run build` also compiles the PWA and needs an optional Rollup
+      # linux binary that `bun install --frozen-lockfile` does not fetch.
       - name: Build workspace dependencies
-        run: bun run build
+        run: bun run --cwd packages/contracts/ratified build && bun x tsc -b
       - name: Format check
         run: bun run --cwd apps/backend-worker format:check
       - name: Lint

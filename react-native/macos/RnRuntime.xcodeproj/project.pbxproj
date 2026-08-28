@@ -20,6 +20,8 @@
 		A10405000000000000000001 /* OmiAuthModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10405000000000000000002 /* OmiAuthModule.mm */; };
 		A10406000000000000000001 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10406000000000000000002 /* AuthenticationServices.framework */; };
 		A10407000000000000000001 /* LocalAuthentication.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10407000000000000000002 /* LocalAuthentication.framework */; };
+		A10408000000000000000001 /* OmiNativeModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10408000000000000000002 /* OmiNativeModule.mm */; };
+		A10409000000000000000001 /* CoreBluetooth.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10409000000000000000002 /* CoreBluetooth.framework */; };
 		DA2AA05EC605ADA710BAA8FE /* libPods-RnRuntime-macOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */; };
 /* End PBXBuildFile section */
 
@@ -48,6 +50,9 @@
 		A10405000000000000000003 /* OmiAuthModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiAuthModule.h; sourceTree = "<group>"; };
 		A10406000000000000000002 /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
 		A10407000000000000000002 /* LocalAuthentication.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = LocalAuthentication.framework; path = System/Library/Frameworks/LocalAuthentication.framework; sourceTree = SDKROOT; };
+		A10408000000000000000002 /* OmiNativeModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiNativeModule.mm; sourceTree = "<group>"; };
+		A10408000000000000000003 /* OmiNativeModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiNativeModule.h; sourceTree = "<group>"; };
+		A10409000000000000000002 /* CoreBluetooth.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreBluetooth.framework; path = System/Library/Frameworks/CoreBluetooth.framework; sourceTree = SDKROOT; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RnRuntime-macOS.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -66,6 +71,7 @@
 			files = (
 				A10406000000000000000001 /* AuthenticationServices.framework in Frameworks */,
 				A10407000000000000000001 /* LocalAuthentication.framework in Frameworks */,
+				A10409000000000000000001 /* CoreBluetooth.framework in Frameworks */,
 				DA2AA05EC605ADA710BAA8FE /* libPods-RnRuntime-macOS.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -78,6 +84,7 @@
 			children = (
 				A10406000000000000000002 /* AuthenticationServices.framework */,
 				A10407000000000000000002 /* LocalAuthentication.framework */,
+				A10409000000000000000002 /* CoreBluetooth.framework */,
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */,
 			);
@@ -114,6 +121,8 @@
 				A10404000000000000000002 /* OmiSFSymbolView.mm */,
 				A10405000000000000000003 /* OmiAuthModule.h */,
 				A10405000000000000000002 /* OmiAuthModule.mm */,
+				A10408000000000000000003 /* OmiNativeModule.h */,
+				A10408000000000000000002 /* OmiNativeModule.mm */,
 			);
 			path = "RnRuntime-macOS";
 			sourceTree = "<group>";
@@ -351,6 +360,7 @@
 				A10403000000000000000001 /* OmiGlassPanelView.mm in Sources */,
 				A10404000000000000000001 /* OmiSFSymbolView.mm in Sources */,
 				A10405000000000000000001 /* OmiAuthModule.mm in Sources */,
+				A10408000000000000000001 /* OmiNativeModule.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -418,6 +428,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = NO;
+				CODE_SIGN_ENTITLEMENTS = "RnRuntime-macOS/RnRuntime.entitlements";
 				INFOPLIST_FILE = "RnRuntime-macos/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
@@ -441,6 +452,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				CODE_SIGN_ENTITLEMENTS = "RnRuntime-macOS/RnRuntime.entitlements";
 				INFOPLIST_FILE = "RnRuntime-macos/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;

@@ -35,6 +35,14 @@ import {
   type AttachmentIngestMessage,
 } from "./attachments";
 import {
+  appendDeviceSessionAudio,
+  completeDeviceSession,
+  listDeviceSessions,
+  openDeviceSession,
+  parseDeviceSessionAudio,
+  parseDeviceSessionCreate,
+} from "./device-sessions";
+import {
   createVectorizeRetrievalBoundary,
   noCanonicalMemoryStore,
 } from "./retrieval";
@@ -148,8 +156,8 @@ app.use("/v1/*", async (context, next) => {
   const clientId = context.req.header("x-omi-client-id");
   // Staging isolation by client id, not production multi-tenant auth.
   // After Bearer auth, each validated x-omi-client-id is its own data
-  // partition for chat, tasks, attachments, and conversations. Settings
-  // display name/email/plan stay staging labels.
+  // partition for chat, tasks, attachments, conversations, and device
+  // sessions. Settings display name/email/plan stay staging labels.
   if (clientId === undefined || !isClientId(clientId)) {
     return backendError("bad_request", "edit_request", 400);
   }
@@ -349,6 +357,89 @@ app.post("/v1/chat-attachments/:id/complete", async (context) => {
     case "conflict":
       return backendError("attachment_rejected", "edit_request", 409);
   }
+});
+
+app.post("/v1/device-sessions", async (context) => {
+  const r2 = context.env.ATTACHMENTS;
+  const db = context.env.DB;
+  if (r2 === undefined || db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const parsed = await readBoundedJson(context.req.raw, 65_536);
+  if (parsed.kind === "too_large")
+    return backendError("attachment_too_large", "edit_request", 413);
+  if (parsed.kind === "invalid")
+    return backendError("bad_request", "edit_request", 400);
+  const request = parseDeviceSessionCreate(parsed.value);
+  if (request === null) return backendError("validation", "edit_request", 422);
+  return json(
+    {
+      session: await openDeviceSession(
+        db,
+        context.get("accountId"),
+        request,
+        Date.now()
+      ),
+    },
+    201
+  );
+});
+
+app.post("/v1/device-sessions/:id/audio", async (context) => {
+  const r2 = context.env.ATTACHMENTS;
+  const db = context.env.DB;
+  if (r2 === undefined || db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const parsed = await readBoundedJson(context.req.raw, 1_572_864);
+  if (parsed.kind === "too_large")
+    return backendError("attachment_too_large", "edit_request", 413);
+  if (parsed.kind === "invalid")
+    return backendError("bad_request", "edit_request", 400);
+  const request = parseDeviceSessionAudio(parsed.value);
+  if (request === null) return backendError("validation", "edit_request", 422);
+  const outcome = await appendDeviceSessionAudio(
+    db,
+    r2,
+    context.get("accountId"),
+    context.req.param("id"),
+    request.bytes,
+    Date.now()
+  );
+  switch (outcome.kind) {
+    case "ok":
+      return json({ session: outcome.session });
+    case "not_found":
+      return backendError("not_found", "refresh_history", 404);
+    case "conflict":
+      return backendError("conflict", "edit_request", 409);
+    case "too_large":
+      return backendError("attachment_too_large", "edit_request", 413);
+  }
+});
+
+app.post("/v1/device-sessions/:id/complete", async (context) => {
+  const r2 = context.env.ATTACHMENTS;
+  const db = context.env.DB;
+  if (r2 === undefined || db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const outcome = await completeDeviceSession(
+    db,
+    context.get("accountId"),
+    context.req.param("id"),
+    Date.now()
+  );
+  return outcome.kind === "not_found"
+    ? backendError("not_found", "refresh_history", 404)
+    : json({ session: outcome.session });
+});
+
+app.get("/v1/device-sessions", async (context) => {
+  const r2 = context.env.ATTACHMENTS;
+  const db = context.env.DB;
+  if (r2 === undefined || db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  return json({
+    sessions: await listDeviceSessions(db, context.get("accountId")),
+  });
 });
 
 app.get("/v1/conversations", async (context) => {
