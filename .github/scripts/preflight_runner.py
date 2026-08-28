@@ -30,8 +30,10 @@ FINGERPRINT_ENV_NAMES = (
 )
 IS_WINDOWS = os.name == "nt"
 HAS_PROCESS_GROUPS = os.name != "nt" and hasattr(os, "killpg")
-WINDOWS_STILL_ACTIVE = 259
 WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+WINDOWS_SYNCHRONIZE = 0x00100000
+WINDOWS_WAIT_OBJECT_0 = 0x00000000
+WINDOWS_WAIT_TIMEOUT = 0x00000102
 WINDOWS_PROCESS_SET_QUOTA = 0x0100
 WINDOWS_PROCESS_TERMINATE = 0x0001
 WINDOWS_ERROR_ACCESS_DENIED = 5
@@ -258,9 +260,9 @@ def windows_process_status(pid: int) -> tuple[bool, int | None]:
     open_process = kernel32.OpenProcess
     open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     open_process.restype = wintypes.HANDLE
-    get_exit_code = kernel32.GetExitCodeProcess
-    get_exit_code.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
-    get_exit_code.restype = wintypes.BOOL
+    wait_for_single_object = kernel32.WaitForSingleObject
+    wait_for_single_object.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    wait_for_single_object.restype = wintypes.DWORD
     get_process_times = kernel32.GetProcessTimes
     get_process_times.argtypes = [
         wintypes.HANDLE,
@@ -274,15 +276,19 @@ def windows_process_status(pid: int) -> tuple[bool, int | None]:
     close_handle.argtypes = [wintypes.HANDLE]
     close_handle.restype = wintypes.BOOL
 
-    handle = open_process(WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    handle = open_process(
+        WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION | WINDOWS_SYNCHRONIZE,
+        False,
+        pid,
+    )
     if not handle:
         return ctypes.get_last_error() == WINDOWS_ERROR_ACCESS_DENIED, None
     try:
-        exit_code = wintypes.DWORD()
-        if not get_exit_code(handle, ctypes.byref(exit_code)):
-            return True, None
-        if exit_code.value != WINDOWS_STILL_ACTIVE:
+        wait_result = wait_for_single_object(handle, 0)
+        if wait_result == WINDOWS_WAIT_OBJECT_0:
             return False, None
+        if wait_result != WINDOWS_WAIT_TIMEOUT:
+            return True, None
 
         creation = wintypes.FILETIME()
         exit_time = wintypes.FILETIME()

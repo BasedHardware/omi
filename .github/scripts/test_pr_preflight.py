@@ -708,12 +708,6 @@ class SingleFlightTests(unittest.TestCase):
             self.assertTrue(preflight_runner.process_exists(os.getpid()))
             self.assertFalse(preflight_runner.process_exists(0x7FFFFFFF))
 
-    @unittest.skipUnless(os.name == "nt", "Windows-only")
-    def test_process_that_exits_with_still_active_status_is_not_alive(self) -> None:
-        child = subprocess.Popen([sys.executable, "-c", "raise SystemExit(259)"])
-        self.assertEqual(child.wait(), 259)
-        self.assertFalse(preflight_runner.process_exists(child.pid))
-
     def test_pr_body_content_participates_in_singleflight_fingerprint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             body = Path(tmp) / "body.md"

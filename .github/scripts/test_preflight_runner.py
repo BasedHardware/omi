@@ -236,6 +236,12 @@ class ProcessExistsTests(unittest.TestCase):
         self.assertFalse(runner.process_exists(0))
 
     @unittest.skipUnless(os.name == "nt", "native Windows liveness contract")
+    def test_process_that_exits_with_still_active_status_is_not_alive(self) -> None:
+        child = subprocess.Popen([sys.executable, "-c", "raise SystemExit(259)"])
+        self.assertEqual(child.wait(), 259)
+        self.assertFalse(runner.process_exists(child.pid))
+
+    @unittest.skipUnless(os.name == "nt", "native Windows liveness contract")
     def test_windows_liveness_probe_does_not_terminate_the_target(self) -> None:
         child = subprocess.Popen(
             [sys.executable, "-c", "import sys; sys.stdin.buffer.read()"],
