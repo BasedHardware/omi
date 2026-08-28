@@ -26,7 +26,15 @@ from pr_metadata import (
     load_from_gh,
     resolve_main_push_body,
 )
-from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, run_git, select_checks
+from pr_preflight import (
+    changed_files,
+    current_branch,
+    format_failure_class_suggest,
+    resolve_pr_metadata,
+    run_git,
+    run_python_capture,
+    select_checks,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
@@ -266,6 +274,37 @@ class MetadataTests(unittest.TestCase):
 
 
 class SelectionTests(unittest.TestCase):
+    def test_captured_python_output_is_utf8_when_host_utf8_mode_is_disabled(self) -> None:
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "0"
+        env.pop("PYTHONIOENCODING", None)
+
+        with patch.dict(os.environ, env, clear=True):
+            completed = run_python_capture(
+                REPO_ROOT,
+                "-c",
+                "print('\\u8def\\u5f84\\U0001f680')",
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stdout)
+        self.assertEqual(completed.stdout, "路径🚀\n")
+
+    def test_current_branch_decodes_utf8_when_host_utf8_mode_is_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            env = os.environ.copy()
+            env["PYTHONUTF8"] = "0"
+            env.pop("PYTHONIOENCODING", None)
+            for key in tuple(env):
+                if key.startswith("GIT_"):
+                    del env[key]
+            subprocess.run(["git", "init", "-q", "-b", "分支-🚀", str(root)], check=True, env=env)
+
+            with patch.dict(os.environ, env, clear=True):
+                branch = current_branch(root)
+
+        self.assertEqual(branch, "分支-🚀")
+
     def test_run_git_decodes_unicode_checkout_path_as_utf8(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "路径 checkout"
