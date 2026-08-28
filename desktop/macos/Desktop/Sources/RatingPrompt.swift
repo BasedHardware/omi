@@ -516,8 +516,15 @@ struct RatingPromptBar: View {
         .foregroundColor(.primary)
 
       TextField("What can we improve?", text: $commentDraft)
-        .textFieldStyle(.roundedBorder)
-        .frame(width: 320)
+        .textFieldStyle(.plain)
+        .font(.system(size: 13))
+        .foregroundColor(Ink.primary)
+        .padding(.horizontal, OmiSpacing.md)
+        .frame(width: 320, alignment: .leading)
+        .frame(minHeight: 30)
+        // Same quiet field surface as OmiSearchField, at the bar's radius so
+        // the row reads as one chrome — no system blue focus ring.
+        .glassField(cornerRadius: 10)
         .onSubmit { manager.submitPendingComment(commentDraft) }
         .onChange(of: commentDraft) { _, newValue in
           if newValue.count > 500 {
@@ -529,15 +536,15 @@ struct RatingPromptBar: View {
       Button("Send") {
         manager.submitPendingComment(commentDraft)
       }
-      .buttonStyle(.borderedProminent)
-      .controlSize(.small)
-      .tint(.primary)
+      .buttonStyle(
+        OmiButtonStyle(
+          RatingPromptButtonStyle.referralKind,
+          size: RatingPromptButtonStyle.referralSize))
 
       Button("Skip") {
         manager.skipPendingComment()
       }
-      .buttonStyle(.bordered)
-      .controlSize(.small)
+      .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
       closeButton { manager.dismiss() }
     }
