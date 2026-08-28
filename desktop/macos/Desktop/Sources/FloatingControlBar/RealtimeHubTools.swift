@@ -262,12 +262,16 @@ enum RealtimeHubTools {
     return query + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
   }
 
-  /// Host-authored public-web request sent through the typed-chat lane. The
-  /// explicit prefix selects the adapter's required public-web route even when
-  /// the original request is a timeless lookup rather than an obviously fresh
-  /// query such as weather.
-  static func publicWebSearchPrompt(query: String, toolContext: String) -> String {
-    let publicWebQuery = "Search the web before answering this request:\n\n" + query
-    return escalationUserPrompt(query: publicWebQuery, toolContext: toolContext)
+  /// Host-authored public-only request sent to the managed web-search lane.
+  /// Private realtime context is deliberately excluded: provider-hosted search
+  /// must never inherit memories or tool output from the canonical chat session.
+  static func publicWebSearchPrompt(query: String) -> String {
+    """
+    Search the live public web before answering this request. Reply with one to four concise, \
+    natural spoken sentences. Name the source you relied on, but do not use Markdown or recite a URL.
+
+    Request:
+    \(query)
+    """
   }
 }

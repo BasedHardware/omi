@@ -1,6 +1,34 @@
 import Foundation
 import OmiWAL
 
+private struct DesktopPublicWebSearchRequest: Encodable {
+  struct Message: Encodable {
+    let role: String
+    let content: String
+  }
+
+  let model = "omi-sonnet"
+  let messages: [Message]
+  let stream = false
+  let maxTokens = 512
+  let omiWebSearch = true
+
+  enum CodingKeys: String, CodingKey {
+    case model, messages, stream
+    case maxTokens = "max_tokens"
+    case omiWebSearch = "omi_web_search"
+  }
+}
+
+private struct DesktopPublicWebSearchResponse: Decodable {
+  struct Choice: Decodable {
+    struct Message: Decodable { let content: String }
+    let message: Message
+  }
+
+  let choices: [Choice]
+}
+
 actor APIClient {
   static let shared = APIClient()
   // Primary data backend URL — Python backend is the single source of truth for all data CRUD.
@@ -66,6 +94,38 @@ actor APIClient {
       includeBYOK: includeBYOK,
       expectedAuthOwnerId: expectedAuthOwnerId
     )
+  }
+
+  /// Executes a fresh public-only lookup through the desktop chat endpoint.
+  ///
+  /// This intentionally does not reuse the canonical typed-chat session. That
+  /// session may contain private memories or prior tool results, and the backend
+  /// correctly withholds provider-hosted web search from a tainted transcript.
+  /// A single isolated user message both preserves that privacy boundary and
+  /// lets realtime voice use the same managed public-web lane as typed chat.
+  func searchPublicWebForVoice(
+    query: String,
+    expectedOwnerID: String,
+    customBaseURL: String? = nil
+  ) async throws -> String {
+    let base = customBaseURL ?? rustBackendURL
+    guard !base.isEmpty else { throw APIError.invalidResponse }
+    let normalized = base.hasSuffix("/") ? base : base + "/"
+    let body = DesktopPublicWebSearchRequest(
+      messages: [.init(role: "user", content: query)])
+    let response: DesktopPublicWebSearchResponse = try await post(
+      "v2/chat/completions",
+      body: body,
+      customBaseURL: normalized,
+      includeBYOK: false,
+      expectedOwnerId: expectedOwnerID,
+      requestTimeout: 45)
+    guard
+      let answer = response.choices.first?.message.content
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+      !answer.isEmpty
+    else { throw APIError.invalidResponse }
+    return answer
   }
 
   // MARK: - HTTP Methods

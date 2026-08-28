@@ -24,20 +24,35 @@ extension RealtimeHubController {
       failureMessage: "I ran into an error reaching the model.")
   }
 
-  /// web_search — force a public-web-routed typed-chat turn and return its
-  /// grounded answer for the realtime provider to speak faithfully.
+  /// web_search — execute a fresh public-only lookup and return its grounded
+  /// answer for the realtime provider to speak faithfully.
   func searchPublicWeb(
     _ query: String,
-    toolContext: String,
+    toolContext _: String,
     invocationID: String,
     ownerID: String
   ) async -> AuthorizedRealtimeToolExecutionResult {
-    await queryChatLaneForVoice(
-      prompt: RealtimeHubTools.publicWebSearchPrompt(query: query, toolContext: toolContext),
-      invocationID: invocationID,
-      ownerID: ownerID,
-      toolName: HubTool.webSearch.rawValue,
-      failureMessage: "The web lookup failed. Please try again.")
+    guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
+      return .failed(Self.authorizedRealtimeOwnerChangedError())
+    }
+    let t0 = Date()
+    do {
+      let answer = try await APIClient.shared.searchPublicWebForVoice(
+        query: RealtimeHubTools.publicWebSearchPrompt(query: query),
+        expectedOwnerID: ownerID)
+      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      let ms = Int(Date().timeIntervalSince(t0) * 1000)
+      log("RealtimeHub: web_search public lane OK in \(ms)ms (\(answer.count) chars)")
+      return .succeeded(answer)
+    } catch {
+      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      log("RealtimeHub: web_search failed — \(error.localizedDescription)")
+      return .succeeded("The web lookup failed. Please try again.")
+    }
   }
 
   private func queryChatLaneForVoice(
