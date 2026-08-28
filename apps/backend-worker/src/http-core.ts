@@ -10,7 +10,7 @@ import {
 import {
   gatewayConfig,
   gatewayModeEnabled,
-  type GatewaySecretEnv,
+  type GatewayEnv,
 } from "./openrouter";
 import {
   configurationNotReadyEvent,
@@ -70,7 +70,7 @@ export type AccountLocator = {
 };
 
 export type CoreEnv = SignedUploadEnv &
-  GatewaySecretEnv &
+  GatewayEnv &
   ObservabilityEnv & {
     ENVIRONMENT: string;
     API_TOKEN: string;
@@ -80,13 +80,11 @@ export type CoreEnv = SignedUploadEnv &
     STAGING_PLAN_LABEL: string;
     STAGING_CHAT_LIMIT: number;
     AI_MODEL: string;
-    OPENROUTER_GATEWAY_ENABLED?: string;
-    OPENROUTER_MODEL?: string;
     DB?: D1Database;
     ATTACHMENTS?: R2Bucket;
     ATTACHMENT_INGEST?: Queue<AttachmentIngestMessage>;
     ACCOUNTS?: AccountLocator;
-    AI?: RetrievalEnv["AI"];
+    AI?: RetrievalEnv["AI"] | { run: (...args: never[]) => Promise<unknown> };
     VECTORIZE?: RetrievalEnv["VECTORIZE"];
   };
 
@@ -688,10 +686,15 @@ export async function handleMemories(context: CoreContext): Promise<Response> {
   const cursor = query.get("cursor") ?? undefined;
   if (cursor === "") return backendError("bad_request", "edit_request", 400);
   if (context.env.AI !== undefined) {
-    const recalled = await createVectorizeRetrievalBoundary(
+    const retrievalEnv =
       context.env.VECTORIZE === undefined
-        ? { AI: context.env.AI }
-        : { AI: context.env.AI, VECTORIZE: context.env.VECTORIZE },
+        ? { AI: context.env.AI as RetrievalEnv["AI"] }
+        : {
+            AI: context.env.AI as RetrievalEnv["AI"],
+            VECTORIZE: context.env.VECTORIZE,
+          };
+    const recalled = await createVectorizeRetrievalBoundary(
+      retrievalEnv,
       noCanonicalMemoryStore
     ).query({
       accountId: context.get("accountId"),

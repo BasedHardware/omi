@@ -5,9 +5,9 @@ import { createD1Mock } from "./d1-mock";
 
 let honoFetch: (
   request: Request,
-  env: unknown,
+  env: CoreEnv,
   ctx: unknown
-) => Promise<Response>;
+) => Response | Promise<Response>;
 let createElysiaApp: typeof import("../src/elysia")["createElysiaApp"];
 
 beforeAll(async () => {
@@ -15,7 +15,7 @@ beforeAll(async () => {
     DurableObject: class {},
   }));
   const worker = await import("../src/index");
-  honoFetch = worker.default.fetch.bind(worker.default);
+  honoFetch = worker.default.fetch.bind(worker.default) as typeof honoFetch;
   ({ createElysiaApp } = await import("../src/elysia"));
 });
 
@@ -89,7 +89,7 @@ function testEnv(): CoreEnv {
       }),
     },
     AI_MODEL: "test-model",
-    AI: { run: async () => ({ response: "test" }) } as CoreEnv["AI"],
+    AI: { run: async () => ({ response: "test" }) },
     STAGING_DISPLAY_NAME: "Test",
     STAGING_EMAIL: "test@example.invalid",
     STAGING_PLAN_LABEL: "Test",
@@ -101,7 +101,7 @@ function testEnv(): CoreEnv {
     OPENROUTER_API_KEY: "",
     ATTACHMENTS: r2Mock,
     DB: d1Mock,
-  };
+  } as CoreEnv;
 }
 
 const adapters = [
@@ -133,7 +133,9 @@ for (const adapter of adapters) {
     test("/health matches the worker contract", async () => {
       const response = await adapter.fetch("/health");
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({
+      expect(
+        (await response.json()) as { status: string; environment: string }
+      ).toEqual({
         status: "ok",
         environment: "test",
       });
@@ -142,7 +144,13 @@ for (const adapter of adapters) {
     test("/ready matches the worker contract", async () => {
       const response = await adapter.fetch("/ready");
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({
+      expect(
+        (await response.json()) as {
+          status: string;
+          environment: string;
+          observability_sink_mode: string;
+        }
+      ).toEqual({
         status: "ready",
         environment: "test",
         observability_sink_mode: "cloudflare_only",
