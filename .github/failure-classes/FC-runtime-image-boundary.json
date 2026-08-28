@@ -8,6 +8,11 @@
     "desktop/windows/scripts/verify-packaged-main-runtime.mjs"
   ],
   "evidence_prs": [9141],
-  "scope_hints": ["backend/**", "plugins/**", ".github/workflows/gcp_*.yml"],
+  "scope_hints": [
+    "backend/**",
+    "desktop/windows/**",
+    "plugins/**",
+    ".github/workflows/gcp_*.yml"
+  ],
   "status": "open"
 }
