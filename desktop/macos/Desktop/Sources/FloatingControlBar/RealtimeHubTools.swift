@@ -94,7 +94,8 @@ enum RealtimeHubTools {
       screen question, unless the user specifically asks about Omi. Answer about the user's \
       visible work and intent, not the assistant UI.
 
-      Keep latency low: prefer answering directly when you can.
+      Keep latency low for simple requests. Never skip a tool call required by its declaration \
+      just to answer faster.
       """
   }
 

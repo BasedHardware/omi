@@ -231,6 +231,27 @@ final class HubSystemInstructionTests: XCTestCase {
     XCTAssertEqual(parameters?["required"] as? [String], ["query"])
   }
 
+  func testRealtimeHigherModelToolOwnsQualityBiasedSelectionPolicy() {
+    let tool = RealtimeHubTools.openAITools.first {
+      ($0["name"] as? String) == HubTool.askHigherModel.rawValue
+    }
+    let description = tool?["description"] as? String ?? ""
+    let instruction = RealtimeHubTools.systemInstruction()
+
+    XCTAssertTrue(description.contains("ALWAYS call this tool before answering"))
+    XCTAssertTrue(description.contains("'what should I do'"))
+    XCTAssertTrue(description.contains("A short, vague, or first-turn request still counts"))
+    XCTAssertTrue(description.contains("proactively on the first turn"))
+    XCTAssertTrue(description.contains("If unsure whether deeper thought would improve the answer, call it"))
+    XCTAssertTrue(description.contains("Skip only chit-chat"))
+    XCTAssertTrue(description.contains("call web_search first and pass its result as context"))
+    XCTAssertTrue(description.contains("request-specific wait-line"))
+    XCTAssertTrue(description.contains("without answering first"))
+    XCTAssertTrue(instruction.contains("Keep latency low for simple requests"))
+    XCTAssertTrue(instruction.contains("Never skip a tool call required by its declaration"))
+    XCTAssertFalse(instruction.contains("prefer answering directly when you can"))
+  }
+
   func testRealtimeSpawnAgentProviderEnumOnlyAdvertisesAvailableProviders() {
     let tools = RealtimeHubTools.openAITools(availableDirectedProviders: ["openclaw"])
     let spawnAgent = tools.first { ($0["name"] as? String) == HubTool.spawnAgent.rawValue }

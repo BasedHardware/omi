@@ -624,10 +624,13 @@ enum GeneratedToolCapabilities {
       title: "Ask Higher Model",
       latency: .asyncBackground,
       surfaces: Set([.realtimeHub]),
-      summary: "Hand a difficult question to the full typed-chat model and tool lane, then speak its answer.",
+      summary: "Use the full Chat model and tools whenever a quick realtime answer would be shallow, then speak its answer.",
       bullets: [
-      "Use when the user pushes back or when a complicated question needs deeper reasoning, memories, or other typed-chat tools that realtime voice cannot use well.",
-      "Do not use for chit-chat or simple and creative requests you can answer well yourself."
+      "Always call before answering explicit think-hard requests, including 'think carefully', 'go deep', 'don't just guess', and 'what should I do', plus advice, tradeoffs, multi-step plans, or pushback on a weak prior answer.",
+      "A short, vague, or first-turn request still counts: call with the question as given instead of answering or asking a clarifying question first.",
+      "Also call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. When unsure, escalate.",
+      "Skip only chit-chat, short confirmations, obvious stable facts, or a single fast realtime tool that fully answers the request.",
+      "When current public facts and deeper judgment are both needed, call web_search first and pass its result as context to ask_higher_model."
     ]
     ),
     Capability(

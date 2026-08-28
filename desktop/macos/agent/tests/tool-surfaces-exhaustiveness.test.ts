@@ -76,6 +76,23 @@ function hasRealtimeSurface(tool: (typeof omiToolManifest)[number]): boolean {
 }
 
 describe("tool surface exhaustiveness", () => {
+  it("keeps the realtime higher-model card quality-biased and composable", () => {
+    const tool = omiToolManifest.find((entry) => entry.name === "ask_higher_model");
+    const description = tool?.voice?.realtimeDescription ?? "";
+    const bullets = tool?.capabilityDoc.bullets.join("\n") ?? "";
+
+    expect(description).toContain("ALWAYS call this tool before answering");
+    expect(description).toContain("'what should I do'");
+    expect(description).toContain("A short, vague, or first-turn request still counts");
+    expect(description).toContain("proactively on the first turn");
+    expect(description).toContain("If unsure whether deeper thought would improve the answer, call it");
+    expect(description).toContain("Skip only chit-chat");
+    expect(description).toContain("call web_search first and pass its result as context");
+    expect(bullets).toContain("When unsure, escalate");
+    expect(bullets).toContain("single fast realtime tool");
+    expect(bullets).toContain("call web_search first");
+  });
+
   it("declares and generates both permission tools across pi-mono and realtime", () => {
     const permissionTools = ["check_permission_status", "request_permission"];
     const piMonoNames = new Set(toolsForAdapter("pi-mono").map((tool) => tool.name));
