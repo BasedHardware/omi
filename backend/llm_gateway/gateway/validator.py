@@ -93,19 +93,20 @@ def validate_embedding_request(request: Mapping[str, Any], lane: LaneConfig) -> 
         raise GatewayInvalidRequestError('model is required', param='model')
 
     raw_input = request.get('input')
+    inputs: list[str] = []
     if isinstance(raw_input, str):
         inputs = [raw_input]
     elif isinstance(raw_input, list):
-        inputs = cast(list[str], raw_input)
+        for index, item in enumerate(raw_input):
+            if not isinstance(item, str) or not item:
+                raise GatewayInvalidRequestError('input items must be non-empty strings', param=f'input[{index}]')
+            inputs.append(item)
     else:
         raise GatewayInvalidRequestError('input must be a string or a list of strings', param='input')
     if not inputs or len(inputs) > MAX_EMBEDDING_INPUTS:
         raise GatewayInvalidRequestError(
             f'input must contain between 1 and {MAX_EMBEDDING_INPUTS} items', param='input'
         )
-    for index, item in enumerate(inputs):
-        if not isinstance(item, str) or not item:
-            raise GatewayInvalidRequestError('input items must be non-empty strings', param=f'input[{index}]')
 
     unsupported = sorted(set(request.keys()) - {'model', 'input', 'task_type', 'title', 'metadata'})
     if unsupported:
@@ -116,12 +117,14 @@ def validate_embedding_request(request: Mapping[str, Any], lane: LaneConfig) -> 
     title = request.get('title')
     if title is not None and (not isinstance(title, str) or not title.strip()):
         raise GatewayInvalidRequestError('title must be a non-empty string', param='title')
+    normalized_task_type = task_type.strip() if isinstance(task_type, str) else None
+    normalized_title = title.strip() if isinstance(title, str) else None
 
     return ValidatedEmbeddingRequest(
         model=model.strip(),
         inputs=tuple(inputs),
-        task_type=task_type.strip() if isinstance(task_type, str) else None,
-        title=title.strip() if isinstance(title, str) else None,
+        task_type=normalized_task_type,
+        title=normalized_title,
     )
 
 

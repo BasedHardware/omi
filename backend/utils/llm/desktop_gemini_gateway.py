@@ -22,10 +22,14 @@ from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from fastapi import HTTPException
+
 import httpx
 
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
+from utils.byok import get_byok_key
 from utils.llm import vertex_pt_routing as ptr
+from utils.llm.gateway_client import should_route_features_through_gateway
 from utils.llm.gateway_client import (
     GEMINI_EMBEDDINGS_AUTO_LANE_ID,
     get_llm_gateway_base_url,
@@ -34,6 +38,12 @@ from utils.llm.gateway_client import (
 
 DESKTOP_GATEWAY_FEATURE = 'desktop_proactivity'
 DESKTOP_GATEWAY_TIMEOUT_SECONDS = 75.0
+# BYOK keeps its historical output ceiling; server-paid clamps lower in the proxy.
+_MAX_OUTPUT_TOKENS = 8192
+_DEFAULT_THINKING_BUDGET = 1024
+_MAX_CONTENT_ITEMS = 128
+_MAX_CONTENT_PARTS = 512
+_MAX_INLINE_MEDIA_PARTS = 16
 _GATEWAY_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent'})
 
 
@@ -123,7 +133,8 @@ def gemini_body_to_openai_chat(
             if not isinstance(content, Mapping):
                 continue
             role = content.get('role') or 'user'
-            parts = content.get('parts') if isinstance(content.get('parts'), list) else []
+            raw_parts = content.get('parts')
+            parts: list[Any] = raw_parts if isinstance(raw_parts, list) else []
             function_responses = [p for p in parts if isinstance(p, Mapping) and ('functionResponse' in p)]
             function_calls = [p for p in parts if isinstance(p, Mapping) and ('functionCall' in p)]
             if function_responses:
@@ -145,13 +156,14 @@ def gemini_body_to_openai_chat(
                     )
                 continue
             if role in {'model', 'assistant'} and function_calls:
-                tool_calls = []
+                tool_calls: list[dict[str, Any]] = []
                 for part in function_calls:
                     call = part.get('functionCall')
                     if not isinstance(call, Mapping):
                         continue
                     name = str(call.get('name') or '')
-                    arguments = call.get('args') if isinstance(call.get('args'), Mapping) else {}
+                    raw_args = call.get('args')
+                    arguments: dict[str, Any] = dict(raw_args) if isinstance(raw_args, Mapping) else {}
                     call_id = _tool_call_id(name, tool_ordinal)
                     tool_name_by_id[call_id] = name
                     tool_ordinal += 1
@@ -270,13 +282,16 @@ _OPENAI_TO_GEMINI_FINISH_REASON = {
 
 def openai_completion_to_gemini(body: Mapping[str, Any]) -> dict[str, Any]:
     """Translate a gateway chat-completions response back into Gemini wire shape."""
-    choices = body.get('choices') if isinstance(body.get('choices'), list) else []
+    raw_choices = body.get('choices')
+    choices = raw_choices if isinstance(raw_choices, list) else []
     choice = choices[0] if choices and isinstance(choices[0], Mapping) else {}
-    message = choice.get('message') if isinstance(choice.get('message'), Mapping) else {}
+    raw_message = choice.get('message')
+    message = raw_message if isinstance(raw_message, Mapping) else {}
     parts: list[dict[str, Any]] = []
     if isinstance(message.get('content'), str) and message['content']:
         parts.append({'text': message['content']})
-    for call in message.get('tool_calls') or []:
+    raw_tool_calls = message.get('tool_calls')
+    for call in raw_tool_calls if isinstance(raw_tool_calls, list) else []:
         if not isinstance(call, Mapping):
             continue
         function = call.get('function')
@@ -319,16 +334,20 @@ def openai_sse_payload_to_gemini_event(
     a single functionCall part on the terminal chunk, matching Gemini's
     whole-object functionCall semantics.
     """
-    choices = payload.get('choices') if isinstance(payload.get('choices'), list) else []
+    raw_choices = payload.get('choices')
+    choices = raw_choices if isinstance(raw_choices, list) else []
     choice = choices[0] if choices and isinstance(choices[0], Mapping) else {}
-    delta = choice.get('delta') if isinstance(choice.get('delta'), Mapping) else {}
+    raw_delta = choice.get('delta')
+    delta = raw_delta if isinstance(raw_delta, Mapping) else {}
     parts: list[dict[str, Any]] = []
     if isinstance(delta.get('content'), str) and delta['content']:
         parts.append({'text': delta['content']})
-    for call in delta.get('tool_calls') or []:
+    raw_calls = delta.get('tool_calls')
+    for call in raw_calls if isinstance(raw_calls, list) else []:
         if not isinstance(call, Mapping):
             continue
-        index = call.get('index') if isinstance(call.get('index'), int) else 0
+        raw_index = call.get('index')
+        index = raw_index if isinstance(raw_index, int) else 0
         accumulated = pending_tool_calls.setdefault(index, {'name': '', 'arguments': ''})
         function = call.get('function')
         if isinstance(function, Mapping):
@@ -487,3 +506,314 @@ async def gateway_desktop_embed_content(body: bytes, *, uid: str) -> GatewayEmbe
             status_code=502, code='invalid_response', message='gateway embeddings response had no vector'
         )
     return GatewayEmbeddingResult(values=[float(value) for value in values])
+
+
+@dataclass(frozen=True)
+class ProxyEnvelope:
+    """Proxy-owned response helpers the gateway hop needs to answer in-shape.
+
+    routers/desktop_proxy.py stays the BFF; this bundle passes its response
+    envelope, disconnect handling, and timeout classification so the gateway
+    hop answers with the exact wire contract desktop clients already parse.
+    """
+
+    error_response: Any
+    response_headers: Any
+    stream_error_event: Any
+    cancel_on_disconnect: Any
+    timeout_phase: Any
+    client_disconnected: Any
+    provider_unavailable_retry_after: int
+
+
+def company_paid_via_gateway(model: str, action: str) -> bool:
+    """Whether this request's model call hops the LLM gateway.
+
+    Company-paid text and single-embed traffic only: BYOK keeps the thin
+    direct AI Studio path (the gateway Vertex adapter fail-closes BYOK) and
+    batchEmbedContents stays on AI Studio because the Vertex batch wire shape
+    is not compatible. FEATURE_MODE=off keeps the legacy direct Vertex path.
+    """
+    if get_byok_key('gemini'):
+        return False
+    if action not in desktop_gateway_actions():
+        return False
+    try:
+        if not should_route_features_through_gateway():
+            return False
+    except RuntimeError:
+        return False
+    if action == 'embedContent':
+        return model == ptr.DESKTOP_EMBEDDING_MODEL
+    return desktop_gateway_text_lane(model) is not None
+
+
+def _gateway_error_response(error: DesktopGeminiGatewayError, telemetry, envelope: ProxyEnvelope):
+    if error.status_code == 429:
+        status_code, retryable, retry_after = 429, True, 30
+    elif error.status_code >= 500:
+        status_code, retryable, retry_after = 503, True, envelope.provider_unavailable_retry_after
+    else:
+        status_code, retryable, retry_after = error.status_code, False, None
+    telemetry.complete(
+        outcome=error.code,
+        status_code=status_code,
+        retryable=retryable,
+        upstream_status=error.status_code,
+        phase='gateway',
+    )
+    return envelope.error_response(
+        telemetry,
+        status_code=status_code,
+        code=error.code,
+        message=error.message,
+        phase='gateway',
+        retryable=retryable,
+        upstream_status=error.status_code,
+        retry_after=retry_after,
+    )
+
+
+async def proxy_company_paid_via_gateway(
+    request,
+    body: bytes,
+    *,
+    model: str,
+    action: str,
+    streaming: bool,
+    uid: str,
+    telemetry,
+    envelope: ProxyEnvelope,
+):
+    """Company-paid hop through the LLM gateway; the desktop proxy stays the BFF."""
+    from fastapi.responses import Response, StreamingResponse
+
+    telemetry.provider = 'llm_gateway'
+    telemetry.credential_source = 'omi_gateway'
+    telemetry.phase = 'gateway'
+    try:
+        if action == 'embedContent':
+            result = await envelope.cancel_on_disconnect(request, gateway_desktop_embed_content(body, uid=uid))
+            content = json.dumps({'embedding': {'values': result.values}}, separators=(',', ':')).encode()
+            telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
+            return Response(
+                content,
+                media_type='application/json',
+                headers=envelope.response_headers(telemetry),
+            )
+        if streaming:
+
+            async def stream_gateway():
+                try:
+                    async for chunk in gateway_desktop_chat_stream(body, model=model, uid=uid):
+                        yield chunk
+                    telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
+                except DesktopGeminiGatewayError as error:
+                    status_code = 429 if error.status_code == 429 else 503 if error.status_code >= 500 else 502
+                    telemetry.complete(outcome=error.code, status_code=status_code, retryable=True, phase='gateway')
+                    yield envelope.stream_error_event(code=error.code, phase='gateway', telemetry=telemetry)
+                except (httpx.TimeoutException, TimeoutError):
+                    telemetry.complete(outcome='provider_timeout', status_code=504, retryable=False, phase='gateway')
+                    yield envelope.stream_error_event(code='provider_timeout', phase='gateway', telemetry=telemetry)
+                except httpx.HTTPError:
+                    telemetry.complete(
+                        outcome='provider_transport_error', status_code=502, retryable=False, phase='gateway'
+                    )
+                    yield envelope.stream_error_event(
+                        code='provider_transport_error', phase='gateway', telemetry=telemetry
+                    )
+
+            return StreamingResponse(
+                stream_gateway(),
+                media_type='text/event-stream',
+                headers=envelope.response_headers(telemetry),
+            )
+        result = await envelope.cancel_on_disconnect(
+            request, gateway_desktop_chat(body, model=model, action=action, uid=uid)
+        )
+        payload = dict(result.gemini_payload)
+        telemetry.observe_gemini_response(payload)
+        telemetry.complete(outcome='success', status_code=200, retryable=False, upstream_status=200, phase='gateway')
+        return Response(
+            json.dumps(payload, separators=(',', ':')).encode(),
+            media_type='application/json',
+            headers=envelope.response_headers(telemetry),
+        )
+    except DesktopGeminiGatewayError as error:
+        return _gateway_error_response(error, telemetry, envelope)
+    except envelope.client_disconnected:
+        telemetry.complete(outcome='client_cancelled', status_code=499, retryable=False, phase='gateway')
+        return envelope.error_response(
+            telemetry,
+            status_code=499,
+            code='client_cancelled',
+            message='Client disconnected before the Gemini request completed',
+            phase='gateway',
+            retryable=False,
+        )
+    except httpx.TimeoutException as error:
+        phase = envelope.timeout_phase(error)
+        telemetry.complete(outcome=f'{phase}_timeout', status_code=504, retryable=False, phase='gateway')
+        return envelope.error_response(
+            telemetry,
+            status_code=504,
+            code='provider_timeout',
+            message=f'Gemini gateway timed out during {phase}',
+            phase='gateway',
+            retryable=False,
+        )
+    except TimeoutError:
+        telemetry.complete(outcome='provider_deadline_exceeded', status_code=504, retryable=False, phase='gateway')
+        return envelope.error_response(
+            telemetry,
+            status_code=504,
+            code='provider_deadline_exceeded',
+            message='Gemini gateway request exceeded the Omi logical deadline',
+            phase='gateway',
+            retryable=False,
+        )
+    except httpx.HTTPError:
+        telemetry.complete(outcome='provider_transport_error', status_code=502, retryable=False, phase='gateway')
+        return envelope.error_response(
+            telemetry,
+            status_code=502,
+            code='provider_transport_error',
+            message='Gemini gateway transport failed',
+            phase='gateway',
+            retryable=False,
+        )
+
+
+@dataclass(frozen=True)
+class PayloadShape:
+    size_bucket: str
+    content_parts_bucket: str
+    inline_media_bucket: str
+
+
+def _as_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int) and value >= 0:
+        return value
+    if isinstance(value, float) and value >= 0 and value.is_integer():
+        return int(value)
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def _bucket(value: int, thresholds: tuple[tuple[int, str], ...], overflow: str) -> str:
+    for maximum, label in thresholds:
+        if value <= maximum:
+            return label
+    return overflow
+
+
+def _size_bucket(size: int) -> str:
+    return _bucket(
+        size,
+        ((16_384, '0-16kb'), (131_072, '16-128kb'), (524_288, '128-512kb'), (1_048_576, '512kb-1mb')),
+        '1mb+',
+    )
+
+
+def _payload_shape(body: bytes) -> PayloadShape:  # pyright: ignore[reportUnusedFunction]
+    try:
+        payload = json.loads(body)
+    except (TypeError, ValueError):
+        return PayloadShape(_size_bucket(len(body)), 'unknown', 'unknown')
+    if not isinstance(payload, dict):
+        return PayloadShape(_size_bucket(len(body)), 'unknown', 'unknown')
+    contents = payload.get('contents')
+    content_count = len(contents) if isinstance(contents, list) else 0
+    part_count = 0
+    inline_media_count = 0
+    if isinstance(contents, list):
+        for content in contents:
+            if not isinstance(content, dict) or not isinstance(content.get('parts'), list):
+                continue
+            parts = content['parts']
+            part_count += len(parts)
+            for part in parts:
+                if isinstance(part, dict) and ('inlineData' in part or 'inline_data' in part):
+                    inline_media_count += 1
+    if content_count > _MAX_CONTENT_ITEMS:
+        raise HTTPException(status_code=413, detail='Gemini request has too many content items')
+    if part_count > _MAX_CONTENT_PARTS:
+        raise HTTPException(status_code=413, detail='Gemini request has too many content parts')
+    if inline_media_count > _MAX_INLINE_MEDIA_PARTS:
+        raise HTTPException(status_code=413, detail='Gemini request has too many inline media parts')
+    return PayloadShape(
+        _size_bucket(len(body)),
+        _bucket(part_count, ((2, '0-2'), (8, '3-8'), (32, '9-32'), (128, '33-128')), '129+'),
+        _bucket(inline_media_count, ((0, '0'), (1, '1'), (4, '2-4')), '5+'),
+    )
+
+
+def _sanitize(  # pyright: ignore[reportUnusedFunction]
+    body: bytes,
+    action: str,
+    *,
+    max_output_tokens: int = _MAX_OUTPUT_TOKENS,
+) -> bytes:
+    try:
+        payload = json.loads(body)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail='Request body must be valid JSON') from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail='Request body must be a JSON object')
+    for key in ('safety_settings', 'safetySettings', 'cached_content', 'cachedContent'):
+        payload.pop(key, None)
+    contents = payload.get('contents')
+    if isinstance(contents, list):
+        system_parts: list[Any] = []
+        remaining = []
+        for content in contents:
+            if not isinstance(content, dict):
+                remaining.append(content)
+                continue
+            role = content.setdefault('role', 'user')
+            if role == 'system':
+                if isinstance(content.get('parts'), list):
+                    system_parts.extend(content['parts'])
+            else:
+                remaining.append(content)
+        payload['contents'] = remaining
+        if system_parts:
+            key = 'system_instruction' if 'system_instruction' in payload else 'systemInstruction'
+            instruction = payload.get(key)
+            if isinstance(instruction, dict) and isinstance(instruction.get('parts'), list):
+                instruction['parts'].extend(system_parts)
+            else:
+                payload['systemInstruction'] = {'parts': system_parts}
+    if action not in {'embedContent', 'batchEmbedContents'}:
+        for key in ('candidate_count', 'candidateCount'):
+            value = _as_nonnegative_int(payload.get(key))
+            if value is not None and value > 1:
+                raise HTTPException(status_code=400, detail='candidate_count must be 1 or absent')
+        generation_configs = [
+            payload[key] for key in ('generation_config', 'generationConfig') if isinstance(payload.get(key), dict)
+        ]
+        if not generation_configs:
+            payload['generationConfig'] = {
+                'maxOutputTokens': max_output_tokens,
+                'thinkingConfig': ptr.thinking_config_for(budget=_DEFAULT_THINKING_BUDGET),
+            }
+        for config in generation_configs:
+            for key in ('candidate_count', 'candidateCount'):
+                value = _as_nonnegative_int(config.get(key))
+                if value is not None and value > 1:
+                    raise HTTPException(status_code=400, detail='candidate_count must be 1 or absent')
+            output_key_present = False
+            for key in ('max_output_tokens', 'maxOutputTokens'):
+                value = _as_nonnegative_int(config.get(key))
+                if value is not None:
+                    output_key_present = True
+                    if value > max_output_tokens:
+                        config[key] = max_output_tokens
+            if not output_key_present:
+                config['maxOutputTokens'] = max_output_tokens
+            if 'thinking_config' not in config and 'thinkingConfig' not in config:
+                config['thinkingConfig'] = ptr.thinking_config_for(budget=_DEFAULT_THINKING_BUDGET)
+    return json.dumps(payload, separators=(',', ':')).encode()

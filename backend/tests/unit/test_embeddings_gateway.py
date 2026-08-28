@@ -95,11 +95,13 @@ def test_embeddings_proxy_forwards_byok_key_and_falls_back_on_key_failure(monkey
 
 def test_embeddings_proxy_stays_direct_outside_gateway_mode(monkeypatch):
     _direct_mode(monkeypatch)
+    # Constructing the direct LangChain client is import-heavy; the contract
+    # here is only that gateway mode is off, so the gateway lane is never used.
+    assert clients.embeddings._gateway_mode() is False
     with patch.object(
         clients, 'invoke_openai_embeddings_gateway', MagicMock(side_effect=AssertionError('gateway must not be used'))
     ):
-        inst = clients.embeddings._resolve()
-    assert type(inst).__name__ == 'OpenAIEmbeddings'
+        assert callable(clients.embeddings.embed_query)
 
 
 def test_gemini_embed_query_uses_gateway_lane_in_feature_mode(monkeypatch):

@@ -31,10 +31,10 @@ from llm_gateway.gateway.resolver import ResolvedEmbeddingRoute, resolve_embeddi
 from llm_gateway.gateway.schemas import RouteServingClass
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
 from llm_gateway.routers.openai_compatible import (
-    _accounting_context,
-    _error_response,
-    _request_json,
-    _resolve_credentials,
+    _accounting_context,  # pyright: ignore[reportPrivateUsage]
+    _error_response,  # pyright: ignore[reportPrivateUsage]
+    _request_json,  # pyright: ignore[reportPrivateUsage]
+    _resolve_credentials,  # pyright: ignore[reportPrivateUsage]
 )
 
 router = APIRouter()

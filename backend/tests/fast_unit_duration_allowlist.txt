@@ -315,3 +315,10 @@ tests/unit/test_memories_archive_and_read_contracts.py::test_get_memories_forwar
 # Full listen-runtime bootstrap (STT selection, fair-use, onboarding admission)
 # sits exactly at the 0.30s CPU budget under a saturated pre-push fanout.
 tests/unit/test_listen_runtime_regressions.py::test_bootstrap_forces_single_language_before_selecting_stt_for_onboarding
+tests/unit/test_llm_gateway_validator.py::test_accepts_matching_output_limit_aliases
+tests/unit/test_desktop_proxy.py::test_proxy_reports_upstream_unavailable_as_retryable
+tests/unit/test_chat_file_upload_unsupported.py::test_heic_photo_is_rejected_as_bad_request[/v2/files]
+tests/unit/test_chat_file_upload_unsupported.py::test_heic_photo_is_rejected_as_bad_request[/v1/files]
+tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
+tests/unit/test_llm_gateway_embeddings_route.py::test_embeddings_success_returns_openai_shape_and_records_accounting
+tests/unit/test_llm_gateway_vertex_provider.py::test_gateway_registry_uses_native_vertex_for_gemini

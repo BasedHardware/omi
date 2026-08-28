@@ -134,7 +134,7 @@ def _reraise_provider_file_error(error: Exception) -> NoReturn:
 
 def _completion_model(files: List[FileChat]) -> str:
     """Model id for the completions call: a gateway lane id in gateway mode."""
-    pdf = files and any(f.is_pdf() for f in files)
+    pdf = bool(files) and any(f.is_pdf() for f in files)
     if _file_chat_gateway_enabled():
         return file_chat_auto_lane_id(pdf=pdf)
     if pdf:

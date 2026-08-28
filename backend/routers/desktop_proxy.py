@@ -25,15 +25,7 @@ from utils.http_client import (
     get_desktop_gemini_stream_client,
 )
 from utils.llm import vertex_pt_routing as ptr
-from utils.llm.desktop_gemini_gateway import (
-    DesktopGeminiGatewayError,
-    desktop_gateway_actions,
-    desktop_gateway_text_lane,
-    gateway_desktop_chat,
-    gateway_desktop_chat_stream,
-    gateway_desktop_embed_content,
-)
-from utils.llm.gateway_client import should_route_features_through_gateway
+from utils.llm import desktop_gemini_gateway
 from utils.llm.desktop_llm_stub import (
     llm_stub_enabled,
     stub_gemini_proxy_json,
@@ -102,7 +94,7 @@ _QUOTA_DEMOTION_MODEL = 'gemini-2.5-flash-lite'
 _MAX_BODY_BYTES = 5 * 1024 * 1024
 # Absolute ceiling; also the default for BYOK traffic, which keeps its
 # historical behavior.
-_MAX_OUTPUT_TOKENS = 8192
+_MAX_OUTPUT_TOKENS = desktop_gemini_gateway._MAX_OUTPUT_TOKENS  # pyright: ignore[reportPrivateUsage]
 # Server-paid requests get a smaller default and clamp. No shipped desktop
 # client can emit maxOutputTokens (macOS GenerationConfig has no such field;
 # Windows sends none), so every request used to take the 8192 default while the
@@ -111,10 +103,10 @@ _MAX_OUTPUT_TOKENS = 8192
 # Mean measured output is ~241 tokens — this bounds the paid tail, it does not
 # change the mean.
 _SERVER_PAID_MAX_OUTPUT_TOKENS = 2048
-_DEFAULT_THINKING_BUDGET = 1024
-_MAX_CONTENT_ITEMS = 128
-_MAX_CONTENT_PARTS = 512
-_MAX_INLINE_MEDIA_PARTS = 16
+_DEFAULT_THINKING_BUDGET = desktop_gemini_gateway._DEFAULT_THINKING_BUDGET  # pyright: ignore[reportPrivateUsage]
+_MAX_CONTENT_ITEMS = desktop_gemini_gateway._MAX_CONTENT_ITEMS  # pyright: ignore[reportPrivateUsage]
+_MAX_CONTENT_PARTS = desktop_gemini_gateway._MAX_CONTENT_PARTS  # pyright: ignore[reportPrivateUsage]
+_MAX_INLINE_MEDIA_PARTS = desktop_gemini_gateway._MAX_INLINE_MEDIA_PARTS  # pyright: ignore[reportPrivateUsage]
 _BURST_LIMIT = 30
 _DAILY_HARD_LIMIT = 1500
 _ALLOWED_WORKLOADS = frozenset({'interactive', 'extraction', 'maintenance'})
@@ -149,13 +141,6 @@ class UpstreamRoute:
     provider: str
     credential_source: str
     region: str
-
-
-@dataclass(frozen=True)
-class PayloadShape:
-    size_bucket: str
-    content_parts_bucket: str
-    inline_media_bucket: str
 
 
 class RoutingFailure(Exception):
@@ -315,52 +300,14 @@ def _status_class(status: int | None) -> str:
     return 'unknown'
 
 
-def _bucket(value: int, thresholds: tuple[tuple[int, str], ...], overflow: str) -> str:
-    for maximum, label in thresholds:
-        if value <= maximum:
-            return label
-    return overflow
-
-
-def _payload_shape(body: bytes) -> PayloadShape:
-    try:
-        payload = json.loads(body)
-    except (TypeError, ValueError):
-        return PayloadShape(_size_bucket(len(body)), 'unknown', 'unknown')
-    if not isinstance(payload, dict):
-        return PayloadShape(_size_bucket(len(body)), 'unknown', 'unknown')
-    contents = payload.get('contents')
-    content_count = len(contents) if isinstance(contents, list) else 0
-    part_count = 0
-    inline_media_count = 0
-    if isinstance(contents, list):
-        for content in contents:
-            if not isinstance(content, dict) or not isinstance(content.get('parts'), list):
-                continue
-            parts = content['parts']
-            part_count += len(parts)
-            for part in parts:
-                if isinstance(part, dict) and ('inlineData' in part or 'inline_data' in part):
-                    inline_media_count += 1
-    if content_count > _MAX_CONTENT_ITEMS:
-        raise HTTPException(status_code=413, detail='Gemini request has too many content items')
-    if part_count > _MAX_CONTENT_PARTS:
-        raise HTTPException(status_code=413, detail='Gemini request has too many content parts')
-    if inline_media_count > _MAX_INLINE_MEDIA_PARTS:
-        raise HTTPException(status_code=413, detail='Gemini request has too many inline media parts')
-    return PayloadShape(
-        _size_bucket(len(body)),
-        _bucket(part_count, ((2, '0-2'), (8, '3-8'), (32, '9-32'), (128, '33-128')), '129+'),
-        _bucket(inline_media_count, ((0, '0'), (1, '1'), (4, '2-4')), '5+'),
-    )
-
-
-def _size_bucket(size: int) -> str:
-    return _bucket(
-        size,
-        ((16_384, '0-16kb'), (131_072, '16-128kb'), (524_288, '128-512kb'), (1_048_576, '512kb-1mb')),
-        '1mb+',
-    )
+# Gemini body sanitization moved to utils/llm/desktop_gemini_gateway.py; these
+# aliases keep the proxy's call sites and tests stable.
+_as_nonnegative_int = desktop_gemini_gateway._as_nonnegative_int  # pyright: ignore[reportPrivateUsage]
+_bucket = desktop_gemini_gateway._bucket  # pyright: ignore[reportPrivateUsage]
+_payload_shape = desktop_gemini_gateway._payload_shape  # pyright: ignore[reportPrivateUsage]
+_sanitize = desktop_gemini_gateway._sanitize  # pyright: ignore[reportPrivateUsage]
+_size_bucket = desktop_gemini_gateway._size_bucket  # pyright: ignore[reportPrivateUsage]
+PayloadShape = desktop_gemini_gateway.PayloadShape
 
 
 def _path_parts(path: str) -> tuple[str, str, str]:
@@ -370,86 +317,6 @@ def _path_parts(path: str) -> tuple[str, str, str]:
     if action not in _ALLOWED_ACTIONS or model not in _ALLOWED_MODELS:
         raise HTTPException(status_code=403, detail='Gemini model or action is not allowed')
     return path, model, action
-
-
-def _as_nonnegative_int(value: Any) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int) and value >= 0:
-        return value
-    if isinstance(value, float) and value >= 0 and value.is_integer():
-        return int(value)
-    if isinstance(value, str) and value.isdigit():
-        return int(value)
-    return None
-
-
-def _sanitize(
-    body: bytes,
-    action: str,
-    *,
-    max_output_tokens: int = _MAX_OUTPUT_TOKENS,
-) -> bytes:
-    try:
-        payload = json.loads(body)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail='Request body must be valid JSON') from exc
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail='Request body must be a JSON object')
-    for key in ('safety_settings', 'safetySettings', 'cached_content', 'cachedContent'):
-        payload.pop(key, None)
-    contents = payload.get('contents')
-    if isinstance(contents, list):
-        system_parts: list[Any] = []
-        remaining = []
-        for content in contents:
-            if not isinstance(content, dict):
-                remaining.append(content)
-                continue
-            role = content.setdefault('role', 'user')
-            if role == 'system':
-                if isinstance(content.get('parts'), list):
-                    system_parts.extend(content['parts'])
-            else:
-                remaining.append(content)
-        payload['contents'] = remaining
-        if system_parts:
-            key = 'system_instruction' if 'system_instruction' in payload else 'systemInstruction'
-            instruction = payload.get(key)
-            if isinstance(instruction, dict) and isinstance(instruction.get('parts'), list):
-                instruction['parts'].extend(system_parts)
-            else:
-                payload['systemInstruction'] = {'parts': system_parts}
-    if action not in {'embedContent', 'batchEmbedContents'}:
-        for key in ('candidate_count', 'candidateCount'):
-            value = _as_nonnegative_int(payload.get(key))
-            if value is not None and value > 1:
-                raise HTTPException(status_code=400, detail='candidate_count must be 1 or absent')
-        generation_configs = [
-            payload[key] for key in ('generation_config', 'generationConfig') if isinstance(payload.get(key), dict)
-        ]
-        if not generation_configs:
-            payload['generationConfig'] = {
-                'maxOutputTokens': max_output_tokens,
-                'thinkingConfig': ptr.thinking_config_for(budget=_DEFAULT_THINKING_BUDGET),
-            }
-        for config in generation_configs:
-            for key in ('candidate_count', 'candidateCount'):
-                value = _as_nonnegative_int(config.get(key))
-                if value is not None and value > 1:
-                    raise HTTPException(status_code=400, detail='candidate_count must be 1 or absent')
-            output_key_present = False
-            for key in ('max_output_tokens', 'maxOutputTokens'):
-                value = _as_nonnegative_int(config.get(key))
-                if value is not None:
-                    output_key_present = True
-                    if value > max_output_tokens:
-                        config[key] = max_output_tokens
-            if not output_key_present:
-                config['maxOutputTokens'] = max_output_tokens
-            if 'thinking_config' not in config and 'thinkingConfig' not in config:
-                config['thinkingConfig'] = ptr.thinking_config_for(budget=_DEFAULT_THINKING_BUDGET)
-    return json.dumps(payload, separators=(',', ':')).encode()
 
 
 def _output_token_cap() -> int:
@@ -1327,50 +1194,18 @@ def _proxy_issue_class(status_code: int) -> str:
 
 
 def _company_paid_via_gateway(model: str, action: str) -> bool:
-    """Whether this request's model call hops the LLM gateway.
-
-    Company-paid text and single-embed traffic only: BYOK keeps the thin
-    direct AI Studio path (the gateway Vertex adapter fail-closes BYOK) and
-    batchEmbedContents stays on AI Studio because the Vertex batch wire shape
-    is not compatible. FEATURE_MODE=off keeps the legacy direct Vertex path.
-    """
-    if get_byok_key('gemini'):
-        return False
-    if action not in desktop_gateway_actions():
-        return False
-    try:
-        if not should_route_features_through_gateway():
-            return False
-    except RuntimeError:
-        return False
-    if action == 'embedContent':
-        return model == ptr.DESKTOP_EMBEDDING_MODEL
-    return desktop_gateway_text_lane(model) is not None
+    return desktop_gemini_gateway.company_paid_via_gateway(model, action)
 
 
-def _gateway_error_response(error: DesktopGeminiGatewayError, telemetry: 'ProxyTelemetry') -> Response:
-    if error.status_code == 429:
-        status_code, retryable, retry_after = 429, True, 30
-    elif error.status_code >= 500:
-        status_code, retryable, retry_after = 503, True, _PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS
-    else:
-        status_code, retryable, retry_after = error.status_code, False, None
-    telemetry.complete(
-        outcome=error.code,
-        status_code=status_code,
-        retryable=retryable,
-        upstream_status=error.status_code,
-        phase='gateway',
-    )
-    return _error_response(
-        telemetry,
-        status_code=status_code,
-        code=error.code,
-        message=error.message,
-        phase='gateway',
-        retryable=retryable,
-        upstream_status=error.status_code,
-        retry_after=retry_after,
+def _gateway_envelope() -> desktop_gemini_gateway.ProxyEnvelope:
+    return desktop_gemini_gateway.ProxyEnvelope(
+        error_response=_error_response,
+        response_headers=_response_headers,
+        stream_error_event=_stream_error_event,
+        cancel_on_disconnect=_cancel_on_disconnect,
+        timeout_phase=_timeout_phase,
+        client_disconnected=ClientDisconnected,
+        provider_unavailable_retry_after=_PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS,
     )
 
 
@@ -1384,97 +1219,16 @@ async def _proxy_via_gateway(
     uid: str,
     telemetry: ProxyTelemetry,
 ) -> Response:
-    """Company-paid hop through the LLM gateway; this proxy stays the BFF."""
-    telemetry.provider = 'llm_gateway'
-    telemetry.credential_source = 'omi_gateway'
-    telemetry.phase = 'gateway'
-    try:
-        if action == 'embedContent':
-            result = await _cancel_on_disconnect(request, gateway_desktop_embed_content(body, uid=uid))
-            content = json.dumps({'embedding': {'values': result.values}}, separators=(',', ':')).encode()
-            telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
-            return Response(
-                content,
-                media_type='application/json',
-                headers=_response_headers(telemetry),
-            )
-        if streaming:
-
-            async def stream_gateway() -> AsyncIterator[bytes]:
-                try:
-                    async for chunk in gateway_desktop_chat_stream(body, model=model, uid=uid):
-                        yield chunk
-                    telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
-                except DesktopGeminiGatewayError as error:
-                    status_code = 429 if error.status_code == 429 else 503 if error.status_code >= 500 else 502
-                    telemetry.complete(outcome=error.code, status_code=status_code, retryable=True, phase='gateway')
-                    yield _stream_error_event(code=error.code, phase='gateway', telemetry=telemetry)
-                except (httpx.TimeoutException, TimeoutError):
-                    telemetry.complete(outcome='provider_timeout', status_code=504, retryable=False, phase='gateway')
-                    yield _stream_error_event(code='provider_timeout', phase='gateway', telemetry=telemetry)
-                except httpx.HTTPError:
-                    telemetry.complete(
-                        outcome='provider_transport_error', status_code=502, retryable=False, phase='gateway'
-                    )
-                    yield _stream_error_event(code='provider_transport_error', phase='gateway', telemetry=telemetry)
-
-            return StreamingResponse(
-                stream_gateway(),
-                media_type='text/event-stream',
-                headers=_response_headers(telemetry),
-            )
-        result = await _cancel_on_disconnect(request, gateway_desktop_chat(body, model=model, action=action, uid=uid))
-        payload = dict(result.gemini_payload)
-        telemetry.observe_gemini_response(payload)
-        telemetry.complete(outcome='success', status_code=200, retryable=False, upstream_status=200, phase='gateway')
-        return Response(
-            json.dumps(payload, separators=(',', ':')).encode(),
-            media_type='application/json',
-            headers=_response_headers(telemetry),
-        )
-    except DesktopGeminiGatewayError as error:
-        return _gateway_error_response(error, telemetry)
-    except ClientDisconnected:
-        telemetry.complete(outcome='client_cancelled', status_code=499, retryable=False, phase='gateway')
-        return _error_response(
-            telemetry,
-            status_code=499,
-            code='client_cancelled',
-            message='Client disconnected before the Gemini request completed',
-            phase='gateway',
-            retryable=False,
-        )
-    except httpx.TimeoutException as error:
-        phase = _timeout_phase(error)
-        telemetry.complete(outcome=f'{phase}_timeout', status_code=504, retryable=False, phase='gateway')
-        return _error_response(
-            telemetry,
-            status_code=504,
-            code='provider_timeout',
-            message=f'Gemini gateway timed out during {phase}',
-            phase='gateway',
-            retryable=False,
-        )
-    except TimeoutError:
-        telemetry.complete(outcome='provider_deadline_exceeded', status_code=504, retryable=False, phase='gateway')
-        return _error_response(
-            telemetry,
-            status_code=504,
-            code='provider_deadline_exceeded',
-            message='Gemini gateway request exceeded the Omi logical deadline',
-            phase='gateway',
-            retryable=False,
-        )
-    except httpx.HTTPError:
-        telemetry.complete(outcome='provider_transport_error', status_code=502, retryable=False, phase='gateway')
-        return _error_response(
-            telemetry,
-            status_code=502,
-            code='provider_transport_error',
-            message='Gemini gateway transport failed',
-            phase='gateway',
-            retryable=False,
-        )
+    return await desktop_gemini_gateway.proxy_company_paid_via_gateway(
+        request,
+        body,
+        model=model,
+        action=action,
+        streaming=streaming,
+        uid=uid,
+        telemetry=telemetry,
+        envelope=_gateway_envelope(),
+    )
 
 
 async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Response:

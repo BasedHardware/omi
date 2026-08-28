@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import time
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -166,12 +166,10 @@ async def execute_embedding(
     _validate_credential_mode(route, credential_context)
     provider_ref = route.primary
     provider = provider_registry.provider_for(provider_ref.provider)
-    create_embedding = getattr(provider, 'create_embedding', None) if provider is not None else None
-    if provider is None or not callable(create_embedding):
-        error = _unsupported_provider_error(provider_ref, credential_context)
-        if isinstance(error, GatewayError):
-            raise error
-        raise GatewayInvalidRouteConfigError(f'provider does not support embeddings: {provider_ref.provider}')
+    create_embedding_attr = getattr(provider, 'create_embedding', None) if provider is not None else None
+    if provider is None or not callable(create_embedding_attr):
+        raise _unsupported_provider_error(provider_ref, credential_context)
+    create_embedding = cast('Callable[..., Awaitable[ProviderResponse]]', create_embedding_attr)
     if credential_context.mode == CredentialMode.BYOK and not credential_context.has_provider_key(
         provider_ref.provider
     ):
@@ -190,6 +188,7 @@ async def execute_embedding(
 
     deadline_monotonic = monotonic() + route.timeouts.request_ms / 1000.0
     max_attempts = max(route.retry.max_attempts, 1)
+    last_error: GatewayError | None = None
     for retry_ordinal in range(1, max_attempts + 1):
         timeout_ms = int((deadline_monotonic - monotonic()) * 1000)
         if timeout_ms <= 0:
@@ -217,6 +216,7 @@ async def execute_embedding(
                     error_class=exc.failure_class.value,
                     usage_status=UsageStatus.INDETERMINATE,
                 )
+            last_error = error
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 raise error
             continue
@@ -232,7 +232,8 @@ async def execute_embedding(
                 metadata=response.accounting,
             )
         return dict(response.response)
-    raise error
+    assert last_error is not None
+    raise last_error
 
 
 def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:

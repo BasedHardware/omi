@@ -1802,9 +1802,11 @@ def _gateway_feature_mode(monkeypatch):
     monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
 
 
-def _install_gateway_doubles(monkeypatch):
+def _install_gateway_doubles(monkeypatch, *, byok: str | None = None):
     """Metering on, direct provider plumbing instrumented to fail loudly."""
     from utils.llm import desktop_gemini_gateway as dgg
+
+    monkeypatch.setattr(dgg, 'get_byok_key', lambda _provider: byok)
 
     async def meter(_uid, path, _model, _action):
         return path
@@ -1839,7 +1841,7 @@ async def test_company_paid_generate_content_hops_the_gateway_never_vertex_direc
         return FakeResult()
 
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(desktop_proxy, "gateway_desktop_chat", fake_chat)
+        mp.setattr(desktop_proxy.desktop_gemini_gateway, "gateway_desktop_chat", fake_chat)
         response = await desktop_proxy._proxy(
             make_request(), "models/gemini-2.5-flash:generateContent", False, "user-1"
         )
@@ -1868,7 +1870,7 @@ async def test_company_paid_embed_content_hops_the_gateway_embeddings_surface(mo
 
     body = json.dumps({"content": {"parts": [{"text": "screen"}]}, "taskType": "RETRIEVAL_DOCUMENT"}).encode()
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(desktop_proxy, "gateway_desktop_embed_content", fake_embed)
+        mp.setattr(desktop_proxy.desktop_gemini_gateway, "gateway_desktop_embed_content", fake_embed)
         response = await desktop_proxy._proxy(
             make_request(body), "models/gemini-embedding-001:embedContent", False, "user-1"
         )
@@ -1884,10 +1886,15 @@ async def test_byok_stays_direct_ai_studio_even_in_gateway_feature_mode(monkeypa
     client = _ScriptedClient([_ok_response])
     _install_proxy_doubles(monkeypatch, client)
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda provider: "user-key" if provider == "gemini" else None)
+    monkeypatch.setattr(
+        desktop_proxy.desktop_gemini_gateway,
+        "get_byok_key",
+        lambda provider: "user-key" if provider == "gemini" else None,
+    )
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(
-            desktop_proxy,
+            desktop_proxy.desktop_gemini_gateway,
             "gateway_desktop_chat",
             lambda *a, **k: pytest.fail("BYOK gemini must keep the thin direct AI Studio path"),
         )
@@ -1912,7 +1919,7 @@ async def test_gateway_error_maps_to_the_retryable_proxy_envelope(monkeypatch):
         )
 
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(desktop_proxy, "gateway_desktop_chat", failing_chat)
+        mp.setattr(desktop_proxy.desktop_gemini_gateway, "gateway_desktop_chat", failing_chat)
         response = await desktop_proxy._proxy(
             make_request(), "models/gemini-2.5-flash:generateContent", False, "user-1"
         )
