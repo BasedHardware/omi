@@ -4830,7 +4830,11 @@ class FloatingControlBarManager {
     }
     barWindow.orderFrontRegardless()
 
-    AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
+    AnalyticsManager.shared.floatingBarQuerySent(
+      messageLength: message.count,
+      hasScreenshot: screenshotData != nil,
+      source: .visibleQuery(fromVoice: queryFromVoice)
+    )
 
     let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
       forVoiceQuery: barWindow.state.currentQueryFromVoice
@@ -5079,7 +5083,11 @@ class FloatingControlBarManager {
       currentTracer?.mark("screenshot_capture")
     }
 
-    AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
+    AnalyticsManager.shared.floatingBarQuerySent(
+      messageLength: message.count,
+      hasScreenshot: screenshotData != nil,
+      source: .pttVoiceOnly
+    )
 
     // Speaking shortly after a notch card is usually a follow-up about it. Tapping the
     // card arms this context; speaking never did, so the model had no idea what "that"

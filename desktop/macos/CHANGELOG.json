@@ -2,6 +2,27 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.234",
+      "date": "2026-08-28",
+      "changes": [
+        "Chat's execute_sql tool now renders timestamp/*At columns in your local time zone instead of unlabeled UTC"
+      ]
+    },
+    {
+      "version": "0.12.233",
+      "date": "2026-08-28",
+      "changes": [
+        "Settings is lighter: the Task, Insight, and Memory Assistant panes and three floating-bar rows are hidden"
+      ]
+    },
+    {
+      "version": "0.12.232",
+      "date": "2026-08-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.231",
       "date": "2026-08-28",
       "changes": [

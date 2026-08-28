@@ -126,8 +126,8 @@ export type InsightContextData = {
   previousInsights: string[]
 }
 
-// "Tuesday, August 25, 2026 at 3:45 PM (America/New_York)" — Mac's
-// InsightAssistant.analysisClockLine. The year and timezone are load-bearing:
+// "Tuesday, August 25, 2026 at 3:45 PM (America/New_York)" — the macOS
+// counterpart's analysisClockLine. The year and timezone are load-bearing:
 // without them the model falls back to its training-cutoff year and flags
 // correctly recorded current-era dates as mistakes (SCA-358).
 export function formatDateTime(
