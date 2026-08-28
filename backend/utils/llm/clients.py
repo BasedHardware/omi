@@ -368,12 +368,30 @@ class _OpenAIEmbeddingsProxy:
     async def aembed_query(self, text: str) -> List[float]:
         if self._gateway_mode():
             return (await self._agateway_embed_texts([text]))[0]
-        return await self._resolve().aembed_query(text)
+        inst = self._resolve()
+        try:
+            return await inst.aembed_query(text)
+        except Exception as e:
+            if inst is not self._default:
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_query')
+                if self._is_key_failure(e):
+                    logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                    return await self._default_client().aembed_query(text)
+            raise
 
     async def aembed_documents(self, texts: List[str]) -> List[List[float]]:
         if self._gateway_mode():
             return await self._agateway_embed_texts(texts)
-        return await self._resolve().aembed_documents(texts)
+        inst = self._resolve()
+        try:
+            return await inst.aembed_documents(texts)
+        except Exception as e:
+            if inst is not self._default:
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents')
+                if self._is_key_failure(e):
+                    logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                    return await self._default_client().aembed_documents(texts)
+            raise
 
     def __getattr__(self, name: str):
         inst = self._resolve()
