@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {
   resolveOmiBackend,
   resolveOmiNative,
@@ -6,6 +8,24 @@ import {
   type OmiBackend,
   type OmiNative,
 } from '../src/omiNative';
+
+test('android scan keeps the connected device and serializes GATT writes', () => {
+  const source = readFileSync(
+    resolve(
+      __dirname,
+      '../android/app/src/main/java/com/rnruntime/OmiBleController.kt',
+    ),
+    'utf8',
+  );
+  expect(source).toContain('results[kept.id] = kept');
+  expect(source).toContain('private val gattQueue');
+  expect(source).toContain('enqueueGatt');
+  expect(source).toContain('GattOp.Read');
+  expect(source).toContain('GattOp.EnableNotify');
+  expect(source).not.toContain(
+    'if (codecChar != null) gatt.readCharacteristic(codecChar)',
+  );
+});
 
 test('public native hardware surface does not advertise unimplemented adapters', () => {
   const source = require('node:fs').readFileSync(

@@ -418,6 +418,14 @@ test('exposes a real OmiNative CoreBluetooth module instead of a hardware stub',
   expect(source).toContain('self.connectResolve = resolve');
   expect(source).toContain('characteristic.isNotifying');
   expect(source).toContain('self.audioNotifying ? @"recording" : @"idle"');
+  const scanStart = source.indexOf('RCT_REMAP_METHOD(startScan');
+  const scanSource = source.slice(
+    scanStart,
+    source.indexOf('RCT_REMAP_METHOD(stopScan', scanStart),
+  );
+  expect(scanSource).toContain('[self.devices removeAllObjects]');
+  expect(scanSource).toContain('self.connectedPeripheral');
+  expect(scanSource).toContain('self.devices[keepId] = kept');
   expect(source).not.toContain('.swift');
   expect(entitlements).toContain('com.apple.security.device.bluetooth');
   expect(info).toContain('NSBluetoothAlwaysUsageDescription');

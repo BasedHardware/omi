@@ -22,6 +22,7 @@ import android.util.Base64
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
+import java.util.ArrayDeque
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -33,6 +34,11 @@ private const val BATTERY_LEVEL_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
 private val CLIENT_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
 private data class OmiDevice(val id: String, val name: String, val rssi: Int, val battery: Int? = null)
+
+private sealed class GattOp {
+  data class Read(val characteristic: BluetoothGattCharacteristic) : GattOp()
+  data class EnableNotify(val characteristic: BluetoothGattCharacteristic) : GattOp()
+}
 
 class OmiBleController(
   private val context: Context,
@@ -52,6 +58,8 @@ class OmiBleController(
   private var scanGeneration = 0
   private var pendingScan: ((WritableArray) -> Unit)? = null
   private var pendingConnect: ((Boolean, String) -> Unit)? = null
+  private val gattQueue = ArrayDeque<GattOp>()
+  private var gattBusy = false
 
   private val scanCallback = object : ScanCallback() {
     override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -133,7 +141,12 @@ class OmiBleController(
       finishScan()
       return
     }
+    val keepId = connectedDeviceId
+    val kept = if (connectionState != "disconnected" && keepId != null) results[keepId] else null
     results.clear()
+    if (kept != null) {
+      results[kept.id] = kept
+    }
     val filters = serviceUuids.ifEmpty { listOf(OMI_SERVICE_UUID) }.map {
       ScanFilter.Builder().setServiceUuid(ParcelUuid.fromString(it)).build()
     }
@@ -173,6 +186,7 @@ class OmiBleController(
     }
     stopScanInternal()
     gatt?.close()
+    clearGattQueue()
     audioNotifying = false
     codec = null
     connectionState = "connecting"
@@ -189,6 +203,7 @@ class OmiBleController(
           finishConnect(true, lastEvent)
         } else {
           audioNotifying = false
+          clearGattQueue()
           gatt.close()
           if (this@OmiBleController.gatt == gatt) this@OmiBleController.gatt = null
           finishConnect(false, lastEvent)
@@ -201,21 +216,51 @@ class OmiBleController(
         val audio = gatt.getService(UUID.fromString(OMI_SERVICE_UUID))?.getCharacteristic(UUID.fromString(OMI_AUDIO_UUID))
         val codecChar = gatt.getService(UUID.fromString(OMI_SERVICE_UUID))?.getCharacteristic(UUID.fromString(OMI_CODEC_UUID))
         val battery = gatt.getService(UUID.fromString(BATTERY_SERVICE_UUID))?.getCharacteristic(UUID.fromString(BATTERY_LEVEL_UUID))
-        if (codecChar != null) gatt.readCharacteristic(codecChar)
-        if (battery != null) gatt.readCharacteristic(battery)
-        if (audio != null) enableNotify(gatt, audio)
+        if (codecChar != null) enqueueGatt(gatt, GattOp.Read(codecChar))
+        if (battery != null) enqueueGatt(gatt, GattOp.Read(battery))
+        if (audio != null) enqueueGatt(gatt, GattOp.EnableNotify(audio))
       }
 
       override fun onCharacteristicRead(
         gatt: BluetoothGatt,
         characteristic: BluetoothGattCharacteristic,
+        value: ByteArray,
         status: Int,
       ) {
-        if (status != android.bluetooth.BluetoothGatt.GATT_SUCCESS) return
-        handleValue(characteristic)
+        if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
+          handleValue(characteristic, value)
+        }
+        finishGattOp(gatt)
       }
 
+      @Deprecated("Deprecated in API 33")
+      override fun onCharacteristicRead(
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+        status: Int,
+      ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          return
+        }
+        if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
+          handleValue(characteristic)
+        }
+        finishGattOp(gatt)
+      }
+
+      override fun onCharacteristicChanged(
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+        value: ByteArray,
+      ) {
+        handleValue(characteristic, value)
+      }
+
+      @Deprecated("Deprecated in API 33")
       override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          return
+        }
         handleValue(characteristic)
       }
 
@@ -231,6 +276,7 @@ class OmiBleController(
           lastEvent = "Omi audio notify is live"
           emitSnapshot()
         }
+        finishGattOp(gatt)
       }
     })
   }
@@ -249,16 +295,49 @@ class OmiBleController(
     }
   }
 
+  private fun enqueueGatt(gatt: BluetoothGatt, op: GattOp) {
+    gattQueue.addLast(op)
+    pumpGatt(gatt)
+  }
+
+  private fun clearGattQueue() {
+    gattQueue.clear()
+    gattBusy = false
+  }
+
   @SuppressLint("MissingPermission")
-  private fun enableNotify(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+  private fun pumpGatt(gatt: BluetoothGatt) {
+    if (gattBusy) return
+    val op = gattQueue.pollFirst() ?: return
+    gattBusy = true
+    val started = when (op) {
+      is GattOp.Read -> gatt.readCharacteristic(op.characteristic)
+      is GattOp.EnableNotify -> writeNotifyDescriptor(gatt, op.characteristic)
+    }
+    if (!started) {
+      finishGattOp(gatt)
+    }
+  }
+
+  private fun finishGattOp(gatt: BluetoothGatt) {
+    gattBusy = false
+    pumpGatt(gatt)
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun writeNotifyDescriptor(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic): Boolean {
     gatt.setCharacteristicNotification(characteristic, true)
-    val descriptor = characteristic.getDescriptor(CLIENT_CONFIG_UUID) ?: return
+    val descriptor = characteristic.getDescriptor(CLIENT_CONFIG_UUID) ?: return false
     descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-    gatt.writeDescriptor(descriptor)
+    return gatt.writeDescriptor(descriptor)
   }
 
   private fun handleValue(characteristic: BluetoothGattCharacteristic) {
     val value = characteristic.value ?: return
+    handleValue(characteristic, value)
+  }
+
+  private fun handleValue(characteristic: BluetoothGattCharacteristic, value: ByteArray) {
     val id = connectedDeviceId ?: return
     when (characteristic.uuid) {
       UUID.fromString(OMI_CODEC_UUID) -> if (value.isNotEmpty()) {

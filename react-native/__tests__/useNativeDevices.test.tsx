@@ -83,6 +83,34 @@ jest.mock('../src/omiNative', () => ({
 
 import {useNativeDevices} from '../src/app/useNativeDevices';
 
+function sessionResponse(
+  status: number,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    id: 'req',
+    status,
+    body: JSON.stringify({
+      session: {
+        id: '11111111-2222-3333-4444-555555555555',
+        deviceId: 'omi-1',
+        deviceName: 'Omi',
+        codec: 21,
+        state: 'open',
+        byteCount: 0,
+        chunkCount: 0,
+        startedAt: 1,
+        endedAt: null,
+        ...overrides,
+      },
+    }),
+  };
+}
+
+function emitNative(event: OmiNativeEvent) {
+  mockListeners.forEach(listener => listener(event));
+}
+
 function Harness({
   onState,
 }: {
@@ -117,7 +145,16 @@ beforeEach(() => {
   mockNative.disconnectDevice.mockReset();
   mockNative.connectDevice.mockResolvedValue(undefined);
   mockNative.disconnectDevice.mockResolvedValue(undefined);
-  mockBackend.request.mockClear();
+  mockBackend.request.mockReset();
+  mockBackend.request.mockImplementation(async (request: {path: string}) => {
+    if (request.path.endsWith('/complete')) {
+      return sessionResponse(200, {state: 'complete', endedAt: 2});
+    }
+    if (request.path.endsWith('/audio')) {
+      return sessionResponse(200, {byteCount: 3, chunkCount: 1});
+    }
+    return sessionResponse(201);
+  });
 });
 
 test('waits for startScan to resolve before clearing the busy flag', async () => {
@@ -209,4 +246,154 @@ test('opens a worker session only after a live audio frame, never a transcript',
   expect(opened.path).toBe('/v1/device-sessions');
   expect(opened.body).not.toContain('transcript');
   expect(hook.latest().nativeSnapshot?.capture).not.toBe('recording');
+});
+
+test('keeps uploading after snapshot events and serializes overlapping appends', async () => {
+  let resolveOpen: () => void = () => undefined;
+  let resolveAppend: () => void = () => undefined;
+  let inFlightAppends = 0;
+  let maxInFlightAppends = 0;
+  mockNative.getSnapshot.mockResolvedValue(
+    snapshot({
+      devices: [{id: 'omi-1', name: 'Pendant', rssi: -40, connected: true}],
+      connectedDeviceId: 'omi-1',
+      phase: 'connected',
+      capture: 'recording',
+    }),
+  );
+  mockBackend.request.mockImplementation(async (request: {path: string}) => {
+    if (request.path === '/v1/device-sessions') {
+      await new Promise<void>(resolve => {
+        resolveOpen = resolve;
+      });
+      return sessionResponse(201);
+    }
+    if (request.path.endsWith('/audio')) {
+      inFlightAppends += 1;
+      maxInFlightAppends = Math.max(maxInFlightAppends, inFlightAppends);
+      await new Promise<void>(resolve => {
+        resolveAppend = resolve;
+      });
+      inFlightAppends -= 1;
+      return sessionResponse(200, {byteCount: 3, chunkCount: 1});
+    }
+    return sessionResponse(200, {state: 'complete', endedAt: 2});
+  });
+
+  const hook = await renderHook();
+  expect(mockListeners).toHaveLength(1);
+
+  await ReactTestRenderer.act(async () => {
+    emitNative({
+      type: 'audio',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'AQID',
+    });
+    emitNative({
+      type: 'snapshot',
+      snapshot: snapshot({
+        devices: [{id: 'omi-1', name: 'Pendant', rssi: -40, connected: true}],
+        connectedDeviceId: 'omi-1',
+        phase: 'connected',
+        capture: 'recording',
+        lastEvent: 'battery 87',
+      }),
+    });
+    emitNative({
+      type: 'audio',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'BAUG',
+    });
+  });
+  expect(mockListeners).toHaveLength(1);
+  expect(hook.latest().nativeSnapshot?.lastEvent).toBe('battery 87');
+
+  await ReactTestRenderer.act(async () => {
+    resolveOpen();
+    await Promise.resolve();
+  });
+  expect(
+    mockBackend.request.mock.calls.filter(
+      ([request]) => request.path === '/v1/device-sessions',
+    ),
+  ).toHaveLength(1);
+
+  await ReactTestRenderer.act(async () => {
+    emitNative({
+      type: 'audio',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'BwgJ',
+    });
+  });
+  expect(inFlightAppends).toBe(1);
+
+  await ReactTestRenderer.act(async () => {
+    resolveAppend();
+    await Promise.resolve();
+    resolveAppend();
+    await Promise.resolve();
+    resolveAppend();
+    await Promise.resolve();
+  });
+  expect(maxInFlightAppends).toBe(1);
+  expect(
+    mockBackend.request.mock.calls.filter(([request]) =>
+      request.path.endsWith('/audio'),
+    ),
+  ).toHaveLength(3);
+});
+
+test('completes a session that opens after disconnect', async () => {
+  let resolveOpen: () => void = () => undefined;
+  mockBackend.request.mockImplementation(async (request: {path: string}) => {
+    if (request.path === '/v1/device-sessions') {
+      await new Promise<void>(resolve => {
+        resolveOpen = resolve;
+      });
+      return sessionResponse(201);
+    }
+    if (request.path.endsWith('/complete')) {
+      return sessionResponse(200, {state: 'complete', endedAt: 2});
+    }
+    return sessionResponse(200, {byteCount: 3, chunkCount: 1});
+  });
+
+  const hook = await renderHook();
+  await ReactTestRenderer.act(async () => {
+    emitNative({
+      type: 'audio',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'AQID',
+    });
+  });
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().toggleDevice('omi-1', true);
+  });
+  expect(
+    mockBackend.request.mock.calls.some(([request]) =>
+      request.path.endsWith('/complete'),
+    ),
+  ).toBe(false);
+
+  await ReactTestRenderer.act(async () => {
+    resolveOpen();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(
+    mockBackend.request.mock.calls.some(
+      ([request]) =>
+        request.path ===
+        '/v1/device-sessions/11111111-2222-3333-4444-555555555555/complete',
+    ),
+  ).toBe(true);
+  expect(
+    mockBackend.request.mock.calls.some(([request]) =>
+      request.path.endsWith('/audio'),
+    ),
+  ).toBe(false);
 });

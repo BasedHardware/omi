@@ -58,9 +58,106 @@ export function useNativeDevices() {
   const [deviceScanMessage, setDeviceScanMessage] = useState<string | null>(
     null,
   );
+  const nativeSnapshotRef = useRef<PlatformNativeSnapshot | null>(null);
   const sessionRef = useRef<string | null>(null);
   const openingRef = useRef(false);
+  const flushingRef = useRef(false);
+  const cancelledRef = useRef(false);
   const pendingAudioRef = useRef<Uint8Array[]>([]);
+
+  nativeSnapshotRef.current = nativeSnapshot;
+
+  const finishSession = useCallback(async () => {
+    cancelledRef.current = true;
+    const sessionId = sessionRef.current;
+    sessionRef.current = null;
+    pendingAudioRef.current = [];
+    if (sessionId === null || omiBackend === undefined || omiBackend === null) {
+      return;
+    }
+    try {
+      await completeDeviceSession(omiBackend, sessionId);
+    } catch {
+      return;
+    }
+  }, []);
+
+  const flushPendingAudio = useCallback(async (sessionId: string) => {
+    if (
+      flushingRef.current ||
+      omiBackend === undefined ||
+      omiBackend === null
+    ) {
+      return;
+    }
+    flushingRef.current = true;
+    try {
+      while (
+        pendingAudioRef.current.length > 0 &&
+        !cancelledRef.current &&
+        sessionRef.current === sessionId
+      ) {
+        const chunk = pendingAudioRef.current.shift();
+        if (chunk === undefined) {
+          break;
+        }
+        try {
+          await appendDeviceSessionAudio(omiBackend, sessionId, chunk);
+        } catch {
+          return;
+        }
+      }
+    } finally {
+      flushingRef.current = false;
+    }
+    if (
+      pendingAudioRef.current.length > 0 &&
+      !cancelledRef.current &&
+      sessionRef.current === sessionId
+    ) {
+      await flushPendingAudio(sessionId);
+    }
+  }, []);
+
+  const persistAudio = useCallback(
+    async (event: Extract<OmiNativeEvent, {type: 'audio'}>) => {
+      if (omiBackend === undefined || omiBackend === null) {
+        return;
+      }
+      pendingAudioRef.current.push(bytesFromBase64(event.payloadBase64));
+      if (sessionRef.current === null && !openingRef.current) {
+        cancelledRef.current = false;
+        openingRef.current = true;
+        try {
+          const snapshot = nativeSnapshotRef.current;
+          const device = snapshot?.devices.find(
+            item => item.id === event.deviceId,
+          );
+          const session = await openDeviceSession(omiBackend, {
+            deviceId: event.deviceId,
+            deviceName: device?.name,
+            codec: event.codec,
+          });
+          sessionRef.current = session.id;
+        } catch {
+          pendingAudioRef.current = [];
+          openingRef.current = false;
+          return;
+        }
+        openingRef.current = false;
+        if (cancelledRef.current) {
+          await finishSession();
+          return;
+        }
+      }
+      const sessionId = sessionRef.current;
+      if (sessionId === null) {
+        return;
+      }
+      await flushPendingAudio(sessionId);
+    },
+    [finishSession, flushPendingAudio],
+  );
 
   useEffect(() => {
     let active = true;
@@ -104,78 +201,11 @@ export function useNativeDevices() {
         setNativeSnapshot(current =>
           current === null ? current : mergeBattery(current, event),
         );
-      }
-    });
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, []);
-
-  const finishSession = useCallback(async () => {
-    const sessionId = sessionRef.current;
-    sessionRef.current = null;
-    pendingAudioRef.current = [];
-    if (sessionId === null || omiBackend === undefined || omiBackend === null) {
-      return;
-    }
-    try {
-      await completeDeviceSession(omiBackend, sessionId);
-    } catch {
-      return;
-    }
-  }, []);
-
-  const persistAudio = useCallback(
-    async (event: Extract<OmiNativeEvent, {type: 'audio'}>) => {
-      if (omiBackend === undefined || omiBackend === null) {
         return;
       }
-      pendingAudioRef.current.push(bytesFromBase64(event.payloadBase64));
-      if (sessionRef.current === null && !openingRef.current) {
-        openingRef.current = true;
-        try {
-          const snapshot = nativeSnapshot;
-          const device = snapshot?.devices.find(
-            item => item.id === event.deviceId,
-          );
-          const session = await openDeviceSession(omiBackend, {
-            deviceId: event.deviceId,
-            deviceName: device?.name,
-            codec: event.codec,
-          });
-          sessionRef.current = session.id;
-        } catch {
-          pendingAudioRef.current = [];
-          openingRef.current = false;
-          return;
-        }
-        openingRef.current = false;
+      if (event.type === 'audio') {
+        persistAudio(event).catch(() => undefined);
       }
-      const sessionId = sessionRef.current;
-      if (sessionId === null) {
-        return;
-      }
-      const pending = pendingAudioRef.current;
-      pendingAudioRef.current = [];
-      for (const chunk of pending) {
-        try {
-          await appendDeviceSessionAudio(omiBackend, sessionId, chunk);
-        } catch {
-          return;
-        }
-      }
-    },
-    [nativeSnapshot],
-  );
-
-  useEffect(() => {
-    let active = true;
-    const unsubscribe = subscribeOmiNativeEvents(event => {
-      if (!active || event.type !== 'audio') {
-        return;
-      }
-      persistAudio(event).catch(() => undefined);
     });
     return () => {
       active = false;

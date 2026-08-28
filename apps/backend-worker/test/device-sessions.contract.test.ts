@@ -292,6 +292,66 @@ describe("device session ingest", () => {
     expect(missingDbBody.transcript).toBeUndefined();
   });
 
+  test("claims distinct chunk keys and rejects appends after complete", async () => {
+    const opened = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify(openBody),
+    });
+    const created = (await opened.json()) as { session: { id: string } };
+    const first = new Uint8Array([1, 0, 0, 1]);
+    const second = new Uint8Array([1, 0, 0, 2]);
+    const [left, right] = await Promise.all([
+      fetchWorker(`/v1/device-sessions/${created.session.id}/audio`, {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({
+          bytesBase64: btoa(String.fromCharCode(...first)),
+        }),
+      }),
+      fetchWorker(`/v1/device-sessions/${created.session.id}/audio`, {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({
+          bytesBase64: btoa(String.fromCharCode(...second)),
+        }),
+      }),
+    ]);
+    expect(left.status).toBe(200);
+    expect(right.status).toBe(200);
+    expect(r2Mock.objects.size).toBe(2);
+    const keys = [...r2Mock.objects.keys()].sort();
+    expect(keys[0]?.endsWith("/000000")).toBe(true);
+    expect(keys[1]?.endsWith("/000001")).toBe(true);
+    const stored = keys.map((key) =>
+      Array.from(r2Mock.objects.get(key)?.bytes ?? [])
+    );
+    expect(stored).toContainEqual(Array.from(first));
+    expect(stored).toContainEqual(Array.from(second));
+
+    const completed = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/complete`,
+      { method: "POST", headers: authenticatedHeaders }
+    );
+    expect(completed.status).toBe(200);
+    const late = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/audio`,
+      {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({ bytesBase64: btoa("late") }),
+      }
+    );
+    expect(late.status).toBe(409);
+    const lateBody = (await late.json()) as {
+      error: { code: string };
+      session?: unknown;
+    };
+    expect(lateBody.error.code).toBe("conflict");
+    expect(lateBody.session).toBeUndefined();
+    expect(r2Mock.objects.size).toBe(2);
+  });
+
   test("does not invent a 200 transcript when audio is absent", async () => {
     const opened = await fetchWorker("/v1/device-sessions", {
       method: "POST",

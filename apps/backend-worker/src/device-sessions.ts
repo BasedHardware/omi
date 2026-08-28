@@ -173,28 +173,44 @@ export async function appendDeviceSessionAudio(
   now: number
 ): Promise<AppendResult> {
   if (!isSessionId(sessionId)) return { kind: "not_found" };
-  const row = await loadSession(db, accountId, sessionId);
-  if (row === null) return { kind: "not_found" };
-  if (row.state !== "open") return { kind: "conflict" };
-  const nextBytes = row.byte_count + bytes.byteLength;
-  if (nextBytes > DEVICE_SESSION_CAPABILITIES.maxSessionBytes)
-    return { kind: "too_large" };
-  const chunkIndex = row.chunk_count;
-  const key = `${row.r2_prefix}/${String(chunkIndex).padStart(6, "0")}`;
+  const claimed = await db
+    .prepare(
+      `UPDATE device_sessions
+       SET byte_count = byte_count + ?,
+           chunk_count = chunk_count + 1,
+           updated_at = ?
+       WHERE id = ? AND account_id = ? AND state = 'open'
+         AND byte_count + ? <= ?
+       RETURNING id, account_id, device_id, device_name, codec, state, r2_prefix,
+                 byte_count, chunk_count, started_at, ended_at, created_at, updated_at`
+    )
+    .bind(
+      bytes.byteLength,
+      now,
+      sessionId,
+      accountId,
+      bytes.byteLength,
+      DEVICE_SESSION_CAPABILITIES.maxSessionBytes
+    )
+    .first<StoredSession>();
+  if (claimed === null) {
+    const row = await loadSession(db, accountId, sessionId);
+    if (row === null) return { kind: "not_found" };
+    if (row.state !== "open") return { kind: "conflict" };
+    if (
+      row.byte_count + bytes.byteLength >
+      DEVICE_SESSION_CAPABILITIES.maxSessionBytes
+    ) {
+      return { kind: "too_large" };
+    }
+    return { kind: "conflict" };
+  }
+  const chunkIndex = claimed.chunk_count - 1;
+  const key = `${claimed.r2_prefix}/${String(chunkIndex).padStart(6, "0")}`;
   await r2.put(key, bytes, {
     httpMetadata: { contentType: "application/octet-stream" },
   });
-  await db
-    .prepare(
-      `UPDATE device_sessions
-       SET byte_count = ?, chunk_count = ?, updated_at = ?
-       WHERE id = ? AND account_id = ? AND state = 'open'`
-    )
-    .bind(nextBytes, chunkIndex + 1, now, sessionId, accountId)
-    .run();
-  const updated = await loadSession(db, accountId, sessionId);
-  if (updated === null) return { kind: "not_found" };
-  return { kind: "ok", session: toDeviceSession(updated) };
+  return { kind: "ok", session: toDeviceSession(claimed) };
 }
 
 export type CompleteResult =

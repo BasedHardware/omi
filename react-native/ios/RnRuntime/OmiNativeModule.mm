@@ -122,7 +122,19 @@ RCT_REMAP_METHOD(startScan,
   for (NSString *uuid in serviceUuids.count ? serviceUuids : @[ OmiServiceUUID ]) {
     [uuids addObject:[CBUUID UUIDWithString:uuid]];
   }
+  NSString *keepId = nil;
+  NSMutableDictionary *kept = nil;
+  if (![self.connectionState isEqualToString:@"disconnected"] && self.connectedPeripheral != nil) {
+    keepId = self.connectedPeripheral.identifier.UUIDString;
+    kept = self.devices[keepId];
+    if (kept == nil) {
+      kept = [self deviceDictionary:keepId name:self.connectedPeripheral.name rssi:@0];
+    }
+  }
   [self.devices removeAllObjects];
+  if (keepId.length > 0 && kept != nil) {
+    self.devices[keepId] = kept;
+  }
   [self.central scanForPeripheralsWithServices:uuids options:@{ CBCentralManagerScanOptionAllowDuplicatesKey: @NO }];
   self.scanning = YES;
   self.lastEvent = @"Scanning for Omi devices";
