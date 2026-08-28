@@ -1,16 +1,25 @@
 import OmiTheme
 import SwiftUI
 
-/// The first interactive row inside a destination panel.
+/// The compact vertical rhythm shared by every destination panel.
 ///
-/// Activity established the visual rhythm for the compact shell: ten points of
-/// breathing room above its navigation, then six points before the content it
-/// controls. List and catalog pages use the same contract so their first pills
-/// do not appear pinned to the panel's rounded top edge.
-enum PagePanelFirstRowMetrics {
+/// Each gap has exactly one owner: the destination owns the navigation-to-
+/// surface gap, the panel owns its top inset, the preceding control row owns
+/// the row gap, and content owns the final eight points before its first item.
+/// This prevents adjacent views from stacking otherwise reasonable padding.
+enum PagePanelVerticalRhythm {
   static let horizontalPadding = QueryShellLayout.panelPaddingHorizontal
-  static let topPadding = QueryShellLayout.panelPaddingTop
-  static let bottomPadding = QueryShellLayout.panelHeaderSpacing
+  static let panelTopPadding = QueryShellLayout.panelPaddingTop
+  static let rowGap = QueryShellLayout.panelHeaderSpacing
+  static let contentGap = OmiSpacing.sm
+  static let sectionGap = OmiSpacing.lg
+  static let contentBottomPadding = OmiSpacing.lg
+}
+
+enum PagePanelFirstRowMetrics {
+  static let horizontalPadding = PagePanelVerticalRhythm.horizontalPadding
+  static let topPadding = PagePanelVerticalRhythm.panelTopPadding
+  static let bottomPadding: CGFloat = 0
 }
 
 extension View {
@@ -18,6 +27,21 @@ extension View {
     padding(.horizontal, PagePanelFirstRowMetrics.horizontalPadding)
       .padding(.top, PagePanelFirstRowMetrics.topPadding)
       .padding(.bottom, PagePanelFirstRowMetrics.bottomPadding)
+  }
+
+  /// A refinement row below Brain navigation. Navigation already owns the six
+  /// points between rows, so this row only owns horizontal alignment.
+  func pagePanelSubsequentRowInsets() -> some View {
+    padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+  }
+
+  @ViewBuilder
+  func pagePanelToolbarInsets(isBelowNavigation: Bool) -> some View {
+    if isBelowNavigation {
+      pagePanelSubsequentRowInsets()
+    } else {
+      pagePanelFirstRowInsets()
+    }
   }
 }
 
@@ -42,20 +66,29 @@ struct PageQueryToolbar<Refinement: View, ActiveFilters: View, Actions: View>: V
   }
 
   var body: some View {
+    ViewThatFits(in: .horizontal) {
+      toolbarRow(showsActiveFilters: true)
+      toolbarRow(showsActiveFilters: false)
+    }
+    .frame(minHeight: QueryShellLayout.chipHeight)
+    .accessibilityElement(children: .contain)
+  }
+
+  private func toolbarRow(showsActiveFilters: Bool) -> some View {
     HStack(alignment: .center, spacing: OmiSpacing.sm) {
       refinement
         .fixedSize(horizontal: true, vertical: false)
 
-      activeFilters
-        .layoutPriority(1)
+      if showsActiveFilters {
+        activeFilters
+          .layoutPriority(-1)
+      }
 
       Spacer(minLength: OmiSpacing.xs)
 
       actions
         .fixedSize(horizontal: true, vertical: false)
     }
-    .frame(minHeight: QueryShellLayout.chipHeight)
-    .accessibilityElement(children: .contain)
   }
 }
 
@@ -77,6 +110,7 @@ struct PageQueryControlLabel: View {
   let value: String
   var isActive = false
   var showsDisclosure = true
+  var dimensionSeparator = ":"
 
   var body: some View {
     HStack(spacing: OmiSpacing.xs) {
@@ -84,7 +118,7 @@ struct PageQueryControlLabel: View {
         .scaledFont(size: OmiType.caption, weight: .medium)
 
       if let dimension, !dimension.isEmpty {
-        Text("\(dimension):")
+        Text("\(dimension)\(dimensionSeparator)")
           .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundStyle(Ink.secondary)
       }
@@ -117,6 +151,7 @@ struct PageQueryActionLabel: View {
   let icon: String
   let title: String
   var isPrimary = false
+  @State private var isHovering = false
 
   var body: some View {
     ViewThatFits(in: .horizontal) {
@@ -132,6 +167,7 @@ struct PageQueryActionLabel: View {
         .scaledFont(size: OmiType.caption, weight: .semibold)
     }
     .foregroundStyle(isPrimary ? Ink.surface : Ink.primary)
+    .tint(isPrimary ? Ink.surface : Ink.primary)
     .padding(.horizontal, OmiSpacing.sm)
     .frame(minWidth: QueryShellLayout.chipHeight)
     .frame(height: QueryShellLayout.chipHeight)
@@ -141,13 +177,15 @@ struct PageQueryActionLabel: View {
           .fill(Ink.primary)
       } else {
         Capsule(style: .continuous)
-          .fill(Ink.rowFill)
+          .fill(isHovering ? Ink.rowFillHover : Ink.rowFill)
           .overlay {
             Capsule(style: .continuous)
               .stroke(Ink.separator, lineWidth: 1)
           }
       }
     }
+    .contentShape(Capsule(style: .continuous))
+    .onHover { isHovering = $0 }
     .accessibilityElement(children: .combine)
     .accessibilityLabel(title)
   }

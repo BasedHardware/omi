@@ -99,8 +99,8 @@ struct DesktopTopBar: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .frame(height: TopNavigationLayoutMetrics.barHeight)
-    // Gap below the bar only: padding above it would put the top resize handle on empty air.
-    .padding(.bottom, OmiSpacing.sm)
+    // The destination owns the single 8 pt gap below navigation. Keeping that
+    // ownership there prevents the bar and the page from silently doubling it.
     // The compact fallback's menu is the one surface here that draws outside the bar. Elevation
     // belongs to the shared top-bar component so every shell and exported preview paints it above the
     // destination sibling rather than relying on each call site to remember (INV-NAV-1).

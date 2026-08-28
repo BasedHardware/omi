@@ -282,7 +282,7 @@ struct ConversationsPage: View {
   private var conversationsListLayout: some View {
     VStack(spacing: 0) {
       conversationQueryToolbar
-        .pagePanelFirstRowInsets()
+        .pagePanelToolbarInsets(isBelowNavigation: brainDestination != nil)
 
       // The whole page below the command row scrolls together. Floating action bars
       // (load-more, merge) stay pinned to the bottom via the ZStack overlay.
@@ -560,7 +560,8 @@ struct ConversationsPage: View {
         )
       }
     }
-    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+    .padding(.top, PagePanelVerticalRhythm.contentGap)
     .padding(.bottom, isMultiSelectMode && !selectedConversationIds.isEmpty ? 80 : OmiSpacing.lg)
   }
 
@@ -707,10 +708,11 @@ struct ConversationsPage: View {
     } label: {
       PageQueryControlLabel(
         icon: "line.3.horizontal.decrease",
-        dimension: "Filter",
+        dimension: activeConversationFilterCount == 0 ? nil : "Filter",
         value: activeConversationFilterCount == 0
-          ? "None" : "\(activeConversationFilterCount)",
-        isActive: activeConversationFilterCount > 0
+          ? "Filter" : "\(activeConversationFilterCount)",
+        isActive: activeConversationFilterCount > 0,
+        dimensionSeparator: " ·"
       )
     }
     .menuStyle(.button)
@@ -813,7 +815,9 @@ struct ConversationsPage: View {
       .buttonStyle(.plain)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(OmiSpacing.section)
+    .padding(.horizontal, OmiSpacing.section)
+    .padding(.top, PagePanelVerticalRhythm.contentGap)
+    .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
     .accessibilityIdentifier("conversations-filtered-empty")
   }
 

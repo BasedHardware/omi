@@ -2102,7 +2102,7 @@ struct MemoriesPage: View {
     VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       if brainDestination != nil {
         memoriesQueryToolbar
-          .pagePanelFirstRowInsets()
+          .pagePanelSubsequentRowInsets()
       } else {
         // A pill row and a text field cannot share one line in a narrow column.
         // The pills hold their intrinsic width so their own labels stay readable,
@@ -2234,9 +2234,10 @@ struct MemoriesPage: View {
     } label: {
       PageQueryControlLabel(
         icon: "line.3.horizontal.decrease",
-        dimension: "Filter",
-        value: memoryActiveFilterCount == 0 ? "None" : "\(memoryActiveFilterCount)",
-        isActive: memoryActiveFilterCount > 0)
+        dimension: memoryActiveFilterCount == 0 ? nil : "Filter",
+        value: memoryActiveFilterCount == 0 ? "Filter" : "\(memoryActiveFilterCount)",
+        isActive: memoryActiveFilterCount > 0,
+        dimensionSeparator: " ·")
     }
     .menuStyle(.button)
     .buttonStyle(.plain)
@@ -2682,8 +2683,9 @@ struct MemoriesPage: View {
           }
         }
       }
-      .padding(.horizontal, OmiSpacing.xxl)
-      .padding(.bottom, OmiSpacing.xxl)
+      .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+      .padding(.top, PagePanelVerticalRhythm.contentGap)
+      .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
     }
     .glassScrollFade()
   }

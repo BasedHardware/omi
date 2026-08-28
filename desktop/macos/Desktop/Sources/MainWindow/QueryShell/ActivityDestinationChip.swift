@@ -170,7 +170,7 @@ struct BrainSectionPageLayout<Search: View, Content: View>: View {
 
 enum BrainSectionPageMetrics {
   static let navigationTopPadding = PagePanelFirstRowMetrics.topPadding
-  static let navigationBottomPadding = PagePanelFirstRowMetrics.bottomPadding
+  static let navigationBottomPadding = PagePanelVerticalRhythm.rowGap
   static let navigationHeight: CGFloat =
     QueryShellLayout.chipHeight + navigationTopPadding + navigationBottomPadding
 }

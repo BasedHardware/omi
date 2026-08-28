@@ -3,45 +3,77 @@ import Combine
 import OmiTheme
 import SwiftUI
 
+struct MemoryExportCatalogEntry: Identifiable {
+  let destination: MemoryExportDestination
+  let title: String?
+  let subtitle: String?
+  let description: String?
+
+  var id: String { destination.id }
+  var resolvedTitle: String { title ?? destination.title }
+  var resolvedSubtitle: String { subtitle ?? destination.subtitle }
+  var resolvedDescription: String { description ?? destination.description }
+}
+
+enum MemoryExportCatalog {
+  static let entries: [MemoryExportCatalogEntry] =
+    MemoryExportDestination.allCases.compactMap { destination in
+      switch destination {
+      case .claudeCode, .codex:
+        return nil
+      case .claude:
+        return MemoryExportCatalogEntry(
+          destination: .claude,
+          title: "Claude / Claude Code",
+          subtitle: nil,
+          description: "Claude Code (CLI) or Claude cloud — choose in setup."
+        )
+      case .chatgpt:
+        return MemoryExportCatalogEntry(
+          destination: .chatgpt,
+          title: "ChatGPT / Codex",
+          subtitle: "ChatGPT app or Codex CLI",
+          description: "Add Omi in ChatGPT or connect Codex locally — choose in setup."
+        )
+      default:
+        return MemoryExportCatalogEntry(
+          destination: destination, title: nil, subtitle: nil, description: nil)
+      }
+    }
+
+  static func matching(_ searchText: String) -> [MemoryExportCatalogEntry] {
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return entries }
+
+    return
+      entries
+      .filter { entry in
+        [entry.resolvedTitle, entry.resolvedSubtitle, entry.resolvedDescription]
+          .contains { $0.localizedCaseInsensitiveContains(query) }
+      }
+      .sorted { matchRank($0, query: query) < matchRank($1, query: query) }
+  }
+
+  private static func matchRank(_ entry: MemoryExportCatalogEntry, query: String) -> Int {
+    if entry.resolvedTitle.localizedCaseInsensitiveCompare(query) == .orderedSame { return 0 }
+    if entry.resolvedTitle.range(
+      of: query, options: [.anchored, .caseInsensitive, .diacriticInsensitive]) != nil
+    {
+      return 1
+    }
+    return 2
+  }
+}
+
 struct ExportsSection: View {
   let statuses: [MemoryExportDestination: MemoryExportStatus]
   var searchText = ""
+  var title = "Exports"
+  var entriesOverride: [MemoryExportCatalogEntry]? = nil
   let onSelectDestination: (MemoryExportDestination) -> Void
 
-  // Claude/Claude Code and ChatGPT/Codex each share one choice. Their setup
-  // sheets keep the cloud and CLI paths distinct without making this list uneven.
-  private var entries: [(destination: MemoryExportDestination, title: String?, subtitle: String?, description: String?)]
-  {
-    let allEntries: [(destination: MemoryExportDestination, title: String?, subtitle: String?, description: String?)] =
-      MemoryExportDestination.allCases.compactMap { d in
-        switch d {
-        case .claudeCode, .codex:
-          return nil
-        case .claude:
-          return (
-            .claude, "Claude / Claude Code", nil,
-            "Claude Code (CLI) or Claude cloud — choose in setup."
-          )
-        case .chatgpt:
-          return (
-            .chatgpt, "ChatGPT / Codex", "ChatGPT app or Codex CLI",
-            "Add Omi in ChatGPT or connect Codex locally — choose in setup."
-          )
-        default:
-          return (d, nil, nil, nil)
-        }
-      }
-
-    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !query.isEmpty else { return allEntries }
-    return allEntries.filter { entry in
-      let destination = entry.destination
-      return [
-        entry.title ?? destination.title,
-        entry.subtitle ?? destination.subtitle,
-        entry.description ?? destination.description,
-      ].contains { $0.localizedCaseInsensitiveContains(query) }
-    }
+  private var entries: [MemoryExportCatalogEntry] {
+    entriesOverride ?? MemoryExportCatalog.matching(searchText)
   }
 
   private func status(for destination: MemoryExportDestination) -> MemoryExportStatus {
@@ -78,8 +110,8 @@ struct ExportsSection: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      Text("Exports")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
+      Text(title)
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
         .foregroundColor(Ink.primary)
 
       if entries.isEmpty {
@@ -93,7 +125,7 @@ struct ExportsSection: View {
           alignment: .leading,
           spacing: OmiSpacing.md
         ) {
-          ForEach(entries, id: \.destination.id) { entry in
+          ForEach(entries) { entry in
             MemoryExportRow(
               destination: entry.destination,
               titleOverride: entry.title,
@@ -131,7 +163,7 @@ private struct MemoryExportRow: View {
     case .obsidian:
       return status.isConfigured ? "Sync" : "Connect"
     case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
-      return "Open"
+      return status.hasConnection ? "Open" : "Connect"
     }
   }
 

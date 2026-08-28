@@ -10,11 +10,22 @@ struct QuerySearchBar: View {
   var accessibilityID: String = "query-search-field"
   var placeholder: String = RewindSearchMetrics.placeholder
   var focus: FocusState<Bool>.Binding? = nil
+  @FocusState private var internalFocus: Bool
+  @State private var isClearHovered = false
+
+  private var isFocused: Bool {
+    focus?.wrappedValue ?? internalFocus
+  }
 
   var body: some View {
     searchRow
       .frame(minHeight: QueryShellLayout.barMinHeight)
       .inkGlassPanel(cornerRadius: QueryShellLayout.panelCornerRadius, shadow: .ambient)
+      .overlay {
+        RoundedRectangle(cornerRadius: QueryShellLayout.panelCornerRadius, style: .continuous)
+          .stroke(isFocused ? Ink.primary.opacity(0.28) : Color.clear, lineWidth: 1)
+          .allowsHitTesting(false)
+      }
   }
 
   private var searchRow: some View {
@@ -28,10 +39,15 @@ struct QuerySearchBar: View {
           text = ""
         } label: {
           Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: QueryShellLayout.heroGlyphSize, weight: .regular)
+            .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundStyle(Ink.secondary)
+            .frame(width: 28, height: 28)
+            .background(isClearHovered ? Ink.rowFillHover : Color.clear)
+            .clipShape(Circle())
+            .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .onHover { isClearHovered = $0 }
         .accessibilityLabel("Clear search")
         .help("Clear the search")
       }
@@ -53,6 +69,7 @@ struct QuerySearchBar: View {
         .textFieldStyle(.plain)
         .scaledFont(size: QueryShellLayout.queryFontSize, weight: .regular)
         .foregroundStyle(Ink.primary)
+        .focused($internalFocus)
         .accessibilityIdentifier(accessibilityID)
     }
   }

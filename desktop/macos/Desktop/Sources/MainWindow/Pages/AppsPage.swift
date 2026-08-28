@@ -179,6 +179,31 @@ enum AppsFilteredResultsPresentation: Equatable {
   }
 }
 
+enum AppsAllSearchPresentation: Equatable {
+  case loading
+  case empty
+  case results(total: Int)
+  case failure
+
+  static func resolve(
+    importsCount: Int,
+    exportsCount: Int,
+    appsCount: Int,
+    marketplace: AppsFilteredResultsPresentation
+  ) -> AppsAllSearchPresentation {
+    let localCount = importsCount + exportsCount
+    let visibleAppsCount = marketplace == .results ? appsCount : 0
+    let total = localCount + visibleAppsCount
+
+    if total > 0 { return .results(total: total) }
+    switch marketplace {
+    case .loading: return .loading
+    case .failure: return .failure
+    case .empty, .results: return .empty
+    }
+  }
+}
+
 struct AppsPage: View {
   @ObservedObject var appProvider: AppProvider
   var appState: AppState? = nil
@@ -222,10 +247,12 @@ struct AppsPage: View {
             loadingShimmerView
           } else {
             ScrollView {
-              LazyVStack(alignment: .leading, spacing: OmiSpacing.xxl) {
+              LazyVStack(alignment: .leading, spacing: PagePanelVerticalRhythm.sectionGap) {
                 catalogContent
               }
-              .padding()
+              .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+              .padding(.top, PagePanelVerticalRhythm.contentGap)
+              .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
             }
           }
         }
@@ -528,9 +555,10 @@ struct AppsPage: View {
     } label: {
       PageQueryControlLabel(
         icon: "line.3.horizontal.decrease",
-        dimension: "Filter",
-        value: activeAppFilters.isEmpty ? "None" : "\(activeAppFilters.count)",
-        isActive: !activeAppFilters.isEmpty
+        dimension: activeAppFilters.isEmpty ? nil : "Filter",
+        value: activeAppFilters.isEmpty ? "Filter" : "\(activeAppFilters.count)",
+        isActive: !activeAppFilters.isEmpty,
+        dimensionSeparator: " ·"
       )
     }
     .menuStyle(.button)
@@ -553,15 +581,13 @@ struct AppsPage: View {
     viewAllSection = nil
     selectedKind = kind
 
-    // Connection and Category are marketplace dimensions. Clear their query
-    // projection when leaving Apps so a later local-catalog view cannot appear
-    // filtered by stale marketplace state.
+    // Connection and Category are marketplace dimensions. Search is a page-
+    // wide intent, so changing scope never discards what the user typed.
     if kind != .apps {
-      appProvider.clearFilters()
-      searchText = ""
+      clearMarketplaceFiltersPreservingSearch()
     }
 
-    if kind == .apps {
+    if kind == .apps || kind == .all {
       appProvider.searchQuery = searchText
       scheduleAppSearch(for: searchText)
     }
@@ -576,8 +602,14 @@ struct AppsPage: View {
 
   private func clearAppFilters() {
     viewAllSection = nil
+    clearMarketplaceFiltersPreservingSearch()
+    scheduleAppSearch(for: searchText)
+  }
+
+  private func clearMarketplaceFiltersPreservingSearch() {
+    let query = searchText
     appProvider.clearFilters()
-    searchText = ""
+    appProvider.searchQuery = query
   }
 
   private func scheduleAppSearch(for query: String) {
@@ -648,17 +680,53 @@ struct AppsPage: View {
 
   @ViewBuilder
   private var allCatalogSearchContent: some View {
-    ImportsSection(
-      statusStore: connectorStatusStore,
-      onSelectConnector: { connector in selectConnector(connector) },
-      connectors: visibleImportConnectors,
-      searchText: searchText,
-      onClearSearch: { searchText = "" }
-    )
-    ExportsSection(statuses: exportStatuses, searchText: searchText) { destination in
-      selectDestination(destination)
+    switch allSearchPresentation {
+    case .loading:
+      searchLoadingState
+    case .failure:
+      searchFailureState
+    case .empty:
+      globalSearchEmptyState
+    case .results(let total):
+      Text("Search Results (\(total))")
+        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .foregroundStyle(Ink.primary)
+
+      if !visibleImportConnectors.isEmpty {
+        ImportsSection(
+          statusStore: connectorStatusStore,
+          onSelectConnector: { connector in selectConnector(connector) },
+          connectors: visibleImportConnectors,
+          title: "Imports (\(visibleImportConnectors.count))"
+        )
+      }
+
+      if !visibleExportEntries.isEmpty {
+        ExportsSection(
+          statuses: exportStatuses,
+          title: "Exports (\(visibleExportEntries.count))",
+          entriesOverride: visibleExportEntries
+        ) { destination in
+          selectDestination(destination)
+        }
+      }
+
+      if !visibleMarketplaceSearchApps.isEmpty {
+        AppGridSection(
+          title: "Apps (\(visibleMarketplaceSearchApps.count))",
+          apps: visibleMarketplaceSearchApps,
+          appProvider: appProvider,
+          onSelectApp: selectApp,
+          titleSize: OmiType.subheading
+        )
+      }
+
+      if filteredAppsPresentation == .loading {
+        marketplaceSearchProgress
+      } else if filteredAppsPresentation == .failure {
+        marketplaceSearchFailure
+      }
     }
-    filteredAppsContent
   }
 
   @ViewBuilder
@@ -748,9 +816,97 @@ struct AppsPage: View {
   private var visibleImportConnectors: [ImportConnector] {
     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !query.isEmpty else { return ImportConnector.all }
-    return ImportConnector.all.filter { connector in
-      [connector.title, connector.subtitle, connector.description]
-        .contains { $0.localizedCaseInsensitiveContains(query) }
+    return ImportConnector.all
+      .filter { connector in
+        [connector.title, connector.subtitle, connector.description]
+          .contains { $0.localizedCaseInsensitiveContains(query) }
+      }
+      .sorted { catalogMatchRank($0.title, query: query) < catalogMatchRank($1.title, query: query) }
+  }
+
+  private var visibleExportEntries: [MemoryExportCatalogEntry] {
+    MemoryExportCatalog.matching(searchText)
+  }
+
+  private var visibleMarketplaceSearchApps: [OmiApp] {
+    guard filteredAppsPresentation == .results else { return [] }
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    return filteredApps.sorted {
+      catalogMatchRank($0.name, query: query) < catalogMatchRank($1.name, query: query)
+    }
+  }
+
+  private var allSearchPresentation: AppsAllSearchPresentation {
+    AppsAllSearchPresentation.resolve(
+      importsCount: visibleImportConnectors.count,
+      exportsCount: visibleExportEntries.count,
+      appsCount: filteredApps.count,
+      marketplace: filteredAppsPresentation
+    )
+  }
+
+  private func catalogMatchRank(_ title: String, query: String) -> Int {
+    if title.localizedCaseInsensitiveCompare(query) == .orderedSame { return 0 }
+    if title.range(of: query, options: [.anchored, .caseInsensitive, .diacriticInsensitive]) != nil {
+      return 1
+    }
+    return 2
+  }
+
+  private var searchLoadingState: some View {
+    VStack(spacing: OmiSpacing.md) {
+      ProgressView()
+      Text("Searching apps, imports, and exports…")
+        .scaledFont(size: OmiType.body)
+        .foregroundStyle(Ink.secondary)
+    }
+    .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
+  }
+
+  private var searchFailureState: some View {
+    VStack(spacing: OmiSpacing.md) {
+      Image(systemName: "exclamationmark.circle")
+        .scaledFont(size: 28)
+        .foregroundStyle(Ink.secondary)
+      Text("Couldn't finish searching apps")
+        .scaledFont(size: OmiType.subheading, weight: .medium)
+      Button("Try Again") { Task { await appProvider.searchApps() } }
+        .buttonStyle(.bordered)
+    }
+    .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
+  }
+
+  private var globalSearchEmptyState: some View {
+    VStack(spacing: OmiSpacing.md) {
+      Image(systemName: "magnifyingglass")
+        .scaledFont(size: 28)
+        .foregroundStyle(Ink.secondary)
+      Text("No results for “\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))”")
+        .scaledFont(size: OmiType.subheading, weight: .medium)
+        .foregroundStyle(Ink.primary)
+      Button("Clear Search") { searchText = "" }
+        .buttonStyle(.bordered)
+    }
+    .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
+  }
+
+  private var marketplaceSearchProgress: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      ProgressView().controlSize(.small)
+      Text("Searching marketplace apps…")
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(Ink.secondary)
+    }
+  }
+
+  private var marketplaceSearchFailure: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Text("Marketplace apps couldn't be loaded.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(Ink.secondary)
+      Button("Try Again") { Task { await appProvider.searchApps() } }
+        .buttonStyle(.plain)
+        .foregroundStyle(Ink.primary)
     }
   }
 
@@ -814,7 +970,7 @@ struct AppsPage: View {
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
       }
-      .frame(maxWidth: .infinity, minHeight: 200)
+      .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
     case .empty:
       VStack(spacing: OmiSpacing.md) {
         Image(systemName: "magnifyingglass")
@@ -824,7 +980,7 @@ struct AppsPage: View {
           .scaledFont(size: OmiType.subheading, weight: .medium)
           .foregroundColor(Ink.secondary)
       }
-      .frame(maxWidth: .infinity, minHeight: 200)
+      .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
     case .failure:
       VStack(spacing: OmiSpacing.md) {
         Image(systemName: "exclamationmark.circle")
@@ -838,7 +994,7 @@ struct AppsPage: View {
         }
         .buttonStyle(.bordered)
       }
-      .frame(maxWidth: .infinity, minHeight: 200)
+      .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
     case .results:
       filteredAppsGrid
     }
@@ -894,7 +1050,7 @@ struct AppsPage: View {
 
   private var loadingShimmerView: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
+      VStack(alignment: .leading, spacing: PagePanelVerticalRhythm.sectionGap) {
         // Shimmer sections
         ForEach(0..<3, id: \.self) { _ in
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -912,7 +1068,9 @@ struct AppsPage: View {
           }
         }
       }
-      .padding()
+      .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+      .padding(.top, PagePanelVerticalRhythm.contentGap)
+      .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
     }
   }
 
@@ -1480,6 +1638,7 @@ struct ImportsSection: View {
   var connectors: [ImportConnector] = ImportConnector.all
   var searchText: String = ""
   var onClearSearch: (() -> Void)? = nil
+  var title = "Imports"
 
   private var normalizedSearchText: String {
     searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1487,7 +1646,7 @@ struct ImportsSection: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      Text("Imports")
+      Text(title)
         .scaledFont(size: OmiType.subheading, weight: .semibold)
         .foregroundColor(Ink.primary)
 
@@ -1508,7 +1667,7 @@ struct ImportsSection: View {
               .tint(Ink.secondary)
           }
         }
-        .frame(maxWidth: .infinity, minHeight: 200)
+        .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
       } else {
         LazyVGrid(
           columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
@@ -2200,6 +2359,7 @@ struct AppGridSection: View {
   let apps: [OmiApp]
   let appProvider: AppProvider
   let onSelectApp: (OmiApp) -> Void
+  var titleSize = OmiType.heading
   var showSeeMore: Bool = false
   var onSeeMore: (() -> Void)? = nil
 
@@ -2207,7 +2367,7 @@ struct AppGridSection: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       HStack {
         Text(title)
-          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .scaledFont(size: titleSize, weight: .semibold)
           .foregroundColor(Ink.primary)
 
         Spacer()
