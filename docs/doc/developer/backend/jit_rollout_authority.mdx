@@ -11,25 +11,29 @@ only identity from the verified Firebase bearer token.
 ## Decision contract
 
 The response reports three tri-state values: `rollout`, `kill_switch`, and
-`effective`. Each is `enabled`, `disabled`, or `unknown`. Work is permitted only
-when the rollout flag is known `enabled` and the independent kill switch is
-known `disabled`.
+`effective`. Each is `enabled`, `disabled`, or `unknown`. Work is permitted
+only when `effective` is `enabled`: the authenticated UID is on the
+code-owned two-UID allowlist, or PostHog `jit-processing-v1` is boolean
+`true` for that UID.
 
-The fixed PostHog keys are:
+The single admission flag is `jit-processing-v1`. These retired keys are no
+longer admission authority and are not read:
 
-- `jit-processing-v1` for staged exposure
-- `jit-processing-ledger-migration-v1` for the separately admitted legacy-row migration and writer cutover
-- `jit-processing-kill-switch-v1` for immediate shutdown
+- `jit-processing-kill-switch-v1`
+- `jit-processing-ledger-migration-v1`
+- `daily-memory-sweep-v1`
 
-Enabling staged JIT exposure never authorizes migration or writer cutover. The
-migration flag is evaluated independently, defaults off when absent, and is
-checked again before every bounded migration mutation and publication step.
-The shared kill switch wins over both authorities.
+The allowlist bypasses the flag and still admits when PostHog is down. A
+known-false or absent `jit-processing-v1` is `disabled` for everyone else.
+Provider timeouts, missing configuration, and malformed values stay
+`unknown` and fail closed for non-allowlist users. Ledger migration, daily
+sweep cohort membership, trigger snapshots, and prompt/mirror snapshots all
+use the same `permits_work` helper.
 
-Missing configuration, an absent flag, a non-boolean variant, provider errors,
-and timeouts resolve to `unknown` and fail off. Fully known answers may be
-cached per authenticated UID for at most 30 seconds; unknown/error answers are
-not cached. Query parameters and client feature state have no authority.
+Fully known answers may be cached per authenticated UID for at most 30
+seconds; unknown/error answers use a short negative cache. Query parameters
+and client feature state have no authority. The `kill_switch` field remains
+on the wire for compatibility and is always `disabled`.
 
 ## Knowledge-writer transition contract
 
@@ -99,9 +103,10 @@ user-deletion tombstone as rollback state.
 ## Paid-work enforcement
 
 `POST /v1/desktop/proactivity/completions` resolves the decision before quota
-reservation or provider selection. It then bypasses the cache and refreshes the
-kill switch immediately before constructing or calling the model provider. A
-late kill releases the quota reservation and makes no model call.
+reservation or provider selection. It then bypasses the cache and refreshes
+the exposure flag immediately before constructing or calling the model
+provider. A late disable releases the quota reservation and makes no model
+call.
 
 The implementation is dark by default. It does not create or enable PostHog
 flags or cohorts, deploy a service, or enroll a user. The desktop backend's

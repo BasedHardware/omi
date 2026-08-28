@@ -116,13 +116,10 @@ def resolve_authorized_first_open_plan(
             # against the shared async authority would cross event loops.
             decision = rollout_module.resolve_jit_rollout_sync(uid, stage=stage, force_refresh=force_refresh)
         permitted = bool(getattr(decision, "permits_work", False))
-        kill_switch_state = getattr(getattr(decision, "kill_switch", None), "value", "")
-        kill_switch = str(kill_switch_state).casefold() == "enabled"
         return resolve_first_open_plan(
             feature_enabled=permitted,
             client_tier=tier,
             source=normalized_source,
-            kill_switch=kill_switch,
         )
     except Exception:
         return resolve_first_open_plan(feature_enabled=False, client_tier=tier, source=normalized_source)

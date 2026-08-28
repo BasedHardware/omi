@@ -1,6 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
 from io import StringIO
-import sys
 import threading
 import time
 from types import SimpleNamespace
@@ -41,9 +40,7 @@ from utils.memory.daily_memory_sweep import (
     _onboarding_transcript_eligibility,
     _pending_completed_dates,
     _advance_cursor,
-    close_daily_memory_sweep_cohort_clients,
     daily_memory_sweep_cohort_authority_from_environment,
-    _POSTHOG_CLIENTS,
     MODEL_INVOCATION_PATH,
     MODEL_INVOCATION_FENCE_COLLECTION,
     MODEL_INVOCATION_SCHEMA_VERSION,
@@ -54,6 +51,7 @@ from utils.memory.daily_memory_sweep import (
     produce_completed_day_daily_summary_sources,
 )
 from models.product_memory import normalized_memory_content_key
+from utils.jit_rollout import JITDecisionStage, TriState
 
 
 def _candidate(**updates):
@@ -497,7 +495,10 @@ def test_cohort_reader_is_backend_read_only_and_injectable(monkeypatch):
     assert read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep", resolver=Reader())
     assert calls == [("memory-sweep", "user-1", {"only_evaluate_locally": False, "send_feature_flag_events": False})]
     assert not read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep", resolver=lambda *_: "true")
-    monkeypatch.delenv("POSTHOG_PROJECT_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.resolve_jit_rollout_sync",
+        lambda *_args, **_kwargs: SimpleNamespace(permits_work=False, effective=TriState.DISABLED),
+    )
     assert not read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep")
 
 
@@ -792,29 +793,31 @@ def test_onboarding_requires_non_discarded_completed_finalized_transcript():
     )
 
 
-def test_posthog_cohort_client_is_reused_and_closed(monkeypatch):
-    created = []
-    closed = []
+def test_default_cohort_reader_uses_shared_jit_permits_work(monkeypatch):
+    calls = []
 
-    class FakePosthog:
-        def __init__(self, **_kwargs):
-            created.append(self)
+    def resolve(uid, *, stage, force_refresh=False):
+        calls.append((uid, stage, force_refresh))
+        return SimpleNamespace(
+            permits_work=uid == "user-1",
+            effective=TriState.ENABLED if uid == "user-1" else TriState.DISABLED,
+        )
 
-        def get_feature_flag(self, *_args, **_kwargs):
-            return True
+    monkeypatch.setattr("utils.memory.daily_memory_sweep.resolve_jit_rollout_sync", resolve)
+    assert read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep") is DailySweepCohortDecision.enabled
+    assert read_daily_memory_sweep_cohort_assignment("user-2", "memory-sweep") is DailySweepCohortDecision.disabled
+    assert calls == [
+        ("user-1", JITDecisionStage.READ_ONLY, False),
+        ("user-2", JITDecisionStage.READ_ONLY, False),
+    ]
 
-        def shutdown(self):
-            closed.append(self)
 
-    monkeypatch.setitem(sys.modules, "posthog", SimpleNamespace(Posthog=FakePosthog))
-    monkeypatch.setenv("POSTHOG_PROJECT_API_KEY", "project-key")
-    monkeypatch.setenv("POSTHOG_HOST", "https://posthog.test")
-    _POSTHOG_CLIENTS.clear()
-    assert read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep")
-    assert read_daily_memory_sweep_cohort_assignment("user-2", "memory-sweep")
-    assert len(created) == 1
-    close_daily_memory_sweep_cohort_clients()
-    assert closed == created
+def test_default_cohort_reader_maps_unknown_rollout_to_unavailable(monkeypatch):
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.resolve_jit_rollout_sync",
+        lambda *_args, **_kwargs: SimpleNamespace(permits_work=False, effective=TriState.UNKNOWN),
+    )
+    assert read_daily_memory_sweep_cohort_assignment("user-1", "memory-sweep") is DailySweepCohortDecision.unavailable
 
 
 def test_onboarding_continuation_reuses_durable_candidate_page(monkeypatch):
