@@ -50,3 +50,89 @@ final class SpeakerAssignmentTests: XCTestCase {
     XCTAssertEqual(parsed.orders, [1, 12])
   }
 }
+
+/// The 404 fallback's durable half, exercised through the REAL SQLite write and
+/// reload path (a per-test RewindDatabase, same seam as the finalization state
+/// machine tests). The write must report whether it landed: when it returns 0
+/// nothing durable holds the user's decision, and `assignSpeakerToSegments`
+/// must not report success — the `try?` that swallowed this was the reviewed
+/// defect.
+final class SpeakerAssignmentPersistenceTests: XCTestCase {
+  private var testUserId = ""
+  private var userDir: URL?
+
+  override func setUp() async throws {
+    try await super.setUp()
+    testUserId = "speaker-assignment-test-\(UUID().uuidString)"
+    await RewindDatabase.shared.close()
+    await TranscriptionStorage.shared.invalidateCache()
+    RewindDatabase.currentUserId = testUserId
+    await RewindDatabase.shared.configure(userId: testUserId)
+    try await RewindDatabase.shared.initialize()
+
+    let appSupport = try XCTUnwrap(
+      FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask).first)
+    userDir =
+      appSupport
+      .appendingPathComponent("Omi", isDirectory: true)
+      .appendingPathComponent(testUserId, isDirectory: true)
+  }
+
+  override func tearDown() async throws {
+    await RewindDatabase.shared.close()
+    await TranscriptionStorage.shared.invalidateCache()
+    RewindDatabase.currentUserId = nil
+    if let userDir {
+      try? FileManager.default.removeItem(at: userDir)
+    }
+    try await super.tearDown()
+  }
+
+  func testPositionalAssignmentPersistsThroughSQLiteAndSurvivesReload() async throws {
+    let sessionId = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    for i in 0..<3 {
+      try await TranscriptionStorage.shared.appendSegment(
+        sessionId: sessionId, speaker: i, text: "segment \(i)",
+        startTime: Double(i), endTime: Double(i) + 1)
+    }
+    try await TranscriptionStorage.shared.finishSession(id: sessionId)
+    _ = try await TranscriptionStorage.shared.markSessionCompleted(
+      id: sessionId, backendId: "backend-conv-speaker")
+
+    // The positional #index:N form the wire carries for segments without
+    // backend ids — parsed to fallbackSegmentOrders by the production caller.
+    let updated = try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
+      "backend-conv-speaker",
+      segmentIds: [],
+      fallbackSegmentOrders: [1],
+      isUser: false,
+      personId: "person-dana"
+    )
+    XCTAssertEqual(updated, 1, "exactly the targeted segment row must report as updated")
+
+    // Reload path: close and reopen storage, then read back what a restart sees.
+    await RewindDatabase.shared.close()
+    await TranscriptionStorage.shared.invalidateCache()
+    try await RewindDatabase.shared.initialize()
+
+    let segments = try await TranscriptionStorage.shared.getSegments(sessionId: sessionId)
+    XCTAssertEqual(segments.count, 3)
+    XCTAssertNil(segments[0].personId)
+    XCTAssertEqual(segments[1].personId, "person-dana", "the assignment must survive a storage reload")
+    XCTAssertNil(segments[2].personId)
+  }
+
+  func testAssignmentAgainstUnknownConversationReportsNothingPersisted() async throws {
+    let updated = try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
+      "no-such-conversation",
+      segmentIds: ["seg-a"],
+      fallbackSegmentOrders: [0],
+      isUser: false,
+      personId: "person-dana"
+    )
+    XCTAssertEqual(
+      updated, 0,
+      "no local session means nothing persisted — the caller must surface failure, not success")
+  }
+}

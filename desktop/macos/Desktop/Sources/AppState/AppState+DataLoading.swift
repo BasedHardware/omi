@@ -299,21 +299,32 @@ extension AppState {
       // converges once the session syncs. Failing here surfaced as the
       // "Couldn't assign this speaker" report on Beta.
       log("People: Conversation \(conversationId) not on backend yet; keeping speaker assignment local")
+      // Here the local store is the ONLY holder of the user's decision — if the
+      // write did not land (no matching session, no matching segment, or a
+      // storage error) reporting success would silently drop the assignment.
+      let persisted = await applySpeakerAssignmentLocally(
+        conversationId: conversationId, segmentIds: segmentIds, personId: personId, isUser: isUser)
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "speaker_assignment",
         from: "backend_bulk_assign",
         to: "local_store",
         reason: "conversation_not_synced",
-        outcome: .degraded
+        outcome: persisted ? .degraded : .exhausted
       )
-      await applySpeakerAssignmentLocally(
-        conversationId: conversationId, segmentIds: segmentIds, personId: personId, isUser: isUser)
-      return true
+      if !persisted {
+        log(
+          "People: Conversation \(conversationId) is neither on the backend (\(statusCode)) nor in local storage — assignment failed"
+        )
+      }
+      return persisted
     } catch {
       logError("People: Failed to assign segments", error: error)
       return false
     }
-    await applySpeakerAssignmentLocally(
+    // Backend accepted the change — it owns the assignment now. The local
+    // mirror is best-effort: a conversation recorded on another device has no
+    // local session, and 0 updated rows is expected there.
+    _ = await applySpeakerAssignmentLocally(
       conversationId: conversationId, segmentIds: segmentIds, personId: personId, isUser: isUser)
     return true
   }
@@ -322,12 +333,16 @@ extension AppState {
   /// (so the label is fresh on next open) and the local SQLite cache (so it
   /// survives restarts, and so a not-yet-synced session carries the assignment to
   /// the backend when it finalizes).
+  /// - Returns: whether the SQLite write actually updated at least one segment.
+  ///   False means nothing durable holds the assignment (no local session, no
+  ///   matching segment, or a storage error).
+  @discardableResult
   private func applySpeakerAssignmentLocally(
     conversationId: String,
     segmentIds: [String],
     personId: String?,
     isUser: Bool
-  ) async {
+  ) async -> Bool {
     let targets = SpeakerAssignmentTargets.parse(segmentIds)
     // Update the in-memory conversations list so the label is fresh on next open.
     // A target may be the segment's local id, its backend id, or a positional
@@ -359,13 +374,19 @@ extension AppState {
     // and, for a conversation the backend does not have yet, so the finalization
     // sync can carry person_id/is_user up with the session. Awaited: returning
     // success before the write lands would let a quit drop the user's decision.
-    try? await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
-      conversationId,
-      segmentIds: targets.ids,
-      fallbackSegmentOrders: targets.orders,
-      isUser: isUser,
-      personId: isUser ? nil : personId
-    )
+    do {
+      let updatedRows = try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
+        conversationId,
+        segmentIds: targets.ids,
+        fallbackSegmentOrders: targets.orders,
+        isUser: isUser,
+        personId: isUser ? nil : personId
+      )
+      return updatedRows > 0
+    } catch {
+      logError("People: Failed to persist speaker assignment locally", error: error)
+      return false
+    }
   }
 
   // MARK: - Backend Segment Handling

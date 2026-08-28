@@ -317,13 +317,8 @@ struct ConversationDetailView: View {
           )
           guard success else { return false }
 
-          await persistSpeakerAssignment(
-            conversationId: conversation.id,
-            backendSegmentIds: assignment.backendIds,
-            fallbackSegmentOrders: assignment.fallbackOrders,
-            isUser: isUser,
-            personId: personId
-          )
+          // assignSpeakerToSegments already persisted the assignment (backend
+          // and/or awaited local SQLite) — only the displayed copy needs updating.
           updateDisplayedConversation(segmentIndices: segmentIndices, isUser: isUser, personId: personId)
           return true
         },
@@ -883,26 +878,6 @@ struct ConversationDetailView: View {
       )
     }
     loadedConversation = updatedConversation
-  }
-
-  private func persistSpeakerAssignment(
-    conversationId: String,
-    backendSegmentIds: [String],
-    fallbackSegmentOrders: [Int],
-    isUser: Bool,
-    personId: String?
-  ) async {
-    do {
-      try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
-        conversationId,
-        segmentIds: backendSegmentIds,
-        fallbackSegmentOrders: fallbackSegmentOrders,
-        isUser: isUser,
-        personId: isUser ? nil : personId
-      )
-    } catch {
-      logError("ConversationDetail: Failed to persist speaker assignment locally", error: error)
-    }
   }
 
   // MARK: - Deferred Processing Loader
