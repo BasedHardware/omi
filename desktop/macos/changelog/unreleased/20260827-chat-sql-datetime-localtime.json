@@ -1,3 +1,0 @@
-{
-  "change": "Chat's execute_sql tool now renders timestamp/*At columns in your local time zone instead of unlabeled UTC"
-}
