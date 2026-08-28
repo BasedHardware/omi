@@ -30,7 +30,8 @@ enum SQLQueryResultProjection {
     var truncated = false
 
     for row in rows.prefix(maxRows) {
-      let line = row.map { (_, value) in renderedValue(value) }.joined(separator: " | ")
+      let line = row.map { (columnName, value) in renderedValue(value, columnName: columnName) }
+        .joined(separator: " | ")
       guard characterCount + line.count + 1 <= maxOutputCharacters else {
         truncated = true
         break
@@ -97,7 +98,7 @@ enum SQLQueryResultProjection {
     }
   }
 
-  private nonisolated static func renderedValue(_ databaseValue: DatabaseValue) -> String {
+  private nonisolated static func renderedValue(_ databaseValue: DatabaseValue, columnName: String) -> String {
     let value: String
     switch databaseValue.storage {
     case .null:
@@ -107,11 +108,38 @@ enum SQLQueryResultProjection {
     case .double(let double):
       value = String(double)
     case .string(let string):
-      value = string
+      value = localTimeString(forUTCDatetime: string, columnName: columnName) ?? string
     case .blob(let data):
       value = "<\(data.count) bytes>"
     }
     guard value.count > maxCellCharacters else { return value }
     return String(value.prefix(maxCellCharacters)) + "..."
+  }
+
+  /// GRDB stores `Date` columns as naive UTC text ("yyyy-MM-dd HH:mm:ss.SSS", no zone marker).
+  /// Rendered verbatim, the chat model reads a UTC wall-clock string as if it were already
+  /// local time (see #12321: "7:59:51 PM" shown for a 3:59:51 PM EDT event). Convert
+  /// datetime-shaped columns to the user's local zone with an explicit abbreviation here,
+  /// mechanically, rather than relying on the model to apply the offset itself.
+  private nonisolated static func localTimeString(forUTCDatetime raw: String, columnName: String) -> String? {
+    guard looksLikeDatetimeColumn(columnName) else { return nil }
+    let utcFormatter = DateFormatter()
+    utcFormatter.locale = Locale(identifier: "en_US_POSIX")
+    utcFormatter.timeZone = TimeZone(identifier: "UTC")
+    utcFormatter.dateFormat = raw.contains(".") ? "yyyy-MM-dd HH:mm:ss.SSS" : "yyyy-MM-dd HH:mm:ss"
+    guard let date = utcFormatter.date(from: raw) else { return nil }
+
+    let localFormatter = DateFormatter()
+    localFormatter.locale = Locale(identifier: "en_US_POSIX")
+    localFormatter.timeZone = .current
+    localFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss zzz"
+    return localFormatter.string(from: date)
+  }
+
+  /// Matches `timestamp` and camelCase `*At` columns (`createdAt`, `startedAt`, `completedAt`)
+  /// without catching unrelated names that merely end in the letters "at" (`format`, `chat`).
+  private nonisolated static func looksLikeDatetimeColumn(_ columnName: String) -> Bool {
+    if columnName.caseInsensitiveCompare("timestamp") == .orderedSame { return true }
+    return columnName.range(of: #"[a-z]At$"#, options: .regularExpression) != nil
   }
 }
