@@ -2040,6 +2040,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get memoryDeleted => 'স্মৃতি মুছে ফেলা হয়েছে।';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'পূর্বাবস্থা';
 
   @override
@@ -9907,4 +9910,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'প্রি-রেকর্ডেড';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant এখনও রেকর্ড করছে, তাই এর সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant-এর স্টোরেজ পূর্ণ এবং এটি এখনও রেকর্ডিং মোডে আছে, তাই সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।';
 }

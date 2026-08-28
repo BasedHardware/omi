@@ -2,6 +2,7 @@ import copy
 import hashlib
 import json
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
 
 try:
@@ -23,6 +24,7 @@ from database.firestore_index_registry import (
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
 )
 from database.memory_collections import MemoryCollections
+from database.legal_holds import external_write_fence
 from database import short_term_memories as short_term_db
 from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
@@ -35,6 +37,26 @@ logger = logging.getLogger(__name__)
 
 memories_collection = 'memories'
 users_collection = 'users'
+
+
+def _account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(function)
+    def wrapped(uid: str, *args: Any, **kwargs: Any) -> Any:
+        database = _get_db(kwargs.get("firestore_client"))
+        with external_write_fence(uid, firestore_client=database):
+            return function(uid, *args, **kwargs)
+
+    return wrapped
+
+
+def _destination_account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(function)
+    def wrapped(prev_uid: str, new_uid: str, *args: Any, **kwargs: Any) -> Any:
+        database = _get_db(kwargs.get("firestore_client"))
+        with external_write_fence(new_uid, firestore_client=database):
+            return function(prev_uid, new_uid, *args, **kwargs)
+
+    return wrapped
 
 
 class MemoryDoc(TypedDict, total=False):
@@ -1254,6 +1276,7 @@ def delete_memories_for_conversation(uid: str, memory_id: str, *, firestore_clie
     return result
 
 
+@_account_write_gated
 def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
     """
     Unlock both released legacy rows and canonical product-memory rows.
@@ -1319,6 +1342,7 @@ def get_memories_to_migrate(uid: str, target_level: str, *, firestore_client: An
     return to_migrate
 
 
+@_account_write_gated
 def migrate_memories_level_batch(
     uid: str, memory_ids: List[str], target_level: str, *, firestore_client: Any = None
 ) -> None:
@@ -1358,6 +1382,7 @@ def migrate_memories_level_batch(
     batch.commit()
 
 
+@_destination_account_write_gated
 def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, *, firestore_client: Any = None) -> int:
     """
     Migrate memories from one user to another.

@@ -5,6 +5,7 @@ Tools for accessing user conversations.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
 import contextvars
+import threading
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -23,6 +24,11 @@ from utils.conversations.search import (
     parse_exact_conversation_reference,
 )
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
+from utils.retrieval.tools.conversation_jit import (
+    MAX_JIT_CONVERSATIONS,
+    format_active_jit_conversations,
+    is_jit_conversation_retrieval_enabled,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -82,6 +88,48 @@ def _scoped_conversation_fetch(
 # information to process at once" (#4927). Bound both the count and the raw size of what we return.
 MAX_CONVERSATIONS_FOR_LLM = 100
 MAX_RESULT_CHARS = 60000
+MAX_JIT_SUMMARY_SEARCHES = 4
+_JIT_SEARCH_BUDGET_COUNT_ATTR = '_jit_conversation_summary_search_count'
+_JIT_SEARCH_BUDGET_EXHAUSTED = (
+    'JIT conversation summary search budget exhausted: at most 4 summary searches are allowed per request. '
+    'Use the candidates already returned or hydrate a bounded transcript window for one candidate.'
+)
+_jit_search_budget_lock = threading.Lock()
+
+
+def _consume_jit_summary_search_budget(configurable: Dict[str, Any]) -> Optional[str]:
+    """Atomically reserve one of the request's four JIT summary searches.
+
+    AgentSafetyGuard is already request-scoped and survives LangChain's shallow
+    config copies. Missing or malformed request state fails closed so alternate
+    callers and concurrent tool dispatch cannot silently bypass the bound.
+    """
+    with _jit_search_budget_lock:
+        safety_guard = configurable.get('safety_guard')
+        if safety_guard is None:
+            return _JIT_SEARCH_BUDGET_EXHAUSTED
+        current = getattr(safety_guard, _JIT_SEARCH_BUDGET_COUNT_ATTR, 0)
+        if type(current) is not int or current < 0 or current > MAX_JIT_SUMMARY_SEARCHES:
+            return _JIT_SEARCH_BUDGET_EXHAUSTED
+        if current >= MAX_JIT_SUMMARY_SEARCHES:
+            return _JIT_SEARCH_BUDGET_EXHAUSTED
+        try:
+            setattr(safety_guard, _JIT_SEARCH_BUDGET_COUNT_ATTR, current + 1)
+        except (AttributeError, TypeError):
+            return _JIT_SEARCH_BUDGET_EXHAUSTED
+    return None
+
+
+def _parse_exact_search_reference(query: str, *, jit_enabled: bool) -> Optional[str]:
+    """Keep owner-scoped card refs additive to the gated JIT retrieval path.
+
+    Bare UUIDs and released share URLs remain exact references regardless of the
+    JIT gate. ``conversation:<id>`` is emitted by JIT cards, so gate-off requests
+    must continue treating that shape as an ordinary semantic-search query.
+    """
+    if not jit_enabled and query.startswith('conversation:'):
+        return None
+    return parse_exact_conversation_reference(query)
 
 
 def _cap_conversations_for_llm(conversations: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int, bool]:
@@ -157,7 +205,6 @@ def get_conversations_tool(
         max_transcript_segments: Limit transcript segments per conversation (default: 0=none, suggest 10-50, max: 1000, -1=full transcript)
         include_transcript: Include full transcript (default: True)
         include_timestamps: Add timestamps to transcript segments (default: False)
-
     Returns:
         Formatted string with conversations including transcripts, summaries, action items, events, and attendees.
     """
@@ -195,6 +242,7 @@ def get_conversations_tool(
         logger.info(f"❌ get_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     logger.info(f"✅ get_conversations_tool - uid: {uid}")
+    jit_enabled = is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable))
 
     scope = chat_scope_from_config(configurable)
     start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
@@ -230,8 +278,15 @@ def get_conversations_tool(
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
-    # Limit to reasonable max
-    limit = min(limit, 5000)
+    # JIT renders at most MAX_JIT_CONVERSATIONS, so do not read rows that can never
+    # reach the result. The legacy path intentionally retains its existing limit.
+    limit = min(limit, MAX_JIT_CONVERSATIONS if jit_enabled else 5000)
+
+    if jit_enabled:
+        budget_error = _consume_jit_summary_search_budget(cast(Dict[str, Any], configurable))
+        if budget_error:
+            logger.warning("get_conversations_tool rejected by JIT summary-search budget")
+            return budget_error
 
     # Parse statuses if provided
     status_list: List[str] = []
@@ -292,6 +347,14 @@ def get_conversations_tool(
         msg = f"No conversations found{date_info}. The user may not have recorded any conversations yet, or the date range may be outside their conversation history."
         logger.info(f"⚠️ get_conversations_tool - {msg}")
         return msg
+
+    if jit_enabled:
+        logger.info("🔧 get_conversations_tool - using explicitly enabled JIT retrieval contract")
+        return format_active_jit_conversations(
+            conversations_data,
+            configurable=cast(Dict[str, Any], configurable),
+            max_transcript_segments=max_transcript_segments if include_transcript else 0,
+        )
 
     try:
         # Only load people if transcripts will be included (people are used for speaker names in transcripts)
@@ -425,17 +488,11 @@ def search_conversations_tool(
         max_transcript_segments: Limit transcript segments (default: 0=none, suggest 20-50 for normal use, max: 1000)
         include_transcript: Include full transcript (default: True)
         include_timestamps: Add timestamps to transcript segments (default: False)
-
     Returns:
         Formatted string with matching conversations, including transcripts, summaries, action items, events, and
         metadata.
     """
-    exact_conversation_id = parse_exact_conversation_reference(query)
-    logger.info(
-        "🔧 search_conversations_tool mode=%s query_len=%s",
-        'exact-reference' if exact_conversation_id else 'semantic',
-        len(query or ''),
-    )
+    logger.info("🔧 search_conversations_tool query_len=%s", len(query or ''))
 
     # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
@@ -459,11 +516,12 @@ def search_conversations_tool(
         logger.info(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     logger.info(
-        "✅ search_conversations_tool - uid=%s query_mode=%s limit=%s",
+        "✅ search_conversations_tool - uid=%s limit=%s",
         uid,
-        'exact-reference' if exact_conversation_id else 'semantic',
         limit,
     )
+    jit_enabled = is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable))
+    exact_conversation_id = _parse_exact_search_reference(query, jit_enabled=jit_enabled)
 
     scope = chat_scope_from_config(configurable)
     start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
@@ -510,6 +568,13 @@ def search_conversations_tool(
     if scoped_id and exact_conversation_id and exact_conversation_id != str(scoped_id):
         return f"Error: Chat is scoped to conversation {scoped_id}; " f"cannot load a different conversation reference."
 
+    if jit_enabled and not exact_conversation_id and not scoped_id:
+        budget_error = _consume_jit_summary_search_budget(cast(Dict[str, Any], configurable))
+        if budget_error:
+            logger.warning("search_conversations_tool rejected by JIT summary-search budget")
+            return budget_error
+
+    conversations_data: List[Dict[str, Any]] = []
     try:
         keyword_ids: List[str] = []
         vector_ids: List[str] = []
@@ -543,29 +608,34 @@ def search_conversations_tool(
             )
             vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
             conversation_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
+
+        if jit_enabled:
+            conversation_ids = conversation_ids[:MAX_JIT_CONVERSATIONS]
+
+        logger.info(
+            "📊 search_conversations_tool - found %s results (%s keyword, %s vector) query_mode=%s",
+            len(conversation_ids),
+            len(keyword_ids),
+            len(vector_ids),
+            'exact-reference' if exact_conversation_id else 'semantic',
+        )
+
+        if not conversation_ids:
+            date_info = ""
+            if starts_at and ends_at:
+                date_info = f" in the specified date range"
+            elif starts_at:
+                date_info = f" after the specified start date"
+            elif ends_at:
+                date_info = f" before the specified end date"
+            msg = f"No conversations found matching the concept '{query}'{date_info}. The user may not have discussed this topic yet, or it may not be in their recorded conversation history."
             logger.info(
-                "📊 search_conversations_tool - found %s results (%s keyword, %s vector) query_mode=%s",
-                len(conversation_ids),
-                len(keyword_ids),
-                len(vector_ids),
+                "⚠️ search_conversations_tool - no results query_mode=%s",
                 'exact-reference' if exact_conversation_id else 'semantic',
             )
-            if not conversation_ids:
-                date_info = ""
-                if starts_at and ends_at:
-                    date_info = f" in the specified date range"
-                elif starts_at:
-                    date_info = f" after the specified start date"
-                elif ends_at:
-                    date_info = f" before the specified end date"
+            return msg
 
-                msg = f"No conversations found matching the concept '{query}'{date_info}. The user may not have discussed this topic yet, or it may not be in their recorded conversation history."
-                logger.info(
-                    "⚠️ search_conversations_tool - no results query_mode=%s",
-                    'exact-reference' if exact_conversation_id else 'semantic',
-                )
-                return msg
-
+        if not scoped_id and not exact_conversation_id:
             conversations_data = conversations_db.get_conversations_by_id(uid, conversation_ids)
             if not conversations_data:
                 return f"No conversations found matching query: '{query}'"
@@ -581,6 +651,15 @@ def search_conversations_tool(
                 return f"No conversations found matching query: '{query}'"
 
         logger.info(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
+
+        if jit_enabled:
+            logger.info("🔧 search_conversations_tool - using explicitly enabled JIT retrieval contract")
+            return format_active_jit_conversations(
+                conversations_data,
+                configurable=cast(Dict[str, Any], configurable),
+                query=None if exact_conversation_id else query,
+                max_transcript_segments=max_transcript_segments if include_transcript else 0,
+            )
 
         # Only load people if transcripts will be included
         people: List[Person] = []

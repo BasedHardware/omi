@@ -6,15 +6,19 @@ import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
+from functools import wraps
+from typing import Any, Callable, Dict, List, Optional, TypedDict, TypeVar, cast
 
 from pinecone import Pinecone
 
 from database import projection_repair
+from database._client import db as default_db_client
+from database.legal_holds import external_write_fence
 from database.memory_vector_metadata import (
     build_archive_memory_vector_filter,
     build_canonical_memory_vector_delete_filter,
     build_default_memory_vector_filter,
+    build_ledger_memory_vector_filter,
     build_memory_vector_metadata,
     canonical_memory_provider_id,
     parse_memory_search_vector_hit,
@@ -26,6 +30,27 @@ from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
 
 logger = logging.getLogger(__name__)
+
+R = TypeVar("R")
+
+
+def _account_external_data_write(func: Callable[..., R]) -> Callable[..., R]:
+    """Linearize provider mutations against explicit/account deletion."""
+
+    @wraps(func)
+    def wrapped(account: Any, *args: Any, **kwargs: Any) -> R:
+        # With no provider configured there is no external mutation to fence.
+        # Let the function's established fail-open return contract run without
+        # touching Firestore (important for offline/local deployments).
+        if index is None:
+            return func(account, *args, **kwargs)
+        uid = account.uid if isinstance(account, MemoryItem) else account
+        if not isinstance(uid, str) or not uid:
+            raise ValueError("provider mutation requires an account identity")
+        with external_write_fence(uid, firestore_client=default_db_client):
+            return func(account, *args, **kwargs)
+
+    return wrapped
 
 
 # ---------------------------------------------------------------------------
@@ -115,11 +140,15 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]) -> VectorReco
     }
 
 
+@_account_external_data_write
 def upsert_vector(uid: str, conversation_id: str, vector: List[float]) -> None:
+    if index is None:
+        return
     res = index.upsert(vectors=[_get_data(uid, conversation_id, vector)], namespace="ns1")
     logger.info(f'upsert_vector {res}')
 
 
+@_account_external_data_write
 def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> None:
     if index is None:
         return
@@ -130,6 +159,7 @@ def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata
     logger.info(f'upsert_vector {res}')
 
 
+@_account_external_data_write
 def update_vector_metadata(uid: str, conversation_id: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
     if index is None:
         return {}
@@ -139,7 +169,10 @@ def update_vector_metadata(uid: str, conversation_id: str, metadata: Dict[str, A
     return result
 
 
+@_account_external_data_write
 def upsert_vectors(uid: str, vectors: List[List[float]], conversation_ids: List[str]) -> None:
+    if index is None:
+        return
     data: List[VectorRecordDoc] = [_get_data(uid, cid, vector) for cid, vector in zip(conversation_ids, vectors)]
     res = index.upsert(vectors=data, namespace="ns1")
     logger.info(f'upsert_vectors {res}')
@@ -282,6 +315,7 @@ WORKSTREAM_ASSOCIATION_NAMESPACE = "workstream-association-v1"
 WORKSTREAM_ASSOCIATION_SCHEMA_VERSION = 1
 
 
+@_account_external_data_write
 def upsert_workstream_association_vector(
     uid: str,
     workstream_id: str,
@@ -389,6 +423,7 @@ class VectorCandidateQueryResult:
     rejected_count: int = 0
 
 
+@_account_external_data_write
 def upsert_memory_vector(
     uid: str,
     memory_id: str,
@@ -431,6 +466,7 @@ def upsert_memory_vector(
     return vector
 
 
+@_account_external_data_write
 def upsert_memory_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
     """
     Upsert many memory embeddings to Pinecone in a single request.
@@ -553,6 +589,7 @@ def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str
     return [match['metadata'].get('memory_id') for match in matches]
 
 
+@_account_external_data_write
 def upsert_canonical_memory_vector(
     item: MemoryItem,
     *,
@@ -615,22 +652,31 @@ def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> b
 
 
 def query_memory_vector_candidates(
-    uid: str, query: str, *, mode: SearchMode = SearchMode.default, limit: int = 10
+    uid: str,
+    query: str,
+    *,
+    mode: SearchMode = SearchMode.default,
+    limit: int = 10,
+    ledger_kinds: Optional[List[str]] = None,
 ) -> VectorCandidateQueryResult:
     """Query ns2 for canonical neutral-metadata memory vector candidates."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping canonical memory vector candidate search')
         return VectorCandidateQueryResult()
 
+    bounded_limit = max(1, min(int(limit or 10), 60))
     vector = embeddings.embed_query(query)
-    filter_data = (
-        build_archive_memory_vector_filter(uid)
-        if mode == SearchMode.archive_explicit
-        else build_default_memory_vector_filter(uid)
-    )
+    if ledger_kinds is not None and mode == SearchMode.default:
+        filter_data = build_ledger_memory_vector_filter(uid, ledger_kinds)
+    else:
+        filter_data = (
+            build_archive_memory_vector_filter(uid)
+            if mode == SearchMode.archive_explicit
+            else build_default_memory_vector_filter(uid)
+        )
     response = index.query(
         vector=vector,
-        top_k=limit,
+        top_k=bounded_limit,
         include_metadata=True,
         include_values=False,
         filter=filter_data,
@@ -719,6 +765,7 @@ def process_projection_repair_queue(
 X_POSTS_NAMESPACE = "ns_x"
 
 
+@_account_external_data_write
 def upsert_x_post_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
     """Upsert X post embeddings in one request. Each item: {'post_id', 'content', 'kind'}.
     Returns the number of vectors written (0 if Pinecone is not configured)."""
@@ -777,6 +824,7 @@ def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[Dict[s
 SCREEN_ACTIVITY_NAMESPACE = "ns3"
 
 
+@_account_external_data_write
 def upsert_screen_activity_vectors(uid: str, rows: List[Dict[str, Any]]) -> int:
     """Batch upsert screenshot embeddings to Pinecone ns3."""
     if index is None:
@@ -882,6 +930,7 @@ def delete_screen_activity_vectors(uid: str, ids: List[str]) -> None:
 ACTION_ITEMS_NAMESPACE = "ns4"
 
 
+@_account_external_data_write
 def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -> List[float] | None:
     """Index one action item for semantic search.
 
@@ -917,6 +966,7 @@ def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -
         return None
 
 
+@_account_external_data_write
 def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
     """Index a batch of action items. Best-effort, for the same reason as
     ``upsert_action_item_vector``: returns 0 instead of raising into a caller
@@ -1125,6 +1175,7 @@ def delete_memory_vectors_batch(uid: str, memory_ids: List[str]) -> int:
 TRANSCRIPT_CHUNKS_NAMESPACE = "ns_tchunks"
 
 
+@_account_external_data_write
 def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List[Dict[str, Any]]) -> int:
     """chunks: [{'text': str, 'created_at': int unix ts, 'chunk_index': int}]"""
     if index is None:

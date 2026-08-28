@@ -3267,5 +3267,7 @@
     "appReEnableFailedBody": "Bu uygulama yeniden etkinleştirilemedi. Lütfen tekrar deneyin.",
     "appDisabledOn": "{date} tarihinde devre dışı bırakıldı.",
     "appDisabledLastError": "Son hata: {error}.",
-    "prerecordedTranscript": "Önceden kaydedilmiş"
+    "prerecordedTranscript": "Önceden kaydedilmiş",
+    "pendantRecordingSyncBlocked": "Pendant hâlâ kayıt yapıyor, bu yüzden depolanan ses aktarılamıyor. Kaydı durdurmak için Pendant'ın düğmesine basın, ardından yeniden senkronize edin.",
+    "pendantFullSyncBlocked": "Pendant'ın depolama alanı dolu ve hâlâ kayıt modunda olduğu için kayıtlı ses aktarılamıyor. Kaydı durdurmak için Pendant'ın düğmesine basın, ardından yeniden senkronize edin."
 }

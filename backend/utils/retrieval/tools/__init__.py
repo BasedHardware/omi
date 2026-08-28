@@ -50,6 +50,7 @@ from .screen_activity_tools import (
     get_screen_activity_tool,
     search_screen_activity_tool,
 )
+from .frame_request_tools import frame_request_runtime_config, look_at_frame_tool
 from .preference_tools import (
     save_user_preference_tool,
 )
@@ -58,6 +59,14 @@ from .web_tools import (
 )
 from .graph_tools import (
     traverse_knowledge_graph_tool,
+)
+from .entity_timeline_tools import (
+    get_entity_timeline_tool,
+)
+from .knowledge_ledger_tools import (
+    read_playbook,
+    search_knowledge,
+    search_historical_facts,
 )
 
 __all__ = [
@@ -84,7 +93,13 @@ __all__ = [
     'create_chart_tool',
     'get_screen_activity_tool',
     'search_screen_activity_tool',
+    'look_at_frame_tool',
+    'frame_request_runtime_config',
     'save_user_preference_tool',
     'fetch_url_tool',
     'traverse_knowledge_graph_tool',
+    'get_entity_timeline_tool',
+    'search_knowledge',
+    'read_playbook',
+    'search_historical_facts',
 ]

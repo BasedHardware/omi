@@ -2047,6 +2047,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get memoryDeleted => 'Spomienka bola odstránená.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Vrátiť späť';
 
   @override
@@ -9895,4 +9898,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Prednahraté';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant stále nahráva, takže uložený zvuk nie je možné preniesť. Stlačením tlačidla na Pendante zastavte nahrávanie a potom synchronizujte znova.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Úložisko Pendantu je plné a stále je v režime nahrávania, takže uložený zvuk nemožno preniesť. Stlačením tlačidla na Pendante zastavte nahrávanie a potom znova synchronizujte.';
 }

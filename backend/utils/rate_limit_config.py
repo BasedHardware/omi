@@ -73,6 +73,16 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "stt:transcribe": (60, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
+    # JIT frame metadata is cheap, but uploads carry bounded pixel bytes.
+    "frame_requests:read": (120, 3600),
+    "frame_requests:write": (120, 3600),
+    "frame_requests:upload": (30, 3600),
+    # The desktop screen-activity sync loop runs once per ~60s per device
+    # (~60/hour each). It must NOT share a bucket with interactive reads:
+    # a user with two Macs would saturate a 120/hour bucket from background
+    # sync alone and 429 their conversation photo loads. Sized for several
+    # devices plus reconnect bursts.
+    "screen_activity:sync": (600, 3600),
     # Platform tools — backend RAG endpoints
     "tools:search": (60, 3600),
     "tools:mutate": (60, 3600),

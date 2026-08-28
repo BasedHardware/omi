@@ -48,12 +48,10 @@ _byok_mod = ModuleType("utils.byok")
 _byok_mod.get_byok_key = MagicMock(return_value=None)
 _byok_mod.get_byok_keys = MagicMock(return_value={})
 _byok_mod.get_byok_llm_provider = MagicMock(return_value=None)
-_byok_mod.has_byok_keys = MagicMock(return_value=False)
-_byok_mod.has_validated_byok_keys = MagicMock(return_value=False)
-# utils.subscription imports these two at module scope; without them the fresh load of
-# utils.subscription fails at import rather than running any assertion here.
 _byok_mod.get_byok_uid = MagicMock(return_value=None)
 _byok_mod.get_cached_byok_state = MagicMock(return_value={})
+_byok_mod.has_byok_keys = MagicMock(return_value=False)
+_byok_mod.has_validated_byok_keys = MagicMock(return_value=False)
 
 # Loaded fresh by the autouse module fixture; reloaded per-test to pick up env changes.
 _sub_mod_ref = None

@@ -175,6 +175,12 @@ class StrictFirestore:
     def collection(self, name: str) -> StrictFirestoreCollection:
         return StrictFirestoreCollection(self, (name,))
 
+    def document(self, path: str) -> StrictFirestoreDocument:
+        segments = tuple(segment for segment in path.split('/') if segment)
+        if len(segments) < 2 or len(segments) % 2 != 0:
+            raise ValueError('Firestore document paths require an even number of non-empty segments')
+        return StrictFirestoreDocument(self, segments)
+
     def transaction(self) -> StrictFirestoreTransaction:
         transaction = StrictFirestoreTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
         self.transactions.append(transaction)

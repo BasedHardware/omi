@@ -139,6 +139,22 @@ the universal authoritative reader before return. Restricted, archived,
 superseded, and tombstoned items remain excluded even while provider cleanup
 lags.
 
+User review preserves that same append-only boundary. Restoring a superseded
+`knowledge_ledger.v1` fact does not reopen or mutate its historical row. The
+authenticated memories API follows the selected fact's bounded successor chain
+to the current fact, then appends a fresh replacement with retry-stable explicit
+user evidence. Malformed, cross-identity, restricted, locked, or no-longer-current
+chains fail closed.
+
+A standalone closed `knowledge_ledger.v1` fact has no successor chain, but an
+explicit user reopen may append one fresh current tail through the same apply
+boundary. The source row remains closed and immutable. The transaction fences
+owner, account/source generations, source revision/content hash, lifecycle,
+source/evidence privacy state, sensitivity, lock, and rejection state before
+staging content or preserved evidence. A source-keyed reopen receipt makes a
+different concurrent request fail closed, while the operation journal and
+deterministic row identity make the same request UUID an exact retry/readback.
+
 `projection_sync` and `vector_sync` outbox events are the retry authority.
 Restricted items are delete-only. `memory_graph_assertions/{memory_id}` is the
 graph authority; retained historical graph data is a bounded read overlay and

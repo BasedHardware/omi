@@ -69,6 +69,17 @@ extension DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "rating_prompt_seed",
+      summary: "Run the history seed now (same call as app launch)"
+    ) { _ in
+      await RatingPromptManager.shared.seedFromHistoryIfNeeded()
+      return await MainActor.run {
+        let m = RatingPromptManager.shared
+        return ["question_count": "\(m.questionCount)", "visible": m.isVisible ? "true" : "false"]
+      }
+    }
+
+    register(
       name: "rating_prompt_reset",
       summary: "Reset persisted rating-prompt state so the trigger can be exercised again"
     ) { _ in

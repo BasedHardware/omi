@@ -37,6 +37,10 @@ run_hermetic() {
   fi
   python3 scripts/validate-backend-runtime-env.py --env dev --check-workflows
   python3 scripts/validate-backend-runtime-env.py --env prod --check-workflows
+  python3 scripts/validate_frame_request_bucket_contract.py \
+    --source-only \
+    --runtime-env deploy/runtime_env.yaml \
+    --contract deploy/frame-request-bucket-contract.json
   python3 ../.github/scripts/check_backend_deploy_source_admission.py
   python3 ../.github/scripts/test_check_backend_deploy_source_admission.py
   python3 scripts/check_mcp_oauth_deploy_contract.py

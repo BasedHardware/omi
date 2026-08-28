@@ -35,6 +35,42 @@ final class RatingPromptManager: ObservableObject {
   private let defaults = UserDefaults.standard
   private var flagObserver: NSObjectProtocol?
   private var flagPollTask: Task<Void, Never>?
+  private var migratedOwners = Set<String>()
+
+  /// Injectable for tests; production scopes all prompt state to the signed-in
+  /// account so a switch never inherits another account's answers (#9821 class).
+  var ownerProvider: () -> String = { RuntimeOwnerIdentity.currentOwnerId() ?? "anonymous" }
+
+  private func scopedKey(_ field: String) -> ScopedDefaultsKey {
+    let owner = ownerProvider()
+    if !migratedOwners.contains(owner) {
+      migratedOwners.insert(owner)
+      migrateLegacyGlobalState(to: owner)
+    }
+    return .ratingPrompt(field, ownerID: owner)
+  }
+
+  /// The first shipped build stored this state device-globally; the account
+  /// signed in when the scoped build first runs inherits it (correct for the
+  /// overwhelmingly common single-account Mac, and prevents re-prompting
+  /// users who already answered), then the global keys are removed.
+  private func migrateLegacyGlobalState(to owner: String) {
+    let legacy: [(DefaultsKey, String)] = [
+      (.ratingPromptQuestionCount, "questionCount"),
+      (.ratingPromptSubmittedRating, "submittedRating"),
+      (.ratingPromptDismissed, "dismissed"),
+      (.ratingPromptHistorySeeded, "historySeeded"),
+    ]
+    for (globalKey, field) in legacy {
+      if let value = defaults.object(forKey: globalKey.rawValue) {
+        let scoped = ScopedDefaultsKey.ratingPrompt(field, ownerID: owner)
+        if defaults.object(forKey: scoped) == nil {
+          defaults.set(value, forKey: scoped)
+        }
+        defaults.removeObject(forKey: globalKey.rawValue)
+      }
+    }
+  }
 
   /// Injectable for tests; production reads the preloaded PostHog flag.
   var remoteDisableCheck: () -> Bool = {
@@ -42,7 +78,19 @@ final class RatingPromptManager: ObservableObject {
   }
 
   private init() {
+    historyFetch = { owner in
+      try await APIClient.shared.getMessages(
+        limit: 100, expectedOwnerId: owner == "anonymous" ? nil : owner)
+    }
     refresh()
+    // Sign-out is an owner transition too: hide immediately, not at the next
+    // question. Sign-IN transitions arrive via the owner-keyed task in
+    // DesktopHomeView calling ownerDidChange().
+    NotificationCenter.default.addObserver(
+      forName: .userDidSignOut, object: nil, queue: nil
+    ) { _ in
+      Task { @MainActor in RatingPromptManager.shared.ownerDidChange() }
+    }
     // The kill switch must not wait for the next question: recompute whenever
     // PostHog delivers a flag payload (initial preload can finish AFTER this
     // singleton initializes, and reloads deliver mid-session flips).
@@ -58,21 +106,33 @@ final class RatingPromptManager: ObservableObject {
     refresh()
   }
 
+  /// The signed-in owner changed (switch, sign-in, sign-out): recompute all
+  /// cached state for the NEW owner's keys immediately — cached isVisible /
+  /// thank-you from the previous account must never survive a switch.
+  func ownerDidChange() {
+    thankYouRating = nil
+    refresh()
+  }
+
   var questionCount: Int {
-    defaults.integer(forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+    defaults.object(forKey: scopedKey("questionCount")) as? Int ?? 0
   }
 
   var submittedRating: Int {
-    defaults.integer(forKey: DefaultsKey.ratingPromptSubmittedRating.rawValue)
+    defaults.object(forKey: scopedKey("submittedRating")) as? Int ?? 0
   }
 
   var isDismissed: Bool {
-    defaults.bool(forKey: DefaultsKey.ratingPromptDismissed.rawValue)
+    defaults.object(forKey: scopedKey("dismissed")) as? Bool ?? false
   }
 
   func recordQuestionAsked() {
-    defaults.set(questionCount + 1, forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
+    defaults.set(questionCount + 1, forKey: scopedKey("questionCount"))
     refresh()
+    // Remote prompts share the same accepted-question seam: only sends the
+    // chat provider accepted reach here, so both counters agree by
+    // construction.
+    RemotePromptEngine.shared.recordQuestionAsked()
   }
 
   /// Rating just submitted this session — drives the thank-you state. 4-5
@@ -81,7 +141,7 @@ final class RatingPromptManager: ObservableObject {
 
   func submit(rating: Int) {
     let clamped = min(max(rating, 1), 5)
-    defaults.set(clamped, forKey: DefaultsKey.ratingPromptSubmittedRating.rawValue)
+    defaults.set(clamped, forKey: scopedKey("submittedRating"))
     AnalyticsManager.shared.desktopRatingSubmitted(rating: clamped)
     thankYouRating = clamped
     refresh()
@@ -95,15 +155,72 @@ final class RatingPromptManager: ObservableObject {
 
   func closeThankYou() {
     thankYouRating = nil
+    RemotePromptEngine.shared.builtInAskChanged()
   }
 
   func referFriend() {
     thankYouRating = nil
     NotificationCenter.default.post(name: .openReferralSheet, object: nil)
+    RemotePromptEngine.shared.builtInAskChanged()
   }
 
   func dismiss() {
-    defaults.set(true, forKey: DefaultsKey.ratingPromptDismissed.rawValue)
+    defaults.set(true, forKey: scopedKey("dismissed"))
+    refresh()
+  }
+
+  /// Users who already asked 3+ questions before this build ship must see
+  /// the ask on their NEXT LAUNCH, not after three more questions: a one-shot
+  /// seed of the counter from server chat history. Fetch failure leaves the
+  /// marker unset so the next launch retries.
+  /// Injectable for tests; production asks the backend for the owner's own
+  /// messages, owner-asserted end to end (expectedOwnerId). Assigned in init
+  /// (APIClient is actor-isolated, so it cannot be a property default).
+  var historyFetch: (String) async throws -> [ChatMessageDB]
+  /// Injectable for tests; production reads the real auth state.
+  var isSignedInCheck: () -> Bool = { AuthState.shared.isSignedIn }
+
+  func seedFromHistoryIfNeeded() async {
+    // Owner-fenced: the seed reads and WRITES the account that started it.
+    // The fetch carries expectedOwnerId, and if the signed-in owner changed
+    // while the request was in flight the result is discarded — account B
+    // must never be seeded from account A's history.
+    let owner = ownerProvider()
+    guard !(defaults.object(forKey: scopedKey("historySeeded")) as? Bool ?? false) else { return }
+    guard submittedRating == 0, !isDismissed,
+      questionCount < RatingPromptPolicy.questionThreshold
+    else {
+      defaults.set(true, forKey: scopedKey("historySeeded"))
+      return
+    }
+    // Launch timing: auth/session may not be ready at first .task — retry a
+    // few times before deferring to the next launch (marker stays unset).
+    var history: [ChatMessageDB] = []
+    var fetched = false
+    for attempt in 1...5 {
+      guard ownerProvider() == owner, !Task.isCancelled else { return }
+      if isSignedInCheck(),
+        let result = try? await historyFetch(owner)
+      {
+        history = result
+        fetched = true
+        break
+      }
+      log("RatingPrompt: history seed attempt \(attempt) not ready, retrying")
+      try? await Task.sleep(nanoseconds: 15_000_000_000)
+    }
+    guard fetched, ownerProvider() == owner, !Task.isCancelled else { return }
+    let asked = history.filter { $0.sender == "human" }.count
+    log("RatingPrompt: history seed fetched \(history.count) messages, \(asked) questions")
+    if asked >= RatingPromptPolicy.questionThreshold {
+      // Merge, never decrease: questions asked live while the history fetch
+      // was in flight already advanced the persisted count past the seed
+      // value, and the seed must not roll that back.
+      defaults.set(
+        max(questionCount, RatingPromptPolicy.questionThreshold),
+        forKey: scopedKey("questionCount"))
+    }
+    defaults.set(true, forKey: scopedKey("historySeeded"))
     refresh()
   }
 
@@ -111,10 +228,12 @@ final class RatingPromptManager: ObservableObject {
   /// path can be exercised repeatedly on a dev bundle.
   func resetForTesting() {
     thankYouRating = nil
-    defaults.removeObject(forKey: DefaultsKey.ratingPromptQuestionCount.rawValue)
-    defaults.removeObject(forKey: DefaultsKey.ratingPromptSubmittedRating.rawValue)
-    defaults.removeObject(forKey: DefaultsKey.ratingPromptDismissed.rawValue)
+    for field in ["historySeeded", "questionCount", "submittedRating", "dismissed"] {
+      defaults.removeObject(forKey: scopedKey(field))
+    }
     refresh()
+    // Allow migration to be exercised again after a test reset.
+    migratedOwners.removeAll()
   }
 
   var isRemotelyDisabled: Bool {
@@ -127,6 +246,12 @@ final class RatingPromptManager: ObservableObject {
       submittedRating: submittedRating,
       dismissed: isDismissed,
       remotelyDisabled: isRemotelyDisabled)
+    // Deferred: refresh() runs inside this singleton's own `static let`
+    // initialization, and RemotePromptEngine.builtInAskChanged() reads
+    // RatingPromptManager.shared back — a synchronous call would re-enter the
+    // still-initializing static let (startup deadlock). The async hop runs
+    // after init completes.
+    Task { @MainActor in RemotePromptEngine.shared.builtInAskChanged() }
     // While the prompt is on screen, poll for a remote disable so an active
     // kill switch takes effect within minutes, not at the next app launch.
     if isVisible, flagPollTask == nil {

@@ -3210,5 +3210,7 @@
     "appReEnableFailedBody": "No s'ha pogut reactivar aquesta app. Torna-ho a provar.",
     "appDisabledOn": "Desactivada el {date}.",
     "appDisabledLastError": "Últim error: {error}.",
-    "prerecordedTranscript": "Pregravat"
+    "prerecordedTranscript": "Pregravat",
+    "pendantRecordingSyncBlocked": "El Pendant encara està gravant, així que el seu àudio emmagatzemat no es pot transferir. Prem el botó del Pendant per aturar la gravació i torna a sincronitzar.",
+    "pendantFullSyncBlocked": "L'emmagatzematge del Pendant és ple i encara està en mode de gravació, així que l'àudio desat no es pot transferir. Prem el botó del Pendant per aturar la gravació i torna a sincronitzar."
 }
