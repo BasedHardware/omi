@@ -200,7 +200,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     let hubPill = TopNavigationRoutes.primaryItems.first {
       $0.index == SidebarNavItem.conversations.rawValue
     }
-    XCTAssertEqual(hubPill?.title, "Brain")
+    XCTAssertEqual(hubPill?.title, "Memories")
     XCTAssertNotEqual(
       hubPill?.icon, "clock.arrow.circlepath",
       "the Brain pill must not wear Rewind's section glyph")
