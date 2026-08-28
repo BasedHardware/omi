@@ -28,10 +28,31 @@ final class FormAssistGateTests: XCTestCase {
       FormAssistGate.decide(fields: [field("Search")], hasSubmitButton: true), .notAForm)
   }
 
-  /// A password box means sign-in or sign-up, and Omi has nothing to paste there.
-  func testCredentialFormIsRefusedEvenWhenItLooksLikeAForm() {
+  /// A sign-up box is a password field plus an email box and nothing else worth filling.
+  func testCredentialFormIsRefused() {
     let decision = FormAssistGate.decide(
       fields: [field("Email"), field("Password", secure: true), field("Confirm password", secure: true)],
+      hasSubmitButton: true
+    )
+    XCTAssertEqual(decision, .credentialForm)
+  }
+
+  /// But a job application that ends in "create a password" is still an application. The
+  /// password field is never offered; it just stops disqualifying everything around it.
+  func testApplicationWithAPasswordFieldStaysEligible() {
+    let decision = FormAssistGate.decide(
+      fields: [
+        field("Full name"), field("University"), field("Current employer"),
+        field("Password", secure: true),
+      ],
+      hasSubmitButton: true
+    )
+    XCTAssertEqual(decision, .eligible)
+  }
+
+  func testSecureFieldsNeverCountTowardEligibility() {
+    let decision = FormAssistGate.decide(
+      fields: [field("Email"), field("Password", secure: true), field("PIN", secure: true)],
       hasSubmitButton: true
     )
     XCTAssertEqual(decision, .credentialForm)
@@ -55,7 +76,8 @@ final class FormSnapshotFingerprintTests: XCTestCase {
       windowTitle: title,
       fields: labels.map { FormField(label: $0, isEmpty: true, isSecure: false) },
       hasSubmitButton: true,
-      windowFrame: nil
+      windowFrame: nil,
+      windowID: nil
     )
   }
 
@@ -69,7 +91,17 @@ final class FormSnapshotFingerprintTests: XCTestCase {
   func testADifferentFormIsADifferentIdentity() {
     XCTAssertNotEqual(
       snapshot(labels: ["Email", "First name"]).fingerprint,
-      snapshot(title: "Apply — step 2", labels: ["Email", "First name"]).fingerprint
+      snapshot(labels: ["Email", "First name", "Cover letter"]).fingerprint
+    )
+  }
+
+  /// A page reports its title after it reports its fields. Folding the title in made the
+  /// same form look like two, and the card was torn down and rebuilt a second after the
+  /// user first saw it.
+  func testTitleArrivingLateDoesNotChangeIdentity() {
+    XCTAssertEqual(
+      snapshot(title: "", labels: ["Email", "First name"]).fingerprint,
+      snapshot(title: "Apply — Acme", labels: ["Email", "First name"]).fingerprint
     )
   }
 }
@@ -117,6 +149,37 @@ final class FormAssistFillPolicyTests: XCTestCase {
       limit: 2
     )
     XCTAssertEqual(fills.count, 2)
+  }
+}
+
+/// How much of the user's memory reaches the model, and in what order.
+final class FormAssistRecallSelectionTests: XCTestCase {
+  func testKeywordMatchesComeFirstAndDuplicatesCollapse() {
+    let selected = FormAssistRecall.selected(
+      matched: ["Works at Datasaur", "Works at Datasaur"],
+      recent: ["Likes coffee", "Works at Datasaur"]
+    )
+    XCTAssertEqual(selected, ["Works at Datasaur", "Likes coffee"])
+  }
+
+  func testStopsAtTheCharacterBudget() {
+    let long = String(repeating: "x", count: 60)
+    let selected = FormAssistRecall.selected(
+      matched: [], recent: [long, long + "y", "short"], budget: 123)
+    XCTAssertEqual(selected, [long, long + "y"])
+  }
+
+  /// A memory too large for the remaining budget must not stop the smaller ones behind
+  /// it from being included — truncating the list on the first oversized entry silently
+  /// drops the facts most likely to answer a short field.
+  func testAnOversizedMemoryDoesNotBlockLaterOnes() {
+    let selected = FormAssistRecall.selected(
+      matched: [], recent: [String(repeating: "x", count: 200), "Lives in San Jose"], budget: 100)
+    XCTAssertEqual(selected, ["Lives in San Jose"])
+  }
+
+  func testDropsBlankMemories() {
+    XCTAssertEqual(FormAssistRecall.selected(matched: ["   "], recent: ["Real"]), ["Real"])
   }
 }
 
@@ -192,5 +255,151 @@ final class FormFieldScannerTests: XCTestCase {
       FormFieldScanner.hasSubmitButton(in: [FormElement(role: "AXButton", title: "Submit application")]))
     XCTAssertFalse(
       FormFieldScanner.hasSubmitButton(in: [FormElement(role: "AXButton", title: "Cancel")]))
+  }
+}
+
+/// The card follows a window, and windows keep their identity while their titles move.
+final class FormWindowKeyTests: XCTestCase {
+  private func key(_ title: String, id: CGWindowID? = 42, app: String = "Safari") -> FormWindowKey {
+    FormWindowKey(appName: app, windowTitle: title, windowID: id)
+  }
+
+  func testTitleChangesDoNotChangeTheWindow() {
+    XCTAssertEqual(key(""), key("Apply — Acme"))
+  }
+
+  func testADifferentWindowIsADifferentWindow() {
+    XCTAssertNotEqual(key("Apply", id: 42), key("Apply", id: 43))
+  }
+
+  func testSameWindowIDInAnotherAppIsNotTheSameWindow() {
+    XCTAssertNotEqual(key("Apply"), key("Apply", app: "Chrome"))
+  }
+
+  /// Windowless targets still need an identity, so the title is the fallback.
+  func testFallsBackToTitleWithoutAWindowID() {
+    XCTAssertEqual(key("Apply", id: nil), key("Apply", id: nil))
+    XCTAssertNotEqual(key("Apply", id: nil), key("Settings", id: nil))
+  }
+}
+
+final class FormFieldScannerChromeTests: XCTestCase {
+  /// Safari's address bar reports two text fields of its own. Counting them inflates the
+  /// tally the gate reads, and they are never something to fill from memory.
+  func testBrowserSearchFieldsAreNotFormFields() {
+    let elements = [
+      FormElement(role: "AXTextField", title: "smart search field"),
+      FormElement(role: "AXTextField", title: "Search"),
+      FormElement(role: "AXTextField", title: "Full name"),
+    ]
+    XCTAssertEqual(FormFieldScanner.fields(in: elements).map(\.label), ["Full name"])
+  }
+}
+
+/// A real login page is not one password box in isolation: Hacker News shows a login
+/// form and a create-account form side by side, which is two username fields, two
+/// password fields, and a submit button — enough non-secure fields to pass a plain count.
+final class FormAssistCredentialRatioTests: XCTestCase {
+  private func field(_ label: String, secure: Bool = false) -> FormField {
+    FormField(label: label, isEmpty: true, isSecure: secure)
+  }
+
+  func testLoginAndSignupSideBySideIsACredentialForm() {
+    let decision = FormAssistGate.decide(
+      fields: [
+        field("username"), field("password", secure: true),
+        field("username"), field("password", secure: true),
+      ],
+      hasSubmitButton: true
+    )
+    XCTAssertEqual(decision, .credentialForm)
+  }
+
+  func testOnePasswordAmongManyRealFieldsIsStillAnApplication() {
+    let decision = FormAssistGate.decide(
+      fields: [
+        field("Full name"), field("University"), field("Current employer"),
+        field("Portfolio URL"), field("Password", secure: true),
+      ],
+      hasSubmitButton: true
+    )
+    XCTAssertEqual(decision, .eligible)
+  }
+}
+
+/// The card is about the fields underneath it, so it goes where no form puts them.
+final class FormAssistCardPlacementTests: XCTestCase {
+  private let screen = CGRect(x: 0, y: 0, width: 1512, height: 950)
+  private let card = CGSize(width: 460, height: 216)
+
+  func testSitsInTheTopRightCorner() {
+    let frame = FormAssistCardPlacement.frame(cardSize: card, visibleFrame: screen)
+    XCTAssertEqual(frame.maxX, screen.maxX - FormAssistCardPlacement.margin)
+    XCTAssertEqual(frame.maxY, screen.maxY - FormAssistCardPlacement.margin)
+  }
+
+  func testHonoursAScreenOffsetFromTheOrigin() {
+    let secondary = CGRect(x: -1728, y: 300, width: 1728, height: 1080)
+    let frame = FormAssistCardPlacement.frame(cardSize: card, visibleFrame: secondary)
+    XCTAssertTrue(secondary.contains(frame))
+  }
+
+  /// A tiny screen must still get a card that fits on it.
+  func testShrinksToFitASmallScreen() {
+    let small = CGRect(x: 0, y: 0, width: 400, height: 200)
+    let frame = FormAssistCardPlacement.frame(cardSize: card, visibleFrame: small)
+    XCTAssertTrue(small.contains(frame))
+  }
+}
+
+/// Drafted answers are held higher than copied facts, and some fields are never
+/// answered from memory at all.
+final class FormAssistDraftPolicyTests: XCTestCase {
+  private let labels = ["Full name", "Why Anthropic?", "Gender", "Desired salary"]
+
+  private func accepted(_ fills: [FormAssistFill]) -> [FormAssistFill] {
+    FormAssistFillPolicy.accepted(
+      fills, forLabels: labels, minConfidence: 0.6, minDraftConfidence: 0.75, limit: 12)
+  }
+
+  func testDraftsClearAHigherBarThanFacts() {
+    let fills = accepted([
+      FormAssistFill(label: "Full name", value: "Yashwanth", confidence: 0.65, kind: .fact),
+      FormAssistFill(label: "Why Anthropic?", value: "Because…", confidence: 0.65, kind: .draft),
+    ])
+    XCTAssertEqual(fills.map(\.label), ["Full name"])
+  }
+
+  func testAConfidentDraftIsKept() {
+    let fills = accepted([
+      FormAssistFill(label: "Why Anthropic?", value: "I have shipped…", confidence: 0.8, kind: .draft)
+    ])
+    XCTAssertEqual(fills.map(\.kind), [.draft])
+  }
+
+  /// Protected characteristics and negotiated terms are filtered before the model sees
+  /// them; this pins that a model answering them anyway still cannot reach the card.
+  func testProtectedAndNegotiatedFieldsAreNeverAnswered() {
+    let fills = accepted([
+      FormAssistFill(label: "Gender", value: "Male", confidence: 0.99, kind: .fact),
+      FormAssistFill(label: "Desired salary", value: "$200k", confidence: 0.99, kind: .fact),
+    ])
+    XCTAssertTrue(fills.isEmpty)
+  }
+
+  func testSensitiveLabelsAreStrippedBeforeTheModelSeesThem() {
+    let answerable = FormAssistSensitiveFields.answerable([
+      "Full name", "Race / Ethnicity", "Veteran status", "Are you 18 years of age or older?",
+      "Current employer",
+    ])
+    XCTAssertEqual(answerable, ["Full name", "Current employer"])
+  }
+
+  func testARunawayDraftIsDropped() {
+    let long = String(repeating: "a", count: FormAssistFillPolicy.maxDraftLength + 1)
+    let fills = accepted([
+      FormAssistFill(label: "Why Anthropic?", value: long, confidence: 0.9, kind: .draft)
+    ])
+    XCTAssertTrue(fills.isEmpty)
   }
 }

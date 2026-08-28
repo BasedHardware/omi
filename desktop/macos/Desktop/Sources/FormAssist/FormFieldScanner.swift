@@ -59,6 +59,26 @@ struct FormField: Sendable, Equatable {
   let isSecure: Bool
 }
 
+/// Cheap identity of the window in front of the user, readable without walking the
+/// accessibility tree. Used to decide whether a walk is worth doing at all, and whether
+/// the card on screen still belongs to what the user is looking at.
+///
+/// Identity is the window, not its title. Titles move under you — a page sets its title
+/// after it renders its fields, a tab picks up an unread count, a document gains a dirty
+/// marker — and treating that as a new window made the card disappear and rebuild itself
+/// seconds after the user first saw it.
+struct FormWindowKey: Sendable, Equatable {
+  let appName: String
+  let windowTitle: String
+  let windowID: CGWindowID?
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    guard lhs.appName == rhs.appName else { return false }
+    if let left = lhs.windowID, let right = rhs.windowID { return left == right }
+    return lhs.windowTitle == rhs.windowTitle
+  }
+}
+
 /// What the frontmost window looks like right now, in the only terms form assist needs.
 struct FormSnapshot: Sendable, Equatable {
   let appName: String
@@ -66,13 +86,21 @@ struct FormSnapshot: Sendable, Equatable {
   let fields: [FormField]
   let hasSubmitButton: Bool
   let windowFrame: CGRect?
+  let windowID: CGWindowID?
 
   var emptyFields: [FormField] { fields.filter { $0.isEmpty && !$0.isSecure } }
 
-  /// Identity of "this form, in this state". Re-deriving the same fingerprint means the
-  /// user is looking at a form Omi already offered to help with, so it stays quiet.
+  /// Identity of "this form". Re-deriving the same fingerprint means the user is looking
+  /// at a form Omi has already answered, so it re-shows that card instead of paying for
+  /// another model call.
+  ///
+  /// Deliberately excludes the window title. A page's title arrives after its fields do,
+  /// so including it made the same form fingerprint differently either side of load, and
+  /// the card was rebuilt from under the user a second after it appeared. Two forms with
+  /// the same fields in the same app get the same answers anyway — the values come from
+  /// the user's memories, never from the page.
   var fingerprint: String {
-    ([appName, windowTitle] + fields.map(\.label).sorted()).joined(separator: "\u{1F}")
+    ([appName] + fields.map(\.label).sorted()).joined(separator: "\u{1F}")
   }
 }
 
@@ -88,14 +116,22 @@ enum FormAssistGate {
     case nothingLeftToFill
   }
 
+  /// Secure fields never count toward eligibility and are never offered, but their
+  /// presence alone no longer refuses the form: a job application that ends in "create a
+  /// password" is still an application. What refuses a form is having nothing else worth
+  /// filling — which is exactly the shape of a sign-in or sign-up box.
   static func decide(fields: [FormField], hasSubmitButton: Bool) -> Decision {
-    guard !fields.contains(where: { $0.isSecure }) else { return .credentialForm }
-    let empty = fields.filter(\.isEmpty).count
+    let secure = fields.filter(\.isSecure).count
+    let fillable = fields.filter { $0.isEmpty && !$0.isSecure }.count
     guard fields.count >= 2 else { return .notAForm }
-    guard empty >= 3 || (empty >= 2 && hasSubmitButton) else {
-      return empty == 0 ? .nothingLeftToFill : .notAForm
-    }
-    return .eligible
+    // Half the fields being passwords means the page is *about* credentials — a login
+    // box, a sign-up box, or both side by side, which is what a real login page looks
+    // like: two username boxes and two password boxes, enough non-secure fields to pass
+    // a plain count.
+    guard secure * 2 < fields.count else { return .credentialForm }
+    if fillable >= 3 || (fillable >= 2 && hasSubmitButton) { return .eligible }
+    if secure > 0 { return .credentialForm }
+    return fields.allSatisfy { !$0.isEmpty } ? .nothingLeftToFill : .notAForm
   }
 }
 
@@ -111,6 +147,25 @@ enum FormFieldScanner {
   ]
 
   private static let secureTerms = ["password", "passcode", "pin", "cvv", "security code"]
+
+  /// Browser chrome and search boxes. They are text fields the user never wants filled
+  /// from memory, and counting them inflates the field tally that decides eligibility —
+  /// Safari's address bar alone contributed two "smart search field" entries.
+  private static let ignoredLabelTerms = ["search", "address and search", "url"]
+
+  /// Who is in front, without touching the accessibility tree.
+  @MainActor
+  static func frontWindowKey() -> FormWindowKey? {
+    guard let app = NSWorkspace.shared.frontmostApplication,
+      app.processIdentifier != ProcessInfo.processInfo.processIdentifier
+    else { return nil }
+    let info = ScreenCaptureService.getActiveWindowInfo()
+    return FormWindowKey(
+      appName: app.localizedName ?? "",
+      windowTitle: info.windowTitle ?? "",
+      windowID: info.windowID
+    )
+  }
 
   @MainActor
   static func scanFrontmostWindow() -> FormSnapshot? {
@@ -128,15 +183,18 @@ enum FormFieldScanner {
       .collectNodes(from: window, maxDepth: maxDepth, maxNodes: maxNodes)
       .map(FormElement.init(node:))
     let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]]
+    let info = ScreenCaptureService.getActiveWindowInfo()
+    let axTitle = AXFormTree.stringAttribute(window, "AXTitle")
 
     return FormSnapshot(
       appName: app.localizedName ?? "",
-      windowTitle: AXFormTree.stringAttribute(window, "AXTitle"),
+      windowTitle: axTitle.isEmpty ? (info.windowTitle ?? "") : axTitle,
       fields: fields(in: elements),
       hasSubmitButton: hasSubmitButton(in: elements),
       windowFrame: windows.flatMap {
         CloudConnectorFormAutomation.appKitWindowFrame(pid: app.processIdentifier, windows: $0)
-      }
+      },
+      windowID: info.windowID
     )
   }
 
@@ -145,7 +203,7 @@ enum FormFieldScanner {
     return elements.compactMap { element in
       guard isInput(element) else { return nil }
       let label = self.label(for: element, captions: captions)
-      guard !label.isEmpty else { return nil }
+      guard !label.isEmpty, !isIgnored(label) else { return nil }
       return FormField(
         label: label,
         isEmpty: element.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -160,6 +218,11 @@ enum FormFieldScanner {
       let text = element.searchableText
       return submitTerms.contains { text.contains($0) }
     }
+  }
+
+  private static func isIgnored(_ label: String) -> Bool {
+    let lowered = label.lowercased()
+    return ignoredLabelTerms.contains { lowered.contains($0) }
   }
 
   private static func isInput(_ element: FormElement) -> Bool {

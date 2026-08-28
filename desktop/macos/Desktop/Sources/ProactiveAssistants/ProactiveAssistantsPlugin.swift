@@ -381,6 +381,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
       if let formAssist = formAssistAssistant {
         AssistantCoordinator.shared.register(formAssist)
+        Task { await formAssist.startWatching() }
       }
 
     } catch {

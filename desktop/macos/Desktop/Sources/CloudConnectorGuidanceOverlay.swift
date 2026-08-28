@@ -454,21 +454,30 @@ final class CloudConnectorGuidanceOverlay {
     title: String,
     subtitle: String,
     fields: [CloudConnectorCopyField],
-    near anchor: CGRect?
+    near anchor: CGRect?,
+    at preferredFrame: CGRect? = nil
   ) {
     presentFieldCopyCard(
       title: title,
       subtitle: subtitle,
       sections: [CloudConnectorCopySection(id: "fields", title: "", fields: fields)],
-      near: anchor
+      near: anchor,
+      at: preferredFrame
     )
+  }
+
+  /// The card's size for a given row count, so a caller can place it itself.
+  func fieldCopyCardSize(title: String, subtitle: String, fieldCount: Int) -> CGSize {
+    Self.fieldCopyCardSize(
+      title: title, subtitle: subtitle, fieldCount: fieldCount, sectionTitleCount: 0)
   }
 
   func presentFieldCopyCard(
     title: String,
     subtitle: String,
     sections: [CloudConnectorCopySection],
-    near anchor: CGRect?
+    near anchor: CGRect?,
+    at preferredFrame: CGRect? = nil
   ) {
     dismissTask?.cancel()
     closeCurrentOverlay()
@@ -482,8 +491,10 @@ final class CloudConnectorGuidanceOverlay {
       sectionTitleCount: CloudConnectorCopySection.visibleTitleCount(sections)
     )
     let screen = Self.screen(forAnchor: anchor)
-    let frame = Self.instructionCardFrame(
-      anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
+    let frame =
+      preferredFrame
+      ?? Self.instructionCardFrame(
+        anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
 
     lastAutomationState = [
       "visible": "true",
