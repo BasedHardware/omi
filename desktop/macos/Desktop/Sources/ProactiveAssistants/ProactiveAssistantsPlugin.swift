@@ -53,6 +53,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var insightAssistant: InsightAssistant?
   private var memoryAssistant: MemoryAssistant?
   private var suggestionAssistant: SuggestionAssistant?
+  private var formAssistAssistant: FormAssistAssistant?
   private var captureTimer: Timer?
   private var analysisDelayTimer: Timer?
   private var isInDelayPeriod = false
@@ -374,6 +375,12 @@ public class ProactiveAssistantsPlugin: NSObject {
 
       if let suggestion = suggestionAssistant {
         AssistantCoordinator.shared.register(suggestion)
+      }
+
+      formAssistAssistant = try FormAssistAssistant()
+
+      if let formAssist = formAssistAssistant {
+        AssistantCoordinator.shared.register(formAssist)
       }
 
     } catch {

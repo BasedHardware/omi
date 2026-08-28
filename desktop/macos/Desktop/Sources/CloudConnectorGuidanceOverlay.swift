@@ -86,6 +86,10 @@ final class CloudConnectorGuidanceOverlay {
 
   private init() {}
 
+  /// True while any card from this overlay is on screen. Another surface must not
+  /// close a card the user is still working through.
+  var isPresenting: Bool { window != nil }
+
   func presentClaudeAddHint(windowFrame: CGRect, candidates: [SpatialOverlayAnchorCandidate]) {
     presentClaudeHint(
       actionLabel: "Add",
