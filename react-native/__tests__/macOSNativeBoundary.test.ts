@@ -396,6 +396,53 @@ test('lets the host choose the glass radius so one panel can run full-bleed', ()
   );
 });
 
+test('exposes a real OmiNative CoreBluetooth module instead of a hardware stub', () => {
+  const source = readNativeSource('OmiNativeModule.mm');
+  const header = readNativeSource('OmiNativeModule.h');
+  const entitlements = readNativeSource('RnRuntime.entitlements');
+  const info = readNativeSource('Info.plist');
+  const pbxproj = readFileSync(
+    resolve(__dirname, '../macos/RnRuntime.xcodeproj/project.pbxproj'),
+    'utf8',
+  );
+
+  expect(header).toContain('RCTEventEmitter');
+  expect(source).toContain('RCT_EXPORT_MODULE(OmiNative)');
+  expect(source).toContain('#import <CoreBluetooth/CoreBluetooth.h>');
+  expect(source).toContain('19b10000-e8f2-537e-4f6c-d104768a1214');
+  expect(source).toContain('19b10001-e8f2-537e-4f6c-d104768a1214');
+  expect(source).toContain('19b10002-e8f2-537e-4f6c-d104768a1214');
+  expect(source).toContain('2A19');
+  expect(source).toContain('timeoutSeconds');
+  expect(source).toContain('self.scanResolve = resolve');
+  expect(source).toContain('self.connectResolve = resolve');
+  const connectStart = source.indexOf('RCT_REMAP_METHOD(connectDevice');
+  const connectSource = source.slice(
+    connectStart,
+    source.indexOf('RCT_REMAP_METHOD(disconnectDevice', connectStart),
+  );
+  expect(connectSource).toContain('cancelPeripheralConnection:existing');
+  expect(source).toContain(
+    'self.connectedPeripheral != nil && self.connectedPeripheral != peripheral',
+  );
+  expect(source).toContain('characteristic.isNotifying');
+  expect(source).toContain('self.audioNotifying ? @"recording" : @"idle"');
+  const scanStart = source.indexOf('RCT_REMAP_METHOD(startScan');
+  const scanSource = source.slice(
+    scanStart,
+    source.indexOf('RCT_REMAP_METHOD(stopScan', scanStart),
+  );
+  expect(scanSource).toContain('[self.devices removeAllObjects]');
+  expect(scanSource).toContain('self.connectedPeripheral');
+  expect(scanSource).toContain('self.devices[keepId] = kept');
+  expect(source).not.toContain('.swift');
+  expect(entitlements).toContain('com.apple.security.device.bluetooth');
+  expect(info).toContain('NSBluetoothAlwaysUsageDescription');
+  expect(pbxproj).toContain('OmiNativeModule.mm in Sources');
+  expect(pbxproj).toContain('CoreBluetooth.framework');
+  expect(pbxproj).toContain('CODE_SIGN_ENTITLEMENTS');
+});
+
 test('treats a generation transport failure with no HTTP response as an error', () => {
   const source = readNativeSource('OmiBackendModule.mm');
   const didCompleteIndex = source.indexOf('didCompleteWithError:');

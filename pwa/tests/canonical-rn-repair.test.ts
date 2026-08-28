@@ -56,12 +56,10 @@ test("unsupported web operations share the explicit rejection behavior", async (
   await expect(adapter.connectDevice("device-1")).rejects.toThrow(
     "Omi device capture is unavailable in the browser"
   );
-  await expect(adapter.stopCapture()).rejects.toThrow(
-    "Omi capture is unavailable in the browser"
-  );
   await expect(adapter.stopScan()).rejects.toThrow(
     "Omi device capture is unavailable in the browser"
   );
+  expect("stopCapture" in adapter).toBe(false);
 });
 
 test("web Bluetooth capability remains distinct from native power and permission states", async () => {
@@ -143,13 +141,13 @@ test("web assets are typed for both Metro numbers and browser URLs", async () =>
 
 test("web platform ownership stays in the React Native boundary", async () => {
   const source = await webSource();
-  const appSource = await readFile(
-    resolve(root, "../react-native/src/app/AppOrchestrator.tsx"),
+  const deviceSource = await readFile(
+    resolve(root, "../react-native/src/app/DeviceSession.tsx"),
     "utf8"
   );
 
   expect(source).not.toContain("../../pwa/src/");
-  expect(appSource).toContain(
+  expect(deviceSource).toContain(
     "isBluetoothScanAvailable(nativeSnapshot?.bluetooth)"
   );
   expect(await readFile(resolve(root, "src/main.ts"), "utf8")).toContain(

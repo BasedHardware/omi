@@ -10,5 +10,7 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<key>com.apple.security.device.bluetooth</key>
+	<true/>
 </dict>
 </plist>

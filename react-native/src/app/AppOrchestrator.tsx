@@ -27,7 +27,7 @@ import {
   sendChatMessage,
   type ChatMessage,
 } from '../chatClient';
-import {isBluetoothScanAvailable, omiBackend} from '../omiNative';
+import {omiBackend} from '../omiNative';
 import {
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
@@ -52,7 +52,7 @@ import {ConnectorsPage} from '../pages/Connectors';
 import {SettingsPage} from '../pages/Settings';
 import {HomeSurface} from '../pages/Home';
 import {resolveInitialRoute, type Route} from './routes';
-import {bluetoothStatusLabel} from './bluetooth';
+import {DeviceSession, homeConnectionStatus} from './DeviceSession';
 import {useDesktopReads} from './useDesktopReads';
 import {useOnboarding} from './useOnboarding';
 import {useNativeDevices} from './useNativeDevices';
@@ -470,24 +470,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     />
   );
 
-  const connectedDevice =
-    nativeSnapshot?.devices.find(device => device.connected) ?? null;
-  const homeStatus =
-    connectedDevice === null
-      ? nativeSnapshot === null
-        ? 'Checking Bluetooth…'
-        : nativeSnapshot.bluetooth === 'poweredOn'
-        ? 'Omi disconnected'
-        : bluetoothStatusLabel(nativeSnapshot.bluetooth)
-      : `Connected · ${
-          nativeSnapshot?.capture === 'recording' ? 'Listening' : 'Ready'
-        }`;
-  const homeStatusColor =
-    nativeSnapshot === null
-      ? '#b4ad9f'
-      : connectedDevice === null
-      ? '#d9826f'
-      : '#45b79b';
+  const {
+    connectedDevice,
+    label: homeStatus,
+    color: homeStatusColor,
+  } = homeConnectionStatus(nativeSnapshot);
   const bluetoothStatusColor =
     nativeSnapshot === null
       ? '#b4ad9f'
@@ -536,54 +523,16 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   );
 
   const homeDesktopDeviceAffordance = (
-    <View
-      accessibilityLabel="Home device affordance"
-      style={styles.macHomeDeviceAffordance}>
-      <View style={styles.macHomeDeviceStatus}>
-        <View
-          style={[styles.pendantStatusDot, {backgroundColor: homeStatusColor}]}
-        />
-        <Text style={styles.macHomeDeviceStatusText}>{homeStatus}</Text>
-      </View>
-      <View style={styles.macHomeDeviceActions}>
-        {nativeSnapshot?.devices.map(device => (
-          <FocusPressable
-            accessibilityLabel={`${
-              device.connected ? 'Disconnect' : 'Connect'
-            } ${device.name}`}
-            accessibilityRole="button"
-            disabled={deviceBusy}
-            key={device.id}
-            onPress={() => toggleDevice(device.id, device.connected)}
-            style={({pressed}) => [
-              styles.macHomeDeviceChip,
-              pressed && styles.pressed,
-            ]}>
-            <Text style={styles.macHomeDeviceChipText}>
-              {device.name} · {device.connected ? 'Connected' : 'Connect'}
-            </Text>
-          </FocusPressable>
-        ))}
-        <FocusPressable
-          accessibilityLabel="Scan for Omi devices"
-          accessibilityRole="button"
-          disabled={
-            deviceBusy || !isBluetoothScanAvailable(nativeSnapshot?.bluetooth)
-          }
-          onPress={scanForOmi}
-          style={({pressed}) => [
-            styles.macHomeDeviceChip,
-            pressed && styles.pressed,
-          ]}>
-          <Text style={styles.macHomeDeviceChipText}>
-            {deviceBusy ? 'Scanning…' : 'Devices'}
-          </Text>
-        </FocusPressable>
-      </View>
-      {deviceScanMessage !== null && (
-        <Text style={styles.macHomeDeviceHint}>{deviceScanMessage}</Text>
-      )}
-    </View>
+    <DeviceSession
+      deviceBusy={deviceBusy}
+      deviceScanMessage={deviceScanMessage}
+      homeStatus={homeStatus}
+      homeStatusColor={homeStatusColor}
+      nativeSnapshot={nativeSnapshot}
+      onScan={scanForOmi}
+      onToggle={toggleDevice}
+      variant="affordance"
+    />
   );
 
   const homeDesktopEmptyTitle =
@@ -719,93 +668,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             )}
           </View>
 
-          <View
-            accessibilityLabel="Home devices"
-            style={[styles.homeSection, styles.homeDevicesSection]}>
-            <View style={styles.homeDeviceCard}>
-              <View style={styles.deviceHeader}>
-                <View style={styles.homeDeviceHeading}>
-                  <View
-                    style={[
-                      styles.pendantStatusDot,
-                      {backgroundColor: bluetoothStatusColor},
-                    ]}
-                  />
-                  <View>
-                    <Text
-                      style={[styles.sectionLabel, styles.homeSectionLabel]}>
-                      Devices
-                    </Text>
-                    <Text style={[styles.deviceState, styles.homeDeviceState]}>
-                      {nativeSnapshot === null
-                        ? 'Checking Bluetooth…'
-                        : bluetoothStatusLabel(nativeSnapshot.bluetooth)}
-                    </Text>
-                  </View>
-                </View>
-                <FocusPressable
-                  accessibilityLabel="Scan for Omi devices"
-                  accessibilityRole="button"
-                  disabled={
-                    deviceBusy ||
-                    !isBluetoothScanAvailable(nativeSnapshot?.bluetooth)
-                  }
-                  onPress={scanForOmi}
-                  style={({pressed}) => [
-                    styles.scanButton,
-                    styles.homeScanButton,
-                    pressed && styles.pressed,
-                  ]}>
-                  <Text
-                    style={[styles.scanButtonText, styles.homeScanButtonText]}>
-                    {deviceBusy ? 'Scanning…' : 'Scan'}
-                  </Text>
-                </FocusPressable>
-              </View>
-              {nativeSnapshot?.devices.map(device => (
-                <FocusPressable
-                  accessibilityLabel={`${
-                    device.connected ? 'Disconnect' : 'Connect'
-                  } ${device.name}`}
-                  accessibilityRole="button"
-                  key={device.id}
-                  disabled={deviceBusy}
-                  onPress={() => toggleDevice(device.id, device.connected)}
-                  style={({pressed}) => [
-                    styles.deviceRow,
-                    styles.homeDeviceRow,
-                    pressed && styles.pressed,
-                  ]}>
-                  <View style={styles.homeDeviceRowLead}>
-                    <View
-                      style={[
-                        styles.homeDeviceRowDot,
-                        device.connected && styles.homeDeviceRowDotConnected,
-                      ]}
-                    />
-                    <View>
-                      <Text style={styles.deviceName}>{device.name}</Text>
-                      <Text style={styles.deviceMeta}>
-                        {device.connected ? 'Connected' : `${device.rssi} dBm`}
-                      </Text>
-                    </View>
-                  </View>
-                  {device.battery !== undefined && (
-                    <Text style={styles.deviceBattery}>{device.battery}%</Text>
-                  )}
-                </FocusPressable>
-              ))}
-              {(deviceScanMessage !== null ||
-                (nativeSnapshot !== null &&
-                  nativeSnapshot.devices.length === 0)) && (
-                <Text style={styles.deviceHint}>
-                  {deviceScanMessage ??
-                    nativeSnapshot?.lastEvent ??
-                    'No Omi device was discovered.'}
-                </Text>
-              )}
-            </View>
-          </View>
+          <DeviceSession
+            bluetoothStatusColor={bluetoothStatusColor}
+            deviceBusy={deviceBusy}
+            deviceScanMessage={deviceScanMessage}
+            nativeSnapshot={nativeSnapshot}
+            onScan={scanForOmi}
+            onToggle={toggleDevice}
+            variant="compact"
+          />
         </>
       )}
     </ScrollView>
@@ -991,81 +862,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                             }
                             header={
                               <View style={styles.homeOverview}>
-                                <View style={styles.deviceHeader}>
-                                  <View>
-                                    <Text style={styles.sectionLabel}>
-                                      Devices
-                                    </Text>
-                                    <Text style={styles.deviceState}>
-                                      {nativeSnapshot === null
-                                        ? 'Checking Bluetooth…'
-                                        : bluetoothStatusLabel(
-                                            nativeSnapshot.bluetooth,
-                                          )}
-                                    </Text>
-                                  </View>
-                                  <FocusPressable
-                                    accessibilityLabel="Scan for Omi devices"
-                                    accessibilityRole="button"
-                                    disabled={
-                                      deviceBusy ||
-                                      !isBluetoothScanAvailable(
-                                        nativeSnapshot?.bluetooth,
-                                      )
-                                    }
-                                    onPress={scanForOmi}
-                                    style={({pressed}) => [
-                                      styles.scanButton,
-                                      pressed && styles.pressed,
-                                    ]}>
-                                    <Text style={styles.scanButtonText}>
-                                      {deviceBusy ? 'Scanning…' : 'Scan'}
-                                    </Text>
-                                  </FocusPressable>
-                                </View>
-                                {nativeSnapshot?.devices.map(device => (
-                                  <FocusPressable
-                                    accessibilityLabel={`${
-                                      device.connected
-                                        ? 'Disconnect'
-                                        : 'Connect'
-                                    } ${device.name}`}
-                                    accessibilityRole="button"
-                                    key={device.id}
-                                    disabled={deviceBusy}
-                                    onPress={() =>
-                                      toggleDevice(device.id, device.connected)
-                                    }
-                                    style={({pressed}) => [
-                                      styles.deviceRow,
-                                      pressed && styles.pressed,
-                                    ]}>
-                                    <View>
-                                      <Text style={styles.deviceName}>
-                                        {device.name}
-                                      </Text>
-                                      <Text style={styles.deviceMeta}>
-                                        {device.connected
-                                          ? 'Connected'
-                                          : `${device.rssi} dBm`}
-                                      </Text>
-                                    </View>
-                                    {device.battery !== undefined && (
-                                      <Text style={styles.deviceBattery}>
-                                        {device.battery}%
-                                      </Text>
-                                    )}
-                                  </FocusPressable>
-                                ))}
-                                {(deviceScanMessage !== null ||
-                                  (nativeSnapshot !== null &&
-                                    nativeSnapshot.devices.length === 0)) && (
-                                  <Text style={styles.deviceHint}>
-                                    {deviceScanMessage ??
-                                      nativeSnapshot?.lastEvent ??
-                                      'No Omi device was discovered.'}
-                                  </Text>
-                                )}
+                                <DeviceSession
+                                  deviceBusy={deviceBusy}
+                                  deviceScanMessage={deviceScanMessage}
+                                  nativeSnapshot={nativeSnapshot}
+                                  onScan={scanForOmi}
+                                  onToggle={toggleDevice}
+                                  variant="overview"
+                                />
                                 <Text style={styles.sectionLabel}>
                                   Currents
                                 </Text>
