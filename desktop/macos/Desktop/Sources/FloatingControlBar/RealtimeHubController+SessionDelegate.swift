@@ -605,8 +605,81 @@ extension RealtimeHubController {
       }
       return .succeeded("Clicked at \(Int(x)), \(Int(y)).")
 
+    case .showPanel:
+      let title =
+        (command.input["title"] as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let items = Self.voicePanelItems(command.input["items"])
+      guard !title.isEmpty, !items.isEmpty else {
+        return .succeeded("Could not show the panel: show_panel needs a title and at least one item with text.")
+      }
+      guard
+        let shown = Self.performOwnerBoundPhysicalEffect(
+          expectedOwnerID: command.ownerID,
+          effect: { VoicePanel.present(title: title, items: items) })
+      else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      guard let shown else { return .succeeded("Could not show the panel: no item had any text.") }
+      return .succeeded("Panel is on screen with \(shown) item\(shown == 1 ? "" : "s") to copy.")
+
+    case .reopenPanel:
+      guard
+        let shown = Self.performOwnerBoundPhysicalEffect(
+          expectedOwnerID: command.ownerID,
+          effect: { VoicePanel.reopen() })
+      else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      guard let shown else { return .succeeded("There is no panel to show again.") }
+      return .succeeded("Panel is back on screen with \(shown) item\(shown == 1 ? "" : "s") to copy.")
+
+    case .closePanel:
+      guard
+        let dismissed = Self.performOwnerBoundPhysicalEffect(
+          expectedOwnerID: command.ownerID,
+          effect: { VoicePanel.dismiss() })
+      else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      return .succeeded(dismissed ? "Panel closed." : "There was no panel on screen.")
+
+    case .draftMessage:
+      let context =
+        (command.input["context"] as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let result = await ProactiveAssistantsPlugin.shared.draftMessageOnDemand(context: context)
+      guard AuthorizedToolExecution.isOwnerCurrent(command.ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      return .succeeded(result)
+
+    case .assistForm:
+      let context =
+        (command.input["context"] as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let result = await ProactiveAssistantsPlugin.shared.assistFormOnDemand(context: context)
+      guard AuthorizedToolExecution.isOwnerCurrent(command.ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      return .succeeded(result)
+
     default:
       return .failed(Self.authorizedRealtimeToolError(code: "wrong_realtime_executor_tool"))
+    }
+  }
+
+  /// The provider hands back `items` as loosely-typed JSON. An entry without text is
+  /// dropped rather than shown as an empty row: the panel exists to be copied from.
+  nonisolated static func voicePanelItems(_ raw: Any?) -> [VoicePanelItem] {
+    guard let entries = raw as? [[String: Any]] else { return [] }
+    return entries.compactMap { entry in
+      guard let text = (entry["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !text.isEmpty
+      else { return nil }
+      return VoicePanelItem(
+        label: (entry["label"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+        text: text)
     }
   }
 

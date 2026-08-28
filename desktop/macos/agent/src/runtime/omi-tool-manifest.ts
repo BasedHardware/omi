@@ -694,6 +694,98 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       ),
     },
   },
+  show_panel: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc("Show Panel", "Put copyable text on the user's screen.", [
+      "Use when the answer is something the user will paste, keep, or read back.",
+    ]),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Put text on the user's screen in a floating panel with a copy button, so they can paste it somewhere. Use it whenever the answer is something to paste or keep rather than only hear: a snippet, an address, a set of values, a written passage. Speak one short line about what you put up; the panel carries the text, so never read long or secret content aloud.",
+      schemaOverride: schema(
+        {
+          title: { type: "string", description: "Short title naming what the panel holds." },
+          items: {
+            type: "array",
+            description:
+              "The content. One entry with no label for a single passage of text; one labeled entry per value when there are several.",
+            items: {
+              type: "object",
+              properties: {
+                label: { type: "string", description: "Short name for this value. Omit for a single passage of prose." },
+                text: { type: "string", description: "The text to show and copy." },
+              },
+              required: ["text"],
+              additionalProperties: false,
+            },
+          },
+        },
+        ["title", "items"],
+      ),
+    },
+  },
+  close_panel: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc("Close Panel", "Take down the panel currently on screen.", [
+      "Use when the user asks to close, hide, or dismiss it.",
+    ]),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Take down the panel you put on the user's screen. Use it when they ask to close, hide, or dismiss it.",
+      schemaOverride: schema({}),
+    },
+  },
+  reopen_panel: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc("Reopen Panel", "Put the last panel back on screen.", [
+      "Use when the user asks to see again what was on screen a moment ago.",
+    ]),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Put the last panel back on the user's screen, where they are now. A panel belongs to the window it was opened over and goes away when they leave it, so use this whenever they ask to see it again, and instead of redoing the work that produced it.",
+      schemaOverride: schema({}),
+    },
+  },
+  draft_message: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc("Draft Message", "Write the message the user is about to send.", [
+      "Use when the user asks for a reply, a message, or an email to be written.",
+    ]),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Write the message the user is about to send and put it on screen to copy. Use it when they ask you to draft, write, or reply to a message or email. It reads the conversation in front of them; pass anything they said about what the message should say.",
+      schemaOverride: schema(
+        {
+          context: {
+            type: "string",
+            description: "What the user said the message should say. Omit when they gave no direction.",
+          },
+        },
+      ),
+    },
+  },
+  assist_form: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc("Assist Form", "Answer the form in front of the user from their memories.", [
+      "Use when the user asks for help filling in what is on screen.",
+    ]),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Answer the form the user is looking at from what Omi knows about them, and put the values on screen to copy field by field. Use it when they ask for help filling something in. It reads the screen fresh every time, so call it again with what they said when they correct an answer: use my work email, make it shorter, that employer is out of date.",
+      schemaOverride: schema({
+        context: {
+          type: "string",
+          description:
+            "What the user said about how to fill the form, especially a correction to an answer already on screen. Omit when they gave no direction.",
+        },
+      }),
+    },
+  },
 };
 
 const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
@@ -1504,6 +1596,101 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       },
       ["x", "y"],
     ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only; requires Accessibility permission."],
+    adapters: {},
+  },
+  {
+    name: "show_panel",
+    label: "Show Panel",
+    description: "Show copyable text on the user's screen in a floating panel.",
+    promptSnippet: "show_panel - Show copyable text on screen",
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        title: { type: "string", description: "Short title naming what the panel holds." },
+        items: {
+          type: "array",
+          description: "The content: one unlabeled entry for a passage of text, or one labeled entry per value.",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Short name for this value." },
+              text: { type: "string", description: "The text to show and copy." },
+            },
+            required: ["text"],
+            additionalProperties: false,
+          },
+        },
+      },
+      ["title", "items"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only."],
+    adapters: {},
+  },
+  {
+    name: "close_panel",
+    label: "Close Panel",
+    description: "Dismiss the panel currently on the user's screen.",
+    promptSnippet: "close_panel - Dismiss the panel on screen",
+    latency: "fast local",
+    inputSchema: schema({}),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only."],
+    adapters: {},
+  },
+  {
+    name: "reopen_panel",
+    label: "Reopen Panel",
+    description: "Put the last panel back on the user's screen, at the window in front now.",
+    promptSnippet: "reopen_panel - Show the last panel again",
+    latency: "fast local",
+    inputSchema: schema({}),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only."],
+    adapters: {},
+  },
+  {
+    name: "draft_message",
+    label: "Draft Message",
+    description: "Write the message the user is about to send and show it to copy.",
+    promptSnippet: "draft_message - Draft the message on screen",
+    latency: "fast network",
+    inputSchema: schema({
+      context: { type: "string", description: "What the user said the message should say." },
+    }),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only; requires Accessibility permission."],
+    adapters: {},
+  },
+  {
+    name: "assist_form",
+    label: "Assist Form",
+    description: "Answer the form in front of the user from their memories and show the values to copy.",
+    promptSnippet: "assist_form - Answer the form on screen",
+    latency: "fast network",
+    inputSchema: schema({
+      context: {
+        type: "string",
+        description: "What the user said about how to fill the form, including a correction.",
+      },
+    }),
     annotations: localWrite,
     timeoutClass: "normal",
     executor: { kind: "swiftTool", executorName: "realtimeHub" },

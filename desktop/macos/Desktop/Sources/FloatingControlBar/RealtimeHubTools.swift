@@ -94,6 +94,16 @@ enum RealtimeHubTools {
       screen question, unless the user specifically asks about Omi. Answer about the user's \
       visible work and intent, not the assistant UI.
 
+      Leaving something behind: speech disappears, so an answer the user has to paste, \
+      keep, or read back — a snippet, an address, a set of values, a written passage, a \
+      draft — belongs on screen. Call show_panel with it and say one short line about \
+      what you put up rather than reading it out; call close_panel when they ask to \
+      dismiss it. A panel belongs to the window it opened over and goes away when the \
+      user moves on, so when they ask to see it again call reopen_panel instead of \
+      redoing the work. For the message or email they are about to send, call draft_message; \
+      for a form in front of them, call assist_form. Both put their result on the same \
+      panel to copy from.
+
       Keep latency low: prefer answering directly when you can.
       """
   }

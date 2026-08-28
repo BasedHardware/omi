@@ -34,6 +34,11 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case screenshot = "screenshot"
   case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
+  case showPanel = "show_panel"
+  case closePanel = "close_panel"
+  case reopenPanel = "reopen_panel"
+  case draftMessage = "draft_message"
+  case assistForm = "assist_form"
   case createCanonicalGoal = "create_canonical_goal"
   case getCanonicalGoals = "get_canonical_goals"
   case renderChatBlocks = "render_chat_blocks"
@@ -47,8 +52,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:d32bf2fca0a1a0f22eef248c5939566761b2c48cf706a4d65fbe0b924aedba91"
-  static let chatFirstManifestDigest = "sha256:8e6fa8a438188b2d34436a47962adc95c0fd8fbde619779087cd8c2ffd1ae0ce"
+  static let manifestDigest = "sha256:3f3854a3644fed132ab8224a7e37a50b50e21e4e8a2959364dfcb8fe3d1f15be"
+  static let chatFirstManifestDigest = "sha256:f9c831b1e4fd936b7aa9bc434b16965b37bb8fe291d3e84615a49ee1e53995d5"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -89,6 +94,11 @@ enum GeneratedToolExecutors {
     .screenshot: .realtimeHub,
     .reportScreenObservation: .realtimeHub,
     .pointClick: .realtimeHub,
+    .showPanel: .realtimeHub,
+    .closePanel: .realtimeHub,
+    .reopenPanel: .realtimeHub,
+    .draftMessage: .realtimeHub,
+    .assistForm: .realtimeHub,
     .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,
     .renderChatBlocks: .chatToolExecutor,

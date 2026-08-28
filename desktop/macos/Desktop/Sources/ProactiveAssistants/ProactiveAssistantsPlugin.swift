@@ -246,6 +246,31 @@ public class ProactiveAssistantsPlugin: NSObject {
     log("ProactiveAssistantsPlugin initialized")
   }
 
+  // MARK: - Voice-requested assist
+
+  /// Draft the message on screen because the user asked for it out loud.
+  ///
+  /// The assistants are built when monitoring starts. Someone who asked for a draft is
+  /// owed one whether or not they have proactive monitoring on, so the assistant is
+  /// built here if it does not exist yet — without subscribing it to the watcher, which
+  /// is what monitoring, and only monitoring, turns on.
+  func draftMessageOnDemand(context: String) async -> String {
+    guard let assistant = messageDraftAssistant ?? (try? MessageDraftAssistant()) else {
+      return "Message drafting is unavailable."
+    }
+    messageDraftAssistant = assistant
+    return await assistant.draftOnDemand(context: context)
+  }
+
+  /// Answer the form on screen because the user asked for it out loud.
+  func assistFormOnDemand(context: String) async -> String {
+    guard let assistant = formAssistAssistant ?? (try? FormAssistAssistant()) else {
+      return "Form assist is unavailable."
+    }
+    formAssistAssistant = assistant
+    return await assistant.assistOnDemand(context: context)
+  }
+
   // MARK: - Assistant Management
 
   private func enableAssistant(identifier: String, enabled: Bool) {

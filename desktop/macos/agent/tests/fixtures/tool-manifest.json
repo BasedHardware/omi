@@ -5112,6 +5112,319 @@
     }
   },
   {
+    "name": "show_panel",
+    "label": "Show Panel",
+    "description": "Show copyable text on the user's screen in a floating panel.",
+    "promptSnippet": "show_panel - Show copyable text on screen",
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Short title naming what the panel holds."
+        },
+        "items": {
+          "type": "array",
+          "description": "The content: one unlabeled entry for a passage of text, or one labeled entry per value.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Short name for this value."
+              },
+              "text": {
+                "type": "string",
+                "description": "The text to show and copy."
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "title",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Show Panel",
+      "summary": "Put copyable text on the user's screen.",
+      "bullets": [
+        "Use when the answer is something the user will paste, keep, or read back."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Put text on the user's screen in a floating panel with a copy button, so they can paste it somewhere. Use it whenever the answer is something to paste or keep rather than only hear: a snippet, an address, a set of values, a written passage. Speak one short line about what you put up; the panel carries the text, so never read long or secret content aloud.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Short title naming what the panel holds."
+          },
+          "items": {
+            "type": "array",
+            "description": "The content. One entry with no label for a single passage of text; one labeled entry per value when there are several.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "description": "Short name for this value. Omit for a single passage of prose."
+                },
+                "text": {
+                  "type": "string",
+                  "description": "The text to show and copy."
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "title",
+          "items"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "name": "close_panel",
+    "label": "Close Panel",
+    "description": "Dismiss the panel currently on the user's screen.",
+    "promptSnippet": "close_panel - Dismiss the panel on screen",
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Close Panel",
+      "summary": "Take down the panel currently on screen.",
+      "bullets": [
+        "Use when the user asks to close, hide, or dismiss it."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Take down the panel you put on the user's screen. Use it when they ask to close, hide, or dismiss it.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "name": "reopen_panel",
+    "label": "Reopen Panel",
+    "description": "Put the last panel back on the user's screen, at the window in front now.",
+    "promptSnippet": "reopen_panel - Show the last panel again",
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Reopen Panel",
+      "summary": "Put the last panel back on screen.",
+      "bullets": [
+        "Use when the user asks to see again what was on screen a moment ago."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Put the last panel back on the user's screen, where they are now. A panel belongs to the window it was opened over and goes away when they leave it, so use this whenever they ask to see it again, and instead of redoing the work that produced it.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "name": "draft_message",
+    "label": "Draft Message",
+    "description": "Write the message the user is about to send and show it to copy.",
+    "promptSnippet": "draft_message - Draft the message on screen",
+    "latency": "fast network",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "type": "string",
+          "description": "What the user said the message should say."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only; requires Accessibility permission."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Draft Message",
+      "summary": "Write the message the user is about to send.",
+      "bullets": [
+        "Use when the user asks for a reply, a message, or an email to be written."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Write the message the user is about to send and put it on screen to copy. Use it when they ask you to draft, write, or reply to a message or email. It reads the conversation in front of them; pass anything they said about what the message should say.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "type": "string",
+            "description": "What the user said the message should say. Omit when they gave no direction."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "name": "assist_form",
+    "label": "Assist Form",
+    "description": "Answer the form in front of the user from their memories and show the values to copy.",
+    "promptSnippet": "assist_form - Answer the form on screen",
+    "latency": "fast network",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "type": "string",
+          "description": "What the user said about how to fill the form, including a correction."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only; requires Accessibility permission."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Assist Form",
+      "summary": "Answer the form in front of the user from their memories.",
+      "bullets": [
+        "Use when the user asks for help filling in what is on screen."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Answer the form the user is looking at from what Omi knows about them, and put the values on screen to copy field by field. Use it when they ask for help filling something in. It reads the screen fresh every time, so call it again with what they said when they correct an answer: use my work email, make it shorter, that employer is out of date.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "context": {
+            "type": "string",
+            "description": "What the user said about how to fill the form, especially a correction to an answer already on screen. Omit when they gave no direction."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
     "name": "get_local_status",
     "label": "Get Local Status",
     "description": "Report whether local Omi Desktop context is available, including screen-history counts, indexed screenshot counts, and latest capture time.",

@@ -682,6 +682,56 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
+      toolName: "show_panel",
+      title: "Show Panel",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Put copyable text on the user's screen.",
+      bullets: [
+      "Use when the answer is something the user will paste, keep, or read back."
+    ]
+    ),
+    Capability(
+      toolName: "close_panel",
+      title: "Close Panel",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Take down the panel currently on screen.",
+      bullets: [
+      "Use when the user asks to close, hide, or dismiss it."
+    ]
+    ),
+    Capability(
+      toolName: "reopen_panel",
+      title: "Reopen Panel",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Put the last panel back on screen.",
+      bullets: [
+      "Use when the user asks to see again what was on screen a moment ago."
+    ]
+    ),
+    Capability(
+      toolName: "draft_message",
+      title: "Draft Message",
+      latency: .fastNetwork,
+      surfaces: Set([.realtimeHub]),
+      summary: "Write the message the user is about to send.",
+      bullets: [
+      "Use when the user asks for a reply, a message, or an email to be written."
+    ]
+    ),
+    Capability(
+      toolName: "assist_form",
+      title: "Assist Form",
+      latency: .fastNetwork,
+      surfaces: Set([.realtimeHub]),
+      summary: "Answer the form in front of the user from their memories.",
+      bullets: [
+      "Use when the user asks for help filling in what is on screen."
+    ]
+    ),
+    Capability(
       toolName: "get_local_status",
       title: "Get Local Status",
       latency: .fastLocal,
@@ -723,6 +773,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["ask_higher_model","cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
+    ["ask_higher_model","assist_form","cancel_agent_run","check_permission_status","close_panel","create_action_item","create_calendar_event","draft_message","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","reopen_panel","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","show_panel","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
   }
 }
