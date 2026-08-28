@@ -114,6 +114,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   // replacement turn.
   private var activeSystemSpeechToken: SystemSpeechToken?
   private var activePTTLease: VoiceOutputLease?
+  private var activeRealtimeSlowToolAcknowledgement: RealtimeSlowToolAcknowledgementKind?
 
   /// QueryTracer for the in-flight query, handed in by the floating-bar window.
   /// Used to bracket the `tts_start` span (first real chunk → first audio out).
@@ -529,6 +530,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       return
     }
     guard let phrase = kind.phrases.randomElement() else { return }
+    activeRealtimeSlowToolAcknowledgement = kind
+    log(
+      "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement queued kind=\(kind.rawValue)"
+    )
     setFloatingPillResponseGlow(true)
     let mode = currentMode ?? resolvePlaybackMode()
     currentMode = mode
@@ -654,6 +659,13 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       }
       audioPlayer = player
       activePlayerFallbackText = fallbackText
+      if let acknowledgement = activeRealtimeSlowToolAcknowledgement,
+        activePTTLease?.lane == .deterministicAgentAck
+      {
+        log(
+          "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement started kind=\(acknowledgement.rawValue) transport=selected_voice"
+        )
+      }
       tracer?.end("tts_start")
     } catch {
       // Don't drop the reply silently — speak this chunk with the system voice instead.
@@ -782,6 +794,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     Task { @MainActor [weak self] in
       guard let self else { return }
       guard self.audioPlayer === player else { return }
+      if let acknowledgement = self.activeRealtimeSlowToolAcknowledgement {
+        log(
+          "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement finished kind=\(acknowledgement.rawValue) transport=selected_voice success=\(flag)"
+        )
+        self.activeRealtimeSlowToolAcknowledgement = nil
+      }
       let fallbackText = self.activePlayerFallbackText
       self.audioPlayer = nil
       self.activePlayerFallbackText = ""
@@ -797,11 +815,36 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
   }
 
+  nonisolated func speechSynthesizer(
+    _ synthesizer: AVSpeechSynthesizer,
+    didStart utterance: AVSpeechUtterance
+  ) {
+    let utteranceBox = UtteranceBox(utterance)
+    Task { @MainActor [weak self, utteranceBox] in
+      guard let self,
+        SystemSpeechCallbackPolicy.matchesCurrentUtterance(
+          callbackUtterance: utteranceBox.value,
+          currentToken: self.activeSystemSpeechToken,
+          playbackGeneration: self.playbackGeneration),
+        let acknowledgement = self.activeRealtimeSlowToolAcknowledgement
+      else { return }
+      log(
+        "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement started kind=\(acknowledgement.rawValue) transport=system_voice"
+      )
+    }
+  }
+
   nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
     let utteranceBox = UtteranceBox(utterance)
     Task { @MainActor [weak self, utteranceBox] in
       guard let self else { return }
       guard self.completeSystemSpeechIfCurrent(utteranceBox.value) else { return }
+      if let acknowledgement = self.activeRealtimeSlowToolAcknowledgement {
+        log(
+          "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement finished kind=\(acknowledgement.rawValue) transport=system_voice success=true"
+        )
+        self.activeRealtimeSlowToolAcknowledgement = nil
+      }
       self.startPlaybackIfNeeded()
       self.clearFloatingPillResponseGlowIfIdle()
     }
@@ -812,6 +855,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     Task { @MainActor [weak self, utteranceBox] in
       guard let self else { return }
       guard self.completeSystemSpeechIfCurrent(utteranceBox.value) else { return }
+      if let acknowledgement = self.activeRealtimeSlowToolAcknowledgement {
+        log(
+          "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement finished kind=\(acknowledgement.rawValue) transport=system_voice success=false"
+        )
+        self.activeRealtimeSlowToolAcknowledgement = nil
+      }
       self.clearFloatingPillResponseGlowIfIdle()
     }
   }
@@ -844,6 +893,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     activePlayerFallbackText = ""
     speechSynthesizer.stopSpeaking(at: .immediate)
     activeSystemSpeechToken = nil
+    activeRealtimeSlowToolAcknowledgement = nil
     activePTTLease = nil
     if let lease = leaseToRelease, notifyPTTDrain {
       _ = VoiceTurnCoordinator.shared.releaseOutput(lease)
