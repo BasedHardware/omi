@@ -31,20 +31,37 @@ extension RealtimeHubController {
     warmDeferredForUserAway = true
     presenceRewarmTask?.cancel()
     presenceRewarmTask = Task { @MainActor [weak self] in
+      var previousSampleAt = Date()
       while !Task.isCancelled {
         try? await Task.sleep(
           nanoseconds: UInt64(RealtimeHubWarmPresencePolicy.presencePollInterval * 1_000_000_000))
         guard let self, !Task.isCancelled else { return }
-        guard self.warmDeferredForUserAway else { return }
-        if RealtimeHubWarmPresencePolicy.shouldResumeWarming(
-          secondsSinceLastUserInput: self.presenceIdleProvider())
-        {
-          log("RealtimeHub: user input resumed — re-warming deferred hub session")
-          self.ensureWarm(userInitiated: true)
-          return
-        }
+        let now = Date()
+        let elapsed = now.timeIntervalSince(previousSampleAt)
+        previousSampleAt = now
+        if self.presencePollTick(elapsedSincePreviousSample: elapsed) { return }
       }
     }
+  }
+
+  /// One presence-poll tick. Returns true when polling should stop — either
+  /// warming resumed or the deferral is gone. The freshness window is the
+  /// MEASURED gap since the previous sample plus slack, so a poll delayed by
+  /// the scheduler still accepts input that arrived anywhere in the gap
+  /// (a fixed sub-gap window would miss a brief return permanently).
+  @discardableResult
+  func presencePollTick(elapsedSincePreviousSample: TimeInterval) -> Bool {
+    guard warmDeferredForUserAway else { return true }
+    guard
+      RealtimeHubWarmPresencePolicy.shouldResumeWarming(
+        secondsSinceLastUserInput: presenceIdleProvider(),
+        freshnessWindow: max(
+          RealtimeHubWarmPresencePolicy.presencePollInterval,
+          elapsedSincePreviousSample) + RealtimeHubWarmPresencePolicy.presencePollSlack)
+    else { return false }
+    log("RealtimeHub: user input resumed — re-warming deferred hub session")
+    ensureWarm(userInitiated: true)
+    return true
   }
 
   /// Gate on every `ensureWarm` entry. A path carrying direct user intent

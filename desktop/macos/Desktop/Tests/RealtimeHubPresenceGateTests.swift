@@ -37,3 +37,48 @@ final class RealtimeHubPresenceGateTests: XCTestCase {
     XCTAssertFalse(controller.warmDeferredForUserAway)
   }
 }
+
+/// The return detector must not lose a brief return between delayed polls:
+/// the freshness window is the measured inter-sample gap plus slack, never a
+/// fixed sub-gap constant.
+@MainActor
+final class RealtimeHubPresencePollTimingTests: XCTestCase {
+  private func deferredController(idleSeconds: TimeInterval) -> RealtimeHubController {
+    let controller = RealtimeHubController()
+    controller.warmDeferredForUserAway = true
+    controller.presenceIdleProvider = { idleSeconds }
+    return controller
+  }
+
+  /// Input 15s ago, poll delayed to a 20s gap: a fixed 10s window would miss
+  /// this return forever; the elapsed-aware window resumes warming.
+  func testInputBetweenDelayedPollsResumesWarming() {
+    let controller = deferredController(idleSeconds: 15)
+    XCTAssertTrue(controller.presencePollTick(elapsedSincePreviousSample: 20))
+    XCTAssertFalse(controller.warmDeferredForUserAway)
+  }
+
+  /// Input from before the previous sample (older than the whole gap) is not
+  /// a return — the deferral holds.
+  func testStaleInputAcrossDelayedPollsStaysDeferred() {
+    let controller = deferredController(idleSeconds: 40)
+    XCTAssertFalse(controller.presencePollTick(elapsedSincePreviousSample: 20))
+    XCTAssertTrue(controller.warmDeferredForUserAway)
+  }
+
+  /// An on-time poll keeps the one-interval window (plus slack).
+  func testOnTimePollAcceptsInputInsideTheInterval() {
+    let controller = deferredController(idleSeconds: 5)
+    XCTAssertTrue(
+      controller.presencePollTick(
+        elapsedSincePreviousSample: RealtimeHubWarmPresencePolicy.presencePollInterval))
+    XCTAssertFalse(controller.warmDeferredForUserAway)
+  }
+
+  /// A cleared deferral stops the poll loop without touching warm state.
+  func testTickStopsWhenDeferralAlreadyCleared() {
+    let controller = RealtimeHubController()
+    controller.warmDeferredForUserAway = false
+    XCTAssertTrue(controller.presencePollTick(elapsedSincePreviousSample: 10))
+  }
+}

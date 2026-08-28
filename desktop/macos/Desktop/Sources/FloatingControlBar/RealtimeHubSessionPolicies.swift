@@ -1107,6 +1107,10 @@ enum RealtimeHubWarmPresencePolicy {
   static let idleThreshold: TimeInterval = 10 * 60
   /// While deferred, how often the controller re-samples for returned input.
   static let presencePollInterval: TimeInterval = 10
+  /// Slack added to the measured inter-poll gap: a poll that fires late must
+  /// still accept input that arrived any time since the previous sample, or a
+  /// brief return between delayed polls is missed permanently.
+  static let presencePollSlack: TimeInterval = 2
 
   /// `nil` = the idle query failed → warm (fail-open to today's behavior).
   static func shouldRewarmAfterIdleTeardown(secondsSinceLastUserInput: TimeInterval?) -> Bool {
@@ -1114,10 +1118,16 @@ enum RealtimeHubWarmPresencePolicy {
     return idle < idleThreshold
   }
 
-  /// While deferred: fresh input since the previous poll → resume warming.
-  static func shouldResumeWarming(secondsSinceLastUserInput: TimeInterval?) -> Bool {
+  /// While deferred: input newer than the freshness window → resume warming.
+  /// The poll loop passes its MEASURED elapsed time (+ slack) so scheduler
+  /// delay widens the window instead of losing the return; passive
+  /// `ensureWarm` callers use the default one-interval window.
+  static func shouldResumeWarming(
+    secondsSinceLastUserInput: TimeInterval?,
+    freshnessWindow: TimeInterval = presencePollInterval
+  ) -> Bool {
     guard let idle = secondsSinceLastUserInput else { return true }
-    return idle < presencePollInterval
+    return idle < freshnessWindow
   }
 }
 enum RealtimeProviderCloseRecoveryAction: String {
