@@ -7,6 +7,23 @@ import {
   type OmiNative,
 } from '../src/omiNative';
 
+test('public native hardware surface does not advertise unimplemented adapters', () => {
+  const source = require('node:fs').readFileSync(
+    require('node:path').resolve(__dirname, '../src/omiNativeTypes.ts'),
+    'utf8',
+  );
+
+  expect(source).not.toContain('readCharacteristic');
+  expect(source).not.toContain('getWatchStatus');
+  expect(source).not.toContain('capturePhoto');
+  expect(source).not.toContain('startPhoneCall');
+  expect(source).not.toContain('getWifiNetwork');
+  expect(source).toContain('startScan');
+  expect(source).toContain('connectDevice');
+  expect(source).toContain('connectedDeviceId');
+  expect(source).toContain('ConnectionPhase');
+});
+
 test('native module selection keeps a registered implementation', () => {
   const nativeModule = {} as OmiNative;
 

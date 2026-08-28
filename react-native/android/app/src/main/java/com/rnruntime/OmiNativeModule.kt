@@ -7,11 +7,19 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.WritableMap
+import com.facebook.react.modules.core.DeviceEventManagerModule
 
 class OmiNativeModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
-  private val ble = OmiBleController(context)
+  private val ble = OmiBleController(context, ::emit)
 
   override fun getName() = "OmiNative"
+
+  @ReactMethod
+  fun addListener(eventName: String) {}
+
+  @ReactMethod
+  fun removeListeners(count: Int) {}
 
   @ReactMethod
   fun getSnapshot(promise: Promise) = promise.resolve(ble.snapshot())
@@ -33,8 +41,7 @@ class OmiNativeModule(private val context: ReactApplicationContext) : ReactConte
   @ReactMethod
   fun startScan(timeoutSeconds: Int?, serviceUuids: ReadableArray?, promise: Promise) {
     val uuids = buildList { serviceUuids?.let { values -> for (index in 0 until values.size()) values.getString(index)?.let(::add) } }
-    ble.startScan(uuids)
-    promise.resolve(ble.devices())
+    ble.startScan(timeoutSeconds, uuids, promise::resolve)
   }
 
   @ReactMethod
@@ -45,8 +52,9 @@ class OmiNativeModule(private val context: ReactApplicationContext) : ReactConte
 
   @ReactMethod
   fun connectDevice(id: String, promise: Promise) {
-    ble.connect(id)
-    promise.resolve(null)
+    ble.connect(id) { ok, message ->
+      if (ok) promise.resolve(null) else promise.reject("OMI_DEVICE_UNAVAILABLE", message)
+    }
   }
 
   @ReactMethod
@@ -54,27 +62,6 @@ class OmiNativeModule(private val context: ReactApplicationContext) : ReactConte
     ble.disconnect(id)
     promise.resolve(null)
   }
-
-  @ReactMethod fun readCharacteristic(deviceId: String, serviceUuid: String, characteristicUuid: String, promise: Promise) = unsupported(promise, "GATT read")
-  @ReactMethod fun writeCharacteristic(deviceId: String, serviceUuid: String, characteristicUuid: String, data: ReadableArray, promise: Promise) = unsupported(promise, "GATT write")
-  @ReactMethod fun subscribeCharacteristic(deviceId: String, serviceUuid: String, characteristicUuid: String, promise: Promise) = unsupported(promise, "GATT subscribe")
-  @ReactMethod fun unsubscribeCharacteristic(deviceId: String, serviceUuid: String, characteristicUuid: String, promise: Promise) = unsupported(promise, "GATT unsubscribe")
-  @ReactMethod fun startRssiStreaming(deviceId: String, promise: Promise) = unsupported(promise, "RSSI streaming")
-  @ReactMethod fun stopRssiStreaming(deviceId: String, promise: Promise) = promise.resolve(null)
-  @ReactMethod fun getDeviceDiagnostics(deviceId: String, promise: Promise) = unsupported(promise, "device diagnostics")
-  @ReactMethod fun getBatteryHistory(deviceId: String, promise: Promise) = promise.resolve(Arguments.createArray())
-  @ReactMethod fun startCapture(mode: String, promise: Promise) = unsupported(promise, "audio capture")
-  @ReactMethod fun stopCapture(promise: Promise) = promise.resolve(null)
-  @ReactMethod fun getAudioRoute(promise: Promise) = promise.resolve("phone-mic")
-  @ReactMethod fun startPhoneCall(phoneNumber: String, promise: Promise) = unsupported(promise, "phone call")
-  @ReactMethod fun endPhoneCall(promise: Promise) = promise.resolve(null)
-  @ReactMethod fun setPhoneCallAudio(muted: Boolean, speakerOn: Boolean, promise: Promise) = unsupported(promise, "call audio")
-  @ReactMethod fun setNotificationOnKillService(title: String, description: String, promise: Promise) = unsupported(promise, "kill-service notification")
-  @ReactMethod fun getWifiNetwork(promise: Promise) = unsupported(promise, "Wi-Fi")
-  @ReactMethod fun setBackgroundMode(active: Boolean, promise: Promise) = unsupported(promise, "background mode")
-  @ReactMethod fun getWatchStatus(promise: Promise) = unsupported(promise, "watch status")
-  @ReactMethod fun getCameraStatus(promise: Promise) = unsupported(promise, "camera status")
-  @ReactMethod fun capturePhoto(promise: Promise) = unsupported(promise, "camera capture")
 
   @ReactMethod
   fun getCppCapabilities(promise: Promise) = promise.resolve(nativeCapabilities())
@@ -87,7 +74,14 @@ class OmiNativeModule(private val context: ReactApplicationContext) : ReactConte
     else promise.resolve(Arguments.fromList(normalized.map { it.toInt() and 0xff }))
   }
 
-  private fun unsupported(promise: Promise, capability: String) = promise.reject("NATIVE_ADAPTER_UNAVAILABLE", "$capability requires a platform adapter")
+  private fun emit(type: String, body: WritableMap) {
+    body.putString("type", type)
+    if (context.hasActiveReactInstance()) {
+      context
+        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+        .emit("omiNativeEvent", body)
+    }
+  }
 
   private external fun nativeCapabilities(): String
   private external fun nativeNormalizePacket(raw: ByteArray): ByteArray?

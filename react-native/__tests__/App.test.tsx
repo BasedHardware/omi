@@ -20,19 +20,41 @@ type MockResponse = {body: string | null; id: string; status: number};
 const mockNative = {
   connectDevice: jest.fn(async (_deviceId: string) => undefined),
   disconnectDevice: jest.fn(async (_deviceId: string) => undefined),
-  getSnapshot: jest.fn(async () => ({
-    audioRoute: 'phone-mic',
-    background: 'inactive',
-    bluetooth: 'poweredOn',
-    capture: 'idle',
-    captureMode: 'stream',
-    devices: [
-      {battery: 82, connected: true, id: 'omi-1', name: 'Omi', rssi: -54},
-    ],
-    lastEvent: 'Connected to Omi',
-    microphone: 'granted',
-    notifications: 'granted',
-  })),
+  getSnapshot: jest.fn(
+    async (): Promise<{
+      audioRoute: string;
+      background: string;
+      bluetooth: string;
+      capture: string;
+      captureMode: string;
+      connectedDeviceId: string | null;
+      devices: Array<{
+        battery?: number;
+        connected: boolean;
+        id: string;
+        name: string;
+        rssi: number;
+      }>;
+      lastEvent: string;
+      phase: string;
+      microphone: string;
+      notifications: string;
+    }> => ({
+      audioRoute: 'phone-mic',
+      background: 'inactive',
+      bluetooth: 'poweredOn',
+      capture: 'idle',
+      captureMode: 'stream',
+      connectedDeviceId: 'omi-1',
+      devices: [
+        {battery: 82, connected: true, id: 'omi-1', name: 'Omi', rssi: -54},
+      ],
+      lastEvent: 'Connected to Omi',
+      phase: 'connected',
+      microphone: 'granted',
+      notifications: 'granted',
+    }),
+  ),
   startScan: jest.fn(async (_timeoutSeconds?: number) => []),
 };
 const mockBackend = {
@@ -340,6 +362,7 @@ jest.mock('../src/omiNative', () => ({
   },
   isBluetoothScanAvailable: (state: string | undefined) =>
     state === 'poweredOn' || state === 'available' || state === 'selected',
+  subscribeOmiNativeEvents: () => () => undefined,
   omiNative: {
     connectDevice: (deviceId: string) => mockNative.connectDevice(deviceId),
     disconnectDevice: (deviceId: string) =>
@@ -463,8 +486,10 @@ test.each([
       bluetooth: 'poweredOn',
       capture: 'idle',
       captureMode: 'stream',
+      connectedDeviceId: null,
       devices: [],
       lastEvent: 'Omi device capture is not wired in the browser.',
+      phase: 'disconnected',
       microphone: 'unsupported',
       notifications: 'unknown',
     });
@@ -2722,10 +2747,12 @@ test('keeps desktop hardware secondary while retaining native device actions', a
     bluetooth: 'poweredOn',
     capture: 'idle',
     captureMode: 'stream',
+    connectedDeviceId: 'omi-1',
     devices: [
       {battery: 82, connected: true, id: 'omi-1', name: 'Omi', rssi: -54},
     ],
     lastEvent: 'Connected to Omi',
+    phase: 'connected',
     microphone: 'granted',
     notifications: 'granted',
   });
