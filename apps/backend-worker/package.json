@@ -22,6 +22,7 @@
     "@omi-core/contracts": "workspace:*",
     "@omi-core/kernel": "workspace:*",
     "@omi-core/ratified-contracts": "workspace:*",
+    "@sinclair/typebox": "0.34.41",
     "elysia": "1.4.30",
     "hono": "4.12.26"
   },
