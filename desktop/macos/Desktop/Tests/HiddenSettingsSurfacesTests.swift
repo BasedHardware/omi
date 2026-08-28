@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 
 @testable import Omi_Computer
@@ -66,5 +67,41 @@ final class HiddenSettingsSurfacesTests: XCTestCase {
   func testSearchIndexAgreesWithThePolicy() {
     let searchable = Set(SettingsSearchItem.allSearchableItems.map(\.settingId))
     XCTAssertTrue(searchable.isDisjoint(with: HiddenSettingsSurfacesPolicy.hiddenSettingIds))
+  }
+
+  // MARK: - The real view's render decision
+
+  /// Executes TasksHeaderSettingsGear's REAL `body` builder — the production
+  /// render decision — and reports whether it produced the button. A lone `if`
+  /// in a ViewBuilder yields an Optional view: nil means nothing renders.
+  /// (SwiftUI's accessibility tree does not materialize in this CLI test host,
+  /// so the body value is the deepest reliably executable seam.)
+  @MainActor
+  private func gearBodyProducesButton(_ view: TasksHeaderSettingsGear) -> Bool {
+    let mirror = Mirror(reflecting: view.body)
+    if mirror.displayStyle == .optional { return mirror.children.first != nil }
+    return true
+  }
+
+  /// Under the production policy the header component renders nothing; forced
+  /// visible it renders the button — the control case that proves the probe
+  /// distinguishes the two, so the production absence is meaningful.
+  @MainActor
+  func testGearBodyRendersNothingUnderProductionPolicyAndButtonWhenForced() {
+    XCTAssertFalse(
+      gearBodyProducesButton(TasksHeaderSettingsGear(action: {})),
+      "production policy: the header's gear body must render nothing")
+    XCTAssertTrue(
+      gearBodyProducesButton(TasksHeaderSettingsGear(visible: true, action: {})),
+      "control case: forced visible must render the button")
+  }
+
+  /// Drives the exact transition value SettingsPage applies on
+  /// `.navigateToTaskSettings`: it opens Advanced and highlights nothing while
+  /// the Task Assistant pane is hidden.
+  func testTaskSettingsTransitionOpensAdvancedAndHighlightsNothing() {
+    let transition = SettingsDeepLinkTransition.taskSettings()
+    XCTAssertEqual(transition.section, "Advanced")
+    XCTAssertNil(transition.highlight)
   }
 }
