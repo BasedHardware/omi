@@ -875,7 +875,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// PTT cold-start grace: give an already-warming/reconnecting hub a short chance to
   /// become ready before falling back to the slower transcript cascade.
   func waitUntilActive(timeout: TimeInterval) async -> Bool {
-    ensureWarm()
+    ensureWarm(userInitiated: true)
     if isTransportReady { return true }
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
@@ -992,7 +992,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       log(
         "RealtimeHub: headless PTT screen evidence capture="
           + (screenEvidenceCaptured ? "available" : "unavailable"))
-      ensureWarm()
+      ensureWarm(userInitiated: true)
       guard await waitUntilActive(timeout: 15) else {
         _ = cancelTurn(turnID: turnID)
         VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
@@ -1338,7 +1338,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     clips: [Data],
     timeout: Double
   ) async -> [String: String] {
-    ensureWarm()
+    ensureWarm(userInitiated: true)
     guard await waitUntilActive(timeout: 15) else {
       return ["error": "hub session did not become active"]
     }

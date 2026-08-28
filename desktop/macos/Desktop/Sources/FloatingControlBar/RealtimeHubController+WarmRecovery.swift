@@ -40,11 +40,31 @@ extension RealtimeHubController {
           secondsSinceLastUserInput: self.presenceIdleProvider())
         {
           log("RealtimeHub: user input resumed — re-warming deferred hub session")
-          self.ensureWarm()
+          self.ensureWarm(userInitiated: true)
           return
         }
       }
     }
+  }
+
+  /// Gate on every `ensureWarm` entry. A path carrying direct user intent
+  /// (PTT press, app launch, the presence poll's input-return) always clears
+  /// an away deferral. Passive lifecycle callers (mint completions,
+  /// owner-change recovery, barge-in cleanup) keep it unless the HID sample
+  /// shows the user actually returned — otherwise background churn would
+  /// silently defeat the quota gate.
+  func admitWarmRequest(userInitiated: Bool) -> Bool {
+    guard warmDeferredForUserAway else { return true }
+    guard
+      userInitiated
+        || RealtimeHubWarmPresencePolicy.shouldResumeWarming(
+          secondsSinceLastUserInput: presenceIdleProvider())
+    else {
+      log("RealtimeHub: passive warm request skipped — deferred while user away")
+      return false
+    }
+    clearPresenceWarmDeferral()
+    return true
   }
 
   func clearPresenceWarmDeferral() {

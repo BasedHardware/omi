@@ -19,7 +19,7 @@ extension DesktopAutomationActionRegistry {
       let controller = RealtimeHubController.shared
       let from = controller.effectiveProvider.rawValue
       let started = controller.failoverToAlternateProvider(reason: "quota")
-      controller.ensureWarm()
+      controller.ensureWarm(userInitiated: true)
       return [
         "failover_started": started ? "true" : "false",
         "from": from,
