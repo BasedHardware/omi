@@ -673,6 +673,10 @@ struct ConversationDetailView: View {
         .padding(.horizontal, OmiSpacing.lg)
     }
 
+    ConversationPhotoGallery(
+      conversationID: displayConversation.id,
+      photos: displayConversation.photos)
+
     // Action items sit directly under the summary: they are the part of a
     // meeting a reader acts on. Nothing here is a task until the reader says
     // so (I1) — each row carries its own "Add to Tasks".

@@ -121,3 +121,20 @@ def test_deploy_workflows_gate_success_on_read_only_scheduler_validation(workflo
     assert "scheduler jobs create" not in workflow
     assert "scheduler jobs update" not in workflow
     assert "scheduler jobs resume" not in workflow
+
+
+def test_frame_retention_workflow_resumes_only_a_verified_paused_scheduler():
+    # omi-test-quality: source-inspection -- static workflow recovery contract
+    workflow = (ROOT / ".github" / "workflows" / "gcp_frame_request_retention_job.yml").read_text(encoding="utf-8")
+
+    state_read = "scheduler_state=$(gcloud scheduler jobs describe"
+    paused_guard = 'if [[ "$scheduler_state" == "PAUSED" ]]; then'
+    resume = 'gcloud scheduler jobs resume "$SCHEDULER_JOB"'
+    unexpected_guard = 'elif [[ "$scheduler_state" != "ENABLED" ]]; then'
+    validation = "validate_memory_maintenance_scheduler.py"
+    assert state_read in workflow
+    assert paused_guard in workflow
+    assert resume in workflow
+    assert unexpected_guard in workflow
+    assert workflow.index(state_read) < workflow.index(paused_guard) < workflow.index(resume)
+    assert workflow.index(resume) < workflow.index(validation)

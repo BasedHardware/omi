@@ -101,6 +101,7 @@ function attemptContext(adapterId: string, binding: Awaited<ReturnType<RuntimeAd
 
 async function executeNodeAdapterBoundary(adapterId: string, failExecution: boolean): Promise<void> {
   let adapter: RuntimeAdapter;
+  let restoreProcessGroupKill: (() => void) | undefined;
   if (adapterId === "pi-mono") {
     const harness = new PiMonoAdapter({ authToken: "fixture-token" });
     vi.spyOn(harness, "start").mockResolvedValue();
@@ -114,6 +115,12 @@ async function executeNodeAdapterBoundary(adapterId: string, failExecution: bool
   } else {
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as never);
+    const processGroupKill = vi.spyOn(process, "kill").mockImplementation(() => {
+      const error = new Error("mock process group is unavailable") as NodeJS.ErrnoException;
+      error.code = "ESRCH";
+      throw error;
+    });
+    restoreProcessGroupKill = () => processGroupKill.mockRestore();
     installAcpTransport(proc, failExecution);
     adapter = adapterId === "acp"
       ? new AcpRuntimeAdapter({ nodeBin: "/node", acpEntry: "/acp-entry.mjs" })
@@ -122,19 +129,23 @@ async function executeNodeAdapterBoundary(adapterId: string, failExecution: bool
         : new OpenClawRuntimeAdapter({ command: "openclaw acp" });
   }
 
-  await adapter.start();
-  const binding = await adapter.openBinding({
-    sessionId: "ses-conformance",
-    cwd: "/tmp",
-    model: "fixture-model",
-  });
-  const execution = adapter.executeAttempt(attemptContext(adapterId, binding), () => {}, new AbortController().signal);
-  if (failExecution) {
-    await expect(execution).rejects.toThrow("deterministic conformance failure");
-  } else {
-    await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });
+  try {
+    await adapter.start();
+    const binding = await adapter.openBinding({
+      sessionId: "ses-conformance",
+      cwd: "/tmp",
+      model: "fixture-model",
+    });
+    const execution = adapter.executeAttempt(attemptContext(adapterId, binding), () => {}, new AbortController().signal);
+    if (failExecution) {
+      await expect(execution).rejects.toThrow("deterministic conformance failure");
+    } else {
+      await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });
+    }
+    await adapter.stop();
+  } finally {
+    restoreProcessGroupKill?.();
   }
-  await adapter.stop();
 }
 
 /** A deterministic stdio sink substitutes for a model-facing adapter socket. */

@@ -455,6 +455,11 @@ extension RealtimeHubController {
         interrupting: reducerInterruptsPreviousTurn)
     }
     s.commitInputTurn()
+    AnalyticsManager.shared.floatingBarQuerySent(
+      messageLength: turnTranscript.count,
+      hasScreenshot: false,
+      source: .pttRealtime
+    )
     VoiceTurnCoordinator.shared.publish(
       .hubCommitAccepted(
         turnID: turnID,

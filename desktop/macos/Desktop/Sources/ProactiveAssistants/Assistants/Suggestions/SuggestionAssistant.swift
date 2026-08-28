@@ -439,18 +439,40 @@ actor SuggestionAssistant: ProactiveAssistant {
   }
 
   private func buildPrompt(frame: CapturedFrame, grounding: SuggestionGrounding) -> String {
+    Self.userPrompt(
+      appName: frame.appName,
+      windowTitle: frame.windowTitle,
+      groundingText: grounding.promptSections(),
+      recentSuggestions: recentSuggestions.map(\.text),
+      now: Date()
+    )
+  }
+
+  /// The per-evaluation user prompt. Static with an injected clock so tests can pin
+  /// the rendered request from a fixed instant. The suggestion lane judges on-screen
+  /// dates (the "scheduled this for 2026" class) and commitment timing, so every
+  /// request carries today's date — date-only, in the user turn, keeping the system
+  /// prompt byte-stable for prefix caching (SCA-358).
+  static func userPrompt(
+    appName: String,
+    windowTitle: String?,
+    groundingText: String,
+    recentSuggestions: [String],
+    now: Date,
+    timeZone: TimeZone = .current
+  ) -> String {
     var sections: [String] = []
 
     sections.append(
       """
       == WHAT THE USER IS DOING RIGHT NOW ==
-      App: \(frame.appName)
-      Window: \(frame.windowTitle ?? "(no title)")
+      App: \(appName)
+      Window: \(windowTitle ?? "(no title)")
+      Today is \(ChatPromptBuilder.currentCalendarDay(at: now, timeZone: timeZone)).
       The attached screenshot is their screen at this moment.
       """
     )
 
-    let groundingText = grounding.promptSections()
     if !groundingText.isEmpty {
       sections.append(groundingText)
     }
@@ -458,7 +480,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     if !recentSuggestions.isEmpty {
       sections.append(
         "== RECENT SUGGESTIONS (do not repeat these) ==\n"
-          + recentSuggestions.map(\.text).joined(separator: "\n")
+          + recentSuggestions.joined(separator: "\n")
       )
     }
 

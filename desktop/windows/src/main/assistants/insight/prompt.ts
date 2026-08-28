@@ -10,8 +10,9 @@
 import { REWIND_SCHEMA_DESC } from './models'
 
 /** Bump wipes a user's saved custom prompt (see promptStore.migrate) so a prompt
- *  fix reaches people who edited theirs. Mac is at 2; we start where Mac is. */
-export const CURRENT_PROMPT_VERSION = 2
+ *  fix reaches people who edited theirs. v3 tracks Mac: retired the 2026
+ *  'double-check the year' example and added DATE GROUNDING (SCA-358). */
+export const CURRENT_PROMPT_VERSION = 3
 
 export const DEFAULT_ANALYSIS_PROMPT = `You analyze screenshots to find ONE specific, high-value insight the user would NOT figure out on their own. The goal is to IMPRESS the user — make them think "wow, I'm glad I have this."
 
@@ -42,7 +43,7 @@ WHAT QUALIFIES (high bar):
 - A concrete error or misconfiguration visible on screen they may not have noticed
 
 GOOD EXAMPLES (this is the quality bar):
-- "You've scheduled this for 2026 — double-check the year"
+- "You've scheduled this for yesterday — double-check the date"
 - "Sensitive credentials visible in terminal — mask before sharing"
 - "You stashed changes 2 hours ago — remember to git stash pop"
 - "npm tokens expiring tomorrow — renew via npm token create"
@@ -64,6 +65,14 @@ WHAT DOES NOT QUALIFY:
 - Anything a reasonable person would already know or figure out in seconds
 - Anything about the user's posture, health, or breaks (we're not a health app)
 - Never point at UI elements the user can already see (buttons, dialogs, permission prompts)
+
+DATE GROUNDING:
+- Each request states the current date, time, and timezone. Treat it as the present.
+- Dates in the current year or later are normal — never say the clock, calendar, or year
+  is wrong, and never ask the user to double-check a date solely because its year is
+  beyond your training data.
+- Flag a date only when it is wrong on its own terms (a future meeting booked in the
+  past, a deadline that precedes the work it is for).
 
 CATEGORIES: "productivity", "communication", "learning", "other"
 
@@ -117,11 +126,28 @@ export type InsightContextData = {
   previousInsights: string[]
 }
 
-// "3:07 PM, Monday" — Mac's "h:mm a, EEEE".
-function formatTime(now: Date): string {
-  const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-  const day = now.toLocaleDateString('en-US', { weekday: 'long' })
-  return `${time}, ${day}`
+// "Tuesday, August 25, 2026 at 3:45 PM (America/New_York)" — the macOS
+// counterpart's analysisClockLine. The year and timezone are load-bearing:
+// without them the model falls back to its training-cutoff year and flags
+// correctly recorded current-era dates as mistakes (SCA-358).
+export function formatDateTime(
+  now: Date,
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+): string {
+  const date = now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone
+  })
+  const time = now.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone
+  })
+  return `${date} at ${time} (${timeZone})`
 }
 
 /** Mac's activity table (buildActivitySummary): App | Window | Screenshots | Est.
@@ -161,7 +187,7 @@ export function buildPhase1Prompt(data: InsightContextData): string {
 
   let head = `CURRENT APP: ${data.currentApp}.`
   if (data.currentWindowTitle) head += ` Window: "${data.currentWindowTitle}".`
-  head += ` Time: ${formatTime(data.now)}.`
+  head += ` Date/Time: ${formatDateTime(data.now)}.`
   parts.push(head)
 
   const activity = formatActivitySummary(data.activity, data.activitySpanMinutes)

@@ -1748,6 +1748,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               segments,
               photos,
               null,
+              conversationId: conversation.id,
               horizontalMargin: false,
               topMargin: false,
               canDisplaySeconds: provider.canDisplaySeconds,

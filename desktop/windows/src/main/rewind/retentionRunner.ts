@@ -8,8 +8,9 @@ const PRUNE_INTERVAL_MS = 60 * 60 * 1000 // hourly
 
 export async function pruneRewindOnce(): Promise<number> {
   const { retentionDays } = getRewindSettings()
-  const cutoff = retentionCutoff(Date.now(), retentionDays)
-  const removed = deleteRewindFramesOlderThan(cutoff)
+  const now = Date.now()
+  const cutoff = retentionCutoff(now, retentionDays)
+  const removed = deleteRewindFramesOlderThan(cutoff, now)
   await Promise.all(
     removed.map((f) =>
       removeRewindFrame(rewindRoot(), f.imagePath).catch((error: NodeJS.ErrnoException) => {

@@ -180,6 +180,8 @@ class ConversationPhoto {
   String id;
   final String base64;
   String? description;
+  final String? contentType;
+  final String? storageId;
   final DateTime createdAt;
   bool discarded;
 
@@ -187,6 +189,8 @@ class ConversationPhoto {
     required this.id,
     required this.base64,
     this.description,
+    this.contentType,
+    this.storageId,
     required this.createdAt,
     this.discarded = false,
   });
@@ -201,6 +205,8 @@ class ConversationPhoto {
       id: generated.id ?? '',
       base64: generated.base64,
       description: generated.description,
+      contentType: generated.contentType,
+      storageId: generated.storageId,
       createdAt: generated.createdAt ?? DateTime.now(),
       discarded: generated.discarded,
     );
@@ -211,8 +217,10 @@ class ConversationPhoto {
       id: id,
       base64: base64,
       description: description,
+      contentType: contentType,
       createdAt: createdAt,
       discarded: discarded,
+      storageId: storageId,
     );
   }
 

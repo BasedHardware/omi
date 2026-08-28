@@ -212,6 +212,14 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
 
   Future<void> _handleSave() async {
     if (contentController.text.trim().isEmpty) return;
+    if (widget.memory.isKnowledgeLedger &&
+        (widget.memory.deleted ||
+            widget.memory.invalidAt != null ||
+            (widget.memory.supersededBy ?? '').trim().isNotEmpty ||
+            widget.memory.ledgerKind != KnowledgeLedgerKind.fact ||
+            widget.memory.isLocked)) {
+      return;
+    }
 
     setState(() {
       _isSaving = true;

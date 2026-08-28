@@ -5,6 +5,7 @@ description: Hermetic memory create and delete via bridge API actions
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/KnowledgeLedgerMirrorStagingSchema.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+MemoryCreation.swift
 preconditions:

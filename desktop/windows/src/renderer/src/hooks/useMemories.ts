@@ -3,33 +3,13 @@ import { omiApi } from '../lib/apiClient'
 import { fetchAllMemoriesPaged } from '../lib/memoriesBulk'
 import { cache, hydrateFromDisk, publish, subscribers } from '../lib/memoriesCache'
 import { getCacheUid } from '../lib/persistentCache'
+import {
+  parseKnowledgeLedgerMemory,
+  type KnowledgeLedgerMemory
+} from '../../../shared/knowledgeLedger'
 
-export type Memory = {
-  id: string
-  uid: string
-  content: string
-  headline?: string | null
-  category?: string
-  visibility?: string
-  tags?: string[]
-  created_at: string
-  updated_at: string
-  conversation_id?: string | null
-  // Canonical product lifecycle layer (short_term/long_term/…), derived from
-  // memory_tier on the backend at serialization time. Null for legacy/untiered
-  // memories — the tier badge renders ONLY when this is set (mirrors Mac's
-  // `tierIsExplicit` rule), and the layer filter is itself hidden unless the
-  // server advertises tier exposure (see canonicalLifecycleExposed).
-  layer?: string | null
-  memory_tier?: string | null
-  // Capture provenance — shown in the card footer / detail sheet when present.
-  primary_capture_device?: string | null
-  capture_device_ids?: string[]
-  manually_added?: boolean
-  capture_confidence?: number | null
-  app_id?: string | null
-  evidence?: Array<{ source_type?: string | null }>
-}
+/** Memory is the legacy adapter plus optional knowledge_ledger.v1 fields. */
+export type Memory = KnowledgeLedgerMemory
 
 // Axios lowercases response header keys.
 const CANONICAL_LIFECYCLE_HEADER = 'x-omi-memory-canonical-lifecycle-exposed'
@@ -47,7 +27,10 @@ async function fetchMemories(): Promise<Memory[]> {
     const header = r.headers?.[CANONICAL_LIFECYCLE_HEADER]
     if (typeof header === 'string') cache.canonicalLifecycleExposed = header === 'true'
   })
-  return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  return list
+    .map(parseKnowledgeLedgerMemory)
+    .filter((memory): memory is Memory => memory !== null)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 }
 
 // Shared by editMemory and setMemoryVisibility: both PATCH a single field and

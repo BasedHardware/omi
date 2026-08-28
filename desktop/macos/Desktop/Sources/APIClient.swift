@@ -681,6 +681,24 @@ extension APIClient {
     return try await get("v1/conversations/\(id)")
   }
 
+  /// Reads conversation-lifetime photo bytes. Storage-backed photos no longer
+  /// require inline base64 in the conversation JSON payload.
+  func getConversationPhotoImage(conversationId: String, photoId: String) async throws -> Data {
+    let authPolicy = try resolvedRequestAuthPolicy(expectedOwnerId: nil, authorizationSnapshot: nil)
+    let base = baseURL
+    guard let url = URL(string: base + "v1/conversations/\(conversationId)/photos/\(photoId)/image") else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    let (data, response) = try await performAuthenticatedData(for: request, authPolicy: authPolicy)
+    guard (200...299).contains(response.statusCode) else {
+      throw APIError.httpError(statusCode: response.statusCode, detail: nil)
+    }
+    return data
+  }
+
   /// Reads a capture detail through the archive's strict Omi-device provenance
   /// contract. This is intentionally separate from the legacy mixed-source
   /// conversation detail API.

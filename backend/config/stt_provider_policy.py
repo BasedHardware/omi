@@ -23,6 +23,7 @@ DEEPGRAM_CLOUD_PROVIDER: Final = 'deepgram_cloud'
 DEEPGRAM_SELF_HOSTED_PROVIDER: Final = 'deepgram_self_hosted'
 MODULATE_PROVIDER: Final = 'modulate'
 PARAKEET_PROVIDER: Final = 'parakeet'
+SONIOX_PROVIDER: Final = 'soniox'
 
 DEEPGRAM_PROVIDERS: Final[tuple[str, ...]] = (DEEPGRAM_CLOUD_PROVIDER, DEEPGRAM_SELF_HOSTED_PROVIDER)
 DEEPGRAM_MODEL_TOKENS: Final[frozenset[str]] = frozenset({'deepgram', 'nova-2', 'nova-3', 'dg-nova-2', 'dg-nova-3'})
@@ -121,6 +122,9 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
             STTServingSurface.PTT,
         }
     ),
+    # Streaming only: transcribe_voice_message_stream dispatches Parakeet and
+    # Modulate alone, and the batch path has no Soniox client.
+    SONIOX_PROVIDER: frozenset({STTServingSurface.STREAMING}),
 }
 
 # Defaults are also policy-owned so a deployment fallback cannot drift from the
@@ -221,6 +225,8 @@ def provider_for_model_token(model: str) -> str | None:
         return PARAKEET_PROVIDER
     if normalized == 'modulate-velma-2':
         return MODULATE_PROVIDER
+    if normalized == 'soniox':
+        return SONIOX_PROVIDER
     if normalized in DEEPGRAM_MODEL_TOKENS:
         return DEEPGRAM_CLOUD_PROVIDER
     return None

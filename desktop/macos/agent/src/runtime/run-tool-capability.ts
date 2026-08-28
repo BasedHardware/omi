@@ -78,6 +78,8 @@ export interface RunToolCapability {
   originatingUserText: string;
   precedingAssistantText: string | null;
   runMode: RunMode;
+  /** Kernel-derived adapter built-in policy; request metadata cannot widen it. */
+  builtInToolPolicy: "default" | "read_only";
   chatMode: string | null;
   profileGeneration: number;
   manifestVersion: number;
@@ -314,6 +316,13 @@ export class RunToolCapabilityBroker {
       originatingUserText: persisted.originatingUserText,
       precedingAssistantText: persisted.precedingAssistantText,
       runMode: persisted.runMode,
+      // Ask-mode service turns are non-interactive system work. Derive this
+      // from persisted run/surface authority, never an external-ref prefix or
+      // caller metadata, so choosing a label cannot grant mutation tools.
+      builtInToolPolicy:
+        persisted.runMode === "ask" && persisted.surfaceKind === "service"
+          ? "read_only"
+          : "default",
       chatMode: persisted.chatMode,
       profileGeneration: persisted.profile.generation,
       manifestVersion: snapshot.manifestVersion,
@@ -395,6 +404,9 @@ export class RunToolCapabilityBroker {
     const normalized = normalizeOmiToolName(projection, input.toolName).canonicalName;
     const tool = toolManifestEntry(normalized);
     if (!tool) this.reject("tool_not_manifested", "Tool is absent from the canonical Omi manifest");
+    if (capability.builtInToolPolicy === "read_only" && tool.annotations.readOnlyHint !== true) {
+      this.reject("tool_not_allowed", "Ask-mode service runs have hard read-only tool authority");
+    }
     if (!capability.allowedToolNames.includes(tool.name)) {
       this.reject("tool_not_allowed", "Tool is unavailable for this run execution profile");
     }

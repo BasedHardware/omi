@@ -66,7 +66,8 @@ from models.memories import Memory, MemoryCategory, MemoryDB
 from models.memory_apply import MemoryControlState
 from models.memory_review import build_memory_review_conflict
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState
-from database.memory_apply_store import CanonicalReviewResolutionConflict
+from database import memory_ledger
+from database.memory_apply_store import CanonicalReviewResolutionConflict, privacy_deletion_receipt_id
 from database.memory_vector_metadata import canonical_memory_provider_id
 from utils.memory.canonical_memory_adapter import (
     delete_default_canonical_memories,
@@ -113,6 +114,8 @@ def _reset_universal_memory_env(monkeypatch):
     from tests.unit.universal_memory_test_helpers import reset_universal_memory_fixture
 
     _refresh_canonical_memory_adapter_runtime()
+    atom_keyword_index = importlib.import_module("utils.memory.atom_keyword_index")
+    monkeypatch.setattr(atom_keyword_index, "delete_atom_keyword_doc", lambda *_args, **_kwargs: True)
     reset_universal_memory_fixture(monkeypatch)
 
 
@@ -147,6 +150,16 @@ def _canonical_doc_paths(db: "_FakeDb", uid: str) -> set[str]:
         f"users/{uid}/memory_operations/",
     )
     return {path for path in db.docs if any(path.startswith(prefix) for prefix in prefixes)}
+
+
+def _assert_opaque_deletion_finalized(db: "_FakeDb", uid: str, memory_ids: list[str]) -> None:
+    for memory_id in memory_ids:
+        assert f"users/{uid}/memory_items/{memory_id}" not in db.docs
+        receipt_id = privacy_deletion_receipt_id(uid, memory_id)
+        receipt = db.docs[f"users/{uid}/memory_deletion_receipts/{receipt_id}"]
+        assert receipt["schema_version"] == "memory_deletion_receipt.v2"
+        assert receipt["receipt_id"] == receipt_id
+        assert memory_id not in repr(receipt)
 
 
 class _Snapshot:
@@ -218,6 +231,9 @@ class _DocRef:
 
     def update(self, data):
         self._db.docs[self.path].update(data)
+
+    def delete(self):
+        self._db.docs.pop(self.path, None)
 
     def collection(self, name):
         return _CollectionRef(self._db, f"{self.path}/{name}")
@@ -379,13 +395,85 @@ def _trusted_account_generation():
     )
 
 
+def test_privacy_history_retry_discovers_commit_and_outbox_after_operation_is_already_gone():
+    uid = "uid-history-crash-retry"
+    memory_id = "mem-target"
+    db = _FakeDb(
+        {
+            f"users/{uid}/memory_commits/commit-1": {
+                "operation_id": "already-deleted-operation",
+                "memory_item_ids": [memory_id],
+            },
+            f"users/{uid}/memory_outbox/event-1": {
+                "operation_id": "already-deleted-operation",
+                "memory_id": memory_id,
+            },
+        }
+    )
+
+    removed = memory_ledger.purge_canonical_privacy_history_for_memories(
+        uid,
+        [memory_id],
+        firestore_client=db,
+    )
+
+    assert removed == {"memory_commits": ["commit-1"], "memory_outbox": ["event-1"]}
+    assert not any("already-deleted-operation" in repr(payload) for payload in db.docs.values())
+
+
+def test_privacy_finalization_commit_failure_leaves_full_lineage_for_retry():
+    uid = "uid-finalize-crash-retry"
+    memory_ids = ["mem-a", "mem-b"]
+    docs = {}
+    for memory_id in memory_ids:
+        evidence_id = f"evidence-{memory_id}"
+        docs[f"users/{uid}/memory_items/{memory_id}"] = {
+            "status": "tombstoned",
+            "evidence": [{"evidence_id": evidence_id}],
+        }
+        docs[f"users/{uid}/memory_evidence/{evidence_id}"] = {"source_state": "tombstoned"}
+        docs[f"users/{uid}/memory_graph_assertions/{memory_id}"] = {"memory_id": memory_id}
+    db = _FakeDb(docs)
+    original_commit = db.transaction_obj._commit
+
+    def fail_commit_once():
+        db.transaction_obj._commit = original_commit
+        raise RuntimeError("injected finalization commit failure")
+
+    db.transaction_obj._commit = fail_commit_once
+    with pytest.raises(RuntimeError, match="injected finalization commit failure"):
+        memory_ledger.finalize_canonical_privacy_tombstones(uid, memory_ids, firestore_client=db)
+
+    assert set(db.docs) == set(docs)
+
+    memory_ledger.finalize_canonical_privacy_tombstones(uid, memory_ids, firestore_client=db)
+
+    assert not any(
+        path.startswith(
+            (
+                f"users/{uid}/memory_items/",
+                f"users/{uid}/memory_evidence/",
+                f"users/{uid}/memory_graph_assertions/",
+            )
+        )
+        for path in db.docs
+    )
+
+
 def _mark_account_deletion_fenced(db, uid: str) -> None:
     db.docs[f"account_deletions/{uid}"] = {"wipe_status": "running"}
 
 
 def _sample_memory_payload(*, uid: str, conversation_id: str, content: str) -> dict:
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
-    evidence_id = "ev_ws_j_1"
+    evidence_id = (
+        "ev_ws_j_"
+        + extraction_memory_id(
+            uid=uid,
+            source_id=conversation_id,
+            content="test-evidence",
+        )[4:20]
+    )
     memory_id = extraction_memory_id(uid=uid, source_id=conversation_id, content=content)
     return {
         "id": memory_id,
@@ -492,6 +580,10 @@ def test_canonical_account_delete_purge_emits_user_scoped_vector_outbox(monkeypa
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.kg_db.delete_knowledge_graph",
         delete_graph,
+    )
+    monkeypatch.setattr(
+        "utils.memory.atom_keyword_index.purge_user_atom_keyword_index",
+        MagicMock(return_value=0),
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
@@ -666,23 +758,8 @@ def test_conversation_delete_cascade_tombstones_canonical_and_emits_durable_dele
     retract_result = retract_conversation_sourced_memories(uid, conversation_id, db_client=canonical_db)
 
     assert retract_result["retracted_memory_ids"] == [memory_id]
-    tombstoned = canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]
-    assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
-    assert tombstoned["evidence"][0]["source_state"] == "tombstoned"
-
-    outbox_paths = [path for path in canonical_db.docs if "memory_outbox" in path]
-    assert outbox_paths
-    delete_events = [
-        canonical_db.docs[path]
-        for path in outbox_paths
-        if canonical_db.docs[path].get("payload", {}).get("reason") == "conversation_reprocess_retract"
-    ]
-    assert {event["event_type"] for event in delete_events} == {"projection_sync", "vector_sync"}
-    assert all(event["memory_id"] == memory_id for event in delete_events)
-    assert all(event["payload"]["action"] == "delete" for event in delete_events)
-    assert all(event["payload"]["item_revision"] == tombstoned["item_revision"] for event in delete_events)
-    assert all(event["payload"]["content_hash"] == tombstoned["content_hash"] for event in delete_events)
-    assert all(isinstance(event["available_at"], datetime) for event in delete_events)
+    _assert_opaque_deletion_finalized(canonical_db, uid, [memory_id])
+    assert not any("memory_outbox" in path and memory_id in repr(row) for path, row in canonical_db.docs.items())
 
 
 def test_conversation_full_retract_journals_every_source_item_in_one_commit(monkeypatch, canonical_db):
@@ -714,9 +791,7 @@ def test_conversation_full_retract_journals_every_source_item_in_one_commit(monk
         first["evidence"][0]["evidence_id"],
         second["evidence"][0]["evidence_id"],
     }
-    tombstoned = [canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"] for memory_id in (first_id, second_id)]
-    assert all(item["status"] == MemoryItemStatus.tombstoned.value for item in tombstoned)
-    assert len({item["ledger_commit_id"] for item in tombstoned}) == 1
+    _assert_opaque_deletion_finalized(canonical_db, uid, [first_id, second_id])
     replacement_operations = [
         document
         for path, document in canonical_db.docs.items()
@@ -727,7 +802,7 @@ def test_conversation_full_retract_journals_every_source_item_in_one_commit(monk
         for path, document in canonical_db.docs.items()
         if path.startswith(f"users/{uid}/memory_source_replacements/")
     ]
-    assert len(replacement_operations) == 1
+    assert len(replacement_operations) == 0
     assert len(replacement_receipts) == 1
 
 
@@ -762,10 +837,9 @@ def test_conversation_full_retract_closes_non_active_source_items_and_evidence(
 
     assert result["retracted_memory_ids"] == [memory_id]
     assert result["tombstoned_evidence_ids"] == [payload["evidence"][0]["evidence_id"]]
-    assert canonical_db.docs[item_path]["status"] == MemoryItemStatus.tombstoned.value
-    assert canonical_db.docs[item_path]["content"] is None
+    assert item_path not in canonical_db.docs
     evidence_path = f"users/{uid}/memory_evidence/{payload['evidence'][0]['evidence_id']}"
-    assert canonical_db.docs[evidence_path]["source_state"] == "tombstoned"
+    assert evidence_path not in canonical_db.docs
 
 
 def test_conversation_delete_cascade_deletes_canonical_vector_immediately(monkeypatch, canonical_db):
@@ -782,7 +856,7 @@ def test_conversation_delete_cascade_deletes_canonical_vector_immediately(monkey
     deleted_vectors = []
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.delete_canonical_memory_vector",
-        lambda u, mid: deleted_vectors.append((u, mid)),
+        lambda u, mid: (deleted_vectors.append((u, mid)) or True),
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
@@ -832,7 +906,7 @@ def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonic
     )
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.delete_canonical_memory_vector",
-        lambda u, mid: deleted_vectors.append((u, mid)),
+        lambda u, mid: (deleted_vectors.append((u, mid)) or True),
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
@@ -840,8 +914,7 @@ def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonic
 
     assert kg_calls == [(uid, [memory_id])]
     assert deleted_vectors == [(uid, memory_id)]
-    tombstoned = canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]
-    assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
+    _assert_opaque_deletion_finalized(canonical_db, uid, [memory_id])
 
 
 def _external_memory_payload(uid: str, content: str) -> dict:
@@ -876,7 +949,7 @@ def _stub_delete_side_effects(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.delete_canonical_memory_vector",
-        lambda *args, **kwargs: None,
+        lambda *args, **kwargs: True,
     )
 
 
@@ -888,15 +961,16 @@ def test_readding_a_deleted_manual_memory_lands_on_a_fresh_evidence_identity(mon
     first_id = write_canonical_external_memory(uid, _external_memory_payload(uid, content), db_client=canonical_db)
     delete_canonical_memory(uid, first_id, db_client=canonical_db)
     retired_evidence = _tombstoned_evidence_paths(canonical_db, uid)
-    assert retired_evidence
+    assert retired_evidence == []
 
-    write_canonical_external_memory(uid, _external_memory_payload(uid, content), db_client=canonical_db)
+    second_id = write_canonical_external_memory(uid, _external_memory_payload(uid, content), db_client=canonical_db)
 
     live = read_canonical_memories(uid, db_client=canonical_db, include_pending_processing=True)
+    assert second_id != first_id
     assert content in [memory.content for memory in live]
     # The deleted submission's evidence identity stays retired: the re-add is a
     # new source artifact, not a resurrection of the deleted one.
-    assert all(canonical_db.docs[path]["source_state"] == "tombstoned" for path in retired_evidence)
+    assert retired_evidence == []
 
 
 def test_conversation_sourced_evidence_is_never_reissued_after_delete(monkeypatch, canonical_db):
@@ -913,7 +987,7 @@ def test_conversation_sourced_evidence_is_never_reissued_after_delete(monkeypatc
         _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content),
         source_surface="v3_api",
     )
-    with pytest.raises(RuntimeError, match="source_not_active"):
+    with pytest.raises(RuntimeError, match="privacy-deleted"):
         write_canonical_external_memory(uid, resubmitted, db_client=canonical_db)
 
 
@@ -978,8 +1052,7 @@ def test_delete_canonical_survivor_tombstones_active_alias_lineage(monkeypatch, 
 
     delete_canonical_memory(uid, survivor_id, db_client=canonical_db)
 
-    assert canonical_db.docs[survivor_path]["status"] == MemoryItemStatus.tombstoned.value
-    assert canonical_db.docs[alias_path]["status"] == MemoryItemStatus.tombstoned.value
+    _assert_opaque_deletion_finalized(canonical_db, uid, [survivor_id, alias_id])
     assert read_canonical_memories(uid, db_client=canonical_db, now=observed_at) == []
     assert set(deleted_vectors) == {(uid, survivor_id), (uid, alias_id)}
     assert kg_calls == [(uid, sorted([survivor_id, alias_id]))]
@@ -1030,10 +1103,7 @@ def test_delete_canonical_survivor_tombstones_superseded_alias_lineage(monkeypat
 
     delete_canonical_memory(uid, survivor_id, db_client=canonical_db)
 
-    assert canonical_db.docs[survivor_path]["status"] == MemoryItemStatus.tombstoned.value
-    assert canonical_db.docs[survivor_path]["content"] is None
-    assert canonical_db.docs[alias_path]["status"] == MemoryItemStatus.tombstoned.value
-    assert canonical_db.docs[alias_path]["content"] is None
+    _assert_opaque_deletion_finalized(canonical_db, uid, [survivor_id, alias_id])
 
 
 def test_privacy_delete_rescans_lineage_when_control_changes(monkeypatch, canonical_db):
@@ -1098,7 +1168,7 @@ def test_privacy_delete_rescans_lineage_when_control_changes(monkeypatch, canoni
     assert {item.memory_id for item in tombstone_store.call_args.kwargs["expected_items"]} == {survivor_id, alias_id}
 
 
-def test_delete_remains_durable_when_every_immediate_projection_cleanup_fails(monkeypatch, canonical_db):
+def test_delete_fails_closed_but_remains_durable_when_required_review_scrub_fails(monkeypatch, canonical_db):
     uid = "uid-canonical-ws-j"
     payload = _sample_memory_payload(
         uid=uid,
@@ -1124,7 +1194,9 @@ def test_delete_remains_durable_when_every_immediate_projection_cleanup_fails(mo
     monkeypatch.setattr("utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction", fail)
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
-    delete_canonical_memory(uid, memory_id, db_client=canonical_db)
+    _seed_canonical_review(canonical_db, uid, memory_id)
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        delete_canonical_memory(uid, memory_id, db_client=canonical_db)
 
     tombstoned = canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]
     assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
@@ -1138,6 +1210,26 @@ def test_delete_remains_durable_when_every_immediate_projection_cleanup_fails(mo
     assert {event["event_type"] for event in events} == {"projection_sync", "vector_sync"}
     assert all(event["status"] == "pending" for event in events)
     assert all(isinstance(event["available_at"], datetime) for event in events)
+
+
+def test_delete_scrubs_review_candidate_and_content_derived_source_fields_before_success(canonical_db):
+    uid = "uid-canonical-ws-j"
+    secret = "Review plaintext must not survive explicit deletion"
+    payload = _sample_memory_payload(
+        uid=uid,
+        conversation_id="conv-delete-review-scrub",
+        content=secret,
+    )
+    memory_id = write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    review_id = _seed_canonical_review(canonical_db, uid, memory_id)
+    review_path = f"users/{uid}/memory_review_queue/{review_id}"
+    original_hash = canonical_db.docs[review_path]["source_content_hash"]
+
+    delete_canonical_memory(uid, memory_id, db_client=canonical_db)
+
+    assert review_path not in canonical_db.docs
+    assert secret not in repr(canonical_db.docs)
+    assert original_hash not in repr(canonical_db.docs)
 
 
 def test_update_canonical_visibility_validates_before_persisting(monkeypatch, canonical_db):
@@ -1427,7 +1519,7 @@ def test_delete_default_canonical_memories_leaves_archive_untouched(monkeypatch,
 
     delete_default_canonical_memories(uid, db_client=canonical_db)
 
-    assert canonical_db.docs[f"users/{uid}/memory_items/{default_id}"]["status"] == MemoryItemStatus.tombstoned.value
+    _assert_opaque_deletion_finalized(canonical_db, uid, [default_id])
     assert canonical_db.docs[f"users/{uid}/memory_items/{archive_id}"]["status"] == MemoryItemStatus.active.value
 
 
@@ -1455,13 +1547,16 @@ def test_delete_all_final_rescan_tombstones_concurrent_write(monkeypatch, canoni
 
     original_fetch = canonical_adapter.fetch_authoritative_product_memory_items
     injected = False
+    concurrent_write_blocked = False
 
     def fetch_with_concurrent_write(**kwargs):
-        nonlocal injected
+        nonlocal injected, concurrent_write_blocked
         snapshot = original_fetch(**kwargs)
         if not injected:
             injected = True
-            write_canonical_extraction_memory(uid, concurrent_payload, db_client=canonical_db)
+            with pytest.raises(RuntimeError, match="destructive operation"):
+                write_canonical_extraction_memory(uid, concurrent_payload, db_client=canonical_db)
+            concurrent_write_blocked = True
         return snapshot
 
     monkeypatch.setattr(canonical_adapter, "fetch_authoritative_product_memory_items", fetch_with_concurrent_write)
@@ -1483,12 +1578,10 @@ def test_delete_all_final_rescan_tombstones_concurrent_write(monkeypatch, canoni
 
     delete_all_canonical_memories(uid, db_client=canonical_db)
 
-    concurrent_id = concurrent_payload["id"]
     assert injected is True
-    for memory_id in (first_id, concurrent_id):
-        stored = canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]
-        assert stored["status"] == MemoryItemStatus.tombstoned.value
-        assert stored["content"] is None
+    assert concurrent_write_blocked is True
+    _assert_opaque_deletion_finalized(canonical_db, uid, [first_id])
+    assert f"users/{uid}/memory_items/{concurrent_payload['id']}" not in canonical_db.docs
 
 
 def test_canonical_review_accept_returns_archive_item_to_pending_short_term(canonical_db):
@@ -1647,7 +1740,10 @@ def test_competing_canonical_review_decisions_preserve_atomic_queue_item_outcome
     assert accepted_item["status"] == MemoryItemStatus.active.value
     assert accepted_review["status"] == "accepted"
     assert accepted_review["decision"] == "accept"
-    assert accepted_review["candidate"] == {"id": memory_id}
+    assert accepted_review["candidate"] == {}
+    assert accepted_review["source_content_hash"] is None
+    assert accepted_review["source_commit_id"] is None
+    assert accepted_review["source_short_term_id"] is None
 
 
 def test_canonical_review_accept_rejects_correction_substitution(canonical_db):
@@ -1704,6 +1800,8 @@ def test_canonical_review_reject_tombstones_content_and_rejects_unknown_decision
         }
     )
     review_id = _seed_canonical_review(canonical_db, uid, memory_id)
+    review_path = f"users/{uid}/memory_review_queue/{review_id}"
+    sensitive_reason = "private reason from the user's conversation"
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter._run_immediate_privacy_cleanup",
         lambda *_args, **_kwargs: None,
@@ -1714,11 +1812,13 @@ def test_canonical_review_reject_tombstones_content_and_rejects_unknown_decision
         memory_id,
         review_id=review_id,
         decision="reject",
+        reason=sensitive_reason,
         db_client=canonical_db,
     )
 
-    assert canonical_db.docs[item_path]["status"] == MemoryItemStatus.tombstoned.value
-    assert canonical_db.docs[item_path]["content"] is None
+    assert item_path not in canonical_db.docs
+    assert review_path not in canonical_db.docs
+    assert sensitive_reason not in repr(canonical_db.docs)
     with pytest.raises(ValueError, match="unsupported canonical review decision"):
         resolve_canonical_memory_review(
             uid,

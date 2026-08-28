@@ -1149,3 +1149,61 @@ def test_validation_result_model():
         reasoning="This would genuinely help the user.",
     )
     assert result.approved is True
+
+
+def test_pipeline_anchors_prompts_to_user_timezone_date(monkeypatch):
+    """All three pipeline prompts must carry the user's timezone date, not the UTC default.
+
+    SCA-358 sibling fix: the production caller never passed ``current_date``, so the
+    gate/generate/critic prompts silently fell back to ``current_date_in_tz(None)`` —
+    UTC — wrong by up to a day for non-UTC users and desyncing the never-say-the-year-
+    is-wrong guard near local midnight. The sentinel date proves the plumbing
+    end-to-end: a caller that dropped the parameter would render the runner's real
+    UTC date instead of 2031-02-03.
+    """
+    monkeypatch.setattr(app_int, 'current_date_for_uid', lambda uid: '2031-02-03')
+    _setup_app_integrations_stubs()
+
+    prompts: list = []
+    results = [
+        RelevanceResult(
+            is_relevant=True,
+            relevance_score=0.85,
+            reasoning="User is skipping gym despite their 3x/week goal.",
+            context_summary="User discussing skipping exercise.",
+        ),
+        NotificationDraft(
+            notification_text="You've been skipping gym — remember your 3x/week goal!",
+            reasoning="User's goal is 'Exercise 3x per week' and they mentioned skipping today.",
+            confidence=0.82,
+            category="goal_connection",
+        ),
+        ValidationResult(approved=True, reasoning="Concrete, tied to a goal and the current action."),
+    ]
+    call_count = [0]
+
+    def side_effect_structured_output(model_class):
+        parser = MagicMock()
+        idx = min(call_count[0], len(results) - 1)
+        call_count[0] += 1
+
+        def _invoke(prompt, *args, **kwargs):
+            prompts.append(prompt)
+            return results[idx]
+
+        parser.invoke = MagicMock(side_effect=_invoke)
+        return parser
+
+    mock_llm_mini.with_structured_output = MagicMock(side_effect=side_effect_structured_output)
+
+    messages = [
+        {"text": "I'll skip the gym today", "is_user": True},
+        {"text": "You sure?", "is_user": False},
+    ]
+
+    result = app_int._process_mentor_proactive_notification("test_uid_tz_date", messages)
+
+    assert result is not None
+    assert len(prompts) >= 3
+    for prompt in prompts:
+        assert "2031-02-03" in prompt, "pipeline prompt lost the user-timezone date anchor"

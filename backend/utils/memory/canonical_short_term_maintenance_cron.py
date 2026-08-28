@@ -8,6 +8,7 @@ inventory; this module never scans all users or consults a UID allowlist.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
@@ -16,6 +17,7 @@ from collections.abc import Callable
 from typing import Any, Iterable, Optional, Protocol, cast
 
 from pydantic import ValidationError
+from google.cloud import firestore
 
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
@@ -33,6 +35,11 @@ from utils.memory.memory_system import (
     CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH,
     CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION,
     CANONICAL_MEMORY_MAINTENANCE_REGISTRY_SCHEMA_VERSION,
+)
+from utils.jit_rollout import JITDecisionStage, resolve_jit_ledger_migration_rollout
+from utils.memory.knowledge_ledger_migration import (
+    publish_ledger_migration_cutover,
+    run_ledger_migration_sweep,
 )
 from utils.memory.promotion_flex import (
     MEMORY_PROMOTION_FLEX_LEASE_SECONDS,
@@ -59,6 +66,8 @@ DEFAULT_GRAPH_BACKFILL_PAGE_SIZE = 5
 GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER = 5
 DEFAULT_GRAPH_BACKFILL_SCAN_SIZE = DEFAULT_GRAPH_BACKFILL_PAGE_SIZE * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER
 MAX_MAINTENANCE_UIDS_PER_RUN = 400
+MAX_LEDGER_MIGRATION_UIDS_PER_RUN = 20
+LEDGER_ROW_AUTHORIZATION_TIMEOUT_SECONDS = 15.0
 EXPIRY_ADJUDICATION_LOOKAHEAD = DEFAULT_SHORT_TERM_TTL / 2
 CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH = "canonical_memory_maintenance_control/seed_cursor"
 CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION = 1
@@ -132,36 +141,59 @@ def _registry_uid(snapshot: Any) -> Optional[str]:
     return uid.strip()
 
 
-def _read_registry_cursor(db_client: Any) -> str:
+def _read_registry_cursor_state(db_client: Any) -> tuple[str, int]:
     ref = db_client.document(CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH)
     try:
         snapshot = ref.get()
     except Exception as exc:
         raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor unavailable") from exc
     if not getattr(snapshot, "exists", False):
-        payload = {"schema_version": 1, "last_uid": ""}
-        try:
-            create = getattr(ref, "create", None)
-            if callable(create):
-                create(payload)
-            else:
-                ref.set(payload)
-        except Exception as exc:
-            raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor unavailable") from exc
-        return ""
+        # Reads must stay side-effect free. The first durable cursor write is
+        # performed by the generation-fenced commit below; creating an empty
+        # document here would make ``persist_cursor=False`` mutate state.
+        return "", 0
     payload = snapshot.to_dict()
     if not isinstance(payload, dict) or payload.get("schema_version") != 1:
         raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor is malformed")
     last_uid = payload.get("last_uid", "")
-    if not isinstance(last_uid, str):
+    generation = payload.get("generation", 0)
+    if not isinstance(last_uid, str) or not isinstance(generation, int) or generation < 0:
         raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor is malformed")
-    return last_uid
+    return last_uid, generation
 
 
-def _persist_registry_cursor(db_client: Any, last_uid: str) -> None:
+def _persist_registry_cursor(db_client: Any, last_uid: str, *, expected_generation: int | None = None) -> None:
     payload = {"schema_version": 1, "last_uid": last_uid}
     try:
-        db_client.document(CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH).set(payload, merge=True)
+        ref = db_client.document(CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH)
+        current = ref.get()
+        current_payload = current.to_dict() if getattr(current, "exists", False) else {}
+        current_generation = current_payload.get("generation", 0) if isinstance(current_payload, dict) else 0
+        if not isinstance(current_generation, int) or current_generation < 0:
+            raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor is malformed")
+        if expected_generation is not None and current_generation != expected_generation:
+            raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor generation conflict")
+        next_payload = {**payload, "generation": current_generation + 1}
+        transaction_factory = getattr(db_client, "transaction", None)
+        if callable(transaction_factory):
+            try:
+                transaction = transaction_factory()
+
+                def write_transaction(tx: Any) -> None:
+                    live_snapshot = ref.get(transaction=tx)
+                    live_payload = live_snapshot.to_dict() if getattr(live_snapshot, "exists", False) else {}
+                    live_generation = live_payload.get("generation", 0) if isinstance(live_payload, dict) else 0
+                    if expected_generation is not None and live_generation != expected_generation:
+                        raise CanonicalMaintenanceInventoryUnavailable(
+                            "canonical maintenance cursor generation conflict"
+                        )
+                    tx.set(ref, next_payload, merge=True)
+
+                cast(Any, firestore.transactional(write_transaction))(transaction)
+                return
+            except TypeError:
+                pass
+        ref.set(next_payload, merge=True)
     except Exception as exc:
         raise CanonicalMaintenanceInventoryUnavailable("canonical maintenance cursor unavailable") from exc
 
@@ -368,7 +400,7 @@ def bounded_canonical_memory_uid_inventory(
             "bounded canonical UID registry is unavailable; provide a registry/index or injectable inventory"
         )
     _seed_registry_from_existing_memory_states(db_client, limit=bounded_limit)
-    cursor = _read_registry_cursor(db_client)
+    cursor, cursor_generation = _read_registry_cursor_state(db_client)
     try:
         # Firestore's public query objects and the strict test fakes both expose
         # this fluent surface, but the callable narrowing above intentionally
@@ -387,7 +419,7 @@ def bounded_canonical_memory_uid_inventory(
             if uid and uid not in uids:
                 uids.append(uid)
         if persist_cursor and uids:
-            _persist_registry_cursor(db_client, uids[-1])
+            _persist_registry_cursor(db_client, uids[-1], expected_generation=cursor_generation)
         return tuple(uids[:bounded_limit])
     except CanonicalMaintenanceInventoryUnavailable:
         raise
@@ -501,6 +533,9 @@ class CanonicalShortTermMaintenanceCronSummary:
     outbox_ack_failures_total: int = 0
     graph_enriched_total: int = 0
     graph_enrichment_blocked_total: int = 0
+    ledger_migration_users: int = 0
+    ledger_migration_rows: int = 0
+    completed_uids: tuple[str, ...] = ()
     errors: list[str] = field(default_factory=_empty_errors)
 
 
@@ -559,6 +594,7 @@ def run_universal_short_term_maintenance(
     promotion_flex = PromotionFlexRunRouter(db_client=client, force_enabled=maintenance_flex_forced())
     expiry_inventory = ExpiryOrderedMaintenanceInventory(uids=())
     registry_uids: tuple[str, ...] = ()
+    registry_cursor_generation = 0
     inventory_errors: list[str] = []
     if uid_inventory is None:
         try:
@@ -574,6 +610,12 @@ def run_universal_short_term_maintenance(
                 type(exc).__name__,
             )
         try:
+            # Keep compatibility with the injected expiry-only backstop,
+            # which intentionally uses a sentinel client without Firestore.
+            # Real clients expose ``document`` and therefore receive the
+            # generation snapshot used by the final CAS commit.
+            if callable(getattr(client, "document", None)):
+                _registry_cursor, registry_cursor_generation = _read_registry_cursor_state(client)
             registry_uids = bounded_canonical_memory_uid_inventory(
                 client,
                 limit=inventory_limit,
@@ -813,7 +855,11 @@ def run_universal_short_term_maintenance(
         last_completed_registry_uid = registry_uid
     if uid_inventory is None and last_completed_registry_uid:
         try:
-            _persist_registry_cursor(client, last_completed_registry_uid)
+            _persist_registry_cursor(
+                client,
+                last_completed_registry_uid,
+                expected_generation=registry_cursor_generation,
+            )
         except CanonicalMaintenanceInventoryUnavailable as exc:
             summary.errors.append(f"cursor_persist:{type(exc).__name__}")
             logger.warning(
@@ -848,6 +894,7 @@ def run_universal_short_term_maintenance(
         summary.skipped_users,
         len(summary.errors),
     )
+    summary.completed_uids = tuple(sorted(completed_uids))
     return summary
 
 
@@ -862,7 +909,7 @@ async def run_canonical_short_term_maintenance_cron(
     inventory_limit: int = MAX_MAINTENANCE_UIDS_PER_RUN,
 ) -> CanonicalShortTermMaintenanceCronSummary:
     """Async entrypoint: offload sync Firestore maintenance to ``db_executor``."""
-    return await run_blocking(
+    summary = await run_blocking(
         db_executor,
         run_universal_short_term_maintenance,
         db_client=db_client,
@@ -873,3 +920,86 @@ async def run_canonical_short_term_maintenance_cron(
         uid_inventory=uid_inventory,
         inventory_limit=inventory_limit,
     )
+    client = db_client if db_client is not None else default_db_client
+    candidate_uids = summary.completed_uids[:MAX_LEDGER_MIGRATION_UIDS_PER_RUN]
+    if not candidate_uids:
+        return summary
+
+    authority_loop = asyncio.get_running_loop()
+
+    def fresh_rollout_authorizer(uid: str) -> Callable[..., bool]:
+        def authorize(*_context: str) -> bool:
+            future = asyncio.run_coroutine_threadsafe(
+                resolve_jit_ledger_migration_rollout(
+                    uid,
+                    stage=JITDecisionStage.INGRESS,
+                    force_refresh=True,
+                ),
+                authority_loop,
+            )
+            try:
+                return future.result(timeout=LEDGER_ROW_AUTHORIZATION_TIMEOUT_SECONDS).permits_work
+            except Exception as exc:
+                future.cancel()
+                logger.warning(
+                    "canonical_short_term_maintenance_cron: uid=%s ledger_authorization_failed=%s",
+                    uid,
+                    type(exc).__name__,
+                )
+                return False
+
+        return authorize
+
+    # Re-authorize each account immediately before its bounded mutation pass.
+    # Resolving the whole page up front leaves later accounts holding stale
+    # permission while earlier accounts scan and mutate.
+    for uid in candidate_uids:
+        decision = await resolve_jit_ledger_migration_rollout(
+            uid,
+            stage=JITDecisionStage.INGRESS,
+            force_refresh=True,
+        )
+        if not decision.permits_work:
+            continue
+        authorizer = fresh_rollout_authorizer(uid)
+        try:
+            result = await run_blocking(
+                db_executor,
+                run_ledger_migration_sweep,
+                uid,
+                db_client=client,
+                completed_at=now,
+                publish=False,
+                mutation_authorizer=authorizer,
+                publication_authorizer=authorizer,
+            )
+        except Exception as exc:
+            summary.errors.append(f"uid={uid}: ledger_migration:{type(exc).__name__}")
+            logger.warning(
+                "canonical_short_term_maintenance_cron: uid=%s ledger_migration_failed=%s",
+                uid,
+                type(exc).__name__,
+            )
+            continue
+        summary.ledger_migration_rows += result.migrated_long_term_count
+        if getattr(result, "authorization_revoked", False):
+            continue
+        if result.remaining_live_legacy_count:
+            continue
+        try:
+            await run_blocking(
+                db_executor,
+                publish_ledger_migration_cutover,
+                uid,
+                db_client=client,
+                publication_authorizer=authorizer,
+                mutation_authorizer=authorizer,
+                migrated_long_term_count=result.migrated_long_term_count,
+                adjudicated_short_term_count=result.adjudicated_short_term_count,
+                completed_at=now,
+            )
+        except Exception as exc:
+            summary.errors.append(f"uid={uid}: ledger_publication:{type(exc).__name__}")
+            continue
+        summary.ledger_migration_users += 1
+    return summary

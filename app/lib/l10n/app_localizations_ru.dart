@@ -2049,6 +2049,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get memoryDeleted => 'Воспоминание удалено.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Отменить';
 
   @override
@@ -9939,4 +9942,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Предзапись';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant всё ещё ведёт запись, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Память Pendant заполнена, и он всё ещё в режиме записи, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова.';
 }

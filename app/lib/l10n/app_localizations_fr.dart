@@ -2060,6 +2060,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get memoryDeleted => 'Mémoire supprimée.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Annuler';
 
   @override
@@ -9989,4 +9992,12 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Préenregistré';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Votre Pendant est encore en train d\'enregistrer, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l\'enregistrement, puis synchronisez à nouveau.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Le stockage de votre Pendant est plein et il est encore en mode enregistrement, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l\'enregistrement, puis synchronisez à nouveau.';
 }

@@ -49,9 +49,8 @@ def _make_chat_client():
     # client stack in); keep it inert so the upload path itself is what runs.
     gateway_client = harness.install_module('utils.llm.gateway_client', ModuleType('utils.llm.gateway_client'))
     gateway_client.should_route_features_through_gateway = MagicMock(return_value=False)
-    # Mirrors the real constant (utils/llm/gateway_client.py); importers read it at module
-    # import time, so the stub has to carry it even though this test never routes.
     gateway_client.CHAT_AGENT_ROUTE_DIRECT = 'direct'
+    gateway_client.CHAT_AGENT_ROUTE_GATEWAY = 'gateway'
     gateway_client.get_chat_agent_route = MagicMock(return_value='direct')
     gateway_obs = harness.install_module(
         'utils.llm.gateway_observability', ModuleType('utils.llm.gateway_observability')

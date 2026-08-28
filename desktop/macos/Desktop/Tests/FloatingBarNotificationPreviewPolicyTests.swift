@@ -174,6 +174,119 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       "muted in-bar preview must keep a banner surface so director delivery is visible")
   }
 
+  func testMutedJITNoticeUsesSystemBannerUntilTheUserTapsIt() {
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: false,
+        floatingBarEnabled: true,
+        deliverSystemBanner: false),
+      "a muted preview must not bypass the user's preference for JIT feedback")
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
+        previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false),
+      "the muted JIT preview still owes a visible system-banner surface")
+  }
+
+  @MainActor
+  func testTappedMutedJITBannerRoutesOpaqueContextToPersistentFeedbackDetail() throws {
+    let context = JITTriggerFeedbackContext(
+      ownerID: "owner-jit-banner",
+      eventID: JITProactivityReservation.identifier("event", "jit-banner"),
+      triggerMemoryID: "memory-jit-banner",
+      accountGeneration: 4,
+      triggerRevision: 7)
+    XCTAssertEqual(
+      NotificationService.openAction(
+        assistantId: "context-director",
+        title: "A useful reminder",
+        jitFeedbackContext: context),
+      .openJITDetail,
+      "a tapped JIT system banner must open the detail card, not only record analytics")
+
+    let userInfo: [AnyHashable: Any] = [
+      "omi.jit.feedback.v1": [
+        "owner_id": context.ownerID,
+        "event_id": context.eventID,
+        "trigger_memory_id": context.triggerMemoryID,
+        "account_generation": context.accountGeneration,
+        "trigger_revision": context.triggerRevision,
+      ]
+    ]
+    XCTAssertEqual(
+      NotificationService.jitFeedbackContext(from: userInfo),
+      context,
+      "the system banner must carry only the opaque, owner-fenced feedback join keys")
+    XCTAssertEqual(
+      JITTriggerFeedbackActionRouter.visibleActions,
+      [.useful, .falsePositive, .snooze, .disable, .missedOrLate],
+      "the persistent detail route must retain every explicit feedback action")
+  }
+
+  @MainActor
+  func testSystemBannerTapPresentsOwnerFencedPersistentJITCardWithAllActions() throws {
+    let defaults = UserDefaults.standard
+    let authKey = DefaultsKey.authUserId.rawValue
+    let overrideKey = DefaultsKey.automationOwnerOverride.rawValue
+    let priorAuth = defaults.object(forKey: authKey)
+    let priorOverride = defaults.object(forKey: overrideKey)
+    let priorOwner = RuntimeOwnerIdentity.currentOwnerId()
+    let owner = "owner-jit-banner-route-\(UUID().uuidString)"
+    defer {
+      if let priorAuth { defaults.set(priorAuth, forKey: authKey) } else { defaults.removeObject(forKey: authKey) }
+      if let priorOverride {
+        defaults.set(priorOverride, forKey: overrideKey)
+      } else {
+        defaults.removeObject(forKey: overrideKey)
+      }
+      RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: priorOwner)
+    }
+
+    defaults.set(owner, forKey: authKey)
+    defaults.removeObject(forKey: overrideKey)
+    RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: owner)
+    let context = JITTriggerFeedbackContext(
+      ownerID: owner,
+      eventID: JITProactivityReservation.identifier("event", "jit-banner-route"),
+      triggerMemoryID: "memory-jit-banner-route",
+      accountGeneration: 5,
+      triggerRevision: 9)
+    let userInfo: [AnyHashable: Any] = [
+      "omi.jit.feedback.v1": [
+        "owner_id": context.ownerID,
+        "event_id": context.eventID,
+        "trigger_memory_id": context.triggerMemoryID,
+        "account_generation": context.accountGeneration,
+        "trigger_revision": context.triggerRevision,
+      ]
+    ]
+    var presented: (String, String, String, JITTriggerFeedbackContext, Bool)?
+    let service = NotificationService(
+      registerWithSystemNotificationCenter: false,
+      jitDetailPresenter: { ownerID, title, message, _, feedbackContext, _, isPersistent in
+        presented = (
+          ownerID,
+          title,
+          message,
+          feedbackContext,
+          isPersistent
+        )
+      })
+
+    XCTAssertTrue(
+      service.routeJITDetailCard(
+        title: "A useful reminder",
+        message: "The release is waiting on review.",
+        userInfo: userInfo))
+    XCTAssertEqual(presented?.0, owner)
+    XCTAssertEqual(presented?.1, "A useful reminder")
+    XCTAssertEqual(presented?.2, "The release is waiting on review.")
+    XCTAssertEqual(presented?.3, context)
+    XCTAssertEqual(presented?.4, true)
+    XCTAssertEqual(
+      JITTriggerFeedbackActionRouter.visibleActions,
+      [.useful, .falsePositive, .snooze, .disable, .missedOrLate])
+  }
+
   /// Behavioral guard for the category taxonomy: the director's real entry point must
   /// refuse a delivery whose category toggle is off. A "suggest" decision is a generic
   /// tip, which the taxonomy files under Insight. Every upstream gate is pinned open
