@@ -35,25 +35,45 @@ extension SettingsContentView {
       // memoryAssistantSubsection
       advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
       analysisThrottleSubsection
-      advancedCategoryHeader(title: "Profile & Stats", icon: "brain")
-      profileAndStatsSubsection
-      advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")
-      resetOnboardingSubsection
-      advancedCategoryHeader(title: "Goals", icon: "target")
-      goalsSubsection
-      advancedCategoryHeader(title: "Preferences", icon: "slider.horizontal.3")
-      preferencesSubsection
-      advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
-      troubleshootingSubsection
-      if AppBuild.isBetaProductionBundle {
-        advancedCategoryHeader(title: "Beta Diagnostics", icon: "waveform.path.ecg")
-        betaDiagnosticsSubsection
-      }
-      advancedCategoryHeader(title: "Developer API Keys", icon: "key")
-      developerKeysSubsection
 
-      advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
-      devToolsSubsection
+      DisclosureGroup(isExpanded: $advancedDetailsExpanded) {
+        VStack(spacing: OmiSpacing.xxl) {
+          advancedCategoryHeader(title: "Profile & Stats", icon: "brain")
+          profileAndStatsSubsection
+          advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")
+          resetOnboardingSubsection
+          advancedCategoryHeader(title: "Goals", icon: "target")
+          goalsSubsection
+          advancedCategoryHeader(title: "Preferences", icon: "slider.horizontal.3")
+          preferencesSubsection
+          advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
+          troubleshootingSubsection
+          if AppBuild.isBetaProductionBundle {
+            advancedCategoryHeader(title: "Beta Diagnostics", icon: "waveform.path.ecg")
+            betaDiagnosticsSubsection
+          }
+          advancedCategoryHeader(title: "Developer API Keys", icon: "key")
+          developerKeysSubsection
+
+          if devModeEnabled {
+            advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
+            devToolsSubsection
+          }
+        }
+        .padding(.top, OmiSpacing.md)
+      } label: {
+        HStack(spacing: OmiSpacing.sm) {
+          Image(systemName: "wrench.and.screwdriver")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundStyle(Ink.secondary)
+          Text("Advanced")
+            .scaledFont(size: OmiType.heading, weight: .semibold)
+            .foregroundStyle(Ink.primary)
+        }
+      }
+      .tint(Ink.secondary)
+      .padding(.top, OmiSpacing.lg)
+      .accessibilityIdentifier("settings-ai-automation-advanced-disclosure")
     }
     // The assistant cards above are seeded from their singletons when the pane is constructed, but
     // `loadBackendSettings()` then runs `SettingsSyncManager.syncFromServer()`, which is
@@ -63,6 +83,14 @@ extension SettingsContentView {
     // this is the pane agreeing to listen. Same shape as the Notifications pane.
     .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
       syncAssistantControlsFromSettings()
+    }
+    .onChange(of: highlightedSettingId) { _, settingId in
+      // Search and deep links must still reveal cards tucked into the collapsed
+      // secondary section. The default presentation stays compact until a
+      // specific result asks for that content.
+      if settingId != nil {
+        advancedDetailsExpanded = true
+      }
     }
   }
 

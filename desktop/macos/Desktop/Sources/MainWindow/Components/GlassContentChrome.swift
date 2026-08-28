@@ -47,9 +47,10 @@ enum PageGlass {
   /// A text field or search field.
   static let fieldRadius: CGFloat = 13
 
-  /// The default top fade on a scrolling column: enough to say "there is more above" and not so much
-  /// that a pinned first row looks half-erased.
-  static let topFade: CGFloat = 18
+  /// Page content starts fully opaque. A permanent top-edge mask fades the first visible row before
+  /// the user has scrolled, which makes correctly positioned controls and headings look clipped.
+  /// The bottom edge still signals overflow without compromising the page's resting state.
+  static let topFade: CGFloat = 0
   /// Deeper than the top, because the bottom of a page is where floating bars sit and the content has
   /// to pass under one legibly.
   static let bottomFade: CGFloat = 30

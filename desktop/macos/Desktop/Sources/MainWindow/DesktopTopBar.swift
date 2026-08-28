@@ -4,8 +4,9 @@ import SwiftUI
 /// The constant floating top bar.
 ///
 /// **It carries the destinations flat, and nothing opens.** On the left, one pill per destination:
-/// `Home`, `Activity`, `Tasks`, `Rewind`, `Apps`. On the right, the referral action sits immediately
-/// before the microphone, followed by screen capture and settings.
+/// `Chat`, `Brain`, `Tasks`, `Apps`. On the right, operational status and Settings
+/// stay persistent; referral remains available from Settings without competing
+/// with the product's primary destinations.
 ///
 /// The bar used to spell out `Home · Memory · Tasks · Apps` beside `Listening` and `Capture`, and both
 /// halves were wrong once Home became a search surface. A **`Memory` destination sitting next to a
@@ -26,7 +27,7 @@ import SwiftUI
 ///
 /// **Nothing became unreachable.** INV-NAV-1 is about the destination a shell routes to, not about how
 /// many pills the bar has: every established destination — Home, Conversations, Memories, Brain Map,
-/// Tasks, Rewind — still lands on its own feature-complete page. `Insights` is not in that list
+/// Tasks — still lands on its own feature-complete page. `Insights` is not in that list
 /// because its page was deleted rather than rehoused: the invariant forbids *stranding* a destination
 /// behind a reduced copy, not retiring one. What the assistant produces still arrives, as memories and
 /// notifications, and Home's knows-list still reads its history (`InsightStorage`).
@@ -47,7 +48,6 @@ struct DesktopTopBar: View {
   /// Items created after this instant count as "new" — updated whenever Omi
   /// last resigned front (see DesktopHomeView).
   let sinceDate: Date
-  let onRewind: () -> Void
   @State private var showingReferral = false
 
   private var newConversations: Int {
@@ -79,7 +79,6 @@ struct DesktopTopBar: View {
           persistentControls: {
             TopNavigationTrailingControlsLayout(
               updateStatus: { DesktopUpdateStatusChip() },
-              referral: { ReferralTopBarButton { showingReferral = true } },
               statusControls: { ShellStatusIcons(appState: appState) }
             )
           },
@@ -100,8 +99,8 @@ struct DesktopTopBar: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .frame(height: TopNavigationLayoutMetrics.barHeight)
-    // Gap below the bar only: padding above it would put the top resize handle on empty air.
-    .padding(.bottom, OmiSpacing.sm)
+    // The destination owns the single 8 pt gap below navigation. Keeping that
+    // ownership there prevents the bar and the page from silently doubling it.
     // The compact fallback's menu is the one surface here that draws outside the bar. Elevation
     // belongs to the shared top-bar component so every shell and exported preview paints it above the
     // destination sibling rather than relying on each call site to remember (INV-NAV-1).
@@ -163,13 +162,7 @@ struct DesktopTopBar: View {
   /// Every nav press on this bar: the brand, the pills and the settings gear. Keeping the transition
   /// in one place prevents those entry points from drifting apart.
   ///
-  /// `Rewind` is the one destination the shell does not reach by index — each shell hands the bar its
-  /// own way in (an overlay here, a `More` route in chat-first), so the pill calls that.
   private func navigate(to index: Int) {
-    guard index != SidebarNavItem.rewind.rawValue else {
-      onRewind()
-      return
-    }
     OmiMotion.withGated(.easeOut(duration: 0.08)) {
       // The pill says `Activity`, so it opens Activity rather than whichever hub page was persisted
       // last. `memoryDestinationRawValue` was declared here and never written — which is why this
@@ -183,27 +176,23 @@ struct DesktopTopBar: View {
   }
 }
 
-/// The right-side controls in their visual order. Keeping Refer in this cluster makes its placement
-/// independent of navigation width and keeps it directly beside the microphone at every window size.
-struct TopNavigationTrailingControlsLayout<UpdateStatus: View, Referral: View, StatusControls: View>: View {
+/// The right-side controls in their visual order. These are persistent because
+/// they report live app state; promotional actions live in Settings instead.
+struct TopNavigationTrailingControlsLayout<UpdateStatus: View, StatusControls: View>: View {
   let updateStatus: UpdateStatus
-  let referral: Referral
   let statusControls: StatusControls
 
   init(
     @ViewBuilder updateStatus: () -> UpdateStatus,
-    @ViewBuilder referral: () -> Referral,
     @ViewBuilder statusControls: () -> StatusControls
   ) {
     self.updateStatus = updateStatus()
-    self.referral = referral()
     self.statusControls = statusControls()
   }
 
   var body: some View {
     HStack(spacing: OmiSpacing.sm) {
       updateStatus
-      referral
       statusControls
     }
   }

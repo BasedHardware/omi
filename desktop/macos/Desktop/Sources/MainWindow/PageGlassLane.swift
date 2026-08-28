@@ -6,8 +6,8 @@
 //  wallpaper. That is the whole point — panels sit *on* the desktop rather than on a full-bleed slab
 //  of glass the window painted for them.
 //
-//  QueryShell Home and Rewind were already built that way: each is a set of glass objects with real air
-//  between them (`QueryShellHome`, `RewindSearchLayout`). The two older Home surfaces are the exception:
+//  Search-first pages and Rewind are built that way: each is a set of glass objects with real air
+//  between them. The older single-surface pages are the exception:
 //  `DashboardPage` is laned when it mounts either one, so without this file they render straight onto
 //  the wallpaper. **Every other destination was drawn assuming the window's ground was underneath it**,
 //  so this file is where they get a surface, and it is one surface for all of them: a page that invents
@@ -40,8 +40,8 @@ import SwiftUI
 
 /// Which destinations already carry their own glass, and therefore must not be wrapped in more.
 ///
-/// A pure function of the route rather than a condition inside the router, so "Home and Rewind own
-/// their panels and everything else is given one" is a claim a hermetic test can hold. Nesting a
+/// A pure function of the route rather than a condition inside the router, so panel ownership is a
+/// claim a hermetic test can hold. Nesting a
 /// second `.behindWindow` surface inside a panel does not stack two materials, it takes a second copy
 /// of the desktop and doubles the scrim — see `InkGlassBackdrop` — so a page wrapped twice reads
 /// visibly muddier than the pages around it.
@@ -63,19 +63,23 @@ enum PageGlassLanePolicy {
       return homeOwnsItsPanels
     case .rewind:
       return true
+    case .tasks, .apps:
+      return true
     case .conversations:
       // **Only this index is the Memory hub.** It is one rail slot wearing four different pages, and
-      // only one of them builds its own glass: Activity is Home's column — a search bar and a
-      // results panel, each already an `inkGlassPanel` — so wrapping the hub wholesale nested those
-      // two inside a third and double-scrimmed both, the muddier-than-its-neighbours failure this
-      // policy exists to prevent. The hub's list pages paint no ground and still need the lane.
+      // every Brain destination now builds the same two-panel shape: search above, then navigation
+      // and destination content together below. Wrapping the hub wholesale would nest both inside a
+      // third panel.
       //
       // `SidebarNavItem.memories` is deliberately NOT here. In this shell that index is the
       // *standalone* `MemoriesPage`, not the hub, and it paints no ground of its own — answering
       // for it off a persisted hub destination stripped its panel and drew its rows onto the
       // wallpaper. The chat-first shell reaches the hub through `ChatFirstPageGlassLanePolicy`,
       // which never constructs this view for Activity at all.
-      return MemoryHubDestination(rawValue: memoryDestinationRawValue ?? -1) == .activity
+      guard MemoryHubDestination(rawValue: memoryDestinationRawValue ?? -1) != nil else {
+        return false
+      }
+      return true
     default:
       return false
     }
