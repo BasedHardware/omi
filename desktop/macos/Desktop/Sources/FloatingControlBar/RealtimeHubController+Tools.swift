@@ -7,40 +7,28 @@ import VoiceTurnDomain
 extension RealtimeHubController {
   // MARK: - Tools
 
-  /// ask_higher_model — reuse the EXISTING prompt-cached /v2/chat/completions
-  /// (no new backend route). Returns the assistant text for the model to speak.
+  /// ask_higher_model — run the question through the same kernel session,
+  /// model selection, and tool surface as typed Chat. Returns its final text
+  /// for the realtime provider to speak faithfully.
   func escalateToHigherModel(
     _ query: String,
-    kernelSemanticGuidance: String,
-    kernelContext: String,
-    stableCacheIdentity: String,
-    dynamicContextIdentity: String,
-    contextPlanID: String,
     toolContext: String,
+    invocationID: String,
     ownerID: String
   ) async -> AuthorizedRealtimeToolExecutionResult {
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
       return .failed(Self.authorizedRealtimeOwnerChangedError())
     }
-    let body = RealtimeHubTools.escalationBody(
-      query: query,
-      kernelSemanticGuidance: kernelSemanticGuidance,
-      kernelContext: kernelContext,
-      stableCacheIdentity: stableCacheIdentity,
-      dynamicContextIdentity: dynamicContextIdentity,
-      contextPlanID: contextPlanID,
-      toolContext: toolContext)
     let t0 = Date()
     do {
-      let answer = try await APIClient.shared.askHigherModel(
-        body: body,
+      let answer = try await FloatingControlBarManager.shared.askChatLaneForSpokenAnswer(
+        prompt: RealtimeHubTools.escalationUserPrompt(query: query, toolContext: toolContext),
+        invocationID: invocationID,
         expectedOwnerID: ownerID)
       let ms = Int(Date().timeIntervalSince(t0) * 1000)
-      log(
-        "RealtimeHub: ask_higher_model ← \(ModelQoS.Claude.defaultSelection) OK in \(ms)ms (\(answer.count) chars)"
-      )
+      log("RealtimeHub: ask_higher_model chat lane OK in \(ms)ms (\(answer.count) chars)")
       return .succeeded(answer)
-    } catch AuthError.userChangedDuringRequest {
+    } catch RealtimeChatLaneError.ownerChanged {
       return .failed(Self.authorizedRealtimeOwnerChangedError())
     } catch {
       log("RealtimeHub: ask_higher_model failed — \(error.localizedDescription)")

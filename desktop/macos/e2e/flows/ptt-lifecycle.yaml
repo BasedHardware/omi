@@ -6,7 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/AudioLevelMonitor.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchVoiceMorphMark.swift
-  - desktop/macos/Desktop/Sources/Chat/APIClient+HigherModel.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
   - desktop/macos/Desktop/Sources/Chat/ExternalSurfaceRunAuthority.swift
   - desktop/macos/Desktop/Sources/DefaultsKey.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
@@ -23,6 +23,9 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+EventAdmission.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+PushToTalk.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+Tools.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTools.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+StreamingJournal.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeVoiceContextSingleFlight.swift

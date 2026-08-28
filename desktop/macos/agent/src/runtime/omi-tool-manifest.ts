@@ -621,13 +621,16 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["realtime_voice"],
     capabilityDoc: doc(
       "Ask Higher Model",
-      "Get a second opinion from the larger model when the user pushes back or current facts are needed.",
-      ["Use sparingly; answer simple or creative requests yourself."],
+      "Hand a difficult question to the full typed-chat model and tool lane, then speak its answer.",
+      [
+        "Use when the user pushes back or when a complicated question needs deeper reasoning, memories, search, or other typed-chat tools that realtime voice cannot use well.",
+        "Do not use for chit-chat or simple and creative requests you can answer well yourself.",
+      ],
     ),
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     voice: {
       realtimeDescription:
-        "Get a second opinion from a smarter model and receive text to speak. Use it when the user is dissatisfied with your previous answer (pushes back, rephrases, says you're wrong, or asks for a better/deeper answer), or when you genuinely need precise up-to-date facts you don't know. Answer general, creative, and long-form requests yourself.",
+        "Send a difficult question through Omi's full typed-chat model and tools, then receive its final answer to speak. Use it when the user is dissatisfied with your previous answer, or when a complicated question needs deeper reasoning, memories, search, or other tools unavailable in the realtime lane. Before calling it, say a short varied wait-line such as 'let me think about that' or 'give me a second'; do not use a fixed script, do not answer before the tool returns, and do not call it for chit-chat or simple creative requests. When it returns, read its answer faithfully; you may lightly adapt phrasing for speech but must not invent a different answer.",
       schemaOverride: schema(
         {
           query: { type: "string", description: "The full question to escalate." },
@@ -1379,9 +1382,9 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "ask_higher_model",
     label: "Ask Higher Model",
-    description: "Escalate a hard question to the larger model and speak its answer.",
-    promptSnippet: "ask_higher_model - Escalate to a higher model for a second opinion",
-    latency: "fast network",
+    description: "Run a hard question through the full typed-chat model and tool lane, then speak its answer.",
+    promptSnippet: "ask_higher_model - Use the full typed-chat lane for a difficult spoken question",
+    latency: "async background",
     inputSchema: schema(
       {
         query: { type: "string", description: "The full question to escalate." },
@@ -1390,7 +1393,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       ["query"],
     ),
     annotations: readOnlyLocal,
-    timeoutClass: "normal",
+    timeoutClass: "long",
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
     runtimePreconditions: ["Realtime voice only."],

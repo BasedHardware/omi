@@ -972,6 +972,43 @@ enum ChatSystemPromptStyle {
   case floating
 }
 
+enum RealtimeChatLaneError: Error {
+  case busy
+  case unavailable
+  case emptyResponse
+  case ownerChanged
+  case revoked
+}
+
+struct RealtimeChatLaneInvocationGate: Equatable {
+  private(set) var activeInvocationID: String?
+  private var revokedInvocationID: String?
+
+  mutating func begin(_ invocationID: String) -> Bool {
+    guard activeInvocationID == nil, !invocationID.isEmpty else { return false }
+    activeInvocationID = invocationID
+    return true
+  }
+
+  func accepts(_ invocationID: String) -> Bool {
+    activeInvocationID == invocationID && revokedInvocationID != invocationID
+  }
+
+  @discardableResult
+  mutating func finish(_ invocationID: String) -> Bool {
+    guard activeInvocationID == invocationID else { return false }
+    activeInvocationID = nil
+    revokedInvocationID = nil
+    return true
+  }
+
+  mutating func revokeActive() -> String? {
+    guard let activeInvocationID, revokedInvocationID != activeInvocationID else { return nil }
+    revokedInvocationID = activeInvocationID
+    return activeInvocationID
+  }
+}
+
 /// State management for chat functionality with Claude Agent SDK
 /// Uses hybrid architecture: Swift → Claude Agent (via Node.js bridge) for AI, Backend for persistence + context
 @MainActor
@@ -1079,12 +1116,16 @@ class ChatProvider: ObservableObject {
   /// makes `ChatQueryResultAuthority` reject the dead turn's late result.
   private(set) var sendGeneration: Int = 0
   private var sendLockOwnership = ChatSendLockOwnership()
+  private var realtimeChatLaneInvocationGate = RealtimeChatLaneInvocationGate()
 
   /// Whether a new turn can start right now. The bridge holds one message
   /// continuation, so a second concurrent turn would have its response
   /// consumed by the wrong caller. Exposed so a caller can ask before it
   /// sends — and report the refusal — instead of discovering it as a `nil`.
-  var canAcceptSend: Bool { !isSending && !sendLockOwnership.isHeld }
+  var canAcceptSend: Bool {
+    !isSending && !sendLockOwnership.isHeld
+      && realtimeChatLaneInvocationGate.activeInvocationID == nil
+  }
 
   /// Said, not swallowed: a refused send is the reader's message going
   /// nowhere, so it needs an account of where it went.
@@ -1981,6 +2022,73 @@ class ChatProvider: ObservableObject {
       log("ChatProvider: realtime kernel context preparation failed: \(error.localizedDescription)")
       return .empty
     }
+  }
+
+  /// Executes one non-journaled companion query on the canonical main-chat
+  /// session. Session resolution supplies the same selected model and complete
+  /// desktop-chat capability projection as typed Chat; the voice reducer still
+  /// owns the enclosing audible turn and its persistence.
+  func askChatLaneForSpokenAnswer(
+    prompt: String,
+    invocationID: String,
+    expectedOwnerID: String
+  ) async throws -> String {
+    guard runtimeOwnerId == expectedOwnerID else { throw RealtimeChatLaneError.ownerChanged }
+    guard canAcceptSend, realtimeChatLaneInvocationGate.begin(invocationID) else {
+      throw RealtimeChatLaneError.busy
+    }
+    defer { realtimeChatLaneInvocationGate.finish(invocationID) }
+
+    guard await ensureBridgeStartedForKernel() else { throw RealtimeChatLaneError.unavailable }
+    guard runtimeOwnerId == expectedOwnerID else { throw RealtimeChatLaneError.ownerChanged }
+    guard realtimeChatLaneInvocationGate.accepts(invocationID) else {
+      throw RealtimeChatLaneError.revoked
+    }
+
+    let surface = mainChatSurfaceReference()
+    let kernelContext = try await prepareKernelQueryContext(
+      surface: surface,
+      systemPromptStyle: .main,
+      systemPromptPrefix: nil,
+      systemPromptSuffix: RealtimeHubTools.escalationSystemPrompt(),
+      notificationContext: nil,
+      screenPayload: nil,
+      includePromptCitations: true,
+      requestedModelProfile: nil
+    )
+    await resolvedAgentClient().warmupSession(kernelContext.session)
+    guard runtimeOwnerId == expectedOwnerID else { throw RealtimeChatLaneError.ownerChanged }
+    guard realtimeChatLaneInvocationGate.accepts(invocationID) else {
+      throw RealtimeChatLaneError.revoked
+    }
+
+    let result = try await resolvedAgentClient().query(
+      prompt: ChatPromptBuilder.currentTimePrompt(for: prompt),
+      session: kernelContext.session,
+      surface: surface,
+      mode: chatMode.rawValue,
+      expectedContext: kernelContext.snapshot.freshness,
+      reasoningEffort: ChatTurnOwner.mainChat.reasoningEffort,
+      onTextDelta: { _ in },
+      onToolActivity: { _, _, _, _ in },
+      onThinkingDelta: { _ in }
+    )
+    guard runtimeOwnerId == expectedOwnerID else { throw RealtimeChatLaneError.ownerChanged }
+    guard realtimeChatLaneInvocationGate.accepts(invocationID) else {
+      throw RealtimeChatLaneError.revoked
+    }
+    let answer = try Self.requireSuccessfulQueryResult(result).text
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !answer.isEmpty else { throw RealtimeChatLaneError.emptyResponse }
+    return answer
+  }
+
+  /// Revokes only the exact voice companion query. The gate remains occupied
+  /// until that query unwinds, so its interrupt cannot touch a newer typed turn.
+  func cancelActiveRealtimeChatLaneInvocation() {
+    guard realtimeChatLaneInvocationGate.revokeActive() != nil else { return }
+    let client = resolvedAgentClient()
+    Task { await client.interrupt() }
   }
 
   private static func queryAttachments(_ attachments: [ChatAttachment]) -> [AgentQueryAttachment] {

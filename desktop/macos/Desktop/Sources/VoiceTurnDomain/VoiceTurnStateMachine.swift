@@ -271,6 +271,12 @@ package enum VoiceTurnDeadline: String, Equatable, Hashable, Sendable, CaseItera
   case hintVisibility = "hint_visibility"
 }
 
+package enum VoiceToolDeadlineClass: Equatable, Sendable {
+  case standard
+  /// A full typed-chat turn may use several tools before producing speech.
+  case chatLane
+}
+
 package struct VoiceTurnUIProjection: Equatable, Sendable {
   package var isListening = false
   package var isLocked = false
@@ -509,6 +515,9 @@ enum VoiceTurnEvent: Equatable, Sendable {
     sessionID: VoiceSessionID?, responseID: VoiceResponseID?)
   case toolStartedScoped(
     turnID: VoiceTurnID, identity: VoiceEffectIdentity, callID: VoiceToolCallID)
+  case toolDeadlineClassSelectedScoped(
+    turnID: VoiceTurnID, identity: VoiceEffectIdentity, callID: VoiceToolCallID,
+    deadlineClass: VoiceToolDeadlineClass)
   /// A native result is already the complete user-visible answer for a tool.
   /// It replaces, rather than races, an optional provider continuation.
   case authoritativeLocalResultAcceptedScoped(
@@ -591,6 +600,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
       .providerResponseStartedScoped(let turnID, _, _, _),
       .providerTurnFinishedScoped(let turnID, _, _, _),
       .toolStartedScoped(let turnID, _, _),
+      .toolDeadlineClassSelectedScoped(let turnID, _, _, _),
       .authoritativeLocalResultAcceptedScoped(let turnID, _, _, _),
       .screenEvidenceReportVerifiedScoped(let turnID, _, _, _, _),
       .screenEvidenceUnavailableScoped(let turnID, _, _),
@@ -647,6 +657,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
     case .providerResponseStartedScoped: return "provider_response_started_scoped"
     case .providerTurnFinishedScoped: return "provider_turn_finished_scoped"
     case .toolStartedScoped: return "tool_started_scoped"
+    case .toolDeadlineClassSelectedScoped: return "tool_deadline_class_selected_scoped"
     case .authoritativeLocalResultAcceptedScoped: return "authoritative_local_result_accepted_scoped"
     case .screenEvidenceReportVerifiedScoped: return "screen_evidence_report_verified_scoped"
     case .screenEvidenceUnavailableScoped: return "screen_evidence_unavailable_scoped"
@@ -862,7 +873,21 @@ package struct VoiceTurnFact: Sendable {
     identity: VoiceEffectIdentity,
     callID: VoiceToolCallID
   ) -> Self {
-    Self(.toolStartedScoped(turnID: turnID, identity: identity, callID: callID))
+    Self(
+      .toolStartedScoped(
+        turnID: turnID, identity: identity, callID: callID))
+  }
+
+  package static func toolDeadlineClassSelectedScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    callID: VoiceToolCallID,
+    deadlineClass: VoiceToolDeadlineClass
+  ) -> Self {
+    Self(
+      .toolDeadlineClassSelectedScoped(
+        turnID: turnID, identity: identity, callID: callID,
+        deadlineClass: deadlineClass))
   }
 
   package static func authoritativeLocalResultAcceptedScoped(
@@ -1078,6 +1103,7 @@ struct VoiceTurnReducer {
     var transcription: TimeInterval = 12
     var providerResponse: TimeInterval = 20
     var pendingTools: TimeInterval = 30
+    var chatLaneTool: TimeInterval = 180
     var deferredCommit: TimeInterval = 8
     var bargeInReplacement: TimeInterval = 3
     var playbackDrain: TimeInterval = 30
@@ -1612,6 +1638,19 @@ struct VoiceTurnReducer {
       cancel(.providerResponse, in: &model, effects: &effects)
       schedule(.pendingTools, after: deadlines.pendingTools, in: &model, effects: &effects)
 
+    case .toolDeadlineClassSelectedScoped(_, let identity, let callID, let deadlineClass):
+      guard turn.toolEffectIdentities[callID] == identity,
+        turn.pendingToolCallIDs.contains(callID),
+        acceptsProviderOutput(turn.phase)
+      else {
+        stale(&model, event: event, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
+      cancel(.pendingTools, in: &model, effects: &effects)
+      let pendingToolDeadline =
+        deadlineClass == .chatLane ? deadlines.chatLaneTool : deadlines.pendingTools
+      schedule(.pendingTools, after: pendingToolDeadline, in: &model, effects: &effects)
+
     case .authoritativeLocalResultAcceptedScoped(_, let identity, let callID, let kind):
       guard turn.toolEffectIdentities[callID] == identity,
         acceptsProviderOutput(turn.phase)
@@ -1771,8 +1810,12 @@ struct VoiceTurnReducer {
         terminate(&model, reason: .success, effects: &effects)
       } else if !turn.pendingToolCallIDs.isEmpty {
         model.turn?.phase = .awaitingTools
+        model.turn?.projection.isThinking = true
         model.turn?.projection.isResponseActive = false
-        model.turn?.projection.isResponseWaiting = false
+        // A spoken heads-up may drain while a long-running tool is still
+        // working. Keep the response glow visible until that exact tool call
+        // finishes or the turn is interrupted.
+        model.turn?.projection.isResponseWaiting = true
       } else if model.turn?.providerFinished == true {
         model.turn?.phase = .awaitingJournal
         model.turn?.projection.isThinking = true

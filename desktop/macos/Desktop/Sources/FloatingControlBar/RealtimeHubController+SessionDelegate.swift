@@ -529,18 +529,10 @@ extension RealtimeHubController {
     case .askHigherModel:
       let query = (command.input["query"] as? String) ?? turnTranscript
       let toolContext = (command.input["context"] as? String) ?? ""
-      let kernelContext = voiceSessionContext(for: currentOwnerScope)
-      guard kernelContext.isResolved else {
-        return .failed(Self.authorizedRealtimeToolError(code: "kernel_context_unavailable"))
-      }
       return await escalateToHigherModel(
         query,
-        kernelSemanticGuidance: kernelContext.semanticGuidance,
-        kernelContext: kernelContext.rendered,
-        stableCacheIdentity: kernelContext.stableCacheIdentity,
-        dynamicContextIdentity: kernelContext.dynamicContextIdentity,
-        contextPlanID: kernelContext.planID,
         toolContext: toolContext,
+        invocationID: command.invocationID,
         ownerID: command.ownerID)
 
     case .screenshot:
@@ -848,6 +840,14 @@ extension RealtimeHubController {
         turnID: turnID,
         identity: toolIdentity,
         callID: VoiceToolCallID(callId)))
+    if name == HubTool.askHigherModel.rawValue {
+      VoiceTurnCoordinator.shared.publish(
+        .toolDeadlineClassSelectedScoped(
+          turnID: turnID,
+          identity: toolIdentity,
+          callID: VoiceToolCallID(callId),
+          deadlineClass: .chatLane))
+    }
     guard
       VoiceTurnCoordinator.shared.isToolEffectActive(
         turnID: turnID,
@@ -1182,6 +1182,7 @@ extension RealtimeHubController {
 
   func clearRealtimeToolTracking() {
     realtimeToolTurnEpoch += 1
+    FloatingControlBarManager.shared.cancelActiveRealtimeChatLaneInvocation()
     toolEffectIdentityByTransportKey.removeAll()
     DesktopDiagnosticsManager.shared.clearVoiceToolStarts()
     authorizedRealtimeInvocations.removeAll()

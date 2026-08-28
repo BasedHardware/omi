@@ -933,6 +933,45 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertTrue(finished.model.turn?.deadlines.contains(.providerResponse) == true)
   }
 
+  func testChatLaneToolKeepsGlowAfterHeadsUpPlaybackDrains() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    var model = reduce(
+      startingModel,
+      .providerResponseStarted(turnID: turnID, sessionID: sessionID, responseID: responseID)
+    ).model
+    let lease = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    model = reduce(model, .playbackStarted(turnID: turnID, lease: lease)).model
+
+    let reservation = reserveIdentity(model, turnID: turnID)
+    let callID = VoiceToolCallID("ask-higher-model")
+    let started = reducer.reduce(
+      reservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: reservation.identity,
+        callID: callID))
+    model = started.model
+
+    let selected = reducer.reduce(
+      model,
+      .toolDeadlineClassSelectedScoped(
+        turnID: turnID,
+        identity: reservation.identity,
+        callID: callID,
+        deadlineClass: .chatLane))
+    model = selected.model
+
+    XCTAssertTrue(
+      selected.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .pendingTools, after: 180)))
+    let drained = reduce(model, .playbackDrained(turnID: turnID, leaseID: lease.id))
+    XCTAssertEqual(drained.model.turn?.phase, .awaitingTools)
+    XCTAssertTrue(drained.model.turn?.projection.isThinking == true)
+    XCTAssertFalse(drained.model.turn?.projection.isResponseActive == true)
+    XCTAssertTrue(drained.model.turn?.projection.isResponseWaiting == true)
+    XCTAssertTrue(drained.model.turn?.pendingToolCallIDs.contains(callID) == true)
+  }
+
   func testProviderFinishDuringToolWaitRequiresPostToolContinuationBeforeJournal() throws {
     let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
     let callID = VoiceToolCallID("pending")

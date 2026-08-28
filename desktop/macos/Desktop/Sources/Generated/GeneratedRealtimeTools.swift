@@ -612,7 +612,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "ask_higher_model",
-    "description": "Get a second opinion from a smarter model and receive text to speak. Use it when the user is dissatisfied with your previous answer (pushes back, rephrases, says you're wrong, or asks for a better/deeper answer), or when you genuinely need precise up-to-date facts you don't know. Answer general, creative, and long-form requests yourself.",
+    "description": "Send a difficult question through Omi's full typed-chat model and tools, then receive its final answer to speak. Use it when the user is dissatisfied with your previous answer, or when a complicated question needs deeper reasoning, memories, search, or other tools unavailable in the realtime lane. Before calling it, say a short varied wait-line such as 'let me think about that' or 'give me a second'; do not use a fixed script, do not answer before the tool returns, and do not call it for chit-chat or simple creative requests. When it returns, read its answer faithfully; you may lightly adapt phrasing for speech but must not invent a different answer.",
     "parameters": {
       "type": "object",
       "properties": {

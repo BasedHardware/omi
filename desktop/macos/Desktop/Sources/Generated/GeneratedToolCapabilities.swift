@@ -622,11 +622,12 @@ enum GeneratedToolCapabilities {
     Capability(
       toolName: "ask_higher_model",
       title: "Ask Higher Model",
-      latency: .fastNetwork,
+      latency: .asyncBackground,
       surfaces: Set([.realtimeHub]),
-      summary: "Get a second opinion from the larger model when the user pushes back or current facts are needed.",
+      summary: "Hand a difficult question to the full typed-chat model and tool lane, then speak its answer.",
       bullets: [
-      "Use sparingly; answer simple or creative requests yourself."
+      "Use when the user pushes back or when a complicated question needs deeper reasoning, memories, search, or other typed-chat tools that realtime voice cannot use well.",
+      "Do not use for chit-chat or simple and creative requests you can answer well yourself."
     ]
     ),
     Capability(

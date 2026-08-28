@@ -241,67 +241,23 @@ enum RealtimeHubTools {
     return out
   }
 
-  /// System prompt for an escalated (ask_higher_model) answer. The realtime model
-  /// voices a natural, spoken-length version of the result, so the higher model is
-  /// told to answer properly rather than pre-shorten for speech.
+  /// Response contract for the typed-chat turn behind `ask_higher_model`.
+  /// This model authors the answer that will be spoken; realtime only voices it.
   static func escalationSystemPrompt() -> String {
     """
-    You are Omi, a knowledgeable assistant. Answer the user's question accurately and \
-    usefully. When the question needs current facts (news, weather, prices, scores, \
-    schedules), use your web search tool and ground the answer in what it returns. A \
-    voice assistant will relay your answer aloud and adapt the phrasing for speech, so \
-    be clear and well-structured; you don't need to pre-shorten it.
+    Your final response will be spoken aloud as Omi's answer. Use the same tools and \
+    evidence you would use for a typed-chat answer, but write only the final speakable \
+    conclusion: short, conversational prose with no Markdown, lists, citations, IDs, \
+    tool JSON, or tool trace. Prefer one to four spoken sentences unless the user asks \
+    for more detail. If you use tools, speak the conclusion rather than narrating the \
+    tool work. The realtime voice will read this answer faithfully and may make only \
+    light pronunciation or spoken-flow adjustments; it will not rewrite a long essay.
     """
   }
 
-  static func escalationBody(
-    query: String,
-    kernelSemanticGuidance: String,
-    kernelContext: String,
-    stableCacheIdentity: String,
-    dynamicContextIdentity: String,
-    contextPlanID: String,
-    toolContext: String
-  ) -> [String: Any] {
-    let semanticGuidance = kernelSemanticGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
-    let canonicalContext = kernelContext.trimmingCharacters(in: .whitespacesAndNewlines)
+  static func escalationUserPrompt(query: String, toolContext: String) -> String {
     let trimmedToolContext = toolContext.trimmingCharacters(in: .whitespacesAndNewlines)
-
-    // The cache marker is derived only from the typed kernel plan. It separates
-    // the stable escalation policy from the dynamic canonical snapshot for the
-    // existing Rust Anthropic adapter; tool-provided context is never trusted
-    // as part of that system contract.
-    let cacheBoundary: String
-    if !semanticGuidance.isEmpty,
-      !stableCacheIdentity.isEmpty,
-      !dynamicContextIdentity.isEmpty,
-      !contextPlanID.isEmpty
-    {
-      cacheBoundary =
-        "<!-- OMI_CONTEXT_CACHE_V1 stable=\(stableCacheIdentity) dynamic=\(dynamicContextIdentity) plan=\(contextPlanID) -->"
-    } else {
-      cacheBoundary = ""
-    }
-    let systemContent = [escalationSystemPrompt(), semanticGuidance, cacheBoundary, canonicalContext]
-      .filter { !$0.isEmpty }
-      .joined(separator: "\n\n")
-    let userContent =
-      !trimmedToolContext.isEmpty
-      ? query + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
-      : query
-    let messages: [[String: String]] = [
-      ["role": "system", "content": systemContent],
-      ["role": "user", "content": userContent],
-    ]
-    return [
-      "model": ModelQoS.Claude.defaultSelection,
-      "max_tokens": 1024,
-      "messages": messages,
-      "stream": false,
-      // Escalations carry no client tools, so opt in to the gateway's
-      // managed Perplexity web-search lane explicitly — voice escalations are
-      // exactly the "current facts" turns that need a live lookup.
-      "omi_web_search": true,
-    ]
+    guard !trimmedToolContext.isEmpty else { return query }
+    return query + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
   }
 }
