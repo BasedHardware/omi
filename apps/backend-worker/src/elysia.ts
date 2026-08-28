@@ -21,7 +21,10 @@ export function createElysiaApp(env: CoreEnv): Elysia {
   for (const route of v1Routes) {
     mount(app, env, route, true);
   }
-  app.onError(({ error, request }) => {
+  app.onError(({ error, request, code }) => {
+    if (code === "NOT_FOUND") {
+      return backendError("not_found", "edit_request", 404);
+    }
     console.error(
       JSON.stringify(
         requestFailedEvent({
@@ -33,7 +36,7 @@ export function createElysiaApp(env: CoreEnv): Elysia {
     );
     return backendError("internal_server_error", "retry", 500, true);
   });
-  return app.notFound(() => backendError("not_found", "edit_request", 404));
+  return app;
 }
 
 function mount(

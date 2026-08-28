@@ -3,9 +3,9 @@ import type { CoreEnv } from "../src/http-core";
 import { createD1Mock } from "../test/d1-mock";
 
 const objects = new Map<string, Uint8Array>();
-const env: CoreEnv = {
+const env = {
   ENVIRONMENT: "local",
-  API_TOKEN: process.env.API_TOKEN || "local-token",
+  API_TOKEN: process.env["API_TOKEN"] || "local-token",
   STAGING_ACCOUNT_ID: "local-account",
   STAGING_DISPLAY_NAME: "Omi Local",
   STAGING_EMAIL: "local@omi.invalid",
@@ -17,7 +17,7 @@ const env: CoreEnv = {
   OPENROUTER_MODEL: "",
   OPENROUTER_GATEWAY_URL: "",
   OPENROUTER_API_KEY: "",
-  AI: { run: async () => ({ response: "" }) } as CoreEnv["AI"],
+  AI: { run: async () => ({ response: "" }) },
   DB: createD1Mock(),
   ATTACHMENTS: {
     async put(key: string, value: unknown) {
@@ -61,8 +61,8 @@ const env: CoreEnv = {
       fetch: async () => new Response(null, { status: 404 }),
     }),
   },
-};
+} as CoreEnv;
 
-const port = Number(process.env.PORT ?? "8787");
+const port = Number(process.env["PORT"] ?? "8787");
 createElysiaApp(env).listen(port);
 console.log(`elysia listening on http://127.0.0.1:${port}`);
