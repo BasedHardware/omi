@@ -49,6 +49,7 @@ _utils_stubs = [
     "utils.llm",
     "utils.llm.clients",
     "utils.llm.proactive_notification",
+    "utils.llm.temporal",
     "utils.llm.usage_tracker",
     "utils.llms",
     "utils.llms.memory",
@@ -216,6 +217,11 @@ _proactive_mod.validate_notification = MagicMock(return_value=False)
 _proactive_mod.FREQUENCY_TO_BASE_THRESHOLD = {1: 0.5, 2: 0.4, 3: 0.3}
 _proactive_mod.MAX_DAILY_NOTIFICATIONS = 10
 _proactive_mod.Record = MagicMock
+
+# Stub the current-date helper imported by utils.app_integrations. Keeping it
+# inside this harness avoids pulling the real timezone/database path into this
+# otherwise hermetic unit test.
+sys.modules["utils.llm.temporal"].current_date_for_uid = MagicMock(return_value="2026-01-01")
 
 # Stub usage tracker
 _usage_mod = sys.modules["utils.llm.usage_tracker"]
