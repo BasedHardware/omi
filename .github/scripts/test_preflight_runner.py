@@ -486,7 +486,7 @@ class LaunchContractTests(unittest.TestCase):
         self.assertIn(r"bad:\xa1", completed.stdout)
 
     @unittest.skipUnless(os.name == "nt", "native Windows Git encoding contract")
-    def test_runner_handles_utf8_git_worktree_path_without_utf8_mode(self) -> None:
+    def test_runner_emits_utf8_from_unicode_checkout_without_utf8_mode(self) -> None:
         git = shutil.which("git")
         self.assertIsNotNone(git)
 
@@ -501,7 +501,7 @@ class LaunchContractTests(unittest.TestCase):
             )
             env = os.environ.copy()
             env["PYTHONUTF8"] = "0"
-            env["PYTHONIOENCODING"] = "utf-8"
+            env.pop("PYTHONIOENCODING", None)
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -511,7 +511,7 @@ class LaunchContractTests(unittest.TestCase):
                     "--",
                     sys.executable,
                     "-c",
-                    "print('unicode-path-ok')",
+                    "print('\\u8def\\u5f84\\U0001f680')",
                 ],
                 cwd=root,
                 env=env,
@@ -520,9 +520,11 @@ class LaunchContractTests(unittest.TestCase):
                 encoding="utf-8",
                 check=False,
             )
+            log = (root / ".git/omi-preflight/unicode-path/preflight.log").read_text(encoding="utf-8")
 
         self.assertEqual(completed.returncode, 0, completed.stdout)
-        self.assertIn("unicode-path-ok", completed.stdout)
+        self.assertIn("路径🚀", completed.stdout)
+        self.assertEqual(log, "路径🚀\n")
 
     @unittest.skipUnless(os.name == "nt", "native Windows Git encoding contract")
     def test_pr_preflight_handles_utf8_git_worktree_path_without_utf8_mode(self) -> None:

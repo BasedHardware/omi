@@ -676,6 +676,7 @@ class SingleFlightTests(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
         )
 
     def wait_for_lock(self, state_root: Path) -> None:
@@ -684,44 +685,6 @@ class SingleFlightTests(unittest.TestCase):
         while not lock.exists() and time.monotonic() < deadline:
             time.sleep(0.02)
         self.assertTrue(lock.exists(), "runner did not acquire its lock")
-
-    def test_runner_starts_from_unicode_checkout(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "路径 checkout"
-            root.mkdir()
-            state_root = root / "state"
-            env = os.environ.copy()
-            env["OMI_PREFLIGHT_STATE_DIR"] = str(state_root)
-            for key in tuple(env):
-                if key.startswith("GIT_"):
-                    del env[key]
-            subprocess.run(["git", "init", "-q", str(root)], check=True, env=env)
-
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    str(RUNNER),
-                    "--name",
-                    "unicode-checkout",
-                    "--",
-                    sys.executable,
-                    "-c",
-                    "print('\\u8def\\u5f84\\U0001f680')",
-                ],
-                cwd=root,
-                env=env,
-                input="",
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-            )
-            log = (state_root / "unicode-checkout" / "preflight.log").read_text(encoding="utf-8")
-
-        self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("路径🚀", result.stdout)
-        self.assertEqual(log, "路径🚀\n")
 
     @unittest.skipUnless(os.name == "nt", "Windows-only")
     def test_process_liveness_check_does_not_send_windows_ctrl_c(self) -> None:

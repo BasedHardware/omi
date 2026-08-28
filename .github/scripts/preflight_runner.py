@@ -242,6 +242,18 @@ def atomic_json(path: Path, value: dict) -> None:
     os.replace(temporary, path)
 
 
+def configure_output_streams() -> None:
+    """Keep captured runner output UTF-8 and non-fatal on Windows."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        options = {"errors": "backslashreplace"}
+        if IS_WINDOWS:
+            options["encoding"] = "utf-8"
+        reconfigure(**options)
+
+
 def read_json(path: Path) -> dict:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -503,9 +515,12 @@ def run_owned(
         log_path.write_text("", encoding="utf-8")
         os.chmod(log_path, 0o600)
         write_status()
+        child_env = os.environ.copy()
+        child_env["PYTHONIOENCODING"] = "utf-8:backslashreplace"
         child = subprocess.Popen(
             child_launch_command(command),
             cwd=root,
+            env=child_env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -607,6 +622,7 @@ def resolve_repo_root() -> Path:
 
 
 def main() -> int:
+    configure_output_streams()
     if sys.argv[1:2] == [WINDOWS_CHILD_BOOTSTRAP_FLAG]:
         return run_windows_child_bootstrap(sys.argv[2:])
 
