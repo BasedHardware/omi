@@ -26,6 +26,10 @@ describe('navigation SSOT', () => {
       expect(sidebarHrefs).toContain(href);
       expect(bottomBarHrefs).toContain(href);
     }
+
+    expect(sidebarHrefs.filter((href) => !bottomBarHrefs.includes(href))).toEqual([
+      '/memories',
+    ]);
   });
 
   it('gives every entry a label and falls back to it for the bottom bar', () => {
