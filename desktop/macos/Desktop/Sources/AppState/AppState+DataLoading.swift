@@ -253,6 +253,28 @@ extension AppState {
     }
   }
 
+  /// The wire targets a caller may send: backend segment ids, or `#index:N`
+  /// positional fallbacks for segments stored without ids (the same contract
+  /// the backend's `_resolve_bulk_segment_indices` accepts). The local half of
+  /// an assignment must resolve BOTH — matching only ids silently drops every
+  /// positional target on the floor.
+  enum SpeakerAssignmentTargets {
+    static let indexPrefix = "#index:"
+
+    static func parse(_ targets: [String]) -> (ids: [String], orders: [Int]) {
+      var ids: [String] = []
+      var orders: [Int] = []
+      for target in targets {
+        if target.hasPrefix(indexPrefix), let order = Int(target.dropFirst(indexPrefix.count)) {
+          orders.append(order)
+        } else {
+          ids.append(target)
+        }
+      }
+      return (ids, orders)
+    }
+  }
+
   func assignSpeakerToSegments(
     conversationId: String,
     segmentIds: [String],
@@ -284,14 +306,14 @@ extension AppState {
         reason: "conversation_not_synced",
         outcome: .degraded
       )
-      applySpeakerAssignmentLocally(
+      await applySpeakerAssignmentLocally(
         conversationId: conversationId, segmentIds: segmentIds, personId: personId, isUser: isUser)
       return true
     } catch {
       logError("People: Failed to assign segments", error: error)
       return false
     }
-    applySpeakerAssignmentLocally(
+    await applySpeakerAssignmentLocally(
       conversationId: conversationId, segmentIds: segmentIds, personId: personId, isUser: isUser)
     return true
   }
@@ -305,12 +327,20 @@ extension AppState {
     segmentIds: [String],
     personId: String?,
     isUser: Bool
-  ) {
-    // Update in-memory conversations list so the prop is fresh on next open
-    let idSet = Set(segmentIds)
+  ) async {
+    let targets = SpeakerAssignmentTargets.parse(segmentIds)
+    // Update the in-memory conversations list so the label is fresh on next open.
+    // A target may be the segment's local id, its backend id, or a positional
+    // #index:N — all three must land, or the caller's positional targets are
+    // silently dropped on the floor.
+    let idSet = Set(targets.ids)
+    let orderSet = Set(targets.orders)
     if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
       for segIdx in conversations[idx].transcriptSegments.indices
-      where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
+      where idSet.contains(conversations[idx].transcriptSegments[segIdx].id)
+        || conversations[idx].transcriptSegments[segIdx].backendId.map(idSet.contains) == true
+        || orderSet.contains(segIdx)
+      {
         let old = conversations[idx].transcriptSegments[segIdx]
         conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
           id: old.id,
@@ -325,15 +355,17 @@ extension AppState {
         )
       }
     }
-    // Also update local SQLite cache so changes persist across app restarts
-    Task {
-      try? await TranscriptionStorage.shared.updateSegmentSpeakerAssignment(
-        backendConversationId: conversationId,
-        segmentIds: segmentIds,
-        personId: personId,
-        isUser: isUser
-      )
-    }
+    // Also update the local SQLite cache so the assignment survives restarts —
+    // and, for a conversation the backend does not have yet, so the finalization
+    // sync can carry person_id/is_user up with the session. Awaited: returning
+    // success before the write lands would let a quit drop the user's decision.
+    try? await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
+      conversationId,
+      segmentIds: targets.ids,
+      fallbackSegmentOrders: targets.orders,
+      isUser: isUser,
+      personId: isUser ? nil : personId
+    )
   }
 
   // MARK: - Backend Segment Handling

@@ -38,4 +38,15 @@ final class SpeakerAssignmentTests: XCTestCase {
     XCTAssertEqual(meta.backendIds, ["backend-a"])
     XCTAssertEqual(meta.fallbackOrders, [1])
   }
+
+  /// The local half must consume BOTH target kinds the wire carries — backend
+  /// ids and positional #index:N — because unsynced/legacy segments only have
+  /// the positional form. Dropping them was the "assignment succeeded but did
+  /// not survive reload" defect.
+  func testTargetParsingSplitsIdsAndPositionalFallbacks() {
+    let parsed = AppState.SpeakerAssignmentTargets.parse(
+      ["backend-a", "#index:1", "#index:12", "not-an-index", "#index:x"])
+    XCTAssertEqual(parsed.ids, ["backend-a", "not-an-index", "#index:x"])
+    XCTAssertEqual(parsed.orders, [1, 12])
+  }
 }

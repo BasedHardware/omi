@@ -1,0 +1,3 @@
+{
+  "change": "Speaker names tagged on a recording that hasn't finished syncing now reliably survive restarting the app"
+}
