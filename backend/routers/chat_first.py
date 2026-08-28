@@ -19,6 +19,7 @@ import database.chat_first_intents as chat_first_intents_db
 import database.conversation_finalization_jobs as finalization_jobs_db
 import database.conversations as conversations_db
 import database.goals as goals_db
+from database.firestore_read_metrics import FirestoreReadSite
 import database.task_intelligence_control as task_control_db
 from models.chat_first import (
     CaptureLinkSpec,
@@ -172,7 +173,9 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
     if isinstance(block, GoalLinkSpec):
         return goals_db.get_goal_by_id(uid, block.goal_id) is not None
     if isinstance(block, CaptureLinkSpec):
-        capture = conversations_db.get_conversation(uid, block.conversation_id)
+        capture = conversations_db.get_conversation(
+            uid, block.conversation_id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
+        )
         return bool(
             capture
             and capture.get('source') == 'omi'
@@ -180,7 +183,9 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
             and not capture.get('is_locked', False)
         )
     if isinstance(block, ConversationLinkSpec):
-        conversation = conversations_db.get_conversation(uid, block.conversation_id)
+        conversation = conversations_db.get_conversation(
+            uid, block.conversation_id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
+        )
         return bool(
             conversation
             and conversation.get('source') == 'desktop'
@@ -204,7 +209,9 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
         return bool(task and not task.get('is_locked', False))
     if subject.kind == 'goal':
         return goals_db.get_goal_by_id(uid, subject.id) is not None
-    capture = conversations_db.get_conversation(uid, subject.id)
+    capture = conversations_db.get_conversation(
+        uid, subject.id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
+    )
     return bool(
         capture
         and capture.get('source') == 'omi'

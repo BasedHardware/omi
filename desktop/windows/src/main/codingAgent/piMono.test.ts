@@ -58,6 +58,7 @@ function newFakeProc(): FakeProc {
 // and inspect internal state without `any` (lint forbids explicit any).
 interface PiInternals {
   sendCommand: (cmd: Record<string, unknown>) => void
+  handleEvent: (line: string) => void
   handleTurnEnd: (event: Record<string, unknown>) => void
   handleToolStart: (event: Record<string, unknown>) => void
   handleToolEnd: (event: Record<string, unknown>) => void
@@ -401,6 +402,29 @@ describe('PiMonoAdapter prompt correlation', () => {
       cacheWriteTokens: 2
     })
     expect(events.some((event) => event.type === 'result')).toBe(false)
+  })
+
+  it('treats agent_settled as advisory and waits for the authoritative turn_end', async () => {
+    const { adapter } = createAdapter()
+    seedSessions(adapter, 'session-1')
+
+    const prompt = adapter.sendPrompt(
+      'session-1',
+      [{ type: 'text', text: 'wait for the child' }],
+      [],
+      'act',
+      () => {},
+      async () => ''
+    )
+
+    internals(adapter).handleEvent(JSON.stringify({ type: 'agent_settled' }))
+
+    expect(internals(adapter).activePromptGeneration).toBe(1)
+    expect(internals(adapter).pendingRequests.size).toBe(1)
+
+    internals(adapter).handleTurnEnd(makeTurnEndEvent('authoritative terminal result'))
+
+    await expect(prompt).resolves.toMatchObject({ text: 'authoritative terminal result' })
   })
 
   it('rejects turn_end errors instead of resolving success', async () => {

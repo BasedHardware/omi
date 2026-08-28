@@ -1129,14 +1129,26 @@ def test_deploy_stages_workflow_owned_control_and_validation_sources_inside_admi
     assert 'COPY backend/ .' in dockerfile
     assert '.deploy-control' not in dockerfile
     assert '.deploy-workflow-source' not in dockerfile
+    before_validation = deploy[
+        deploy.index('Validate backend runtime env before deploy') : deploy.index(
+            'Migrate legacy public Cloud Run bindings'
+        )
+    ]
     validation_steps = [
-        deploy[deploy.index('Validate backend runtime env before deploy') : deploy.index('Build runtime image')],
+        before_validation,
         deploy[
             deploy.index('Validate backend runtime env after deploy') : deploy.index(
                 'Resolve transcription candidate URL'
             )
         ],
     ]
+    assert deploy.index('Render backend runtime env') < deploy.index('Validate backend runtime env before deploy')
+    assert deploy.index('Validate backend runtime env before deploy') < deploy.index(
+        'Deploy ${{ inputs.service }} to Cloud Run'
+    )
+    assert '--state-output "$RUNNER_TEMP/backend-runtime-env-state.json"' in deploy
+    assert '--cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"' in before_validation
+    assert '--check-rendered-cloud-run' not in before_validation
     assert all('--workflow-root "$DEPLOY_WORKFLOW_ROOT"' in step for step in validation_steps)
     assert all('--manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml"' in step for step in validation_steps)
     for action_name in (

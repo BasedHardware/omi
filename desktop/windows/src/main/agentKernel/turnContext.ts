@@ -26,6 +26,7 @@ import type { AgentArtifact, AgentExecutionRole, AgentStore, ConversationTurn } 
 import type { SurfaceRef } from './surfaceSession'
 import { surfaceRefKey as surfaceKeyFor } from './surfaceSession'
 import type { KernelSessionSummary } from './kernelTypes'
+import { currentTimeBlock } from './desktopChatPrompt'
 
 // Retains a long rapid-PTT burst, including an optional assistant row per turn,
 // while staying comfortably inside provider context budgets (~6k tokens at the
@@ -229,6 +230,16 @@ export function assembleTurnContext(input: AssembleTurnContextInput): AssembledT
   const leafWorkerBoundary = leafWorkerExecutionBoundary(input.surfaceRef, input.executionRole)
   if (leafWorkerBoundary) {
     sections.push(leafWorkerBoundary)
+  }
+
+  // Surfaces other than main_chat have no upstream clock wrap — mainChat.ts applies
+  // currentTimePrompt before the kernel sees the text, so injecting here too would
+  // double it for that surface. Pill/task/workstream agents resolve "Friday" or
+  // "due next week" against tool timestamps (create_action_item due_at) and need the
+  // host clock; it rides in this volatile section, never in the byte-stable system
+  // prompt (SCA-358).
+  if (input.surfaceRef.surfaceKind !== 'main_chat') {
+    sections.push(currentTimeBlock(new Date(input.nowMs ?? Date.now())))
   }
 
   sections.push(`# User Message\n\n${input.userText}`)

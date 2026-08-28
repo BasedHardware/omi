@@ -161,6 +161,7 @@ def tombstone_and_delete_empty_conversation(
     recording_session_id: str | None,
     *,
     firestore_client: Any = None,
+    deleted_conversation: dict[str, Any] | None = None,
 ) -> bool:
     """Atomically delete an empty live row and terminalize its bound session.
 
@@ -168,6 +169,12 @@ def tombstone_and_delete_empty_conversation(
     in transactions on this same parent document. Firestore therefore retries
     this transaction when a late content write wins, preventing cleanup from
     deleting user data based on a stale empty read.
+
+    ``deleted_conversation``, when supplied, receives the raw snapshot this
+    transaction actually deleted. Physical cleanup that has to reason about the
+    row's contents must read them from here rather than fetching the document
+    itself: by the time this returns the row is gone, and a fetch beforehand
+    would decide against a snapshot a concurrent write can still invalidate.
     """
     client = _client(firestore_client)
     conversation_ref = (
@@ -208,6 +215,11 @@ def tombstone_and_delete_empty_conversation(
                                 'updated_at': _now(),
                             },
                         )
+        if deleted_conversation is not None:
+            # A contended transaction re-runs this function, so publish the
+            # snapshot that belongs to the attempt that actually commits.
+            deleted_conversation.clear()
+            deleted_conversation.update(conversation)
         transaction.delete(conversation_ref)
         return True
 

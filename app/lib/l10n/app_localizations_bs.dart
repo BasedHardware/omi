@@ -2042,6 +2042,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get memoryDeleted => 'Uspomena je obrisana.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Opozovi';
 
   @override
@@ -9870,6 +9873,20 @@ class AppLocalizationsBs extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
+  String get chatScopeToday => 'Danas';
+
+  @override
+  String get chatScopeThisWeek => 'Ove sedmice';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'O: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Pitaj o ovome';
+
+  @override
   String get sendRawAudioToOmi => 'Šalji sirovi zvuk u Omi';
 
   @override
@@ -9914,4 +9931,15 @@ class AppLocalizationsBs extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Posljednja greška: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Unaprijed snimljeno';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant još uvijek snima, pa se pohranjeni zvuk ne može prenijeti. Pritisnite dugme na Pendantu da zaustavite snimanje, zatim ponovo sinhronizujte.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Memorija Pendanta je puna i još uvijek je u režimu snimanja, pa se pohranjeni zvuk ne može prenijeti. Pritisnite dugme na Pendantu da zaustavite snimanje, a zatim ponovo sinhronizujte.';
 }

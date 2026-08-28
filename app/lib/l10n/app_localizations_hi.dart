@@ -2017,6 +2017,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get memoryDeleted => 'याद हटा दी गई।';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'पूर्ववत करें';
 
   @override
@@ -9821,6 +9824,20 @@ class AppLocalizationsHi extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
+  String get chatScopeToday => 'आज';
+
+  @override
+  String get chatScopeThisWeek => 'इस सप्ताह';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'इसके बारे में: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'इसके बारे में पूछें';
+
+  @override
   String get sendRawAudioToOmi => 'Omi को कच्चा ऑडियो भेजें';
 
   @override
@@ -9864,4 +9881,15 @@ class AppLocalizationsHi extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'अंतिम त्रुटि: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'पूर्व-रिकॉर्डेड';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant अभी भी रिकॉर्ड कर रहा है, इसलिए उसमें संग्रहीत ऑडियो स्थानांतरित नहीं किया जा सकता। रिकॉर्डिंग रोकने के लिए Pendant का बटन दबाएँ, फिर दोबारा सिंक करें।';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant का स्टोरेज भर गया है और यह अभी भी रिकॉर्डिंग मोड में है, इसलिए संग्रहीत ऑडियो स्थानांतरित नहीं किया जा सकता। रिकॉर्डिंग रोकने के लिए Pendant का बटन दबाएँ, फिर दोबारा सिंक करें।';
 }

@@ -217,6 +217,12 @@ actor ContextProactivityEngine {
         startedAt: fence.startedAt,
         endedAt: frameFreshness.endedAt)
     else { return }
+    if await JITProactivityCoordinator.shared.handle(
+      fence: fence, snapshot: snapshot, frame: frameSample.frame,
+      authorizationSnapshot: authorizationSnapshot)
+    {
+      return
+    }
     await evaluateAndDeliver(
       fence: fence,
       snapshot: snapshot,
@@ -267,6 +273,12 @@ actor ContextProactivityEngine {
       log(
         "DepartureEvalDebug: ineligible snapshot worthiness=\(snapshot.notifyWorthiness) facts=\(snapshot.validatedFacts.count)"
       )
+      return
+    }
+    if await JITProactivityCoordinator.shared.handle(
+      fence: fence, snapshot: snapshot, frame: departingFrame,
+      authorizationSnapshot: authorizationSnapshot)
+    {
       return
     }
     log("DepartureEvalDebug: proceeding to evaluateAndDeliver")

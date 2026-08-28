@@ -11,6 +11,15 @@ inputs:
       roles/iam.serviceAccountTokenCreator for the deploy identity on it.
     required: false
     default: ''
+  firebase_probe_signer_credentials:
+    description: >-
+      Base64-encoded service-account key for the Firebase auth project, used to
+      sign release-probe custom tokens locally. This is how the development lane
+      signs for production Firebase without an IAM grant, matching
+      desktop_backend_auto_dev.yml. Mutually exclusive with
+      firebase_probe_signer_service_account.
+    required: false
+    default: ''
   deploy_profile:
     description: 'manual or auto-dev orchestration profile'
     required: true
@@ -281,18 +290,6 @@ runs:
         fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" "${PREFLIGHT_ARGS[@]}"
 
-    - name: Validate backend runtime env before deploy
-      shell: bash
-      env:
-        SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
-      run: |
-        python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
-          --env ${{ inputs.runtime_env }} \
-          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
-          --check-workflows \
-          --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
-          --check-rendered-cloud-run
-
     - name: Build runtime image
       uses: docker/build-push-action@v7
       with:
@@ -435,7 +432,20 @@ runs:
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/render_backend_runtime_env.py" \
           --env ${{ inputs.runtime_env }} \
-          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" >> "$GITHUB_OUTPUT"
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --state-output "$RUNNER_TEMP/backend-runtime-env-state.json" >> "$GITHUB_OUTPUT"
+
+    - name: Validate backend runtime env before deploy
+      shell: bash
+      env:
+        SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
+          --env ${{ inputs.runtime_env }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --check-workflows \
+          --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          --cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"
 
     - name: Migrate legacy public Cloud Run bindings
       shell: bash
@@ -494,6 +504,7 @@ runs:
           --final-revision="backend-${{ steps.image-tag.outputs.revision_suffix }}"
           --ingress-container=backend-1
           --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
+          --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
         )
         if [[ -n "$GMP_CANDIDATE_TAG" ]]; then
           args+=(--tag="$GMP_CANDIDATE_TAG")
@@ -751,12 +762,15 @@ runs:
         candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
         project_id: ${{ inputs.project_id }}
         firebase_auth_project_id: based-hardware
-        # A development deploy identity cannot sign a custom token for the
-        # production Firebase project this gate authenticates against, so it
+        # The development backend authenticates against production Firebase, so
+        # a development deploy identity cannot sign this gate's custom token: it
         # failed at custom_token_signing and blocked every manual development
-        # deploy. Left empty the behaviour is unchanged; set the variable to
-        # the Firebase project's signer to make this lane usable.
-        firebase_signer_service_account: ${{ inputs.firebase_probe_signer_service_account }}
+        # deploy. Sign locally with the Firebase project's own key instead --
+        # the same resolution desktop_backend_auto_dev.yml already uses. The
+        # named-signer input stays available but needs an IAM grant, so it is
+        # only consulted when a credential is not supplied.
+        firebase_signer_service_account: ${{ inputs.firebase_probe_signer_credentials == '' && inputs.firebase_probe_signer_service_account || '' }}
+        firebase_signer_credentials: ${{ inputs.firebase_probe_signer_credentials }}
 
     - name: Accept no-traffic Cloud Run candidate
       id: verify-cloud-run-candidate
@@ -958,7 +972,10 @@ runs:
         ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
         export ADMIN_KEY
         trap 'unset ADMIN_KEY' EXIT
-        python3 "$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url https://api.omi.dev
+        # api.omi.dev has never resolved (NXDOMAIN), so this smoke could not reach
+        # anything; api.omiapi.com is development's real public API host, matching
+        # the rest of the dev domain family (parakeet/nllb/pusher.omiapi.com).
+        python3 "$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url https://api.omiapi.com
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-

@@ -52,6 +52,15 @@ export type McpServerBuilder = (
 
 export type RecoverableErrorPredicate = (error: unknown, adapterId: string) => boolean;
 export type RecoverableErrorHandler = (error: unknown, adapterId: string) => Promise<void>;
+export type QueryActivityLeaseScheduler = (emit: () => void) => () => void;
+
+const QUERY_ACTIVITY_LEASE_INTERVAL_MS = 15_000;
+
+function scheduleQueryActivityLease(emit: () => void): () => void {
+  const timer = setInterval(emit, QUERY_ACTIVITY_LEASE_INTERVAL_MS);
+  timer.unref();
+  return () => clearInterval(timer);
+}
 
 export interface JsonlTransportOptions {
   kernel: AgentRuntimeKernel;
@@ -66,6 +75,7 @@ export interface JsonlTransportOptions {
   onRecoverableError?: RecoverableErrorHandler;
   maxRecoverableRetries?: number;
   activeOwnerId?: () => string;
+  scheduleQueryActivity?: QueryActivityLeaseScheduler;
 }
 
 interface ActiveRequestContext {
@@ -123,6 +133,7 @@ export class JsonlTransport {
   private readonly onRecoverableError?: RecoverableErrorHandler;
   private readonly maxRecoverableRetries: number;
   private readonly activeOwnerId: () => string;
+  private readonly scheduleQueryActivity: QueryActivityLeaseScheduler;
   private readonly activeByRequest = new Map<string, ActiveRequestContext>();
   private readonly activeByRun = new Map<string, ActiveRequestContext>();
   private readonly latestRunByClient = new Map<string, string>();
@@ -141,6 +152,7 @@ export class JsonlTransport {
     this.onRecoverableError = options.onRecoverableError;
     this.maxRecoverableRetries = Math.max(0, options.maxRecoverableRetries ?? 0);
     this.activeOwnerId = options.activeOwnerId ?? (() => this.ownerId);
+    this.scheduleQueryActivity = options.scheduleQueryActivity ?? scheduleQueryActivityLease;
     this.kernel.subscribe((event) => this.handleKernelEvent(event));
   }
 
@@ -162,6 +174,16 @@ export class JsonlTransport {
       revoked: false,
     };
     this.activeByRequest.set(key, context);
+    const stopQueryActivity = this.scheduleQueryActivity(() => {
+      // The callback is deliberately owned by this live request registration.
+      // A scheduler callback racing with terminal cleanup cannot extend a
+      // completed or owner-revoked turn.
+      if (context.revoked || !this.activeByRequest.has(key)) return;
+      this.send(this.withCorrelation({
+        type: "turn_activity",
+        phase: "running",
+      }, context));
+    });
 
     try {
       const result = await this.kernel.executeRun(input);
@@ -202,6 +224,7 @@ export class JsonlTransport {
       };
       this.send(this.withCorrelation(errorMessage, context));
     } finally {
+      stopQueryActivity();
       this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));
       if (context.runId) {
         this.activeByRun.delete(context.runId);

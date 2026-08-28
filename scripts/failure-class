@@ -4,6 +4,9 @@
 Definitions live in .github/failure-classes/ as one JSON file per semantic
 failure-class ID. This CLI never classifies a change from its diff or paths;
 it provides structured context and validates the declaration an author chose.
+`prepare` may narrow which definitions it *lists* using advisory `scope_hints`;
+that is a display convenience which reports itself as such, and the author still
+chooses the declaration.
 All required validation is local and deterministic. `report` accepts an
 explicit event fixture so advisory recurrence reports do not require network
 access or mutate definition state.
@@ -17,6 +20,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from fnmatch import fnmatch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -28,6 +32,17 @@ DEFINITIONS_RELATIVE_PATH = Path(".github/failure-classes")
 FAILURE_CLASS_ID_RE = re.compile(r"^FC-[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 FIX_SUBJECT_RE = re.compile(r"^fix(?:\([^)]+\))?!?:")
 DECLARATION_LINE_RE = re.compile(r"^[ \t]*Failure-Class:[ \t]*([^\r\n]*)[ \t]*$", re.MULTILINE)
+# The declaration value is ONE of these literal forms. The syntax used to be taught as
+# "Failure-Class: FC-<slug> | new | none", which reads as a pipe-separated value in a
+# repo whose other PR-body directives really are pipe-separated
+# (Line-Count-Exception: path | 2157 -> 2181 | reason). Authors wrote
+# "Failure-Class: FC-my-slug | new", and the error repeated the same ambiguous template
+# back at them. Always present the alternatives as separate lines.
+DECLARATION_FORMS = (
+    "Failure-Class: FC-<lower-kebab-slug>",
+    "Failure-Class: new",
+    "Failure-Class: none",
+)
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 DURATION_RE = re.compile(r"^(\d+)([dh])$")
 
@@ -98,6 +113,11 @@ def parse_args() -> argparse.Namespace:
     prepare.add_argument("--base", default="origin/main")
     prepare.add_argument("--head", default="HEAD")
     prepare.add_argument("--pr-body-file", type=Path, required=True)
+    prepare.add_argument(
+        "--all-candidates",
+        action="store_true",
+        help="List every definition instead of those whose scope_hints overlap this change.",
+    )
 
     explain = subparsers.add_parser("explain", help="Return one failure-class definition.")
     add_common_arguments(explain)
@@ -221,15 +241,21 @@ def validate_definition(data: Any, path: Path, root: Path) -> list[dict[str, Any
             errors.append(error("invalid_definition_field", f"'{key}' must be a non-empty string", path=str(path)))
 
     evidence_prs = data.get("evidence_prs")
-    if (
-        not isinstance(evidence_prs, list)
-        or not evidence_prs
-        or any(not isinstance(pr, int) or isinstance(pr, bool) or pr <= 0 for pr in evidence_prs)
+    # May be empty. `evidence_prs` records *merged* PRs, so a class born in the PR that
+    # fixes its first instance has none to cite: its number does not exist until the PR
+    # is opened. Requiring non-empty made `Failure-Class: new` unsatisfiable — the author
+    # had to invent a number or push with --no-verify and backfill. Empty is not missing
+    # data; the adding commit is the evidence, and `git log -- <definition>` recovers it.
+    # Nothing enforces recurrence from this field (the guard-artifact ratchet counts
+    # declarations in git history), so requiring it bought paperwork, not traceability.
+    if not isinstance(evidence_prs, list) or any(
+        not isinstance(pr, int) or isinstance(pr, bool) or pr <= 0 for pr in evidence_prs
     ):
         errors.append(
             error(
                 "invalid_evidence_prs",
-                "'evidence_prs' must be a non-empty array of positive PR numbers",
+                "'evidence_prs' must be an array of positive PR numbers (may be empty for a "
+                "class this change introduces)",
                 path=str(path),
             )
         )
@@ -358,6 +384,28 @@ def commit_subjects(root: Path, base: str, head: str) -> tuple[str, list[str]]:
     return common, [subject for subject in subjects.splitlines() if subject]
 
 
+def changed_paths_in_range(root: Path, common: str, head: str) -> list[str]:
+    output = run_git(root, "diff", "--name-only", common, head)
+    return [line for line in output.splitlines() if line]
+
+
+def candidates_matching_scope(definitions: list[Definition], paths: list[str]) -> list[Definition]:
+    """Definitions whose advisory `scope_hints` overlap the change's paths.
+
+    This narrows what is *listed*; it does not choose. `scope_hints` stay advisory — a
+    hit is not a classification, and the author still declares manually. The narrowing
+    exists because `prepare` printed all definitions in full, and an unreadable registry
+    gets a new class invented rather than an existing one reused, inflating the very
+    registry this protocol wants to keep small.
+    """
+    matched: list[Definition] = []
+    for definition in definitions:
+        hints = definition.data.get("scope_hints") or []
+        if any(fnmatch(path, hint) for hint in hints for path in paths):
+            matched.append(definition)
+    return matched
+
+
 def added_definition_paths(root: Path, common: str, head: str) -> list[Path]:
     output = run_git(
         root,
@@ -473,7 +521,9 @@ def validate_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, An
             errors.append(
                 error(
                     "missing_declaration",
-                    "a commit subject beginning with fix: requires 'Failure-Class: FC-<slug> | new | none'",
+                    "a commit subject beginning with fix: requires a Failure-Class declaration "
+                    "in the PR body; write exactly one of the accepted forms",
+                    accepted_forms=list(DECLARATION_FORMS),
                 )
             )
     elif declaration == "new":
@@ -492,7 +542,10 @@ def validate_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, An
                     errors.append(
                         error(
                             "new_definition_required",
-                            "'Failure-Class: new' requires exactly one added, valid class definition in this commit range",
+                            "'Failure-Class: new' requires exactly one added, valid class definition "
+                            "in this commit range; add "
+                            ".github/failure-classes/FC-<lower-kebab-slug>.json alongside the fix "
+                            "(its 'evidence_prs' may be [] — this PR is the evidence)",
                             added_paths=[str(path) for path in added_paths],
                         )
                     )
@@ -507,11 +560,21 @@ def validate_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, An
     elif declaration == "none":
         pass
     elif not FAILURE_CLASS_ID_RE.fullmatch(declaration):
+        # "FC-my-slug | new" is the common miss, because the old template joined its
+        # alternatives with a character this repo uses as a real field separator
+        # elsewhere. Name that mistake instead of echoing the template again.
+        hint = (
+            "write one form only — '|' separated the alternatives in the old template, "
+            "it is not part of the value"
+            if "|" in declaration
+            else "the value is a single token"
+        )
         errors.append(
             error(
                 "invalid_declaration",
-                "Failure-Class must be an existing FC-<lower-kebab-slug>, 'new', or 'none'",
+                f"'{declaration}' is not a valid Failure-Class declaration; {hint}",
                 declaration=declaration,
+                accepted_forms=list(DECLARATION_FORMS),
             )
         )
     elif declaration not in by_id:
@@ -534,6 +597,7 @@ def validate_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, An
     if (
         has_fix_commit
         and declaration not in (None, "new", "none")
+        and declaration in by_id
         and changed_definition_paths_in_range
         and not instance_fix_registry_changes_allowed(
             root, common, declaration, changed_definition_paths_in_range
@@ -586,6 +650,24 @@ def prepare_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, Any
     has_fix_commit = any(FIX_SUBJECT_RE.match(subject) for subject in subjects)
     declarations = declarations_in_body(body)
 
+    shown = definitions
+    narrowing = "none: every definition is listed"
+    if not args.all_candidates and common:
+        try:
+            paths = changed_paths_in_range(root, common, args.head)
+        except CliError as exc:
+            errors.append(error("changed_path_check_failed", str(exc)))
+        else:
+            matched = candidates_matching_scope(definitions, paths)
+            # Never narrow to nothing: an empty list reads as "no class can apply",
+            # which is a classification this CLI does not make.
+            if matched:
+                shown = matched
+                narrowing = (
+                    "scope_hints overlapping this change's paths; advisory only, not a "
+                    "classification. Pass --all-candidates for the full registry."
+                )
+
     payload = {
         "schema_version": OUTPUT_SCHEMA_VERSION,
         "command": "prepare",
@@ -594,7 +676,7 @@ def prepare_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, Any
         "requires_declaration": has_fix_commit,
         "commit_subjects": subjects,
         "merge_base": common or None,
-        "declaration_template": "Failure-Class: FC-<lower-kebab-slug> | new | none",
+        "declaration_template": list(DECLARATION_FORMS),
         "pr_body_patch": pr_body_patch(body, declarations),
         "advisory_candidates": [
             {
@@ -603,10 +685,18 @@ def prepare_command(args: argparse.Namespace, root: Path) -> tuple[dict[str, Any
                 "violated_contract": definition.data["violated_contract"],
                 "canonical_prevention": definition.data["canonical_prevention"],
             }
-            for definition in definitions
+            for definition in shown
         ],
+        "candidates_shown": len(shown),
+        "candidates_total": len(definitions),
+        "candidate_narrowing": narrowing,
         "candidate_source": "registry-only; no class was inferred from paths, diffs, or commit text",
-        "next_action": "Choose the declaration manually; replace 'none' in an appended patch if a class applies.",
+        "next_action": (
+            "Choose the declaration manually; replace 'none' in an appended patch if a class "
+            "applies. Declaring 'new' means adding one "
+            ".github/failure-classes/FC-<lower-kebab-slug>.json in this same change; its "
+            "'evidence_prs' may be [] because this PR is the evidence."
+        ),
     }
     return payload, 0 if not errors else 1
 

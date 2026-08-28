@@ -182,15 +182,6 @@ def _project_fields(env: str, env_config: ConfigDict) -> ConfigDict:
     }
 
 
-def _inject_config_map(env_config: ConfigDict, env: str) -> ConfigDict:
-    result = deepcopy(env_config)
-    gke = result.setdefault('gke', {})
-    if not isinstance(gke, dict):
-        return result
-    gke['config_map'] = _build_config_map_section(env)
-    return result
-
-
 def _strip_legacy_project_keys(env_config: ConfigDict) -> ConfigDict:
     result = deepcopy(env_config)
     result.pop('gcp_project', None)

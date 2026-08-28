@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-alert-never-provably-fired",
+  "violated_contract": "A newly authored alert counts as coverage only once its expression has been evaluated against real historical data spanning both a known-bad and a known-good period. Valid PromQL, successful provisioning, and a green evaluation state are all satisfied by an alert that can never fire: an expression that is silently mistyped for how the metric is actually exposed returns empty, and empty is indistinguishable from healthy. A threshold picked from a remembered baseline rather than from the metric's measured distribution fails the same way in the other direction, firing on ordinary noise or sitting inside it.",
+  "canonical_prevention": "Before merging an alert, run its exact expression against the real series over a window that contains the incident it is meant to catch, and record two numbers in the rule's own annotations: what it evaluates to during the bad period and during the good period. If the two are not separated by the threshold, the rule is not finished. Check the exposed representation of the metric -- not its upstream semantics -- because an exporter may publish a DELTA counter as a gauge, which makes rate() return a plausible wrong number rather than an error.",
+  "canonical_prevention_artifact": [
+    "backend/charts/monitoring/alerts/firestore.json"
+  ],
+  "evidence_prs": [12193],
+  "scope_hints": [
+    "backend/charts/monitoring/alerts/",
+    "backend/charts/monitoring/alert-rules.json",
+    "backend/charts/monitoring/prometheus-stackdriver-exporter/"
+  ],
+  "status": "open"
+}

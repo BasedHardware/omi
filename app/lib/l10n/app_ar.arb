@@ -3191,6 +3191,10 @@
     "accountCutoverMigrationInProgressMessage": "حسابك قيد الترحيل. ميزات المنتج متوقفة مؤقتًا حتى انتهاء الترحيل.",
     "accountCutoverMigrationRollbackMessage": "حسابك قيد الصيانة بعد التراجع عن الترحيل. قد تُعزل بعض البيانات الأحدث.",
     "accountCutoverOpenStore": "فتح المتجر",
+    "chatScopeToday": "اليوم",
+    "chatScopeThisWeek": "هذا الأسبوع",
+    "chatScopeAbout": "عن: {title}",
+    "askAboutThisConversation": "اسأل عن هذا",
     "sendRawAudioToOmi": "إرسال الصوت الخام إلى Omi",
     "sendRawAudioToOmiDescription": "أوقف هذا الخيار لمنع إرسال الصوت الخام إلى Omi. قد يستمر إرسال النصوص والبيانات اللازمة للميزات السحابية إلى Omi.",
     "findDevice": "العثور",
@@ -3203,5 +3207,8 @@
     "appReEnableFailedTitle": "تعذّرت إعادة التفعيل",
     "appReEnableFailedBody": "تعذّرت إعادة تفعيل هذا التطبيق. يُرجى المحاولة مرة أخرى.",
     "appDisabledOn": "تم التعطيل في {date}.",
-    "appDisabledLastError": "آخر خطأ: {error}"
+    "appDisabledLastError": "آخر خطأ: {error}",
+    "prerecordedTranscript": "مسجّل مسبقاً",
+    "pendantRecordingSyncBlocked": "لا يزال Pendant يسجّل، لذا لا يمكن نقل الصوت المخزّن عليه. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.",
+    "pendantFullSyncBlocked": "ذاكرة Pendant ممتلئة وما زال في وضع التسجيل، لذا لا يمكن نقل الصوت المخزّن. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة."
 }

@@ -2026,6 +2026,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryDeleted => 'تم حذف الذكرى.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'تراجع';
 
   @override
@@ -9784,6 +9787,20 @@ class AppLocalizationsAr extends AppLocalizations {
   String get accountCutoverOpenStore => 'فتح المتجر';
 
   @override
+  String get chatScopeToday => 'اليوم';
+
+  @override
+  String get chatScopeThisWeek => 'هذا الأسبوع';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'عن: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'اسأل عن هذا';
+
+  @override
   String get sendRawAudioToOmi => 'إرسال الصوت الخام إلى Omi';
 
   @override
@@ -9827,4 +9844,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'آخر خطأ: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'مسجّل مسبقاً';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'لا يزال Pendant يسجّل، لذا لا يمكن نقل الصوت المخزّن عليه. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'ذاكرة Pendant ممتلئة وما زال في وضع التسجيل، لذا لا يمكن نقل الصوت المخزّن. اضغط على زر Pendant لإيقاف التسجيل، ثم أعد المزامنة.';
 }

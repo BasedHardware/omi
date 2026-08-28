@@ -63,6 +63,27 @@ def _emit(logger: logging.Logger, payload: dict[str, Any]) -> None:
     logger.info("%s %s", MEMORY_DECISION_PATH_EVENT, json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
 
+def count_speaker_ids(segments: Any) -> tuple[int, int]:
+    """Return (distinct speakers, speakers flagged as the account owner).
+
+    Both are telemetry concerns, so they live here rather than in conversation
+    processing. The owner count is the one that cannot be reconstructed later: 0 means
+    diarization never identified the owner, so every memory from the conversation is
+    born third_party and dies at the TTL, and >1 is impossible by construction and
+    means speaker clustering shattered one person across several ids.
+    """
+    distinct: set[Any] = set()
+    owner: set[Any] = set()
+    for segment in segments:
+        speaker_id = getattr(segment, "speaker_id", None)
+        if speaker_id is None:
+            continue
+        distinct.add(speaker_id)
+        if getattr(segment, "is_user", False):
+            owner.add(speaker_id)
+    return len(distinct), len(owner)
+
+
 def emit_memory_capture_decision(
     logger: logging.Logger,
     *,
@@ -74,6 +95,7 @@ def emit_memory_capture_decision(
     model_about: str,
     attribution_disagreed: bool,
     distinct_speaker_ids: int,
+    owner_speaker_ids: int,
 ) -> None:
     _emit(
         logger,
@@ -87,6 +109,12 @@ def emit_memory_capture_decision(
             "model_about": model_about,
             "attribution_disagreed": attribution_disagreed,
             "distinct_speaker_ids": distinct_speaker_ids,
+            # How many distinct speakers the diarizer marked as the account owner.
+            # An account has exactly one owner, so 0 means the owner was never
+            # identified in this conversation and >1 is impossible-by-construction --
+            # neither is derivable from distinct_speaker_ids alone, and both are the
+            # states that decide whether a memory can ever be promoted.
+            "owner_speaker_ids": owner_speaker_ids,
         },
     )
 

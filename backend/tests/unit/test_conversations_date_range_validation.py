@@ -114,11 +114,17 @@ def conv():
         # utils.other.*
         "utils.other.endpoints": endpoints_stub,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
+        # routers.conversations imports this at module load to close the screenshot deletion
+        # loop (Firestore does not cascade-delete subcollections), so the stub map has to know
+        # about it or collection dies with ModuleNotFoundError before a single test runs.
+        "utils.screen_frames": AutoMockModule("utils.screen_frames"),
+        "utils.screen_frames.store": AutoMockModule("utils.screen_frames.store"),
         # utils.conversations.*
         "utils.conversations.factory": AutoMockModule("utils.conversations.factory"),
         "utils.conversations.render": AutoMockModule("utils.conversations.render"),
         "utils.conversations.process_conversation": AutoMockModule("utils.conversations.process_conversation"),
         "utils.conversations.search": AutoMockModule("utils.conversations.search"),
+        "utils.conversations.mcp_transcript_search": AutoMockModule("utils.conversations.mcp_transcript_search"),
         "utils.conversations.calendar_linking": AutoMockModule("utils.conversations.calendar_linking"),
         "utils.conversations.calendar_utils": AutoMockModule("utils.conversations.calendar_utils"),
         "utils.conversations.location": AutoMockModule("utils.conversations.location"),

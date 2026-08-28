@@ -270,6 +270,8 @@ export const cacheKeys = {
 
   conversation: (id: string) => `conversation:${id}`,
 
+  screenFrames: (conversationId: string) => `screenFrames:${conversationId}`,
+
   memories: (categories: string[]) =>
     `memories:${categories.length === 0 ? 'all' : [...categories].sort().join(',')}`,
 

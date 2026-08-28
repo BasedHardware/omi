@@ -261,6 +261,22 @@ void main() {
       mainSource.indexOf('validateApplicationStartupRouting();'),
       lessThan(mainSource.indexOf('ServiceManager.init()')),
     );
-    expect(mainSource, contains('Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);'));
+    // Same guarantee as before — the project id of the Firebase app main.dart ends
+    // up with is fed to Env.validateFirebaseProject — but the statement it used to
+    // name verbatim now lives in ensureFirebaseApp() (lib/startup_firebase.dart),
+    // which applies it to the freshly initialized app, the already-running native
+    // app, and the app adopted after [core/duplicate-app] alike. So this pins the
+    // wiring instead of one branch's text; that ensureFirebaseApp actually calls it
+    // on every one of those paths is asserted behaviorally in
+    // test/unit/startup_firebase_duplicate_app_test.dart.
+    expect(
+      mainSource,
+      matches(
+        RegExp(
+          r'projectIdOf:\s*\(app\)\s*=>\s*app\.options\.projectId,\s*'
+          r'validateProject:\s*\(projectId\)\s*=>\s*Env\.validateFirebaseProject\(projectId:\s*projectId\),',
+        ),
+      ),
+    );
   });
 }

@@ -3215,6 +3215,10 @@
     "accountCutoverMigrationInProgressMessage": "Ваш обліковий запис мігрує. Функції продукту призупинено до завершення міграції.",
     "accountCutoverMigrationRollbackMessage": "Ваш обліковий запис на обслуговуванні після відкату міграції. Частина новіших даних може бути ізольована.",
     "accountCutoverOpenStore": "Відкрити магазин",
+    "chatScopeToday": "Сьогодні",
+    "chatScopeThisWeek": "Цього тижня",
+    "chatScopeAbout": "Про: {title}",
+    "askAboutThisConversation": "Запитати про це",
     "sendRawAudioToOmi": "Надсилати необроблений звук до Omi",
     "sendRawAudioToOmiDescription": "Вимкніть, щоб необроблений звук не надсилався до Omi. Транскрипти й дані, потрібні хмарним функціям, усе ще можуть надсилатися до Omi.",
     "findDevice": "Знайти",
@@ -3227,5 +3231,8 @@
     "appReEnableFailedTitle": "Не вдалося ввімкнути знову",
     "appReEnableFailedBody": "Не вдалося повторно ввімкнути цей застосунок. Спробуйте ще раз.",
     "appDisabledOn": "Вимкнено {date}.",
-    "appDisabledLastError": "Остання помилка: {error}."
+    "appDisabledLastError": "Остання помилка: {error}.",
+    "prerecordedTranscript": "Попередній запис",
+    "pendantRecordingSyncBlocked": "Pendant усе ще записує, тому збережене аудіо не можна передати. Натисніть кнопку Pendant, щоб зупинити запис, а потім синхронізуйте знову.",
+    "pendantFullSyncBlocked": "Пам'ять Pendant заповнена, і він досі в режимі запису, тому збережене аудіо не можна передати. Натисніть кнопку Pendant, щоб зупинити запис, а потім синхронізуйте знову."
 }

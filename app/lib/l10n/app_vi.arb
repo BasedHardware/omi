@@ -3220,6 +3220,10 @@
     "accountCutoverMigrationInProgressMessage": "Tài khoản của bạn đang được di chuyển. Các tính năng sản phẩm tạm dừng cho đến khi hoàn tất.",
     "accountCutoverMigrationRollbackMessage": "Tài khoản của bạn đang bảo trì sau khi hoàn tác di chuyển. Một số dữ liệu mới hơn có thể bị cô lập.",
     "accountCutoverOpenStore": "Mở cửa hàng",
+    "chatScopeToday": "Hôm nay",
+    "chatScopeThisWeek": "Tuần này",
+    "chatScopeAbout": "Về: {title}",
+    "askAboutThisConversation": "Hỏi về điều này",
     "sendRawAudioToOmi": "Gửi âm thanh thô đến Omi",
     "sendRawAudioToOmiDescription": "Tắt để ngăn âm thanh thô được gửi đến Omi. Bản chép lời và dữ liệu cần cho các tính năng đám mây vẫn có thể được gửi đến Omi.",
     "findDevice": "Tìm",
@@ -3232,5 +3236,8 @@
     "appReEnableFailedTitle": "Không thể bật lại",
     "appReEnableFailedBody": "Không thể bật lại ứng dụng này. Vui lòng thử lại.",
     "appDisabledOn": "Đã vô hiệu hoá vào {date}.",
-    "appDisabledLastError": "Lỗi gần nhất: {error}."
+    "appDisabledLastError": "Lỗi gần nhất: {error}.",
+    "prerecordedTranscript": "Đã ghi sẵn",
+    "pendantRecordingSyncBlocked": "Pendant vẫn đang ghi âm nên không thể chuyển âm thanh đã lưu. Nhấn nút trên Pendant để dừng ghi âm, sau đó đồng bộ lại.",
+    "pendantFullSyncBlocked": "Bộ nhớ của Pendant đã đầy và nó vẫn đang ở chế độ ghi âm, nên không thể chuyển âm thanh đã lưu. Nhấn nút của Pendant để dừng ghi âm, sau đó đồng bộ lại."
 }

@@ -82,6 +82,37 @@ def _plan_key(uid: str, firestore_client: Any | None) -> str:
     return resolve_usage_plan_id(uid, firestore_client=firestore_client) or _UNATTRIBUTED_PLAN
 
 
+def _nested(update: Dict[str, Any]) -> Dict[str, Any]:
+    """Expand dotted field paths into nested maps, for writes that use ``set(..., merge=True)``.
+
+    Firestore treats a dot as a field PATH in ``update()`` but as a literal character in ``set()``. These
+    usage documents are written with ``set(merge=True)`` because they must be created on first use, so a
+    key like ``chat.gpt-4o.input_tokens`` lands as ONE top-level field whose name contains dots — the
+    counter still increments correctly, but nothing is nested, and every reader that walks
+    ``feature -> model -> counter`` (``get_usage_summary``, ``_aggregate_summary``,
+    ``get_plan_usage_report``) skips it and reports empty usage.
+
+    Every dot in these keys is a separator by construction: the model name, the cost-exclusion label and
+    the plan id are each sanitised of ``.`` before being interpolated, and the remaining segments are
+    literals in this module.
+    """
+    nested: Dict[str, Any] = {}
+    for path, value in update.items():
+        if '.' not in path:
+            nested[path] = value
+            continue
+        cursor = nested
+        *parents, leaf = path.split('.')
+        for segment in parents:
+            branch = cursor.get(segment)
+            if not isinstance(branch, dict):
+                branch = {}
+                cursor[segment] = branch
+            cursor = branch
+        cursor[leaf] = value
+    return nested
+
+
 def _record_plan_metadata(
     update: Dict[str, Any],
     plan_key: str,
@@ -214,7 +245,7 @@ def record_llm_usage(
         cost_exclusion=cost_exclusion,
     )
 
-    usage_ref.set(update_data, merge=True)
+    usage_ref.set(_nested(update_data), merge=True)
 
 
 @transactional  # pyright: ignore[reportUntypedFunctionDecorator]
@@ -239,7 +270,7 @@ def _record_chat_quota_question_transaction(
     }
     _record_plan_bucket(update, plan_key, 'backend_chat', quota_questions=1)
     _record_plan_metadata(update, plan_key, cost_status='missing', cost_exclusion='chat_token_cost_not_recorded')
-    transaction.set(usage_ref, update, merge=True)
+    transaction.set(usage_ref, _nested(update), merge=True)
     return True
 
 
@@ -351,7 +382,9 @@ def get_usage_summary(uid: str, days: int = 30) -> Dict[str, Dict[str, int]]:
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     cutoff_id = f"{cutoff.year}-{cutoff.month:02d}-{cutoff.day:02d}"
 
-    docs = usage_collection.where("__name__", ">=", cutoff_id).stream()
+    # The value of a `__name__` filter must be a Key, not a string: Firestore answers
+    # `400 __key__ filter value must be a Key` otherwise, so this raised on every call.
+    docs = usage_collection.where("__name__", ">=", usage_collection.document(cutoff_id)).stream()
 
     # Aggregate by feature
     summary: Dict[str, Dict[str, int]] = {}
@@ -516,7 +549,7 @@ def record_llm_usage_bucket(
         count_call=count_call,
     )
     _record_plan_metadata(update, plan_key, cost_status=cost_status, cost_exclusion=cost_exclusion)
-    ref.set(update, merge=True)
+    ref.set(_nested(update), merge=True)
 
 
 def record_llm_cost_exclusion(
@@ -535,7 +568,7 @@ def record_llm_cost_exclusion(
     plan_key = _plan_key(uid, firestore_client)
     update: Dict[str, Any] = {'date': today, 'last_updated': datetime.now(timezone.utc)}
     _record_plan_metadata(update, plan_key, cost_status='excluded', cost_exclusion=cost_exclusion)
-    ref.set(update, merge=True)
+    ref.set(_nested(update), merge=True)
 
 
 def _merge_cost_status(existing: str | None, observed: str) -> str:
@@ -583,7 +616,8 @@ def get_plan_usage_report(uid: str, days: int = 30) -> Dict[str, Dict[str, Any]]
     usage_collection = db.collection('users').document(uid).collection('llm_usage')
     report: Dict[str, Dict[str, Any]] = {}
 
-    for doc in usage_collection.where('__name__', '>=', cutoff_id).stream():
+    # A `__name__` filter takes a Key, not a string (see get_usage_summary above).
+    for doc in usage_collection.where('__name__', '>=', usage_collection.document(cutoff_id)).stream():
         data = _typed_doc(doc)
         plan_usage = data.get('plan_usage')
         if isinstance(plan_usage, dict):

@@ -121,42 +121,42 @@ def postprocess_conversation(
 
         speakers_count = len(set([segment.speaker for segment in conversation.transcript_segments]))
         words = prerecorded(signed_url, speakers_count=speakers_count)
-        fal_segments = postprocess_words(words, aseg.duration_seconds)
+        prerecorded_segments = postprocess_words(words, aseg.duration_seconds)
 
-        # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL
+        # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or STT provider
         count = len(''.join([segment.text.strip() for segment in conversation.transcript_segments]))
-        new_count = len(''.join([segment.text.strip() for segment in fal_segments]))
+        new_count = len(''.join([segment.text.strip() for segment in prerecorded_segments]))
         logger.info(f'Prev characters count: {count} New characters count: {new_count}')
 
-        fal_failed = not fal_segments or new_count < (count * 0.85)
+        prerecorded_failed = not prerecorded_segments or new_count < (count * 0.85)
 
-        if fal_failed:
+        if prerecorded_failed:
             _handle_segment_embedding_matching(uid, file_path, conversation.transcript_segments, aseg)
         else:
-            _handle_segment_embedding_matching(uid, file_path, fal_segments, aseg)
+            _handle_segment_embedding_matching(uid, file_path, prerecorded_segments, aseg)
 
         # Store both models results.
         conversations_db.store_model_segments_result(
             uid, conversation.id, streaming_model, conversation.transcript_segments
         )
-        conversations_db.store_model_segments_result(uid, conversation.id, 'fal_whisperx', fal_segments)
+        conversations_db.store_model_segments_result(uid, conversation.id, 'prerecorded', prerecorded_segments)
 
-        if not fal_failed:
-            conversation.transcript_segments = fal_segments
+        if not prerecorded_failed:
+            conversation.transcript_segments = prerecorded_segments
 
         lifecycle_service.persist_processed_conversation(
             uid, conversation.model_dump()
         )  # Store transcript segments at least if smth fails later
-        if fal_failed:
-            # TODO: FAL fails too much and is fucking expensive. Remove it.
+        if prerecorded_failed:
             fail_reason = (
-                'FAL empty segments' if not fal_segments else f'FAL transcript too short ({new_count} vs {count})'
+                'STT empty segments'
+                if not prerecorded_segments
+                else f'STT transcript too short ({new_count} vs {count})'
             )
             conversations_db.set_postprocessing_status(
                 uid, conversation.id, PostProcessingStatus.failed, fail_reason=fail_reason
             )
             # conversation.postprocessing = MemoryPostProcessing(
-            #     status=PostProcessingStatus.failed, model=PostProcessingModel.fal_whisperx)
             # TODO: consider doing process_conversation, if any segment still matched to user or people
             return 200, conversation
 
@@ -175,7 +175,6 @@ def postprocess_conversation(
 
     conversations_db.set_postprocessing_status(uid, conversation.id, PostProcessingStatus.completed)
     # result.postprocessing = MemoryPostProcessing(
-    #     status=PostProcessingStatus.completed, model=PostProcessingModel.fal_whisperx)
 
     return 200, result
 

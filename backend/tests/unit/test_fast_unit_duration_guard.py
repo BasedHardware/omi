@@ -82,6 +82,34 @@ def test_fast_unit_duration_guard_fails_above_fail_threshold(monkeypatch):
     assert any('failures' in message for message in reporter.messages)
 
 
+def test_duration_guard_names_the_failing_file_for_the_runner(monkeypatch):
+    """The guard fails no test, so the runner cannot find it in pytest's short summary.
+
+    ``test.sh`` runs the non-legacy files as one parallel pytest session, so per-file
+    attribution is recovered by scraping. Without this marker a duration-guard failure
+    reaches the developer as "the suite failed" with an empty rerun list.
+    """
+    reporter = _Reporter()
+    session = _Session(reporter)
+
+    monkeypatch.setenv('BACKEND_FAST_UNIT_WARN_SECONDS', '0.1')
+    monkeypatch.setenv('BACKEND_FAST_UNIT_FAIL_SECONDS', '0.12')
+    monkeypatch.setattr(backend_conftest, '_collected_unit_files', {'tests/unit/test_example.py'})
+    monkeypatch.setattr(
+        backend_conftest,
+        '_test_item_cpu',
+        defaultdict(float, {'tests/unit/test_example.py::test_slow': 0.14}),
+    )
+    monkeypatch.setattr(backend_conftest, '_read_duration_allowlist', lambda: set())
+
+    backend_conftest._enforce_fast_unit_duration_guard(session)
+
+    marker = backend_conftest._FAILED_FILE_MARKER
+    assert f'{marker} tests/unit/test_example.py' in reporter.messages
+    runner = (TESTS_DIR.parent / 'test.sh').read_text()
+    assert marker in runner, 'test.sh no longer reads the marker this guard emits'
+
+
 def test_fast_unit_duration_guard_rejects_fail_threshold_below_warn_threshold(monkeypatch):
     reporter = _Reporter()
     session = _Session(reporter)

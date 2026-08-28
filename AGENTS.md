@@ -15,6 +15,7 @@ These rules apply to every AI agent working in this repository. This file is **h
 | Backend Python (`backend/`) | `backend/AGENTS.md` — setup, async/executors, WebSocket rules, service map, logging security, testing |
 | Flutter app (`app/`) | `app/AGENTS.md` — build flavors, l10n, native bridge, tests, agent-flutter UI verification |
 | Desktop macOS (`desktop/macos/`) | `desktop/macos/AGENTS.md` — build/run, named bundles, self-testing, release pipeline, changelog |
+| Desktop Windows/Linux (`desktop/windows/`) | `desktop/windows/AGENTS.md` — pnpm pin, build/test, CI shape, Linux/Wayland dev env, release pipeline |
 | Web app (`web/app/`) | `web/app/AGENTS.md` — setup, quality gates, tests, desktop-parity limits |
 | Firmware (`omi/firmware/`) | `omi/firmware/AGENTS.md` — release workflow |
 | Product behavior | `PRODUCT.md` + `docs/product/invariants/` — locked invariants and guard tests |
@@ -98,7 +99,7 @@ The unit of work is the violated contract, not only the line where the symptom a
 
 ## Formatting
 
-The pre-commit hook (installed by `make setup`) auto-formats staged files. Verify: `test -x "$(git rev-parse --git-path hooks)/pre-commit" && echo OK`. Manual commands:
+The pre-commit hook (installed by `make setup`) auto-formats staged files. Verify: `test -x "$(git rev-parse --git-path hooks)/pre-commit" && echo OK`. It refuses to format rather than reformat with an unpinned toolchain: web needs the installed Prettier and its resolved plugins to match the versions in `package-lock.json` (run `npm ci` in the changed web dir), Dart needs the pinned Flutter and its sibling `dart`. Hatches: `OMI_SKIP_WEB_FORMAT=1`, `OMI_SKIP_DART_FORMAT=1`. Manual commands:
 
 | Language | Manual command |
 |----------|----------------|

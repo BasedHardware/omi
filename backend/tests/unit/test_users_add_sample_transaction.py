@@ -45,6 +45,7 @@ def users_db():
     google_exceptions_stub.NotFound = NotFound
 
     firestore_stub.transactional = lambda func: func
+    firestore_stub.DELETE_FIELD = object()
 
     fv1_stub = ModuleType("google.cloud.firestore_v1")
     fv1_stub.FieldFilter = MagicMock()
@@ -100,6 +101,11 @@ class _FakeTransaction:
     def update(self, person_ref, update_data):
         self.updated_ref = person_ref
         self.updated_data = update_data
+
+    def set(self, person_ref, update_data, merge=False):
+        self.updated_ref = person_ref
+        self.updated_data = update_data
+        self.merge = merge
 
     def _clean_up(self):
         self._id = None
@@ -173,6 +179,24 @@ def test_add_sample_transaction_already_aligned_transcripts(users_db):
         "third",
     ]
     assert transaction.updated_data["speech_samples_version"] == 3
+
+
+def test_byok_activation_replaces_existing_provider_fingerprints(users_db):
+    user_ref = _FakePersonRef(
+        {'byok': {'fingerprints': {'openai': 'openai-fingerprint', 'gemini': 'gemini-fingerprint'}}}
+    )
+    transaction = _FakeTransaction()
+
+    users_db._set_byok_active_transaction(transaction, user_ref, {'openrouter': 'openrouter-fingerprint'})
+
+    assert transaction.updated_ref is user_ref
+    assert transaction.merge is True
+    fingerprints = transaction.updated_data['byok']['fingerprints']
+    assert fingerprints['openrouter'] == 'openrouter-fingerprint'
+    assert fingerprints['openai'] is users_db.firestore.DELETE_FIELD
+    assert fingerprints['gemini'] is users_db.firestore.DELETE_FIELD
+    assert set(fingerprints) == {'openrouter', 'openai', 'gemini'}
+    assert transaction.updated_data['byok']['active'] is True
 
 
 def test_add_sample_transaction_max_samples_reached(users_db):

@@ -24,8 +24,13 @@
 
 ## Failure class (fixes)
 
-<!-- Every `fix:` commit needs this exact, machine-validated declaration.
-     Use `scripts/failure-class prepare` or `explain` to choose a class.
+<!-- Every `fix:` commit needs this exact, machine-validated declaration. Write one
+     of these three lines, exactly — the value is a single token, never a list:
+         Failure-Class: FC-<lower-kebab-slug>
+         Failure-Class: new
+         Failure-Class: none
+     `scripts/failure-class prepare` lists the classes whose scope_hints overlap your
+     change (add --all-candidates for the whole registry); `explain <id>` prints one.
      `harden:` commits may cite a class but do not need a declaration. -->
 
 Failure-Class: none
@@ -33,12 +38,20 @@ Failure-Class: none
 ## Failure-class transition narrative (only when needed)
 
 <!-- Required only when declaring `new`, changing a class's canonical prevention
-     primitive/owner, or making a registry-only lifecycle transition. A dormant
-     transition sets `status: dormant` and an ISO-8601 `dormant_since`; a reopen
-     sets `status: open` and removes `dormant_since`. Make that transition in a
-     separate PR, never in the instance-fix PR. State the violated contract, the
-     canonical guard, and the supporting evidence. Delete this section for an
-     ordinary instance fix. -->
+     primitive/owner, or making a registry-only lifecycle transition.
+
+     Declaring `new` means adding exactly one
+     .github/failure-classes/FC-<lower-kebab-slug>.json in THIS PR, alongside the fix.
+     Its `evidence_prs` may be `[]` — this PR is the evidence, and its number does not
+     exist yet.
+
+     Every OTHER registry transition — dormant, reopen, or changing an existing class's
+     canonical prevention — goes in a separate registry-only PR, never in the
+     instance-fix PR. A dormant transition sets `status: dormant` and an ISO-8601
+     `dormant_since`; a reopen sets `status: open` and removes `dormant_since`.
+
+     State the violated contract, the canonical guard, and the supporting evidence.
+     Delete this section for an ordinary instance fix. -->
 
 ## New guards (only when adding a check or ratchet)
 

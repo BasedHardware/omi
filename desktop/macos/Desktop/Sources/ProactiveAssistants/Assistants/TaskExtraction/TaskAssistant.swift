@@ -653,11 +653,15 @@ actor TaskAssistant: ProactiveAssistant {
           log("Task: Workflow control omitted generation; capture remains retryable")
           return
         }
+        let evidenceVersion = ScreenCandidateAdapter.evidenceVersion(
+          for: localRecord.screenshotId
+        )
         let decision = ScreenCandidateAdapter.adapt(
           task: task,
           dueAt: parseDueDate(from: task.inferredDeadline),
           localEvidenceID: "screen-\(localRecord.screenshotId ?? localID)",
-          deviceID: ClientDeviceService.shared.clientDeviceId
+          deviceID: ClientDeviceService.shared.clientDeviceId,
+          evidenceVersion: evidenceVersion
         )
         guard decision.candidate != nil else {
           try await StagedTaskStorage.shared.discardCanonicalOutbox(id: localID)
@@ -749,68 +753,20 @@ actor TaskAssistant: ProactiveAssistant {
         return
       }
 
-      guard TaskCaptureModePolicy.usesLegacyStaging(mode) else {
-        DesktopDiagnosticsManager.shared.recordFallback(
-          area: "task_workflow",
-          from: "workflow_control",
-          to: "capture_deferred",
-          reason: "other",
-          outcome: .degraded
-        )
-        log("Task: Unknown workflow mode; capture remains retryable")
-        return
-      }
-
-      let shadowOutcome = ScreenCapturePolicy.evaluate(ScreenCandidateAdapter.facts(for: task))
-      if mode == .shadow {
-        log("Task: Shadow capture outcome=\(shadowOutcome.rawValue)")
-      }
-      var metadata: [String: Any] = [
-        "source_app": task.sourceApp,
-        "confidence": task.confidence,
-        "context_summary": taskResult.contextSummary,
-        "current_activity": taskResult.currentActivity,
-        "tags": task.tags,
-        "source_category": task.sourceCategory,
-        "source_subcategory": task.sourceSubcategory,
-      ]
-      if let primaryTag = task.primaryTag {
-        metadata["category"] = primaryTag
-      }
-      if let reasoning = task.description {
-        metadata["reasoning"] = reasoning
-      }
-      if let deadline = task.inferredDeadline {
-        metadata["inferred_deadline"] = deadline
-      }
-      if let windowTitle = windowTitle {
-        metadata["window_title"] = windowTitle
-      }
-
-      let dueAt = parseDueDate(from: task.inferredDeadline)
-
-      let response = try await APIClient.shared.createStagedTask(
-        description: task.title,
-        dueAt: dueAt,
-        source: "screenshot",
-        priority: task.priority.rawValue,
-        category: task.primaryTag,
-        metadata: metadata,
-        relevanceScore: nil
+      // I1: screen capture proposes, it never creates. `.read` above is the only
+      // path that persists anything, and it persists a pending Candidate. Any
+      // other mode — including the `.off` the control endpoint returns when its
+      // Firestore read fails — leaves the capture in the outbox to retry. A
+      // backend hiccup must never be the reason a task appears in the list.
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "task_workflow",
+        from: "workflow_control",
+        to: "capture_deferred",
+        reason: "other",
+        outcome: .degraded
       )
-
-      log("Task: Synced to staged_tasks backend (id: \(response.id))")
-      try await StagedTaskStorage.shared.markSynced(
-        id: localID,
-        backendId: response.id,
-        source: "screenshot"
-      )
-      Task {
-        await self.generateEmbeddingForTask(id: localID, text: task.title)
-      }
-      Task {
-        await TaskPromotionService.shared.promoteIfNeeded()
-      }
+      log("Task: Non-canonical workflow mode \(mode); capture deferred and remains retryable")
+      return
     } catch {
       await CandidateOutboxRetryPolicy.handleDeliveryFailure(error, localID: localID)
     }

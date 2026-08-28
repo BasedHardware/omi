@@ -2,6 +2,7 @@ import { getIdToken } from './firebase';
 import { getWebDeviceIdHash } from './clientDevice';
 import {
   invalidateCache,
+  invalidateCacheKey,
   invalidationPatterns,
   fetchWithCache,
   cacheKeys,
@@ -10,12 +11,14 @@ import {
 import type {
   Conversation,
   ConversationSearchResponse,
+  ConversationScreenFrameSet,
   ConversationStatus,
   ActionItem,
   Memory,
   MemoryCategory,
   MemoryVisibility,
   KnowledgeGraph,
+  ScreenFrameSharingUpdateRequest,
   ServerMessage,
   MessageChunk,
   MessageChunkType,
@@ -29,6 +32,10 @@ import type {
   ActionItemsResponse,
   FairUseStatusResponse,
 } from './omiApi.generated';
+import {
+  normalizeKnowledgeLedgerMemories,
+  normalizeKnowledgeLedgerMemory,
+} from './knowledgeLedger';
 export type {
   MergeConversationsResponse,
   CreateConversationResponse,
@@ -227,6 +234,78 @@ export async function deleteConversation(id: string): Promise<void> {
     method: 'DELETE',
   });
   invalidateCache(invalidationPatterns.conversations);
+}
+
+// =============================================================================
+// Meeting-note screenshots ("screen frames")
+// =============================================================================
+// Types come from the generated OpenAPI client (`@/types/conversation`
+// re-exports them). Route paths mirror the shared contract
+// (`data/reports/meeting-screenshots/DESIGN-sol.md` §1-2) exactly.
+
+/**
+ * Get the approved screenshot set (banner + strip) for a conversation.
+ * Uses the same fetch-with-cache idiom as `getConversation`; a short TTL
+ * balances against the frame set's signed URLs expiring after 60 minutes.
+ */
+export async function getConversationScreenFrames(
+  conversationId: string,
+): Promise<ConversationScreenFrameSet> {
+  return fetchWithCache<ConversationScreenFrameSet>(
+    cacheKeys.screenFrames(conversationId),
+    () =>
+      fetchWithAuth<ConversationScreenFrameSet>(
+        `/v1/conversations/${conversationId}/screenshots`,
+      ),
+    { ttl: CACHE_TTL.SHORT },
+  );
+}
+
+/**
+ * Delete a single screenshot. The server may promote another already-
+ * approved, already-persisted frame to banner (contract §8); the returned
+ * set is authoritative, so callers should replace their local state with it
+ * rather than trying to predict the promotion.
+ */
+export async function deleteScreenFrame(
+  conversationId: string,
+  frameId: string,
+): Promise<ConversationScreenFrameSet> {
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots/${frameId}`,
+    { method: 'DELETE' },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
+}
+
+/** Delete every screenshot for a conversation (banner + strip). */
+export async function deleteAllScreenFrames(
+  conversationId: string,
+): Promise<ConversationScreenFrameSet> {
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots`,
+    { method: 'DELETE' },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
+}
+
+/**
+ * Toggle whether this conversation's approved frames are visible on its
+ * public share link. Default for a new conversation is `enabled: true`.
+ */
+export async function patchScreenFrameSharing(
+  conversationId: string,
+  enabled: boolean,
+): Promise<ConversationScreenFrameSet> {
+  const body: ScreenFrameSharingUpdateRequest = { enabled };
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshot-sharing`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
 }
 
 /**
@@ -431,7 +510,8 @@ export async function getMemories(params: GetMemoriesParams = {}): Promise<Memor
     offset: offset.toString(),
   });
 
-  return fetchWithAuth<Memory[]>(`/v3/memories?${queryParams}`);
+  const raw = await fetchWithAuth<unknown>(`/v3/memories?${queryParams}`);
+  return normalizeKnowledgeLedgerMemories(raw);
 }
 
 /**
@@ -444,7 +524,7 @@ export interface CreateMemoryParams {
 }
 
 export async function createMemory(params: CreateMemoryParams): Promise<Memory> {
-  const memory = await fetchWithAuth<Memory>('/v3/memories', {
+  const raw = await fetchWithAuth<unknown>('/v3/memories', {
     method: 'POST',
     body: JSON.stringify({
       content: params.content,
@@ -452,6 +532,8 @@ export async function createMemory(params: CreateMemoryParams): Promise<Memory> 
       category: params.category || 'manual',
     }),
   });
+  const memory = normalizeKnowledgeLedgerMemory(raw);
+  if (!memory) throw new Error('Malformed memory response');
   invalidateCache(invalidationPatterns.memories);
   return memory;
 }
@@ -879,6 +961,8 @@ export async function sendMessageStream(
       id?: string;
       title?: string;
       summary?: string;
+      start_date?: string;
+      end_date?: string;
     } | null;
   },
 ): Promise<void> {
@@ -917,7 +1001,15 @@ export async function sendMessageStream(
     body: JSON.stringify({
       text,
       file_ids: options?.fileIds || [],
-      context: options?.context || null,
+      context: options?.context
+        ? {
+            type: options.context.type === 'general' ? 'recap' : options.context.type,
+            id: options.context.id,
+            title: options.context.title,
+            start_date: options.context.start_date,
+            end_date: options.context.end_date,
+          }
+        : null,
     }),
   });
 

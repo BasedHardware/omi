@@ -20,6 +20,7 @@ struct RewindPage: View {
 
   @State private var searchViewMode: SearchViewMode? = nil
   @State private var selectedGroupIndex: Int = 0
+  @State private var unavailableCitationScreenshotID: Int64?
   @FocusState private var isSearchFocused: Bool
   @FocusState private var isPageFocused: Bool
 
@@ -147,6 +148,16 @@ struct RewindPage: View {
         .padding(.top, RewindSurfaceLayout.topGap)
         .padding(.bottom, RewindSurfaceLayout.bottomGap)
       }
+
+      if let screenshotID = unavailableCitationScreenshotID {
+        VStack {
+          citationUnavailableBanner(for: screenshotID)
+          Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.top, RewindSurfaceLayout.topGap)
+        .padding(.horizontal, OmiSpacing.lg)
+      }
     }
   }
 
@@ -199,10 +210,14 @@ struct RewindPage: View {
         currentImage = nil
         currentIndex = 0
         selectedGroupIndex = 0
+        unavailableCitationScreenshotID = nil
         searchViewMode = nil
         selectedSpeakerSegment = nil
         isTranscriptExpanded = false
         LiveTranscriptMonitor.shared.clearSaved()
+        // Cancel the model's in-flight citation admission immediately. The model also carries the
+        // exact owner lease, so a suspended database read cannot insert an old-owner row later.
+        viewModel.invalidateCitationFocus()
       }
       .onReceive(NotificationCenter.default.publisher(for: .expandRewindTranscript)) { _ in
         OmiMotion.withGated(.easeInOut(duration: 0.2)) {
@@ -338,22 +353,85 @@ struct RewindPage: View {
     // notification can arrive while the destination is still mounting; consuming then would lose
     // the citation before Rewind can resolve it.
     guard viewModel.isReadyForCitationFocus,
-      let id = RewindCitationFocusState.shared.consume(),
-      let screenshot = try? await RewindDatabase.shared.getScreenshot(id: id)
+      let request = RewindCitationFocusState.shared.consumeRequest()
     else { return }
 
-    // A citation jump owns the frame transition. Cancel the previous decode and clear its image so
-    // an old day's picture cannot remain visible while the exact target day is being sampled.
-    invalidatePendingFrameLoad()
-    currentImage = nil
-    currentIndex = 0
-    guard await viewModel.focusCitationScreenshot(screenshot),
-      let targetIndex = viewModel.screenshots.firstIndex(where: { $0.id == id })
-    else { return }
+    switch await viewModel.resolveCitationRequest(request) {
+    case .staleOwner:
+      return
+    case .unavailable:
+      guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return }
+      unavailableCitationScreenshotID = request.screenshotID
+      return
+    case .found(let screenshot):
+      guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return }
 
-    currentIndex = targetIndex
-    trackWindow.reveal(screenshot.timestamp.timeIntervalSince1970)
-    scheduleLoadCurrentFrame()
+      // A citation jump owns the frame transition. Cancel the previous decode and clear its image
+      // so an old day's picture cannot remain visible while the exact target day is sampled.
+      invalidatePendingFrameLoad()
+      currentImage = nil
+      currentIndex = 0
+
+      switch await viewModel.focusCitationScreenshotResult(
+        screenshot,
+        ownerLease: request.owner
+      ) {
+      case .staleOwner:
+        return
+      case .unavailable:
+        guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return }
+        unavailableCitationScreenshotID = request.screenshotID
+        return
+      case .focused:
+        guard let targetIndex = viewModel.screenshots.firstIndex(where: { $0.id == request.screenshotID })
+        else {
+          guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return }
+          unavailableCitationScreenshotID = request.screenshotID
+          return
+        }
+
+        guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return }
+        unavailableCitationScreenshotID = nil
+        currentIndex = targetIndex
+        trackWindow.reveal(screenshot.timestamp.timeIntervalSince1970)
+        scheduleLoadCurrentFrame()
+      }
+    }
+  }
+
+  private func citationUnavailableBanner(for screenshotID: Int64) -> some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .foregroundColor(PageGlass.warning)
+        .scaledFont(size: OmiType.body)
+
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+        Text(RewindCitationUnavailablePresentationPolicy.title)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(Ink.primary)
+        Text(RewindCitationUnavailablePresentationPolicy.message(for: screenshotID))
+          .scaledFont(size: OmiType.micro)
+          .foregroundColor(Ink.secondary)
+      }
+
+      Spacer(minLength: OmiSpacing.xs)
+
+      Button("Dismiss") {
+        unavailableCitationScreenshotID = nil
+      }
+      .buttonStyle(.plain)
+      .scaledFont(size: OmiType.micro, weight: .medium)
+      .foregroundColor(PageGlass.primaryActionLabel)
+      .accessibilityIdentifier("rewind-citation-unavailable-dismiss")
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .glassCard(cornerRadius: PageGlass.chipRadius, emphasized: false)
+    .accessibilityIdentifier("rewind-citation-unavailable")
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(RewindCitationUnavailablePresentationPolicy.title)
+    .accessibilityValue(RewindCitationUnavailablePresentationPolicy.message(for: screenshotID))
+    .accessibilityHint(RewindCitationUnavailablePresentationPolicy.hint)
   }
 
   /// The AppKit track owns wheel/swipe input and forwards only gestures that begin on the timeline.
@@ -773,6 +851,15 @@ struct RewindPage: View {
             // track are visibly the same stretch of the day.
             .overlay(frameShape.strokeBorder(frameBorderColor, lineWidth: 2))
             .shadow(color: .black.opacity(0.08), radius: 8)
+            // **The stage is a preview, not the frame.** It is fit to whatever the pane happens to
+            // be, which on a half-width window is a fraction of a 5120pt capture — enough to
+            // recognise the moment and not enough to read a line of it, which is the whole reason
+            // someone scrubbed to it. Clicking opens the real thing in Quick Look, at full
+            // resolution, with the rest of the day's frames behind the arrow keys.
+            .contentShape(frameShape)
+            .onTapGesture { openCurrentFrameFullSize() }
+            .help("Open this frame in Quick Look")
+            .contextMenu { Button("Quick Look", action: openCurrentFrameFullSize) }
         }
         .frame(width: geometry.size.width, height: geometry.size.height)
       } else {
@@ -813,6 +900,19 @@ struct RewindPage: View {
 
   private var frameShape: RoundedRectangle {
     RoundedRectangle(cornerRadius: 10, style: .continuous)
+  }
+
+  /// Hand the whole visible run to Quick Look, positioned on the frame that is on the stage.
+  ///
+  /// The run and not the single frame, because Quick Look steps left and right through whatever it
+  /// is given — so this makes the arrow keys walk the same sequence the track does, which is the
+  /// behaviour someone who opened a frame from a timeline already expects.
+  private func openCurrentFrameFullSize() {
+    let screenshots = activeScreenshots
+    guard screenshots.indices.contains(currentIndex) else { return }
+    let frames = screenshots.map { QuickLookFrame(screenshot: $0) }
+    ScreenFrameQuickLook.shared.present(
+      frames, startingAt: frames[currentIndex].id)
   }
 
   /// Nil is an honest outcome: with no frame resolved the border is a neutral hairline rather than an

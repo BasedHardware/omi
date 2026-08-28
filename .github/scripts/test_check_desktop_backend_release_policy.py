@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import re
+import shutil
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -102,6 +106,35 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                     self.assertTrue(any(required in error for error in errors), errors)
 
 
+
+    def test_rejects_sidecar_attach_without_rendered_expected_env_state(self) -> None:
+        """#12098 made --expected-env-state required and updated only the backend caller.
+
+        Every other fragment this policy required was still present, so both
+        desktop deploy paths passed the check and then died at the attach step
+        with an argparse usage error. Bind the requirement to the step.
+        """
+        for workflow, production in ((self.dev, False), (self.prod, True)):
+            with self.subTest(production=production, mutation="drop --expected-env-state"):
+                errors = POLICY.validate_deploy_workflow(
+                    workflow.replace('            --expected-env-state=', '            --unused-arg=', 1),
+                    production=production,
+                )
+                self.assertTrue(any("--expected-env-state" in error for error in errors), errors)
+
+            with self.subTest(production=production, mutation="drop the render step"):
+                errors = POLICY.validate_deploy_workflow(
+                    workflow.replace("Render desktop backend expected env state", "Render something else"),
+                    production=production,
+                )
+                self.assertTrue(any("Render desktop backend expected env state" in e for e in errors), errors)
+
+            with self.subTest(production=production, mutation="render without --desktop-state-output"):
+                errors = POLICY.validate_deploy_workflow(
+                    workflow.replace('--desktop-state-output', '--state-output', 1),
+                    production=production,
+                )
+                self.assertTrue(any("--desktop-state-output" in error for error in errors), errors)
 
     def test_rejects_traffic_before_candidate_proof(self) -> None:
         mutated = self.dev.replace(
@@ -468,6 +501,100 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         )
         errors = POLICY.validate_deploy_workflow(mutated, production=False)
         self.assertTrue(any("verify-image-lineage.outputs.runtime_digest" in error for error in errors), errors)
+
+    # RevisionStatus in the Cloud Run v1 API has no per-container digest map: its
+    # legacy image-digest field is a single-container scalar that is empty on any
+    # multi-container revision. The Managed Prometheus sidecar (#11998) made every
+    # desktop-backend candidate two-container, so both workflows switched to
+    # extracting the runtime image from the named "desktop-backend-1" container in
+    # `gcloud run revisions describe --format=json` instead. Regression-guard both
+    # properties: the legacy field must not come back, and the extraction filter
+    # actually resolves the right image out of a realistic two-container revision.
+
+    def test_neither_deploy_workflow_reads_the_legacy_single_container_digest_field(self) -> None:
+        legacy_field = "status" + "." + "imageDigest"
+        for name, text in (("dev", self.dev), ("prod", self.prod)):
+            with self.subTest(workflow=name):
+                self.assertNotIn(legacy_field, text)
+                self.assertIn('select(.name == "desktop-backend-1")', text)
+                self.assertIn("--format=json", text)
+
+    def _extract_runtime_image_jq_filter(self, text: str) -> str:
+        match = re.search(r"jq -er '(.*?)'\)\"", text, re.DOTALL)
+        assert match, "expected an inline jq filter selecting the desktop-backend-1 image"
+        return match.group(1)
+
+    def _run_runtime_image_filter(self, jq_filter: str, revision: dict[str, object]) -> subprocess.CompletedProcess:
+        assert shutil.which("jq"), "jq must be installed to exercise the workflow's extraction filter"
+        return subprocess.run(
+            ["jq", "-er", jq_filter],
+            input=json.dumps(revision),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_runtime_image_filter_selects_desktop_backend_container_on_two_container_revision(self) -> None:
+        expected_image = (
+            "gcr.io/based-hardware-dev/desktop-backend@sha256:"
+            "b6c51555ebd7274728ccb79e0f2957fd1f6761d469aa51d5eb999d2debc6b706"
+        )
+        # A realistic post-#11998 candidate revision: two containers, and the legacy
+        # status.imageDigest scalar left absent, exactly as Cloud Run returns it.
+        revision = {
+            "spec": {
+                "containers": [
+                    {
+                        "name": "collector",
+                        "image": "gcr.io/based-hardware-dev/collector@sha256:" + "a" * 64,
+                    },
+                    {
+                        "name": "desktop-backend-1",
+                        "image": expected_image,
+                    },
+                ]
+            },
+            "status": {},
+        }
+        for name, text in (("dev", self.dev), ("prod", self.prod)):
+            with self.subTest(workflow=name):
+                jq_filter = self._extract_runtime_image_jq_filter(text)
+                result = self._run_runtime_image_filter(jq_filter, revision)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), expected_image)
+
+    def test_runtime_image_filter_rejects_missing_or_duplicated_desktop_backend_container(self) -> None:
+        image = "gcr.io/based-hardware-dev/desktop-backend@sha256:" + "b" * 64
+        cases = {
+            "no desktop-backend-1 container": {
+                "spec": {
+                    "containers": [
+                        {"name": "collector", "image": "gcr.io/based-hardware-dev/collector@sha256:" + "a" * 64}
+                    ]
+                },
+                "status": {},
+            },
+            "duplicated desktop-backend-1 container": {
+                "spec": {
+                    "containers": [
+                        {"name": "desktop-backend-1", "image": image},
+                        {"name": "desktop-backend-1", "image": image},
+                    ]
+                },
+                "status": {},
+            },
+            "empty image string": {
+                "spec": {"containers": [{"name": "desktop-backend-1", "image": ""}]},
+                "status": {},
+            },
+        }
+        for name, text in (("dev", self.dev), ("prod", self.prod)):
+            jq_filter = self._extract_runtime_image_jq_filter(text)
+            for case_name, revision in cases.items():
+                with self.subTest(workflow=name, case=case_name):
+                    result = self._run_runtime_image_filter(jq_filter, revision)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("expected exactly one desktop-backend-1 container image", result.stderr)
 
 
 if __name__ == "__main__":

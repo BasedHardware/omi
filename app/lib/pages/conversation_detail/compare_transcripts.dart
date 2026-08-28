@@ -47,11 +47,11 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
               padding: EdgeInsets.zero,
               indicatorPadding: EdgeInsets.zero,
               labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
-              tabs: const [
-                Tab(text: 'Deepgram'),
-                Tab(text: 'Soniox'),
-                Tab(text: 'SpeechMatics'),
-                Tab(text: 'Whisper-x'),
+              tabs: [
+                const Tab(text: 'Deepgram'),
+                const Tab(text: 'Soniox'),
+                const Tab(text: 'SpeechMatics'),
+                Tab(text: context.l10n.prerecordedTranscript),
               ],
               indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
             ),
@@ -138,7 +138,9 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
                             //     ? const SizedBox(height: 16)
                             //     : const SizedBox(height: 0),
                             TranscriptWidget(
-                              segments: transcripts?.whisperx ?? [],
+                              segments: (transcripts?.prerecorded.isNotEmpty ?? false)
+                                  ? transcripts!.prerecorded
+                                  : transcripts?.whisperx ?? [],
                               horizontalMargin: false,
                               topMargin: false,
                               canDisplaySeconds: true,

@@ -3215,6 +3215,10 @@
     "accountCutoverMigrationInProgressMessage": "계정을 마이그레이션하는 중입니다. 마이그레이션이 끝날 때까지 제품 기능이 일시 중지됩니다.",
     "accountCutoverMigrationRollbackMessage": "마이그레이션 롤백 후 계정이 유지보수 상태입니다. 일부 최신 데이터가 고립될 수 있습니다.",
     "accountCutoverOpenStore": "스토어 열기",
+    "chatScopeToday": "오늘",
+    "chatScopeThisWeek": "이번 주",
+    "chatScopeAbout": "{title}에 대해",
+    "askAboutThisConversation": "이에 대해 질문",
     "sendRawAudioToOmi": "원본 오디오를 Omi로 보내기",
     "sendRawAudioToOmiDescription": "끄면 원본 오디오가 Omi로 전송되지 않습니다. 텍스트 변환 결과와 클라우드 기능에 필요한 데이터는 계속 Omi로 전송될 수 있습니다.",
     "findDevice": "찾기",
@@ -3227,5 +3231,8 @@
     "appReEnableFailedTitle": "다시 활성화할 수 없음",
     "appReEnableFailedBody": "이 앱을 다시 활성화하지 못했습니다. 다시 시도해 주세요.",
     "appDisabledOn": "{date}에 비활성화되었습니다.",
-    "appDisabledLastError": "마지막 오류: {error}"
+    "appDisabledLastError": "마지막 오류: {error}",
+    "prerecordedTranscript": "사전 녹음",
+    "pendantRecordingSyncBlocked": "Pendant가 아직 녹음 중이어서 저장된 오디오를 전송할 수 없습니다. Pendant의 버튼을 눌러 녹음을 중지한 후 다시 동기화하세요.",
+    "pendantFullSyncBlocked": "Pendant의 저장 공간이 가득 찼고 아직 녹음 모드이므로 저장된 오디오를 전송할 수 없습니다. Pendant의 버튼을 눌러 녹음을 중지한 다음 다시 동기화하세요."
 }

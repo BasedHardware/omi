@@ -874,6 +874,15 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
     _exitEditing();
   }
 
+  /// Attribution label for the summary source. A first-party summary (notes v2
+  /// structured overview, `appId == null`) is Omi's own "Summary" — the same name
+  /// the bottom pill and desktop use; "Unknown App" is reserved for an app result
+  /// whose catalog lookup failed (SCA-359).
+  String _summarySourceLabel(BuildContext context) {
+    if (widget.app != null) return widget.app!.name.decodeString;
+    return widget.appResponse.appId == null ? context.l10n.summary : context.l10n.unknownApp;
+  }
+
   @override
   Widget build(BuildContext context) {
     final String content = widget.appResponse.content.trim().decodeString;
@@ -999,7 +1008,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  widget.app != null ? widget.app!.name.decodeString : context.l10n.unknownApp,
+                                  _summarySourceLabel(context),
                                   maxLines: 1,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w500,
@@ -1427,7 +1436,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.app != null ? widget.app!.name.decodeString : context.l10n.unknownApp,
+                          _summarySourceLabel(context),
                           maxLines: 1,
                           style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 14),
                         ),

@@ -3215,6 +3215,10 @@
     "accountCutoverMigrationInProgressMessage": "Ditt konto migreras. Produktfunktioner pausas tills migreringen är klar.",
     "accountCutoverMigrationRollbackMessage": "Ditt konto är under underhåll efter en migreringsåterställning. Nyare data kan vara isolerad.",
     "accountCutoverOpenStore": "Öppna butik",
+    "chatScopeToday": "I dag",
+    "chatScopeThisWeek": "Denne uken",
+    "chatScopeAbout": "Om: {title}",
+    "askAboutThisConversation": "Spør om dette",
     "sendRawAudioToOmi": "Send rå lyd til Omi",
     "sendRawAudioToOmiDescription": "Slå av for å hindre at rå lyd sendes til Omi. Transkripsjoner og data som skyfunksjoner trenger, kan fortsatt bli sendt til Omi.",
     "findDevice": "Finn",
@@ -3227,5 +3231,8 @@
     "appReEnableFailedTitle": "Kunne ikke reaktivere",
     "appReEnableFailedBody": "Denne appen kunne ikke reaktiveres. Prøv igjen.",
     "appDisabledOn": "Deaktivert {date}.",
-    "appDisabledLastError": "Siste feil: {error}."
+    "appDisabledLastError": "Siste feil: {error}.",
+    "prerecordedTranscript": "Forhåndsinnspilt",
+    "pendantRecordingSyncBlocked": "Pendant tar fortsatt opp, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.",
+    "pendantFullSyncBlocked": "Lagringen på Pendant er full, og den er fortsatt i opptaksmodus, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt."
 }

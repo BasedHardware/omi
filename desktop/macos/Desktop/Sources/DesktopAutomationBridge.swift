@@ -681,6 +681,12 @@ final class DesktopAutomationActionRegistry {
     let run: Handler
   }
 
+  /// A 1x1 PNG, for the hermetic half of `screen_frame_quick_look_probe`. Literal bytes rather
+  /// than a rendered image so the probe has no dependency on capture history, a backend, or AppKit
+  /// drawing — the thing it is verifying is the panel, not the picture.
+  static let onePixelPNGBase64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
   private var entries: [String: Entry] = [:]
   private var didRegisterBuiltins = false
   /// Non-prod harness latch so race probes stay busy without relying on LLM latency.
@@ -2133,9 +2139,9 @@ final class DesktopAutomationActionRegistry {
       guard AppBuild.isNonProduction else {
         return ["error": "suspend_agent_stream is disabled on production bundles"]
       }
-      // Default just past the 180s send watchdog so CHAT-02 can assert the
+      // Default just past the 60s send watchdog so CHAT-02 can assert the
       // "Response took too long" error + recoverable retry; capped at 300s.
-      let durationMs = intParam(params["durationMs"], default: 190_000)
+      let durationMs = intParam(params["durationMs"], default: 70_000)
       return await AgentRuntimeProcess.shared.debugSuspendStream(durationMs: durationMs)
     }
 
@@ -2461,6 +2467,55 @@ final class DesktopAutomationActionRegistry {
           return ["error": error.localizedDescription]
         }
       }
+    }
+
+    // Cursor-free notch hover driver: enter/exit run the same pointer update
+    // the tracking view calls from mouse events; state reads the island's
+    // visibility inputs so a stuck reveal or menu can be caught mechanically.
+    register(
+      name: "notch_hover",
+      summary: "Simulate notch pointer enter/exit or read island state (non-prod). action=enter|exit|state",
+      params: ["action"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "notch_hover is disabled on production bundles"]
+      }
+      guard let bar = FloatingControlBarManager.shared.window else {
+        return ["error": "no floating bar window"]
+      }
+      switch params["action"] ?? "state" {
+      case "enter":
+        bar.automationSimulateNotchPointer(inside: true)
+      case "exit":
+        bar.automationSimulateNotchPointer(inside: false)
+      case "state":
+        break
+      default:
+        throw DesktopAutomationActionError.invalidParams("action must be enter, exit, or state")
+      }
+      return bar.automationNotchStateSnapshot
+    }
+
+    // Drives the REAL provider failover the quota/auth close handlers call
+    // (failoverToAlternateProvider), then re-warms, so the cross-provider path
+    // can be exercised without waiting for the shared key to actually throttle.
+    register(
+      name: "realtime_failover",
+      summary: "Fail the realtime hub over to the alternate provider via the production path (non-prod).",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "realtime_failover is disabled on production bundles"]
+      }
+      let controller = RealtimeHubController.shared
+      let from = controller.effectiveProvider.rawValue
+      let started = controller.failoverToAlternateProvider(reason: "quota")
+      controller.ensureWarm()
+      return [
+        "failover_started": started ? "true" : "false",
+        "from": from,
+        "to": controller.effectiveProvider.rawValue,
+      ]
     }
 
     register(
@@ -3562,6 +3617,8 @@ final class DesktopAutomationActionRegistry {
     }
 
     registerNotificationActions()
+    registerRatingPromptActions()
+    registerRemotePromptActions()
     register(
       name: "rewind_settings_snapshot",
       summary: "Return Rewind settings retention and excluded-app counts"
@@ -3597,6 +3654,15 @@ final class DesktopAutomationActionRegistry {
       case "5", "rewind": item = .rewind
       case "6", "apps": item = .apps
       case ",", "comma", "settings": item = .settings
+      // Settings sub-sections ride the same notifications the app already posts
+      // for its own deep-links (the Tasks gear, the floating-bar context menu),
+      // so QA can land on a specific pane without any cursor input.
+      case "tasksettings", "advancedsettings":
+        NotificationCenter.default.post(name: .navigateToTaskSettings, object: nil)
+        return ["navigated": "Settings › Advanced"]
+      case "floatingbarsettings":
+        NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
+        return ["navigated": "Settings › Floating Bar"]
       default: item = nil
       }
       guard let item else {
@@ -3708,6 +3774,84 @@ final class DesktopAutomationActionRegistry {
         "speaker_label": assignedSegment?.speaker ?? segment.speaker ?? "",
         "segment_count": "\(refreshed.transcriptSegments.count)",
       ]
+    }
+
+    register(
+      name: "screen_frame_quick_look_probe",
+      summary: "Open screenshots in Quick Look and read the panel back",
+      params: ["conversationId", "source", "dismiss"]
+    ) { params in
+      // Quick Look's panel is a system window, so no capture path in this app can photograph it —
+      // see `ScreenFrameQuickLook.probeState()`. This is how the responder-chain claim, the
+      // materialisation of signed URLs into files, and the panel actually opening are verified.
+      if params["dismiss"] == "true" {
+        await ScreenFrameQuickLook.shared.dismissForProbe()
+        return ["dismissed": "true"]
+      }
+      // Two sources, because they materialise by completely different routes: a meeting frame is a
+      // signed URL to download, a Rewind moment is usually a frame inside a video chunk to decode.
+      // A probe that only exercised one would leave the other unproven.
+      let source = params["source"] ?? "conversation"
+      let frames: [QuickLookFrame]
+      let subject: String
+      if source == "synthetic" {
+        // The hermetic case. It needs neither a signed URL nor a Rewind chunk, so it can run on a
+        // fresh bundle with no capture history and no backend — which is what makes it usable as
+        // an e2e step. `URLSession` serves `file://` for a data task, so this reaches the panel
+        // through exactly the same materialise-then-present path a real frame does.
+        let seed = FileManager.default.temporaryDirectory
+          .appendingPathComponent("omi-quick-look-probe.png")
+        guard let png = Data(base64Encoded: Self.onePixelPNGBase64) else {
+          return ["error": "probe_seed_undecodable"]
+        }
+        do {
+          try png.write(to: seed, options: .atomic)
+        } catch {
+          return ["error": "probe_seed_unwritable: \(error.localizedDescription)"]
+        }
+        frames = [QuickLookFrame(id: "probe", source: .remote(seed), title: "Quick Look probe")]
+        subject = "synthetic"
+      } else if source == "rewind" {
+        let recent = try await RewindDatabase.shared.getRecentScreenshots(limit: 6)
+        frames = recent.map { QuickLookFrame(screenshot: $0) }
+        subject = "rewind"
+      } else {
+        let rawConversationId = params["conversationId"]?
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let rawConversationId, !rawConversationId.isEmpty else {
+          return ["error": "missing conversationId"]
+        }
+        let set = try await APIClient.shared.getConversationScreenFrames(
+          conversationID: rawConversationId)
+        let ordered = (set.banner.map { [$0] } ?? []) + set.strip
+        frames = ordered.compactMap { QuickLookFrame(frame: $0) }
+        subject = rawConversationId
+      }
+      guard let first = frames.first else {
+        return ["error": "no_frames", "conversation_id": subject]
+      }
+      await MainActor.run {
+        ScreenFrameQuickLook.shared.present(frames, startingAt: first.id)
+      }
+      // `present` fetches the clicked frame before it shows anything, so the panel is not up the
+      // instant this returns. Poll rather than sleep a guessed interval.
+      // Both conditions, not just visibility: an ordered-out panel can still report itself visible
+      // while its data source is gone, so polling on `panel_visible` alone returns the *previous*
+      // presentation's window and reads zero ready items off the new one.
+      for _ in 0..<40 {
+        let state = await MainActor.run { ScreenFrameQuickLook.shared.probeState() }
+        if state["panel_visible"] == "true", state["panel_controlled"] == "true",
+          state["ready_count"] != "0"
+        {
+          break
+        }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      var result = await MainActor.run { ScreenFrameQuickLook.shared.probeState() }
+      result["conversation_id"] = subject
+      result["source"] = source
+      result["requested_count"] = "\(frames.count)"
+      return result
     }
 
     register(

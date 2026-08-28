@@ -179,6 +179,7 @@ enum ScreenContextToolTelemetry {
     "get_work_context",
     "capture_screen",
     "get_screenshot",
+    "look_at_frame",
     "show_rewind_evidence",
     "search_screen_history",
     "semantic_search",

@@ -57,8 +57,12 @@ def test_public_memory_writes_route_through_memory_service():
             )
         ):
             # Every file in this list owns either a memory write or a read path;
-            # the service import is the stable routing seam for both.
-            assert "MemoryService" in source, relative
+            # require its canonical service or intent-backed ledger seam.
+            if relative == "utils/retrieval/tools/preference_tools.py":
+                assert "utils.memory.knowledge_ledger" in source, relative
+                assert "save_fact(" in source, relative
+            else:
+                assert "MemoryService" in source, relative
 
 
 def test_no_public_memory_mirror_delete_helpers_remain():

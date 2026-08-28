@@ -3215,6 +3215,10 @@
     "accountCutoverMigrationInProgressMessage": "Contul tău este în curs de migrare. Funcțiile produsului sunt întrerupte până la finalizarea migrării.",
     "accountCutoverMigrationRollbackMessage": "Contul tău este în mentenanță după un rollback al migrării. Unele date mai noi pot fi izolate.",
     "accountCutoverOpenStore": "Deschide magazinul",
+    "chatScopeToday": "Astăzi",
+    "chatScopeThisWeek": "Săptămâna aceasta",
+    "chatScopeAbout": "Despre: {title}",
+    "askAboutThisConversation": "Întreabă despre asta",
     "sendRawAudioToOmi": "Trimite sunetul brut către Omi",
     "sendRawAudioToOmiDescription": "Dezactivează pentru a împiedica trimiterea sunetului brut către Omi. Transcrierile și datele necesare funcțiilor cloud pot fi trimise în continuare către Omi.",
     "findDevice": "Găsește",
@@ -3227,5 +3231,8 @@
     "appReEnableFailedTitle": "Reactivarea a eșuat",
     "appReEnableFailedBody": "Această aplicație nu a putut fi reactivată. Încearcă din nou.",
     "appDisabledOn": "Dezactivată pe {date}.",
-    "appDisabledLastError": "Ultima eroare: {error}."
+    "appDisabledLastError": "Ultima eroare: {error}.",
+    "prerecordedTranscript": "Preînregistrat",
+    "pendantRecordingSyncBlocked": "Pendant încă înregistrează, așa că sunetul stocat nu poate fi transferat. Apasă butonul Pendant pentru a opri înregistrarea, apoi sincronizează din nou.",
+    "pendantFullSyncBlocked": "Spațiul de stocare al Pendantului este plin și acesta este încă în modul de înregistrare, așa că audio-ul stocat nu poate fi transferat. Apăsați butonul Pendantului pentru a opri înregistrarea, apoi sincronizați din nou."
 }

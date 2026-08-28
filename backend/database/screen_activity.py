@@ -59,11 +59,22 @@ def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
                 'appName': row.get('appName', ''),
                 'windowTitle': row.get('windowTitle', ''),
                 'ocrText': (row.get('ocrText') or '')[:1000],
+                # The Firestore/vector ID is device-qualified, while the desktop
+                # frame database is addressed by this original numeric ID.
+                'localScreenshotId': str(row['id']),
+                # The desktop only creates sync rows from captures admitted by
+                # Rewind's local exclusion policy; persist that attestation so
+                # automatic selection remains fail closed.
+                'captureEligible': row.get('captureEligible') is True,
             }
             if row.get('deviceName'):
                 doc_data['deviceName'] = row['deviceName']
             if row.get('clientDeviceId'):
                 doc_data['clientDeviceId'] = row['clientDeviceId']
+            doc_data['accountGeneration'] = max(0, int(row.get('accountGeneration') or 0))
+            retention = row.get('deviceRetentionSeconds')
+            if isinstance(retention, int) and retention > 0:
+                doc_data['deviceRetentionSeconds'] = retention
             batch.set(collection_ref.document(doc_id), doc_data)
         batch.commit()
         written += len(chunk)

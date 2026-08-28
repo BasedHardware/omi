@@ -71,6 +71,13 @@ class _ChatGoogleGenerativeAI(_BaseChatModel):
         self.model = self.model_name
 
 
+class _ChatAnthropic(_BaseChatModel):
+    def __init__(self, **kwargs):
+        self._constructor_kwargs = dict(kwargs)
+        self.model_name = kwargs.get('model')
+        self.model = self.model_name
+
+
 class _OpenAIEmbeddings:
     def __init__(self, **_kwargs):
         pass
@@ -105,8 +112,14 @@ _install_module('langchain_core.language_models', BaseChatModel=_BaseChatModel)
 _install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticOutputParser)
 _install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
 _install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
+_install_module('langchain_anthropic', ChatAnthropic=_ChatAnthropic)
 _install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
-_install_module('utils.byok', get_byok_key=MagicMock(return_value=None), get_byok_uid=MagicMock(return_value=None))
+_install_module(
+    'utils.byok',
+    get_byok_key=MagicMock(return_value=None),
+    get_byok_llm_provider=MagicMock(return_value=None),
+    get_byok_uid=MagicMock(return_value=None),
+)
 
 _HEAVY_MOCKS = {
     'firebase_admin': MagicMock(),
@@ -167,6 +180,7 @@ def _clients_subprocess_script(assertion: str) -> str:
         "    'langchain_core.output_parsers',",
         "    'langchain_core.outputs',",
         "    'langchain_google_genai',",
+        "    'langchain_anthropic',",
         "    'langchain_openai',",
         "    'tiktoken',",
         "    'database',",
@@ -732,7 +746,8 @@ class TestExpandedCallsiteCoverage:
         calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
         for key in ['memories', 'learnings', 'memory_category', 'memory_conflict']:
             assert key in calls, f"Missing get_llm('{key}') in memories.py"
-        assert calls.count('memories') == 3, "memories should appear exactly three times"
+        # 4th call site: the daily-sweep summary agent reuses the same memories QoS route.
+        assert calls.count('memories') == 4, "memories should appear exactly four times"
 
     def test_knowledge_graph_all_keys(self):
         import re
@@ -1012,6 +1027,7 @@ class TestBYOKProfile:
                 'onboarding',
                 'app_integration',
                 'trends',
+                'screen_frame_judge',
             ):
                 continue
             assert provider == 'openai', f'byok {feature} should be openai, got {provider}'
@@ -1078,8 +1094,8 @@ class TestEffectiveBYOKProvider:
     def test_gemini_passthrough(self):
         assert _effective_byok_provider('gemini-2.5-flash', 'gemini') == 'gemini'
 
-    def test_openrouter_gemini_maps_to_gemini(self):
-        assert _effective_byok_provider('gemini-3-flash-preview', 'openrouter') == 'gemini'
+    def test_openrouter_gemini_uses_openrouter_key(self):
+        assert _effective_byok_provider('gemini-3-flash-preview', 'openrouter') == 'openrouter'
 
     def test_openrouter_non_gemini_stays_openrouter(self):
         assert _effective_byok_provider('anthropic/claude-3.5-sonnet', 'openrouter') == 'openrouter'
@@ -1103,6 +1119,7 @@ class TestStructuredOutputFeatureTracking:
             'translation',
             'conv_app_select',
             'external_structure',
+            'screen_frame_judge',
             'trends',
             'what_matters_now',
         }
@@ -1114,19 +1131,20 @@ class TestStructuredOutputFeatureTracking:
                 assert feature in profile, f'{feature} missing from {profile_name}'
 
     def test_premium_gemini_structured_output(self):
-        """In premium profile, translation and trends use structured output on Gemini."""
+        """In premium profile, translation, trends, and screen_frame_judge use structured output on Gemini."""
         premium = MODEL_QOS_PROFILES['premium']
         gemini_so = {f for f in _STRUCTURED_OUTPUT_FEATURES if premium[f][1] == 'gemini'}
         assert gemini_so == {
             'translation',
             'trends',
-        }, f'Expected translation and trends on Gemini SO in premium, got {gemini_so}'
+            'screen_frame_judge',
+        }, f'Expected translation, trends, and screen_frame_judge on Gemini SO in premium, got {gemini_so}'
 
     def test_byok_no_gemini_structured_output(self):
-        """BYOK routes structured output to OpenAI except managed translation."""
+        """BYOK routes structured output to OpenAI except managed translation/trends/screen_frame_judge."""
         profile = MODEL_QOS_PROFILES['byok']
         for feature in _STRUCTURED_OUTPUT_FEATURES:
-            if feature in {'translation', 'trends'}:
+            if feature in {'translation', 'trends', 'screen_frame_judge'}:
                 assert profile[feature] == ('gemini-2.5-flash-lite', 'gemini')
                 continue
             assert profile[feature][1] == 'openai', f'byok {feature} should be openai, got {profile[feature][1]}'

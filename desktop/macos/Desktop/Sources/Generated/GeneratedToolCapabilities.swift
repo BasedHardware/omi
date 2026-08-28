@@ -679,6 +679,17 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Local API only."
     ]
+    ),
+    Capability(
+      toolName: "look_at_frame",
+      title: "Look at Frame",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat]),
+      summary: "Inspect one retrieved Rewind frame by screenshot_id for a just-in-time visual answer.",
+      bullets: [
+      "Use only after search_screen_history returns the screenshot_id; never invent an id.",
+      "This is one-frame inspection, not a continuous vision lane. Local API only."
+    ]
     )
   ]
 

@@ -3215,6 +3215,10 @@
     "accountCutoverMigrationInProgressMessage": "Twoje konto jest migrowane. Funkcje produktu są wstrzymane do końca migracji.",
     "accountCutoverMigrationRollbackMessage": "Twoje konto jest w trybie konserwacji po cofnięciu migracji. Nowsze dane mogą zostać odizolowane.",
     "accountCutoverOpenStore": "Otwórz sklep",
+    "chatScopeToday": "Šodien",
+    "chatScopeThisWeek": "Šonedēļ",
+    "chatScopeAbout": "Par: {title}",
+    "askAboutThisConversation": "Jautāt par šo",
     "sendRawAudioToOmi": "Sūtīt neapstrādātu audio uz Omi",
     "sendRawAudioToOmiDescription": "Izslēdziet, lai neapstrādāts audio netiktu sūtīts uz Omi. Transkripcijas un mākoņfunkcijām nepieciešamie dati joprojām var tikt sūtīti uz Omi.",
     "findDevice": "Atrast",
@@ -3227,5 +3231,8 @@
     "appReEnableFailedTitle": "Neizdevās iespējot atkārtoti",
     "appReEnableFailedBody": "Šo lietotni neizdevās iespējot atkārtoti. Mēģiniet vēlreiz.",
     "appDisabledOn": "Atspējota {date}.",
-    "appDisabledLastError": "Pēdējā kļūda: {error}."
+    "appDisabledLastError": "Pēdējā kļūda: {error}.",
+    "prerecordedTranscript": "Iepriekš ierakstīts",
+    "pendantRecordingSyncBlocked": "Pendant joprojām ieraksta, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz.",
+    "pendantFullSyncBlocked": "Pendant atmiņa ir pilna, un tas joprojām ir ierakstīšanas režīmā, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz."
 }

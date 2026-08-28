@@ -18,11 +18,13 @@ from utils.llm.gateway_client import (
     LLM_CHAT_AGENT_ROUTE_ENV_VAR,
     LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR,
     LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR,
+    LLM_GATEWAY_APP_PLATFORM_HEADER,
     LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_URL_ENV_VAR,
     GatewayDirectModelSurfaceBlocked,
     feature_auto_lane_id,
     get_chat_agent_route,
+    llm_gateway_headers,
     raise_if_gateway_feature_mode_blocks_direct_model_surface,
     should_route_chat_agent_through_gateway,
     should_route_features_through_gateway,
@@ -310,6 +312,87 @@ def test_get_llm_feature_gateway_mode_routes_byok_through_gateway_only(monkeypat
     assert legacy.calls == []
 
 
+def test_get_llm_feature_gateway_mode_bypasses_lane_for_provider_switch(monkeypatch):
+    """Provider-switched BYOK must bypass the feature's fixed gateway lane.
+
+    The gateway lane for a feature is pinned to the feature's default provider
+    (e.g. conv_discard → openai). When the user's BYOK enrollment selects a
+    different provider (e.g. OpenRouter-only), forwarding that key to the fixed
+    lane makes the gateway reject the request with missing_byok_key. Route such
+    requests through the direct BYOK client instead.
+    """
+    legacy = FakeChatModel(name='byok-direct', calls=[])
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(
+        clients,
+        'get_byok_key',
+        lambda provider: 'sk-test-openrouter' if provider == 'openrouter' else None,
+    )
+
+    def fail_gateway(*_args, **_kwargs):
+        raise AssertionError('gateway lane must be bypassed for a provider-switched BYOK call')
+
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm_for_byok', fail_gateway)
+    monkeypatch.setattr(clients, '_create_byok_client', lambda *args, **kwargs: legacy)
+
+    result = clients.get_llm('conv_discard').invoke('hello')
+
+    assert result.content == 'byok-direct response'
+
+
+def test_get_llm_uses_feature_profile_when_multiple_byok_keys_are_present(monkeypatch):
+    legacy = FakeChatModel(name='byok-direct', calls=[])
+    captured = {}
+
+    monkeypatch.setattr(
+        clients,
+        'get_byok_key',
+        lambda provider: {'openrouter': 'sk-test-openrouter', 'openai': 'sk-test-openai'}.get(provider),
+    )
+    monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
+
+    def create_client(*args, **kwargs):
+        captured['args'] = args
+        captured['kwargs'] = kwargs
+        return legacy
+
+    monkeypatch.setattr(clients, '_create_byok_client', create_client)
+
+    clients.get_llm('conv_discard')
+
+    assert legacy.name == 'byok-direct'
+    assert captured['args'][:2] == ('gpt-5-nano', 'openai')
+    assert captured['args'][2] == 'sk-test-openai'
+
+
+def test_get_llm_falls_back_to_openrouter_when_profile_key_is_missing(monkeypatch):
+    legacy = FakeChatModel(name='byok-direct', calls=[])
+    captured = {}
+
+    monkeypatch.setattr(
+        clients,
+        'get_byok_key',
+        lambda provider: 'sk-test-openrouter' if provider == 'openrouter' else None,
+    )
+    monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
+
+    def create_client(*args, **kwargs):
+        captured['args'] = args
+        captured['kwargs'] = kwargs
+        return legacy
+
+    monkeypatch.setattr(clients, '_create_byok_client', create_client)
+
+    clients.get_llm('conv_discard')
+
+    assert legacy.name == 'byok-direct'
+    assert captured['args'][:2] == ('gemini-2.5-flash-lite', 'openrouter')
+    assert captured['args'][2] == 'sk-test-openrouter'
+
+
 def test_gateway_feature_mode_is_blocked_in_prod_without_explicit_allow(monkeypatch):
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv('K_SERVICE', 'omi-backend')
@@ -498,3 +581,25 @@ def _load_perplexity_tools():
 
 async def _async_return(value):
     return value
+
+
+def test_llm_gateway_headers_sends_app_platform_when_known() -> None:
+    headers = llm_gateway_headers(feature='chat_agent', platform=' Desktop ')
+
+    assert headers[LLM_GATEWAY_APP_PLATFORM_HEADER] == 'desktop'
+    assert headers['X-Omi-LLM-Feature'] == 'chat_agent'
+    for platform in ('mobile', 'web'):
+        assert llm_gateway_headers(feature='chat_agent', platform=platform)[LLM_GATEWAY_APP_PLATFORM_HEADER] == platform
+
+
+def test_llm_gateway_headers_omits_app_platform_when_unknown() -> None:
+    """Callers that do not know the platform must not send a guessed value."""
+    assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent')
+    assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent', platform=None)
+    assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent', platform='   ')
+
+
+def test_llm_gateway_headers_never_forward_client_supplied_junk_platform() -> None:
+    """A client-controlled header value must not reach an outbound header verbatim."""
+    for junk in ('nintendo-switch', 'desktop\nX-Injected: 1', 'デスクトップ', 'desktop; drop table'):
+        assert LLM_GATEWAY_APP_PLATFORM_HEADER not in llm_gateway_headers(feature='chat_agent', platform=junk)

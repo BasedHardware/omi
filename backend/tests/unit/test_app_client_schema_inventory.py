@@ -128,6 +128,24 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     ) not in unmodeled_operations
     assert ('GET', '/v1/users/language', 'get_user_language_v1_users_language_get') not in unmodeled_operations
     assert ('GET', '/v1/users/export', 'export_all_user_data_v1_users_export_get') not in unmodeled_operations
+    spec = json.loads(SPEC_PATH.read_text())
+    export_properties = spec['components']['schemas']['UserDataExportResponse']['properties']
+    assert {
+        'profile',
+        'conversations',
+        'conversation_photo_manifest',
+        'frame_requests',
+        'frame_vision_receipts',
+        'conversation_keyframe_jobs',
+        'memories',
+        'memory_review_data',
+        'memory_ledger_data',
+        'jit_data',
+        'people',
+        'action_items',
+        'task_data',
+        'chat_messages',
+    } <= set(export_properties)
     assert ('POST', '/v2/sync-local-files', 'sync_local_files_v2_v2_sync_local_files_post') not in unmodeled_operations
     assert (
         'POST',
@@ -173,6 +191,22 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert any(item['function_name'] == 'parseMessageChunk' for item in message_send_route['called_function_ranges'])
     assert message_send_route['raw_decode_site_count'] == 0
     assert message_send_route['generated_backed_decode_site_count'] > 0
+    memory_revert_route = message_routes[
+        ('app/lib/backend/http/api/memories.dart', 'POST', '/v3/memories/{param}/revert')
+    ]
+    assert memory_revert_route['function_name'] == 'revertMemoryServer'
+    assert memory_revert_route['operations'] == [
+        {
+            'method': 'POST',
+            'normalized_path': '/v3/memories/{param}/revert',
+            'operation_id': 'revert_memory_v3_memories__memory_id__revert_post',
+            'path': '/v3/memories/{memory_id}/revert',
+            'request_schema': 'MemoryRevertRequest',
+            'response_schema': 'MemoryEditResponse',
+            'unmodeled_success_response': False,
+        }
+    ]
+    assert memory_revert_route['raw_response_decode_site_count'] == 0
     assert report['manual_dart_json_schema_file_count'] == (
         report['generated_backed_adapter_file_count'] + report['remaining_manual_dart_json_schema_file_count']
     )

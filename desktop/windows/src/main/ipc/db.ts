@@ -153,6 +153,21 @@ import type {
 } from '../../shared/types'
 import { perfMark } from '../../shared/perf'
 import { cachedStmt } from './stmtCache'
+import {
+  initializeJitTriggerMirrorSafely,
+  listAllJitKeyframePinDetails,
+  enqueueJitKeyframeCleanup,
+  type JitMirrorDb
+} from '../jit/jitTriggerMirror'
+import {
+  drainJitKeyframeCleanup,
+  listJitKeyframePinsForDeletion,
+  startJitKeyframeCleanupWorker,
+  type JitKeyframeCleanupDriver
+} from '../jit/jitKeyframeDeletion'
+import { conversationIdsForDeletion as kernelConversationIdsForDeletion } from '../agentKernel/controlPlane'
+import { removeRewindFrame } from '../rewind/frameFile'
+import { rewindRoot } from '../rewind/paths'
 
 // Time a synchronous DB helper and emit a perf mark with its duration in ms.
 // Always-on (perfMark is a no-op unless OMI_PERF_LOG is set), so the bench can
@@ -168,6 +183,9 @@ function timed<T>(name: string, fn: () => T): T {
 
 let db: Database.Database | null = null
 let roDb: Database.Database | null = null
+// Set by every open: whether the additive JIT mirror bootstrapped. False keeps
+// the JIT lane unregistered while the rest of the database stays usable.
+let jitMirrorAvailable = false
 
 // (ensureColumn — add a column only if missing, so existing databases migrate
 // forward without data loss — is dbMigrations.addColumnIfMissing, shared with
@@ -693,6 +711,15 @@ function get(): Database.Database {
   // Versioned migrations (PRAGMA user_version) — everything beyond the additive
   // baseline above. Ordered + exactly-once; see dbMigrations.ts.
   runMigrations(db)
+  // JIT uses a dedicated namespaced mirror/outbox. It is additive and never
+  // shares tables with legacy memories or conversations, so an old client can
+  // continue running safely while the JIT lane is disabled. Its bootstrap is
+  // therefore guarded: opening the ONE local database every legacy feature
+  // depends on must not fail because an additive mirror could not be created.
+  // The lane stays unregistered instead (see isJitMirrorAvailable).
+  jitMirrorAvailable = initializeJitTriggerMirrorSafely(
+    db as unknown as import('../jit/jitTriggerMirror').JitMirrorDb
+  )
   // After a salvage the FTS index is empty: salvage skips virtual tables (copying
   // FTS shadow tables raw would produce a corrupt index) and preserves
   // user_version, so migration v2's backfill does not re-run. The bootstrap block
@@ -712,6 +739,19 @@ function get(): Database.Database {
     }
   }
   return db
+}
+
+/** Driver boundary for the Windows JIT mirror. Callers must not use this handle
+ * for non-JIT user data; the mirror owns only its `jit_*` namespace. */
+export function getJitDatabase(): Database.Database {
+  return get()
+}
+
+/** False when the mirror bootstrap failed on this open: the database is usable,
+ * but no `jit_*` table may be assumed, so the JIT lane must not be registered.
+ * Only meaningful once the database has been opened (see `getJitDatabase`). */
+export function isJitMirrorAvailable(): boolean {
+  return jitMirrorAvailable
 }
 
 type LocalConversationRow = {
@@ -930,7 +970,46 @@ export function listLocalConversations(): LocalConversation[] {
   })
 }
 
-export function deleteLocalConversation(id: string): void {
+export async function deleteJitConversationKeyframe(id: string): Promise<void> {
+  const mirror = get() as unknown as JitMirrorDb
+  for (const pin of listJitKeyframePinsForDeletion(mirror, id, (sessionId) =>
+    kernelConversationIdsForDeletion(sessionId)
+  )) {
+    const frame = rewindFramesByIds([pin.frameId])[0]
+    // Persist the path from the pin before attempting cleanup. If a crash or
+    // independent retention removed the rewind row, the outbox can still
+    // unlink the captured file without falsely dropping its permanent pin.
+    enqueueJitKeyframeCleanup(
+      mirror,
+      { ...pin, imagePath: frame?.imagePath || pin.imagePath },
+      Date.now()
+    )
+  }
+  await drainJitKeyframeCleanup(jitKeyframeCleanupDriver())
+}
+
+function jitKeyframeCleanupDriver(): JitKeyframeCleanupDriver {
+  return {
+    db: get() as unknown as JitMirrorDb,
+    readFrame: (frameId) => rewindFramesByIds([frameId])[0] ?? null,
+    removeFile: (imagePath) => removeRewindFrame(rewindRoot(), imagePath),
+    deleteFrame: (frameId) => {
+      cachedStmt(get(), 'DELETE FROM rewind_frames WHERE id = ?').run(frameId)
+    }
+  }
+}
+
+/** Launch/deletion-independent bounded retry entry point. */
+export async function drainPendingJitKeyframeCleanup(): Promise<number> {
+  return drainJitKeyframeCleanup(jitKeyframeCleanupDriver())
+}
+
+export function startPendingJitKeyframeCleanupWorker(): () => void {
+  return startJitKeyframeCleanupWorker(jitKeyframeCleanupDriver())
+}
+
+export async function deleteLocalConversation(id: string): Promise<void> {
+  await deleteJitConversationKeyframe(id)
   cachedStmt(get(), 'DELETE FROM local_conversation WHERE id = ?').run(id)
 }
 
@@ -997,7 +1076,32 @@ export function setAppMeta(key: string, value: string): void {
 // Clear every user-scoped table on sign-out (see dbWipe.ts for scope + rationale).
 // wipeUserDataOn lives in the better-sqlite3-free dbWipe.ts so it is unit-testable
 // under plain-node vitest, which can't load this module's Electron-ABI native dep.
-export function wipeUserData(): void {
+/** Queue and drain all permanent JIT keyframes before account-scoped rows are
+ * wiped. Pins/outbox are install-scoped cleanup authority and intentionally are
+ * not part of wipeUserDataOn; a failed unlink must remain retryable after the
+ * Firebase session is gone. */
+async function drainJitKeyframesBeforeUserWipe(): Promise<void> {
+  const mirror = get() as unknown as JitMirrorDb
+  for (const pin of listAllJitKeyframePinDetails(mirror)) {
+    const frame = rewindFramesByIds([pin.frameId])[0]
+    enqueueJitKeyframeCleanup(
+      mirror,
+      { ...pin, imagePath: frame?.imagePath || pin.imagePath },
+      Date.now()
+    )
+  }
+  await drainJitKeyframeCleanup(jitKeyframeCleanupDriver())
+}
+
+export async function wipeUserData(): Promise<void> {
+  try {
+    await drainJitKeyframesBeforeUserWipe()
+  } catch (error) {
+    // The cleanup authority remains in SQLite, so a transient DB/filesystem
+    // failure must not prevent the rest of sign-out from completing. The launch
+    // worker will retry the retained pin/outbox on the next process lifetime.
+    console.warn('[jit] keyframe cleanup deferred during account wipe:', error)
+  }
   wipeUserDataOn(get())
   // BYOK provider keys live in a separate encrypted file (not SQLite), but they
   // are user-scoped too: drop them on an account wipe so a different account on
@@ -1568,13 +1672,22 @@ export function rewindImagePathsBetween(fromMs: number, toMs: number): string[] 
   ).map((r) => r.image_path)
 }
 
-export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
+export function deleteRewindFramesOlderThan(cutoffTs: number, now = Date.now()): RewindFrame[] {
   const d = get()
-  const select = cachedStmt(d, `SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts < ?`)
-  const del = cachedStmt(d, 'DELETE FROM rewind_frames WHERE ts < ?')
-  const pruneOlderThan = d.transaction((cutoff: number) => {
-    const doomed = select.all(cutoff) as RewindFrame[]
-    del.run(cutoff)
+  const select = cachedStmt(
+    d,
+    `SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE id NOT IN (SELECT frame_id FROM jit_keyframe_pin) AND (ts < ? OR id IN (SELECT frame_id FROM jit_temporary_frame WHERE expires_at <= ?))`
+  )
+  const del = cachedStmt(
+    d,
+    'DELETE FROM rewind_frames WHERE id NOT IN (SELECT frame_id FROM jit_keyframe_pin) AND (ts < ? OR id IN (SELECT frame_id FROM jit_temporary_frame WHERE expires_at <= ?))'
+  )
+  const pruneOlderThan = d.transaction((cutoff: number, at: number) => {
+    const doomed = select.all(cutoff, at) as RewindFrame[]
+    del.run(cutoff, at)
+    d.prepare(
+      'DELETE FROM jit_temporary_frame WHERE expires_at <= ? OR frame_id NOT IN (SELECT id FROM rewind_frames)'
+    ).run(at)
     // Embeddings are DERIVED FROM THE USER'S SCREEN CONTENT, so retention has to
     // reach them too — there is no FK/CASCADE here (foreign_keys is off), and a
     // vector that outlives its frame is exactly the data the user asked us to
@@ -1582,7 +1695,7 @@ export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
     dropOrphanedEmbeddingsOn(d)
     return doomed // caller deletes the image files
   })
-  return pruneOlderThan(cutoffTs)
+  return pruneOlderThan(cutoffTs, now)
 }
 
 // --- Track 4: Rewind semantic search ---

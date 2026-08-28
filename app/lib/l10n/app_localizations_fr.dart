@@ -2060,6 +2060,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get memoryDeleted => 'Mémoire supprimée.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Annuler';
 
   @override
@@ -9929,6 +9932,20 @@ class AppLocalizationsFr extends AppLocalizations {
   String get accountCutoverOpenStore => 'Ouvrir le store';
 
   @override
+  String get chatScopeToday => 'Aujourd’hui';
+
+  @override
+  String get chatScopeThisWeek => 'Cette semaine';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'À propos de : $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Demander à ce sujet';
+
+  @override
   String get sendRawAudioToOmi => 'Envoyer l\'audio brut à Omi';
 
   @override
@@ -9972,4 +9989,15 @@ class AppLocalizationsFr extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Dernière erreur : $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Préenregistré';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Votre Pendant est encore en train d\'enregistrer, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l\'enregistrement, puis synchronisez à nouveau.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Le stockage de votre Pendant est plein et il est encore en mode enregistrement, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l\'enregistrement, puis synchronisez à nouveau.';
 }

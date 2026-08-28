@@ -48,10 +48,12 @@ only to the macOS scope.
 ## Apply
 
 Grafana's database is the layout master — drag/resize edits made in the UI
-persist there. `apply_omi_tv_dashboard.py` overwrites the boards with the
-checked-in JSONs (uids restricted to the three above), so it runs only when a
-push actually changes `dashboards/*.json` (see the gated step in
-`gcp_admin.yml`) or on `workflow_dispatch`. It no-ops when `GRAFANA_TOKEN` is
+persist there **and survive applies**: `apply_omi_tv_dashboard.py` fetches the
+live board first and keeps its gridPos for every panel that already exists
+(matched by id), so a dashboards-diff merge updates panel content without
+reverting manual arrangement. Only brand-new panels land at their authored
+position. It runs when a push changes `dashboards/*.json` (see the gated step
+in `gcp_admin.yml`) or on `workflow_dispatch`. It no-ops when `GRAFANA_TOKEN` is
 unset — do not invent a write token.
 
 ```bash

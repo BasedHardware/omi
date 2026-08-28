@@ -165,15 +165,17 @@ def resolve_main_push_body(
     token: str,
     loader: Callable[..., PullRequestMetadata] = load_from_api,
 ) -> str:
-    """Commit message plus the merged PR body when HEAD is a squash/merge.
+    """Use the merged PR body when HEAD identifies a squash/merge.
 
     #10965 passed only `git log -1` through --pr-body-file, assuming GitHub
     folds the PR description into the squash message. This repo's squash
     default is the commit list, so INV-* citations that made PR Hygiene
-    green (see #11835) vanish on the main push. Append the live PR body
-    when the subject carries (#NNNN). API failures keep the commit
-    message — fail-closed for direct pushes, no new flake on API outage
-    when the commit already cites the IDs.
+    green (see #11835) vanish on the main push. When the subject carries
+    (#NNNN), the live PR body is the authoritative metadata: retaining the
+    merge message can reintroduce Git's wrapped, line-sensitive declarations
+    (#12003). API failures and empty PR bodies keep the commit message —
+    fail-closed for direct pushes without adding an API-outage flake when the
+    commit already cites the IDs.
     """
     number = extract_merged_pr_number(commit_body)
     if number is None or not repository or not token:
@@ -183,10 +185,9 @@ def resolve_main_push_body(
     except RuntimeError as exc:
         print(f"WARN: could not load merged PR #{number} body: {exc}", file=sys.stderr)
         return commit_body
-    pr_body = (metadata.body or "").strip()
-    if not pr_body or pr_body in commit_body:
+    if not (metadata.body or "").strip():
         return commit_body
-    return commit_body.rstrip() + "\n\n" + metadata.body
+    return metadata.body
 
 
 def parse_args() -> argparse.Namespace:
@@ -196,7 +197,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--from-commit-body-file",
         type=Path,
-        help="Main-push commit message; resolve (#NNNN) and append that PR body",
+        help="Main-push commit message; resolve (#NNNN) and prefer that live PR body",
     )
     parser.add_argument("--output", required=True, type=Path, help="File to receive the current PR body")
     return parser.parse_args()
@@ -218,7 +219,7 @@ def main() -> int:
         args.output.write_text(body, encoding="utf-8")
         number = extract_merged_pr_number(commit_body)
         if number is not None and body != commit_body:
-            print(f"Loaded merged PR #{number} body and appended it to the commit message.")
+            print(f"Loaded merged PR #{number} body as the authoritative main-push metadata.")
         else:
             print("Using commit message as the main-push PR body.")
         return 0

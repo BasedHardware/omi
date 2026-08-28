@@ -40,6 +40,11 @@ _CHAT_AGENT_ROUTE_GATEWAY_VALUES = frozenset({'gateway', '1', 'true', 'yes', 'lu
 LLM_GATEWAY_CALLER = 'backend'
 LLM_GATEWAY_USER_UID_HEADER = 'X-Omi-User-Uid'
 LLM_GATEWAY_USAGE_FEATURE_HEADER = 'X-Omi-LLM-Feature'
+LLM_GATEWAY_APP_PLATFORM_HEADER = 'X-Omi-App-Platform'
+# Closed enum, mirroring the gateway's own normalization. Client-supplied platform
+# strings are never forwarded verbatim: unknown values are dropped so accounting
+# stays aggregatable and arbitrary client text never reaches an outbound header.
+LLM_GATEWAY_APP_PLATFORMS = frozenset({'desktop', 'mobile', 'web'})
 CHAT_EXTRACTION_TIMEOUT_SECONDS = 10.0
 BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
 GATEWAY_TRANSPORT_STATUS_CODES = frozenset({502, 504})
@@ -350,7 +355,7 @@ def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason:
     record_gateway_request_result(feature=feature, outcome=outcome, reason=reason, mode=mode)
 
 
-def _gateway_headers(*, feature: str | None = None) -> dict[str, str]:
+def _gateway_headers(*, feature: str | None = None, platform: str | None = None) -> dict[str, str]:
     headers = {
         'Content-Type': 'application/json',
         'X-Omi-Service-Caller': LLM_GATEWAY_CALLER,
@@ -358,12 +363,18 @@ def _gateway_headers(*, feature: str | None = None) -> dict[str, str]:
     service_token = get_llm_gateway_service_token()
     if service_token is not None:
         headers['Authorization'] = f'Bearer {service_token}'
-    headers.update(_gateway_usage_headers(feature=feature))
+    headers.update(_gateway_usage_headers(feature=feature, platform=platform))
     return headers
 
 
-def llm_gateway_headers(*, feature: str | None = None) -> dict[str, str]:
-    return _gateway_headers(feature=feature)
+def llm_gateway_headers(*, feature: str | None = None, platform: str | None = None) -> dict[str, str]:
+    """Gateway headers for one request.
+
+    ``platform`` is the client app platform when the caller knows it. It is
+    normalized to ``LLM_GATEWAY_APP_PLATFORMS``; an absent or unrecognized value
+    sends no header at all, so the attempt stays unattributed rather than guessed.
+    """
+    return _gateway_headers(feature=feature, platform=platform)
 
 
 def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feature: str) -> JsonDict:
@@ -541,7 +552,7 @@ def generate_image_via_gateway(
     return cast('Mapping[str, object]', body)
 
 
-def _gateway_usage_headers(*, feature: str | None) -> dict[str, str]:
+def _gateway_usage_headers(*, feature: str | None, platform: str | None = None) -> dict[str, str]:
     context = get_current_context()
     headers: dict[str, str] = {}
     if context is not None and context.uid:
@@ -549,6 +560,9 @@ def _gateway_usage_headers(*, feature: str | None) -> dict[str, str]:
     resolved_feature = context.feature if context is not None and context.feature else feature
     if resolved_feature:
         headers[LLM_GATEWAY_USAGE_FEATURE_HEADER] = resolved_feature
+    normalized_platform = platform.strip().lower() if isinstance(platform, str) else None
+    if normalized_platform in LLM_GATEWAY_APP_PLATFORMS:
+        headers[LLM_GATEWAY_APP_PLATFORM_HEADER] = normalized_platform
     return headers
 
 

@@ -49,17 +49,16 @@ trap 'rm -f "$FILES_TO_SYNC"; cleanup' EXIT
 
 (
   cd "$SOURCE_REPO"
-  find desktop/Desktop/Sources -type f \
+  find desktop/macos/Desktop/Sources -type f \
     \( -name 'Onboarding*.swift' \
     -o -name 'PostOnboardingPromptViews.swift' \
-    -o -path 'desktop/Desktop/Sources/FileIndexing/OnboardingLoadingAnimation.swift' \
-    -o -path 'desktop/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift' \
-    -o -path 'desktop/Desktop/Sources/Theme/OmiColors.swift' \) \
+    -o -path 'desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift' \
+    -o -path 'desktop/macos/Desktop/Sources/Theme/OmiColors.swift' \) \
     | sort
 ) >"$FILES_TO_SYNC"
 
 rsync -a --files-from="$FILES_TO_SYNC" "$SOURCE_REPO/" "$EXPORT_REPO/"
-python3 "$EXPORT_REPO/scripts/apply_export_preview_overrides.py" "$EXPORT_REPO/desktop/Desktop/Sources"
+python3 "$EXPORT_REPO/scripts/apply_export_preview_overrides.py" "$EXPORT_REPO/desktop/macos/Desktop/Sources"
 
 SOURCE_COMMIT=$(git -C "$SOURCE_REPO" rev-parse HEAD 2>/dev/null || echo local)
 SOURCE_BRANCH=$(git -C "$SOURCE_REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo local)
@@ -75,7 +74,7 @@ if ! lsof -ti tcp:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
 fi
 
 pkill -f 'chrome-devtools-mcp' || true
-pkill -f '/Users/nik/.cache/chrome-devtools-mcp/chrome-profile' || true
+pkill -f "chrome-devtools-mcp/chrome-profile" || true
 pkill -f "codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C $SITE_DIR" || true
 sleep 1
 

@@ -19,7 +19,6 @@ final class NotchMomentsCoordinator {
   private weak var appState: AppState?
 
   private var wasTranscribing = false
-  private var knownTaskIds = Set<String>()
   /// Open-task ids captured when the current conversation started, so the end card
   /// counts only the follow-ups this conversation produced — not the whole backlog.
   private var sessionBaselineTaskIds = Set<String>()
@@ -27,12 +26,9 @@ final class NotchMomentsCoordinator {
   /// or cross-device-synced older tasks (new ids, but old timestamps) can't inflate
   /// the end-card count.
   private var sessionStartedAt: Date?
-  /// The task shown in the most recent receipt (so Undo can retract it).
-  private var lastReceiptTask: TaskActionItem?
-  /// Receipt verification runs asynchronously against the canonical action-items
-  /// read path. Keep one request per observed task so cache updates cannot emit
-  /// duplicate success receipts while that read is in flight.
-  private var pendingReceiptVerificationIDs = Set<String>()
+  /// Pending suggestion ids already surfaced, so a store refresh cannot re-announce
+  /// the same proposal.
+  private var knownSuggestionIDs = Set<String>()
 
   private init() {}
 
@@ -41,8 +37,7 @@ final class NotchMomentsCoordinator {
     started = true
     self.appState = appState
     wasTranscribing = appState.isTranscribing
-    knownTaskIds = Set(TasksStore.shared.incompleteTasks.map(\.id))
-    sessionBaselineTaskIds = knownTaskIds
+    sessionBaselineTaskIds = Set(TasksStore.shared.incompleteTasks.map(\.id))
     // If we begin monitoring mid-conversation, count follow-ups from now on.
     sessionStartedAt = appState.isTranscribing ? Date() : nil
 
@@ -51,9 +46,9 @@ final class NotchMomentsCoordinator {
       .sink { [weak self] transcribing in self?.handleTranscribing(transcribing) }
       .store(in: &cancellables)
 
-    TasksStore.shared.$incompleteTasks
+    SuggestedTasksStore.shared.$candidates
       .receive(on: RunLoop.main)
-      .sink { [weak self] tasks in self?.handleTasks(tasks) }
+      .sink { [weak self] candidates in self?.handleSuggestedCandidates(candidates) }
       .store(in: &cancellables)
   }
 
@@ -91,80 +86,67 @@ final class NotchMomentsCoordinator {
     }.count
   }
 
-  // MARK: live receipts
+  // MARK: live suggestions
 
-  private func handleTasks(_ tasks: [TaskActionItem]) {
-    let currentIds = Set(tasks.map(\.id))
-    defer { knownTaskIds = currentIds }
-    // Only surface receipts for tasks that appear WHILE listening — that's the
-    // "Omi is writing this down" moment. Backfilled loads shouldn't spam the pill.
-    guard appState?.isTranscribing == true else { return }
-    let newIds = currentIds.subtracting(knownTaskIds)
-    guard !newIds.isEmpty else { return }
-    // Only a task that was *just created* is a live receipt. A paginated backfill
-    // or a re-opened old task also adds an id, but its createdAt is stale — skip it
-    // so the pill only shows "✓ Noted" the instant Omi actually writes something down.
-    let freshCutoff = Date().addingTimeInterval(-120)
-    guard
-      let newTask =
-        tasks
-        .filter({ newIds.contains($0.id) && $0.createdAt >= freshCutoff })
-        .max(by: { $0.createdAt < $1.createdAt })
-    else { return }
-    verifyAndPostReceipt(for: newTask)
+  nonisolated static let suggestedMomentFreshness: TimeInterval = 120
+
+  /// Parse a backend `createdAt` timestamp. The backend emits ISO 8601 with or
+  /// without fractional seconds depending on the value; `ISO8601DateFormatter`
+  /// pins its behavior to the presence of `.withFractionalSeconds`, so try both.
+  /// Returns nil on anything unparseable — callers fail closed (not fresh).
+  nonisolated static func suggestedCandidateCreatedAt(_ raw: String) -> Date? {
+    let fractional = ISO8601DateFormatter()
+    fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let plain = ISO8601DateFormatter()
+    plain.formatOptions = [.withInternetDateTime]
+    return fractional.date(from: raw) ?? plain.date(from: raw)
   }
 
-  /// A local cache insert is not a durable-save acknowledgement. Read the task
-  /// through the canonical API before claiming it was saved, then make sure it
-  /// still remains in the active local projection before presenting the receipt.
-  private func verifyAndPostReceipt(for task: TaskActionItem) {
-    guard pendingReceiptVerificationIDs.insert(task.id).inserted else { return }
-    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
-      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
-    else {
-      pendingReceiptVerificationIDs.remove(task.id)
-      return
-    }
-
-    Task { @MainActor [weak self] in
-      defer { self?.pendingReceiptVerificationIDs.remove(task.id) }
-      guard let self else { return }
-      do {
-        let canonicalTask = try await APIClient.shared.getActionItem(
-          id: task.id,
-          expectedOwnerId: ownerID,
-          authorizationSnapshot: authorizationSnapshot)
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-          self.appState?.isTranscribing == true,
-          Self.isReceiptConfirmation(task, canonicalTask),
-          TasksStore.shared.incompleteTasks.contains(where: { $0.id == task.id })
-        else { return }
-        self.lastReceiptTask = canonicalTask
-        self.post(
-          title: "✓ Saved to Tasks — \(canonicalTask.description)", message: "",
-          assistantId: NotchMoment.receiptAssistantId)
-      } catch {
-        // Deliberately do not claim a save when the canonical task read fails.
-        // The next store update can re-attempt with a new task identity once
-        // the task has actually made it through the durable read path.
-        log("NotchMoments: Suppressed unconfirmed task receipt")
+  /// The proposal worth surfacing: one not announced before AND created within
+  /// the freshness window. The window is what keeps a store load or
+  /// cross-device sync (new ids, stale `createdAt`) from announcing an old
+  /// suggestion mid-conversation as if Omi had just proposed it.
+  nonisolated static func suggestedMomentCandidate(
+    candidates: [SuggestedCandidate],
+    knownIDs: Set<String>,
+    now: Date
+  ) -> SuggestedCandidate? {
+    let freshCutoff = now.addingTimeInterval(-suggestedMomentFreshness)
+    return
+      candidates
+      .compactMap { candidate -> (SuggestedCandidate, Date)? in
+        guard !knownIDs.contains(candidate.id),
+          let createdAt = suggestedCandidateCreatedAt(candidate.createdAt),
+          createdAt >= freshCutoff
+        else { return nil }
+        return (candidate, createdAt)
       }
-    }
+      .max(by: { $0.1 < $1.1 })?.0
   }
 
-  /// The receipt contract: the canonical read must name the same active task.
-  /// Keep this pure so its behavior remains covered without a live API.
-  nonisolated static func isReceiptConfirmation(_ observed: TaskActionItem, _ canonical: TaskActionItem) -> Bool {
-    observed.id == canonical.id && !canonical.completed && !canonical.isRetired
+  /// Surface a task Omi proposed while listening. INVARIANT I1: this is a
+  /// proposal, not a save. The card and its chat row both carry "Add to Tasks";
+  /// nothing enters the task list until the user presses it. This replaces the
+  /// old "✓ Saved to Tasks" receipt, which acknowledged a write the user never
+  /// asked for.
+  private func handleSuggestedCandidates(_ candidates: [SuggestedCandidate]) {
+    let currentIDs = Set(candidates.map(\.id))
+    defer { knownSuggestionIDs = currentIDs }
+    // Only while listening: a backfilled load is not a "just now" moment.
+    guard appState?.isTranscribing == true else { return }
+    guard
+      let candidate = Self.suggestedMomentCandidate(
+        candidates: candidates, knownIDs: knownSuggestionIDs, now: Date())
+    else { return }
+    let title = candidate.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !title.isEmpty else { return }
+    post(
+      title: SuggestedTaskChatCard.encode(candidateID: candidate.id, description: title),
+      message: "",
+      assistantId: NotchMoment.receiptAssistantId)
   }
 
   // MARK: actions from the cards
-
-  func undoLastReceipt() {
-    guard let task = lastReceiptTask else { return }
-    lastReceiptTask = nil
-    Task { await TasksStore.shared.deleteTask(task) }
-  }
 
   func reviewFollowUps() {
     AppDelegate.openMainWindow?()

@@ -11,12 +11,12 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Advanced.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Assistants.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+DeveloperKeys.swift
+  - desktop/macos/Desktop/Sources/BYOKValidator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Integrations.swift
   - desktop/macos/Desktop/Sources/Integrations/GmailAccountPickerView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatLabView.swift
   - desktop/macos/Desktop/Sources/Chat/ChatResource.swift
   - desktop/macos/Desktop/Sources/Chat/ClaudeAuthSheet.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentViews.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/InsightTestRunnerWindow.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/TaskTestRunnerWindow.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/InsightPromptEditorWindow.swift

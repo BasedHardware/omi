@@ -3250,6 +3250,10 @@
     "accountCutoverMigrationInProgressMessage": "Ваш аккаунт мигрирует. Функции продукта приостановлены до завершения миграции.",
     "accountCutoverMigrationRollbackMessage": "Ваш аккаунт на обслуживании после отката миграции. Часть более новых данных может быть изолирована.",
     "accountCutoverOpenStore": "Открыть магазин",
+    "chatScopeToday": "Сегодня",
+    "chatScopeThisWeek": "На этой неделе",
+    "chatScopeAbout": "О: {title}",
+    "askAboutThisConversation": "Спросить об этом",
     "sendRawAudioToOmi": "Отправлять необработанный звук в Omi",
     "sendRawAudioToOmiDescription": "Отключите, чтобы необработанный звук не отправлялся в Omi. Расшифровки и данные, необходимые облачным функциям, всё ещё могут отправляться в Omi.",
     "findDevice": "Найти",
@@ -3262,5 +3266,8 @@
     "appReEnableFailedTitle": "Не удалось включить снова",
     "appReEnableFailedBody": "Это приложение не удалось включить снова. Попробуйте ещё раз.",
     "appDisabledOn": "Отключено {date}.",
-    "appDisabledLastError": "Последняя ошибка: {error}."
+    "appDisabledLastError": "Последняя ошибка: {error}.",
+    "prerecordedTranscript": "Предзапись",
+    "pendantRecordingSyncBlocked": "Pendant всё ещё ведёт запись, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова.",
+    "pendantFullSyncBlocked": "Память Pendant заполнена, и он всё ещё в режиме записи, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова."
 }

@@ -77,7 +77,7 @@ The exporter accepts `prometheus.googleapis.com/` prefixes and converts Cloud Mo
 
 ### Dedicated isolated Stackdriver exporter — selected
 
-The new release imports only `prometheus.googleapis.com/omi_*` and filters monitored resources to `cluster=__run__` with namespace `backend` or `desktop-backend`. It reuses the existing exporter Kubernetes service account, so no new Workload Identity binding is required. Prometheus scrapes it every 30 seconds. The original load-balancer exporter and its HPA-sensitive cadence are unchanged.
+The new release imports only `prometheus.googleapis.com/omi_*` and filters monitored resources to `cluster=__run__` with namespace `backend` or `desktop-backend`. The namespace disjunction must be written as `resource.labels.namespace=one_of("backend","desktop-backend")`: Cloud Monitoring rejects a filter that mixes `AND` with `OR` across `resource.labels` restrictions (`AND and OR cannot be mixed for 'resource.labels' restrictions`, HTTP 400), and the exporter absorbs that rejection per descriptor without ever going unready. It reuses the existing exporter Kubernetes service account, so no new Workload Identity binding is required. Prometheus scrapes it every 30 seconds. The original load-balancer exporter and its HPA-sensitive cadence are unchanged.
 
 ## Metric names are rewritten back at scrape time
 
@@ -195,11 +195,17 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
 ```
 
 5. In Cloud Monitoring Metrics Explorer, use PromQL and query an idle, zero-initialized metric such as `omi_journey_accepted_total`. Confirm both `service_name="backend"` and `service_name="desktop-backend"` exist and instances are distinct.
-6. Confirm the Prometheus target `cloud-run-application-metrics` is up. This proves only the GKE exporter scrape, not Cloud Run ingestion, so the target remains `coverage_status: declared` until a post-deploy normalized metric name can support a per-service freshness alert. In Grafana Explore, query:
+6. Confirm data actually crossed the bridge. `up` is not that proof: it reports only that Prometheus reached the exporter's own `/metrics`, and it stayed 1 for 21 hours while every Cloud Monitoring query returned HTTP 400 and not one series was imported. Require all three, in this order:
 
 ```promql
-{job="cloud-run-application-metrics", __name__=~"stackdriver_prometheus_target_prometheus_googleapis_com_omi_.*"}
+up{job="cloud-run-application-metrics"}                                  # exporter reachable  — necessary, not sufficient
+stackdriver_monitoring_last_scrape_error{job="cloud-run-application-metrics"}   # MUST be 0: the upstream query was accepted
+count({job="cloud-run-application-metrics", __name__=~"omi_.*"})         # MUST be > 0: series arrived, under their plain names
 ```
+
+Query the plain `omi_*` names, not the `stackdriver_prometheus_target_...` form. The scrape job rewrites `__name__` back to the plain name, so on a healthy deployment the mangled form returns zero — reading it as a health check inverts the signal. The mangled form is what `omi-cloud-run-metric-names-unnormalized` watches for, and it should be empty.
+
+The target stays `coverage_status: declared` until both prod services serve the sidecar and a per-service freshness alert can be written against a real series.
 
 7. Generate one known dev client journey, then confirm the corresponding counter increases in Cloud Monitoring and in kube-prometheus-stack after the one-minute exporter offset. Compare `sum(rate(...[5m]))` by service between both stores.
 8. Dispatch the production metrics egress workflow from `main`, then deploy the prod Cloud Run revisions and repeat the checks before enabling any new Grafana alert:

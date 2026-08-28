@@ -16,8 +16,8 @@ codebase; only OS-specific adapters branch on `process.platform`.
 ```bash
 cd desktop/windows
 cp .env.example .env          # public Firebase/PostHog config; sign-in works as-is
-npm install
-npm run dev                   # launch on an X11 session (DISPLAY set)
+pnpm install --frozen-lockfile
+pnpm run dev                   # launch on an X11 session (DISPLAY set)
 ```
 
 ## Runtime dependencies (Debian/Ubuntu)

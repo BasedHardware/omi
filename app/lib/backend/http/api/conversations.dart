@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -259,6 +258,20 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
   return (await getConversationByIdResult(conversationId)).item;
 }
 
+/// Fetches conversation-lifetime photo bytes for storage-backed photos. Legacy
+/// inline base64 photos continue to render without a network round trip.
+Future<Uint8List?> getConversationPhotoImage(String conversationId, String photoId) async {
+  final response = await makeApiCall(
+    url:
+        '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/photos/${Uri.encodeComponent(photoId)}/image',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response?.statusCode != 200) return null;
+  return response!.bodyBytes;
+}
+
 Future<bool> updateConversationTitle(String conversationId, String title) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/title?title=$title',
@@ -298,12 +311,14 @@ class TranscriptsResponse {
   List<TranscriptSegment> soniox;
   List<TranscriptSegment> whisperx;
   List<TranscriptSegment> speechmatics;
+  List<TranscriptSegment> prerecorded;
 
   TranscriptsResponse({
     this.deepgram = const [],
     this.soniox = const [],
     this.whisperx = const [],
     this.speechmatics = const [],
+    this.prerecorded = const [],
   });
 
   factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
@@ -328,6 +343,7 @@ class TranscriptsResponse {
       soniox: readSegments('soniox'),
       whisperx: readSegments('whisperx'),
       speechmatics: readSegments('speechmatics'),
+      prerecorded: readSegments('prerecorded'),
     );
   }
 }
@@ -562,10 +578,10 @@ int? _parseRetryAfterSeconds(http.Response response) {
 ///
 /// The application-generated restriction response carries this bounded header.
 /// Everything else remains a generic backend-capacity limit.
-SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) =>
-    response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use'
-        ? SyncRateLimitKind.fairUse
-        : SyncRateLimitKind.backendCapacity;
+SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
+  final reason = response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase();
+  return reason == 'fair_use' ? SyncRateLimitKind.fairUse : SyncRateLimitKind.backendCapacity;
+}
 
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
@@ -717,7 +733,9 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   if (response == null) return (<ServerConversation>[], 0, 0);
   if (response.statusCode == 200) {
     final data = wire.GeneratedSearchConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    final convos = data.items.map((conversation) => ServerConversation.fromGenerated(conversation)).toList();
+    // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
+    // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
+    final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
     return (convos, data.currentPage, data.totalPages);
   }
   return (<ServerConversation>[], 0, 0);

@@ -2,6 +2,198 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.234",
+      "date": "2026-08-28",
+      "changes": [
+        "Chat's execute_sql tool now renders timestamp/*At columns in your local time zone instead of unlabeled UTC"
+      ]
+    },
+    {
+      "version": "0.12.233",
+      "date": "2026-08-28",
+      "changes": [
+        "Settings is lighter: the Task, Insight, and Memory Assistant panes and three floating-bar rows are hidden"
+      ]
+    },
+    {
+      "version": "0.12.232",
+      "date": "2026-08-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.231",
+      "date": "2026-08-28",
+      "changes": [
+        "Insight and Focus cards no longer claim the system clock is stuck in 2026 or ask you to double-check 2026-dated items: the assistants now know today's date and only flag a date when it is genuinely wrong, not because its year is beyond their training data.",
+        "A chat window you moved or resized no longer snaps back to the top of the screen when switching Spaces"
+      ]
+    },
+    {
+      "version": "0.12.230",
+      "date": "2026-08-27",
+      "changes": [
+        "Voice replies keep the same deep male voice even when the assistant fails over between providers"
+      ]
+    },
+    {
+      "version": "0.12.229",
+      "date": "2026-08-27",
+      "changes": [
+        "Every Omi reply in chat shows the Omi mark again, not just the newest one"
+      ]
+    },
+    {
+      "version": "0.12.228",
+      "date": "2026-08-27",
+      "changes": [
+        "Fixed the notch island disappearing after you hover over it — it stays put now instead of needing a Push-to-Talk press to bring it back",
+        "Rating and in-app prompt history is now tracked per account, so switching accounts on one Mac never hides or repeats prompts incorrectly.",
+        "Omi can now ask short in-app questions (stars, NPS, quick choices) configured by the team - no update needed, one prompt at a time, never twice."
+      ]
+    },
+    {
+      "version": "0.12.227",
+      "date": "2026-08-27",
+      "changes": [
+        "Conversation photos now remain available with their conversation and render reliably on desktop.",
+        "Added smarter just-in-time proactive help with safer trigger authority, durable memory privacy cleanup, explicit feedback controls, and offline retry when feedback cannot be sent immediately",
+        "Made planned proactive triggers run through the authoritative local watchlist before ambient suggestions.",
+        "Omi can now act once on an enrolled standing proactive instruction when its locally observed conditions are met, with durable duplicate and daily-budget protection"
+      ]
+    },
+    {
+      "version": "0.12.226",
+      "date": "2026-08-27",
+      "changes": [
+        "A single failed update check is now reported once instead of once per Sparkle callback",
+        "Fixed transparent and unresponsive left menus in the old Home design"
+      ]
+    },
+    {
+      "version": "0.12.225",
+      "date": "2026-08-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.224",
+      "date": "2026-08-27",
+      "changes": [
+        "Chat failures now report which subsystem they came from, so a failed answer can be diagnosed instead of just counted"
+      ]
+    },
+    {
+      "version": "0.12.223",
+      "date": "2026-08-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.222",
+      "date": "2026-08-26",
+      "changes": [
+        "Added a simpler BYOK provider menu with OpenRouter chat routing and separate transcription setup",
+        "Fixed a microphone failure warning that could freeze Omi instead of letting you keep using the app"
+      ]
+    },
+    {
+      "version": "0.12.221",
+      "date": "2026-08-26",
+      "changes": [
+        "On-device transcription now ends a window when you stop talking instead of on a fixed 10-second boundary, so what you say is transcribed about a second later"
+      ]
+    },
+    {
+      "version": "0.12.220",
+      "date": "2026-08-26",
+      "changes": [
+        "Fixed the Screen Recording permission dialog reappearing even though permission was already granted."
+      ]
+    },
+    {
+      "version": "0.12.219",
+      "date": "2026-08-26",
+      "changes": [
+        "Pressing Return while the assistant is still answering no longer clears your draft or miscounts a question.",
+        "Every chat surface now records a question only once the assistant actually accepts the send.",
+        "A chat send the assistant refuses no longer loses your typed question or miscounts toward the rating prompt."
+      ]
+    },
+    {
+      "version": "0.12.218",
+      "date": "2026-08-25",
+      "changes": [
+        "Hardened the rating-prompt kill switch wiring against analytics SDK updates.",
+        "The rating prompt now counts each question exactly once (retries and busy sends no longer advance it).",
+        "Hardened rating-prompt question accounting behind an executable submit/retry ledger.",
+        "The rating-prompt kill switch now takes effect within minutes, without waiting for another question.",
+        "Added a remote kill switch for the in-app rating prompt."
+      ]
+    },
+    {
+      "version": "0.12.217",
+      "date": "2026-08-25",
+      "changes": [
+        "Added a one-time in-app rating prompt: after your 3rd question, a closable bar asks how you'd rate Omi Desktop (1-5 stars)."
+      ]
+    },
+    {
+      "version": "0.12.216",
+      "date": "2026-08-25",
+      "changes": [
+        "Fixed longer Assistant replies being cancelled when the agent was still working through a quiet step.",
+        "Fixed cancelled and superseded tasks appearing as active across desktop task views"
+      ]
+    },
+    {
+      "version": "0.12.215",
+      "date": "2026-08-25",
+      "changes": [
+        "Delivered cloud-generated proactive messages directly to macOS desktop over the active listen stream"
+      ]
+    },
+    {
+      "version": "0.12.214",
+      "date": "2026-08-24",
+      "changes": [
+        "Fixed the app hanging indefinitely on \"Preparing your data...\" during startup"
+      ]
+    },
+    {
+      "version": "0.12.213",
+      "date": "2026-08-23",
+      "changes": [
+        "Fixed local-profile saves and Accessibility setup, and clarified the one-month referral reward",
+        "Onboarding music now stops after 10 seconds instead of looping for as long as the app is open"
+      ]
+    },
+    {
+      "version": "0.12.212",
+      "date": "2026-08-23",
+      "changes": [
+        "Kept signed desktop releases moving when debug-symbol publishing is temporarily unavailable"
+      ]
+    },
+    {
+      "version": "0.12.211",
+      "date": "2026-08-23",
+      "changes": [
+        "Tasks Omi writes down now arrive as suggestions you add with one click instead of appearing in your list on their own, unaccepted suggestions expire after two days, meeting summaries show action items right under the summary with Add to Tasks, selecting tasks keeps them grouped by category, and running an agent on a task has been removed",
+        "Added a Disconnect action for ChatGPT and Claude cloud connections so Omi shows them as disconnected after authorization is revoked"
+      ]
+    },
+    {
+      "version": "0.12.210",
+      "date": "2026-08-23",
+      "changes": [
+        "Integration suggestions now recognize Gmail on a work or school Google account, and no longer appear when you are reading an article that merely mentions ChatGPT, Claude, or Gemini"
+      ]
+    },
+    {
       "version": "0.12.209",
       "date": "2026-08-23",
       "changes": [
