@@ -17,6 +17,7 @@ import os
 
 import firebase_admin
 
+from services.frame_request_retention import run_frame_request_retention_maintenance
 from utils.memory.canonical_short_term_maintenance_cron import (
     run_canonical_short_term_maintenance_cron,
 )
@@ -43,6 +44,14 @@ def _init_firebase() -> None:
 def main() -> None:
     _init_firebase()
     logger.info("Starting memory-maintenance-job...")
+    # Preserve the legacy cleanup path until deployment records a healthy,
+    # independently scheduled retention job. The explicit env gate is switched
+    # only by an operational rollout after live bucket/Scheduler proof.
+    if os.getenv("FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY", "false").strip().lower() != "true":
+        try:
+            run_frame_request_retention_maintenance(user_limit=250)
+        except Exception:
+            logger.exception("legacy frame retention safety pass failed; canonical maintenance continues")
     summary = asyncio.run(
         run_canonical_short_term_maintenance_cron(
             recurrence_signal_persister=persist_recurrence_signals_for_maintenance,

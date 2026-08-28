@@ -122,6 +122,12 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: MODULATE_API_KEY
+  - name: SONIOX_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: SONIOX_API_KEY
+        optional: true
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:

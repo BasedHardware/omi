@@ -42,8 +42,9 @@ class SuggestionAssistantSettings {
   /// Bump when `defaultAnalysisPrompt` changes so a saved copy of the old prompt is
   /// discarded. v3 removed the invented names from the examples (a model was reproducing
   /// them as the user's own commitments); v4 moved the anti-fabrication rule out of the
-  /// prompt into SuggestionCommitmentGuard, because as prose it also suppressed real nudges.
-  private let currentPromptVersion = 7
+  /// prompt into SuggestionCommitmentGuard, because as prose it also suppressed real nudges;
+  /// v8 retired the 2026 wrong-year example and added date grounding (SCA-358).
+  private let currentPromptVersion = 8
 
   /// System prompt. Inherits the shape of the shipped Insight prompt — which was never
   /// the defect — and adds the grounding contract: a suggestion must use what Omi knows,
@@ -109,7 +110,7 @@ class SuggestionAssistantSettings {
     - "[the goal] won't come from [the app on screen] — [the open commitment] is still sitting there"
     - "Still on [the app on screen]. [The open commitment] is the one that moves [the goal]"
     - "You said you'd [the open commitment] Friday — this is that thread"
-    - "You've scheduled this for 2026 — double-check the year"
+    - "You've scheduled this for yesterday — double-check the date"
     - "This is the role you saved last week — you know someone there"
     - "Sensitive credentials visible in terminal — mask before sharing"
     - "You stashed changes 2 hours ago — remember to git stash pop"
@@ -126,6 +127,14 @@ class SuggestionAssistantSettings {
     - "call dad (due 2026-08-10)" (a database row read aloud — no dates, write like a person)
     - Any sentence you can see on the screen (that is echo, not insight)
     - Naming an app the user is not on (say what the screen says, never an app from these notes)
+
+    DATE GROUNDING:
+    - Each request states today's date. Treat it as the present.
+    - Dates in the current year or later are normal — never say the clock, calendar, or year
+      is wrong, and never ask the user to double-check a date solely because its year is
+      beyond your training data.
+    - Flag a date only when it is wrong on its own terms (a future meeting booked in the
+      past, a deadline that precedes the work it is for).
 
     CATEGORIES:
     - "commitment" — something the user said they would do

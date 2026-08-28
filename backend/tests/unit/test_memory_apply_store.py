@@ -1,5 +1,7 @@
 import copy
+import hashlib
 import os
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
@@ -27,14 +29,24 @@ from models.memory_apply import (
     memory_content_hash,
 )
 from models.memory_contracts import DurablePatchDecision, LifecycleState
-from models.memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType
+from models.memory_operations import (
+    MemoryLedgerReopenReceipt,
+    MemoryOperation,
+    MemoryOperationStatus,
+    MemoryOperationType,
+)
+from models.jit_trigger_feedback import JITTriggerFeedbackReceipt
+from models.jit_proactivity import JITProactivityEventReceipt
 from models.memory_promotion import PromotionGraphPlan, build_promotion_admission_receipt
 from models.product_memory import (
+    LedgerWriteReason,
     MemoryAccessPolicy,
+    MemoryItem,
     MemoryItemStatus,
+    MemoryKind,
+    MemorySubjectScope,
     MemoryTier,
     ProcessingState,
-    MemoryItem,
     is_default_access_eligible,
 )
 
@@ -75,6 +87,7 @@ def store():
     """
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
+    client_stub.get_firestore_client = MagicMock(return_value=client_stub.db)
 
     firestore_v1_stub = ModuleType("google.cloud.firestore_v1")
     firestore_v1_stub.transactional = _fake_transactional()
@@ -94,6 +107,13 @@ def store():
             "database.memory_apply_store",
             os.path.join(str(backend), "database", "memory_apply_store.py"),
         )
+        module.assert_destructive_operation_transaction = MagicMock()
+
+        @contextmanager
+        def permitted_cleanup_gate(*_args, **_kwargs):
+            yield "retention-cleanup-token"
+
+        module.destructive_operation_gate = permitted_cleanup_gate
         yield module
 
 
@@ -127,6 +147,7 @@ def test_global_intake_pause_is_enforced_inside_source_replacement_boundary(stor
             expected_source_items=[],
             expected_reactivation_items=[],
             writes=[],
+            deletion_gate_token="gate-token",
             db_client=db_client,
         )
 
@@ -138,6 +159,7 @@ class _FakeSnapshot:
         self._data = data
         self.exists = exists
         self.reference = reference
+        self.id = reference.path.rsplit("/", 1)[-1] if reference is not None else None
 
     def to_dict(self):
         return self._data
@@ -152,6 +174,35 @@ class _FakeDocumentRef:
         if self.path not in self._db.docs:
             return _FakeSnapshot(None, exists=False, reference=self)
         return _FakeSnapshot(self._db.docs[self.path], exists=True, reference=self)
+
+    def delete(self):
+        self._db.docs.pop(self.path, None)
+
+
+class _FakeReceiptQuery:
+    def __init__(self, db, path):
+        self._db = db
+        self._path = path
+        self._cutoff = None
+        self._limit = 128
+
+    def where(self, field, operator, value):
+        assert field == "expires_at" and operator == "<="
+        self._cutoff = value
+        return self
+
+    def limit(self, value):
+        self._limit = value
+        return self
+
+    def stream(self):
+        prefix = self._path + "/"
+        rows = []
+        for path, payload in self._db.docs.items():
+            if not path.startswith(prefix) or payload.get("expires_at") > self._cutoff:
+                continue
+            rows.append(_FakeSnapshot(payload, exists=True, reference=_FakeDocumentRef(path, self._db)))
+        return iter(rows[: self._limit])
 
 
 class _FakeTransaction:
@@ -211,6 +262,9 @@ class _FakeDb:
 
     def document(self, path):
         return _FakeDocumentRef(path, self)
+
+    def collection(self, path):
+        return _FakeReceiptQuery(self, path)
 
 
 def _evidence(**overrides):
@@ -306,7 +360,7 @@ def _stored_model(model):
     return model.model_dump(mode="json")
 
 
-def _assert_privacy_scrubbed_evidence(raw, *, original: MemoryEvidence):
+def _assert_privacy_scrubbed_evidence(raw, *, original: MemoryEvidence, source_identity_scrubbed: bool = True):
     assert raw["artifact_refs"] == []
     assert raw["artifact_preservation"] == ArtifactPreservationState.deleted_by_user.value
     assert raw["quote_refs"] == []
@@ -329,10 +383,10 @@ def _assert_privacy_scrubbed_evidence(raw, *, original: MemoryEvidence):
     } == {
         "evidence_id": original.evidence_id,
         "source_type": original.source_type,
-        "source_id": original.source_id,
-        "source_version": original.source_version,
-        "conversation_id": original.conversation_id,
-        "lineage_id": original.lineage_id,
+        "source_id": None if source_identity_scrubbed else original.source_id,
+        "source_version": None if source_identity_scrubbed else original.source_version,
+        "conversation_id": None if source_identity_scrubbed else original.conversation_id,
+        "lineage_id": None if source_identity_scrubbed else original.lineage_id,
     }
 
 
@@ -340,6 +394,8 @@ def _assert_privacy_scrubbed_item_semantics(raw):
     assert raw["status"] == MemoryItemStatus.tombstoned.value
     assert raw["source_state"] == SourceState.tombstoned.value
     assert raw["content"] is None
+    assert raw["content_hash"] is None
+    assert raw["normalized_content_key"] is None
     assert raw["sensitivity_labels"] == []
     assert raw["promotion"] is None
     assert raw["capture_device_ids"] == []
@@ -350,6 +406,17 @@ def _assert_privacy_scrubbed_item_semantics(raw):
     assert raw["subject_entity_id"] is None
     assert raw["predicate"] is None
     assert raw["arguments"] == {}
+    assert raw["ledger_schema_version"] is None
+    assert raw["kind"] == MemoryKind.fact.value
+    assert raw["subject_scope"] == MemorySubjectScope.primary_user.value
+    assert raw["slot"] is None
+    assert raw["body"] is None
+    assert raw["valid_from"] is None
+    assert raw["valid_to"] is None
+    assert raw["curation_weight"] == 0
+    assert raw["trigger_condition"] == {}
+    assert raw["intent_backed"] is False
+    assert raw["write_reason"] is None
 
 
 def _db_with(control=None, operation=None, evidence=None, target_items=None):
@@ -599,6 +666,7 @@ def test_firestore_privacy_tombstone_advances_ledger_and_journals_delete_events(
         observed_control=control,
         expected_items=[item],
         preserved_evidence_ids=[],
+        deletion_gate_token="gate-token",
         db_client=db,
     )
 
@@ -619,6 +687,14 @@ def test_firestore_privacy_tombstone_advances_ledger_and_journals_delete_events(
     assert len(operations) == 1
     operation = operations[0]
     assert operation["status"] == MemoryOperationStatus.committed.value
+    assert operation["evidence_ids"] == []
+    assert "hash1" not in repr(operation)
+    receipt_id = store.privacy_deletion_receipt_id("u1", "mem1")
+    receipt = db.docs[f"users/u1/memory_deletion_receipts/{receipt_id}"]
+    assert receipt["schema_version"] == "memory_deletion_receipt.v2"
+    assert receipt["receipt_id"] == receipt_id
+    assert "mem1" not in repr(receipt)
+    assert receipt["expires_at"] - receipt["deleted_at"] == timedelta(days=30)
     commit = db.docs[f"users/u1/memory_commits/{result.control_state.head_commit_id}"]
     assert commit["operation_id"] == operation["operation_id"]
     assert set(commit["outbox_event_ids"]) == set(operation["committed_outbox_event_ids"])
@@ -630,12 +706,12 @@ def test_firestore_privacy_tombstone_advances_ledger_and_journals_delete_events(
     ]
     assert {event["event_type"] for event in events} == {"projection_sync", "vector_sync"}
     assert all(event["commit_id"] == result.control_state.head_commit_id for event in events)
-    assert all(event["parent_commit_id"] == "head0" for event in events)
+    assert all(event["parent_commit_id"] == result.control_state.head_commit_id for event in events)
     assert all(event["commit_sequence"] == 5 for event in events)
     assert "users/u1/memory_graph_assertions/mem1" not in db.transaction_obj.deletes
 
 
-def test_firestore_privacy_tombstone_accepts_released_hundred_item_batch(store):
+def test_firestore_privacy_tombstone_accepts_exact_ninety_nine_item_batch(store):
     control = MemoryControlState(
         uid="u1",
         head_commit_id="head0",
@@ -644,7 +720,7 @@ def test_firestore_privacy_tombstone_accepts_released_hundred_item_batch(store):
         commit_sequence=4,
     )
     items = []
-    for index in range(100):
+    for index in range(99):
         evidence = _evidence(
             evidence_id=f"ev-{index}",
             source_id=f"conv-{index}",
@@ -669,12 +745,82 @@ def test_firestore_privacy_tombstone_accepts_released_hundred_item_batch(store):
         observed_control=control,
         expected_items=items,
         preserved_evidence_ids=[],
+        deletion_gate_token="gate-token",
         db_client=db,
     )
 
-    assert len(result.memory_items) == 100
-    assert len(db.transaction_obj.mutations) == 404
+    assert len(result.memory_items) == 99
+    assert len(db.transaction_obj.mutations) == 499
+
+
+def test_content_free_deletion_receipt_expires_after_thirty_days(store, monkeypatch):
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+        commit_sequence=4,
+    )
+    evidence = _privacy_sensitive_evidence()
+    item = _privacy_sensitive_target(memory_id="mem-expiring-receipt", evidence=evidence)
+    db = _db_with(control=control, evidence=evidence, target_items=[item])
+
+    result = store.tombstone_memory_items_firestore(
+        uid="u1",
+        reason="canonical_memory_delete",
+        observed_control=control,
+        expected_items=[item],
+        preserved_evidence_ids=[],
+        deletion_gate_token="gate-token",
+        db_client=db,
+    )
+    receipt_path = next(path for path in db.docs if path.startswith("users/u1/memory_deletion_receipts/"))
+    receipt = db.docs[receipt_path]
+    assert receipt["schema_version"] == "memory_deletion_receipt.v2"
+    assert receipt["receipt_id"] == store.privacy_deletion_receipt_id("u1", item.memory_id)
+    assert item.memory_id not in repr(receipt)
+    assert item.content_hash not in repr(receipt)
+    assert evidence.source_id not in repr(receipt)
+
+    assert (
+        store.cleanup_expired_memory_deletion_receipts(
+            "u1", db_client=db, now=receipt["expires_at"] - timedelta(microseconds=1)
+        )
+        == 0
+    )
+    assert receipt_path in db.docs
+    with monkeypatch.context() as hold_context:
+
+        @contextmanager
+        def blocked_cleanup_gate(*_args, **_kwargs):
+            raise RuntimeError("active legal hold")
+            yield  # pragma: no cover
+
+        hold_context.setattr(store, "destructive_operation_gate", blocked_cleanup_gate)
+        assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=db, now=receipt["expires_at"]) == 0
+        assert receipt_path in db.docs
+    assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=db, now=receipt["expires_at"]) == 1
+    assert receipt_path not in db.docs
+    # Transaction-layer tombstones remain pending until provider cleanup; the
+    # higher-level finalizer removes these content-derived paths on success.
+    tombstone = db.docs["users/u1/memory_items/mem-expiring-receipt"]
+    assert tombstone["content"] is None
     assert not any(path.startswith("users/u1/memory_graph_assertions/") for path in db.transaction_obj.deletes)
+
+
+def test_deletion_receipt_identity_is_server_keyed_and_contains_no_raw_lookup_material(store):
+    memory_id = "mem-secret-project-codename"
+    receipt_id = store.privacy_deletion_receipt_id("u1", memory_id)
+    public_dictionary_guesses = {
+        hashlib.sha256(memory_id.encode()).hexdigest(),
+        hashlib.sha256(f"u1:{memory_id}".encode()).hexdigest(),
+        hashlib.sha256(f"u1/{memory_id}".encode()).hexdigest(),
+    }
+
+    assert receipt_id.startswith("receipt_")
+    assert receipt_id.removeprefix("receipt_") not in public_dictionary_guesses
+    assert "u1" not in receipt_id
+    assert memory_id not in receipt_id
 
 
 def test_firestore_privacy_tombstone_preserves_shared_standalone_evidence_for_editable_sibling(store):
@@ -708,6 +854,7 @@ def test_firestore_privacy_tombstone_preserves_shared_standalone_evidence_for_ed
         observed_control=control,
         expected_items=[deleted],
         preserved_evidence_ids=[shared_evidence.evidence_id],
+        deletion_gate_token="gate-token",
         db_client=db,
     )
 
@@ -783,6 +930,7 @@ def test_firestore_privacy_tombstone_scrubs_semantics_and_keeps_lineage_outbox_f
         observed_control=control,
         expected_items=[item],
         preserved_evidence_ids=[],
+        deletion_gate_token="gate-token",
         db_client=db,
     )
 
@@ -795,10 +943,7 @@ def test_firestore_privacy_tombstone_scrubs_semantics_and_keeps_lineage_outbox_f
     assert tombstoned["superseded_by"] == item.superseded_by
     assert tombstoned["version"] == item.version + 1
     assert tombstoned["item_revision"] == item.item_revision + 1
-    assert tombstoned["content_hash"] == memory_content_hash(
-        content=None,
-        evidence_ids=[evidence.evidence_id],
-    )
+    assert tombstoned["content_hash"] is None
     assert tombstoned["ledger_commit_id"] == result.control_state.head_commit_id
     assert tombstoned["ledger_sequence"] == result.control_state.commit_sequence
     assert tombstoned["source_commit_id"] == result.control_state.head_commit_id
@@ -814,7 +959,7 @@ def test_firestore_privacy_tombstone_scrubs_semantics_and_keeps_lineage_outbox_f
     assert {raw["event_type"] for raw in delete_events} == {"projection_sync", "vector_sync"}
     assert len(delete_events) == 2
     assert all(raw["commit_id"] == result.control_state.head_commit_id for raw in delete_events)
-    assert all(raw["parent_commit_id"] == control.head_commit_id for raw in delete_events)
+    assert all(raw["parent_commit_id"] == result.control_state.head_commit_id for raw in delete_events)
     assert all(raw["commit_sequence"] == result.control_state.commit_sequence for raw in delete_events)
     assert all(raw["account_generation"] == control.account_generation for raw in delete_events)
     assert all(raw["source_generation"] == control.source_generation for raw in delete_events)
@@ -876,6 +1021,38 @@ def test_firestore_conversation_replacement_commits_old_and_new_generation_atomi
     assert all(raw["commit_sequence"] == 1 for raw in replacement_outbox)
 
 
+def test_firestore_conversation_replacement_cannot_bypass_writer_transition(store):
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+        writer_mode="transitioning_to_ledger",
+        writer_epoch=1,
+        writer_transition_owner="migration-owner",
+    )
+    old = _short_term_target(memory_id="mem1")
+    db = _db_with(control=control, target_items=[old])
+    replacement_id, replacement_digest, replacement_operation, write = _replacement_operation_and_write(store, control)
+
+    with pytest.raises(store.ConversationSourceReplacementConflict, match="not admitted"):
+        store.replace_conversation_source_firestore(
+            uid="u1",
+            conversation_id="conv1",
+            replacement_id=replacement_id,
+            replacement_digest=replacement_digest,
+            replacement_operation=replacement_operation,
+            observed_control=control,
+            expected_source_items=[old],
+            expected_reactivation_items=[],
+            writes=[write],
+            db_client=db,
+        )
+
+    assert db.docs["users/u1/memory_items/mem1"]["status"] == MemoryItemStatus.active.value
+    assert "users/u1/memory_items/mem2" not in db.docs
+
+
 def test_firestore_conversation_replacement_scrubs_semantics_and_keeps_lineage_outbox_fences(store):
     control = MemoryControlState(
         uid="u1",
@@ -903,22 +1080,22 @@ def test_firestore_conversation_replacement_scrubs_semantics_and_keeps_lineage_o
         expected_source_items=[old],
         expected_reactivation_items=[],
         writes=[],
+        deletion_gate_token="gate-token",
         db_client=db,
     )
 
     tombstoned = db.docs["users/u1/memory_items/mem-private-replacement"]
     _assert_privacy_scrubbed_item_semantics(tombstoned)
-    _assert_privacy_scrubbed_evidence(tombstoned["evidence"][0], original=evidence)
-    _assert_privacy_scrubbed_evidence(db.docs["users/u1/memory_evidence/ev1"], original=evidence)
+    _assert_privacy_scrubbed_evidence(tombstoned["evidence"][0], original=evidence, source_identity_scrubbed=True)
+    _assert_privacy_scrubbed_evidence(
+        db.docs["users/u1/memory_evidence/ev1"], original=evidence, source_identity_scrubbed=True
+    )
     assert result.tombstoned_evidence_ids == [evidence.evidence_id]
     assert tombstoned["canonical_memory_id"] == old.canonical_memory_id
     assert tombstoned["superseded_by"] == old.superseded_by
     assert tombstoned["version"] == old.version + 1
     assert tombstoned["item_revision"] == old.item_revision + 1
-    assert tombstoned["content_hash"] == memory_content_hash(
-        content=None,
-        evidence_ids=[evidence.evidence_id],
-    )
+    assert tombstoned["content_hash"] is None
     assert tombstoned["ledger_commit_id"] == result.control_state.head_commit_id
     assert tombstoned["ledger_sequence"] == result.control_state.commit_sequence
     assert tombstoned["source_commit_id"] == result.control_state.head_commit_id
@@ -1020,6 +1197,7 @@ def test_firestore_source_withdrawal_reactivates_independently_sourced_long_term
         expected_source_items=[source_survivor],
         expected_reactivation_items=[independent],
         writes=[],
+        deletion_gate_token="gate-token",
         db_client=db,
     )
 
@@ -1123,6 +1301,7 @@ def test_firestore_source_withdrawal_preserves_conflict_semantics_for_malformed_
             expected_source_items=[source_survivor],
             expected_reactivation_items=[independent],
             writes=[],
+            deletion_gate_token="gate-token",
             db_client=db,
         )
 
@@ -1158,6 +1337,7 @@ def test_firestore_empty_conversation_replacement_is_journaled_and_idempotent(st
         expected_source_items=[old],
         expected_reactivation_items=[],
         writes=[],
+        deletion_gate_token="gate-token",
         db_client=db,
     )
     docs_after_first = copy.deepcopy(db.docs)
@@ -1171,6 +1351,7 @@ def test_firestore_empty_conversation_replacement_is_journaled_and_idempotent(st
         expected_source_items=[old],
         expected_reactivation_items=[],
         writes=[],
+        deletion_gate_token="gate-token",
         db_client=db,
     )
 
@@ -1402,6 +1583,7 @@ def test_firestore_conversation_replacement_preflights_transaction_limit_before_
             expected_source_items=old_items,
             expected_reactivation_items=[],
             writes=[],
+            deletion_gate_token="gate-token",
             db_client=db,
         )
 
@@ -1480,6 +1662,464 @@ def test_firestore_apply_creates_operation_inside_transaction_and_never_overwrit
     assert replay.status == ApplyStatus.idempotent_skip
     assert replay.control_state.commit_sequence == first_sequence
     assert db.docs[operation_path]["status"] == MemoryOperationStatus.committed.value
+
+
+def test_firestore_standalone_reopen_receipt_blocks_duplicate_current_tail(store):
+    now = datetime.now(timezone.utc)
+    source_evidence = _evidence(evidence_id="ev-closed-source", source_id="source", source_version="v1")
+    reopen_evidence = _evidence(
+        evidence_id="ev-reopen",
+        source_id="source",
+        source_type="explicit_user_reopen",
+        source_version="item_revision:1",
+    )
+    source = _target_item(
+        memory_id="source",
+        content="User lives in Boston.",
+        evidence=[source_evidence],
+        content_hash="source-content-hash",
+        status=MemoryItemStatus.superseded,
+        valid_from=now - timedelta(days=1),
+        valid_to=now,
+        canonical_memory_id=None,
+        superseded_by=None,
+        ledger_schema_version="knowledge_ledger.v1",
+        kind=MemoryKind.fact,
+        subject_scope=MemorySubjectScope.primary_user,
+        slot="home_city",
+        intent_backed=True,
+        write_reason=LedgerWriteReason.daily_reconciliation,
+        user_asserted=True,
+    )
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    patch = _patch(
+        patch_id="patch-reopen",
+        packet_id="source",
+        run_id="reopen-source",
+        idempotency_key="reopen-source",
+        evidence_ids=[source_evidence.evidence_id, reopen_evidence.evidence_id],
+        new_memory_id="replacement",
+        memory_text=source.content,
+        initial_tier=MemoryTier.long_term,
+        ledger_schema_version="knowledge_ledger.v1",
+        kind=MemoryKind.fact,
+        subject_scope=MemorySubjectScope.primary_user,
+        slot="home_city",
+        intent_backed=True,
+        write_reason=LedgerWriteReason.direct_user_statement,
+        user_asserted=True,
+        visibility="private",
+    )
+    mutation_identity = build_patch_mutation_identity(patch)
+    patch["mutation_metadata"] = mutation_identity
+    operation = _operation(
+        operation_type=MemoryOperationType.ledger_mutation,
+        source_packet_id="source",
+        evidence_ids=patch["evidence_ids"],
+        logical_payload={
+            "decision": DurablePatchDecision.add.value,
+            "memory_text": source.content,
+            "supersedes": [],
+            "result_status": LifecycleState.active.value,
+            "mutation_metadata": mutation_identity,
+        },
+    )
+    db = _db_with(control=control, operation=operation, evidence=source_evidence, target_items=[source])
+    db.docs.pop("users/u1/memory_evidence/ev1", None)
+    db.docs[f"users/u1/memory_evidence/{source_evidence.evidence_id}"] = _stored_model(source_evidence)
+    db.docs[f"users/u1/memory_evidence/{reopen_evidence.evidence_id}"] = _stored_model(reopen_evidence)
+    receipt = MemoryLedgerReopenReceipt(
+        uid="u1",
+        source_memory_id="source",
+        replacement_memory_id="replacement",
+        operation_id="client-op-1",
+        account_generation=1,
+        source_generation=2,
+        source_item_revision=source.item_revision,
+        source_content_hash=source.content_hash or "",
+    )
+
+    first = store.apply_direct_user_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        proposed_evidence=[source_evidence, reopen_evidence],
+        required_source_item=source,
+        ledger_reopen_receipt=receipt,
+        db_client=db,
+    )
+    assert first.status == ApplyStatus.committed, first.reason
+    assert db.docs["users/u1/memory_ledger_reopens/source"]["replacement_memory_id"] == "replacement"
+
+    replay = store.apply_direct_user_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        proposed_evidence=[source_evidence, reopen_evidence],
+        required_source_item=source,
+        ledger_reopen_receipt=receipt,
+        db_client=db,
+    )
+    assert replay.status == ApplyStatus.idempotent_skip
+    assert len([path for path in db.docs if path.startswith("users/u1/memory_items/")]) == 2
+
+    competing = _operation(
+        operation_type=MemoryOperationType.ledger_mutation,
+        source_packet_id="source:competing",
+        evidence_ids=patch["evidence_ids"],
+        observed_head_commit_id=first.control_state.head_commit_id,
+        logical_payload={
+            "decision": DurablePatchDecision.add.value,
+            "memory_text": source.content,
+            "supersedes": [],
+            "result_status": LifecycleState.active.value,
+            "mutation_metadata": mutation_identity,
+        },
+    )
+    competing_result = store.apply_direct_user_long_term_patch_firestore(
+        uid="u1",
+        operation_id=competing.operation_id,
+        patch_payload=patch,
+        proposed_operation=competing,
+        proposed_evidence=[source_evidence, reopen_evidence],
+        required_source_item=source,
+        ledger_reopen_receipt=receipt.model_copy(update={"operation_id": "client-op-2"}),
+        db_client=db,
+    )
+    assert competing_result.status == ApplyStatus.source_not_active
+    assert len([path for path in db.docs if path.startswith("users/u1/memory_items/")]) == 2
+
+
+def test_firestore_apply_stages_new_evidence_in_the_same_commit(store):
+    operation = _operation()
+    evidence = _evidence()
+    db = _db_with(operation=operation)
+    evidence_path = "users/u1/memory_evidence/ev1"
+    db.docs.pop(evidence_path)
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=_patch(),
+        proposed_operation=operation,
+        proposed_evidence=[evidence],
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.committed
+    assert db.docs[evidence_path]["evidence_id"] == evidence.evidence_id
+    assert evidence_path in [path for path, _ in db.transaction_obj.sets]
+
+
+def test_firestore_apply_does_not_orphan_proposed_evidence_when_patch_fails(store):
+    evidence = _evidence(evidence_id="ev-ledger-failed", source_version="v2")
+    operation = _operation(
+        operation_type=MemoryOperationType.long_term_apply,
+        evidence_ids=[evidence.evidence_id],
+    )
+    patch = _patch(
+        evidence_ids=[evidence.evidence_id],
+        ledger_schema_version="knowledge_ledger.v1",
+        initial_tier=MemoryTier.long_term,
+        intent_backed=True,
+        write_reason="agent_reusable_conclusion",
+    )
+    db = _db_with(operation=operation)
+    evidence_path = f"users/u1/memory_evidence/{evidence.evidence_id}"
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        proposed_evidence=[evidence],
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert evidence_path not in db.docs
+    assert evidence_path not in [path for path, _ in db.transaction_obj.sets]
+
+
+def test_firestore_apply_rejects_changed_source_version_for_existing_evidence_identity(store):
+    operation = _operation()
+    db = _db_with(operation=operation, evidence=_evidence(source_version="v1"))
+
+    with pytest.raises(store.MemoryFirestoreApplyError, match="conflicts with existing evidence identity"):
+        store.apply_long_term_patch_firestore(
+            uid="u1",
+            operation_id=operation.operation_id,
+            patch_payload=_patch(),
+            proposed_operation=operation,
+            proposed_evidence=[_evidence(source_version="v2")],
+            db_client=db,
+        )
+
+    assert db.docs["users/u1/memory_evidence/ev1"]["source_version"] == "v1"
+    assert db.transaction_obj.mutations == []
+
+
+@pytest.mark.parametrize("source_state", [SourceState.tombstoned, SourceState.purged])
+def test_firestore_apply_never_resurrects_inactive_proposed_evidence(store, source_state):
+    operation = _operation()
+    db = _db_with(operation=operation)
+    evidence_path = "users/u1/memory_evidence/ev1"
+    db.docs.pop(evidence_path)
+
+    with pytest.raises(store.MemoryFirestoreApplyError, match="proposed evidence must be active"):
+        store.apply_long_term_patch_firestore(
+            uid="u1",
+            operation_id=operation.operation_id,
+            patch_payload=_patch(),
+            proposed_operation=operation,
+            proposed_evidence=[
+                _evidence(
+                    source_state=source_state,
+                    source_state_reason=(
+                        SourceStateReason.deleted_by_user
+                        if source_state == SourceState.tombstoned
+                        else SourceStateReason.account_purged
+                    ),
+                )
+            ],
+            db_client=db,
+        )
+
+    assert evidence_path not in db.docs
+    assert db.transaction_obj.mutations == []
+
+
+def test_firestore_add_rejects_new_operation_that_collides_with_existing_ledger_row_id(store):
+    first_evidence = _evidence(evidence_id="ev-ledger-v1", source_version="v1")
+    first_operation = _operation(
+        operation_type=MemoryOperationType.ledger_mutation,
+        evidence_ids=[first_evidence.evidence_id],
+    )
+    patch = _patch(
+        new_memory_id="mem-ledger-stable-action",
+        evidence_ids=[first_evidence.evidence_id],
+        ledger_schema_version="knowledge_ledger.v1",
+        initial_tier=MemoryTier.long_term,
+        intent_backed=True,
+        write_reason=LedgerWriteReason.agent_reusable_conclusion,
+    )
+    db = _db_with(operation=first_operation)
+    db.docs.pop("users/u1/memory_evidence/ev1")
+    db.docs["users/u1/memory_state/apply_control"].update({"writer_mode": "ledger", "writer_epoch": 1})
+
+    first = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=first_operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=first_operation,
+        proposed_evidence=[first_evidence],
+        db_client=db,
+    )
+    assert first.status == ApplyStatus.committed
+    original = copy.deepcopy(db.docs["users/u1/memory_items/mem-ledger-stable-action"])
+
+    second_evidence = _evidence(evidence_id="ev-ledger-v2", source_version="v2")
+    second_operation = _operation(
+        operation_type=MemoryOperationType.ledger_mutation,
+        evidence_ids=[second_evidence.evidence_id],
+        observed_head_commit_id=first.control_state.head_commit_id,
+    )
+    second_patch = {
+        **patch,
+        "observed_head_commit_id": first.control_state.head_commit_id,
+        "evidence_ids": [second_evidence.evidence_id],
+    }
+
+    collision = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=second_operation.operation_id,
+        patch_payload=second_patch,
+        proposed_operation=second_operation,
+        proposed_evidence=[second_evidence],
+        db_client=db,
+    )
+
+    assert collision.status == ApplyStatus.invalid_patch
+    assert collision.reason == "add patch new_memory_id already exists"
+    assert db.docs["users/u1/memory_items/mem-ledger-stable-action"] == original
+    assert "users/u1/memory_evidence/ev-ledger-v2" not in db.docs
+
+
+@pytest.mark.parametrize(
+    ("writer_mode", "writer_epoch", "transition_owner"),
+    [
+        ("transitioning_to_ledger", 1, "migration-owner"),
+        ("transitioning_to_compatibility", 2, "rollback-owner"),
+    ],
+)
+def test_firestore_apply_boundary_blocks_ordinary_writers_during_mode_transitions(
+    store, writer_mode, writer_epoch, transition_owner
+):
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+        writer_mode=writer_mode,
+        writer_epoch=writer_epoch,
+        writer_transition_owner=transition_owner,
+    )
+    operation = _operation()
+    db = _db_with(control=control, operation=operation)
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=_patch(),
+        proposed_operation=operation,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert "not admitted" in (result.reason or "")
+    assert not any(path.startswith("users/u1/memory_items/") for path in db.docs)
+
+
+def test_firestore_apply_boundary_blocks_legacy_schema_writer_in_ledger_mode(store):
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+        writer_mode="ledger",
+        writer_epoch=1,
+    )
+    operation = _operation()
+    db = _db_with(control=control, operation=operation)
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=_patch(),
+        proposed_operation=operation,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert "compatibility writer is not admitted" in (result.reason or "")
+    assert not any(path.startswith("users/u1/memory_items/") for path in db.docs)
+
+
+def test_firestore_apply_rejects_user_mutation_disguised_as_ledger_migration(store):
+    existing = _target_item()
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+        writer_mode="transitioning_to_ledger",
+        writer_epoch=1,
+        writer_transition_owner="migration-owner",
+    )
+    operation = _operation(
+        operation_type=MemoryOperationType.user_mutation,
+        source_packet_id="user_mutation:content_edit:mem1:r1:attack",
+        target_memory_id="mem1",
+        logical_payload={
+            "decision": "update",
+            "target_memory_id": "mem1",
+            "memory_text": "Unauthorized edit.",
+            "result_status": "active",
+        },
+    )
+    db = _db_with(control=control, operation=operation, target_items=[existing])
+    patch = _patch(
+        decision=DurablePatchDecision.update,
+        target_memory_id="mem1",
+        memory_text="Unauthorized edit.",
+        ledger_schema_version="knowledge_ledger.v1",
+    )
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        allow_ledger_migration=True,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert "allowlisted pre-ledger schema adaptation" in (result.reason or "")
+    assert db.docs["users/u1/memory_items/mem1"]["content"] == existing.content
+
+
+def test_firestore_apply_rejects_spoofed_user_prefix_for_ledger_append_in_compatibility(store):
+    operation = _operation(
+        operation_type=MemoryOperationType.ledger_mutation,
+        source_packet_id="user_mutation:spoofed-ledger-add",
+    )
+    db = _db_with(operation=operation)
+    patch = _patch(
+        ledger_schema_version="knowledge_ledger.v1",
+        initial_tier=MemoryTier.long_term,
+        intent_backed=True,
+        write_reason=LedgerWriteReason.direct_user_statement,
+        user_asserted=True,
+    )
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert "ledger writer is not admitted" in (result.reason or "")
+
+
+def test_firestore_apply_rejects_spoofed_user_update_that_clears_ledger_schema_in_compatibility(store):
+    existing = _target_item(
+        ledger_schema_version="knowledge_ledger.v1",
+        kind=MemoryKind.fact,
+        subject_scope=MemorySubjectScope.primary_user,
+        intent_backed=True,
+        write_reason=LedgerWriteReason.direct_user_statement,
+        user_asserted=True,
+    )
+    operation = _operation(
+        operation_type=MemoryOperationType.user_mutation,
+        source_packet_id="user_mutation:spoofed-ledger-update",
+        target_memory_id=existing.memory_id,
+        logical_payload={
+            "decision": DurablePatchDecision.update.value,
+            "target_memory_id": existing.memory_id,
+            "memory_text": "Spoofed downgrade.",
+            "result_status": LifecycleState.active.value,
+        },
+    )
+    db = _db_with(operation=operation, target_items=[existing])
+    patch = _patch(
+        decision=DurablePatchDecision.update,
+        target_memory_id=existing.memory_id,
+        memory_text="Spoofed downgrade.",
+        ledger_schema_version=None,
+        expected_item_revision=existing.item_revision,
+        expected_content_hash=existing.content_hash,
+    )
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert "ledger writer is not admitted" in (result.reason or "")
+    stored = db.docs[f"users/u1/memory_items/{existing.memory_id}"]
+    assert stored["ledger_schema_version"] == "knowledge_ledger.v1"
+    assert stored["content"] == existing.content
 
 
 def test_firestore_promotion_persists_long_term_item_and_structured_graph_assertion_atomically(store):
@@ -1705,10 +2345,18 @@ def test_firestore_apply_update_keeps_persisted_timestamps_monotonic_when_apply_
     assert restored.updated_at >= prior_updated_at
 
 
+@pytest.mark.parametrize(
+    ("writer_mode", "operation_type"),
+    [
+        ("transitioning_to_ledger", MemoryOperationType.long_term_apply),
+        ("transitioning_to_compatibility", MemoryOperationType.ledger_mutation),
+    ],
+)
 def test_firestore_apply_retries_committed_operation_from_stored_result_without_rereading_mutable_evidence_or_target(
-    store,
+    store, writer_mode, operation_type
 ):
     operation = _operation(
+        operation_type=operation_type,
         target_memory_id="mem1",
         logical_payload={
             "decision": "update",
@@ -1727,7 +2375,15 @@ def test_firestore_apply_retries_committed_operation_from_stored_result_without_
         source_state_reason=SourceStateReason.account_purged,
         artifact_preservation=ArtifactPreservationState.deleted_by_user,
     )
-    control = MemoryControlState(uid="u1", head_commit_id="head1", account_generation=1, source_generation=2)
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head1",
+        account_generation=1,
+        source_generation=2,
+        writer_mode=writer_mode,
+        writer_epoch=1,
+        writer_transition_owner="transition-owner",
+    )
     db = _db_with(control=control, operation=operation, evidence=purged_evidence)
     patch = _patch(decision=DurablePatchDecision.update, target_memory_id="mem1", memory_text="Updated.")
 
@@ -1821,3 +2477,126 @@ def test_firestore_transaction_set_failure_leaves_store_unchanged_and_retry_comm
     assert db.docs["users/u1/memory_state/apply_control"]["head_commit_id"] == retry.control_state.head_commit_id
     assert retry.operation.committed_memory_item_ids == [item.memory_id for item in retry.memory_items]
     assert retry.operation.committed_outbox_event_ids == [event.event_id for event in retry.outbox_events]
+
+
+def test_explicit_trigger_feedback_receipt_commits_and_replays_with_the_canonical_revision(store):
+    feedback_id = "f" * 64
+    trigger = _target_item(
+        memory_id="trigger-1",
+        user_asserted=True,
+        ledger_schema_version="knowledge_ledger.v1",
+        kind=MemoryKind.trigger,
+        subject_scope=MemorySubjectScope.primary_user,
+        slot=None,
+        trigger_condition={
+            "keywords": ["release"],
+            "action": {"type": "agent_prompt", "prompt": "Give the next release step."},
+        },
+        intent_backed=True,
+        write_reason=LedgerWriteReason.standing_trigger,
+    )
+    source_packet_id = f"user_mutation:jit_trigger_feedback:{feedback_id}:trigger-1:r1:receipt"
+    patch = {
+        "patch_id": f"patch-{feedback_id}",
+        "packet_id": feedback_id,
+        "run_id": feedback_id,
+        "observed_head_commit_id": "head0",
+        "idempotency_key": feedback_id,
+        "decision": DurablePatchDecision.update.value,
+        "target_memory_id": trigger.memory_id,
+        "result_status": LifecycleState.active.value,
+        "evidence_ids": ["ev1"],
+        "expected_item_revision": trigger.item_revision,
+        "expected_content_hash": trigger.content_hash,
+        "arguments": {
+            "jit_trigger_feedback": {
+                "applied_feedback_ids": [feedback_id],
+                "last_action": "useful",
+                "feedback_count": 1,
+            }
+        },
+        "curation_weight": 1,
+    }
+    mutation_identity = build_patch_mutation_identity(patch)
+    patch["mutation_metadata"] = mutation_identity
+    operation = MemoryOperation.new(
+        uid="u1",
+        operation_type=MemoryOperationType.ledger_mutation,
+        source_packet_id=source_packet_id,
+        target_memory_id=trigger.memory_id,
+        evidence_ids=["ev1"],
+        logical_payload={
+            "decision": DurablePatchDecision.update.value,
+            "memory_text": None,
+            "target_memory_id": trigger.memory_id,
+            "result_status": LifecycleState.active.value,
+            "supersedes": [],
+            "arguments": patch["arguments"],
+            "mutation_metadata": mutation_identity,
+        },
+        account_generation=1,
+        source_generation=2,
+        observed_head_commit_id="head0",
+    )
+    receipt = JITTriggerFeedbackReceipt(
+        uid="u1",
+        feedback_id=feedback_id,
+        event_id="e" * 64,
+        trigger_memory_id=trigger.memory_id,
+        account_generation=1,
+        expected_trigger_revision=trigger.item_revision,
+        action="useful",
+        recorded_at=datetime.now(timezone.utc),
+        request_hash="a" * 64,
+    )
+    db = _db_with(operation=operation, target_items=[trigger])
+    db.docs[f"users/u1/jit_proactivity_events/{'e' * 64}"] = _stored_model(
+        JITProactivityEventReceipt(
+            uid="u1",
+            event_id="e" * 64,
+            candidate_id="c" * 64,
+            operation="planned_notification",
+            account_generation=1,
+            trigger_memory_id=trigger.memory_id,
+            trigger_revision=trigger.item_revision,
+            budget_day="2026-08-24",
+            device_id="d" * 64,
+            created_at=datetime.now(timezone.utc),
+            request_hash="c" * 64,
+        )
+    )
+
+    first = store.apply_direct_user_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        trigger_feedback_receipt=receipt,
+        db_client=db,
+    )
+
+    assert first.status == ApplyStatus.committed, first.reason
+    persisted = db.docs[f"users/u1/jit_trigger_feedback/{feedback_id}"]
+    assert persisted["request_hash"] == "a" * 64
+    assert persisted["applied_trigger_revision"] == trigger.item_revision + 1
+    assert db.docs["users/u1/memory_items/trigger-1"]["curation_weight"] == 1
+
+    replay = store.apply_direct_user_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        proposed_operation=operation,
+        trigger_feedback_receipt=receipt,
+        db_client=db,
+    )
+    assert replay.status == ApplyStatus.idempotent_skip
+
+    with pytest.raises(store.MemoryFirestoreApplyError, match="different payload"):
+        store.apply_direct_user_long_term_patch_firestore(
+            uid="u1",
+            operation_id=operation.operation_id,
+            patch_payload=patch,
+            proposed_operation=operation,
+            trigger_feedback_receipt=receipt.model_copy(update={"request_hash": "b" * 64}),
+            db_client=db,
+        )

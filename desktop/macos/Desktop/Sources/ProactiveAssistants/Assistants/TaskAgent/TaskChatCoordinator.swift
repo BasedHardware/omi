@@ -1037,7 +1037,8 @@ final class TaskChatCoordinator: ObservableObject {
         onClose: {
           coordinator.closeChat()
           window?.close()
-        }
+        },
+        onOpenRewindEvidence: nil
       )
       let hostingView = NSHostingView(rootView: panel)
       if let existing = window {

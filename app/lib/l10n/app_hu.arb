@@ -3328,5 +3328,7 @@
     "appReEnableFailedBody": "Ezt az alkalmazást nem sikerült újraengedélyezni. Próbáld újra.",
     "appDisabledOn": "Letiltva ekkor: {date}.",
     "appDisabledLastError": "Utolsó hiba: {error}.",
-    "prerecordedTranscript": "Előre rögzített"
+    "prerecordedTranscript": "Előre rögzített",
+    "pendantRecordingSyncBlocked": "A Pendant még mindig felvételt készít, ezért a tárolt hang nem vihető át. Nyomd meg a Pendant gombját a felvétel leállításához, majd szinkronizálj újra.",
+    "pendantFullSyncBlocked": "A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra."
 }

@@ -22,6 +22,7 @@ import {
   FlaskConical,
   Rocket,
   Handshake,
+  MessageSquarePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,9 +35,9 @@ export function DashboardSidebar() {
 
   // Load collapsed state from localStorage on mount
   useEffect(() => {
-    const savedState = localStorage.getItem('sidebarCollapsed');
+    const savedState = localStorage.getItem("sidebarCollapsed");
     if (savedState !== null) {
-      setIsCollapsed(savedState === 'true');
+      setIsCollapsed(savedState === "true");
     }
   }, []);
 
@@ -44,9 +45,9 @@ export function DashboardSidebar() {
   const toggleCollapse = () => {
     const newState = !isCollapsed;
     setIsCollapsed(newState);
-    localStorage.setItem('sidebarCollapsed', String(newState));
+    localStorage.setItem("sidebarCollapsed", String(newState));
   };
-  
+
   const navItems = [
     {
       title: "Dashboard",
@@ -104,6 +105,11 @@ export function DashboardSidebar() {
       icon: Bell,
     },
     {
+      title: "Prompts",
+      href: "/dashboard/prompts",
+      icon: MessageSquarePlus,
+    },
+    {
       title: "Releases",
       href: "/dashboard/releases",
       icon: Rocket,
@@ -130,26 +136,32 @@ export function DashboardSidebar() {
   };
 
   return (
-    <aside className={cn(
-      "border-r bg-card h-screen flex-shrink-0 sticky top-0 flex flex-col z-20 transition-all duration-300",
-      isCollapsed ? "w-16" : "w-64"
-    )}>
-      <div className={cn(
-        "border-b h-14 flex items-center transition-all duration-300 relative",
-        isCollapsed ? "px-2 justify-center" : "px-4 justify-between"
-      )}>
-        <Link 
-          href="/dashboard" 
+    <aside
+      className={cn(
+        "border-r bg-card h-screen flex-shrink-0 sticky top-0 flex flex-col z-20 transition-all duration-300",
+        isCollapsed ? "w-16" : "w-64",
+      )}
+    >
+      <div
+        className={cn(
+          "border-b h-14 flex items-center transition-all duration-300 relative",
+          isCollapsed ? "px-2 justify-center" : "px-4 justify-between",
+        )}
+      >
+        <Link
+          href="/dashboard"
           className={cn(
             "flex items-center space-x-2 font-semibold transition-all duration-200",
-            isCollapsed ? "justify-center" : "justify-start"
+            isCollapsed ? "justify-center" : "justify-start",
           )}
         >
           <Package2 className="h-6 w-6 flex-shrink-0" />
-          <span className={cn(
-            "transition-opacity duration-200 whitespace-nowrap",
-            isCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
-          )}>
+          <span
+            className={cn(
+              "transition-opacity duration-200 whitespace-nowrap",
+              isCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100",
+            )}
+          >
             OMI Admin
           </span>
         </Link>
@@ -158,7 +170,8 @@ export function DashboardSidebar() {
           size="icon"
           className={cn(
             "h-8 w-8 flex-shrink-0",
-            isCollapsed && "absolute top-1/2 -right-3 translate-y-[-50%] bg-background border border-border rounded-full shadow-sm z-10"
+            isCollapsed &&
+              "absolute top-1/2 -right-3 translate-y-[-50%] bg-background border border-border rounded-full shadow-sm z-10",
           )}
           onClick={toggleCollapse}
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -181,35 +194,43 @@ export function DashboardSidebar() {
                 isCollapsed ? "justify-center" : "justify-start",
                 pathname === item.href
                   ? "bg-primary/10 text-primary"
-                  : "text-foreground hover:bg-accent hover:text-accent-foreground"
+                  : "text-foreground hover:bg-accent hover:text-accent-foreground",
               )}
               title={isCollapsed ? item.title : undefined}
             >
               <item.icon className="h-5 w-5 flex-shrink-0" />
-              <span className={cn(
-                "transition-opacity duration-200",
-                isCollapsed ? "opacity-0 w-0 overflow-hidden ml-0" : "opacity-100 ml-3"
-              )}>
+              <span
+                className={cn(
+                  "transition-opacity duration-200",
+                  isCollapsed
+                    ? "opacity-0 w-0 overflow-hidden ml-0"
+                    : "opacity-100 ml-3",
+                )}
+              >
                 {item.title}
               </span>
             </Link>
           ))}
         </nav>
         <div className="px-2 space-y-1">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             className={cn(
               "w-full text-muted-foreground transition-colors",
-              isCollapsed ? "justify-center" : "justify-start"
+              isCollapsed ? "justify-center" : "justify-start",
             )}
             onClick={handleLogout}
             title={isCollapsed ? "Log out" : undefined}
           >
             <LogOut className="h-5 w-5 flex-shrink-0" />
-            <span className={cn(
-              "transition-opacity duration-200",
-              isCollapsed ? "opacity-0 w-0 overflow-hidden ml-0" : "opacity-100 ml-3"
-            )}>
+            <span
+              className={cn(
+                "transition-opacity duration-200",
+                isCollapsed
+                  ? "opacity-0 w-0 overflow-hidden ml-0"
+                  : "opacity-100 ml-3",
+              )}
+            >
               Log out
             </span>
           </Button>

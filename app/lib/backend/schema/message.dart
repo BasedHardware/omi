@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:collection/collection.dart';
 import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
+import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:uuid/uuid.dart';
 
 enum MessageSender { ai, human }
@@ -246,6 +247,10 @@ class ServerMessage {
   Map<String, dynamic>? rawChartData;
   List<Map<String, dynamic>> contentBlocks;
 
+  /// Optional supplemental references. Text remains authoritative when this
+  /// envelope is absent, malformed, unavailable, or from a future version.
+  ChatEvidenceReferenceEnvelope? evidenceEnvelope;
+
   ServerMessage(
     this.id,
     this.createdAt,
@@ -262,6 +267,7 @@ class ServerMessage {
     this.chartData,
     this.rawChartData,
     this.contentBlocks = const [],
+    this.evidenceEnvelope,
   });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
@@ -269,22 +275,29 @@ class ServerMessage {
   }
 
   static ServerMessage fromGeneratedWireJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedMessage.fromJson(json);
+    // Evidence is deliberately fail-soft UI chrome. Decode it through the
+    // bounded compatibility parser below instead of letting the strict
+    // generated DTO reject an otherwise valid text answer.
+    final generatedJson = Map<String, dynamic>.from(json)..remove('evidence');
+    final generated = wire.GeneratedMessage.fromJson(generatedJson);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
     return ServerMessage.fromGenerated(
       generated,
       fromIntegration: fromIntegration,
       contentBlocks: _decodeContentBlocks(json['content_blocks'], generated.metadata),
+      evidenceEnvelope: _decodeEvidenceEnvelope(json, generated.metadata),
     );
   }
 
   static ServerMessage fromResponseJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedResponseMessage.fromJson(json);
+    final generatedJson = Map<String, dynamic>.from(json)..remove('evidence');
+    final generated = wire.GeneratedResponseMessage.fromJson(generatedJson);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
     return ServerMessage.fromGeneratedResponse(
       generated,
       fromIntegration: fromIntegration,
       contentBlocks: _decodeContentBlocks(json['content_blocks'], generated.metadata),
+      evidenceEnvelope: _decodeEvidenceEnvelope(json, generated.metadata),
     );
   }
 
@@ -294,6 +307,7 @@ class ServerMessage {
     bool askForNps = true,
     ChartData? chartData,
     List<Map<String, dynamic>> contentBlocks = const [],
+    ChatEvidenceReferenceEnvelope? evidenceEnvelope,
   }) {
     final rawChartData = generated.chartData;
     final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);
@@ -313,6 +327,7 @@ class ServerMessage {
       chartData: parsedChartData,
       rawChartData: rawChartData,
       contentBlocks: contentBlocks,
+      evidenceEnvelope: evidenceEnvelope,
     );
   }
 
@@ -321,6 +336,7 @@ class ServerMessage {
     bool? fromIntegration,
     ChartData? chartData,
     List<Map<String, dynamic>> contentBlocks = const [],
+    ChatEvidenceReferenceEnvelope? evidenceEnvelope,
   }) {
     final rawChartData = generated.chartData;
     final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);
@@ -340,6 +356,7 @@ class ServerMessage {
       chartData: parsedChartData,
       rawChartData: rawChartData,
       contentBlocks: contentBlocks,
+      evidenceEnvelope: evidenceEnvelope,
     );
   }
 
@@ -363,7 +380,42 @@ class ServerMessage {
       'rating': rating,
       'chart_data': chartJson,
       'content_blocks': contentBlocks,
+      if (evidenceEnvelope != null) 'evidence': evidenceEnvelope!.toJson(),
     };
+  }
+
+  /// Decode only additive evidence fields. A malformed or unknown payload is
+  /// treated as absent so released text/chat behavior remains unchanged.
+  static ChatEvidenceReferenceEnvelope? _decodeEvidenceEnvelope(
+    Map<String, dynamic> json,
+    String? metadata,
+  ) {
+    final direct =
+        json['evidence'] ?? json['evidence_envelope'] ?? json['evidence_refs'] ?? json['evidence_references'];
+    final parsedDirect = _tryEvidenceEnvelope(direct);
+    if (parsedDirect != null) return parsedDirect;
+
+    if (metadata == null || metadata.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(metadata);
+      if (decoded is! Map) return null;
+      final metadataMap = Map<String, dynamic>.from(decoded);
+      return _tryEvidenceEnvelope(
+        metadataMap['evidence'] ??
+            metadataMap['evidence_envelope'] ??
+            metadataMap['evidence_refs'] ??
+            metadataMap['evidence_references'],
+      );
+    } on FormatException {
+      return null;
+    } on TypeError {
+      return null;
+    }
+  }
+
+  static ChatEvidenceReferenceEnvelope? _tryEvidenceEnvelope(Object? value) {
+    if (value is List) return ChatEvidenceReferenceEnvelope.tryFromJson({'references': value});
+    return ChatEvidenceReferenceEnvelope.tryFromJson(value);
   }
 
   static List<Map<String, dynamic>> _decodeContentBlocks(dynamic firstClass, String? metadata) {
@@ -468,6 +520,11 @@ class ServerMessage {
         return labelled('Memory', [value('summary')]);
       case 'citation':
         return labelled('Source', [value('title'), value('preview')]);
+      case 'evidence':
+      case 'evidence_envelope':
+        // Evidence is optional UI chrome. Never invent fallback answer text for
+        // a reference-only block.
+        return '';
       case 'agentSpawn':
       case 'agent_spawn':
         return labelled('Agent started', [value('title'), value('objective')]);

@@ -982,12 +982,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // re-run on every rewrite of the streaming tail.
       let visibleMessages = visibleTranscriptMessages
       let displayMessages = AgentLifecycleDisplayProjection.project(visibleMessages)
-      let finalAssistantMessageID = ChatOmiMarkPlacement.finalAssistantMessageID(in: displayMessages)
       ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, message in
         ChatBubble(
           message: message,
           app: app,
-          showsOmiMark: message.id == finalAssistantMessageID,
+          // Every Omi reply carries the identity mark — limiting it to the
+          // newest reply left older answers looking unattributed.
+          showsOmiMark: message.sender == .ai,
           onRate: { rating in
             onRate(message.id, rating)
           },

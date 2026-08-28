@@ -115,6 +115,22 @@ def test_firestore_config_declares_screen_activity_app_filter_index():
     )
 
 
+def test_firestore_config_declares_device_routed_frame_request_queue_index():
+    required_fields = [
+        ('device_id', 'ASCENDING'),
+        ('state', 'ASCENDING'),
+        ('created_at', 'ASCENDING'),
+        ('__name__', 'ASCENDING'),
+    ]
+
+    assert any(
+        index.get('collectionGroup') == 'frame_requests'
+        and index.get('queryScope') == 'COLLECTION'
+        and _fields(index) == required_fields
+        for index in _index_specs()
+    )
+
+
 def _reconcile_workflow():
     path = Path(__file__).resolve().parents[3] / '.github/workflows/gcp_firestore_indexes.yml'
     return path.read_text()

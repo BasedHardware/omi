@@ -33,8 +33,16 @@ class OnboardingHandler:
         uid: str,
         send_message: Callable[[Dict[str, Any]], Awaitable[None]],
         stream_transcript: Optional[Callable[[List[Dict[str, Any]]], None]] = None,
+        session_id: Optional[str] = None,
     ) -> None:
         self.uid = uid
+        # Server-generated provenance.  Clients may request onboarding mode,
+        # but they cannot choose or forge this session identity; consumers use
+        # it instead of trusting request.source.
+        # The admission/session identity is issued by the authenticated
+        # backend.  Keep the UUID fallback for existing internal callers, but
+        # never accept a client-provided value here.
+        self.session_id = session_id if isinstance(session_id, str) and len(session_id) >= 16 else uuid.uuid4().hex
         self.send_message = send_message
         self.stream_transcript = stream_transcript  # Callback to inject segments into transcript stream
         self.questions: List[Dict[str, str]] = ONBOARDING_QUESTIONS.copy()

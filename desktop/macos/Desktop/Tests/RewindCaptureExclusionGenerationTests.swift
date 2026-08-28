@@ -191,21 +191,31 @@ final class RewindCaptureExclusionGenerationTests: XCTestCase {
   /// #11572: launch / CI window where `auth_userId` is set but RewindDatabase
   /// has not resolved `currentUserId` yet. Capture preferred auth; isCurrent
   /// used to compare only the DB id and permanently fail-closed.
-  func testOwnerSnapshotStaysCurrentWhenAuthLeadsUnresolvedRewindDatabase() {
-    let defaults = UserDefaults.standard
-    let previousAuth = defaults.object(forKey: .authUserId)
+  ///
+  /// #12039: establish the owner through the production transition boundary.
+  /// Mutating `auth_userId` directly makes the process-wide authorization
+  /// authority correctly revoke the out-of-band owner, so this test otherwise
+  /// depends on which owner-bound suite ran before it.
+  @MainActor
+  func testOwnerSnapshotStaysCurrentWhenAuthLeadsUnresolvedRewindDatabase() async {
+    let ownerFixture = RuntimeOwnerAuthorityTestFixture()
+    addTeardownBlock { @MainActor in
+      await ownerFixture.restore()
+    }
     let previousDB = RewindDatabase.currentUserId
     defer {
-      if let previousAuth {
-        defaults.set(previousAuth, forKey: .authUserId)
-      } else {
-        defaults.removeObject(forKey: .authUserId)
-      }
       RewindDatabase.currentUserId = previousDB
     }
 
+    // Reproduce the shared-state signature from #12039: another suite changed
+    // durable auth outside the transition boundary, so the authorization
+    // authority revoked itself before this test started.
+    await ownerFixture.establish(authOwnerID: "prior-owner-\(UUID().uuidString)")
+    UserDefaults.standard.set("out-of-band-owner-\(UUID().uuidString)", forKey: .authUserId)
+    XCTAssertNil(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+
     let authOwner = "auth-leading-\(UUID().uuidString)"
-    defaults.set(authOwner, forKey: .authUserId)
+    await ownerFixture.establish(authOwnerID: authOwner)
     RewindDatabase.currentUserId = nil
 
     guard let snapshot = RewindCaptureOwnerSnapshot.capture() else {

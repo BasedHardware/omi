@@ -786,6 +786,60 @@ struct ChatPromptBuilder {
     return "# Current Time\n\(formatter.string(from: date)) (\(timeZone.identifier))\n\n\(prompt)"
   }
 
+  /// Shared formatter for calendar-day grounding (see `currentCalendarDay`).
+  private static let calendarDayFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd (EEEE)"
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = .current
+    return f
+  }()
+
+  /// Calendar-day grounding for agents that judge dates, deadlines, or recency but
+  /// not clock time: "2026-08-25 (Tuesday)".
+  ///
+  /// Date-only by contract: the string is stable within a local day, so it can ride in
+  /// a prompt without busting it per call — and it still belongs in the uncached user
+  /// turn, never in a cached system prefix. Without a year the model falls back to its
+  /// training-cutoff year and flags correctly recorded current-era dates as mistakes.
+  static func currentCalendarDay(at date: Date = Date(), timeZone: TimeZone = .current) -> String {
+    if timeZone == .current {
+      return calendarDayFormatter.string(from: date)
+    }
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd (EEEE)"
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = timeZone
+    return f.string(from: date)
+  }
+
+  /// Shared formatter for full local datetime grounding (see `currentLocalDatetime`).
+  private static let localDatetimeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = .current
+    return f
+  }()
+
+  /// Full local datetime with IANA timezone: "Tuesday, August 25, 2026 at 3:45 PM
+  /// (America/New_York)". For agents that also read absolute timestamps (SQL over UTC
+  /// columns, ISO strings) or discuss local times with the user. Uncached user turn
+  /// only — the live clock must never enter a cached system prefix.
+  static func currentLocalDatetime(at date: Date = Date(), timeZone: TimeZone = .current) -> String {
+    let rendered: String
+    if timeZone == .current {
+      rendered = localDatetimeFormatter.string(from: date)
+    } else {
+      let f = DateFormatter()
+      f.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
+      f.locale = Locale(identifier: "en_US_POSIX")
+      f.timeZone = timeZone
+      rendered = f.string(from: date)
+    }
+    return "\(rendered) (\(timeZone.identifier))"
+  }
+
   /// Build a system prompt with the given variables
   static func build(
     template: String,

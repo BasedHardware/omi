@@ -18,6 +18,11 @@ import routers.action_items as action_items_router
 from utils.task_intelligence import task_links
 
 
+@pytest.fixture(autouse=True)
+def _isolate_task_change_wake(monkeypatch):
+    monkeypatch.setattr(action_items_router, 'run_task_changed_wake', lambda *_args, **_kwargs: None)
+
+
 def test_create_update_and_response_round_trip_every_canonical_field():
     payload = {
         'description': 'Send the budget',

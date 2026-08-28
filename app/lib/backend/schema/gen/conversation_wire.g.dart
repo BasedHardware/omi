@@ -368,40 +368,48 @@ class GeneratedGeolocation {
 
 class GeneratedConversationPhoto {
   final String base64;
+  final String? contentType;
   final DateTime? createdAt;
   final String? dataProtectionLevel;
   final String? description;
   final bool discarded;
   final String? id;
+  final String? storageId;
 
   const GeneratedConversationPhoto({
     required this.base64,
+    this.contentType,
     this.createdAt,
     this.dataProtectionLevel,
     this.description,
     this.discarded = false,
     this.id,
+    this.storageId,
   });
 
   factory GeneratedConversationPhoto.fromJson(Map<String, dynamic> json) {
     return GeneratedConversationPhoto(
       base64: _required(_readFieldValue<String>(_readField(json, const ["base64"]), "base64", _readString, requiredField: true, nullable: false), "base64"),
+      contentType: _readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString, requiredField: false, nullable: true),
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
       description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
       discarded: _required(_readFieldValue<bool>(_readField(json, const ["discarded"]), "discarded", _readBool, requiredField: false, nullable: false, defaultValue: false), "discarded"),
       id: _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: false, nullable: true),
+      storageId: _readFieldValue<String>(_readField(json, const ["storage_id"]), "storage_id", _readString, requiredField: false, nullable: true),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'base64': base64,
+      'content_type': contentType,
       'created_at': createdAt?.toUtc().toIso8601String(),
       'data_protection_level': dataProtectionLevel,
       'description': description,
       'discarded': discarded,
       'id': id,
+      'storage_id': storageId,
     };
   }
 }

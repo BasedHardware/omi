@@ -1150,8 +1150,19 @@ struct DesktopHomeView: View {
         GoalCelebrationView()
       }
       .overlay(alignment: .bottom) {
-        // One-time rating ask, due after the user's 3rd question.
+        // One-time rating ask, due after the user's 3rd question. Remote
+        // (admin-authored) prompts render through the same slot; the built-in
+        // ask has right of way inside RemotePromptEngine.evaluate().
         RatingPromptBar()
+        RemotePromptBar()
+      }
+      .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "signed-out") {
+        // Re-runs on every owner transition (same pattern as the chat-first
+        // capability task): cached prompt state must swap accounts instantly.
+        RatingPromptManager.shared.ownerDidChange()
+        RemotePromptEngine.shared.ownerDidChange()
+        RemotePromptEngine.shared.start()
+        await RatingPromptManager.shared.seedFromHistoryIfNeeded()
       }
       .overlay {
         if !usesChatFirstShell && showTryAskingPopup {
@@ -1324,26 +1335,24 @@ struct DesktopHomeView: View {
   @ViewBuilder
   private var sidebarSlot: some View {
     if showsPrimarySidebar {
-      ZStack {
-        SidebarView(
-          selectedIndex: $selectedIndex,
-          isCollapsed: $isSidebarCollapsed,
-          memoryDestinationRawValue: $memoryDestinationRawValue,
-          appState: appState
-        )
-        .opacity(isInSettings ? 0 : 1)
-        .allowsHitTesting(!isInSettings)
-        if isInSettings { settingsSidebar }
+      LegacySidebarSurface {
+        ZStack {
+          SidebarView(
+            selectedIndex: $selectedIndex,
+            isCollapsed: $isSidebarCollapsed,
+            memoryDestinationRawValue: $memoryDestinationRawValue,
+            appState: appState
+          )
+          .opacity(isInSettings ? 0 : 1)
+          .allowsHitTesting(!isInSettings)
+          if isInSettings { settingsSidebar }
+        }
       }
-      .fixedSize(horizontal: true, vertical: false)
-      .clipped()
     }
   }
 
-  /// The settings section list. In the glass shell it belongs *inside* the Settings panel rather than
-  /// beside the whole window: the window has no ground, so a nav column left outside the panel is a
-  /// list of controls floating on the user's wallpaper. It needs no surface of its own — its
-  /// `Ink.rowFill` is already a wash meant to read as a shaded part of the glass it sits on.
+  /// The settings section list. Modern settings hosts it inside the page panel; legacy Home hosts the
+  /// whole sidebar slot on `LegacySidebarSurface`, so this view always inherits a glass ground.
   private var settingsSidebar: some View {
     SettingsSidebar(
       selectedSection: $selectedSettingsSection,
@@ -1555,7 +1564,11 @@ private struct PageContentView: View {
           TasksPage(
             viewModel: viewModelContainer.tasksViewModel,
             chatCoordinator: viewModelContainer.taskChatCoordinator,
-            chatProvider: viewModelContainer.chatProvider))
+            chatProvider: viewModelContainer.chatProvider,
+            onOpenRewindEvidence: { screenshotID in
+              RewindCitationFocusState.shared.request(screenshotID)
+              selectedTabIndex = SidebarNavItem.rewind.rawValue
+            }))
       case 7:
         RewindPage(appState: appState)
       case 8:

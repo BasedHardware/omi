@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the main window occasionally ignoring clicks after reopening"
+}

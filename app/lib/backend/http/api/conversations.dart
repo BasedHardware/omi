@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -257,6 +256,20 @@ Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String c
 
 Future<ServerConversation?> getConversationById(String conversationId) async {
   return (await getConversationByIdResult(conversationId)).item;
+}
+
+/// Fetches conversation-lifetime photo bytes for storage-backed photos. Legacy
+/// inline base64 photos continue to render without a network round trip.
+Future<Uint8List?> getConversationPhotoImage(String conversationId, String photoId) async {
+  final response = await makeApiCall(
+    url:
+        '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/photos/${Uri.encodeComponent(photoId)}/image',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response?.statusCode != 200) return null;
+  return response!.bodyBytes;
 }
 
 Future<bool> updateConversationTitle(String conversationId, String title) async {
