@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-shell-remount-on-navigate",
+  "violated_contract": "The signed-in web shell (providers, sidebar, bottom bar, recording context) is one instance shared by every authenticated route; a route change must reconcile the page subtree in place. Keying the shell by pathname or registering a page with its own shell instance remounts the whole DOM on navigation, resetting scroll, discarding in-progress state such as an active recording, and reading as a page reload.",
+  "canonical_prevention": "Register client routes with kind 'authenticated' so they ride the shared (authenticated) layout, and never key the persistent shell (or any provider-bearing ancestor) by pathname. A render test that changes the mocked pathname and asserts sidebar and bottom bar mount exactly once pins the contract.",
+  "canonical_prevention_artifact": [
+    "web/app/src/components/layout/__tests__/MainLayout.test.tsx",
+    "web/app/src/moonshine/register-client-route.tsx"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["web/app/src/app/**", "web/app/src/components/layout/**", "web/app/src/moonshine/**"],
+  "status": "open"
+}
