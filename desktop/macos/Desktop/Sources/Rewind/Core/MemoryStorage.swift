@@ -257,6 +257,25 @@ actor MemoryStorage {
     }
   }
 
+  /// Local rows whose backend create never landed, oldest first.
+  ///
+  /// A memory only reaches chat recall, the phone, and the knowledge graph once
+  /// the backend has it, so a failed sync has to be retried rather than left as
+  /// a permanently local row.
+  func unsyncedLocalMemories(limit: Int) async throws -> [MemoryRecord] {
+    guard limit > 0 else { return [] }
+    let db = try await ensureInitialized()
+
+    return try await db.read { database in
+      try MemoryRecord
+        .filter(Column("deleted") == false)
+        .filter(Column("backendId") == nil)
+        .order(Column("createdAt").asc)
+        .limit(limit)
+        .fetchAll(database)
+    }
+  }
+
   /// Read a bounded, newest-first snapshot of mirrored canonical candidates.
   ///
   /// The caller supplies the bound from its authoritative sync/list contract;

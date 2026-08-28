@@ -1044,6 +1044,9 @@ extension Notification.Name {
   static let refreshAllData = Notification.Name("refreshAllData")
   /// Posted after a conversation is deleted so dependent views can prune local state.
   static let conversationDeleted = Notification.Name("conversationDeleted")
+  /// Posted after a memory is written outside the memories page — a chat save or a
+  /// proactive extraction — so an open page re-reads instead of showing a stale list.
+  static let memoriesDidChange = Notification.Name("memoriesDidChange")
   /// Posted by the local desktop automation bridge to request semantic navigation.
   static let desktopAutomationNavigateRequested = Notification.Name(
     "desktopAutomationNavigateRequested")

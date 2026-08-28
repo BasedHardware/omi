@@ -225,6 +225,45 @@ final class MemoryAssistantDurabilityPipelineTests: XCTestCase {
       XCTAssertEqual(captured.count, testCase.historicalSuccess ? 2 : 1)
     }
   }
+
+  /// The retry half of the same pipeline: a row that is already durable locally
+  /// re-sends only the backend create, and never re-emits the extraction
+  /// terminal that would double-count the memory.
+  func testRetryOfAPersistedLocalRowSyncsWithoutReemittingTelemetry() async {
+    let cases: [(remote: Bool, mark: Bool, outcome: MemoryAssistantDurability.Outcome, calls: [String])] = [
+      (true, true, .synced, ["remote", "mark"]),
+      (false, true, .syncFailed, ["remote"]),
+      (true, false, .syncStatePersistenceFailed, ["remote", "mark"]),
+    ]
+
+    for testCase in cases {
+      captured = []
+      let operations = MemoryAssistantDurabilityFixtureOperations(
+        insertSucceeds: true,
+        remoteSucceeds: testCase.remote,
+        markSucceeds: testCase.mark
+      )
+      let pipeline = MemoryAssistantDurabilityPipeline(
+        runner: MemoryAssistantProductionDurability(operations: operations)
+      )
+
+      let result = await pipeline.syncPersistedLocal(
+        MemoryAssistantDurabilityRequest(
+          memory: ExtractedMemory(content: "stranded memory", category: .system, sourceApp: "Test", confidence: 0.82),
+          screenshotId: nil,
+          contextSummary: "test",
+          windowTitle: nil,
+          ownerID: "test-owner"
+        ),
+        localID: 42
+      )
+
+      XCTAssertEqual(result, testCase.outcome)
+      let actualCalls = await operations.recordedCalls()
+      XCTAssertEqual(actualCalls, testCase.calls, "retry must not re-insert the local row")
+      XCTAssertTrue(captured.isEmpty, "retry must not emit an extraction terminal")
+    }
+  }
 }
 
 private enum MemoryAssistantAnalysisFixtureError: Error {

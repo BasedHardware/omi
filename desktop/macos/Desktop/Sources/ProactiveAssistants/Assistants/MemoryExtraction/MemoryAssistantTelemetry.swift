@@ -150,6 +150,11 @@ struct MemoryAssistantDurabilityRequest: Sendable {
 /// ``MemoryAssistant`` rather than exercising a parallel helper.
 protocol MemoryAssistantDurabilityRunning: Sendable {
   func persistAndSync(_ request: MemoryAssistantDurabilityRequest) async -> MemoryAssistantDurability.Outcome
+  /// Retry the backend half for a row that is already durable locally.
+  func syncPersistedLocal(
+    _ request: MemoryAssistantDurabilityRequest,
+    localID: Int64
+  ) async -> MemoryAssistantDurability.Outcome
 }
 
 /// The three production operations behind the durable sequence. Returning only
@@ -241,6 +246,25 @@ actor MemoryAssistantProductionDurability: MemoryAssistantDurabilityRunning {
     guard let localID = await operations.insertLocalMemory(request) else {
       return .localPersistenceFailed
     }
+    guard let receipt = await operations.createRemoteMemory(request) else {
+      return .syncFailed
+    }
+    guard
+      await operations.markLocalMemorySynced(
+        id: localID,
+        receipt: receipt,
+        ownerID: request.ownerID
+      )
+    else {
+      return .syncStatePersistenceFailed
+    }
+    return .synced
+  }
+
+  func syncPersistedLocal(
+    _ request: MemoryAssistantDurabilityRequest,
+    localID: Int64
+  ) async -> MemoryAssistantDurability.Outcome {
     guard let receipt = await operations.createRemoteMemory(request) else {
       return .syncFailed
     }
@@ -354,5 +378,14 @@ actor MemoryAssistantDurabilityPipeline {
       MemoryAssistantDurability.emitPersistenceTerminal(outcome, confidence: confidence)
     }
     return outcome
+  }
+
+  /// Retries emit no terminal: the extraction they belong to already emitted
+  /// one, and re-emitting would count the same memory twice.
+  func syncPersistedLocal(
+    _ request: MemoryAssistantDurabilityRequest,
+    localID: Int64
+  ) async -> MemoryAssistantDurability.Outcome {
+    await runner.syncPersistedLocal(request, localID: localID)
   }
 }

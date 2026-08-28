@@ -533,6 +533,14 @@ class MemoriesViewModel: ObservableObject {
       }
       .store(in: &cancellables)
 
+    // A memory written elsewhere (chat tool, proactive extraction) is only in
+    // the backend projection; without this the open page keeps its stale list.
+    NotificationCenter.default.publisher(for: .memoriesDidChange)
+      .sink { [weak self] _ in
+        Task { await self?.refreshMemoriesIfNeeded() }
+      }
+      .store(in: &cancellables)
+
     // Conversation delete: purge conversation-sourced memories from local cache + re-fetch.
     NotificationCenter.default.publisher(for: .conversationDeleted)
       .sink { [weak self] notification in
