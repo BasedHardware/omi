@@ -3912,7 +3912,12 @@ struct TasksPage: View {
           chatToggleButton
         }
         addTaskButton
-        taskSettingsButton
+        // HIDDEN DELIBERATELY (Nik, 2026-08-25): the gear deep-linked to the Task
+        // Assistant pane, which is hidden from Settings. TasksHeaderSettingsGear
+        // consults the policy and is host-tested; do not add a parallel gear here.
+        TasksHeaderSettingsGear {
+          NotificationCenter.default.post(name: .navigateToTaskSettings, object: nil)
+        }
       }
     }
     .padding(.horizontal, OmiSpacing.lg)
