@@ -32,5 +32,8 @@
     "eslint": "8.57.1",
     "vitest": "4.1.10",
     "wrangler": "4.123.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.62.4"
   }
 }
