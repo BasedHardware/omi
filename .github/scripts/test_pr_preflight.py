@@ -351,11 +351,23 @@ class SelectionTests(unittest.TestCase):
         git_isolation = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
 
         def run(*args: str, cwd: Path) -> None:
-            subprocess.run(["git", *git_isolation, *args], cwd=cwd, check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["git", *git_isolation, *args],
+                cwd=cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
 
         def rev_parse(cwd: Path, ref: str = "HEAD") -> str:
             result = subprocess.run(
-                ["git", *git_isolation, "rev-parse", ref], cwd=cwd, check=True, capture_output=True, text=True
+                ["git", *git_isolation, "rev-parse", ref],
+                cwd=cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
             )
             return result.stdout.strip()
 
@@ -410,6 +422,7 @@ class SelectionTests(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
         )
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("scripts/dev-harness/run-python.sh", result.stdout)
@@ -475,6 +488,7 @@ class SelectionTests(unittest.TestCase):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
             )
             coverage = subprocess.run(
                 [
@@ -488,6 +502,7 @@ class SelectionTests(unittest.TestCase):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
             )
             self.assertEqual(invariant.returncode, 1, invariant.stdout)
             self.assertIn("INV-AUTH-1", invariant.stdout)
@@ -542,6 +557,7 @@ class SelectionTests(unittest.TestCase):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
             )
 
         self.assertEqual(coverage.returncode, 1, coverage.stdout)
@@ -563,6 +579,7 @@ class SelectionTests(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
         )
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("## Product invariants affected", result.stdout)
@@ -609,6 +626,7 @@ class SelectionTests(unittest.TestCase):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8",
             )
             # This test isolates metadata-file selection. Other manifest-selected
             # repository guardrails may legitimately fail as global state evolves;
