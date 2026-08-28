@@ -93,6 +93,8 @@ export function useNativeDevices() {
                 phase: 'disconnected',
                 capture: 'idle',
                 lastEvent: 'Found 1 Omi device',
+                microphone: 'unknown',
+                notifications: 'unknown',
               }
             : mergeDiscovery(current, event),
         );

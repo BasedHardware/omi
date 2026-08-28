@@ -15,6 +15,8 @@ const snapshot = (overrides: Partial<NativeSnapshot> = {}): NativeSnapshot => ({
   phase: 'disconnected',
   capture: 'idle',
   lastEvent: 'ready',
+  microphone: 'unknown',
+  notifications: 'unknown',
   ...overrides,
 });
 

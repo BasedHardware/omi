@@ -62,10 +62,10 @@ export type NativeSnapshot = {
   phase: ConnectionPhase;
   capture: 'idle' | 'recording' | 'stopping';
   lastEvent: string;
+  microphone: 'unknown' | 'granted' | 'denied';
+  notifications: 'unknown' | 'granted' | 'denied';
   codec?: number;
   captureMode?: CaptureMode;
-  microphone?: 'unknown' | 'granted' | 'denied';
-  notifications?: 'unknown' | 'granted' | 'denied';
   background?: 'inactive' | 'active';
   audioRoute?: string;
 };
@@ -80,8 +80,8 @@ export type OmiNative = {
   getSnapshot(): Promise<NativeSnapshot>;
   getBluetoothState(): Promise<BluetoothState>;
   requestPermissions(): Promise<{
-    microphone: NonNullable<NativeSnapshot['microphone']>;
-    notifications: NonNullable<NativeSnapshot['notifications']>;
+    microphone: NativeSnapshot['microphone'];
+    notifications: NativeSnapshot['notifications'];
   }>;
   startScan(
     timeoutSeconds?: number,

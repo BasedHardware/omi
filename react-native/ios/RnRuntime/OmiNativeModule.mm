@@ -348,6 +348,8 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     @"phase": self.connectionState,
     @"capture": self.audioNotifying ? @"recording" : @"idle",
     @"lastEvent": self.lastEvent,
+    @"microphone": @"unknown",
+    @"notifications": @"unknown",
   } mutableCopy];
   if (self.codec != nil) {
     snapshot[@"codec"] = self.codec;
