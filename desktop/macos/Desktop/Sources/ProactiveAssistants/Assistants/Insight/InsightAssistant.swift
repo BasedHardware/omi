@@ -626,6 +626,15 @@ actor InsightAssistant: ProactiveAssistant {
 
   // MARK: - Core Extraction (shared by production + test)
 
+  /// The clock line grounding the model to the user's local calendar, clock, and
+  /// timezone. The year is load-bearing: without it the model falls back to its
+  /// training-cutoff year and flags correctly recorded current-era dates on screen as
+  /// mistakes (SCA-358). Rides in the per-call user prompt — the system prompt stays
+  /// free of live clock so its cached prefix remains byte-stable.
+  static func analysisClockLine(at date: Date, timeZone: TimeZone = .current) -> String {
+    "Date/Time: " + ChatPromptBuilder.currentLocalDatetime(at: date, timeZone: timeZone)
+  }
+
   /// Two-phase insight extraction:
   /// Phase 1 (text-only): Activity summary + SQL investigation loop. Model investigates via
   ///   execute_sql, then calls `request_screenshot` with an ID and its findings so far.
@@ -643,13 +652,11 @@ actor InsightAssistant: ProactiveAssistant {
     var sqlCount = 0
 
     // Build prompt with current context
-    let timeFormatter = DateFormatter()
-    timeFormatter.dateFormat = "h:mm a, EEEE"
     var prompt = "CURRENT APP: \(appName)."
     if let windowTitle = windowTitle, !windowTitle.isEmpty {
       prompt += " Window: \"\(windowTitle)\"."
     }
-    prompt += " Time: \(timeFormatter.string(from: referenceTime))."
+    prompt += " \(Self.analysisClockLine(at: referenceTime))."
 
     // Add activity summary from database, anchored to the reference time
     let elapsed = referenceTime.timeIntervalSince(lookbackStart)

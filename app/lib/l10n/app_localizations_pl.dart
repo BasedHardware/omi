@@ -2045,6 +2045,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get memoryDeleted => 'Wspomnienie usunięte.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Cofnij';
 
   @override

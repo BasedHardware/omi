@@ -1162,6 +1162,42 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
   }
 
+  func testJITQABackendTupleIsPreservedInAgentChildEnvironment() {
+    let localTuple = [
+      "OMI_PYTHON_API_URL": "http://127.0.0.1:18080",
+      "OMI_DESKTOP_API_URL": "http://127.0.0.1:18081",
+      "OMI_AUTH_API_URL": "http://127.0.0.1:18080",
+      "OMI_ENV_STAGE": "dev",
+    ]
+    let localChild = AgentRuntimeProcess.childBackendRoutingEnvironment(
+      baseEnvironment: localTuple,
+      rustBase: "http://127.0.0.1:18081"
+    )
+    XCTAssertEqual(localChild["OMI_PYTHON_API_URL"], "http://127.0.0.1:18080")
+    XCTAssertEqual(localChild["OMI_DESKTOP_API_URL"], "http://127.0.0.1:18081")
+    XCTAssertEqual(localChild["OMI_AUTH_API_URL"], "http://127.0.0.1:18080")
+    XCTAssertEqual(localChild["OMI_ENV_STAGE"], "dev")
+    XCTAssertEqual(localChild["OMI_API_BASE_URL"], "http://127.0.0.1:18081/v2")
+
+    let deployedTuple = [
+      "OMI_PYTHON_API_URL": "https://api.omiapi.com",
+      "OMI_DESKTOP_API_URL": "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
+      "OMI_AUTH_API_URL": "https://api.omiapi.com",
+      "OMI_ENV_STAGE": "dev",
+    ]
+    let deployedChild = AgentRuntimeProcess.childBackendRoutingEnvironment(
+      baseEnvironment: deployedTuple,
+      rustBase: "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
+    )
+    XCTAssertEqual(deployedChild["OMI_PYTHON_API_URL"], "https://api.omiapi.com")
+    XCTAssertEqual(deployedChild["OMI_AUTH_API_URL"], "https://api.omiapi.com")
+    XCTAssertEqual(
+      deployedChild["OMI_API_BASE_URL"],
+      "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/v2"
+    )
+    XCTAssertFalse(deployedChild.values.contains { $0.contains("api.omi.me") })
+  }
+
   @MainActor
   func testUsableByokEnvironmentSuppressesAllKeysWhenOneProviderIsKnownBad() {
     let savedSelectedProvider = UserDefaults.standard.string(forKey: .byokLLMProvider)
@@ -1179,6 +1215,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
         }
       }
       CredentialHealthManager.shared.reset()
+      APIKeyService.persistEnrolledFingerprints([:])
       if let savedSelectedProvider {
         UserDefaults.standard.set(savedSelectedProvider, forKey: .byokLLMProvider)
       } else {
@@ -1190,6 +1227,11 @@ final class AgentRuntimeProcessTests: XCTestCase {
     for provider in BYOKProvider.allCases {
       UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
     }
+    APIKeyService.persistEnrolledFingerprints(
+      Dictionary(
+        uniqueKeysWithValues: BYOKProvider.allCases.map {
+          ($0.rawValue, APIKeyService.byokFingerprint("sk-agent-\($0.rawValue)"))
+        }))
     UserDefaults.standard.set(BYOKLLMProvider.openai.rawValue, forKey: .byokLLMProvider)
     let openAIKey = APIKeyService.byokKey(.openai)!
     // usableBYOKEnvironment() gates on isByokActive, which requires the
@@ -1228,6 +1270,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
         }
       }
       CredentialHealthManager.shared.reset()
+      APIKeyService.persistEnrolledFingerprints([:])
       if let savedSelectedProvider {
         UserDefaults.standard.set(savedSelectedProvider, forKey: .byokLLMProvider)
       } else {
@@ -1239,6 +1282,11 @@ final class AgentRuntimeProcessTests: XCTestCase {
     for provider in BYOKProvider.allCases {
       UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
     }
+    APIKeyService.persistEnrolledFingerprints(
+      Dictionary(
+        uniqueKeysWithValues: BYOKProvider.allCases.map {
+          ($0.rawValue, APIKeyService.byokFingerprint("sk-agent-\($0.rawValue)"))
+        }))
     UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
     // usableBYOKEnvironment() gates on isByokActive, which requires the
     // selected provider's key to be enrolled (#11454's fingerprint contract).

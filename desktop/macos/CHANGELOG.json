@@ -2,6 +2,47 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.231",
+      "date": "2026-08-28",
+      "changes": [
+        "Insight and Focus cards no longer claim the system clock is stuck in 2026 or ask you to double-check 2026-dated items: the assistants now know today's date and only flag a date when it is genuinely wrong, not because its year is beyond their training data.",
+        "A chat window you moved or resized no longer snaps back to the top of the screen when switching Spaces"
+      ]
+    },
+    {
+      "version": "0.12.230",
+      "date": "2026-08-27",
+      "changes": [
+        "Voice replies keep the same deep male voice even when the assistant fails over between providers"
+      ]
+    },
+    {
+      "version": "0.12.229",
+      "date": "2026-08-27",
+      "changes": [
+        "Every Omi reply in chat shows the Omi mark again, not just the newest one"
+      ]
+    },
+    {
+      "version": "0.12.228",
+      "date": "2026-08-27",
+      "changes": [
+        "Fixed the notch island disappearing after you hover over it — it stays put now instead of needing a Push-to-Talk press to bring it back",
+        "Rating and in-app prompt history is now tracked per account, so switching accounts on one Mac never hides or repeats prompts incorrectly.",
+        "Omi can now ask short in-app questions (stars, NPS, quick choices) configured by the team - no update needed, one prompt at a time, never twice."
+      ]
+    },
+    {
+      "version": "0.12.227",
+      "date": "2026-08-27",
+      "changes": [
+        "Conversation photos now remain available with their conversation and render reliably on desktop.",
+        "Added smarter just-in-time proactive help with safer trigger authority, durable memory privacy cleanup, explicit feedback controls, and offline retry when feedback cannot be sent immediately",
+        "Made planned proactive triggers run through the authoritative local watchlist before ambient suggestions.",
+        "Omi can now act once on an enrolled standing proactive instruction when its locally observed conditions are met, with durable duplicate and daily-budget protection"
+      ]
+    },
+    {
       "version": "0.12.226",
       "date": "2026-08-27",
       "changes": [

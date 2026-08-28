@@ -104,9 +104,9 @@ def test_cascade_delete_cleans_memories_before_conversation_doc():
     fn_start = source.index("def delete_conversation(")
     fn_end = source.index("\n@router.", fn_start)
     body = source[fn_start:fn_end]
-    conv_delete_idx = body.index("conversations_db.delete_conversation")
+    conv_delete_idx = body.index("delete_conversation_and_frame_evidence")
     cascade_idx = body.index("if cascade:")
-    memories_idx = body.index("retract_conversation_memories")
+    memories_idx = body.index("memory_service.retract_conversation_memories")
     action_items_idx = body.index("delete_action_items_for_conversation")
     assert cascade_idx < memories_idx < conv_delete_idx
     assert cascade_idx < action_items_idx < conv_delete_idx

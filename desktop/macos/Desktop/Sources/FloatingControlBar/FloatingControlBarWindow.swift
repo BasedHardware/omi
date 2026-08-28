@@ -178,6 +178,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   static let notchHoverMenuCollapseAnimation: Animation = .spring(response: 0.3, dampingFraction: 1.0)
   static let notchHoverMenuExpandDuration: TimeInterval = 0.16
   static let notchHoverMenuCollapseDuration: TimeInterval = 0.10
+  /// How long after the collapse spring's logical completion its visual tail
+  /// can still hold the content's min size above the idle island height.
+  static let notchHoverMenuCollapseSettleTail: TimeInterval = 0.45
   private static let frameNoopEpsilon: CGFloat = 0.5
   private static let startupDisplayRevalidationDelays: [TimeInterval] = [0.2, 0.8, 2.0]
   private static let topInset: CGFloat = 40
@@ -1016,6 +1019,33 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     scheduleNotchRevealCompletion(generation: revealGeneration, after: duration)
   }
 
+  // MARK: - Automation hover seam (non-production)
+  //
+  // Drives the same pointer entry point the tracking view calls from real
+  // mouse events, so hover open/close can be exercised without a cursor.
+  func automationSimulateNotchPointer(inside: Bool) {
+    let point: NSPoint =
+      inside
+      ? NSPoint(x: frame.width / 2 - Self.notchHiddenCenterWidth / 2 - 12, y: frame.height - 4)
+      : NSPoint(x: -400, y: -400)
+    updateNotchPointer(localPoint: point)
+  }
+
+  var automationNotchStateSnapshot: [String: String] {
+    [
+      "isVisible": isVisible ? "true" : "false",
+      "alpha": String(format: "%.3f", alphaValue),
+      "frame": NSStringFromRect(frame),
+      "usesNotchIsland": state.usesNotchIsland ? "true" : "false",
+      "notchRevealProgress": String(format: "%.3f", state.notchRevealProgress),
+      "hoverMenuOpen": state.notchHoverMenuOpen ? "true" : "false",
+      "showingAIConversation": state.showingAIConversation ? "true" : "false",
+      "isVoicePresentationActive": state.isVoicePresentationActive ? "true" : "false",
+      "currentNotification": state.currentNotification == nil ? "none" : "present",
+      "screen": screen.map { NSStringFromRect($0.frame) } ?? "nil",
+    ]
+  }
+
   private enum NotchPointerMode {
     case activationOnly
     case openMenuRetention
@@ -1082,6 +1112,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     // unrelated controls in windows underneath it.
     state.setNotchHoverMenuOpen(allowed)
     if allowed {
+      notchCollapseReassertTask?.cancel()
+      notchCollapseReassertTask = nil
       resizeForAgentSwitcher(visible: true)
     }
   }
@@ -2030,9 +2062,26 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
   }
 
+  private var notchCollapseReassertTask: Task<Void, Never>?
+
   func settleNotchAgentSwitcherCollapse() {
     guard notchModeEnabled, !state.isNotchHoverMenuVisible else { return }
     resizeForAgentSwitcher(visible: false)
+    // The collapse spring is still shrinking the content when the resize
+    // above lands, and the hosting view's min-size constraint grows the
+    // panel right back (the growth itself is top-re-anchored by
+    // `reanchorNotchTopEdgeIfNeeded`, so the island stays visible). One
+    // re-assert after the spring's visual tail returns the panel to the
+    // idle island size instead of leaving a stale menu-sized frame.
+    notchCollapseReassertTask?.cancel()
+    notchCollapseReassertTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(
+        nanoseconds: UInt64(Self.notchHoverMenuCollapseSettleTail * 1_000_000_000))
+      guard !Task.isCancelled, let self, self.notchModeEnabled,
+        !self.state.isNotchHoverMenuVisible
+      else { return }
+      self.resizeForAgentSwitcher(visible: false)
+    }
   }
 
   /// Window size for the pill-mode agent list. No chrome band and no glow
@@ -2566,11 +2615,38 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   func windowDidResize(_ notification: Notification) {
     syncMouseInterception()
+    reanchorNotchTopEdgeIfNeeded()
     // Response size persistence is committed when the user finishes dragging
     // the resize grip. Persisting ordinary resize notifications here records
     // programmatic min-height transitions as user preferences because AppKit
     // can deliver the final resize notification after our animation flag is
     // cleared.
+  }
+
+  /// Keeps the island hanging from the screen top no matter who resized the
+  /// window. The buggy resizes come from auto layout (SwiftUI content that has
+  /// not finished collapsing pushes the panel back up from a pinned bottom-left
+  /// origin), which bypasses every programmatic resize path — so the anchor is
+  /// enforced at the notification, not at the call sites.
+  private var isReanchoringNotchTop = false
+  private func reanchorNotchTopEdgeIfNeeded() {
+    guard notchModeEnabled, !isReanchoringNotchTop else { return }
+    guard let screenFrame = (screen ?? screenForPlacement)?.frame else { return }
+    guard
+      let anchored = FloatingControlBarGeometry.notchTopReanchoredFrame(
+        frame: frame,
+        screenFrame: screenFrame,
+        isResizable: styleMask.contains(.resizable),
+        isUserDragging: isUserDragging,
+        isConversationOpen: state.conversationSurface.isOpen
+      )
+    else { return }
+    log(
+      "FloatingControlBar: re-anchoring notch top edge from \(frame) to \(anchored)"
+    )
+    isReanchoringNotchTop = true
+    setFrame(anchored, display: true, animate: false)
+    isReanchoringNotchTop = false
   }
 
   func finishUserResponseResize() {
@@ -3383,6 +3459,7 @@ class FloatingControlBarManager {
     kind: ProactiveNotificationKind? = nil,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
+    jitFeedbackContext: JITTriggerFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
@@ -3409,6 +3486,7 @@ class FloatingControlBarManager {
       kind: kind,
       context: context,
       action: action,
+      jitFeedbackContext: jitFeedbackContext,
       suggestionTelemetryIdentity: suggestionTelemetryIdentity,
       insightDeliveryID: insightDeliveryID,
       screenshotData: screenshotData,

@@ -163,6 +163,40 @@ final class SystemCalendarMeetingContextServiceTests: XCTestCase {
     XCTAssertEqual(counts.reads, 2)
   }
 
+  func testTriggerObservationUsesExistingGrantWithoutPromptOrUploadAndCapsAt32() async {
+    let events = (0..<40).map { index in
+      snapshot(
+        id: "event-\(index)", title: "Planning \(index)",
+        start: referenceDate.addingTimeInterval(-60),
+        end: referenceDate.addingTimeInterval(60))
+    }
+    let provider = SystemCalendarProviderStub(state: .allowed, snapshots: events)
+    let uploader = SystemCalendarUploaderStub()
+    let service = SystemCalendarMeetingContextService(provider: provider, uploader: uploader)
+
+    let observed = await service.authorizedTriggerEvents(around: referenceDate)
+
+    XCTAssertEqual(observed.count, 32)
+    XCTAssertTrue(observed.allSatisfy { $0.eventType == "meeting" })
+    let counts = await provider.counts()
+    let uploaded = await uploader.uploadedPayloads()
+    XCTAssertEqual(counts.requests, 0)
+    XCTAssertEqual(counts.reads, 1)
+    XCTAssertTrue(uploaded.isEmpty)
+  }
+
+  func testTriggerObservationWithoutGrantIsNoMatchInputAndNeverPrompts() async {
+    let provider = SystemCalendarProviderStub(state: .notDetermined)
+    let service = SystemCalendarMeetingContextService(
+      provider: provider, uploader: SystemCalendarUploaderStub())
+
+    let observed = await service.authorizedTriggerEvents(around: referenceDate)
+    XCTAssertTrue(observed.isEmpty)
+    let counts = await provider.counts()
+    XCTAssertEqual(counts.requests, 0)
+    XCTAssertEqual(counts.reads, 0)
+  }
+
   private func snapshot(
     id: String,
     title: String,

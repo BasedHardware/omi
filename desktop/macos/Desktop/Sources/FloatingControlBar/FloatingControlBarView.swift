@@ -565,7 +565,9 @@ struct FloatingControlBarView: View {
   /// normal notification card.
   @ViewBuilder
   private func barNotification(_ notification: FloatingBarNotification) -> some View {
-    if notification.assistantId == "reach_error" {
+    if let feedbackContext = notification.jitFeedbackContext {
+      jitFeedbackCard(notification, context: feedbackContext)
+    } else if notification.assistantId == "reach_error" {
       reachErrorCard(notification)
     } else if notification.assistantId == NotchMoment.receiptAssistantId {
       notchReceiptCard(notification)
@@ -585,6 +587,119 @@ struct FloatingControlBarView: View {
       IntegrationNudgeCard(notification: notification, entry: entry, triggerID: triggerID)
     } else {
       notificationView(notification)
+    }
+  }
+
+  /// Concrete, explicit-only controls for a planned trigger. Each action is
+  /// submitted through the delivery actor; dismissing or ignoring the card
+  /// never calls this path.
+  private func jitFeedbackCard(
+    _ notification: FloatingBarNotification,
+    context: JITTriggerFeedbackContext
+  ) -> some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      Button {
+        FloatingControlBarManager.shared.openNotificationAsChat(notification)
+      } label: {
+        HStack(alignment: .top, spacing: OmiSpacing.md) {
+          Image(systemName: "bell.badge.fill")
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundColor(.white)
+            .frame(width: 44, height: 44)
+            .background(Color.white.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+
+          VStack(alignment: .leading, spacing: 3) {
+            Text(notification.title)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(.white)
+              .lineLimit(1)
+            Text(notification.message)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(.white.opacity(0.78))
+              .lineLimit(3)
+              .multilineTextAlignment(.leading)
+          }
+          Spacer(minLength: 0)
+        }
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+
+      HStack(spacing: OmiSpacing.xs) {
+        jitFeedbackButton("Useful", systemImage: "hand.thumbsup.fill") {
+          submitJITFeedback(.useful, context: context)
+        }
+        jitFeedbackButton("Not relevant", systemImage: "hand.thumbsdown.fill") {
+          submitJITFeedback(.falsePositive, context: context)
+        }
+        jitFeedbackButton("Snooze", systemImage: "zzz") {
+          submitJITFeedback(.snooze, context: context, snoozedUntil: Date().addingTimeInterval(24 * 60 * 60))
+        }
+        jitFeedbackButton("Disable", systemImage: "bell.slash.fill") {
+          submitJITFeedback(.disable, context: context)
+        }
+        jitFeedbackButton("Missed", systemImage: "clock.badge.exclamationmark") {
+          submitJITFeedback(.missedOrLate, context: context)
+        }
+      }
+    }
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.md + 2)
+    .overlay(alignment: .topTrailing) {
+      Button {
+        FloatingControlBarManager.shared.dismissCurrentNotification()
+      } label: {
+        Image(systemName: "xmark")
+          .font(.system(size: 10, weight: .bold))
+          .foregroundColor(.white.opacity(0.62))
+          .frame(width: 18, height: 18)
+          .background(Color.white.opacity(0.08))
+          .clipShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.md)
+      .accessibilityLabel("Dismiss notification")
+    }
+  }
+
+  private func jitFeedbackButton(
+    _ title: String,
+    systemImage: String,
+    action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      Label(title, systemImage: systemImage)
+        .scaledFont(size: OmiType.micro, weight: .semibold)
+        .foregroundColor(.white.opacity(0.9))
+        .padding(.horizontal, OmiSpacing.xs)
+        .padding(.vertical, OmiSpacing.xxs)
+        .background(Color.white.opacity(0.12))
+        .clipShape(Capsule())
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func submitJITFeedback(
+    _ action: JITTriggerFeedbackAction,
+    context: JITTriggerFeedbackContext,
+    snoozedUntil: Date? = nil
+  ) {
+    guard
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: context.ownerID
+      )
+    else { return }
+    Task {
+      await JITTriggerFeedbackActionRouter.record(
+        action,
+        context: context,
+        snoozedUntil: snoozedUntil,
+        authorizationSnapshot: authorizationSnapshot)
+      await MainActor.run {
+        FloatingControlBarManager.shared.dismissCurrentNotification()
+      }
     }
   }
 

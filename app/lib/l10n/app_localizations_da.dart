@@ -2025,6 +2025,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get memoryDeleted => 'Hukommelse slettet';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Fortryd';
 
   @override

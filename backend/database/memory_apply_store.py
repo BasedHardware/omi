@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from functools import wraps
-from typing import Any, Callable, Dict, Iterable, List, Optional, TypeVar, TypedDict, cast
+import hashlib
+import hmac
+import os
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypeVar, TypedDict, cast
 
 from pydantic import BaseModel
 
@@ -18,6 +21,12 @@ except ImportError:  # pragma: no cover - local unit tests mock Firestore.
     _firestore_transactional = None
 
 from database._client import db
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.legal_holds import (
+    assert_destructive_operation_transaction,
+    assert_no_destructive_operation_transaction,
+    destructive_operation_gate,
+)
 from database.memory_collections import MemoryCollections
 from database.read_boundary import parse_snapshot_strict
 from models.memory_evidence import (
@@ -33,16 +42,27 @@ from models.memory_apply import (
     ApplyResult,
     ApplyStatus,
     MemoryControlState,
+    MemoryWriterClass,
     MemoryOutboxEvent,
     MemoryOutboxEventType,
+    WriterAdmissionError,
     apply_long_term_patch_transaction,
-    memory_content_hash,
+    require_writer_admitted,
 )
-from models.memory_operations import MemoryOperation, MemoryOperationType
+from models.memory_operations import MemoryLedgerReopenReceipt, MemoryOperation, MemoryOperationType
+from models.jit_proactivity import JITProactivityEventReceipt
+from models.jit_trigger_feedback import JITTriggerFeedbackReceipt
 from models.memory_promotion import MemoryGraphAssertion, PromotionGraphPlan, build_memory_graph_assertion
 from models.memory_review import build_memory_review_conflict
 from models.memory_source_replacement import ConversationSourceReplacementReceipt
-from models.product_memory import RESTRICTED_SENSITIVITY_LABELS, MemoryItemStatus, MemoryItem
+from models.product_memory import (
+    RESTRICTED_SENSITIVITY_LABELS,
+    LedgerWriteReason,
+    MemoryItem,
+    MemoryItemStatus,
+    MemoryKind,
+    MemorySubjectScope,
+)
 from models.memory_state_head import trusted_memory_state_head_fields
 
 
@@ -70,6 +90,67 @@ def _require_canonical_intake_enabled() -> None:
 
 class MissingMemoryDocument(MemoryFirestoreApplyError):
     pass
+
+
+_DIRECT_USER_LEDGER_EVIDENCE_TYPES = {
+    "explicit_user_correction",
+    "explicit_user_reopen",
+    "explicit_user_revert",
+}
+_DIRECT_USER_WRITE_AUTHORITY = object()
+_DIRECT_USER_MUTATION_PATCH_FIELDS = frozenset(
+    {
+        "patch_id",
+        "packet_id",
+        "run_id",
+        "observed_head_commit_id",
+        "idempotency_key",
+        "decision",
+        "target_memory_id",
+        "result_status",
+        "mutation_metadata",
+        "evidence_ids",
+        "expected_item_revision",
+        "expected_content_hash",
+        "memory_text",
+        "target_tier",
+        "target_user_asserted",
+        "target_visibility",
+        "clear_graph_assertion",
+        "arguments",
+        "promotion_audit",
+        "expires_at",
+        "kg_extracted",
+        "valid_to",
+    }
+)
+_LEDGER_MIGRATION_PATCH_FIELDS = frozenset(
+    {
+        "patch_id",
+        "packet_id",
+        "run_id",
+        "observed_head_commit_id",
+        "idempotency_key",
+        "decision",
+        "target_memory_id",
+        "result_status",
+        "mutation_metadata",
+        "evidence_ids",
+        "expected_item_revision",
+        "expected_content_hash",
+        "ledger_schema_version",
+        "kind",
+        "subject_scope",
+        "slot",
+        "valid_from",
+        "valid_to",
+        "curation_weight",
+        "trigger_condition",
+        "intent_backed",
+        "write_reason",
+        "arguments",
+    }
+)
 
 
 class ConversationSourceReplacementConflict(MemoryFirestoreApplyError):
@@ -128,6 +209,10 @@ class CanonicalReviewResolution:
     memory_id: str
     decision: str
     reason: str = ""
+    authority: Optional[str] = "canonical_memory"
+    expected_candidate: Optional[Dict[str, Any]] = None
+    mutation_target_memory_id: Optional[str] = None
+    correction_record: Optional[Dict[str, Any]] = None
 
 
 @dataclass(frozen=True)
@@ -287,7 +372,13 @@ def apply_long_term_patch_firestore(
     operation_id: str,
     patch_payload: Dict[str, Any],
     proposed_operation: Optional[MemoryOperation] = None,
+    proposed_evidence: Optional[List[MemoryEvidence]] = None,
     review_resolution: Optional[CanonicalReviewResolution] = None,
+    required_source_item: Optional[MemoryItem] = None,
+    ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
+    trigger_feedback_receipt: Optional[JITTriggerFeedbackReceipt] = None,
+    allow_ledger_migration: bool = False,
+    _direct_user_authority: object | None = None,
     db_client: Any = db,
 ) -> ApplyResult:
     """Apply a memory Long-term patch through the Firestore transaction boundary.
@@ -305,7 +396,50 @@ def apply_long_term_patch_firestore(
         operation_id,
         patch_payload,
         proposed_operation,
+        proposed_evidence,
         review_resolution,
+        required_source_item,
+        ledger_reopen_receipt,
+        trigger_feedback_receipt,
+        allow_ledger_migration,
+        _direct_user_authority is _DIRECT_USER_WRITE_AUTHORITY,
+    )
+
+
+def apply_direct_user_long_term_patch_firestore(
+    *,
+    uid: str,
+    operation_id: str,
+    patch_payload: Dict[str, Any],
+    proposed_operation: Optional[MemoryOperation] = None,
+    proposed_evidence: Optional[List[MemoryEvidence]] = None,
+    review_resolution: Optional[CanonicalReviewResolution] = None,
+    required_source_item: Optional[MemoryItem] = None,
+    ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
+    trigger_feedback_receipt: Optional[JITTriggerFeedbackReceipt] = None,
+    allow_ledger_migration: bool = False,
+    db_client: Any = db,
+) -> ApplyResult:
+    """Apply a mutation admitted only through the trusted user-facing adapter.
+
+    User authority is an opaque in-process capability. It is deliberately not
+    inferred from operation ids, packet prefixes, evidence, or patch content.
+    """
+
+    if allow_ledger_migration:
+        raise ValueError("direct user authority cannot grant ledger migration capability")
+    return apply_long_term_patch_firestore(
+        uid=uid,
+        operation_id=operation_id,
+        patch_payload=patch_payload,
+        proposed_operation=proposed_operation,
+        proposed_evidence=proposed_evidence,
+        review_resolution=review_resolution,
+        required_source_item=required_source_item,
+        ledger_reopen_receipt=ledger_reopen_receipt,
+        trigger_feedback_receipt=trigger_feedback_receipt,
+        _direct_user_authority=_DIRECT_USER_WRITE_AUTHORITY,
+        db_client=db_client,
     )
 
 
@@ -323,6 +457,7 @@ def replace_conversation_source_firestore(
     expected_source_items: List[MemoryItem],
     expected_reactivation_items: List[MemoryItem],
     writes: List[CanonicalApplyWrite],
+    deletion_gate_token: str | None = None,
     db_client: Any = db,
 ) -> ConversationSourceReplacementResult:
     """Atomically replace every active item sourced from one conversation.
@@ -347,6 +482,7 @@ def replace_conversation_source_firestore(
         expected_source_items,
         expected_reactivation_items,
         writes,
+        deletion_gate_token,
     )
 
 
@@ -357,6 +493,7 @@ def tombstone_memory_items_firestore(
     observed_control: MemoryControlState,
     expected_items: List[MemoryItem],
     preserved_evidence_ids: Iterable[str],
+    deletion_gate_token: str,
     review_resolution: Optional[CanonicalReviewResolution] = None,
     db_client: Any = db,
 ) -> CanonicalMemoryTombstoneResult:
@@ -370,8 +507,23 @@ def tombstone_memory_items_firestore(
         observed_control,
         expected_items,
         frozenset(preserved_evidence_ids),
+        deletion_gate_token,
         review_resolution,
     )
+
+
+def privacy_deletion_receipt_id(uid: str, memory_id: str) -> str:
+    """Return a server-keyed, non-enumerable anti-resurrection identity."""
+
+    secret = (os.getenv("ENCRYPTION_SECRET") or "").encode("utf-8")
+    if len(secret) < 32:
+        raise MemoryFirestoreApplyError("privacy deletion receipt secret is unavailable")
+    digest = hmac.new(
+        secret,
+        f"memory-privacy-receipt.v2\n{uid}\n{memory_id}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"receipt_{digest}"
 
 
 def _control_fence(control: MemoryControlState) -> _MemoryControlFence:
@@ -413,7 +565,9 @@ def _privacy_delete_events(
                 uid=uid,
                 event_type=event_type,
                 commit_id=committed_control.head_commit_id,
-                parent_commit_id=parent_control.head_commit_id,
+                # Privacy deletion rotates the externally visible hash epoch.
+                # Do not retain the pre-delete content-derived parent commit.
+                parent_commit_id=committed_control.head_commit_id,
                 commit_sequence=committed_control.commit_sequence,
                 memory_id=item.memory_id,
                 operation_id=operation_id,
@@ -454,9 +608,10 @@ def _read_canonical_review_resolution(
         raise CanonicalReviewResolutionConflict("stale_review", "canonical review no longer exists")
     review_item = _typed_doc(snapshot)
     if (
-        review_item.get("authority") != "canonical_memory"
+        review_item.get("authority") != request.authority
         or review_item.get("review_id") != request.review_id
         or review_item.get("fact_id") != request.memory_id
+        or (request.expected_candidate is not None and review_item.get("candidate") != request.expected_candidate)
     ):
         raise CanonicalReviewResolutionConflict(
             "stale_review",
@@ -479,6 +634,8 @@ def _validate_canonical_review_source(
     item: MemoryItem,
 ) -> None:
     if request is None:
+        return
+    if request.authority != "canonical_memory":
         return
     if review_item is None:
         raise CanonicalReviewResolutionConflict("stale_review", "canonical review source is missing")
@@ -522,18 +679,39 @@ def _write_canonical_review_resolution(
         **review_item,
         "status": status_by_decision[request.decision],
         "decision": request.decision,
-        "reason": request.reason,
+        "reason": (
+            f"canonical_review_{request.decision}" if request.decision in {"reject", "drop"} else request.reason
+        ),
         "resolved_at": now,
         "updated_at": now,
         "resolution_commit_id": commit_id,
-        "candidate": {"id": request.memory_id},
+        # Resolution history is not an authority or deletion receipt.  Once a
+        # decision is committed it must not retain candidate plaintext, a
+        # dictionary-attackable content hash, or source-location identifiers.
+        "candidate": {},
+        "source_commit_id": None,
+        "source_short_term_id": None,
+        "source_item_revision": None,
+        "source_content_hash": None,
+        "veracity": None,
+        "impact": None,
         "permitted_uses": [],
     }
     review_ref = db_client.document(f"{collections.memory_review_queue}/{request.review_id}")
     transaction.set(review_ref, _firestore_data(redacted))
+    if request.correction_record is not None:
+        correction_id = request.correction_record.get("correction_id")
+        if request.authority == "canonical_memory" or not isinstance(correction_id, str) or not correction_id.strip():
+            raise CanonicalReviewResolutionConflict(
+                "stale_review",
+                "legacy review correction receipt is invalid",
+                review_item=review_item,
+            )
+        correction_ref = db_client.document(f"{collections.user_root}/memory_corrections/{correction_id}")
+        transaction.set(correction_ref, _firestore_data(request.correction_record))
 
 
-def _privacy_tombstoned_evidence(evidence: MemoryEvidence) -> MemoryEvidence:
+def _privacy_tombstoned_evidence(evidence: MemoryEvidence, *, scrub_source_identity: bool = False) -> MemoryEvidence:
     """Retain only non-content lineage identity after a user privacy deletion."""
     return evidence.model_copy(
         update={
@@ -541,6 +719,10 @@ def _privacy_tombstoned_evidence(evidence: MemoryEvidence) -> MemoryEvidence:
             "artifact_preservation": ArtifactPreservationState.deleted_by_user,
             "quote_refs": [],
             "content_hash": None,
+            "source_id": None if scrub_source_identity else evidence.source_id,
+            "source_version": None if scrub_source_identity else evidence.source_version,
+            "conversation_id": None if scrub_source_identity else evidence.conversation_id,
+            "lineage_id": None if scrub_source_identity else evidence.lineage_id,
             "source_state": SourceState.tombstoned,
             "source_state_reason": SourceStateReason.deleted_by_user,
             "provenance_visibility": ProvenanceVisibility.hidden,
@@ -549,6 +731,68 @@ def _privacy_tombstoned_evidence(evidence: MemoryEvidence) -> MemoryEvidence:
             "patch_id": None,
             "commit_id": None,
             "client_device_id": None,
+        }
+    )
+
+
+def _privacy_tombstoned_memory_item(
+    item: MemoryItem,
+    *,
+    embedded_evidence: List[MemoryEvidence],
+    now: datetime,
+    commit_id: str,
+    commit_sequence: int,
+    account_generation: int,
+) -> MemoryItem:
+    """Build the one content-free canonical tombstone shape.
+
+    Explicit memory deletion and empty conversation-source retraction must not
+    drift: both can carry knowledge-ledger bodies and trigger action prompts in
+    fields outside ``content``.  Keeping this scrubber shared makes every
+    privacy tombstone clear the complete semantic payload.
+    """
+
+    return item.model_copy(
+        update={
+            "status": MemoryItemStatus.tombstoned,
+            "source_state": SourceState.tombstoned,
+            "content": None,
+            "evidence": embedded_evidence,
+            "sensitivity_labels": [],
+            "promotion": None,
+            "capture_device_ids": [],
+            "primary_capture_device": None,
+            "corroboration_count": 0,
+            "last_corroborated_at": None,
+            "confidence": None,
+            "subject_entity_id": None,
+            "predicate": None,
+            "arguments": {},
+            "ledger_schema_version": None,
+            "kind": MemoryKind.fact,
+            "subject_scope": MemorySubjectScope.primary_user,
+            "slot": None,
+            "body": None,
+            "valid_from": None,
+            "valid_to": None,
+            "curation_weight": 0,
+            "trigger_condition": {},
+            "intent_backed": False,
+            "write_reason": None,
+            "updated_at": max(now, item.updated_at),
+            "version": item.version + 1,
+            "item_revision": item.item_revision + 1,
+            "ledger_commit_id": commit_id,
+            "ledger_sequence": commit_sequence,
+            "source_commit_id": commit_id,
+            "source_commit_sequence": commit_sequence,
+            "normalized_content_key": None,
+            "content_hash": None,
+            "account_generation": account_generation,
+            "kg_extracted": False,
+            "graph_ready": False,
+            "graph_assertion_id": None,
+            "graph_plan_hash": None,
         }
     )
 
@@ -562,6 +806,7 @@ def _tombstone_memory_items_firestore_transaction(
     observed_control: MemoryControlState,
     expected_items: List[MemoryItem],
     preserved_evidence_ids: frozenset[str],
+    deletion_gate_token: str,
     review_resolution: Optional[CanonicalReviewResolution],
 ) -> CanonicalMemoryTombstoneResult:
     if not reason.strip():
@@ -571,6 +816,13 @@ def _tombstone_memory_items_firestore_transaction(
         raise CanonicalMemoryTombstoneConflict("privacy tombstone requires unique items")
 
     collections = MemoryCollections(uid=uid)
+    assert_destructive_operation_transaction(
+        transaction,
+        db_client,
+        uid=uid,
+        kind="explicit_memory_deletion",
+        token=deletion_gate_token,
+    )
     review_item = _read_canonical_review_resolution(
         transaction=transaction,
         db_client=db_client,
@@ -646,7 +898,6 @@ def _tombstone_memory_items_firestore_transaction(
             {
                 "memory_id": item.memory_id,
                 "item_revision": item.item_revision,
-                "content_hash": item.content_hash,
             }
             for item in authoritative_items
         ],
@@ -656,21 +907,43 @@ def _tombstone_memory_items_firestore_transaction(
         operation_type=MemoryOperationType.deletion,
         source_packet_id=f"privacy_delete:{reason}",
         target_memory_id=None,
-        evidence_ids=sorted(evidence_by_id),
+        # Evidence/source identities are intentionally absent from the durable
+        # operation. The authoritative tombstone is already content-free and
+        # the bounded anti-resurrection receipt below expires after 30 days.
+        evidence_ids=[],
         logical_payload=logical_payload,
         account_generation=control.account_generation,
         source_generation=control.source_generation,
-        observed_head_commit_id=control.head_commit_id,
+        # The transaction validates the exact control fence above. Persisting
+        # the old content-derived head would retain a dictionary oracle after
+        # explicit deletion.
+        observed_head_commit_id=None,
     )
     operation_ref = db_client.document(f"{collections.memory_operations}/{operation.operation_id}")
     if getattr(operation_ref.get(transaction=transaction), "exists", False):
         raise CanonicalMemoryTombstoneConflict("privacy tombstone operation already exists")
 
-    commit_id = control.next_commit_id(operation.operation_id)
-    committed_control = control.advance_head(commit_id)
+    commit_id = (
+        "commit_"
+        + deterministic_contract_id(
+            "memory-privacy-epoch",
+            {
+                "uid": uid,
+                "deletion_gate_token": deletion_gate_token,
+                "commit_sequence": control.commit_sequence + 1,
+            },
+        )[:32]
+    )
+    committed_control = control.advance_head(commit_id).model_copy(
+        update={
+            "projection_watermark_commit_id": None,
+            "vector_watermark_commit_id": None,
+        }
+    )
     now = datetime.now(timezone.utc)
     embedded_tombstoned_evidence = {
-        evidence_id: _privacy_tombstoned_evidence(evidence) for evidence_id, evidence in evidence_by_id.items()
+        evidence_id: _privacy_tombstoned_evidence(evidence, scrub_source_identity=True)
+        for evidence_id, evidence in evidence_by_id.items()
     }
     tombstoned_evidence = {
         evidence_id: evidence
@@ -681,39 +954,13 @@ def _tombstone_memory_items_firestore_transaction(
     events: List[MemoryOutboxEvent] = []
     for item in authoritative_items:
         embedded_evidence = [embedded_tombstoned_evidence[evidence.evidence_id] for evidence in item.evidence]
-        tombstoned = item.model_copy(
-            update={
-                "status": MemoryItemStatus.tombstoned,
-                "source_state": SourceState.tombstoned,
-                "content": None,
-                "evidence": embedded_evidence,
-                "sensitivity_labels": [],
-                "promotion": None,
-                "capture_device_ids": [],
-                "primary_capture_device": None,
-                "corroboration_count": 0,
-                "last_corroborated_at": None,
-                "confidence": None,
-                "subject_entity_id": None,
-                "predicate": None,
-                "arguments": {},
-                "updated_at": max(now, item.updated_at),
-                "version": item.version + 1,
-                "item_revision": item.item_revision + 1,
-                "ledger_commit_id": commit_id,
-                "ledger_sequence": committed_control.commit_sequence,
-                "source_commit_id": commit_id,
-                "source_commit_sequence": committed_control.commit_sequence,
-                "content_hash": memory_content_hash(
-                    content=None,
-                    evidence_ids=[evidence.evidence_id for evidence in embedded_evidence],
-                ),
-                "account_generation": committed_control.account_generation,
-                "kg_extracted": False,
-                "graph_ready": False,
-                "graph_assertion_id": None,
-                "graph_plan_hash": None,
-            }
+        tombstoned = _privacy_tombstoned_memory_item(
+            item,
+            embedded_evidence=embedded_evidence,
+            now=now,
+            commit_id=commit_id,
+            commit_sequence=committed_control.commit_sequence,
+            account_generation=committed_control.account_generation,
         )
         tombstoned_items.append(tombstoned)
         events.extend(
@@ -732,7 +979,7 @@ def _tombstone_memory_items_firestore_transaction(
     # delete events. The graph assertion is derived and is deleted by that
     # outbox path after reads have already been fenced by this tombstone.
     mutation_count = (
-        len(tombstoned_evidence) + 4 + (3 * len(tombstoned_items)) + (1 if review_resolution is not None else 0)
+        len(tombstoned_evidence) + 4 + (4 * len(tombstoned_items)) + (1 if review_resolution is not None else 0)
     )
     if mutation_count > _MAX_FIRESTORE_TRANSACTION_MUTATIONS:
         raise CanonicalMemoryTombstoneLimitError(
@@ -756,6 +1003,20 @@ def _tombstone_memory_items_firestore_transaction(
     for evidence in tombstoned_evidence.values():
         evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence.evidence_id}")
         transaction.set(evidence_ref, _firestore_data(evidence))
+    for item in tombstoned_items:
+        receipt_id = privacy_deletion_receipt_id(uid, item.memory_id)
+        receipt_ref = db_client.document(f"{collections.memory_deletion_receipts}/{receipt_id}")
+        transaction.set(
+            receipt_ref,
+            {
+                "schema_version": "memory_deletion_receipt.v2",
+                "uid": uid,
+                "receipt_id": receipt_id,
+                "privacy_epoch_commit_id": committed_control.head_commit_id,
+                "deleted_at": now,
+                "expires_at": now + timedelta(days=30),
+            },
+        )
     _write_apply_result(
         transaction=transaction,
         db_client=db_client,
@@ -1075,8 +1336,21 @@ def _replace_conversation_source_firestore_transaction(
     expected_source_items: List[MemoryItem],
     expected_reactivation_items: List[MemoryItem],
     writes: List[CanonicalApplyWrite],
+    deletion_gate_token: str | None,
 ) -> ConversationSourceReplacementResult:
     collections = MemoryCollections(uid=uid)
+    if writes:
+        assert_no_destructive_operation_transaction(transaction, db_client, uid=uid)
+    else:
+        if deletion_gate_token is None:
+            raise ConversationSourceReplacementConflict("empty replacement requires privacy gate authority")
+        assert_destructive_operation_transaction(
+            transaction,
+            db_client,
+            uid=uid,
+            kind="explicit_memory_deletion",
+            token=deletion_gate_token,
+        )
     control_ref = db_client.document(collections.memory_apply_control_state)
     control_snapshot = control_ref.get(transaction=transaction)
     if getattr(control_snapshot, "exists", False):
@@ -1153,6 +1427,32 @@ def _replace_conversation_source_firestore_transaction(
 
     if _control_fence(control) != _control_fence(observed_control):
         raise ConversationSourceReplacementConflict("memory control changed during conversation replacement")
+    replacement_writer_classes = {
+        (
+            MemoryWriterClass.ledger
+            if write.patch_payload.get("ledger_schema_version") == "knowledge_ledger.v1"
+            else MemoryWriterClass.compatibility
+        )
+        for write in writes
+    }
+    if not replacement_writer_classes:
+        replacement_writer_classes = {
+            (
+                MemoryWriterClass.ledger
+                if item.ledger_schema_version == "knowledge_ledger.v1"
+                else MemoryWriterClass.compatibility
+            )
+            for item in expected_source_items
+        }
+    if len(replacement_writer_classes) > 1:
+        raise ConversationSourceReplacementConflict("conversation replacement mixes writer authorities")
+    try:
+        require_writer_admitted(
+            control,
+            next(iter(replacement_writer_classes), MemoryWriterClass.compatibility),
+        )
+    except WriterAdmissionError as exc:
+        raise ConversationSourceReplacementConflict(str(exc)) from exc
     if (
         replacement_operation.uid != uid
         or replacement_operation.operation_type != MemoryOperationType.source_replacement
@@ -1308,6 +1608,11 @@ def _replace_conversation_source_firestore_transaction(
                         f"replacement target belongs to unrelated state: {memory_id}"
                     )
                 prior_new_items[memory_id] = prior_item
+            receipt_ref = db_client.document(
+                f"{collections.memory_deletion_receipts}/{privacy_deletion_receipt_id(uid, memory_id)}"
+            )
+            if getattr(receipt_ref.get(transaction=transaction), "exists", False):
+                raise ConversationSourceReplacementConflict("replacement target is privacy-deleted")
         if not write.evidence:
             raise MemoryFirestoreApplyError("conversation replacement writes require evidence")
         for evidence in write.evidence:
@@ -1333,8 +1638,28 @@ def _replace_conversation_source_firestore_transaction(
             "updated_at": datetime.now(timezone.utc),
         }
     )
-    replacement_commit_id = bumped_control.next_commit_id(replacement_operation.operation_id)
-    replacement_control = bumped_control.advance_head(replacement_commit_id)
+    if writes:
+        replacement_commit_id = bumped_control.next_commit_id(replacement_operation.operation_id)
+        replacement_control = bumped_control.advance_head(replacement_commit_id)
+    else:
+        assert deletion_gate_token is not None
+        replacement_commit_id = (
+            "commit_"
+            + deterministic_contract_id(
+                "memory-privacy-epoch",
+                {
+                    "uid": uid,
+                    "deletion_gate_token": deletion_gate_token,
+                    "commit_sequence": bumped_control.commit_sequence + 1,
+                },
+            )[:32]
+        )
+        replacement_control = bumped_control.advance_head(replacement_commit_id).model_copy(
+            update={
+                "projection_watermark_commit_id": None,
+                "vector_watermark_commit_id": None,
+            }
+        )
     working_control = replacement_control
     results: List[ApplyResult] = []
     for write, memory_id in zip(writes, new_memory_ids):
@@ -1362,45 +1687,23 @@ def _replace_conversation_source_firestore_transaction(
     tombstoned_items: Dict[str, MemoryItem] = {}
     tombstoned_evidence: Dict[str, MemoryEvidence] = {}
     delete_events: List[MemoryOutboxEvent] = []
+    scrub_source_identity = not writes
     for memory_id, item in authoritative_by_id.items():
         next_evidence: List[MemoryEvidence] = []
         for evidence in evidence_by_old_item[memory_id]:
-            scrubbed = _privacy_tombstoned_evidence(evidence)
+            scrubbed = _privacy_tombstoned_evidence(
+                evidence,
+                scrub_source_identity=scrub_source_identity,
+            )
             tombstoned_evidence[scrubbed.evidence_id] = scrubbed
             next_evidence.append(scrubbed)
-        tombstoned = item.model_copy(
-            update={
-                "status": MemoryItemStatus.tombstoned,
-                "source_state": SourceState.tombstoned,
-                "content": None,
-                "evidence": next_evidence,
-                "sensitivity_labels": [],
-                "promotion": None,
-                "capture_device_ids": [],
-                "primary_capture_device": None,
-                "corroboration_count": 0,
-                "last_corroborated_at": None,
-                "confidence": None,
-                "subject_entity_id": None,
-                "predicate": None,
-                "arguments": {},
-                "updated_at": max(now, item.updated_at),
-                "version": item.version + 1,
-                "item_revision": item.item_revision + 1,
-                "ledger_commit_id": replacement_control.head_commit_id,
-                "ledger_sequence": replacement_control.commit_sequence,
-                "source_commit_id": replacement_control.head_commit_id,
-                "source_commit_sequence": replacement_control.commit_sequence,
-                "content_hash": memory_content_hash(
-                    content=None,
-                    evidence_ids=[evidence.evidence_id for evidence in next_evidence],
-                ),
-                "account_generation": replacement_control.account_generation,
-                "kg_extracted": False,
-                "graph_ready": False,
-                "graph_assertion_id": None,
-                "graph_plan_hash": None,
-            }
+        tombstoned = _privacy_tombstoned_memory_item(
+            item,
+            embedded_evidence=next_evidence,
+            now=now,
+            commit_id=replacement_control.head_commit_id,
+            commit_sequence=replacement_control.commit_sequence,
+            account_generation=replacement_control.account_generation,
         )
         tombstoned_items[memory_id] = tombstoned
         delete_events.extend(
@@ -1474,6 +1777,8 @@ def _replace_conversation_source_firestore_transaction(
         results=[replacement_apply_result, *results],
     )
     mutation_count += 1  # committed replacement receipt
+    if not writes:
+        mutation_count += len(tombstoned_items)  # opaque anti-resurrection receipts
     if mutation_count > _MAX_FIRESTORE_TRANSACTION_MUTATIONS:
         raise ConversationSourceReplacementLimitError(
             "conversation source replacement exceeds Firestore's 500-mutation transaction limit"
@@ -1494,6 +1799,19 @@ def _replace_conversation_source_firestore_transaction(
             transaction.set(item_ref, _firestore_data(item))
             assertion_ref = db_client.document(f"{collections.memory_graph_assertions}/{memory_id}")
             transaction.delete(assertion_ref)
+        if not writes:
+            receipt_id = privacy_deletion_receipt_id(uid, memory_id)
+            transaction.set(
+                db_client.document(f"{collections.memory_deletion_receipts}/{receipt_id}"),
+                {
+                    "schema_version": "memory_deletion_receipt.v2",
+                    "uid": uid,
+                    "receipt_id": receipt_id,
+                    "privacy_epoch_commit_id": replacement_control.head_commit_id,
+                    "deleted_at": now,
+                    "expires_at": now + timedelta(days=30),
+                },
+            )
     for result in [replacement_apply_result, *results]:
         operation_ref = db_client.document(f"{collections.memory_operations}/{result.operation.operation_id}")
         _write_apply_result(
@@ -1553,6 +1871,10 @@ def _atomic_bump_source_generation_transaction(
         )
     else:
         control = parse_snapshot_strict(MemoryControlState, snapshot, payload_from_snapshot=_typed_doc)
+    try:
+        require_writer_admitted(control, MemoryWriterClass.compatibility)
+    except WriterAdmissionError as exc:
+        raise MemoryFirestoreApplyError(str(exc)) from exc
     bumped = control.model_copy(
         update={
             "source_generation": control.source_generation + 1,
@@ -1571,9 +1893,76 @@ def _apply_long_term_patch_firestore_transaction(
     operation_id: str,
     patch_payload: Dict[str, Any],
     proposed_operation: Optional[MemoryOperation],
+    proposed_evidence: Optional[List[MemoryEvidence]],
     review_resolution: Optional[CanonicalReviewResolution],
+    required_source_item: Optional[MemoryItem],
+    ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt],
+    trigger_feedback_receipt: Optional[JITTriggerFeedbackReceipt],
+    allow_ledger_migration: bool = False,
+    direct_user_authorized: bool = False,
 ) -> ApplyResult:
     collections = MemoryCollections(uid=uid)
+    # Canonical writes and destructive privacy cleanup share the same
+    # account-wide fence.  Without this transactional read, a delayed legacy
+    # review acceptance could recreate content after a tombstone committed but
+    # before its required review/correction scrub completed.
+    assert_no_destructive_operation_transaction(transaction, db_client, uid=uid)
+    # The deletion authority must be part of this very transaction, not only a
+    # best-effort preflight.  Otherwise a wipe can race a canonical apply and
+    # the apply can recreate an item after the wipe's inventory was read.
+    # Reading the marker here makes Firestore retry the transaction when the
+    # deletion lifecycle changes, and a non-restoring marker fails closed.
+    deletion_ref = db_client.document(f"account_deletions/{uid}")
+    deletion_snapshot = deletion_ref.get(transaction=transaction)
+    deletion_payload = deletion_snapshot.to_dict() if getattr(deletion_snapshot, "exists", False) else {}
+    deletion_status = normalize_account_deletion_status(
+        marker_exists=bool(getattr(deletion_snapshot, "exists", False)),
+        raw_status=deletion_payload.get("wipe_status") if isinstance(deletion_payload, dict) else None,
+    )
+    if account_deletion_blocks_access(deletion_status):
+        raise MemoryFirestoreApplyError("canonical apply blocked by account deletion fence")
+    feedback_receipt_ref = None
+    existing_feedback_receipt = None
+    feedback_event_ref = None
+    feedback_event_receipt = None
+    if trigger_feedback_receipt is not None:
+        if trigger_feedback_receipt.uid != uid:
+            raise MemoryFirestoreApplyError("trigger feedback receipt owner mismatch")
+        feedback_receipt_ref = db_client.document(
+            f"{MemoryCollections(uid=uid).jit_trigger_feedback}/{trigger_feedback_receipt.feedback_id}"
+        )
+        feedback_snapshot = feedback_receipt_ref.get(transaction=transaction)
+        if getattr(feedback_snapshot, "exists", False):
+            existing_feedback_receipt = parse_snapshot_strict(
+                JITTriggerFeedbackReceipt,
+                feedback_snapshot,
+                payload_from_snapshot=_typed_doc,
+            )
+            if existing_feedback_receipt.request_hash != trigger_feedback_receipt.request_hash:
+                raise MemoryFirestoreApplyError("trigger feedback id was reused with a different payload")
+        feedback_event_ref = db_client.document(
+            f"{collections.jit_proactivity_events}/{trigger_feedback_receipt.event_id}"
+        )
+        feedback_event_snapshot = feedback_event_ref.get(transaction=transaction)
+        if not getattr(feedback_event_snapshot, "exists", False):
+            raise MemoryFirestoreApplyError("trigger feedback event receipt is unavailable")
+        feedback_event_receipt = parse_snapshot_strict(
+            JITProactivityEventReceipt,
+            feedback_event_snapshot,
+            payload_from_snapshot=_typed_doc,
+        )
+        if (
+            feedback_event_receipt.uid != uid
+            or feedback_event_receipt.operation != "planned_notification"
+            or feedback_event_receipt.account_generation != trigger_feedback_receipt.account_generation
+            or feedback_event_receipt.trigger_memory_id != trigger_feedback_receipt.trigger_memory_id
+            or feedback_event_receipt.trigger_revision != trigger_feedback_receipt.expected_trigger_revision
+            or (
+                feedback_event_receipt.feedback_id is not None
+                and feedback_event_receipt.feedback_id != trigger_feedback_receipt.feedback_id
+            )
+        ):
+            raise MemoryFirestoreApplyError("trigger feedback event authority fence is stale or invalid")
     review_item = _read_canonical_review_resolution(
         transaction=transaction,
         db_client=db_client,
@@ -1604,6 +1993,7 @@ def _apply_long_term_patch_firestore_transaction(
         raise MemoryFirestoreApplyError("operation uid does not match requested uid")
     if operation.operation_id != operation_id:
         raise MemoryFirestoreApplyError("operation_id does not match requested operation document")
+    source_packet_id = operation.source_packet_id or ""
 
     committed_replay = apply_long_term_patch_transaction(
         control_state=control_state,
@@ -1617,9 +2007,62 @@ def _apply_long_term_patch_firestore_transaction(
                 "canonical review operation was already committed without its projection",
                 review_item=review_item,
             )
+        if trigger_feedback_receipt is not None and existing_feedback_receipt is None:
+            raise MemoryFirestoreApplyError("committed trigger feedback is missing its receipt")
         return committed_replay
     if committed_replay.status == ApplyStatus.payload_mismatch:
         return committed_replay
+
+    reopen_receipt_ref = None
+    if ledger_reopen_receipt is not None:
+        if ledger_reopen_receipt.uid != uid:
+            raise MemoryFirestoreApplyError("ledger reopen receipt uid does not match requested uid")
+        if required_source_item is None or ledger_reopen_receipt.source_memory_id != required_source_item.memory_id:
+            raise MemoryFirestoreApplyError("ledger reopen receipt source does not match the fenced source")
+        if (
+            ledger_reopen_receipt.account_generation != control_state.account_generation
+            or ledger_reopen_receipt.source_generation != control_state.source_generation
+            or ledger_reopen_receipt.source_item_revision != required_source_item.item_revision
+            or ledger_reopen_receipt.source_content_hash != (required_source_item.content_hash or "")
+        ):
+            return _source_not_active(control_state, operation, "standalone ledger reopen receipt fence is stale")
+        reopen_receipt_ref = db_client.document(
+            f"{collections.memory_ledger_reopens}/{ledger_reopen_receipt.source_memory_id}"
+        )
+        existing_receipt_snapshot = reopen_receipt_ref.get(transaction=transaction)
+        if getattr(existing_receipt_snapshot, "exists", False):
+            existing_receipt = parse_snapshot_strict(
+                MemoryLedgerReopenReceipt,
+                existing_receipt_snapshot,
+                payload_from_snapshot=_typed_doc,
+            )
+            if (
+                existing_receipt.uid != uid
+                or existing_receipt.source_memory_id != ledger_reopen_receipt.source_memory_id
+                or existing_receipt.account_generation != control_state.account_generation
+                or existing_receipt.source_generation != control_state.source_generation
+            ):
+                return _source_not_active(
+                    control_state, operation, "standalone ledger source reopen receipt is invalid"
+                )
+            # A committed operation should have been handled by the idempotent
+            # replay above. Any other operation is a duplicate current-tail
+            # attempt and must not mutate the ledger or operation journal.
+            return _source_not_active(control_state, operation, "standalone ledger source is already reopened")
+
+    source_validation = _validate_required_ledger_source(
+        db_client=db_client,
+        transaction=transaction,
+        collections=collections,
+        expected=required_source_item,
+        operation=operation,
+        control_state=control_state,
+        ledger_reopen_receipt=ledger_reopen_receipt,
+    )
+    if source_validation is not None:
+        # The proposed operation carries memory_text. A privacy-invalidated
+        # source must fail without persisting that stale content anywhere.
+        return source_validation
     if committed_replay.status in {ApplyStatus.generation_mismatch, ApplyStatus.retryable_head_mismatch}:
         _write_apply_result(
             transaction=transaction,
@@ -1630,11 +2073,12 @@ def _apply_long_term_patch_firestore_transaction(
         )
         return committed_replay
 
-    evidence_items = _read_authoritative_evidence(
+    evidence_items, staged_evidence = _read_or_stage_authoritative_evidence(
         db_client=db_client,
         transaction=transaction,
         collections=collections,
         evidence_ids=operation.evidence_ids,
+        proposed_evidence=proposed_evidence,
     )
     target_validation = _validate_authoritative_targets(
         db_client=db_client,
@@ -1663,18 +2107,147 @@ def _apply_long_term_patch_firestore_transaction(
     )
     if existing_item is not None:
         authoritative_payload["existing_item"] = existing_item.model_dump(mode="python")
+    if trigger_feedback_receipt is not None:
+        if existing_feedback_receipt is not None:
+            raise MemoryFirestoreApplyError("trigger feedback receipt exists without a committed replay")
+        if (
+            not direct_user_authorized
+            or existing_item is None
+            or existing_item.uid != uid
+            or existing_item.kind != MemoryKind.trigger
+            or existing_item.ledger_schema_version != "knowledge_ledger.v1"
+            or existing_item.account_generation != trigger_feedback_receipt.account_generation
+            or control_state.account_generation != trigger_feedback_receipt.account_generation
+            or existing_item.memory_id != trigger_feedback_receipt.trigger_memory_id
+            or existing_item.item_revision != trigger_feedback_receipt.expected_trigger_revision
+            or operation.target_memory_id != trigger_feedback_receipt.trigger_memory_id
+            or not source_packet_id.startswith(
+                f"user_mutation:jit_trigger_feedback:{trigger_feedback_receipt.feedback_id}:"
+            )
+        ):
+            raise MemoryFirestoreApplyError("trigger feedback authority fence is stale or invalid")
+        feedback_arguments = patch_payload.get("arguments")
+        if (
+            not isinstance(feedback_arguments, dict)
+            or "jit_trigger_feedback" not in feedback_arguments
+            or {key: value for key, value in feedback_arguments.items() if key != "jit_trigger_feedback"}
+            != {key: value for key, value in existing_item.arguments.items() if key != "jit_trigger_feedback"}
+        ):
+            raise MemoryFirestoreApplyError("trigger feedback may only update its bounded argument state")
+    if allow_ledger_migration:
+        migration_prefix = source_packet_id.startswith(
+            ("user_mutation:knowledge_ledger_migration:", "user_mutation:legacy_short_term_adjudication:")
+        )
+        invalid_migration_fields = set(patch_payload) - _LEDGER_MIGRATION_PATCH_FIELDS
+        if (
+            existing_item is None
+            or existing_item.ledger_schema_version is not None
+            or operation.operation_type != MemoryOperationType.ledger_mutation
+            or operation.logical_payload.decision != DurablePatchDecision.update.value
+            or patch_payload.get("ledger_schema_version") != "knowledge_ledger.v1"
+            or not migration_prefix
+            or invalid_migration_fields
+        ):
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason="ledger migration capability requires an allowlisted pre-ledger schema adaptation",
+            )
+        writer_class = MemoryWriterClass.ledger
+    elif operation.operation_type != MemoryOperationType.deletion:
+        allowed_direct_user_fields = _DIRECT_USER_MUTATION_PATCH_FIELDS
+        if trigger_feedback_receipt is not None:
+            allowed_direct_user_fields = allowed_direct_user_fields | {"curation_weight"}
+        invalid_direct_user_fields = set(patch_payload) - allowed_direct_user_fields
+        direct_user_update = (
+            direct_user_authorized
+            and existing_item is not None
+            and operation.logical_payload.decision == DurablePatchDecision.update.value
+            and operation.operation_type in {MemoryOperationType.user_mutation, MemoryOperationType.ledger_mutation}
+            and not invalid_direct_user_fields
+        )
+        direct_user_append = (
+            direct_user_authorized
+            and operation.operation_type == MemoryOperationType.ledger_mutation
+            and operation.logical_payload.decision == DurablePatchDecision.add.value
+            and patch_payload.get("ledger_schema_version") == "knowledge_ledger.v1"
+            and patch_payload.get("write_reason") == LedgerWriteReason.direct_user_statement.value
+            and patch_payload.get("user_asserted") is True
+            and (bool(operation.logical_payload.supersedes) or ledger_reopen_receipt is not None)
+            and any(evidence.source_type in _DIRECT_USER_LEDGER_EVIDENCE_TYPES for evidence in evidence_items)
+        )
+        if direct_user_update or direct_user_append:
+            writer_class = MemoryWriterClass.user
+        else:
+            writer_class = (
+                MemoryWriterClass.ledger
+                if (
+                    (existing_item is not None and existing_item.ledger_schema_version == "knowledge_ledger.v1")
+                    or patch_payload.get("ledger_schema_version") == "knowledge_ledger.v1"
+                )
+                else MemoryWriterClass.compatibility
+            )
+    else:
+        writer_class = None
+    if writer_class is not None:
+        try:
+            require_writer_admitted(
+                control_state,
+                writer_class,
+                allow_ledger_migration=allow_ledger_migration,
+            )
+        except WriterAdmissionError as exc:
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason=str(exc),
+            )
     if review_resolution is not None:
-        if existing_item is None:
+        if review_resolution.authority == "canonical_memory":
+            if existing_item is None:
+                raise CanonicalReviewResolutionConflict(
+                    "stale_review",
+                    "canonical review target no longer exists",
+                    review_item=review_item,
+                )
+            _validate_canonical_review_source(
+                review_item=review_item,
+                request=review_resolution,
+                item=existing_item,
+            )
+        elif review_resolution.decision == "accept":
+            if (
+                existing_item is not None
+                or operation.logical_payload.decision != DurablePatchDecision.add.value
+                or patch_payload.get("new_memory_id") != review_resolution.memory_id
+            ):
+                raise CanonicalReviewResolutionConflict(
+                    "stale_review",
+                    "legacy review acceptance no longer owns an exact add",
+                    review_item=review_item,
+                )
+        elif review_resolution.decision == "correct":
+            mutation_target = review_resolution.mutation_target_memory_id
+            if (
+                existing_item is None
+                or not mutation_target
+                or operation.target_memory_id != mutation_target
+                or existing_item.memory_id != mutation_target
+                or operation.logical_payload.decision != DurablePatchDecision.update.value
+            ):
+                raise CanonicalReviewResolutionConflict(
+                    "stale_review",
+                    "legacy review correction no longer owns an exact update",
+                    review_item=review_item,
+                )
+        else:
             raise CanonicalReviewResolutionConflict(
                 "stale_review",
-                "canonical review target no longer exists",
+                "legacy review resolution operation is unsupported",
                 review_item=review_item,
             )
-        _validate_canonical_review_source(
-            review_item=review_item,
-            request=review_resolution,
-            item=existing_item,
-        )
     superseded_items = _read_authoritative_superseded_items(
         db_client=db_client,
         transaction=transaction,
@@ -1688,7 +2261,47 @@ def _apply_long_term_patch_firestore_transaction(
         control_state=control_state,
         operation=operation,
         patch_payload=authoritative_payload,
+        allow_trigger_feedback_arguments=trigger_feedback_receipt is not None,
     )
+    # Validate the authoritative source before reporting a row-id collision so
+    # a delayed replay from deleted evidence remains fail-closed as
+    # ``source_not_active``. A valid add still cannot overwrite any existing
+    # row, including non-active history.
+    if result.status == ApplyStatus.committed and operation.logical_payload.decision == DurablePatchDecision.add.value:
+        new_memory_id = patch_payload.get("new_memory_id")
+        if isinstance(new_memory_id, str) and new_memory_id.strip():
+            new_item_ref = db_client.document(f"{collections.memory_items}/{new_memory_id}")
+            deleted_receipt_ref = db_client.document(
+                f"{collections.memory_deletion_receipts}/{privacy_deletion_receipt_id(uid, new_memory_id)}"
+            )
+            if getattr(deleted_receipt_ref.get(transaction=transaction), "exists", False):
+                result = ApplyResult(
+                    status=ApplyStatus.invalid_patch,
+                    control_state=control_state,
+                    operation=operation,
+                    reason="add patch new_memory_id is privacy-deleted",
+                )
+            elif getattr(new_item_ref.get(transaction=transaction), "exists", False):
+                result = ApplyResult(
+                    status=ApplyStatus.invalid_patch,
+                    control_state=control_state,
+                    operation=operation,
+                    reason="add patch new_memory_id already exists",
+                )
+    if result.status == ApplyStatus.committed and allow_ledger_migration:
+        control_updates: Dict[str, Any]
+        if source_packet_id.startswith("user_mutation:knowledge_ledger_migration:"):
+            control_updates = {
+                "ledger_migration_migrated_count": result.control_state.ledger_migration_migrated_count + 1
+            }
+        else:
+            control_updates = {
+                "ledger_migration_adjudicated_count": result.control_state.ledger_migration_adjudicated_count + 1
+            }
+        result = result.model_copy(update={"control_state": result.control_state.model_copy(update=control_updates)})
+    if result.status == ApplyStatus.committed:
+        for evidence_ref, evidence in staged_evidence:
+            transaction.set(evidence_ref, _firestore_data(evidence))
     _write_apply_result(
         transaction=transaction,
         db_client=db_client,
@@ -1706,27 +2319,174 @@ def _apply_long_term_patch_firestore_transaction(
             commit_id=result.control_state.head_commit_id,
             now=result.control_state.updated_at,
         )
+        if ledger_reopen_receipt is not None:
+            if reopen_receipt_ref is None or len(result.memory_items) != 1:
+                raise MemoryFirestoreApplyError("standalone ledger reopen did not produce exactly one replacement")
+            replacement = result.memory_items[0]
+            if replacement.memory_id != ledger_reopen_receipt.replacement_memory_id:
+                raise MemoryFirestoreApplyError("standalone ledger reopen replacement identity mismatch")
+            transaction.set(reopen_receipt_ref, _firestore_data(ledger_reopen_receipt))
+        if trigger_feedback_receipt is not None:
+            if (
+                feedback_receipt_ref is None
+                or feedback_event_ref is None
+                or feedback_event_receipt is None
+                or len(result.memory_items) != 1
+            ):
+                raise MemoryFirestoreApplyError("trigger feedback did not update exactly one trigger")
+            applied_item = result.memory_items[0]
+            transaction.set(
+                feedback_receipt_ref,
+                _firestore_data(
+                    trigger_feedback_receipt.model_copy(update={"applied_trigger_revision": applied_item.item_revision})
+                ),
+            )
+            transaction.set(
+                feedback_event_ref,
+                _firestore_data(
+                    feedback_event_receipt.model_copy(update={"feedback_id": trigger_feedback_receipt.feedback_id})
+                ),
+            )
     return result
 
 
-def _read_authoritative_evidence(
+@transactional
+def _read_trigger_feedback_replay_transaction(
+    transaction: Any,
+    db_client: Any,
+    uid: str,
+    feedback_id: str,
+    request_hash: str,
+) -> Optional[Tuple[MemoryItem, JITTriggerFeedbackReceipt]]:
+    collections = MemoryCollections(uid=uid)
+    deletion_ref = db_client.document(f"account_deletions/{uid}")
+    deletion_snapshot = deletion_ref.get(transaction=transaction)
+    deletion_payload = deletion_snapshot.to_dict() if getattr(deletion_snapshot, "exists", False) else {}
+    deletion_status = normalize_account_deletion_status(
+        marker_exists=bool(getattr(deletion_snapshot, "exists", False)),
+        raw_status=deletion_payload.get("wipe_status") if isinstance(deletion_payload, dict) else None,
+    )
+    if account_deletion_blocks_access(deletion_status):
+        raise MemoryFirestoreApplyError("trigger feedback replay blocked by account deletion fence")
+    control = _required_model(
+        ref=db_client.document(collections.memory_apply_control_state),
+        transaction=transaction,
+        model=MemoryControlState,
+        label="memory control state",
+    )
+    receipt_ref = db_client.document(f"{collections.jit_trigger_feedback}/{feedback_id}")
+    receipt_snapshot = receipt_ref.get(transaction=transaction)
+    if not getattr(receipt_snapshot, "exists", False):
+        return None
+    receipt = parse_snapshot_strict(
+        JITTriggerFeedbackReceipt,
+        receipt_snapshot,
+        payload_from_snapshot=_typed_doc,
+    )
+    if receipt.uid != uid or receipt.request_hash != request_hash:
+        raise MemoryFirestoreApplyError("trigger feedback id was reused with a different payload")
+    if receipt.account_generation != control.account_generation or receipt.applied_trigger_revision is None:
+        raise MemoryFirestoreApplyError("trigger feedback replay generation is stale")
+    event = _required_model(
+        ref=db_client.document(f"{collections.jit_proactivity_events}/{receipt.event_id}"),
+        transaction=transaction,
+        model=JITProactivityEventReceipt,
+        label="JIT proactivity event receipt",
+    )
+    if (
+        event.uid != uid
+        or event.account_generation != receipt.account_generation
+        or event.trigger_memory_id != receipt.trigger_memory_id
+        or event.trigger_revision != receipt.expected_trigger_revision
+        or event.feedback_id != receipt.feedback_id
+    ):
+        raise MemoryFirestoreApplyError("trigger feedback replay event authority is stale")
+    item = _required_model(
+        ref=db_client.document(f"{collections.memory_items}/{receipt.trigger_memory_id}"),
+        transaction=transaction,
+        model=MemoryItem,
+        label="trigger feedback target",
+    )
+    if (
+        item.uid != uid
+        or item.account_generation != receipt.account_generation
+        or item.item_revision < receipt.applied_trigger_revision
+        or item.kind != MemoryKind.trigger
+    ):
+        raise MemoryFirestoreApplyError("trigger feedback replay target authority is stale")
+    return item, receipt
+
+
+def read_trigger_feedback_replay_firestore(
+    uid: str,
+    *,
+    feedback_id: str,
+    request_hash: str,
+    db_client: Any = None,
+) -> Optional[Tuple[MemoryItem, JITTriggerFeedbackReceipt]]:
+    client = db_client or db
+    transaction = client.transaction()
+    return _read_trigger_feedback_replay_transaction(
+        transaction,
+        client,
+        uid,
+        feedback_id,
+        request_hash,
+    )
+
+
+_EVIDENCE_SEMANTIC_EXCLUDES = {
+    "created_at",
+    "artifact_preservation",
+    "source_state",
+    "source_state_reason",
+    "provenance_visibility",
+    "redaction_status",
+    "encryption_or_redaction_status",
+}
+
+
+def _evidence_semantic_payload(evidence: MemoryEvidence) -> Dict[str, Any]:
+    return evidence.model_dump(mode="json", exclude=_EVIDENCE_SEMANTIC_EXCLUDES)
+
+
+def _read_or_stage_authoritative_evidence(
     *,
     db_client: Any,
     transaction: Any,
     collections: MemoryCollections,
     evidence_ids: Iterable[str],
-) -> List[MemoryEvidence]:
+    proposed_evidence: Optional[List[MemoryEvidence]],
+) -> tuple[List[MemoryEvidence], List[tuple[Any, MemoryEvidence]]]:
+    proposed_by_id = {evidence.evidence_id: evidence for evidence in proposed_evidence or []}
+    if len(proposed_by_id) != len(proposed_evidence or []):
+        raise MemoryFirestoreApplyError("proposed evidence contains duplicate ids")
+    expected_ids = list(evidence_ids)
+    if proposed_evidence is not None and set(proposed_by_id) != set(expected_ids):
+        raise MemoryFirestoreApplyError("proposed evidence ids do not match the operation")
     evidence_items: List[MemoryEvidence] = []
-    for evidence_id in evidence_ids:
+    staged: List[tuple[Any, MemoryEvidence]] = []
+    for evidence_id in expected_ids:
         evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence_id}")
-        evidence = _required_model(
-            ref=evidence_ref,
-            transaction=transaction,
-            model=MemoryEvidence,
-            label="memory evidence",
-        )
+        snapshot = evidence_ref.get(transaction=transaction)
+        proposed = proposed_by_id.get(evidence_id)
+        if getattr(snapshot, "exists", False):
+            evidence = parse_snapshot_strict(MemoryEvidence, snapshot, payload_from_snapshot=_typed_doc)
+            if (
+                evidence.source_state == SourceState.active
+                and proposed is not None
+                and _evidence_semantic_payload(evidence) != _evidence_semantic_payload(proposed)
+            ):
+                raise MemoryFirestoreApplyError("proposed evidence conflicts with existing evidence identity")
+        elif proposed is not None:
+            if proposed.source_state != SourceState.active:
+                raise MemoryFirestoreApplyError("proposed evidence must be active")
+            evidence = proposed
+            staged.append((evidence_ref, evidence))
+        else:
+            raise MissingMemoryDocument(f"missing memory evidence: {evidence_ref.path}")
         evidence_items.append(evidence)
-    return evidence_items
+    return evidence_items, staged
 
 
 def _read_authoritative_target_item(
@@ -1789,6 +2549,78 @@ def _validate_authoritative_targets(
     return None
 
 
+def _validate_required_ledger_source(
+    *,
+    db_client: Any,
+    transaction: Any,
+    collections: MemoryCollections,
+    expected: Optional[MemoryItem],
+    operation: MemoryOperation,
+    control_state: MemoryControlState,
+    ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
+) -> Optional[ApplyResult]:
+    """Fence a user-selected ledger source in the same transaction as its append."""
+
+    if expected is None:
+        return None
+    source_ref = db_client.document(f"{collections.memory_items}/{expected.memory_id}")
+    snapshot = source_ref.get(transaction=transaction)
+    if not getattr(snapshot, "exists", False):
+        return _source_not_active(control_state, operation, "required ledger source is missing")
+    source = parse_snapshot_strict(MemoryItem, snapshot, payload_from_snapshot=_typed_doc)
+    restricted = bool(set(source.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS))
+    if (
+        source.uid != operation.uid
+        or source.memory_id != expected.memory_id
+        or str(getattr(snapshot, "id", expected.memory_id)) != expected.memory_id
+        or source.account_generation != control_state.account_generation
+        or source.item_revision != expected.item_revision
+        or source.content_hash != expected.content_hash
+        or source.source_state != SourceState.active
+        or source.source_state != expected.source_state
+        or source.status != expected.status
+        or source.sensitivity_labels != expected.sensitivity_labels
+        or restricted
+        or bool((source.promotion or {}).get("is_locked", False))
+    ):
+        return _source_not_active(control_state, operation, "required ledger source changed or is unavailable")
+    if ledger_reopen_receipt is None:
+        return None
+    if (
+        source.valid_to != expected.valid_to
+        or source.superseded_by != expected.superseded_by
+        or source.canonical_memory_id != expected.canonical_memory_id
+        or source.ledger_schema_version != expected.ledger_schema_version
+        or source.kind != expected.kind
+        or source.intent_backed != expected.intent_backed
+        or source.processing_state != expected.processing_state
+        or source.visibility != expected.visibility
+        or source.slot != expected.slot
+        or source.subject_scope != expected.subject_scope
+        or source.subject_entity_id != expected.subject_entity_id
+        or source.promotion != expected.promotion
+    ):
+        return _source_not_active(control_state, operation, "standalone ledger source changed or is unavailable")
+    # Reopening is allowed to preserve the source evidence only while every
+    # referenced evidence record is still active.  Do not permit the external
+    # evidence-reissue path to turn a privacy tombstone into a fresh source.
+    for expected_evidence in expected.evidence:
+        evidence_ref = db_client.document(f"{collections.memory_evidence}/{expected_evidence.evidence_id}")
+        evidence_snapshot = evidence_ref.get(transaction=transaction)
+        if not getattr(evidence_snapshot, "exists", False):
+            return _source_not_active(control_state, operation, "required ledger source evidence is missing")
+        evidence = parse_snapshot_strict(MemoryEvidence, evidence_snapshot, payload_from_snapshot=_typed_doc)
+        if (
+            evidence.evidence_id != expected_evidence.evidence_id
+            or evidence.source_state != SourceState.active
+            or evidence.redaction_status == RedactionStatus.tombstoned
+            or evidence.redaction_status == RedactionStatus.redacted
+            or evidence.encryption_or_redaction_status != RedactionStatus.active
+        ):
+            return _source_not_active(control_state, operation, "required ledger source evidence is unavailable")
+    return None
+
+
 def _operation_target_ids(operation: MemoryOperation) -> List[str]:
     target_ids: List[str] = []
     if operation.target_memory_id:
@@ -1802,6 +2634,15 @@ def _operation_target_ids(operation: MemoryOperation) -> List[str]:
 def _target_not_active(control_state: MemoryControlState, operation: MemoryOperation, reason: str) -> ApplyResult:
     return ApplyResult(
         status=ApplyStatus.target_not_active,
+        control_state=control_state,
+        operation=operation,
+        reason=reason,
+    )
+
+
+def _source_not_active(control_state: MemoryControlState, operation: MemoryOperation, reason: str) -> ApplyResult:
+    return ApplyResult(
+        status=ApplyStatus.source_not_active,
         control_state=control_state,
         operation=operation,
         reason=reason,
@@ -1911,6 +2752,114 @@ def _firestore_data(value: object) -> Any:
     return value
 
 
+def cleanup_expired_memory_deletion_receipts(
+    uid: str,
+    *,
+    db_client: Any = db,
+    now: datetime | None = None,
+    limit: int = 128,
+) -> int:
+    """Remove only expired, content-free anti-resurrection receipts.
+
+    V2 receipts contain only a server-keyed identity and privacy epoch. Legacy
+    V1 receipts remain readable until their own expiry so rollout never drops
+    an existing deletion fence. Any malformed row fails closed.
+    """
+
+    cutoff = now or datetime.now(timezone.utc)
+    bounded_limit = max(1, min(256, int(limit)))
+    collection = db_client.collection(MemoryCollections(uid=uid).memory_deletion_receipts)
+    try:
+        query = collection.where("expires_at", "<=", cutoff).limit(bounded_limit)
+        rows = list(query.stream())
+    except Exception:
+        return 0
+    try:
+        # Legal hold and retention cleanup share the same account-wide
+        # linearization gate. A hold that wins first preserves every receipt;
+        # a cleanup that wins first completes before a hold can activate.
+        with destructive_operation_gate(
+            uid,
+            kind="retention_cleanup",
+            firestore_client=db_client,
+        ):
+            deleted = 0
+            for row in rows:
+                try:
+                    payload = row.to_dict()
+                    if not isinstance(payload, dict):
+                        continue
+                    expires_at = payload.get("expires_at")
+                    if (
+                        payload.get("schema_version") == "memory_deletion_receipt.v2"
+                        and payload.get("uid") == uid
+                        and payload.get("receipt_id") == str(row.id)
+                        and isinstance(payload.get("privacy_epoch_commit_id"), str)
+                        and payload.get("privacy_epoch_commit_id")
+                        and isinstance(expires_at, datetime)
+                        and expires_at.tzinfo is not None
+                        and expires_at.utcoffset() is not None
+                        and expires_at <= cutoff
+                    ):
+                        row.reference.delete()
+                        deleted += 1
+                        continue
+                    memory_ids = payload.get("memory_ids")
+                    operation_id = payload.get("operation_id")
+                    commit_id = payload.get("commit_id")
+                    if (
+                        payload.get("schema_version") != "memory_deletion_receipt.v1"
+                        or payload.get("uid") != uid
+                        or not isinstance(memory_ids, list)
+                        or not memory_ids
+                        or not all(isinstance(memory_id, str) and memory_id for memory_id in memory_ids)
+                        or not isinstance(operation_id, str)
+                        or not operation_id
+                        or not isinstance(commit_id, str)
+                        or not commit_id
+                        or not isinstance(expires_at, datetime)
+                        or expires_at.tzinfo is None
+                        or expires_at.utcoffset() is None
+                        or expires_at > cutoff
+                    ):
+                        continue
+                    operation_snapshot = db_client.document(
+                        f"{MemoryCollections(uid=uid).memory_operations}/{operation_id}"
+                    ).get()
+                    operation_payload = (
+                        operation_snapshot.to_dict() if getattr(operation_snapshot, "exists", False) else None
+                    )
+                    if (
+                        not isinstance(operation_payload, dict)
+                        or operation_payload.get("operation_type") != MemoryOperationType.deletion.value
+                        or operation_payload.get("committed_head_commit_id") != commit_id
+                    ):
+                        continue
+                    items_match = True
+                    for memory_id in memory_ids:
+                        item_snapshot = db_client.document(
+                            f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
+                        ).get()
+                        item_payload = item_snapshot.to_dict() if getattr(item_snapshot, "exists", False) else None
+                        if (
+                            not isinstance(item_payload, dict)
+                            or item_payload.get("status") != MemoryItemStatus.tombstoned.value
+                            or item_payload.get("ledger_commit_id") != commit_id
+                        ):
+                            items_match = False
+                            break
+                    if not items_match:
+                        continue
+                    row.reference.delete()
+                    deleted += 1
+                except Exception:
+                    continue
+            return deleted
+    except Exception:
+        # Active/malformed/unavailable legal-hold authority fails closed.
+        return 0
+
+
 __all__ = [
     "CanonicalApplyWrite",
     "CanonicalMemoryIntakePausedError",
@@ -1927,6 +2876,8 @@ __all__ = [
     "MemoryFirestoreApplyError",
     "apply_long_term_patch_firestore",
     "atomic_bump_source_generation",
+    "cleanup_expired_memory_deletion_receipts",
+    "privacy_deletion_receipt_id",
     "replace_conversation_source_firestore",
     "tombstone_memory_items_firestore",
 ]

@@ -21,8 +21,11 @@ from utils.conversations.meeting_receipt import record_and_persist_finalized_mee
 from utils.conversations.process_conversation import extract_memories, process_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.jit_rollout import JITDecisionStage
 from utils.log_sanitizer import sanitize_pii
 from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
+from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
+from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +191,30 @@ async def finalize_persisted_conversation(
             conversation,
             finalization_job_id=finalization_job_id,
         )
+        # This is a metadata-only durable outbox write. Pixels remain local and
+        # an offline desktop can satisfy it on a later screen-sync recovery.
+        if not getattr(conversation, 'discarded', False):
+            decision = await resolve_frame_request_authority(
+                uid,
+                stage=JITDecisionStage.INGRESS,
+                force_refresh=True,
+            )
+            if decision.enabled and decision.account_generation is not None:
+                keyframe_eligible = await run_blocking(
+                    db_executor,
+                    ensure_conversation_keyframe_job,
+                    uid,
+                    conversation,
+                )
+                device_id = str(getattr(conversation, 'client_device_id', None) or '').strip()
+                if keyframe_eligible and device_id:
+                    await run_blocking(
+                        db_executor,
+                        reconcile_conversation_keyframe_jobs,
+                        uid,
+                        device_id=device_id,
+                        account_generation=decision.account_generation,
+                    )
         source = getattr(conversation, 'source', None)
         source_value = getattr(source, 'value', source)
         if source_value == 'omi' and not getattr(conversation, 'discarded', False):

@@ -6,12 +6,14 @@ import Image from '@tschk/moonshine-next/image';
 import { Brain } from 'lucide-react';
 import type { ClientMessage } from '@/types/conversation';
 import { cn } from '@/lib/utils';
+import { parseChatEvidenceFromRecord } from '@/lib/chatEvidence';
 import {
   nearestVerticalScroller,
   scrollEdgesOf,
   shouldFollowLiveEdge,
 } from '@/lib/scrollEdges';
 import { ChatMarkdown } from './ChatMarkdown';
+import { ChatEvidenceCard } from './ChatEvidenceCard';
 
 /**
  * The chat transcript, with no chrome of its own.
@@ -138,6 +140,7 @@ export function ChatTranscript({
                   )}
                   <ChatMarkdown>{message.text}</ChatMarkdown>
                 </div>
+                <ChatEvidenceCard envelope={parseChatEvidenceFromRecord(message)} />
                 <span className="text-xs text-text-quaternary mt-1 block">
                   {formatMessageTime(message.created_at)}
                 </span>

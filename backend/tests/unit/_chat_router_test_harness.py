@@ -115,6 +115,12 @@ def wire_common_stubs(install) -> SimpleNamespace:
     helpers.extract_memory_ids = MagicMock(return_value=[])
     goals = install('utils.llm.goals', ModuleType('utils.llm.goals'))
     goals.extract_and_update_goal_progress = MagicMock()
+    # routers.chat resolves the chat-agent provider through the gateway route
+    # pin (a6988be309); stub it so these suites stay off the real LLM package.
+    gateway_client = install('utils.llm.gateway_client', ModuleType('utils.llm.gateway_client'))
+    gateway_client.CHAT_AGENT_ROUTE_DIRECT = 'direct'
+    gateway_client.CHAT_AGENT_ROUTE_GATEWAY = 'gateway'
+    gateway_client.get_chat_agent_route = MagicMock(return_value='direct')
     users = install('utils.users', ModuleType('utils.users'))
     users.get_user_display_name = MagicMock(return_value='Test User')
     sanitizer = install('utils.log_sanitizer', ModuleType('utils.log_sanitizer'))

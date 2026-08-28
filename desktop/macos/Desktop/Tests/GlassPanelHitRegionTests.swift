@@ -191,10 +191,10 @@ final class GlassPanelHitRegionTests: XCTestCase {
     case .panelSettings:
       sidebar = AnyView(settingsSidebar)
     case .legacySettings:
-      sidebar = AnyView(LegacySidebarSurface { settingsSidebar })
+      sidebar = AnyView(LegacySidebarSurface(reduceTransparency: false) { settingsSidebar })
     case .legacyNavigation:
       sidebar = AnyView(
-        LegacySidebarSurface {
+        LegacySidebarSurface(reduceTransparency: false) {
           SidebarView(
             selectedIndex: .constant(SidebarNavItem.dashboard.rawValue),
             isCollapsed: .constant(true),

@@ -131,6 +131,8 @@ overlay:
     - .github/workflows/gcp_notifications_job.yml
     - .github/workflows/gcp_x_connector_sync_job.yml
     - .github/workflows/gcp_memory_maintenance_job.yml
+    - .github/workflows/gcp_frame_request_retention_job.yml
+    - .github/workflows/gcp_daily_memory_sweep_job.yml
     network:
       flags:
         --network:
@@ -376,6 +378,34 @@ overlay:
             value: 'true'
           PINECONE_INDEX_NAME:
             value: memories-backend
+      daily-memory-sweep-job:
+        flags:
+          --task-timeout: 3600s
+        env:
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware
+          MEMORY_ENABLED:
+            value: 'on'
+          MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
+            value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH:
+            value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
+            value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
+            value: disabled
+          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES:
+            value: '8'
+          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
+            value: '0'
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
+            value: 'false'
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
+            value: ''
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
+            value: '3'
+          MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
+            value: 'false'
       memory-maintenance-job:
         flags:
           --task-timeout: 3600s
@@ -398,3 +428,10 @@ overlay:
             value: 'true'
           PINECONE_INDEX_NAME:
             value: memories-backend
+      frame-request-retention-job:
+        flags:
+          --task-timeout: 900s
+          --max-retries: '3'
+        env:
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware

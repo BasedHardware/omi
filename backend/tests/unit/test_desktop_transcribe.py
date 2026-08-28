@@ -350,6 +350,7 @@ def _desktop_transcribe_isolation():
         # be a real function (not MagicMock) or it corrupts decorated function signatures.
         for _ufull in [
             'utils.llm',
+            'utils.llm.gateway_client',
             'utils.llm.memories',
             'utils.llm.persona',
             'utils.llm.chat',

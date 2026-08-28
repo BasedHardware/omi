@@ -653,11 +653,15 @@ actor TaskAssistant: ProactiveAssistant {
           log("Task: Workflow control omitted generation; capture remains retryable")
           return
         }
+        let evidenceVersion = ScreenCandidateAdapter.evidenceVersion(
+          for: localRecord.screenshotId
+        )
         let decision = ScreenCandidateAdapter.adapt(
           task: task,
           dueAt: parseDueDate(from: task.inferredDeadline),
           localEvidenceID: "screen-\(localRecord.screenshotId ?? localID)",
-          deviceID: ClientDeviceService.shared.clientDeviceId
+          deviceID: ClientDeviceService.shared.clientDeviceId,
+          evidenceVersion: evidenceVersion
         )
         guard decision.candidate != nil else {
           try await StagedTaskStorage.shared.discardCanonicalOutbox(id: localID)

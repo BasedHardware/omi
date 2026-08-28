@@ -573,7 +573,11 @@ private struct ChatFirstRestoredTasksHost: View {
     TasksPage(
       viewModel: viewModel,
       chatCoordinator: chatCoordinator,
-      chatProvider: chatProvider
+      chatProvider: chatProvider,
+      onOpenRewindEvidence: { screenshotID in
+        RewindCitationFocusState.shared.request(screenshotID)
+        navigation.selectMore(.rewind)
+      }
     )
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .task(id: pendingFocusToken) {

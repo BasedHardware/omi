@@ -2004,6 +2004,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get memoryDeleted => '기억이 삭제되었습니다.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => '실행 취소';
 
   @override

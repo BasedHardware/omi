@@ -2051,6 +2051,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get memoryDeleted => 'జ్ఞాపకం తొలగించబడింది.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'మరలుచేయండి';
 
   @override

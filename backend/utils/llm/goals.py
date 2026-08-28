@@ -245,7 +245,13 @@ Give ONE specific action in 1-2 sentences. Be concise but complete. No generic a
         return 'Focus on the next small step toward your goal.'
 
 
-def extract_and_update_goal_progress(uid: str, text: str) -> Optional[Dict[str, Any]]:
+def extract_and_update_goal_progress(
+    uid: str,
+    text: str,
+    *,
+    idempotency_key_prefix: Optional[str] = None,
+    account_generation: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
     """
     Extract goal progress from text and update if found.
     Checks all active goals in a SINGLE LLM call. Returns dict with update info if successful, None otherwise.
@@ -322,7 +328,16 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                     continue
                 old_value = goal.get('current_value', 0)
                 if new_value != old_value:
-                    goals_db.update_goal_progress(uid, goal_id, new_value)
+                    if idempotency_key_prefix is None:
+                        goals_db.update_goal_progress(uid, goal_id, new_value)
+                    else:
+                        goals_db.update_goal_progress(
+                            uid,
+                            goal_id,
+                            new_value,
+                            idempotency_key=f'{idempotency_key_prefix}:{goal_id}',
+                            account_generation=account_generation,
+                        )
                     goal_title = goal.get('title', '')
                     logger.info(
                         f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result_dict.get('reasoning', 'N/A')})"

@@ -275,29 +275,15 @@ actor TaskPrioritizationService {
         return parts.joined(separator: " ")
       }.joined(separator: "\n")
 
-      let prompt = """
-        Review this window of the user's staged task ranking. The complete ranking has \
-        \(sortedTasks.count) tasks (1 = most important), and this request contains global \
-        positions \(batch.first?.position ?? 0)-\(batch.last?.position ?? 0).
-
-        Identify tasks in THIS WINDOW that are MISRANKED — tasks whose current position \
-        doesn't match their actual importance. Only return tasks that need to move. Do not \
-        return tasks that are already well-positioned, and never return a task not shown below.
-
-        Consider:
-        1. Alignment with the user's goals and current priorities
-        2. Time urgency (due date proximity)
-        3. Actionability — specific tasks rank higher than vague ones
-        4. Real-world importance (financial, health, commitments to others)
-        5. Most AI-extracted tasks are noise — push vague/irrelevant tasks down
-
-        \(contextSection)CURRENT TASK RANKING WINDOW (global positions):
-        \(taskLines)
-
-        Return ONLY tasks from this window that need re-ranking, with their new GLOBAL position \
-        numbers. New positions are relative to the complete list (1 to \(sortedTasks.count)). \
-        Return no more than \(runPolicy.maxTasksPerRequest) tasks.
-        """
+      let prompt = Self.rerankPrompt(
+        totalCount: sortedTasks.count,
+        windowFirst: batch.first?.position ?? 0,
+        windowLast: batch.last?.position ?? 0,
+        contextSection: contextSection,
+        taskLines: taskLines,
+        maxMoves: runPolicy.maxTasksPerRequest,
+        today: ChatPromptBuilder.currentCalendarDay()
+      )
 
       let responseText: String
       do {
@@ -440,6 +426,48 @@ actor TaskPrioritizationService {
     }.joined(separator: "\n")
 
     return "TASKS THE USER HAS COMPLETED (for reference — do NOT rank these):\n\(lines)"
+  }
+
+  /// The re-ranking request. Static with an injected today so tests can pin the
+  /// rendered prompt (SCA-358): the model weighs "Time urgency (due date proximity)"
+  /// against due dates rendered as UTC ISO strings, so without a local "today" line it
+  /// anchors proximity on its training-cutoff date and mis-ranks everything near a
+  /// deadline. Rides in the per-batch user prompt — the system prompt stays static.
+  static func rerankPrompt(
+    totalCount: Int,
+    windowFirst: Int,
+    windowLast: Int,
+    contextSection: String,
+    taskLines: String,
+    maxMoves: Int,
+    today: String
+  ) -> String {
+    """
+    Review this window of the user's staged task ranking. The complete ranking has \
+    \(totalCount) tasks (1 = most important), and this request contains global \
+    positions \(windowFirst)-\(windowLast).
+
+    Today is \(today). Due dates below are UTC ISO timestamps — convert to the local \
+    calendar day when judging proximity.
+
+    Identify tasks in THIS WINDOW that are MISRANKED — tasks whose current position \
+    doesn't match their actual importance. Only return tasks that need to move. Do not \
+    return tasks that are already well-positioned, and never return a task not shown below.
+
+    Consider:
+    1. Alignment with the user's goals and current priorities
+    2. Time urgency (due date proximity)
+    3. Actionability — specific tasks rank higher than vague ones
+    4. Real-world importance (financial, health, commitments to others)
+    5. Most AI-extracted tasks are noise — push vague/irrelevant tasks down
+
+    \(contextSection)CURRENT TASK RANKING WINDOW (global positions):
+    \(taskLines)
+
+    Return ONLY tasks from this window that need re-ranking, with their new GLOBAL position \
+    numbers. New positions are relative to the complete list (1 to \(totalCount)). \
+    Return no more than \(maxMoves) tasks.
+    """
   }
 }
 

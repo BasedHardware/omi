@@ -158,6 +158,16 @@ class _MemoryDialogState extends State<MemoryDialog> {
 
   Future<void> _handleSave() async {
     if (contentController.text.trim().isEmpty) return;
+    final existingMemory = widget.memory;
+    if (existingMemory != null &&
+        existingMemory.isKnowledgeLedger &&
+        (existingMemory.deleted ||
+            existingMemory.invalidAt != null ||
+            (existingMemory.supersededBy ?? '').trim().isNotEmpty ||
+            existingMemory.ledgerKind != KnowledgeLedgerKind.fact ||
+            existingMemory.isLocked)) {
+      return;
+    }
 
     setState(() {
       _isSaving = true;

@@ -1150,8 +1150,19 @@ struct DesktopHomeView: View {
         GoalCelebrationView()
       }
       .overlay(alignment: .bottom) {
-        // One-time rating ask, due after the user's 3rd question.
+        // One-time rating ask, due after the user's 3rd question. Remote
+        // (admin-authored) prompts render through the same slot; the built-in
+        // ask has right of way inside RemotePromptEngine.evaluate().
         RatingPromptBar()
+        RemotePromptBar()
+      }
+      .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "signed-out") {
+        // Re-runs on every owner transition (same pattern as the chat-first
+        // capability task): cached prompt state must swap accounts instantly.
+        RatingPromptManager.shared.ownerDidChange()
+        RemotePromptEngine.shared.ownerDidChange()
+        RemotePromptEngine.shared.start()
+        await RatingPromptManager.shared.seedFromHistoryIfNeeded()
       }
       .overlay {
         if !usesChatFirstShell && showTryAskingPopup {
@@ -1553,7 +1564,11 @@ private struct PageContentView: View {
           TasksPage(
             viewModel: viewModelContainer.tasksViewModel,
             chatCoordinator: viewModelContainer.taskChatCoordinator,
-            chatProvider: viewModelContainer.chatProvider))
+            chatProvider: viewModelContainer.chatProvider,
+            onOpenRewindEvidence: { screenshotID in
+              RewindCitationFocusState.shared.request(screenshotID)
+              selectedTabIndex = SidebarNavItem.rewind.rawValue
+            }))
       case 7:
         RewindPage(appState: appState)
       case 8:

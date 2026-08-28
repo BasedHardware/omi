@@ -294,6 +294,7 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
     )
     monkeypatch.setitem(service_globals, 'users_db', users_db)
     monkeypatch.setitem(service_globals, 'auth', types.SimpleNamespace(delete_account=lambda _uid: None))
+    monkeypatch.setitem(service_globals, 'assert_account_deletion_permitted', lambda _uid: None)
     monkeypatch.setitem(service_globals, 'is_account_deletion_dispatch_enabled', lambda: True)
     monkeypatch.setitem(service_globals, 'enqueue_account_deletion_wipe', enqueue_task)
 
@@ -418,7 +419,7 @@ def test_export_all_user_data_returns_500_before_streaming_headers_when_memory_p
     monkeypatch.setattr(
         data_export,
         'MemoryService',
-        MagicMock(return_value=MagicMock(iter_export_memories=_failing_iter)),
+        MagicMock(return_value=MagicMock(iter_portability_export_memories=_failing_iter)),
     )
     app = FastAPI()
     app.include_router(users_router.router)

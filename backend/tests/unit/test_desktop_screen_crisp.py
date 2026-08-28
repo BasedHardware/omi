@@ -1,3 +1,5 @@
+from contextlib import nullcontext
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -7,6 +9,7 @@ from fastapi.testclient import TestClient
 from database import vector_db
 from routers import desktop_screen_crisp
 from utils.other.endpoints import get_current_user_uid
+from utils.retrieval.frame_request_authority import FrameRequestAuthorityDecision
 
 
 def make_client() -> TestClient:
@@ -14,6 +17,14 @@ def make_client() -> TestClient:
     app.include_router(desktop_screen_crisp.router)
     app.dependency_overrides[get_current_user_uid] = lambda: "user-1"
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _disable_frame_request_authority(monkeypatch):
+    async def disabled(*_args, **_kwargs):
+        return FrameRequestAuthorityDecision(enabled=False)
+
+    monkeypatch.setattr(desktop_screen_crisp, "resolve_frame_request_authority", disabled)
 
 
 def test_crisp_unread_route_is_removed():
@@ -27,6 +38,13 @@ def _entitle(monkeypatch, entitled: bool = True) -> None:
     still hold, but each test pays a live Firestore timeout.
     """
     monkeypatch.setattr(desktop_screen_crisp, "grants_cloud_screen_vectors", lambda uid: entitled)
+
+
+def _enable_frame_requests(monkeypatch, generation: int = 7) -> None:
+    async def enabled(*_args, **_kwargs):
+        return FrameRequestAuthorityDecision(enabled=True, account_generation=generation)
+
+    monkeypatch.setattr(desktop_screen_crisp, "resolve_frame_request_authority", enabled)
 
 
 def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
@@ -71,6 +89,9 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
                     "clientDeviceId": "mac-a",
                     "embedding": [0.1],
                     "storageId": "mac-a-4",
+                    "accountGeneration": 0,
+                    "deviceRetentionSeconds": None,
+                    "captureEligible": False,
                 },
                 {
                     "id": 7,
@@ -82,6 +103,9 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
                     "clientDeviceId": None,
                     "embedding": None,
                     "storageId": "7",
+                    "accountGeneration": 0,
+                    "deviceRetentionSeconds": None,
+                    "captureEligible": False,
                 },
             ],
         ),
@@ -99,10 +123,58 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
                     "clientDeviceId": "mac-a",
                     "embedding": [0.1],
                     "storageId": "mac-a-4",
+                    "accountGeneration": 0,
+                    "deviceRetentionSeconds": None,
+                    "captureEligible": False,
                 }
             ],
         ),
     ]
+
+
+def test_enabled_screen_sync_returns_only_device_routed_frame_metadata(monkeypatch):
+    _entitle(monkeypatch)
+    _enable_frame_requests(monkeypatch)
+    monkeypatch.setattr(desktop_screen_crisp, "upsert_screen_activity", lambda uid, rows: len(rows))
+    monkeypatch.setattr(desktop_screen_crisp, "upsert_screen_activity_vectors", lambda uid, rows: None)
+    monkeypatch.setattr(desktop_screen_crisp, "reconcile_conversation_keyframe_jobs", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(
+        desktop_screen_crisp,
+        "list_pending_frame_requests",
+        lambda uid, **kwargs: [
+            SimpleNamespace(
+                request_id="frame-1",
+                device_id=kwargs["device_id"],
+                account_generation=kwargs["account_generation"],
+                conversation_id="conversation-1",
+                screenshot_id="42",
+                state=SimpleNamespace(value="requested"),
+                expires_at=datetime(2026, 8, 25, tzinfo=timezone.utc),
+            )
+        ],
+    )
+
+    response = make_client().post(
+        "/v1/screen-activity/sync",
+        json={
+            "account_generation": 7,
+            "rows": [{"id": 1, "timestamp": "2026-07-26T00:00:00Z", "clientDeviceId": "mac-a"}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["frame_requests"] == [
+        {
+            "request_id": "frame-1",
+            "device_id": "mac-a",
+            "account_generation": 7,
+            "conversation_id": "conversation-1",
+            "screenshot_id": "42",
+            "state": "requested",
+            "expires_at": "2026-08-25T00:00:00+00:00",
+        }
+    ]
+    assert "image_base64" not in response.text
 
 
 def test_screen_activity_sync_rejects_batches_larger_than_rust_contract():
@@ -141,6 +213,7 @@ def test_screen_activity_storage_ids_are_device_scoped():
 
 def test_screen_activity_vector_treats_canonical_naive_timestamp_as_utc(monkeypatch):
     upserts = []
+    monkeypatch.setattr(vector_db, "external_write_fence", lambda *_args, **_kwargs: nullcontext())
     monkeypatch.setattr(
         vector_db,
         "index",

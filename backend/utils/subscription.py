@@ -221,10 +221,7 @@ def request_has_llm_byok_key() -> bool:
     try:
         fingerprints = get_cached_byok_state(uid).get('fingerprints', {})
     except Exception:
-        return any(
-            get_byok_key(provider)
-            for provider in ('openrouter', 'openai', 'anthropic', 'gemini')
-        )
+        return any(get_byok_key(provider) for provider in ('openrouter', 'openai', 'anthropic', 'gemini'))
     return any(
         provider in fingerprints and bool(get_byok_key(provider))
         for provider in ('openrouter', 'openai', 'anthropic', 'gemini')
