@@ -217,6 +217,20 @@ final class HubSystemInstructionTests: XCTestCase {
     XCTAssertEqual(toolNames, Set(DesktopCapabilityRegistry.realtimeToolNames))
   }
 
+  func testRealtimePublicWebSearchToolExplicitlyCoversFreshFactsAndFalseDenials() {
+    let tool = RealtimeHubTools.openAITools.first {
+      ($0["name"] as? String) == HubTool.webSearch.rawValue
+    }
+    let description = tool?["description"] as? String ?? ""
+    let parameters = tool?["parameters"] as? [String: Any]
+
+    XCTAssertTrue(description.contains("MUST call this tool"))
+    XCTAssertTrue(description.contains("weather"))
+    XCTAssertTrue(description.contains("explicitly asks"))
+    XCTAssertTrue(description.contains("Never say that you lack web search"))
+    XCTAssertEqual(parameters?["required"] as? [String], ["query"])
+  }
+
   func testRealtimeSpawnAgentProviderEnumOnlyAdvertisesAvailableProviders() {
     let tools = RealtimeHubTools.openAITools(availableDirectedProviders: ["openclaw"])
     let spawnAgent = tools.first { ($0["name"] as? String) == HubTool.spawnAgent.rawValue }

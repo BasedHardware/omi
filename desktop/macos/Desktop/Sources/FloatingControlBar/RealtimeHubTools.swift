@@ -241,7 +241,8 @@ enum RealtimeHubTools {
     return out
   }
 
-  /// Response contract for the typed-chat turn behind `ask_higher_model`.
+  /// Response contract for typed-chat turns behind `ask_higher_model` and
+  /// realtime `web_search`.
   /// This model authors the answer that will be spoken; realtime only voices it.
   static func escalationSystemPrompt() -> String {
     """
@@ -259,5 +260,14 @@ enum RealtimeHubTools {
     let trimmedToolContext = toolContext.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedToolContext.isEmpty else { return query }
     return query + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
+  }
+
+  /// Host-authored public-web request sent through the typed-chat lane. The
+  /// explicit prefix selects the adapter's required public-web route even when
+  /// the original request is a timeless lookup rather than an obviously fresh
+  /// query such as weather.
+  static func publicWebSearchPrompt(query: String, toolContext: String) -> String {
+    let publicWebQuery = "Search the web before answering this request:\n\n" + query
+    return escalationUserPrompt(query: publicWebQuery, toolContext: toolContext)
   }
 }

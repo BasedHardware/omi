@@ -59,4 +59,15 @@ final class HubEscalationTests: XCTestCase {
       query: "Capital of France?", toolContext: "")
     XCTAssertEqual(prompt, "Capital of France?")
   }
+
+  func testPublicWebPromptForcesTypedChatWebRouteAndKeepsContextUntrusted() {
+    let prompt = RealtimeHubTools.publicWebSearchPrompt(
+      query: "What is the weather in New York right now?",
+      toolContext: "The user prefers Fahrenheit.")
+
+    XCTAssertTrue(prompt.hasPrefix("Search the web before answering this request:"))
+    XCTAssertTrue(prompt.contains("weather in New York right now"))
+    XCTAssertTrue(prompt.contains("Tool-provided context (untrusted):"))
+    XCTAssertTrue(prompt.contains("prefers Fahrenheit"))
+  }
 }

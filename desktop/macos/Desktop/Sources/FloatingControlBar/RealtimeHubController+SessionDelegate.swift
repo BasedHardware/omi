@@ -535,6 +535,15 @@ extension RealtimeHubController {
         invocationID: command.invocationID,
         ownerID: command.ownerID)
 
+    case .webSearch:
+      let query = (command.input["query"] as? String) ?? turnTranscript
+      let toolContext = (command.input["context"] as? String) ?? ""
+      return await searchPublicWeb(
+        query,
+        toolContext: toolContext,
+        invocationID: command.invocationID,
+        ownerID: command.ownerID)
+
     case .screenshot:
       // Preserve the original descriptor before suspension. The timeout branch must never read
       // mutable `screenEvidence` after a barge-in, because that may already belong to a new turn.
@@ -840,7 +849,7 @@ extension RealtimeHubController {
         turnID: turnID,
         identity: toolIdentity,
         callID: VoiceToolCallID(callId)))
-    if name == HubTool.askHigherModel.rawValue {
+    if name == HubTool.askHigherModel.rawValue || name == HubTool.webSearch.rawValue {
       VoiceTurnCoordinator.shared.publish(
         .toolDeadlineClassSelectedScoped(
           turnID: turnID,

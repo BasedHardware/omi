@@ -30,6 +30,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case getTasks = "get_tasks"
   case createCalendarEvent = "create_calendar_event"
   case askHigherModel = "ask_higher_model"
+  case webSearch = "web_search"
   case screenshot = "screenshot"
   case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
@@ -46,8 +47,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:4adfeac4c9b786f4fed1f96cca9b82ac11f546a95880a213ee70a84b25038bf1"
-  static let chatFirstManifestDigest = "sha256:d6e1d7cd7378454a276330c6aceaba80dcb1fbdd9b71fe63d183bc1f60925ff1"
+  static let manifestDigest = "sha256:78d62d2e7b7b72766d33c8ec03c56a7c2d3904ad1677243fba04c7482e569934"
+  static let chatFirstManifestDigest = "sha256:3728e17f9b2022916b41ce7f5c28503cf1f06dd47d72a57d5ba05835c723c25c"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -84,6 +85,7 @@ enum GeneratedToolExecutors {
     .getTasks: .realtimeHub,
     .createCalendarEvent: .chatToolExecutor,
     .askHigherModel: .realtimeHub,
+    .webSearch: .realtimeHub,
     .screenshot: .realtimeHub,
     .reportScreenObservation: .realtimeHub,
     .pointClick: .realtimeHub,

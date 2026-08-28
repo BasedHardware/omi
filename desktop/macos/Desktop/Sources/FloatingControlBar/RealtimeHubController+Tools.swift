@@ -16,23 +16,54 @@ extension RealtimeHubController {
     invocationID: String,
     ownerID: String
   ) async -> AuthorizedRealtimeToolExecutionResult {
+    await queryChatLaneForVoice(
+      prompt: RealtimeHubTools.escalationUserPrompt(query: query, toolContext: toolContext),
+      invocationID: invocationID,
+      ownerID: ownerID,
+      toolName: HubTool.askHigherModel.rawValue,
+      failureMessage: "I ran into an error reaching the model.")
+  }
+
+  /// web_search — force a public-web-routed typed-chat turn and return its
+  /// grounded answer for the realtime provider to speak faithfully.
+  func searchPublicWeb(
+    _ query: String,
+    toolContext: String,
+    invocationID: String,
+    ownerID: String
+  ) async -> AuthorizedRealtimeToolExecutionResult {
+    await queryChatLaneForVoice(
+      prompt: RealtimeHubTools.publicWebSearchPrompt(query: query, toolContext: toolContext),
+      invocationID: invocationID,
+      ownerID: ownerID,
+      toolName: HubTool.webSearch.rawValue,
+      failureMessage: "The web lookup failed. Please try again.")
+  }
+
+  private func queryChatLaneForVoice(
+    prompt: String,
+    invocationID: String,
+    ownerID: String,
+    toolName: String,
+    failureMessage: String
+  ) async -> AuthorizedRealtimeToolExecutionResult {
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
       return .failed(Self.authorizedRealtimeOwnerChangedError())
     }
     let t0 = Date()
     do {
       let answer = try await FloatingControlBarManager.shared.askChatLaneForSpokenAnswer(
-        prompt: RealtimeHubTools.escalationUserPrompt(query: query, toolContext: toolContext),
+        prompt: prompt,
         invocationID: invocationID,
         expectedOwnerID: ownerID)
       let ms = Int(Date().timeIntervalSince(t0) * 1000)
-      log("RealtimeHub: ask_higher_model chat lane OK in \(ms)ms (\(answer.count) chars)")
+      log("RealtimeHub: \(toolName) chat lane OK in \(ms)ms (\(answer.count) chars)")
       return .succeeded(answer)
     } catch RealtimeChatLaneError.ownerChanged {
       return .failed(Self.authorizedRealtimeOwnerChangedError())
     } catch {
-      log("RealtimeHub: ask_higher_model failed — \(error.localizedDescription)")
-      return .succeeded("I ran into an error reaching the model.")
+      log("RealtimeHub: \(toolName) failed — \(error.localizedDescription)")
+      return .succeeded(failureMessage)
     }
   }
 
