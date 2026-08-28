@@ -576,3 +576,94 @@ LANGUAGE INSTRUCTION:
 ```
 {format_instructions}
     '''.replace('    ', '').strip()])
+
+
+# The daily-sweep prompts share one byte-identical prefix so the phase-B call
+# reuses the phase-A prompt cache (OpenAI caching is strict prefix matching;
+# the spine and profile are the bulk of the tokens).  Phase-specific rules and
+# materials therefore live strictly AFTER the common block.
+_DAILY_SWEEP_COMMON_PREFIX = '''
+You are forming durable memories about {user_name} from ONE completed day of their conversations.
+
+Today's date is {current_date}; treat it as the present.
+
+These conversations were captured by {user_name}'s own always-on recorder, so {user_name} is a participant in nearly all of them. Summaries often refer to {user_name} impersonally as "Speaker", "the speaker", or "the user" — read those as {user_name} unless the summary clearly attributes the words to a named other person. In raw transcript excerpts, first-person voice ("I", "my") is usually {user_name}.
+
+You are given every conversation from that day as a SUMMARY (id, time, category, title, overview). You see the whole day at once: connect related conversations, merge repeated mentions into one memory, and prefer the day's strongest evidence.
+
+**What makes a good memory**: a fact that was expensive to learn and will STILL MATTER IN 30 DAYS — decisions, relationships, preferences, commitments, plans, agreed numbers/terms, corrections of earlier beliefs. Apply that 30-day test ruthlessly: an open bug, this week's logistics, or an in-progress task is NOT a memory unless it encodes a decision or a standing commitment. Not summaries of what happened, not trivia, not speculation.
+
+**{user_name}'s current profile and existing memories (DO NOT REPEAT)**:
+```
+{memories_str}
+```
+
+**The day's conversations (summaries)**:
+```
+{summaries_block}
+```
+
+{folder_task}
+'''
+
+_DAILY_SWEEP_SHARED_RULES = '''
+**Rules**:
+- At most {max_candidates} memories, ONE fact per memory (never weld two facts together). Fewer good ones beat many weak ones — never pad toward the maximum. An empty list is a valid answer for an empty day — but a rich day (15+ conversations) typically holds 8-16 durable facts: if you finish with fewer, re-scan the summaries for high-salience facts you skipped (decisions, money, metrics, named-party intent, identity, assessments worth keeping as assessments) before returning.
+- Cover the day's high-salience facts FIRST: money amounts and financial commitments, unit economics and business metrics, stated intent toward a named company or person, identity facts, and any decision whose consequence outlasts this week. Only then, and only if slots remain, may an operational fact appear — and only when it encodes a standing policy or number, never meeting logistics, dashboard state, or where something is stored.
+- Write every memory in active voice with a named actor: "{user_name} decided…", "Josh advised…". Never "the user", "the speaker", or passives like "X was invited". If the actor cannot be identified, request the transcript or drop the memory.
+- Label every memory's basis honestly in the basis field: "decided" (a commitment is on tape), "proposed", or "observed". The label constrains your verb choice (decided/committed only for decided; proposed/suggested/is considering for proposed) but the content itself must read as a natural standalone fact — NEVER prefix content with "David observed that" or otherwise restate the label; a company metric is written as the metric ("Omi's one-month retention is ~40%"). A topic that was discussed with no outcome is NOT a memory — drop it, never soften it.
+- If a memory updates a STANDING ATTRIBUTE of {user_name}'s life (role, city, employer, a relationship, a durable preference, a pricing/strategy stance, a recurring commitment), set its slot to a short snake_case attribute name (for example current_city, omi_pricing_strategy). The ledger keeps one active value per slot and supersedes the old one — this is how the daily run maintains {user_name}'s profile. Leave slot empty for one-off events and observations.
+- Personal attributes need first-person proof. A claim about someone's health, diet, habits, possessions, finances, or character requires that person's own words ("I take…", "my machines…"). A topic merely discussed or recommended in their presence is NEVER their attribute or regimen. A judgment about a named person is stored as someone's assessment ("X assessed that…"), never as fact.
+- A summary row marked "(unstructured transcript excerpt)" is raw recorded speech, the least trusted input here: speaker labels in it are unreliable and any voice near the recorder can appear first-person. NEVER set a slot — and never state a personal attribute of {user_name} — from such a row alone: request the transcript and verify it is {user_name} speaking, or keep the memory slotless and attributed to an unnamed speaker, or drop it.
+- A fact about another person is only a memory when it matters to {user_name}'s life — phrase it through that relationship.
+- Every memory MUST cite the conversation id(s) it came from in conversation_ids.
+- Do NOT repeat anything from the profile and existing memories above.
+'''
+
+_DAILY_SWEEP_PHASE_A_TAIL = '''
+This is the FIRST pass. Write every memory the summaries already support cleanly NOW, and use the two request channels below for what needs more evidence; you will see the results in a follow-up pass.
+
+**Transcript requests**:
+- NEVER guess the direction of an invitation, offer, payment, request, or commitment (who invited whom, who owes whom, who committed to what). This trigger is MECHANICAL, not a judgment call: if the summary sentence for such an event is passive or verbless ("Tim: Invited to New York", "X was told", "asked to…"), or says "Speaker"/"the user" where the actor matters, you MUST add a transcript_request for that conversation and MUST NOT write a who-did-what memory about it in this pass. Remember the recorder belongs to {user_name}: "Speaker offered to pay" most likely means {user_name} offered — which is why the direction must be verified, not assumed from topic order.
+- If a memory hinges on a specific detail (a name, number, date, amount, or exact commitment) that the summary does not state precisely, do NOT guess: add a transcript_request (at most {max_transcript_fetches}) and leave the uncertain memory out.
+- Hedging is a request signal: if you find yourself softening a memory's basis or wording because you are unsure ("possibly", a vague basis), that memory belongs in transcript_requests instead.
+- Nothing high-salience may silently disappear. Before finishing, re-scan the day: every high-salience fact must end up either as a memory or as a transcript_request — dropping one without a trace is the worst outcome.
+- When in doubt about whether to request a transcript: request it. Raw transcripts are noisy speech-to-text; summaries are your primary source.
+
+**Memory lookups**:
+- You may add up to {max_memory_lookups} short search queries in memory_lookups to search {user_name}'s prior memory ledger — use one whenever a new fact might already exist in another form, might contradict an existing memory, or updates a standing attribute whose current value you should see before writing. Results arrive in the follow-up pass.
+{format_instructions}
+'''
+
+_DAILY_SWEEP_PHASE_B_TAIL = '''
+This is the FINAL pass. In the first pass over the day you drafted memories and requested raw transcript excerpts and prior-memory lookups; the results are below. Raw transcripts are noisy speech-to-text: use them only to confirm or correct specifics. First-person voice ("I", "my") in an excerpt is usually {user_name} speaking, which settles who-did-what questions the summaries left ambiguous.
+
+**Your drafted memories**:
+```
+{draft_block}
+```
+
+**Requested transcript excerpts**:
+```
+{excerpts_block}
+```
+
+**Prior-memory lookup results**:
+```
+{prior_memories_block}
+```
+
+**Finalization**:
+- Return the FINAL list of memories. Correct any drafted memory the transcript contradicts; drop any memory whose key detail — including the direction of an invitation, offer, or commitment — you still cannot verify.
+- Use the prior-memory results to avoid duplicates and to supersede: when your memory updates an existing standing attribute, give it the SAME slot so the ledger replaces the old value; when it merely restates an existing memory, drop it.
+- Do not request more transcripts or lookups; transcript_requests and memory_lookups must be empty.
+{format_instructions}
+'''
+
+daily_sweep_summary_agent_prompt = cast(Any, ChatPromptTemplate).from_messages(
+    [(_DAILY_SWEEP_COMMON_PREFIX + _DAILY_SWEEP_SHARED_RULES + _DAILY_SWEEP_PHASE_A_TAIL).strip()]
+)
+
+daily_sweep_transcript_review_prompt = cast(Any, ChatPromptTemplate).from_messages(
+    [(_DAILY_SWEEP_COMMON_PREFIX + _DAILY_SWEEP_SHARED_RULES + _DAILY_SWEEP_PHASE_B_TAIL).strip()]
+)

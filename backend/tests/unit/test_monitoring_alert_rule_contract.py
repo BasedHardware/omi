@@ -56,6 +56,14 @@ PARAKEET_FATAL_CUDA_EXPR = (
 )
 
 
+# Grafana rejects a rule whose UID exceeds 40 characters with
+# "UID is longer than 40 symbols", at create time. A repo export is a mirror, so
+# an over-long UID costs nothing until someone tries to provision it -- and then
+# the rule that was written, reviewed, and merged simply cannot be made live.
+# Two rules were already past the limit before this was pinned.
+GRAFANA_MAX_UID_LENGTH = 40
+
+
 def _rules(path: Path) -> dict[str, dict]:
     rules = json.loads(path.read_text(encoding="utf-8"))
     by_uid = {rule["uid"]: rule for rule in rules}
@@ -79,6 +87,36 @@ def _all_rule_exports() -> dict[str, dict[str, dict]]:
     }
 
 
+COUNTER_FN_ON_GAUGE_DEBT = {
+    # Pre-existing rules that apply rate() to a stackdriver_ GAUGE. The exporter
+    # publishes Cloud Monitoring DELTA metrics as gauges whose value is the count
+    # for one alignment window, so rate() over them is not a per-second rate.
+    #
+    # Measured 2026-08-25 on the backend-listen LB: rate(...[5m]) read 1.82 where
+    # the correct avg_over_time(avg(...))/60 read 0.63 req/sec -- wrong by ~3x, and
+    # the error scales with the series' volatility rather than being a fixed factor.
+    #
+    # These are NOT being rewritten here. Their thresholds were calibrated
+    # empirically against the wrong values, so a mechanical rewrite would silently
+    # re-tune 14 rules, 6 of which page. That needs its own change with a human
+    # deciding each threshold. This set is a RATCHET: it may shrink, never grow.
+    "cew923rcn3ncwb",
+    "aew926uoh6o00c",  # critical, pages
+    "dew91uem0dnggb",
+    "dew9ala448r9cc",
+    "few9anlyv16v4a",  # critical, pages
+    "bew9aeqgx2w3kf",
+    "eew9ai0vlsyrke",
+    "dfpgfzd3t1m9sf",  # critical, pages
+    "efpossz9hmsqod",  # critical, pages
+    "efpgg049laqyof",
+    "efpgg1kfjglj4d",
+    "bevzeigrns5xca",
+    "cevzen5b94z5sb",  # critical, pages
+    "tz_backend_listen_lb_zero",  # critical, pages
+}
+
+
 def test_stackdriver_error_count_rules_treat_no_data_as_zero_errors():
     """Grafana's Stackdriver empty result is healthy for these error counters."""
     rules = _rules(MONITORING / "alert-rules.json")
@@ -100,6 +138,13 @@ def test_split_alert_exports_preserve_error_count_no_data_contract():
     assert ERROR_COUNT_RULES <= split.keys()
     for uid in ERROR_COUNT_RULES:
         assert combined[uid]["noDataState"] == split[uid]["noDataState"] == "OK"
+
+
+def test_alert_uids_are_short_enough_for_grafana_to_accept():
+    """Every exported rule must be creatable; Grafana caps UIDs at 40 characters."""
+    for export_name, rules in _all_rule_exports().items():
+        over = {uid: len(uid) for uid in rules if len(uid) > GRAFANA_MAX_UID_LENGTH}
+        assert not over, f"{export_name}: Grafana will reject these UIDs at create time: {over}"
 
 
 def test_managed_gke_disables_unavailable_control_plane_scrapes_and_alerts():
@@ -275,7 +320,7 @@ def test_live_transcription_alert_is_traffic_gated_and_ignores_idle_no_data():
 
 
 SILENT_FAILURE_RUNBOOK = "backend/docs/runbooks/silent-failure-detection.md"
-PRE_ROUTE_REJECTION_RULE = "omi-llm-gateway-invalid-request-rejections"
+PRE_ROUTE_REJECTION_RULE = "omi-llm-gateway-invalid-requests"
 PRE_ROUTE_REJECTION_EXPR = (
     'sum(increase(llm_gateway_request_rejections_total{error_class="invalid_request"}[30m])) or vector(0)'
 )
@@ -462,3 +507,36 @@ def test_liveness_exemptions_are_documented_in_the_runbook():
 
     for journey in LIVENESS_EXEMPT_JOURNEYS:
         assert journey in runbook, f"{journey} is exempt from liveness coverage but the runbook does not say why"
+
+
+def test_no_alert_applies_a_counter_function_to_a_stackdriver_gauge():
+    """rate()/increase()/irate() over a stackdriver_ series is always a bug.
+
+    stackdriver_exporter publishes Cloud Monitoring DELTA metrics as GAUGES whose
+    value is the count for one alignment window. A counter function over that
+    returns a plausible wrong number instead of an error -- which is exactly how
+    two Firestore cost alerts shipped in #12193 that could never cross their
+    thresholds: rate() read 75.7 where real volume was ~936/sec. Read volume must
+    be recovered with avg_over_time(avg(...))/60.
+
+    Failure-Class: FC-alert-never-provably-fired
+    """
+    offenders = set()
+    counter_fn_over_stackdriver = re.compile(r"\b(?:rate|irate|increase)\s*\(\s*[^)]*\bstackdriver_")
+    for _export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            for node in rule.get("data", []):
+                expr = (node.get("model") or {}).get("expr")
+                if isinstance(expr, str) and counter_fn_over_stackdriver.search(expr):
+                    offenders.add(uid)
+    new_offenders = offenders - COUNTER_FN_ON_GAUGE_DEBT
+    assert not new_offenders, (
+        "rate()/irate()/increase() applied to a stackdriver_ gauge in: "
+        + ", ".join(sorted(new_offenders))
+        + ". Use avg_over_time(avg(<metric>)[<window>:<step>]) / 60 for a per-second rate."
+    )
+    stale = COUNTER_FN_ON_GAUGE_DEBT - offenders
+    assert not stale, (
+        "these UIDs were fixed or removed -- delete them from COUNTER_FN_ON_GAUGE_DEBT so the "
+        "ratchet keeps tightening: " + ", ".join(sorted(stale))
+    )

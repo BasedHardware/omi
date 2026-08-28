@@ -10781,6 +10781,10 @@
     "accountCutoverMigrationInProgressMessage": "החשבון שלכם בהעברה. תכונות המוצר מושהות עד לסיום ההעברה.",
     "accountCutoverMigrationRollbackMessage": "החשבון שלכם בתחזוקה לאחר ביטול העברה. ייתכן שנתונים חדשים יותר נותרו מבודדים.",
     "accountCutoverOpenStore": "פתחו חנות",
+    "chatScopeToday": "היום",
+    "chatScopeThisWeek": "השבוע הזה",
+    "chatScopeAbout": "אודות: {title}",
+    "askAboutThisConversation": "שאל על זה",
     "sendRawAudioToOmi": "שליחת שמע גולמי ל-Omi",
     "sendRawAudioToOmiDescription": "כבו כדי למנוע שליחת שמע גולמי ל-Omi. תמלילים ונתונים הדרושים לתכונות הענן עדיין עשויים להישלח ל-Omi.",
     "findDevice": "איתור",
@@ -10793,5 +10797,8 @@
     "appReEnableFailedTitle": "ההפעלה מחדש נכשלה",
     "appReEnableFailedBody": "לא ניתן היה להפעיל מחדש את האפליקציה הזו. נסה שוב.",
     "appDisabledOn": "הושבתה בתאריך {date}.",
-    "appDisabledLastError": "השגיאה האחרונה: {error}"
+    "appDisabledLastError": "השגיאה האחרונה: {error}",
+    "prerecordedTranscript": "הוקלט מראש",
+    "pendantRecordingSyncBlocked": "ה-Pendant עדיין מקליט, ולכן לא ניתן להעביר את השמע השמור בו. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ואז סנכרנו שוב.",
+    "pendantFullSyncBlocked": "האחסון של ה-Pendant מלא והוא עדיין במצב הקלטה, ולכן לא ניתן להעביר את השמע השמור. לחצו על כפתור ה-Pendant כדי לעצור את ההקלטה, ולאחר מכן סנכרנו שוב."
 }

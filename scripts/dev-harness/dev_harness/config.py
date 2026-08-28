@@ -25,6 +25,22 @@ TYPESENSE_PINNED_VERSION = "27.1"
 LOCAL_TYPESENSE_API_KEY = "local-typesense-api-key-not-real"
 LOCAL_FIREBASE_API_KEY = "local-firebase-auth-emulator-api-key"
 LOCAL_LLM_GATEWAY_SERVICE_TOKEN = "local-dev-llm-gateway-service-token-not-real"
+# Signs the internal screen-frame approval token. Production sets either this or
+# SCREEN_FRAME_KMS_KEY; without one the egress routes fail closed, so the harness
+# supplies a throwaway value rather than leaving meeting screenshots unrunnable locally.
+LOCAL_SCREEN_FRAME_SIGNING_SECRET = "local-dev-screen-frame-signing-secret-not-real"
+LOCAL_STORAGE_BUCKET_ENV = {
+    "BUCKET_SPEECH_PROFILES": "speech-profiles",
+    "BUCKET_POSTPROCESSING": "postprocessing",
+    "BUCKET_PRIVATE_CLOUD_SYNC": "omi-private-cloud-sync",
+    "BUCKET_TEMPORAL_SYNC_LOCAL": "sync-temporal",
+    "BUCKET_MEMORIES_RECORDINGS": "memories-recordings",
+    "BUCKET_PLUGINS_LOGOS": "plugins-logos",
+    "BUCKET_APP_THUMBNAILS": "app-thumbnails",
+    "BUCKET_CHAT_FILES": "chat-files",
+    "BUCKET_DESKTOP_UPDATES": "desktop-updates",
+    "BUCKET_SCREEN_FRAMES": "screen-frames",
+}
 PORT_OFFSET_ENV = "OMI_HARNESS_PORT_OFFSET"
 PORT_OVERRIDE_ENVS = {
     "firestore": "OMI_HARNESS_FIRESTORE_PORT",
@@ -318,6 +334,8 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
     return {
         "OMI_HARNESS_INSTANCE": cfg.instance,
         "OMI_HARNESS_STATE_ROOT": str(cfg.layout.state_root),
+        "OMI_LOCAL_STORAGE_ROOT": str(cfg.layout.services_dir / "storage"),
+        "OMI_LOCAL_STORAGE_BASE_URL": f"{cfg.backend_url}/_local/storage",
         "FIRESTORE_EMULATOR_HOST": cfg.firestore_host,
         "FIREBASE_AUTH_EMULATOR_HOST": cfg.auth_host,
         "FIREBASE_AUTH_PROJECT_ID": cfg.project_id,
@@ -341,6 +359,11 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "OMI_LLM_GATEWAY_URL": cfg.llm_gateway_url,
         "OMI_LLM_GATEWAY_SERVICE_TOKEN": cfg.llm_gateway_service_token,
         "OMI_LLM_GATEWAY_FEATURE_MODE": gateway_feature_mode,
+        # Production ships default-off and turns this on deliberately; the harness is
+        # the one place the feature must be on, since running it is the whole point.
+        "SCREEN_FRAME_EGRESS_ENABLED": "true",
+        "SCREEN_FRAME_SIGNING_SECRET": LOCAL_SCREEN_FRAME_SIGNING_SECRET,
+        **LOCAL_STORAGE_BUCKET_ENV,
     }
 
 

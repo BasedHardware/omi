@@ -3237,6 +3237,10 @@
     "accountCutoverMigrationInProgressMessage": "您的账户正在迁移。产品功能将暂停，直到迁移完成。",
     "accountCutoverMigrationRollbackMessage": "账户迁移回滚后处于维护状态。部分较新的数据可能被隔离。",
     "accountCutoverOpenStore": "打开应用商店",
+    "chatScopeToday": "今天",
+    "chatScopeThisWeek": "本周",
+    "chatScopeAbout": "关于：{title}",
+    "askAboutThisConversation": "询问此内容",
     "sendRawAudioToOmi": "向 Omi 发送原始音频",
     "sendRawAudioToOmiDescription": "关闭后不会向 Omi 发送原始音频；转写文本及云端功能所需数据仍可能发送至 Omi。",
     "findDevice": "查找",
@@ -3249,5 +3253,8 @@
     "appReEnableFailedTitle": "无法重新启用",
     "appReEnableFailedBody": "无法重新启用此应用，请重试。",
     "appDisabledOn": "于 {date} 停用。",
-    "appDisabledLastError": "最后的错误：{error}"
+    "appDisabledLastError": "最后的错误：{error}",
+    "prerecordedTranscript": "预录",
+    "pendantRecordingSyncBlocked": "Pendant 仍在录音，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。",
+    "pendantFullSyncBlocked": "Pendant 的存储空间已满，且仍处于录音模式，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。"
 }

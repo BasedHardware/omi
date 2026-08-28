@@ -17,6 +17,7 @@ from deepgram.clients.live.v1 import LiveOptions
 from config.stt_provider_policy import (
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
+    SONIOX_PROVIDER,
     STTServingSurface,
     deepgram_provider_for_runtime,
     default_models_for_surface,
@@ -33,6 +34,7 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
+from utils.stt.soniox import SafeSonioxSocket as SafeSonioxSocket, process_audio_soniox as process_audio_soniox
 from utils.stt.provider_resilience import (
     EXPECTED_REJECTIONS,
     ProviderCircuitBreaker,
@@ -40,10 +42,10 @@ from utils.stt.provider_resilience import (
     fallback_socket_is_serving,
 )
 from utils.stt.speaker_embedding import (
-    SPEAKER_MATCH_THRESHOLD,
     async_extract_embedding_from_bytes,
     compare_embeddings,
 )
+from utils.stt.speaker_clustering import select_speaker_cluster
 from utils.observability.fallback import record_fallback
 from utils.other.backoff import calculate_backoff_with_jitter
 import logging
@@ -55,6 +57,7 @@ class STTService(str, Enum):
     deepgram = "deepgram"
     modulate = "modulate"
     parakeet = "parakeet"
+    soniox = "soniox"
 
     @staticmethod
     def get_model_name(value: 'STTService') -> Optional[str]:
@@ -64,6 +67,8 @@ class STTService(str, Enum):
             return 'modulate_streaming'
         if value == STTService.parakeet:
             return 'parakeet_streaming'
+        if value == STTService.soniox:
+            return 'soniox_streaming'
 
 
 class ParakeetConnectionError(RuntimeError):
@@ -87,6 +92,10 @@ _modulate_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')),
     cooldown_seconds=float(os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')),
 )
+_soniox_circuit = ProviderCircuitBreaker(
+    failure_threshold=int(os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')),
+    cooldown_seconds=float(os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')),
+)
 
 
 def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
@@ -96,6 +105,8 @@ def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
         return _deepgram_circuit
     if primary_service == STTService.modulate:
         return _modulate_circuit
+    if primary_service == STTService.soniox:
+        return _soniox_circuit
     raise ValueError(f'connection fallback is not defined for a {primary_service.value} primary')
 
 
@@ -517,6 +528,10 @@ def get_stt_service_for_language(
                 and modulate_supports_language(requested_language)
             ):
                 return (STTService.modulate, requested_language, 'velma-2'), parakeet_fallback_reason
+            if model == 'soniox' and provider_is_enabled(SONIOX_PROVIDER, surface) and os.getenv('SONIOX_API_KEY'):
+                # Soniox identifies the language itself, so every requested language
+                # including 'multi' is serviceable.
+                return (STTService.soniox, requested_language, 'soniox'), parakeet_fallback_reason
         return None, parakeet_fallback_reason
 
     prefers_parakeet = (preferred_service or '').strip().lower() == STTService.parakeet.value
@@ -1355,10 +1370,10 @@ class ParakeetStreamingSocket(STTSocket):
     async def _assign_speaker(self, seg_pcm: bytes) -> int:
         """Cluster a segment's voice embedding into a session-stable speaker index.
 
-        Online greedy clustering: embed the clip, match it to the nearest known speaker
-        centroid (cosine < SPEAKER_MATCH_THRESHOLD) or start a new one. Falls back to the
-        previous speaker when diarization is off, the clip is too short to embed, or the
-        embedding service errs — so a transient failure never drops or mislabels the segment.
+        Online greedy clustering uses the short-clip threshold and cluster cap from
+        speaker_clustering. Once the cap is full, the nearest centroid absorbs misses.
+        Falls back to the previous speaker when diarization is off, the clip is too short
+        to embed, or the embedding service errs, so a transient failure never drops text.
         """
         if not self._diarize:
             return 0
@@ -1373,13 +1388,22 @@ class ParakeetStreamingSocket(STTSocket):
             logger.warning(f"Parakeet diarization embed failed; reusing speaker {self._last_speaker}: {e}")
             return self._last_speaker
 
-        best_i, best_dist = -1, 1e9
-        for i, centroid in enumerate(self._spk_centroids):
-            d = compare_embeddings(emb, centroid)
-            if d < best_dist:
-                best_i, best_dist = i, d
-
-        if best_i >= 0 and best_dist < SPEAKER_MATCH_THRESHOLD:
+        best_i, create_new, _, capped = select_speaker_cluster(emb, self._spk_centroids, compare_embeddings)
+        if not create_new:
+            if capped:
+                # The cap forced this merge; the embedding missed every centroid,
+                # so folding it into a running mean would drag that centroid
+                # toward a different speaker. Report the degraded outcome.
+                record_fallback(
+                    component='other',
+                    from_mode='new_speaker_centroid',
+                    to_mode='nearest_centroid',
+                    reason='capacity_full',
+                    outcome='degraded',
+                    log=logger,
+                )
+                self._last_speaker = best_i
+                return best_i
             # Running-mean keeps the centroid stable as the speaker keeps talking.
             n = self._spk_counts[best_i]
             self._spk_centroids[best_i] = (self._spk_centroids[best_i] * n + emb) / (n + 1)
@@ -1389,7 +1413,7 @@ class ParakeetStreamingSocket(STTSocket):
 
         self._spk_centroids.append(emb)
         self._spk_counts.append(1)
-        self._last_speaker = len(self._spk_centroids) - 1
+        self._last_speaker = best_i
         return self._last_speaker
 
     def _slice_pcm(self, pcm: bytes, rel_start: float, rel_end: float) -> bytes:

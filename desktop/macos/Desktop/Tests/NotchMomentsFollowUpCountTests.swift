@@ -59,25 +59,79 @@ final class NotchMomentsFollowUpCountTests: XCTestCase {
       NotchMomentsCoordinator.followUpCount(tasks: tasks, baselineIds: baseline, since: nil), 1)
   }
 
-  func testReceiptRequiresMatchingActiveCanonicalTask() {
-    let observed = task("task-1", createdAt: sessionStart)
-    let canonical = task("task-1", createdAt: sessionStart)
+  // The receipt contract is gone with the write it acknowledged (I1). What the
+  // moment carries now is a proposal, and the guarantee worth pinning is that the
+  // candidate identity survives the round trip through the transcript.
 
-    XCTAssertTrue(NotchMomentsCoordinator.isReceiptConfirmation(observed, canonical))
-    XCTAssertFalse(
-      NotchMomentsCoordinator.isReceiptConfirmation(
-        observed,
-        task("different-task", createdAt: sessionStart)),
-      "a different canonical task must never acknowledge the observed cache insert")
+  func testSuggestedTaskCardRoundTripsCandidateIdentity() {
+    let encoded = SuggestedTaskChatCard.encode(
+      candidateID: "cand_abc123", description: "Send Sarah the budget")
+    let parsed = SuggestedTaskChatCard.parse(encoded)
+
+    XCTAssertEqual(parsed?.candidateID, "cand_abc123")
+    XCTAssertEqual(parsed?.description, "Send Sarah the budget")
   }
 
-  func testReceiptRejectsCompletedOrRetiredCanonicalTask() {
-    let observed = task("task-1", createdAt: sessionStart)
-    let completed = TaskActionItem(id: "task-1", description: "task-1", completed: true, createdAt: sessionStart)
-    let retired = TaskActionItem(
-      id: "task-1", description: "task-1", completed: false, createdAt: sessionStart, deleted: true)
+  func testSuggestedTaskCardRejectsOrdinaryNotificationText() {
+    XCTAssertNil(SuggestedTaskChatCard.parse("Omi noticed something"))
+    XCTAssertNil(SuggestedTaskChatCard.parse("[Suggested task id=] no candidate"))
+    XCTAssertNil(SuggestedTaskChatCard.parse("[Suggested task id=cand_1]"))
+  }
 
-    XCTAssertFalse(NotchMomentsCoordinator.isReceiptConfirmation(observed, completed))
-    XCTAssertFalse(NotchMomentsCoordinator.isReceiptConfirmation(observed, retired))
+  // The live-suggestion moment must fire only for a proposal Omi made just now.
+  // A store load mid-conversation (all ids new to the coordinator, `createdAt`
+  // stale) must not announce an old suggestion as a "just now" moment.
+
+  private func suggestion(
+    _ id: String, title: String = "task", createdAt: Date, now: Date
+  ) -> SuggestedCandidate {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return SuggestedCandidate(
+      id: id,
+      title: title,
+      detail: nil,
+      accountGeneration: 1,
+      isEditableTask: true,
+      createdAt: formatter.string(from: createdAt))
+  }
+
+  private let now = Date(timeIntervalSince1970: 2_000_000)
+
+  func testAnnouncesFreshUnknownSuggestionPreferringNewest() {
+    let older = suggestion("a", createdAt: now.addingTimeInterval(-100), now: now)
+    let newer = suggestion("b", createdAt: now.addingTimeInterval(-10), now: now)
+    XCTAssertEqual(
+      NotchMomentsCoordinator.suggestedMomentCandidate(
+        candidates: [older, newer], knownIDs: [], now: now)?.id, "b")
+  }
+
+  func testBackfilledStoreLoadDoesNotAnnounceStaleSuggestions() {
+    // First emission the coordinator ever sees, mid-conversation: every id is
+    // new, but the proposals are old. Nothing may be announced.
+    let stale = [
+      suggestion("a", createdAt: now.addingTimeInterval(-3600), now: now),
+      suggestion("b", createdAt: now.addingTimeInterval(-86_400), now: now),
+    ]
+    XCTAssertNil(
+      NotchMomentsCoordinator.suggestedMomentCandidate(candidates: stale, knownIDs: [], now: now))
+  }
+
+  func testAlreadyAnnouncedSuggestionIsNotReAnnounced() {
+    let fresh = suggestion("a", createdAt: now.addingTimeInterval(-30), now: now)
+    XCTAssertNil(
+      NotchMomentsCoordinator.suggestedMomentCandidate(
+        candidates: [fresh], knownIDs: ["a"], now: now))
+  }
+
+  func testUnparseableCreatedAtFailsClosed() {
+    XCTAssertNil(NotchMomentsCoordinator.suggestedCandidateCreatedAt("yesterday"))
+    let fresh = suggestion("a", createdAt: now.addingTimeInterval(-30), now: now)
+    let malformed = SuggestedCandidate(
+      id: "b", title: "bad", detail: nil, accountGeneration: 1, isEditableTask: true,
+      createdAt: "not-a-date")
+    XCTAssertEqual(
+      NotchMomentsCoordinator.suggestedMomentCandidate(
+        candidates: [malformed, fresh], knownIDs: [], now: now)?.id, "a")
   }
 }

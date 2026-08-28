@@ -13,6 +13,7 @@ Protected paths:
 ```text
 users/{uid}/memory_items/{memory_id}
 users/{uid}/memory_operations/{operation_id}
+users/{uid}/memory_ledger_reopens/{source_memory_id}
 users/{uid}/memory_outbox/{event_id}
 users/{uid}/memory_control/{doc_id}
 users/{uid}/memory_control/app_key_memory_grants

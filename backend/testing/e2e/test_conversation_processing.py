@@ -40,16 +40,13 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "upsert_vector2", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "update_vector_metadata", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "upsert_transcript_chunk_vectors", lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_module, "upsert_action_item_vectors_batch", lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_module, "delete_action_item_vectors_batch", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "send_action_item_data_message", lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_module, "auto_sync_action_items_batch", _async_noop)
     monkeypatch.setattr(process_module, "conversation_created_webhook", _async_noop)
     monkeypatch.setattr(process_module, "get_overlapping_calendar_event", _async_none)
     monkeypatch.setattr(process_module, "write_conversation_link_to_calendar_event", _async_noop)
     monkeypatch.setattr(process_module, "precache_conversation_audio", lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_module, "_trigger_apps", lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_module, "_update_goal_progress", lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_module, "trigger_conversation_apps", lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_module, "update_goal_progress", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "submit_with_context", run_selected_postprocess)
     monkeypatch.setattr(
         process_module,
@@ -146,8 +143,10 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     assert body["structured"]["title"] == "Hermetic Conversation Lifecycle"
     assert body["transcript_segments"][0]["text"] == "We should ship deterministic conversation lifecycle coverage."
 
-    action_items = read_action_items("123")
-    assert [item["description"] for item in action_items] == ["Ship deterministic conversation lifecycle coverage"]
+    # INVARIANT I1: extraction proposes only. The summary still lists the item,
+    # but the user's action_items collection must stay empty — a task appears
+    # there only through an explicit user gesture.
+    assert read_action_items("123") == []
     memories_response = client.get("/v3/memories", headers=auth_headers)
     assert memories_response.status_code == 200, memories_response.text
     memories = memories_response.json()

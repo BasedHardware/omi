@@ -21,6 +21,14 @@ vi.mock("@/lib/posthog", () => ({
     return [];
   }),
 }));
+// k-factor reads the Firestore referral ledger alongside PostHog.
+vi.mock("@/lib/firebase/admin", () => ({
+  getDb: () => ({
+    collection: () => ({
+      where: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }),
+    }),
+  }),
+}));
 
 const MACOS_FILTER = "$os_name = 'macOS'";
 const MOBILE_FILTER = "$os_name IN ('iOS', 'Android', 'iPadOS')";
@@ -63,7 +71,6 @@ const ROUTES: [string, () => Promise<any>, string][] = [
   ["dau-trends", () => import("@/app/api/omi/stats/dau-trends/route"), "/api/omi/stats/dau-trends?days=30"],
   ["viral-metrics", () => import("@/app/api/omi/stats/viral-metrics/route"), "/api/omi/stats/viral-metrics?days=30"],
   ["retention", () => import("@/app/api/omi/stats/retention/posthog/route"), "/api/omi/stats/retention/posthog?days=14&intervals=10"],
-  ["k-factor", () => import("@/app/api/omi/stats/k-factor/posthog/route"), "/api/omi/stats/k-factor/posthog?days=30"],
 ];
 
 describe.each(ROUTES)("%s route", (_name, loadRoute, baseUrl) => {
@@ -85,6 +92,26 @@ describe.each(ROUTES)("%s route", (_name, loadRoute, baseUrl) => {
     // macOS semantics when unparameterized. The boards always pass platform=.
     const queries = await capture(loadRoute, baseUrl);
     expectScoped(queries, _name === "retention" ? "all" : "macos");
+  });
+});
+
+describe("k-factor route", () => {
+  it("scopes client viral signals to the board's OS but never the server-emitted events", async () => {
+    const queries = await capture(
+      () => import("@/app/api/omi/stats/k-factor/posthog/route"),
+      "/api/omi/stats/k-factor/posthog?days=30&platform=macos",
+    );
+    // Client-side signals (friend answer, share actions, first-seen new
+    // users) carry the macOS scope…
+    const friend = queries.filter((q) => q.includes("Onboarding How Did You Hear"));
+    expect(friend.length).toBeGreaterThan(0);
+    for (const q of friend) expect(q).toContain(MACOS_FILTER);
+    expect(queries.some((q) => q.includes("min_ts") && q.includes(MACOS_FILTER))).toBe(true);
+    // …while the server-emitted referral funnel and share-email events have
+    // no client OS and must not be OS-filtered.
+    const funnel = queries.filter((q) => q.includes("desktop_operator_month_v1"));
+    expect(funnel).toHaveLength(3);
+    for (const q of funnel) expect(q).not.toContain("$os_name");
   });
 });
 

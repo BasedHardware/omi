@@ -137,6 +137,8 @@ env:
     value: "false"
   - name: MEETING_RECEIPT_RECONCILER_ENABLED
     value: "false"
+  - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
+    value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "false"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
@@ -205,6 +207,12 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MODULATE_API_KEY
+  - name: SONIOX_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: SONIOX_API_KEY
+        optional: true
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:

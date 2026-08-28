@@ -41,7 +41,6 @@ class ViewModelContainer: ObservableObject {
     chatProvider = provider
     taskChatCoordinator = TaskChatCoordinator(chatProvider: provider)
     ChatProvider.mainInstance = provider
-    RecurringTaskScheduler.shared.configure(taskChatCoordinator: taskChatCoordinator)
 
     // Bind the headless task automation actions (create/toggle/delete/reorder/dump)
     // to this canonical, long-lived TasksViewModel so omi-ctl can drive TASK-01/02/03
@@ -84,13 +83,7 @@ class ViewModelContainer: ObservableObject {
     // Pre-initialize database so local SQLite reads are instant
     let dbInitStart = CFAbsoluteTimeGetCurrent()
     let hadUncleanShutdown = await RewindDatabase.shared.hadUncleanShutdown()
-    do {
-      try await RewindDatabase.shared.initialize()
-      databaseInitFailed = false
-    } catch {
-      logError("ViewModelContainer: Database pre-init failed, DB-dependent loads will be skipped", error: error)
-      databaseInitFailed = true
-    }
+    databaseInitFailed = !(await initializeDatabaseWithTimeout())
     let dbInitDuration = CFAbsoluteTimeGetCurrent() - dbInitStart
 
     // Database is ready (or failed) — dismiss the loading screen
@@ -165,18 +158,39 @@ class ViewModelContainer: ObservableObject {
     guard databaseInitFailed else { return true }
     log("ViewModelContainer: Retrying database initialization...")
 
-    do {
-      try await RewindDatabase.shared.initialize()
-      databaseInitFailed = false
-      await homeStatusStore.databaseDidBecomeReady()
-      warmupCoordinator.markDatabaseRetryComplete()
-      TranscriptionRetryService.shared.resumeAfterDatabaseRecovery()
-      log("ViewModelContainer: Database retry succeeded, scheduling staged startup warmup")
-      schedulePostInteractiveWarmup(dbAvailable: true)
-      return true
-    } catch {
-      logError("ViewModelContainer: Database retry failed", error: error)
+    guard await initializeDatabaseWithTimeout() else {
       return false
     }
+    databaseInitFailed = false
+    await homeStatusStore.databaseDidBecomeReady()
+    warmupCoordinator.markDatabaseRetryComplete()
+    TranscriptionRetryService.shared.resumeAfterDatabaseRecovery()
+    log("ViewModelContainer: Database retry succeeded, scheduling staged startup warmup")
+    schedulePostInteractiveWarmup(dbAvailable: true)
+    return true
+  }
+
+  /// Race `RewindDatabase.initialize()` against `StartupWarmupPolicy.databaseInitTimeout` so a
+  /// wedged open/migration (stalled disk, actor deadlock) can't strand the caller forever —
+  /// see the "Preparing your data…" hang this guards against. Must stay on `awaitWithTimeout`'s
+  /// unstructured-task implementation: a `withTaskGroup`-based timeout awaits the wedged child
+  /// task at scope exit and would hang the timeout itself.
+  private func initializeDatabaseWithTimeout() async -> Bool {
+    let succeeded = await awaitWithTimeout(StartupWarmupPolicy.databaseInitTimeout) { () -> Bool in
+      do {
+        try await RewindDatabase.shared.initialize()
+        return true
+      } catch {
+        logError("ViewModelContainer: Database init failed, DB-dependent loads will be skipped", error: error)
+        return false
+      }
+    }
+    guard let succeeded else {
+      logError(
+        "ViewModelContainer: Database init did not complete within \(StartupWarmupPolicy.databaseInitTimeout) — treating as failed so startup can proceed"
+      )
+      return false
+    }
+    return succeeded
   }
 }

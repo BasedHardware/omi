@@ -358,7 +358,17 @@ def _ambient_policy_distribution(
 
 
 def _has_direct_outcome(items: list[dict[str, Any]], segment_id: str) -> bool:
-    return any(item['policy_outcome'] == 'create_direct' and segment_id in item['source_segment_ids'] for item in items)
+    """True when a segment was scored as an explicit command.
+
+    INV-TASK-2 deleted ``create_direct``; an explicit command now proposes a
+    Candidate. The wake-word evaluation still needs to know whether an arm
+    treated a segment as a command, which is what the adjudicator is for.
+    """
+
+    return any(
+        item.get('policy_capture_kind') == 'explicit_command' and segment_id in item['source_segment_ids']
+        for item in items
+    )
 
 
 def _verdict_for_segment(adjudication: WakeWordAdjudication, segment_id: str) -> list[str]:

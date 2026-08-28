@@ -59,6 +59,12 @@ enum DefaultsKey: String {
   case onboardingJustCompleted = "onboardingJustCompleted"
   case hasCompletedFileIndexing = "hasCompletedFileIndexing"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
+  case ratingPromptQuestionCount = "ratingPromptQuestionCount"
+  case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"
+  case ratingPromptDismissed = "ratingPromptDismissed"
+  /// One-shot marker: the question counter was seeded from server chat
+  /// history so long-time users see the rating ask without three NEW questions.
+  case ratingPromptHistorySeeded = "ratingPromptHistorySeeded"
   case screenAnalysisAutoStartFixedV2 = "screenAnalysisAutoStartFixed_v2"
   case screenAnalysisAutoStartFixedV3 = "screenAnalysisAutoStartFixed_v3"
   case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
@@ -66,6 +72,10 @@ enum DefaultsKey: String {
   case pairedDeviceName = "pairedDeviceName"
   case pairedDeviceType = "pairedDeviceType"
   case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
+  /// Client-side mirror of the server's `meeting_note_screenshots_enabled` account setting
+  /// (contract §3/§9). Absent key means enabled (default on) — see
+  /// `MeetingNoteScreenshotsFeature.isEnabled`.
+  case meetingNoteScreenshotsEnabled = "meetingNoteScreenshotsEnabled"
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
@@ -77,6 +87,11 @@ enum DefaultsKey: String {
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case askOmiBarEnabled = "askOmiBarEnabled"
+  case byokLLMProvider = "dev_byok_llm_provider"
+  /// Provider → SHA-256 fingerprint last enrolled after BYOKValidator .ok.
+  case byokEnrolledFingerprints = "byok_enrolled_fingerprints"
+  /// UID that last owned persisted BYOK keys on this Mac.
+  case byokOwnerUid = "byok_owner_uid"
   case rewindDisableContentCache = "rewindDisableContentCache"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.
@@ -156,6 +171,20 @@ struct ScopedDefaultsKey {
 
   static func importConnectorSourceCount(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
+  }
+
+  /// Per-prompt, per-account resolution of a remote (admin-authored) prompt:
+  /// "answered" or "dismissed". Absent = still eligible. Owner-scoped so one
+  /// account's answer never suppresses prompts for another account on the
+  /// same Mac (the #9821 account-switch-bleed class).
+  static func remotePromptResolution(promptId: String, ownerID: String) -> Self {
+    Self(rawValue: "remotePrompt.resolution.v2.\(ownerID).\(promptId)")
+  }
+
+  /// Owner-scoped rating-prompt state (count / submitted / dismissed /
+  /// historySeeded) — same bleed class as above.
+  static func ratingPrompt(_ field: String, ownerID: String) -> Self {
+    Self(rawValue: "ratingPrompt.v2.\(field).\(ownerID)")
   }
 
   static func taskInterruptionLedger(ownerID: String) -> Self {

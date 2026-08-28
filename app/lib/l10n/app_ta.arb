@@ -10781,6 +10781,10 @@
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
     "accountCutoverOpenStore": "स्टोर खोलें",
+    "chatScopeToday": "இன்று",
+    "chatScopeThisWeek": "இந்த வாரம்",
+    "chatScopeAbout": "{title} பற்றி",
+    "askAboutThisConversation": "இதைப் பற்றி கேள்",
     "sendRawAudioToOmi": "மூல ஆடியோவை Omi-க்கு அனுப்பவும்",
     "sendRawAudioToOmiDescription": "மூல ஆடியோ Omi-க்கு அனுப்பப்படுவதைத் தடுக்க இதை அணைக்கவும். உரைமாற்றங்களும் கிளவுட் அம்சங்களுக்குத் தேவையான தரவும் இன்னும் Omi-க்கு அனுப்பப்படலாம்.",
     "findDevice": "கண்டறி",
@@ -10793,5 +10797,8 @@
     "appReEnableFailedTitle": "மீண்டும் இயக்க முடியவில்லை",
     "appReEnableFailedBody": "இந்த ஆப்பை மீண்டும் இயக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
     "appDisabledOn": "{date} அன்று முடக்கப்பட்டது.",
-    "appDisabledLastError": "கடைசி பிழை: {error}"
+    "appDisabledLastError": "கடைசி பிழை: {error}",
+    "prerecordedTranscript": "முன் பதிவு",
+    "pendantRecordingSyncBlocked": "Pendant இன்னும் பதிவு செய்து கொண்டிருக்கிறது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant பொத்தானை அழுத்தி, பிறகு மீண்டும் ஒத்திசைக்கவும்.",
+    "pendantFullSyncBlocked": "Pendant-இன் சேமிப்பகம் நிரம்பிவிட்டது, அது இன்னும் பதிவு பயன்முறையில் உள்ளது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant-இன் பொத்தானை அழுத்தி, பின்னர் மீண்டும் ஒத்திசைக்கவும்."
 }

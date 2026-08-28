@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 # App display names are resolved by an injected callable, never by importing the database
 # layer here: models/ must stay import-pure so a Pydantic module cannot drag the Firestore
@@ -68,6 +68,119 @@ class ChartData(BaseModel):
     datasets: List[ChartDataset]
 
 
+class ChatEvidenceReference(BaseModel):
+    """One bounded, optional source reference attached to a chat answer.
+
+    The answer text remains authoritative.  Clients may render these references
+    as supplemental chrome, but an unavailable or future reference must never
+    make the answer itself unreadable.
+    """
+
+    id: str = Field(..., min_length=1, max_length=256)
+    kind: str
+    state: str
+    title: Optional[str] = Field(None, max_length=160)
+    summary: Optional[str] = Field(None, max_length=600)
+    conversation_id: Optional[str] = Field(None, max_length=256)
+    segment_id: Optional[str] = Field(None, max_length=256)
+    frame_id: Optional[str] = Field(None, max_length=256)
+    request_id: Optional[str] = Field(None, max_length=256)
+    start_ms: Optional[int] = Field(None, ge=0)
+    end_ms: Optional[int] = Field(None, ge=0)
+    captured_at_ms: Optional[int] = Field(None, ge=0)
+    error_code: Optional[str] = Field(None, max_length=128)
+    error_message: Optional[str] = Field(None, max_length=600)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator('id')
+    @classmethod
+    def _normalize_evidence_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError('evidence id must not be blank')
+        return normalized
+
+    @field_validator('kind')
+    @classmethod
+    def _normalize_evidence_kind(cls, value: str) -> str:
+        normalized = (value or '').strip().lower()
+        return (
+            normalized
+            if normalized in {'conversation_summary', 'conversation_segment', 'screen', 'keyframe', 'request'}
+            else 'unknown'
+        )
+
+    @field_validator('state')
+    @classmethod
+    def _normalize_evidence_state(cls, value: str) -> str:
+        normalized = (value or '').strip().lower()
+        return normalized if normalized in {'available', 'loading', 'offline', 'pruned', 'failed'} else 'unknown'
+
+    @field_validator(
+        'title',
+        'summary',
+        'conversation_id',
+        'segment_id',
+        'frame_id',
+        'request_id',
+        'error_code',
+        'error_message',
+    )
+    @classmethod
+    def _strip_evidence_strings(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @model_validator(mode='after')
+    def _validate_evidence_identity(self) -> 'ChatEvidenceReference':
+        try:
+            serialized_metadata = json.dumps(self.metadata, sort_keys=True, separators=(',', ':'))
+        except (TypeError, ValueError) as exc:
+            raise ValueError('evidence metadata must be JSON serializable') from exc
+        if len(self.metadata) > 16 or len(serialized_metadata) > 2_000:
+            raise ValueError('evidence metadata exceeds the bounded transport limit')
+        if self.end_ms is not None and self.start_ms is not None and self.end_ms < self.start_ms:
+            raise ValueError('end_ms must be greater than or equal to start_ms')
+        if self.kind == 'conversation_summary' and not self.conversation_id:
+            raise ValueError('conversation_summary requires conversation_id')
+        if self.kind == 'conversation_segment' and not (self.conversation_id and self.segment_id):
+            raise ValueError('conversation_segment requires conversation_id and segment_id')
+        if self.kind in {'screen', 'keyframe'} and not self.frame_id:
+            raise ValueError(f'{self.kind} requires frame_id')
+        if self.kind == 'request' and not self.request_id:
+            raise ValueError('request requires request_id')
+        return self
+
+
+class ChatEvidenceEnvelope(BaseModel):
+    """Versioned transport envelope for supplemental chat evidence."""
+
+    schema_version: int = Field(default=1, ge=1, le=2_147_483_647)
+    request_id: Optional[str] = Field(None, max_length=256)
+    references: List[ChatEvidenceReference] = Field(default_factory=list, max_length=24)
+
+    @field_validator('request_id')
+    @classmethod
+    def _strip_request_id(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @model_validator(mode='after')
+    def _reject_duplicate_reference_ids(self) -> 'ChatEvidenceEnvelope':
+        identities = [reference.id for reference in self.references]
+        if len(identities) != len(set(identities)):
+            raise ValueError('evidence reference ids must be unique')
+        if self.schema_version != 1:
+            self.references = [
+                reference.model_copy(update={'kind': 'unknown', 'state': 'unknown'}) for reference in self.references
+            ]
+        return self
+
+
 class Message(BaseModel):
     id: str
     text: str
@@ -102,6 +215,7 @@ class Message(BaseModel):
             'legacy rows are projected from metadata.content_blocks.'
         ),
     )
+    evidence: Optional[ChatEvidenceEnvelope] = None
     client_message_id: Optional[str] = None
     message_source: Optional[str] = None
     journal_revision: Optional[int] = None
@@ -246,11 +360,46 @@ class ResponseMessage(Message):
 
 
 class PageContext(BaseModel):
-    """Page context for chat - indicates what the user is currently viewing."""
+    """Page context for chat - indicates what the user is currently viewing.
+
+    When ``type`` is ``conversation`` with an ``id``, and/or ``start_date`` /
+    ``end_date`` are set, retrieval tools hard-scope to that conversation and/or
+    timeframe (#4515). Dates must include a timezone offset
+    (YYYY-MM-DDTHH:MM:SS+HH:MM).
+    """
 
     type: Literal["conversation", "task", "memory", "recap"]
     id: Optional[str] = None
     title: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+    @staticmethod
+    def _require_aware_iso(value: str, field_name: str) -> Optional[str]:
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            parsed = datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(
+                f"{field_name} must be ISO-8601 with timezone " f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
+            ) from exc
+        if parsed.tzinfo is None:
+            raise ValueError(
+                f"{field_name} must include a timezone offset " f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
+            )
+        return stripped
+
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def _validate_scope_dates(cls, value: Any, info: ValidationInfo) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError(f"{info.field_name or 'date'} must be an ISO-8601 string with timezone offset")
+        field_name = info.field_name if isinstance(info.field_name, str) else "date"
+        return cls._require_aware_iso(value, field_name)
 
 
 class SendMessageRequest(BaseModel):

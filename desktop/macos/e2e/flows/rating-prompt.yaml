@@ -1,0 +1,99 @@
+version: 2
+name: rating-prompt
+tier: 2
+description: One-time desktop rating ask — due exactly at the 3rd question, star submit silences it forever
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/RatingPrompt.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge+RatingPrompt.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Reset persisted rating-prompt state
+    bridge.action:
+      name: rating_prompt_reset
+    expect:
+      ok: true
+      result.detail.reset: "true"
+
+  - id: S2
+    name: Two questions keep the prompt hidden
+    bridge.action:
+      name: rating_prompt_record_question
+    expect:
+      ok: true
+      result.detail.visible: "false"
+
+  - id: S3
+    name: Second question still hidden
+    bridge.action:
+      name: rating_prompt_record_question
+    expect:
+      ok: true
+      result.detail.question_count: "2"
+      result.detail.visible: "false"
+
+  - id: S4
+    name: Third question arms the prompt
+    bridge.action:
+      name: rating_prompt_record_question
+    expect:
+      ok: true
+      result.detail.question_count: "3"
+      result.detail.visible: "true"
+
+  - id: S5
+    name: Star submit records the rating and shows the thank-you state
+    bridge.action:
+      name: rating_prompt_submit
+      params:
+        rating: "5"
+    expect:
+      ok: true
+      result.detail.submitted: "true"
+      result.detail.rating: "5"
+
+  - id: S5b
+    name: A 5-star rating proposes refer-a-friend
+    bridge.action:
+      name: rating_prompt_state
+    expect:
+      ok: true
+      result.detail.thank_you: "5"
+      result.detail.visible: "false"
+
+  - id: S5c
+    name: The proposal opens the referral sheet
+    bridge.action:
+      name: rating_prompt_refer
+    expect:
+      ok: true
+      result.detail.opened: "true"
+
+  - id: S6
+    name: Further questions never re-show a rated prompt
+    bridge.action:
+      name: rating_prompt_record_question
+    expect:
+      ok: true
+      result.detail.visible: "false"
+
+  - id: S7
+    name: A second submit is refused
+    bridge.action:
+      name: rating_prompt_submit
+      params:
+        rating: "1"
+    expect:
+      ok: true
+      result.detail.submitted: "false"
+
+  - id: S8
+    name: Leave no persisted QA state behind
+    bridge.action:
+      name: rating_prompt_reset
+    expect:
+      ok: true
+      result.detail.reset: "true"

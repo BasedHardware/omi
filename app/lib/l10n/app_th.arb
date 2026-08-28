@@ -3215,6 +3215,10 @@
     "accountCutoverMigrationInProgressMessage": "บัญชีของคุณกำลังย้าย ฟีเจอร์ผลิตภัณฑ์จะหยุดชั่วคราวจนกว่าการย้ายจะเสร็จ",
     "accountCutoverMigrationRollbackMessage": "บัญชีของคุณอยู่ในโหมดบำรุงรักษาหลังการย้อนกลับการย้าย ข้อมูลที่ใหม่กว่าบางส่วนอาจถูกแยกไว้",
     "accountCutoverOpenStore": "เปิดสโตร์",
+    "chatScopeToday": "วันนี้",
+    "chatScopeThisWeek": "สัปดาห์นี้",
+    "chatScopeAbout": "เกี่ยวกับ: {title}",
+    "askAboutThisConversation": "ถามเกี่ยวกับสิ่งนี้",
     "sendRawAudioToOmi": "ส่งเสียงดิบไปยัง Omi",
     "sendRawAudioToOmiDescription": "ปิดเพื่อไม่ให้ส่งเสียงดิบไปยัง Omi ข้อความถอดเสียงและข้อมูลที่ฟีเจอร์คลาวด์ต้องใช้อาจยังถูกส่งไปยัง Omi",
     "findDevice": "ค้นหา",
@@ -3227,5 +3231,8 @@
     "appReEnableFailedTitle": "เปิดใช้งานอีกครั้งไม่สำเร็จ",
     "appReEnableFailedBody": "ไม่สามารถเปิดใช้งานแอปนี้อีกครั้งได้ โปรดลองใหม่",
     "appDisabledOn": "ปิดใช้งานเมื่อ {date}",
-    "appDisabledLastError": "ข้อผิดพลาดล่าสุด: {error}"
+    "appDisabledLastError": "ข้อผิดพลาดล่าสุด: {error}",
+    "prerecordedTranscript": "บันทึกไว้ล่วงหน้า",
+    "pendantRecordingSyncBlocked": "Pendant ยังบันทึกอยู่ จึงไม่สามารถถ่ายโอนเสียงที่จัดเก็บไว้ได้ กดปุ่มของ Pendant เพื่อหยุดบันทึก แล้วซิงค์อีกครั้ง",
+    "pendantFullSyncBlocked": "พื้นที่จัดเก็บของ Pendant เต็มและยังอยู่ในโหมดบันทึกเสียง จึงไม่สามารถถ่ายโอนเสียงที่บันทึกไว้ได้ กดปุ่มของ Pendant เพื่อหยุดการบันทึก แล้วซิงค์อีกครั้ง"
 }

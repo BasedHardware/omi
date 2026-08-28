@@ -73,9 +73,9 @@ def migrate_staged_tasks(
 ) -> CandidateMigrationReport:
     """Return a bounded compatibility inventory without creating Candidates."""
 
-    rows = sorted(staged_tasks_db.get_all_staged_tasks_for_migration(uid), key=lambda row: row.get('id', ''))
+    rows = sorted(staged_tasks_db.get_all_staged_tasks_for_migration(uid), key=lambda row: str(row.get('id', '')))
     if after_id:
-        rows = [row for row in rows if row.get('id', '') > after_id]
+        rows = [row for row in rows if str(row.get('id', '')) > after_id]
     rows = rows[:limit]
     checkpoint = str(rows[-1].get('id')) if rows else after_id
     return CandidateMigrationReport(

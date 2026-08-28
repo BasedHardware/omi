@@ -16,12 +16,18 @@ class AudioPollingConfig {
   final int minBufferSizeBytes;
   final String? serviceId;
   final IAudioTranscoder? transcoder;
+  // Ceiling on how much unflushed audio we hold in memory
+  // while the custom STT endpoint is unreachable. ~10 minutes of 16kHz/16-bit
+  // mono PCM (32000 B/s); oldest frames are dropped past this to keep memory
+  // bounded during a long outage instead of buffering forever.
+  final int maxBufferBytes;
 
   const AudioPollingConfig({
     this.bufferDuration = const Duration(seconds: 3),
     this.minBufferSizeBytes = 8000,
     this.serviceId,
     this.transcoder,
+    this.maxBufferBytes = 19200000,
   });
 }
 
@@ -64,6 +70,18 @@ class PurePollingSocket implements IPureSocket {
   final List<Uint8List> _audioFrames = [];
   bool _isProcessing = false;
   double _audioOffsetSeconds = 0;
+
+  // Local buffering state, exposed so the recording UI can
+  // show "offline, buffering" instead of silently sitting on "Listening"
+  // while transcribe() keeps failing. Set on the first failed flush after a
+  // success, cleared on the next successful one.
+  DateTime? _bufferingSince;
+  int _consecutiveFailures = 0;
+
+  DateTime? get bufferingSince => _bufferingSince;
+  int get consecutiveFailures => _consecutiveFailures;
+  bool get isBuffering => _bufferingSince != null;
+  int get bufferedBytes => _totalBufferBytes;
 
   PurePollingSocket({required this.config, required this.sttProvider});
 
@@ -150,6 +168,8 @@ class PurePollingSocket implements IPureSocket {
     final serviceId = config.serviceId ?? 'Polling';
     try {
       final result = await sttProvider.transcribe(audioData, audioOffsetSeconds: _audioOffsetSeconds);
+      _bufferingSince = null;
+      _consecutiveFailures = 0;
       if (result != null && result.isNotEmpty) {
         if (result.segments.isNotEmpty) {
           _audioOffsetSeconds = result.segments.last.end;
@@ -163,9 +183,45 @@ class PurePollingSocket implements IPureSocket {
     } catch (e, trace) {
       CustomSttLogService.instance.error(serviceId, 'Transcription error: $e');
       DebugLogManager.logError(e, trace, 'polling_socket_transcription_error', {'service_id': serviceId});
-      onError(e, trace);
+      _consecutiveFailures++;
+      _bufferingSince ??= DateTime.now();
+      _requeueFrames(frames);
+      // Do NOT call onError()/propagate this as a fatal
+      // socket error here. sttProvider.transcribe() already retries
+      // transient failures internally; a failure this far up means the STT
+      // endpoint is genuinely unreachable right now. The old behavior
+      // reported this as a fatal error, which CompositeTranscriptionSocket
+      // treated as "tear down both sockets" — killing the healthy
+      // raw-audio/secondary channel too and forcing a full reconnect every
+      // time custom STT hiccuped. Instead: keep the frames buffered above
+      // (capped by maxBufferBytes) and let the next timer tick retry, so a
+      // transient outage is invisible and a real one just keeps buffering
+      // until the endpoint comes back.
     } finally {
       _isProcessing = false;
+    }
+  }
+
+  /// Puts frames that failed to transcribe back at the front of the buffer
+  /// (ahead of anything captured since the attempt started), trimming the
+  /// oldest audio if the combined buffer now exceeds [AudioPollingConfig.maxBufferBytes].
+  void _requeueFrames(List<Uint8List> frames) {
+    _audioFrames.insertAll(0, frames);
+
+    var droppedBytes = 0;
+    while (_totalBufferBytes > config.maxBufferBytes && _audioFrames.isNotEmpty) {
+      droppedBytes += _audioFrames.removeAt(0).length;
+    }
+    if (droppedBytes > 0) {
+      final serviceId = config.serviceId ?? 'Polling';
+      CustomSttLogService.instance.warning(
+        serviceId,
+        'Buffer cap exceeded while offline, dropped $droppedBytes bytes of oldest audio',
+      );
+      DebugLogManager.logWarning('polling_socket_buffer_overflow', {
+        'service_id': serviceId,
+        'dropped_bytes': droppedBytes,
+      });
     }
   }
 

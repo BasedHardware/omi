@@ -289,6 +289,13 @@ export function controlPlaneOwnerId(): string {
   return activeOwnerId
 }
 
+/** Resolve a renderer/backend deletion key using the real owner-scoped kernel
+ * store.  The renderer cannot supply the owner; it is always host auth state. */
+export function conversationIdsForDeletion(deletionKey: string): string[] {
+  if (!hasKnownControlPlaneOwner()) return []
+  return getAgentRuntimeKernel().conversationIdsForDeletion(activeOwnerId, deletionKey)
+}
+
 /**
  * True once a real signed-in owner has been wired — i.e. the active owner is no
  * longer the shared DEFAULT_LOCAL_OWNER_ID constant. The pi-mono main-chat path

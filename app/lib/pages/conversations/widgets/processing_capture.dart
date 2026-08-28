@@ -44,7 +44,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     _offlineTicker = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!mounted) return;
       final provider = context.read<CaptureProvider>();
-      if (provider.offlineRecordingStartedAt != null) {
+      if (provider.offlineRecordingStartedAt != null || provider.customSttBufferingDuration != null) {
         setState(() {});
       }
       _offlineTick++;
@@ -280,10 +280,17 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
     } else if (isUsingPhoneMic || isHavingRecordingDevice) {
+      final bufferingFor = captureProvider.customSttBufferingDuration;
       if (captureProvider.terminalTranscriptionFailure != null) {
         // Audio remains in the WAL while reconnecting, but the server has
         // explicitly said live STT is unavailable. Do not claim "Listening".
         stateText = context.l10n.transcriptionUnavailable;
+        statusIndicator = const PausedStatusIndicator();
+      } else if (bufferingFor != null) {
+        // Custom STT endpoint unreachable. Audio keeps recording
+        // and buffering locally (see PurePollingSocket) — say so instead of
+        // silently claiming "Listening" while nothing is being transcribed.
+        stateText = _customSttBufferingText(bufferingFor);
         statusIndicator = const PausedStatusIndicator();
       } else {
         // Show "Listening" for all active recording states — WAL ensures audio is
@@ -333,6 +340,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     );
   }
 
+  // Short status text for how long the custom STT endpoint has
+  // been unreachable while audio keeps recording and buffering locally.
+  String _customSttBufferingText(Duration bufferingFor) {
+    if (bufferingFor.inMinutes < 1) return 'Offline, buffering';
+    return 'Offline, buffering ${bufferingFor.inMinutes}m';
+  }
+
   Widget _buildUnifiedRecordingUI(CaptureProvider provider, Widget? header) {
     bool isDeviceRecording = provider.havingRecordingDevice &&
         (provider.recordingState == RecordingState.deviceRecord || provider.recordingState == RecordingState.pause);
@@ -364,6 +378,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       isPaused = _isPhoneMicPaused || provider.isPaused || isAudioInterrupted;
     }
     final hasTerminalTranscriptionFailure = provider.terminalTranscriptionFailure != null;
+    final bufferingFor = provider.customSttBufferingDuration;
 
     // Determine if this is an OmiGlass-type device (captures photos)
     bool hasPhotos = provider.photos.isNotEmpty;
@@ -375,9 +390,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
             : hasTerminalTranscriptionFailure
                 ? context.l10n.transcriptionUnavailable
-                : hasPhotos
-                    ? 'Capturing'
-                    : context.l10n.listening;
+                // Custom STT endpoint unreachable, audio still buffering
+                // locally (see customSttBufferingDuration / PurePollingSocket).
+                : bufferingFor != null
+                    ? _customSttBufferingText(bufferingFor)
+                    : hasPhotos
+                        ? 'Capturing'
+                        : context.l10n.listening;
 
     // When recording is active, show the unified UI design
     if (isDeviceRecording || isPhoneRecording) {

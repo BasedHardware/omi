@@ -3257,6 +3257,10 @@
     "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
     "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
     "accountCutoverOpenStore": "Buka toko",
+    "chatScopeToday": "Hari ini",
+    "chatScopeThisWeek": "Minggu ini",
+    "chatScopeAbout": "Tentang: {title}",
+    "askAboutThisConversation": "Tanyakan tentang ini",
     "sendRawAudioToOmi": "Kirim audio mentah ke Omi",
     "sendRawAudioToOmiDescription": "Nonaktifkan agar audio mentah tidak dikirim ke Omi. Transkrip dan data yang diperlukan fitur cloud mungkin tetap dikirim ke Omi.",
     "findDevice": "Temukan",
@@ -3269,5 +3273,8 @@
     "appReEnableFailedTitle": "Gagal mengaktifkan kembali",
     "appReEnableFailedBody": "Aplikasi ini tidak dapat diaktifkan kembali. Silakan coba lagi.",
     "appDisabledOn": "Dinonaktifkan pada {date}.",
-    "appDisabledLastError": "Kesalahan terakhir: {error}."
+    "appDisabledLastError": "Kesalahan terakhir: {error}.",
+    "prerecordedTranscript": "Prarekam",
+    "pendantRecordingSyncBlocked": "Pendant masih merekam, jadi audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.",
+    "pendantFullSyncBlocked": "Penyimpanan Pendant penuh dan masih dalam mode perekaman, sehingga audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi."
 }

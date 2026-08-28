@@ -10,6 +10,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -19,13 +20,38 @@ os.environ.setdefault(
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
 
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _real_package_path(dotted_name):
+    """``__path__`` for a stub package: the real directory when one exists on disk.
+
+    An empty ``__path__`` makes a stub package a wall -- every submodule this file did
+    not name explicitly raises ``ModuleNotFoundError`` at import, during *collection*,
+    before a single test runs. That turned an ordinary production import into a
+    repo-wide outage on 2026-08-25: ``routers/conversations.py`` gained
+    ``from utils.integration_telemetry import ...``, main went red 21:24-23:12Z (twice)
+    and four unrelated pull requests went red with it, none of which had touched this
+    file or anything it tests.
+
+    Pointing the stub at the real package instead makes the stub fail *open*: a name
+    that is stubbed stays stubbed (``sys.modules`` wins over the path), and a name that
+    is not stubbed imports the real module rather than killing collection. The blast
+    radius of the next production import is then the file that genuinely needs a fake,
+    not every open pull request.
+    """
+    candidate = _BACKEND_ROOT.joinpath(*dotted_name.split('.'))
+    if (candidate / '__init__.py').is_file():
+        return [str(candidate)]
+    return []
+
 
 class _AutoMockModule(ModuleType):
     """Module stub that returns a MagicMock for any missing attribute."""
 
     def __init__(self, name):
         super().__init__(name)
-        self.__path__ = []
+        self.__path__ = _real_package_path(name)
 
     def __getattr__(self, name):
         if name.startswith('__') and name.endswith('__'):
@@ -48,6 +74,11 @@ _stubs = [
     'database.redis_db',
     'database.users',
     'database.vector_db',
+    'services.conversation_frame_evidence',
+    # routers.conversations imports FirestoreReadSite from here at module scope.
+    # database is stubbed submodule-by-submodule in this file, so a new one has to
+    # be listed or collection fails with ModuleNotFoundError before any test runs.
+    'database.firestore_read_metrics',
     'firebase_admin',
     'firebase_admin.messaging',
     'firebase_admin.auth',
@@ -56,13 +87,22 @@ _stubs = [
     'google.cloud.firestore',
     'google.cloud.firestore_v1',
     'utils.request_validation',
-    # routers.conversations resolves the client population for its journey
-    # metric; utils is an _AutoMockModule package here, so the real submodule
-    # is not importable and the name has to be stubbed like the rest.
+    # Stubbed because this suite pins the resolved value (see resolve_client_kind
+    # below), not because the real module is unreachable -- unlisted utils submodules
+    # now resolve to the real package (see _real_package_path).
     'utils.journey_metrics_contract',
+    # routers.conversations emits Conversation Summary Shared telemetry on delivered
+    # share emails; kept faked so no test can reach a real telemetry client. This name
+    # was added twice by successive incident patches (2026-08-25); one entry is enough.
+    'utils.integration_telemetry',
     'utils.other.endpoints',
     'utils.other.list_budget',
     'utils.other.storage',
+    # routers.conversations imports utils.screen_frames.store at module load to close the
+    # screenshot deletion loop (Firestore does not cascade-delete subcollections), so this name
+    # has to be stubbed or collection dies with ModuleNotFoundError before any test runs.
+    'utils.screen_frames',
+    'utils.screen_frames.store',
     # Names only: this file's _AutoMockModule/_register_module wrap them. Parents
     # (including utils.conversations) are created by _register_module, so the
     # package itself is omitted here. See package_submodule_stubs.
@@ -167,7 +207,9 @@ _request_validation.PositiveLimit = int
 _register_module('utils.request_validation', _request_validation)
 
 _utils_memory_pkg = ModuleType('utils.memory')
-_utils_memory_pkg.__path__ = []
+# Same fail-open reasoning as _real_package_path: the four names below are faked on
+# purpose, anything else this package gains must not break collection here.
+_utils_memory_pkg.__path__ = _real_package_path('utils.memory')
 _register_module('utils.memory', _utils_memory_pkg)
 
 _memory_service_stub = ModuleType('utils.memory.memory_service')
@@ -230,6 +272,15 @@ finally:
 conv.parse_exact_conversation_reference = MagicMock(return_value=None)
 conv.clamp_conversation_search_pagination = MagicMock(return_value=(1, 10))
 conv.conversation_matches_date_range = MagicMock(return_value=True)
+# Transcript helpers are stubbed at import time; keep search behavior deterministic for this suite.
+conv.search_transcript_conversation_ids = MagicMock(return_value=[])
+conv.merge_typesense_page_with_transcript_hits = lambda typesense_ids, transcript_ids, page=1, per_page=10: [
+    str(x) for x in typesense_ids if str(x).strip()
+][:per_page]
+conv.attach_match_snippets_to_conversations = lambda conversations, _query: [
+    dict(c) if isinstance(c, dict) else c for c in conversations
+]
+conv.redact_conversations_for_list = MagicMock()
 
 
 def _client():
@@ -452,6 +503,109 @@ def test_search_without_speaker_keeps_every_hydrated_conversation():
 
     assert resp.status_code == 200
     assert [item['id'] for item in resp.json()['items']] == ['conv-1', 'conv-2']
+
+
+def test_search_drops_locked_conversations_before_snippets_can_leak():
+    """Locked rows are filtered after hydration so match_snippets never leave the API."""
+    from utils.conversations.mcp_transcript_search import attach_match_snippets_to_conversations as real_attach
+
+    def _redact(convs):
+        for c in convs:
+            if c.get('is_locked'):
+                c['match_snippets'] = []
+                c['transcript_segments'] = []
+        return convs
+
+    hydrated = [
+        {
+            **_conversation_dict('locked', [_segment()]),
+            'is_locked': True,
+            'transcript_segments': [
+                {'id': 's1', 'text': 'ACME contract secret', 'start': 1.0, 'end': 2.0, 'is_user': False}
+            ],
+        },
+        {
+            **_conversation_dict('open', [_segment()]),
+            'is_locked': False,
+            'transcript_segments': [
+                {'id': 's2', 'text': 'ACME contract public', 'start': 3.0, 'end': 4.0, 'is_user': False}
+            ],
+        },
+    ]
+    with (
+        patch.object(conv, 'attach_match_snippets_to_conversations', real_attach),
+        patch.object(conv, 'redact_conversations_for_list', _redact),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={
+                'items': [{'id': 'locked'}, {'id': 'open'}],
+                'total_pages': 1,
+                'current_page': 1,
+                'per_page': 10,
+            },
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+        patch.object(conv, 'search_transcript_conversation_ids', return_value=[]),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'ACME contract'})
+
+    assert resp.status_code == 200
+    items = resp.json()['items']
+    assert [item['id'] for item in items] == ['open']
+    assert items[0]['match_snippets']
+    assert 'ACME contract' in items[0]['match_snippets'][0]['text']
+    assert items[0]['match_snippets'][0]['start'] == 3.0
+
+
+def test_search_merges_transcript_only_hit_and_attaches_seek_snippet():
+    """Spoken-word ID missing from Typesense still appears with timed match_snippets."""
+    from utils.conversations.mcp_transcript_search import (
+        attach_match_snippets_to_conversations as real_attach,
+        merge_typesense_page_with_transcript_hits as real_merge,
+    )
+
+    def _redact(convs):
+        return convs
+
+    hydrated = [
+        {
+            **_conversation_dict('spoken-only', []),
+            'is_locked': False,
+            'structured': {'title': 'Standup', 'overview': 'Team sync'},
+            'transcript_segments': [
+                {
+                    'id': 's1',
+                    'text': 'Ship the ACME contract by Friday',
+                    'start': 42.0,
+                    'end': 46.5,
+                    'is_user': False,
+                },
+            ],
+        }
+    ]
+    with (
+        patch.object(conv, 'attach_match_snippets_to_conversations', real_attach),
+        patch.object(conv, 'merge_typesense_page_with_transcript_hits', real_merge),
+        patch.object(conv, 'redact_conversations_for_list', _redact),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+        ),
+        patch.object(conv, 'search_transcript_conversation_ids', return_value=['spoken-only']),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'ACME contract'})
+
+    assert resp.status_code == 200
+    items = resp.json()['items']
+    assert [item['id'] for item in items] == ['spoken-only']
+    snippet = items[0]['match_snippets'][0]
+    assert snippet['start'] == 42.0
+    assert snippet['end'] == 46.5
 
 
 def _process_result(result, *, persisted: bool):

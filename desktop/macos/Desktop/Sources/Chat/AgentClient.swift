@@ -56,6 +56,7 @@ enum AgentClient {
   typealias TextDeltaHandler = AgentBridge.TextDeltaHandler
   typealias ToolCallHandler = AgentBridge.ToolCallHandler
   typealias ToolActivityHandler = AgentBridge.ToolActivityHandler
+  typealias TurnActivityHandler = AgentBridge.TurnActivityHandler
   typealias ThinkingDeltaHandler = AgentBridge.ThinkingDeltaHandler
   typealias ToolResultDisplayHandler = AgentBridge.ToolResultDisplayHandler
   typealias AuthRequiredHandler = AgentBridge.AuthRequiredHandler
@@ -517,6 +518,7 @@ enum AgentClient {
       reasoningEffort: String? = nil,
       onTextDelta: @escaping TextDeltaHandler,
       onToolActivity: @escaping ToolActivityHandler,
+      onTurnActivity: @escaping TurnActivityHandler = {},
       onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
       onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
       onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
@@ -535,6 +537,7 @@ enum AgentClient {
         reasoningEffort: reasoningEffort,
         onTextDelta: onTextDelta,
         onToolActivity: onToolActivity,
+        onTurnActivity: onTurnActivity,
         onThinkingDelta: onThinkingDelta,
         onToolResultDisplay: onToolResultDisplay,
         onAuthRequired: onAuthRequired,
@@ -555,6 +558,7 @@ enum AgentClient {
       reasoningEffort: String? = nil,
       onTextDelta: @escaping TextDeltaHandler,
       onToolActivity: @escaping ToolActivityHandler,
+      onTurnActivity: @escaping TurnActivityHandler = {},
       onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
       onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
       onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
@@ -585,6 +589,7 @@ enum AgentClient {
               reasoningEffort: reasoningEffort,
               onTextDelta: onTextDelta,
               onToolActivity: onToolActivity,
+              onTurnActivity: onTurnActivity,
               onThinkingDelta: onThinkingDelta,
               onToolResultDisplay: onToolResultDisplay,
               onAuthRequired: onAuthRequired,
@@ -611,16 +616,22 @@ enum AgentClient {
     harnessMode: String = "piMono",
     mode: String? = nil,
     cwd: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler = { _ in },
     onToolCall _: @escaping ToolCallHandler = { _, _, _ in "" },
     onToolActivity: @escaping ToolActivityHandler = { _, _, _, _ in },
+    onTurnActivity: @escaping TurnActivityHandler = {},
     onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
     onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
     onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
     onAuthSuccess: @escaping AuthSuccessHandler = {}
   ) async throws -> QueryResult {
+    guard
+      let authorization = authorizationSnapshot ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+    else { throw BridgeError.authMissing }
     let bridge = AgentClient.makeBridge(harnessMode: harnessMode)
-    try await bridge.start()
+    try await bridge.start(authorizationSnapshot: authorization)
     do {
 
       guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) else {
@@ -634,11 +645,13 @@ enum AgentClient {
       )
       let session = try await bridge.resolveSurfaceSession(
         surface,
-        creationProfile: creationProfile
+        creationProfile: creationProfile,
+        authorizationSnapshot: authorization
       )
       var snapshot = try await bridge.getContextSnapshot(
         sessionId: session.sessionId,
-        surfaceKind: surface.surfaceKind)
+        surfaceKind: surface.surfaceKind,
+        authorizationSnapshot: authorization)
       let contextInputs: [(AgentContextSource, AgentContextSourceOutcome, [String: Any])] = [
         (
           .surface,
@@ -661,13 +674,19 @@ enum AgentClient {
           sourceRevision: revision,
           outcome: outcome,
           capturedAtMs: Int(Date().timeIntervalSince1970 * 1_000),
-          payload: RuntimeJSONPayloadBox(payload)
+          payload: RuntimeJSONPayloadBox(payload),
+          authorizationSnapshot: authorization
         )
         snapshot = try await bridge.getContextSnapshot(
           sessionId: session.sessionId,
-          surfaceKind: surface.surfaceKind)
+          surfaceKind: surface.surfaceKind,
+          authorizationSnapshot: authorization)
       }
-      await bridge.warmupSession(session)
+      await bridge.warmupSession(session, authorizationSnapshot: authorization)
+
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+        throw BridgeError.authMissing
+      }
 
       let result = try await bridge.query(
         prompt: prompt,
@@ -675,13 +694,18 @@ enum AgentClient {
         surface: surface,
         mode: mode,
         expectedContext: snapshot.freshness,
+        authorizationSnapshot: authorization,
         onTextDelta: onTextDelta,
         onToolActivity: onToolActivity,
+        onTurnActivity: onTurnActivity,
         onThinkingDelta: onThinkingDelta,
         onToolResultDisplay: onToolResultDisplay,
         onAuthRequired: onAuthRequired,
         onAuthSuccess: onAuthSuccess
       )
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+        throw BridgeError.authMissing
+      }
       let output = try QueryResult(result).requireSucceeded()
       await bridge.stop()
       return output

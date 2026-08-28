@@ -133,6 +133,91 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
 })
 
 describe('useMemories — pagination, capability header, delete', () => {
+  it('keeps legacy/v1/future text rows readable while evidence stays optional and inert', async () => {
+    omiApiGet.mockResolvedValue({
+      data: [
+        memory('legacy', 'Legacy text'),
+        {
+          ...(memory('current', 'Current text') as Record<string, unknown>),
+          ledger_schema_version: 'knowledge_ledger.v1',
+          kind: 'fact',
+          status: 'active',
+          subject_scope: 'primary_user',
+          slot: 'home_city',
+          body: 'wrong-kind-body',
+          trigger_condition: { wrong: true },
+          intent_backed: 'true',
+          curation_weight: '3',
+          write_reason: 'bad-reason',
+          valid_at: 42,
+          subject_entity_id: 42,
+          evidence: [
+            null,
+            'malformed',
+            { evidence_id: 'missing-group' },
+            { evidence_id: 'current-evidence', independence_group: 'current-group' }
+          ]
+        },
+        {
+          ...(memory('future', 'Future text') as Record<string, unknown>),
+          ledger_schema_version: 'knowledge_ledger.v2',
+          kind: 'fact',
+          status: 'active',
+          subject_scope: 'primary_user',
+          body: 'Future body must stay inert',
+          slot: 'future-slot',
+          trigger_condition: { unsupported: true },
+          intent_backed: true,
+          curation_weight: 3,
+          write_reason: 'direct_user_statement',
+          valid_at: '2026-08-23T00:00:00Z',
+          subject_entity_id: 'user-1',
+          evidence: [null, 'malformed']
+        },
+        { id: 'malformed', uid: 'u', content: '   ' }
+      ]
+    })
+    const { result } = renderHook(() => useMemories())
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(result.current.memories.map((item) => item.content)).toEqual([
+      'Legacy text',
+      'Current text',
+      'Future text'
+    ])
+    expect(result.current.memories[0]).not.toHaveProperty('kind')
+    expect(result.current.memories[1]).toMatchObject({ kind: 'fact', status: 'active' })
+    expect(result.current.memories[1]).toMatchObject({ slot: 'home_city' })
+    expect(result.current.memories[1].evidence).toEqual([
+      { evidence_id: 'current-evidence', independence_group: 'current-group' }
+    ])
+    for (const field of [
+      'body',
+      'trigger_condition',
+      'intent_backed',
+      'curation_weight',
+      'write_reason',
+      'valid_at',
+      'subject_entity_id'
+    ]) {
+      expect(result.current.memories[1]).not.toHaveProperty(field)
+    }
+    expect(result.current.memories[2]).not.toHaveProperty('kind')
+    expect(result.current.memories[2]).not.toHaveProperty('status')
+    expect(result.current.memories[2]).not.toHaveProperty('body')
+    expect(result.current.memories[2]).not.toHaveProperty('slot')
+    expect(result.current.memories[2]).not.toHaveProperty('trigger_condition')
+    expect(result.current.memories[2]).not.toHaveProperty('intent_backed')
+    expect(result.current.memories[2]).not.toHaveProperty('curation_weight')
+    expect(result.current.memories[2]).not.toHaveProperty('write_reason')
+    expect(result.current.memories[2]).not.toHaveProperty('valid_at')
+    expect(result.current.memories[2]).not.toHaveProperty('subject_entity_id')
+    expect(result.current.memories[2].evidence).toEqual([])
+  })
+
   it('pages past the first server page instead of stopping at it', async () => {
     // Backend hard-caps pages at 500. Display path must page the whole set.
     omiApiGet.mockImplementation(fakeBackend(1200))

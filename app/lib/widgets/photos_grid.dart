@@ -1,13 +1,13 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/widgets/photo_viewer_page.dart';
+import 'package:omi/widgets/conversation_photo_image.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
 
 class PhotosGridComponent extends StatelessWidget {
   final List<ConversationPhoto> photos;
-  const PhotosGridComponent({super.key, required this.photos});
+  final String? conversationId;
+  const PhotosGridComponent({super.key, required this.photos, this.conversationId});
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +24,7 @@ class PhotosGridComponent extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => PhotoViewerPage(photos: photos, initialIndex: idx),
+                builder: (context) => MediaViewerPage(items: _mediaItemsFor(photos, conversationId), initialIndex: idx),
               ),
             );
           },
@@ -35,10 +35,10 @@ class PhotosGridComponent extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.memory(
-                    base64Decode(photo.base64),
+                  ConversationPhotoImage(
+                    photo: photo,
+                    conversationId: conversationId,
                     fit: BoxFit.cover,
-                    gaplessPlayback: true,
                     color: photo.discarded ? const Color(0xFF35343B) : null,
                     colorBlendMode: photo.discarded ? BlendMode.saturation : null,
                   ),
@@ -75,4 +75,19 @@ class PhotosGridComponent extends StatelessWidget {
       ),
     );
   }
+}
+
+List<MediaViewerItem> _mediaItemsFor(List<ConversationPhoto> photos, String? conversationId) {
+  return photos.map((photo) {
+    final hasInlineBytes = photo.base64.isNotEmpty;
+    return MediaViewerItem(
+      base64: hasInlineBytes ? photo.base64 : null,
+      bytesLoader: hasInlineBytes ? null : () => loadConversationPhotoBytes(photo, conversationId),
+      mimeType: photo.contentType,
+      heroTag: photo.id,
+      showCaptionStrip: true,
+      caption: photo.description,
+      discarded: photo.discarded,
+    );
+  }).toList();
 }

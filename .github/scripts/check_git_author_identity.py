@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
-"""Reject test-fixture Git identities on real commits and repo-local config.
+"""Reject unattributable Git identities on real commits and repo-local config.
 
 PR #11525's commits were minted as ``Ratchet Test <ratchet-test@example.invalid>``
 because a leftover ``user.email`` in the clone's ``.git/config`` overrode the
 global identity. GitHub maps avatars by author email, so those commits did not
 belong to the person who opened the PR.
+
+PR #12239 hit the same failure with a different value: a clone-local
+``r <r@r>`` authored 66 commits over five days, and this guard passed every one
+of them. It was enumerating the previous incident's literal fixture name and
+reserved TLDs, so an address that was merely impossible slipped straight
+through. The rule is now the property that actually matters — an address whose
+domain cannot resolve can never be attributed to anyone, whatever it is called.
 
 Fixture identities belong only in temporary test repositories. Never write
 ``user.name`` / ``user.email`` into this clone's local config.
@@ -90,6 +97,32 @@ def fixture_reason(name: str, email: str) -> str | None:
     return None
 
 
+def undeliverable_reason(email: str) -> str | None:
+    """Why this address can never reach anyone, or None if it might.
+
+    Deliberately weaker than "is this a real mailbox" — that is not decidable
+    here. It rejects only addresses that are impossible under any DNS: no ``@``,
+    an empty domain, or a domain with no dot, which cannot be a registrable
+    name. ``r@r`` is the whole reason this exists. A real address, including a
+    GitHub ``users.noreply.github.com`` one, always passes.
+    """
+    if not email:
+        return None
+    if "@" not in email:
+        return "no @ in the address"
+    domain = email.rsplit("@", 1)[1]
+    if not domain:
+        return "empty domain"
+    if "." not in domain:
+        return f"domain '{domain}' has no dot, so it can never resolve"
+    return None
+
+
+def rejection_reason(name: str, email: str) -> str | None:
+    """Why this identity must never author a commit, or None if it may."""
+    return fixture_reason(name, email) or undeliverable_reason(email)
+
+
 def local_config_identities(root: Path | None) -> list[Identity]:
     identities: list[Identity] = []
     for key in ("user.name", "user.email"):
@@ -134,7 +167,7 @@ def range_identities(root: Path | None, base: str, head: str) -> list[Identity]:
 def failures_for(identities: list[Identity]) -> list[str]:
     failures: list[str] = []
     for identity in identities:
-        reason = fixture_reason(identity.name, identity.email)
+        reason = rejection_reason(identity.name, identity.email)
         if reason is None:
             continue
         who = identity.name or identity.email or "(empty)"
@@ -148,9 +181,9 @@ def failures_for(identities: list[Identity]) -> list[str]:
 
 def report(failures: list[str]) -> int:
     if not failures:
-        print("OK: Git author identity is not a test fixture.")
+        print("OK: Git author identity is attributable.")
         return 0
-    print("FAIL: test-fixture Git identity would mint unattributed commits.", file=sys.stderr)
+    print("FAIL: unattributable Git identity would mint commits owned by nobody.", file=sys.stderr)
     for failure in failures:
         print(f"- {failure}", file=sys.stderr)
     print(

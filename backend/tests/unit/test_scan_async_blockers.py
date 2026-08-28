@@ -550,3 +550,133 @@ def test_async_with_is_not_a_structural_finding(scanner, tmp_path):
     results = scanner.scan_dirs([str(source_path)])
 
     assert results["no_await_should_be_def"] == []
+
+
+def test_awaited_async_db_accessor_is_not_blocking(scanner, tmp_path):
+    """`await`ing an async accessor from database.* yields to the loop, so it is not blocking.
+
+    The scanner classified every `database.*` import called inside an `async def` as a sync DB
+    call without checking whether it was awaited. That made a correct fix — routing the
+    proactive dispatcher onto the publisher's shared Redis client via the async accessor —
+    fail the push gate, with no allowlist or inline waiver to say otherwise.
+    """
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from database.redis_db import get_async_redis_client
+
+        async def dispatcher():
+            client = await get_async_redis_client()
+            return client
+        """,
+    )
+
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_unawaited_sync_db_call_is_still_blocking(scanner, tmp_path):
+    """The guard must not widen: the same import called without `await` still blocks."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from database.redis_db import get_redis_client
+
+        async def dispatcher():
+            client = get_redis_client()
+            return client
+        """,
+    )
+
+    assert len(results["async_helpers_with_blocking"]) == 1
+
+
+def test_coroutines_handed_to_asyncio_are_not_blocking(scanner, tmp_path):
+    """Awaiting through asyncio is the same handoff as `await`, so it is not blocking either.
+
+    `_awaited_call_ids` only sees a call that is the direct operand of an `await`. Awaiting two
+    accessors at once, or one with a deadline, means writing `asyncio.gather(...)`,
+    `asyncio.create_task(...)` or `asyncio.wait_for(...)`, and the inner call stops being that
+    operand — so the same async accessor the previous fix cleared was reported again the moment
+    a second one was awaited beside it.
+    """
+    for form in (
+        "await asyncio.gather(get_async_redis_client(), get_async_cache_client())",
+        "await asyncio.wait_for(get_async_redis_client(), timeout=5)",
+        "await asyncio.wait([get_async_redis_client(), get_async_cache_client()])",
+        "await asyncio.create_task(get_async_redis_client())",
+        "await asyncio.shield(get_async_redis_client())",
+    ):
+        _source_path, results = _scan_source(
+            scanner,
+            tmp_path,
+            f"""
+            import asyncio
+
+            from database.redis_db import get_async_cache_client, get_async_redis_client
+
+            async def dispatcher():
+                return {form}
+            """,
+        )
+
+        assert results["async_helpers_with_blocking"] == [], form
+
+
+def test_task_group_create_task_is_not_blocking(scanner, tmp_path):
+    """A TaskGroup drives its argument on the event loop exactly as `asyncio.create_task` does."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        from database.redis_db import get_async_redis_client
+
+        async def dispatcher():
+            async with asyncio.TaskGroup() as group:
+                group.create_task(get_async_redis_client())
+        """,
+    )
+
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_a_sync_db_call_beside_a_handoff_on_one_line_is_still_blocking(scanner, tmp_path):
+    """The skip stays keyed on the call node: only the handed-off half of a line is cleared."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        from database.redis_db import get_async_redis_client, get_redis_client
+
+        async def dispatcher():
+            return await asyncio.gather(get_async_redis_client()), get_redis_client()
+        """,
+    )
+
+    assert [call["call"] for finding in results["async_helpers_with_blocking"] for call in finding["db_calls"]] == [
+        "get_redis_client"
+    ]
+
+
+def test_a_call_asyncio_never_receives_is_still_blocking(scanner, tmp_path):
+    """The guard must not widen: importing asyncio near a sync DB call does not clear it."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        from database.redis_db import get_redis_client
+
+        async def dispatcher():
+            await asyncio.sleep(1)
+            return get_redis_client()
+        """,
+    )
+
+    assert len(results["async_helpers_with_blocking"]) == 1

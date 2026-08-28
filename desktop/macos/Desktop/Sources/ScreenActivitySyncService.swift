@@ -50,6 +50,40 @@ enum ScreenActivityLosslessSyncFeature {
 actor ScreenActivitySyncService {
   static let shared = ScreenActivitySyncService()
 
+  /// Pure lifecycle decisions keep the recovery contract testable without
+  /// invoking Firestore/GCS or a network session. Claimed rows may have lost a
+  /// response after a prior claim and therefore remain uploadable; uploaded
+  /// rows skip pixel upload and only retry promotion.
+  static func shouldClaimFrameRequest(state: String) -> Bool {
+    state == "requested"
+  }
+
+  static func shouldUploadFrameRequest(state: String) -> Bool {
+    state != "uploaded"
+  }
+
+  static func boundedDeviceRetentionSeconds(retentionDays: Int) -> Int? {
+    RewindSettings.isUnlimited(retentionDays: retentionDays)
+      ? nil : min(6, max(1, retentionDays)) * 24 * 60 * 60
+  }
+
+  static func frameRequestSyncPayload(
+    rows: [[String: Any]], accountGeneration: Int, retentionDays: Int
+  ) -> [String: Any] {
+    let eligibleRows = rows.map { row in
+      var admitted = row
+      // A sync row exists only after Rewind's exclusion policy admitted and
+      // persisted the capture. Never synthesize this for an arbitrary image.
+      admitted["captureEligible"] = true
+      return admitted
+    }
+    var payload: [String: Any] = ["rows": eligibleRows, "account_generation": accountGeneration]
+    if let seconds = boundedDeviceRetentionSeconds(retentionDays: retentionDays) {
+      payload["deviceRetentionSeconds"] = seconds
+    }
+    return payload
+  }
+
   // MARK: - State
 
   private var lastSyncedId: Int64 = 0
@@ -381,7 +415,14 @@ actor ScreenActivitySyncService {
   // MARK: - HTTP push
 
   private func pushRows(_ rows: [[String: Any]]) async -> Bool {
-    let payload: [String: Any] = ["rows": rows]
+    let accountGeneration = await MainActor.run {
+      AccountCutoverControlManager.shared.control.accountGeneration
+    }
+    let retentionDays = RewindSettings.shared.retentionDays
+    // This generation is read from the server-authoritative cutover
+    // projection, never inferred from local queue state.
+    let payload = Self.frameRequestSyncPayload(
+      rows: rows, accountGeneration: accountGeneration, retentionDays: retentionDays)
 
     guard let jsonData = try? JSONSerialization.data(withJSONObject: payload) else {
       log("ScreenActivitySync: JSON serialization error")
@@ -408,7 +449,41 @@ actor ScreenActivitySyncService {
       guard let httpResponse = response as? HTTPURLResponse else { return false }
 
       if httpResponse.statusCode == 200 {
-        return true
+        let syncResponse = try JSONDecoder().decode(OmiAPI.ScreenActivitySyncResponse.self, from: data)
+        guard let delivered = syncResponse.frameRequests, !delivered.isEmpty else {
+          return true
+        }
+        let deviceID = ClientDeviceService.shared.clientDeviceId
+        // Validate the entire batch before claiming any row. A mixed-device or
+        // mixed-generation response must never partially move the queue.
+        guard delivered.count <= 32,
+          delivered.allSatisfy({
+            $0.deviceId == deviceID && $0.accountGeneration == accountGeneration
+              && ["requested", "claimed", "uploaded"].contains($0.state)
+          }),
+          Set(delivered.map(\.requestId)).count == delivered.count
+        else {
+          log("ScreenActivitySync: rejected malformed frame-request batch")
+          return false
+        }
+        guard
+          await claimFrameRequests(
+            delivered,
+            deviceID: deviceID,
+            accountGeneration: accountGeneration,
+            headers: headers,
+            baseURL: baseURL
+          )
+        else { return false }
+        // Claiming is the queue ownership fence. Only after the whole batch is
+        // claimed do we read local pixels and upload/promote them.
+        return await uploadAndPromoteFrameRequests(
+          delivered,
+          deviceID: deviceID,
+          accountGeneration: accountGeneration,
+          headers: headers,
+          baseURL: baseURL
+        )
       } else {
         let body = String(data: data, encoding: .utf8) ?? ""
         log("ScreenActivitySync: HTTP \(httpResponse.statusCode): \(body)")
@@ -418,6 +493,135 @@ actor ScreenActivitySyncService {
       log("ScreenActivitySync: network error — \(error.localizedDescription)")
       return false
     }
+  }
+
+  private func claimFrameRequests(
+    _ requests: [OmiAPI.FrameRequestDelivery],
+    deviceID: String,
+    accountGeneration: Int,
+    headers: [String: String],
+    baseURL: String
+  ) async -> Bool {
+    for item in requests {
+      if !Self.shouldClaimFrameRequest(state: item.state) { continue }
+      guard let url = URL(string: baseURL + "v1/frame-requests/\(item.requestId)/state") else { return false }
+      let body: [String: Any] = [
+        "state": "claimed",
+        "device_id": deviceID,
+        "account_generation": accountGeneration,
+      ]
+      guard let encoded = try? JSONSerialization.data(withJSONObject: body) else { return false }
+      var claim = URLRequest(url: url)
+      claim.httpMethod = "POST"
+      claim.httpBody = encoded
+      claim.timeoutInterval = 30
+      for (key, value) in headers {
+        claim.setValue(value, forHTTPHeaderField: key)
+      }
+      guard let result = try? await URLSession.shared.data(for: claim),
+        (result.1 as? HTTPURLResponse)?.statusCode == 200
+      else {
+        log("ScreenActivitySync: frame-request claim failed")
+        return false
+      }
+    }
+    return true
+  }
+
+  private func uploadAndPromoteFrameRequests(
+    _ requests: [OmiAPI.FrameRequestDelivery],
+    deviceID: String,
+    accountGeneration: Int,
+    headers: [String: String],
+    baseURL: String
+  ) async -> Bool {
+    for item in requests {
+      // Requested/claimed are recoverable uploads. Uploaded rows are
+      // recoverable promotions and must not upload a second pixel object.
+      if Self.shouldUploadFrameRequest(state: item.state) {
+        guard let screenshotID = item.screenshotId.flatMap(Int64.init),
+          let screenshot = try? await RewindDatabase.shared.getScreenshot(id: screenshotID),
+          let data = try? await RewindStorage.shared.loadScreenshotData(for: screenshot),
+          data.count <= 10 * 1024 * 1024,
+          let uploadURL = URL(
+            string: baseURL
+              + "v1/frame-requests/\(item.requestId)/upload?device_id=\(deviceID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? deviceID)&account_generation=\(accountGeneration)"
+          )
+        else {
+          // A request may target an already-pruned local capture. Never hide
+          // a terminal-update failure; leaving it claimed lets the next sync
+          // retry or the retention worker reap it safely.
+          guard
+            await failFrameRequest(
+              item, deviceID: deviceID, accountGeneration: accountGeneration,
+              reason: "screenshot_unavailable", headers: headers, baseURL: baseURL
+            )
+          else { return false }
+          continue
+        }
+        let boundary = "omi-frame-\(UUID().uuidString)"
+        var body = Data()
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"frame.jpg\"\r\n".utf8))
+        body.append(Data("Content-Type: image/jpeg\r\n\r\n".utf8))
+        body.append(data)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        var upload = URLRequest(url: uploadURL)
+        upload.httpMethod = "POST"
+        upload.httpBody = body
+        upload.timeoutInterval = 60
+        upload.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        for (key, value) in headers { upload.setValue(value, forHTTPHeaderField: key) }
+        guard let uploadResult = try? await URLSession.shared.data(for: upload),
+          (uploadResult.1 as? HTTPURLResponse)?.statusCode == 200
+        else { return false }
+      }
+
+      if let conversationID = item.conversationId,
+        let promoteURL = URL(string: baseURL + "v1/frame-requests/\(item.requestId)/promote")
+      {
+        let promoteBody: [String: Any] = [
+          "device_id": deviceID,
+          "account_generation": accountGeneration,
+          "conversation_id": conversationID,
+        ]
+        guard let promoteData = try? JSONSerialization.data(withJSONObject: promoteBody) else { return false }
+        var promote = URLRequest(url: promoteURL)
+        promote.httpMethod = "POST"
+        promote.httpBody = promoteData
+        promote.timeoutInterval = 30
+        promote.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        for (key, value) in headers { promote.setValue(value, forHTTPHeaderField: key) }
+        guard let promoteResult = try? await URLSession.shared.data(for: promote),
+          (promoteResult.1 as? HTTPURLResponse)?.statusCode == 200
+        else { return false }
+      }
+    }
+    return true
+  }
+
+  private func failFrameRequest(
+    _ item: OmiAPI.FrameRequestDelivery,
+    deviceID: String,
+    accountGeneration: Int,
+    reason: String,
+    headers: [String: String],
+    baseURL: String
+  ) async -> Bool {
+    guard let url = URL(string: baseURL + "v1/frame-requests/\(item.requestId)/state"),
+      let data = try? JSONSerialization.data(withJSONObject: [
+        "state": reason == "screenshot_unavailable" ? "pruned" : "failed",
+        "device_id": deviceID,
+        "account_generation": accountGeneration,
+        "terminal_reason": reason,
+      ])
+    else { return false }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.httpBody = data
+    for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
+    guard let result = try? await URLSession.shared.data(for: request) else { return false }
+    return (result.1 as? HTTPURLResponse)?.statusCode == 200
   }
 
   // MARK: - Database access

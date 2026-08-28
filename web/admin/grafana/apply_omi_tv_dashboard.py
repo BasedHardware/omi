@@ -2,6 +2,13 @@
 """Publish the checked-in omi-tv dashboard JSON through the Grafana HTTP API.
 
 Skips when GRAFANA_TOKEN is unset. Does not invent credentials.
+
+The live board's layout is the layout master: Nik drags/resizes panels in the
+Grafana UI, and an apply must never revert that (it did, three times in one
+day — every dashboards-diff merge stamped the checked-in gridPos back over
+his arrangement). Checked-in JSONs own panel CONTENT (queries, thresholds,
+titles); positions of panels that already exist on the live board are taken
+from the live board.
 """
 
 from __future__ import annotations
@@ -32,8 +39,41 @@ def load_dashboard(path: Path) -> dict:
     return dashboard
 
 
+def preserve_live_layout(incoming_panels: list, live_panels: list) -> None:
+    """Overlay the live board's gridPos onto matching incoming panels, in place.
+
+    Panels are matched by id (stable in the checked-in JSONs). A panel new to
+    this apply keeps its authored position; a panel the user moved or resized
+    keeps the user's geometry.
+    """
+    live_by_id = {p.get("id"): p.get("gridPos") for p in live_panels if p.get("id") is not None}
+    for panel in incoming_panels:
+        live_pos = live_by_id.get(panel.get("id"))
+        if live_pos:
+            panel["gridPos"] = live_pos
+
+
+def fetch_live_panels(token: str, uid: str) -> list:
+    request = urllib.request.Request(
+        f"{grafana_base_url()}/api/dashboards/uid/{uid}",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = json.loads(response.read().decode("utf-8"))
+            return body.get("dashboard", {}).get("panels", []) or []
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return []  # first apply of a new board
+        raise SystemExit(f"Grafana fetch failed ({exc.code}) for {uid}") from exc
+
+
 def apply(token: str, path: Path) -> None:
     dashboard = load_dashboard(path)
+    preserve_live_layout(
+        dashboard.get("panels", []),
+        fetch_live_panels(token, dashboard["uid"]),
+    )
     payload = json.dumps(
         {
             "dashboard": dashboard,

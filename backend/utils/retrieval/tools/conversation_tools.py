@@ -5,6 +5,7 @@ Tools for accessing user conversations.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
 import contextvars
+import threading
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -21,6 +22,12 @@ from utils.conversations.search import (
     keyword_search_conversation_ids,
     merge_conversation_search_ids,
     parse_exact_conversation_reference,
+)
+from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
+from utils.retrieval.tools.conversation_jit import (
+    MAX_JIT_CONVERSATIONS,
+    format_active_jit_conversations,
+    is_jit_conversation_retrieval_enabled,
 )
 import logging
 
@@ -42,11 +49,87 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return None
 
 
+def _scoped_conversation_fetch(
+    uid: str,
+    conversation_id: str,
+    *,
+    start_dt: Optional[datetime],
+    end_dt: Optional[datetime],
+    include_discarded: bool = False,
+    statuses: Optional[List[str]] = None,
+) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Load one owned conversation and enforce the same visibility filters as list fetch."""
+    # Prefer get_conversations_by_id so missing stored `id` is backfilled from the doc key
+    # (same as list/search hydration); get_conversation alone can silently drop those rows.
+    convs = conversations_db.get_conversations_by_id(uid, [conversation_id], include_discarded=True)
+    conv = convs[0] if convs else None
+    if not conv or conv.get('is_locked', False):
+        return [], f"No accessible conversation found for scoped id {conversation_id}."
+    if not include_discarded and conv.get('discarded', False):
+        return [], f"No accessible conversation found for scoped id {conversation_id}."
+    if statuses:
+        raw_status = conv.get('status')
+        status_val = getattr(raw_status, 'value', raw_status)
+        if status_val is None or str(status_val) not in statuses:
+            return [], f"No accessible conversation found for scoped id {conversation_id}."
+    start_ts = start_dt.timestamp() if start_dt is not None else None
+    end_ts = end_dt.timestamp() if end_dt is not None else None
+    if start_ts is not None or end_ts is not None:
+        if not conversation_matches_date_range(conv, start_ts, end_ts):
+            return [], (
+                f"Scoped conversation {conversation_id} is outside the active chat timeframe. "
+                "Ask the user to clear or widen the timeframe, or pick that conversation alone."
+            )
+    return [conv], None
+
+
 # A wide date range ("analyze my last 30 days") can match hundreds of conversations. Feeding all of
 # them to the chat model floods its context, so it freezes or refuses with "that's quite a bit of
 # information to process at once" (#4927). Bound both the count and the raw size of what we return.
 MAX_CONVERSATIONS_FOR_LLM = 100
 MAX_RESULT_CHARS = 60000
+MAX_JIT_SUMMARY_SEARCHES = 4
+_JIT_SEARCH_BUDGET_COUNT_ATTR = '_jit_conversation_summary_search_count'
+_JIT_SEARCH_BUDGET_EXHAUSTED = (
+    'JIT conversation summary search budget exhausted: at most 4 summary searches are allowed per request. '
+    'Use the candidates already returned or hydrate a bounded transcript window for one candidate.'
+)
+_jit_search_budget_lock = threading.Lock()
+
+
+def _consume_jit_summary_search_budget(configurable: Dict[str, Any]) -> Optional[str]:
+    """Atomically reserve one of the request's four JIT summary searches.
+
+    AgentSafetyGuard is already request-scoped and survives LangChain's shallow
+    config copies. Missing or malformed request state fails closed so alternate
+    callers and concurrent tool dispatch cannot silently bypass the bound.
+    """
+    with _jit_search_budget_lock:
+        safety_guard = configurable.get('safety_guard')
+        if safety_guard is None:
+            return _JIT_SEARCH_BUDGET_EXHAUSTED
+        current = getattr(safety_guard, _JIT_SEARCH_BUDGET_COUNT_ATTR, 0)
+        if type(current) is not int or current < 0 or current > MAX_JIT_SUMMARY_SEARCHES:
+            return _JIT_SEARCH_BUDGET_EXHAUSTED
+        if current >= MAX_JIT_SUMMARY_SEARCHES:
+            return _JIT_SEARCH_BUDGET_EXHAUSTED
+        try:
+            setattr(safety_guard, _JIT_SEARCH_BUDGET_COUNT_ATTR, current + 1)
+        except (AttributeError, TypeError):
+            return _JIT_SEARCH_BUDGET_EXHAUSTED
+    return None
+
+
+def _parse_exact_search_reference(query: str, *, jit_enabled: bool) -> Optional[str]:
+    """Keep owner-scoped card refs additive to the gated JIT retrieval path.
+
+    Bare UUIDs and released share URLs remain exact references regardless of the
+    JIT gate. ``conversation:<id>`` is emitted by JIT cards, so gate-off requests
+    must continue treating that shape as an ordinary semantic-search query.
+    """
+    if not jit_enabled and query.startswith('conversation:'):
+        return None
+    return parse_exact_conversation_reference(query)
 
 
 def _cap_conversations_for_llm(conversations: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int, bool]:
@@ -122,7 +205,6 @@ def get_conversations_tool(
         max_transcript_segments: Limit transcript segments per conversation (default: 0=none, suggest 10-50, max: 1000, -1=full transcript)
         include_transcript: Include full transcript (default: True)
         include_timestamps: Add timestamps to transcript segments (default: False)
-
     Returns:
         Formatted string with conversations including transcripts, summaries, action items, events, and attendees.
     """
@@ -160,6 +242,12 @@ def get_conversations_tool(
         logger.info(f"❌ get_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     logger.info(f"✅ get_conversations_tool - uid: {uid}")
+    jit_enabled = is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable))
+
+    scope = chat_scope_from_config(configurable)
+    start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
+    if scope_err:
+        return f"Error: {scope_err}"
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
@@ -190,28 +278,53 @@ def get_conversations_tool(
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
-    # Limit to reasonable max
-    limit = min(limit, 5000)
+    # JIT renders at most MAX_JIT_CONVERSATIONS, so do not read rows that can never
+    # reach the result. The legacy path intentionally retains its existing limit.
+    limit = min(limit, MAX_JIT_CONVERSATIONS if jit_enabled else 5000)
+
+    if jit_enabled:
+        budget_error = _consume_jit_summary_search_budget(cast(Dict[str, Any], configurable))
+        if budget_error:
+            logger.warning("get_conversations_tool rejected by JIT summary-search budget")
+            return budget_error
 
     # Parse statuses if provided
     status_list: List[str] = []
     if statuses:
         status_list = [s.strip() for s in statuses.split(',') if s.strip()]
 
-    # Get conversations
-    conversations_data: List[Dict[str, Any]] = conversations_db.get_conversations(
-        uid,
-        limit=limit,
-        offset=offset,
-        start_date=start_dt,
-        end_date=end_dt,
-        include_discarded=include_discarded,
-        statuses=status_list,
-    )
+    scoped_id = (scope or {}).get("conversation_id") if scope else None
+    if scoped_id:
+        conversations_data, scoped_err = _scoped_conversation_fetch(
+            uid,
+            str(scoped_id),
+            start_dt=start_dt,
+            end_dt=end_dt,
+            include_discarded=include_discarded,
+            statuses=status_list or None,
+        )
+        if scoped_err:
+            logger.info(f"⚠️ get_conversations_tool - {scoped_err}")
+            return scoped_err
+        if offset > 0:
+            conversations_data = []
+        else:
+            conversations_data = conversations_data[:limit]
+    else:
+        # Get conversations
+        conversations_data = conversations_db.get_conversations(
+            uid,
+            limit=limit,
+            offset=offset,
+            start_date=start_dt,
+            end_date=end_dt,
+            include_discarded=include_discarded,
+            statuses=status_list,
+        )
 
-    # Filter out locked conversations (paid plan required)
-    if conversations_data:
-        conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+        # Filter out locked conversations (paid plan required)
+        if conversations_data:
+            conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
 
     # Bound how many conversations are formatted for the chat model so a wide date range cannot
     # flood its context and freeze it (#4927). Newest-first, so this keeps the most recent.
@@ -234,6 +347,14 @@ def get_conversations_tool(
         msg = f"No conversations found{date_info}. The user may not have recorded any conversations yet, or the date range may be outside their conversation history."
         logger.info(f"⚠️ get_conversations_tool - {msg}")
         return msg
+
+    if jit_enabled:
+        logger.info("🔧 get_conversations_tool - using explicitly enabled JIT retrieval contract")
+        return format_active_jit_conversations(
+            conversations_data,
+            configurable=cast(Dict[str, Any], configurable),
+            max_transcript_segments=max_transcript_segments if include_transcript else 0,
+        )
 
     try:
         # Only load people if transcripts will be included (people are used for speaker names in transcripts)
@@ -367,17 +488,11 @@ def search_conversations_tool(
         max_transcript_segments: Limit transcript segments (default: 0=none, suggest 20-50 for normal use, max: 1000)
         include_transcript: Include full transcript (default: True)
         include_timestamps: Add timestamps to transcript segments (default: False)
-
     Returns:
         Formatted string with matching conversations, including transcripts, summaries, action items, events, and
         metadata.
     """
-    exact_conversation_id = parse_exact_conversation_reference(query)
-    logger.info(
-        "🔧 search_conversations_tool mode=%s query_len=%s",
-        'exact-reference' if exact_conversation_id else 'semantic',
-        len(query or ''),
-    )
+    logger.info("🔧 search_conversations_tool query_len=%s", len(query or ''))
 
     # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
@@ -401,11 +516,17 @@ def search_conversations_tool(
         logger.info(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     logger.info(
-        "✅ search_conversations_tool - uid=%s query_mode=%s limit=%s",
+        "✅ search_conversations_tool - uid=%s limit=%s",
         uid,
-        'exact-reference' if exact_conversation_id else 'semantic',
         limit,
     )
+    jit_enabled = is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable))
+    exact_conversation_id = _parse_exact_search_reference(query, jit_enabled=jit_enabled)
+
+    scope = chat_scope_from_config(configurable)
+    start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
+    if scope_err:
+        return f"Error: {scope_err}"
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
@@ -415,6 +536,8 @@ def search_conversations_tool(
     # Parse dates to timestamps if provided
     starts_at = None
     ends_at = None
+    start_dt = None
+    end_dt = None
 
     if start_date:
         try:
@@ -422,6 +545,7 @@ def search_conversations_tool(
             if dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
             logger.info(f"📅 Parsed start_date '{start_date}' as {dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            start_dt = dt
             starts_at = int(dt.timestamp())
         except ValueError as e:
             return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
@@ -432,6 +556,7 @@ def search_conversations_tool(
             if dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
             logger.info(f"📅 Parsed end_date '{end_date}' as {dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            end_dt = dt
             ends_at = int(dt.timestamp())
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
@@ -439,11 +564,42 @@ def search_conversations_tool(
     # Limit to reasonable max
     limit = min(limit, 20)
 
+    scoped_id = (scope or {}).get("conversation_id") if scope else None
+    if scoped_id and exact_conversation_id and exact_conversation_id != str(scoped_id):
+        return f"Error: Chat is scoped to conversation {scoped_id}; " f"cannot load a different conversation reference."
+
+    if jit_enabled and not exact_conversation_id and not scoped_id:
+        budget_error = _consume_jit_summary_search_budget(cast(Dict[str, Any], configurable))
+        if budget_error:
+            logger.warning("search_conversations_tool rejected by JIT summary-search budget")
+            return budget_error
+
+    conversations_data: List[Dict[str, Any]] = []
     try:
         keyword_ids: List[str] = []
         vector_ids: List[str] = []
-        if exact_conversation_id:
+        if scoped_id:
+            conversations_data, scoped_err = _scoped_conversation_fetch(
+                uid,
+                str(scoped_id),
+                start_dt=start_dt,
+                end_dt=end_dt,
+                include_discarded=False,
+                statuses=None,
+            )
+            if scoped_err:
+                logger.info(f"⚠️ search_conversations_tool - {scoped_err}")
+                return scoped_err
+            conversation_ids = [str(scoped_id)]
+        elif exact_conversation_id:
             conversation_ids = [exact_conversation_id]
+            conversations_data = conversations_db.get_conversations_by_id(uid, conversation_ids)
+            conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+            conversations_data = [
+                c for c in conversations_data if conversation_matches_date_range(c, starts_at, ends_at)
+            ]
+            if not conversations_data:
+                return f"No conversations found matching query: '{query}'"
         else:
             # Hybrid search: keyword (Typesense, exact matches on title/overview — catches proper
             # names that embeddings miss, see #5072) + semantic vector search, keyword hits first.
@@ -452,6 +608,9 @@ def search_conversations_tool(
             )
             vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
             conversation_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
+
+        if jit_enabled:
+            conversation_ids = conversation_ids[:MAX_JIT_CONVERSATIONS]
 
         logger.info(
             "📊 search_conversations_tool - found %s results (%s keyword, %s vector) query_mode=%s",
@@ -469,7 +628,6 @@ def search_conversations_tool(
                 date_info = f" after the specified start date"
             elif ends_at:
                 date_info = f" before the specified end date"
-
             msg = f"No conversations found matching the concept '{query}'{date_info}. The user may not have discussed this topic yet, or it may not be in their recorded conversation history."
             logger.info(
                 "⚠️ search_conversations_tool - no results query_mode=%s",
@@ -477,23 +635,31 @@ def search_conversations_tool(
             )
             return msg
 
-        # Get full conversation data
-        conversations_data: List[Dict[str, Any]] = conversations_db.get_conversations_by_id(uid, conversation_ids)
-
-        if not conversations_data:
-            return f"No conversations found matching query: '{query}'"
-
-        # Filter out locked conversations (paid plan required)
-        conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
-        if exact_conversation_id:
+        if not scoped_id and not exact_conversation_id:
+            conversations_data = conversations_db.get_conversations_by_id(uid, conversation_ids)
+            if not conversations_data:
+                return f"No conversations found matching query: '{query}'"
+            conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+            # Index hits can be stale vs created_at; re-check the hydrated doc against the
+            # hard chat window so timeframe-scoped Ask never returns out-of-window rows.
+            start_bound = start_dt.timestamp() if start_dt is not None else None
+            end_bound = end_dt.timestamp() if end_dt is not None else None
             conversations_data = [
-                c for c in conversations_data if conversation_matches_date_range(c, starts_at, ends_at)
+                c for c in conversations_data if conversation_matches_date_range(c, start_bound, end_bound)
             ]
-
-        if not conversations_data:
-            return f"No conversations found matching query: '{query}'"
+            if not conversations_data:
+                return f"No conversations found matching query: '{query}'"
 
         logger.info(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
+
+        if jit_enabled:
+            logger.info("🔧 search_conversations_tool - using explicitly enabled JIT retrieval contract")
+            return format_active_jit_conversations(
+                conversations_data,
+                configurable=cast(Dict[str, Any], configurable),
+                query=None if exact_conversation_id else query,
+                max_transcript_segments=max_transcript_segments if include_transcript else 0,
+            )
 
         # Only load people if transcripts will be included
         people: List[Person] = []
@@ -549,7 +715,11 @@ def search_conversations_tool(
         )
 
         # Return formatted string
-        match_kind = 'matching exactly' if exact_conversation_id else 'semantically matching'
+        match_kind = (
+            'in the active chat scope'
+            if scoped_id
+            else ('matching exactly' if exact_conversation_id else 'semantically matching')
+        )
         result = f"Found {len(conversations)} conversations {match_kind} '{query}':\n\n"
         result += conversations_to_string(
             conversations,

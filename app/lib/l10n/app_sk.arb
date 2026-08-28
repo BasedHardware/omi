@@ -3220,6 +3220,10 @@
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
     "accountCutoverOpenStore": "Otevřít obchod",
+    "chatScopeToday": "Dnes",
+    "chatScopeThisWeek": "Tento týždeň",
+    "chatScopeAbout": "O: {title}",
+    "askAboutThisConversation": "Opýtať sa na to",
     "sendRawAudioToOmi": "Odosielať nespracovaný zvuk do Omi",
     "sendRawAudioToOmiDescription": "Vypnutím zabránite odosielaniu nespracovaného zvuku do Omi. Prepisy a údaje potrebné pre cloudové funkcie sa môžu naďalej odosielať do Omi.",
     "findDevice": "Nájsť",
@@ -3232,5 +3236,8 @@
     "appReEnableFailedTitle": "Nepodarilo sa znovu zapnúť",
     "appReEnableFailedBody": "Túto aplikáciu sa nepodarilo znovu zapnúť. Skús to znova.",
     "appDisabledOn": "Vypnuté {date}.",
-    "appDisabledLastError": "Posledná chyba: {error}."
+    "appDisabledLastError": "Posledná chyba: {error}.",
+    "prerecordedTranscript": "Prednahraté",
+    "pendantRecordingSyncBlocked": "Pendant stále nahráva, takže uložený zvuk nie je možné preniesť. Stlačením tlačidla na Pendante zastavte nahrávanie a potom synchronizujte znova.",
+    "pendantFullSyncBlocked": "Úložisko Pendantu je plné a stále je v režime nahrávania, takže uložený zvuk nemožno preniesť. Stlačením tlačidla na Pendante zastavte nahrávanie a potom znova synchronizujte."
 }

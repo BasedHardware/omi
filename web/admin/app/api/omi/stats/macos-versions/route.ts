@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin, { getDb } from "@/lib/firebase/admin";
 import { verifyAdmin } from "@/lib/auth";
-import { posthogResults } from "@/lib/posthog";
-import { getPayload, setPayload } from "@/lib/payload-cache";
+import { posthogResults, POSTHOG_SERVED_MAX_ROWS } from "@/lib/posthog";
+import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import {
   parsePlatformScope,
   scopeFilterAnd,
@@ -85,12 +85,15 @@ function breakdownFromEntries(entries: [string, number][], colors: string[] | Re
   }));
 }
 
-function formatTodayLabel() {
+// Derived at SERVE time from the payload's `freshAt`, never baked in at
+// compute time: a payload computed on Monday and served on Friday used to
+// carry a "today" label that claimed Friday's date.
+function formatDateLabel(epochMs: number) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(new Date());
+  }).format(new Date(epochMs));
 }
 
 export async function computeMacosVersions(platform: PlatformScope = "macos") {
@@ -120,10 +123,14 @@ export async function computeMacosVersions(platform: PlatformScope = "macos") {
         ${scopeFilterAnd(platform)}
       GROUP BY actor_id
       ORDER BY actor_id ASC
-      LIMIT 100000
+      LIMIT ${POSTHOG_SERVED_MAX_ROWS}
     `;
 
     const rows = (await posthogQuery(host, projectId, apiKey, activeUsersQuery)) as [unknown, unknown, unknown][];
+    // The shared wrapper binds an outer LIMIT of POSTHOG_SERVED_MAX_ROWS, which
+    // is also PostHog's served maximum. Hitting it means the actor list was cut
+    // short and every breakdown below is a floor, not a count.
+    const truncated = rows.length >= POSTHOG_SERVED_MAX_ROWS;
     const activeUsers = rows
       .map((row: [unknown, unknown, unknown]) => ({
         userId: String(row[0] ?? "").trim(),
@@ -134,10 +141,10 @@ export async function computeMacosVersions(platform: PlatformScope = "macos") {
 
     if (activeUsers.length === 0) {
       return {
-        date: formatTodayLabel(),
         activeUsers: 0,
-        channelBreakdown: [],
-        versionBreakdown: [],
+        channelBreakdown: [] as Breakdown[],
+        versionBreakdown: [] as Breakdown[],
+        truncated,
       };
     }
 
@@ -175,10 +182,10 @@ export async function computeMacosVersions(platform: PlatformScope = "macos") {
     );
 
     return {
-      date: formatTodayLabel(),
       activeUsers: activeUsers.length,
       channelBreakdown,
       versionBreakdown,
+      truncated,
     };
 }
 
@@ -192,12 +199,17 @@ export async function GET(request: NextRequest) {
 
     const cached = await getPayload<Awaited<ReturnType<typeof computeMacosVersions>>>(key);
     if (cached) {
-      return NextResponse.json(cached.data);
+      return NextResponse.json(
+        withFreshness({ ...cached.data, date: formatDateLabel(cached.freshAt) }, cached.freshAt),
+      );
     }
 
     const payload = await computeMacosVersions(platform);
     await setPayload(key, payload);
-    return NextResponse.json(payload);
+    const freshAt = Date.now();
+    return NextResponse.json(
+      withFreshness({ ...payload, date: formatDateLabel(freshAt) }, freshAt),
+    );
   } catch (error: any) {
     console.error("macOS version stats error:", error);
     return NextResponse.json(

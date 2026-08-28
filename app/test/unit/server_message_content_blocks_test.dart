@@ -177,4 +177,89 @@ void main() {
       prose,
     ]);
   });
+
+  test('decodes optional evidence envelope without changing the answer text', () {
+    final json = messageJson(text: 'The answer stays readable.');
+    json['evidence'] = {
+      'schema_version': 1,
+      'request_id': 'request-1',
+      'references': [
+        {
+          'id': 'summary-1',
+          'kind': 'conversation_summary',
+          'state': 'available',
+          'conversation_id': 'conversation-1',
+          'title': 'Weekly summary',
+        },
+        {
+          'id': 'frame-1',
+          'kind': 'keyframe',
+          'state': 'pruned',
+          'frame_id': 'frame-1',
+        },
+      ],
+    };
+
+    final message = ServerMessage.fromJson(json);
+
+    expect(message.text, 'The answer stays readable.');
+    expect(message.evidenceEnvelope?.requestId, 'request-1');
+    expect(message.evidenceEnvelope?.references, hasLength(2));
+    expect(message.evidenceEnvelope?.references.last.canOpen, isFalse);
+    expect(message.toJson()['evidence'], isA<Map<String, dynamic>>());
+  });
+
+  test(
+    'keeps text readable for loading and offline frame requests',
+    () {
+      for (final state in ['loading', 'offline']) {
+        final json = messageJson(text: 'The answer remains available.');
+        json['evidence'] = {
+          'schema_version': 1,
+          'request_id': 'request-$state',
+          'references': [
+            {
+              'id': 'request-$state',
+              'kind': 'request',
+              'state': state,
+              'request_id': 'request-$state',
+            },
+          ],
+        };
+
+        expect(() => ServerMessage.fromJson(json), returnsNormally);
+        final message = ServerMessage.fromJson(json);
+
+        expect(message.text, 'The answer remains available.');
+        expect(message.evidenceEnvelope?.references.single.kind.wireValue, 'request');
+        expect(message.evidenceEnvelope?.references.single.state.wireValue, state);
+        expect(message.evidenceEnvelope?.references.single.canOpen, isFalse);
+      }
+    },
+  );
+
+  test('ignores malformed or future evidence while preserving legacy text', () {
+    final malformed = messageJson(text: 'Legacy answer');
+    malformed['evidence'] = {'schema_version': 1, 'references': 'not-a-list'};
+    final future = messageJson(text: 'Future answer');
+    future['evidence'] = {
+      'schema_version': 99,
+      'references': [
+        {
+          'id': 'future-1',
+          'kind': 'conversation_summary',
+          'state': 'available',
+          'conversation_id': 'conversation-1',
+        },
+      ],
+    };
+
+    final malformedMessage = ServerMessage.fromJson(malformed);
+    final futureMessage = ServerMessage.fromJson(future);
+
+    expect(malformedMessage.text, 'Legacy answer');
+    expect(malformedMessage.evidenceEnvelope?.isEmpty, isTrue);
+    expect(futureMessage.text, 'Future answer');
+    expect(futureMessage.evidenceEnvelope?.references.single.canOpen, isFalse);
+  });
 }

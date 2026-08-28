@@ -29,6 +29,7 @@ from pydub import AudioSegment
 from database import conversations as conversations_db
 from database import users as users_db
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
+from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
     RUN_LOCK_HEARTBEAT_SECONDS,
     RUN_LOCK_RENEWAL_SAFETY_SECONDS,
@@ -1159,7 +1160,9 @@ def process_segment(
         # When a target conversation is specified (auto-sync from live capture),
         # attach segments to it directly instead of searching by timestamp.
         if target_conversation_id:
-            closest_memory = conversations_db.get_conversation(uid, target_conversation_id)
+            closest_memory = conversations_db.get_conversation(
+                uid, target_conversation_id, read_site=FirestoreReadSite.SYNC_PIPELINE_TARGET_CONVERSATION
+            )
             if not conversations_db.eligible_merge_target(closest_memory):
                 logger.warning(
                     f'Target conversation {target_conversation_id} not found or deleted, falling back to timestamp lookup'

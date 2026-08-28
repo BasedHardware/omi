@@ -1,15 +1,15 @@
 # Windows release pipeline
 
 The Windows desktop app ships through `.github/workflows/desktop_windows_release.yml`.
-It mirrors the macOS auto-release shape (`.github/workflows/desktop_auto_release.yml`):
-a merge to `main` cuts a version, tags it, and publishes a beta build — the
-difference is Windows has no external CI (no Codemagic), so the same workflow also
-builds the installer on a `windows-latest` runner with electron-builder (NSIS).
+It mirrors the macOS auto-release shape (`.github/workflows/desktop_auto_release.yml`)
+in what it produces — a tagged version, a beta build — but unlike the macOS workflow
+it is **manual only** (`workflow_dispatch`, no `push` trigger): Windows has no external
+CI (no Codemagic), so the same workflow also builds the installer on a `windows-latest`
+runner with electron-builder (NSIS).
 
 ## What it does
 
-On every push to `main` that touches `desktop/windows/**` (or a manual
-`workflow_dispatch`):
+On a manual `workflow_dispatch`:
 
 1. **plan-and-tag** (Ubuntu)
    - Finds the latest `v*-windows` tag (the version source of truth).

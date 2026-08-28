@@ -2,8 +2,8 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Verifies the BYOK-vs-paywall precedence fix: a user with all four BYOK
-/// keys configured locally is never paywalled, regardless of the persisted
+/// Verifies the BYOK-vs-paywall precedence fix: a user with a configured BYOK
+/// key locally is never paywalled, regardless of the persisted
 /// `desktop_isPaywalled` flag.
 @MainActor final class BYOKPaywallTests: XCTestCase {
   private let paywallKey = "desktop_isPaywalled"
@@ -20,36 +20,66 @@ import XCTest
     }
   }
 
+  /// `isByokActive` requires the selected provider's *current* key to match a
+  /// fingerprint already persisted by `activateBYOK` reconciliation — raw
+  /// UserDefaults presence alone is not enough (#11454 replaced the old
+  /// all-keys-present check with this enrollment contract). Tests that
+  /// exercise `isByokActive`/`isPaywalledEffective` must enroll the provider
+  /// whose key they just set, and re-enroll whenever that key's value changes.
+  private func enroll(_ p: BYOKProvider) {
+    guard let key = APIKeyService.byokKey(p) else {
+      XCTFail("enroll(\(p)) called before \(p.storageKey) was set")
+      return
+    }
+    APIKeyService.persistEnrolledFingerprints([p.rawValue: APIKeyService.byokFingerprint(key)])
+  }
+
   override func tearDown() async throws {
     CredentialHealthManager.shared.reset()
     clearAllBYOKKeys()
     UserDefaults.standard.removeObject(forKey: paywallKey)
+    UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+    APIKeyService.persistEnrolledFingerprints([:])
   }
 
-  func testByokActiveRequiresAllFourKeys() {
+  func testByokActiveRequiresSelectedLLMKey() {
     clearAllBYOKKeys()
     XCTAssertFalse(APIKeyService.isByokActive)
 
-    // Three of four → still not active
+    // A selected LLM key activates BYOK without the optional providers.
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
     for p in BYOKProvider.allCases.dropLast() {
       UserDefaults.standard.set("k", forKey: p.storageKey)
     }
-    XCTAssertFalse(APIKeyService.isByokActive, "3/4 keys must not count as BYOK")
+    enroll(.openrouter)
+    XCTAssertTrue(APIKeyService.isByokActive)
 
-    // All four → active
+    // All configured providers remain active. setAllBYOKKeys() rewrites
+    // openrouter's key to "sk-test-openrouter", which invalidates the
+    // fingerprint just enrolled above — re-enroll against the new value.
     setAllBYOKKeys()
+    enroll(.openrouter)
     XCTAssertTrue(APIKeyService.isByokActive)
   }
 
-  func testBuildHeadersDoesNotAttachPartialByokKeys() async throws {
+  func testLegacyLLMSelectionInfersStoredProvider() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.removeObject(forKey: .byokLLMProvider)
+    UserDefaults.standard.set("sk-test-openai", forKey: BYOKProvider.openai.storageKey)
+
+    XCTAssertEqual(APIKeyService.selectedBYOKLLMProvider, .openai)
+  }
+
+  func testBuildHeadersAttachSelectedLLMByokKey() async throws {
     clearAllBYOKKeys()
     UserDefaults.standard.set("sk-test-openai", forKey: BYOKProvider.openai.storageKey)
+    enroll(.openai)
 
     let client = APIClient()
     await client.setTestAuthHeader("Bearer test-token")
     let headers = try await client.buildHeaders()
 
-    XCTAssertNil(headers[BYOKProvider.openai.headerName])
+    XCTAssertEqual(headers[BYOKProvider.openai.headerName], "sk-test-openai")
   }
 
   func testBuildHeadersCanExplicitlyExcludeByokKeys() async throws {
@@ -78,6 +108,8 @@ import XCTest
 
   func testBuildHeadersSuppressesOnlyInvalidByokHeader() async throws {
     setAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openai.rawValue, forKey: .byokLLMProvider)
+    enroll(.openai)
     let openAIKey = try XCTUnwrap(APIKeyService.byokKey(.openai))
     CredentialHealthManager.shared.recordProviderFailure(
       .providerAuthFailed(provider: .openai, mode: .byok),
@@ -91,15 +123,21 @@ import XCTest
     let headers = try await client.buildHeaders()
 
     XCTAssertNil(headers[BYOKProvider.openai.headerName])
-    for provider in BYOKProvider.allCases where provider != .openai {
-      XCTAssertEqual(headers[provider.headerName], "sk-test-\(provider.rawValue)")
-    }
+    XCTAssertEqual(headers[BYOKProvider.deepgram.headerName], "sk-test-deepgram")
+    XCTAssertNil(headers[BYOKProvider.openrouter.headerName])
+    XCTAssertNil(headers[BYOKProvider.anthropic.headerName])
+    XCTAssertNil(headers[BYOKProvider.gemini.headerName])
   }
 
   func testPaywallFlagSuppressedWhenByokActive() {
-    // The exact bug: trial-expired flag set, then user adds all 4 BYOK keys.
+    // The exact bug: trial-expired flag set, then user configures BYOK keys.
     UserDefaults.standard.set(true, forKey: paywallKey)
     setAllBYOKKeys()
+    // Explicit provider selection: with every provider's key set, legacy
+    // inference (first BYOKLLMProvider.allCases with a key present) would
+    // silently pick whichever provider we did not enroll.
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    enroll(.openrouter)
     XCTAssertFalse(
       AppState.isPaywalledEffective,
       "BYOK-active user must NOT be paywalled even with the flag set")
@@ -119,13 +157,52 @@ import XCTest
     XCTAssertFalse(AppState.isPaywalledEffective)
   }
 
-  func testRemovingOneByokKeyReappliesPaywall() {
+  func testRemovingDeepgramKeyLeavesSelectedLLMByokActive() {
     UserDefaults.standard.set(true, forKey: paywallKey)
     setAllBYOKKeys()
+    // Explicit provider selection: with every provider's key set, legacy
+    // inference (first BYOKLLMProvider.allCases with a key present) would
+    // silently pick whichever provider we did not enroll.
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    enroll(.openrouter)
     XCTAssertFalse(AppState.isPaywalledEffective)
 
-    // User clears their Deepgram key → no longer fully BYOK → paywall returns.
+    // Deepgram is optional when a selected LLM key remains configured.
     UserDefaults.standard.removeObject(forKey: BYOKProvider.deepgram.storageKey)
-    XCTAssertTrue(AppState.isPaywalledEffective)
+    XCTAssertFalse(AppState.isPaywalledEffective)
+  }
+
+  func testHasTranscriptionBYOKRequiresEnrolledDeepgramFingerprint() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    UserDefaults.standard.set("sk-or", forKey: BYOKProvider.openrouter.storageKey)
+    UserDefaults.standard.set("dg-rejected", forKey: BYOKProvider.deepgram.storageKey)
+    APIKeyService.persistEnrolledFingerprints([:])
+
+    XCTAssertFalse(
+      APIKeyService.hasTranscriptionBYOK,
+      "raw Deepgram presence must not suppress transcription exhaustion")
+
+    let fp = APIKeyService.byokFingerprint("dg-rejected")
+    APIKeyService.persistEnrolledFingerprints(["deepgram": fp])
+    XCTAssertTrue(APIKeyService.hasTranscriptionBYOK)
+
+    UserDefaults.standard.set("dg-rotated", forKey: BYOKProvider.deepgram.storageKey)
+    XCTAssertFalse(
+      APIKeyService.hasTranscriptionBYOK,
+      "rotated Deepgram key is not enrolled until validation succeeds")
+  }
+
+  func testSelectedRealtimeBYOKKeyIgnoresUnselectedLeftover() {
+    clearAllBYOKKeys()
+    UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
+    UserDefaults.standard.set("sk-or", forKey: BYOKProvider.openrouter.storageKey)
+    UserDefaults.standard.set("sk-openai-leftover", forKey: BYOKProvider.openai.storageKey)
+    UserDefaults.standard.set("sk-gemini-leftover", forKey: BYOKProvider.gemini.storageKey)
+
+    XCTAssertEqual(APIKeyService.selectedBYOKLLMProvider, .openrouter)
+    XCTAssertNil(APIKeyService.selectedRealtimeBYOKKey(for: .openai))
+    XCTAssertNil(APIKeyService.selectedRealtimeBYOKKey(for: .gemini))
+    XCTAssertEqual(APIKeyService.selectedRealtimeBYOKKey(for: .openrouter), "sk-or")
   }
 }

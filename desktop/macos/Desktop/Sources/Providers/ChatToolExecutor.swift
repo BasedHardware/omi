@@ -666,7 +666,7 @@ class ChatToolExecutor {
     toolName: String
   ) -> PhysicalExecutionPrecondition {
     switch toolName {
-    case "capture_screen", "get_screenshot", "show_rewind_evidence":
+    case "capture_screen", "get_screenshot", "look_at_frame", "show_rewind_evidence":
       if isChatScreenshotSharingEnabled {
         return .satisfied
       }
@@ -1941,7 +1941,7 @@ class ChatToolExecutor {
         return authorizedOwnerChangedResult()
       }
 
-      if task.deleted == true {
+      if task.isRetired {
         return "Error: task '\(task.description)' has been deleted"
       }
 
@@ -1988,7 +1988,7 @@ class ChatToolExecutor {
         return authorizedOwnerChangedResult()
       }
 
-      if task.deleted == true {
+      if task.isRetired {
         return "Error: task '\(task.description)' is already deleted"
       }
 
@@ -2403,10 +2403,10 @@ class ChatToolExecutor {
     let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
     let granted = AXIsProcessTrustedWithOptions(options)
     if !granted {
-      _ = openPermissionPrivacySettings(
-        pane: "Privacy_Accessibility",
-        expectedOwnerID: expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
+      _ = PermissionDragGuidance.openAccessibilitySettings(
+        isAuthorized: {
+          isPermissionAuthorizationCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)
+        })
     }
   }
 

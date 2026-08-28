@@ -65,7 +65,9 @@ def test_conversation_wire_dart_is_generated_from_app_client_openapi():
     assert GENERATED_DART_PATH.read_text() == generated
     for schema_name in generate_dart_models.SCHEMA_GROUPS['conversation']['schemas']:
         assert f'class Generated{schema_name}' in generated
-    assert 'items: _required(_readFieldValue<List<GeneratedConversation>>' in generated
+    assert 'items: _required(_readFieldValue<List<GeneratedConversationSearchItem>>' in generated
+    assert 'class GeneratedConversationSearchItem' in generated
+    assert 'class GeneratedTranscriptMatchSnippet' in generated
     assert 'class GeneratedSyncJobStartResponse' in generated
     assert 'class GeneratedSyncJobStatusResponse' in generated
     assert 'result: _readFieldValue<GeneratedSyncLocalFilesResultResponse>' in generated
@@ -96,7 +98,8 @@ def test_message_adapter_preserves_arbitrary_chart_data_union_payloads():
     assert "const requiredKeys = {'chart_type', 'title', 'datasets'};" in adapter
     assert "return (chartType == 'line' || chartType == 'bar') && requiredKeys.every(json.containsKey);" in adapter
     assert 'static ServerMessage fromResponseJson(Map<String, dynamic> json)' in adapter
-    assert 'wire.GeneratedResponseMessage.fromJson(json)' in adapter
+    assert "Map<String, dynamic>.from(json)..remove('evidence')" in adapter
+    assert 'wire.GeneratedResponseMessage.fromJson(generatedJson)' in adapter
     assert 'askForNps: generated.askForNps ?? false' in adapter
     assert 'final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);' in adapter
     assert 'rawChartData: rawChartData' in adapter
@@ -398,6 +401,10 @@ def test_memories_wire_dart_is_generated_from_app_client_openapi():
     assert MEMORIES_DART_PATH.read_text() == generated
     assert 'class GeneratedEvidence' in generated
     assert 'class GeneratedMemoryDB' in generated
+    assert 'class GeneratedMemoryEditResponse' in generated
+    assert 'class GeneratedMemoryRevertRequest' in generated
+    assert 'final GeneratedMemoryDB? memory;' in generated
+    assert 'final String operationId;' in generated
     assert 'final String? layer;' in generated
     assert 'final String? memoryTier;' in generated
     assert 'layer: _readFieldValue<String>' in generated

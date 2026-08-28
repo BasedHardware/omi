@@ -6,6 +6,7 @@ import os
 import re
 import types
 import importlib
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -90,7 +91,14 @@ ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from database.memory_vector_metadata import canonical_memory_provider_id
 from models.memory_apply import MemoryControlState
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from models.product_memory import (
+    LedgerWriteReason,
+    MemoryItemStatus,
+    MemoryKind,
+    MemoryTier,
+    ProcessingState,
+    MemoryItem,
+)
 from utils.memory.atom_keyword_index import (
     AtomKeywordRebuildReport,
     build_atom_keyword_document,
@@ -175,6 +183,66 @@ def _data_protection_db(level: str = "enhanced") -> MagicMock:
     return db_client
 
 
+def _run_bounded_ledger_search(
+    monkeypatch,
+    items: list[MemoryItem],
+    candidate_id: str,
+    *,
+    payload_overrides: dict[str, dict] | None = None,
+):
+    payloads = {item.memory_id: item.model_dump(mode="python") for item in items}
+    for payload in payloads.values():
+        if payload.get("ledger_schema_version") == "knowledge_ledger.v1" and not payload.get("write_reason"):
+            payload["write_reason"] = LedgerWriteReason.agent_reusable_conclusion.value
+    payloads.update(payload_overrides or {})
+    for payload in payloads.values():
+        if payload.get("ledger_schema_version") == "knowledge_ledger.v1" and not payload.get("write_reason"):
+            payload["write_reason"] = LedgerWriteReason.agent_reusable_conclusion.value
+    read_ids: list[str] = []
+
+    class _Snapshot:
+        def __init__(self, document_id: str, payload):
+            self.id = document_id
+            self.exists = payload is not None
+            self._payload = payload
+
+        def to_dict(self):
+            return self._payload
+
+    class _Ref:
+        def __init__(self, path: str):
+            self.path = path
+
+    class _Db:
+        def document(self, path: str):
+            read_ids.append(path.rsplit("/", 1)[-1])
+            return _Ref(path)
+
+        def get_all(self, refs):
+            return [_Snapshot(ref.path.rsplit("/", 1)[-1], payloads.get(ref.path.rsplit("/", 1)[-1])) for ref in refs]
+
+        def collection(self, _path):
+            pytest.fail("ledger search must not scan the canonical collection")
+
+    monkeypatch.setattr(
+        "utils.memory.atom_keyword_index.keyword_search_ledger_memory_ids",
+        lambda *args, **kwargs: [candidate_id],
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+        lambda **kwargs: pytest.fail("ledger search must not materialize all canonical items"),
+    )
+    results = search_canonical_memories(
+        CANONICAL_UID,
+        NEEDLE,
+        limit=5,
+        vector_query=_empty_vector_query,
+        db_client=_Db(),
+        ledger_kinds={MemoryKind.fact.value},
+    )
+    return results, read_ids
+
+
 def test_user_rejected_long_term_item_is_not_rebuild_or_vector_eligible():
     rejected = _long_term_item().model_copy(update={"promotion": {"user_review": False}})
 
@@ -209,6 +277,21 @@ def _universal_memory(monkeypatch):
     )
     configure_universal_memory(monkeypatch, CANONICAL_UID)
     monkeypatch.setattr(atom_index, "ensure_canonical_apply_control_state", lambda *args, **kwargs: None)
+
+    @contextmanager
+    def allow_external_provider_write(uid, *, kind="explicit_memory_deletion", firestore_client=None):
+        assert uid
+        assert kind in {"external_data_write", "explicit_memory_deletion"}
+        assert firestore_client is not None
+        yield "writer-token"
+
+    monkeypatch.setattr(atom_index, "external_write_fence", allow_external_provider_write)
+    monkeypatch.setattr(canonical_adapter, "destructive_operation_gate", allow_external_provider_write)
+    monkeypatch.setattr(
+        canonical_adapter,
+        "current_destructive_operation_token",
+        lambda uid, *, kind: "writer-token",
+    )
 
 
 @pytest.fixture
@@ -422,6 +505,164 @@ class TestKeywordSearchAndHybrid:
         assert results[0]["memory_id"] == item.memory_id
         assert NEEDLE in results[0]["content"]
 
+    def test_ledger_search_hydrates_only_candidate_and_lineage_ids(self, monkeypatch):
+        candidate = _long_term_item(memory_id="mem-ledger-candidate").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+                "canonical_memory_id": "mem-ledger-root",
+            }
+        )
+        root = _long_term_item(memory_id="mem-ledger-root", content=f"Root {NEEDLE}").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+            }
+        )
+        by_id = {candidate.memory_id: candidate, root.memory_id: root}
+        read_batches = []
+
+        def _read_by_ids(uid, memory_ids, *, db_client):
+            assert uid == CANONICAL_UID
+            read_batches.append(tuple(memory_ids))
+            return [by_id[memory_id] for memory_id in memory_ids if memory_id in by_id]
+
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.keyword_search_ledger_memory_ids",
+            lambda *args, **kwargs: [candidate.memory_id],
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items_by_ids",
+            _read_by_ids,
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+            lambda **kwargs: pytest.fail("ledger search must not scan the canonical collection"),
+        )
+
+        results = search_canonical_memories(
+            CANONICAL_UID,
+            NEEDLE,
+            limit=5,
+            vector_query=_empty_vector_query,
+            db_client=_data_protection_db(),
+            ledger_kinds={MemoryKind.fact.value},
+        )
+
+        assert [row["memory_id"] for row in results] == [root.memory_id]
+        assert read_batches == [(candidate.memory_id,), (root.memory_id,)]
+
+    def test_ledger_search_omits_candidate_with_missing_lineage_target(self, monkeypatch):
+        candidate = _long_term_item(memory_id="mem-ledger-missing").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+                "canonical_memory_id": "mem-ledger-not-found",
+            }
+        )
+
+        results, read_ids = _run_bounded_ledger_search(monkeypatch, [candidate], candidate.memory_id)
+
+        assert results == []
+        assert read_ids == [candidate.memory_id, "mem-ledger-not-found"]
+
+    def test_ledger_search_preserves_closed_cycle_lineage_behavior(self, monkeypatch):
+        candidate = _long_term_item(memory_id="mem-ledger-cycle-candidate").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+                "canonical_memory_id": "mem-ledger-cycle-peer",
+            }
+        )
+        peer = _long_term_item(memory_id="mem-ledger-cycle-peer").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+                "canonical_memory_id": candidate.memory_id,
+            }
+        )
+
+        results, read_ids = _run_bounded_ledger_search(monkeypatch, [candidate, peer], candidate.memory_id)
+
+        assert len(results) == 1
+        assert results[0]["memory_id"] in {candidate.memory_id, peer.memory_id}
+        assert read_ids == [candidate.memory_id, peer.memory_id]
+
+    def test_ledger_search_omits_candidate_with_cross_owner_lineage_target(self, monkeypatch):
+        candidate = _long_term_item(memory_id="mem-ledger-cross-owner").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+                "canonical_memory_id": "mem-ledger-other-owner",
+            }
+        )
+        other_owner = _long_term_item(uid="uid-other", memory_id="mem-ledger-other-owner").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+            }
+        )
+
+        results, read_ids = _run_bounded_ledger_search(monkeypatch, [candidate, other_owner], candidate.memory_id)
+
+        assert results == []
+        assert read_ids == [candidate.memory_id, other_owner.memory_id]
+
+    def test_ledger_search_omits_candidate_with_payload_id_mismatch_lineage_target(self, monkeypatch):
+        candidate = _long_term_item(memory_id="mem-ledger-id-mismatch").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+                "canonical_memory_id": "mem-ledger-target",
+            }
+        )
+        wrong_payload = _long_term_item(memory_id="mem-ledger-wrong-payload").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+            }
+        )
+
+        results, read_ids = _run_bounded_ledger_search(
+            monkeypatch,
+            [candidate],
+            candidate.memory_id,
+            payload_overrides={"mem-ledger-target": wrong_payload.model_dump(mode="python")},
+        )
+
+        assert results == []
+        assert read_ids == [candidate.memory_id, "mem-ledger-target"]
+
+    def test_ledger_search_omits_candidate_when_lineage_exceeds_bounded_hops(self, monkeypatch):
+        chain = []
+        for index in range(14):
+            memory_id = f"mem-ledger-hop-{index}"
+            target_id = f"mem-ledger-hop-{index + 1}" if index < 13 else None
+            chain.append(
+                _long_term_item(memory_id=memory_id).model_copy(
+                    update={
+                        "ledger_schema_version": "knowledge_ledger.v1",
+                        "kind": MemoryKind.fact,
+                        "intent_backed": True,
+                        "canonical_memory_id": target_id,
+                    }
+                )
+            )
+
+        results, read_ids = _run_bounded_ledger_search(monkeypatch, chain, chain[0].memory_id)
+
+        assert results == []
+        assert read_ids == [item.memory_id for item in chain[:13]]
+
     def test_search_excludes_superseded_long_term_items(self, mock_typesense, monkeypatch):
         active = _long_term_item(memory_id="mem_active", content=f"Active {NEEDLE}")
         superseded = _long_term_item(
@@ -499,6 +740,46 @@ class TestKeywordSearchAndHybrid:
 
         assert [row["memory_id"] for row in results] == [short_term.memory_id, long_term.memory_id]
         assert [row["tier"] for row in results] == [MemoryTier.short_term.value, MemoryTier.long_term.value]
+
+    def test_search_applies_item_filter_before_result_limit(self, mock_typesense, monkeypatch):
+        facts = [
+            _long_term_item(memory_id=f"mem_fact_{index}").model_copy(
+                update={
+                    "ledger_schema_version": "knowledge_ledger.v1",
+                    "kind": MemoryKind.fact,
+                    "intent_backed": True,
+                }
+            )
+            for index in range(2)
+        ]
+        document = _long_term_item(memory_id="mem_document").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.document,
+                "intent_backed": True,
+                "body": "A bounded playbook body",
+            }
+        )
+        ranked_ids = [fact.memory_id for fact in facts] + [document.memory_id]
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.keyword_search_memory_ids",
+            lambda *args, **kwargs: ranked_ids,
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None: [*facts, document],
+        )
+
+        results = search_canonical_memories(
+            CANONICAL_UID,
+            "playbook",
+            limit=1,
+            vector_query=_empty_vector_query,
+            db_client=_data_protection_db(),
+            item_filter=lambda item: item.kind == MemoryKind.document,
+        )
+
+        assert [row["memory_id"] for row in results] == [document.memory_id]
 
     def test_search_prefers_long_term_canonical_survivor_and_keeps_unique_short_term(self, mock_typesense, monkeypatch):
         now = datetime.now(timezone.utc)
@@ -578,7 +859,7 @@ class TestKeywordSearchAndHybrid:
         )
         monkeypatch.setattr(
             "utils.memory.memory_service.search_canonical_memories",
-            lambda uid, query, limit=5, db_client=None, device_scope_request=None: [
+            lambda uid, query, limit=5, db_client=None, device_scope_request=None, item_filter=None: [
                 {
                     "memory_id": item.memory_id,
                     "content": item.content,

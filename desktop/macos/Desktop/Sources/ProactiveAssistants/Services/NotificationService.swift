@@ -38,6 +38,17 @@ enum NotificationDeliveryMode: Equatable {
   var requiresSystemBanner: Bool { self == .systemBannerOnly }
 }
 
+typealias JITDetailPresenter =
+  @MainActor (
+    String,
+    String,
+    String,
+    FloatingBarNotificationContext?,
+    JITTriggerFeedbackContext,
+    RuntimeOwnerAuthorizationSnapshot,
+    Bool
+  ) -> Void
+
 @MainActor
 class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   static let shared = NotificationService(registerWithSystemNotificationCenter: true)
@@ -53,6 +64,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
   /// Title that identifies screen capture reset notifications
   static let screenCaptureResetTitle = "Screen Recording Needs Reset"
+
+  /// Title that identifies the consent-decline notice: macOS re-confirmed consent for
+  /// app-built capture filters and the capture loop went terminal instead of retrying
+  /// (see ScreenCaptureConsentPolicy). Distinct from the reset title on purpose — the
+  /// grant is intact, so the repair is "start capturing again", NOT the tccutil wipe
+  /// the reset flow performs.
+  static let screenCaptureConsentTitle = "Screen Recording Paused"
 
   /// UserDefaults key that records whether the screen capture reset notification
   /// has already been shown in the current broken-capture episode. Cleared by
@@ -92,9 +110,16 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
   private struct NotificationMetadata {
     let title: String
+    let message: String
     let assistantId: String
+    let context: FloatingBarNotificationContext?
+    let jitFeedbackContext: JITTriggerFeedbackContext?
     let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   }
+
+  /// The only payload kept on a system banner for a JIT notice. These are
+  /// owner-scoped identifiers, never trigger text, OCR, or evidence.
+  private static let jitFeedbackUserInfoKey = "omi.jit.feedback.v1"
 
   /// Interaction provenance is bound to the exact authorization generation
   /// that delivered the banner, not only to a reusable user ID.
@@ -107,6 +132,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// the growth.
   private var notificationMetadataOrder: [String] = []
   private static let maxNotificationMetadata = 200
+  private let jitDetailPresenter: JITDetailPresenter?
 
   /// Evict oldest ids from `order`/`store` until `order.count <= max`.
   /// `nonisolated static` + generic so the FIFO eviction policy is synchronously
@@ -134,7 +160,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// The system notification center raises an Objective-C exception when
   /// constructed from SwiftPM's command-line test host. Owner-bound policy
   /// tests inject `false`; production always uses the shared `true` instance.
-  init(registerWithSystemNotificationCenter: Bool) {
+  init(
+    registerWithSystemNotificationCenter: Bool,
+    jitDetailPresenter: JITDetailPresenter? = nil
+  ) {
+    self.jitDetailPresenter = jitDetailPresenter
     super.init()
     if registerWithSystemNotificationCenter {
       // Set ourselves as the delegate to show notifications even when app is in foreground
@@ -209,7 +239,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // an OS callback may arrive after the originating session signed out.
     let completion = UNCompletionHandlerBox(completionHandler)
     Task { @MainActor in
-      guard let metadata = self.notificationMetadata[notificationId],
+      let metadata =
+        self.notificationMetadata[notificationId]
+        ?? self.metadataFromSystemNotification(notification)
+      guard let metadata,
         RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot)
       else {
         self.notificationMetadata.removeValue(forKey: notificationId)
@@ -236,8 +269,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let notificationId = response.notification.request.identifier
 
     Task { @MainActor in
-      // Retrieve stored metadata
-      let metadata = self.notificationMetadata[notificationId]
+      // Retrieve stored metadata. The user can tap a banner after the app was
+      // relaunched, so recover the bounded opaque JIT join keys from the
+      // notification itself when the in-memory entry is gone.
+      let metadata =
+        self.notificationMetadata[notificationId]
+        ?? self.metadataFromSystemNotification(response.notification)
       guard let metadata,
         RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot)
       else {
@@ -259,9 +296,17 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
           surface: "system_notification"
         )
 
-        switch Self.openAction(assistantId: assistantId, title: title) {
+        switch Self.openAction(
+          assistantId: assistantId,
+          title: title,
+          jitFeedbackContext: metadata.jitFeedbackContext
+        ) {
+        case .openJITDetail:
+          self.presentJITDetailCard(metadata)
         case .resetScreenCapture:
           self.handleScreenCaptureResetAction(source: "notification_click")
+        case .resumeScreenCapture:
+          self.handleScreenCaptureResumeAction(source: "notification_click")
         case .openMainChat:
           // The same reveal-and-land-on-chat path the floating bar's
           // "Continue in Omi" affordance uses; the chat transcript there
@@ -316,9 +361,15 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     case none
     /// The screen-recording repair, which is an action rather than a page.
     case resetScreenCapture
+    /// Resume after a terminal consent decline: the grant is intact, so the repair is
+    /// simply restarting monitoring (one user-initiated capture attempt), never a reset.
+    case resumeScreenCapture
     /// The main-window chat surface, where the meeting-notes card (with its
     /// conversation link) was materialized.
     case openMainChat
+    /// A muted-preview JIT banner opens the persistent in-app card so all
+    /// explicit feedback actions remain available after the user taps.
+    case openJITDetail
   }
 
   /// Resolve the tap destination from the notification's provenance.
@@ -326,10 +377,132 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// The screen-capture case matches on title because that is how its own delivery gates
   /// (`screenCaptureResetShownKey`) already identify it — changing that identity is a separate
   /// change with its own suppression-state migration.
-  static func openAction(assistantId: String, title: String) -> OpenAction {
+  static func openAction(
+    assistantId: String,
+    title: String,
+    jitFeedbackContext: JITTriggerFeedbackContext? = nil
+  ) -> OpenAction {
+    if jitFeedbackContext != nil { return .openJITDetail }
     if title == screenCaptureResetTitle { return .resetScreenCapture }
+    if title == screenCaptureConsentTitle { return .resumeScreenCapture }
     if assistantId == MeetingActionItemBannerPolicy.assistantID { return .openMainChat }
     return .none
+  }
+
+  /// Re-present a tapped JIT banner as the same persistent feedback card used
+  /// by the in-bar path. Every identifier is checked against the current
+  /// owner before the card can be shown; an old account's banner is inert.
+  @discardableResult
+  private func presentJITDetailCard(_ metadata: NotificationMetadata) -> Bool {
+    guard let feedbackContext = metadata.jitFeedbackContext,
+      feedbackContext.ownerID == metadata.authorizationSnapshot.ownerID,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot)
+    else { return false }
+
+    if let jitDetailPresenter {
+      jitDetailPresenter(
+        metadata.authorizationSnapshot.ownerID,
+        metadata.title,
+        metadata.message,
+        metadata.context,
+        feedbackContext,
+        metadata.authorizationSnapshot,
+        true)
+      return true
+    }
+
+    _ = FloatingControlBarManager.shared.showNotification(
+      ownerID: metadata.authorizationSnapshot.ownerID,
+      title: metadata.title,
+      message: metadata.message,
+      assistantId: metadata.assistantId,
+      sound: .none,
+      context: metadata.context,
+      jitFeedbackContext: feedbackContext,
+      isPersistent: true,
+      authorizationSnapshot: metadata.authorizationSnapshot)
+    return true
+  }
+
+  /// Route a system-banner tap through the same owner-fenced persistent-card
+  /// path used by `didReceive`. The small seam keeps the behavior testable
+  /// without constructing an AppKit/UserNotifications process host, and is
+  /// also the recovery path for a banner tapped after app relaunch.
+  @discardableResult
+  func routeJITDetailCard(
+    title: String,
+    message: String,
+    userInfo: [AnyHashable: Any]
+  ) -> Bool {
+    guard let feedbackContext = Self.jitFeedbackContext(from: userInfo),
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: feedbackContext.ownerID),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else { return false }
+    return presentJITDetailCard(
+      NotificationMetadata(
+        title: title,
+        message: message,
+        assistantId: "context-director",
+        context: nil,
+        jitFeedbackContext: feedbackContext,
+        authorizationSnapshot: authorizationSnapshot))
+  }
+
+  private func metadataFromSystemNotification(_ notification: UNNotification) -> NotificationMetadata? {
+    guard let feedbackContext = Self.jitFeedbackContext(from: notification.request.content.userInfo),
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: feedbackContext.ownerID
+      ),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else { return nil }
+    return NotificationMetadata(
+      title: notification.request.content.title,
+      message: notification.request.content.body,
+      assistantId: "context-director",
+      context: nil,
+      jitFeedbackContext: feedbackContext,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  private static func jitFeedbackUserInfo(
+    for context: JITTriggerFeedbackContext
+  ) -> [AnyHashable: Any] {
+    [
+      jitFeedbackUserInfoKey: [
+        "owner_id": context.ownerID,
+        "event_id": context.eventID,
+        "trigger_memory_id": context.triggerMemoryID,
+        "account_generation": context.accountGeneration,
+        "trigger_revision": context.triggerRevision,
+      ]
+    ]
+  }
+
+  /// Decode only the bounded opaque JIT join keys. This is also the behavioral
+  /// test seam for a banner tapped after a process relaunch.
+  static func jitFeedbackContext(
+    from userInfo: [AnyHashable: Any]
+  ) -> JITTriggerFeedbackContext? {
+    guard let payload = userInfo[jitFeedbackUserInfoKey] as? [String: Any],
+      let ownerID = payload["owner_id"] as? String,
+      let eventID = payload["event_id"] as? String,
+      let triggerMemoryID = payload["trigger_memory_id"] as? String,
+      let accountGeneration = payload["account_generation"] as? Int,
+      let triggerRevision = payload["trigger_revision"] as? Int,
+      !ownerID.isEmpty,
+      JITProactivityReservation.isIdentifier(eventID),
+      !triggerMemoryID.isEmpty,
+      !triggerMemoryID.contains("/"),
+      accountGeneration >= 0,
+      triggerRevision > 0
+    else { return nil }
+    return JITTriggerFeedbackContext(
+      ownerID: ownerID,
+      eventID: eventID,
+      triggerMemoryID: triggerMemoryID,
+      accountGeneration: accountGeneration,
+      triggerRevision: triggerRevision)
   }
 
   /// Handle screen capture reset action from notification click or action button
@@ -337,6 +510,22 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     log("Screen capture reset triggered from \(source)")
     AnalyticsManager.shared.screenCaptureResetClicked(source: source)
     ScreenCaptureService.resetScreenCapturePermissionAndRestart()
+  }
+
+  /// Handle the consent-decline resume: this is the single user-facing repair
+  /// affordance after a terminal "user declined TCCs" stop. It restarts monitoring —
+  /// one user-initiated capture attempt — which either just works (the user allowed
+  /// the OS dialog) or surfaces the consent dialog exactly once, at a moment the user
+  /// chose. Deliberately not the reset flow: the TCC grant is intact.
+  private func handleScreenCaptureResumeAction(source: String) {
+    log("Screen capture resume triggered from \(source)")
+    Task { @MainActor in
+      ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
+        if !success, let error {
+          log("Screen capture resume from \(source) failed to start monitoring: \(error)")
+        }
+      }
+    }
   }
 
   /// Send a notification via the floating bar, and optionally as a native macOS system banner.
@@ -371,6 +560,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     sound: NotificationSound = .default,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
+    jitFeedbackContext: JITTriggerFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
@@ -527,6 +717,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         sound: sound,
         context: context,
         action: action,
+        jitFeedbackContext: jitFeedbackContext,
         suggestionTelemetryIdentity: suggestionTelemetryIdentity,
         insightDeliveryID: insightDeliveryID,
         screenshotData: screenshotData,
@@ -618,6 +809,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         message: message,
         assistantId: assistantId,
         sound: sound,
+        context: context,
+        jitFeedbackContext: jitFeedbackContext,
         authorizationSnapshot: authorizationSnapshot,
         insightDeliveryID: floatingBarDelivered ? nil : insightDeliveryID,
         insightFailureDeliveryID: (floatingBarDelivered || floatingBarHasQueued) ? nil : insightDeliveryID,
@@ -678,6 +871,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     message: String,
     decisionType: String,
     context: FloatingBarNotificationContext,
+    jitFeedbackContext: JITTriggerFeedbackContext? = nil,
     onPresented: (() -> Void)? = nil,
     onDropped: (() -> Void)? = nil
   ) -> OwnerBoundNotificationPresentationResult {
@@ -736,6 +930,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         sound: .default,
         kind: ProactiveNotificationKind.from(decisionType: decisionType),
         context: context,
+        jitFeedbackContext: jitFeedbackContext,
+        isPersistent: jitFeedbackContext != nil,
         authorizationSnapshot: authorizationSnapshot,
         onPresented: recordPresented,
         onDropped: onDropped)
@@ -762,6 +958,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         message: message,
         assistantId: "context-director",
         sound: .default,
+        context: context,
+        jitFeedbackContext: jitFeedbackContext,
         authorizationSnapshot: authorizationSnapshot,
         onPresented: recordPresented,
         onDropped: onDropped
@@ -915,6 +1113,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     message: String,
     assistantId: String,
     sound: NotificationSound,
+    context: FloatingBarNotificationContext? = nil,
+    jitFeedbackContext: JITTriggerFeedbackContext? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     insightDeliveryID: UUID? = nil,
     insightFailureDeliveryID: UUID? = nil,
@@ -930,6 +1130,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     content.title = title
     content.body = message
     content.sound = sound.unSound
+    if let jitFeedbackContext {
+      content.userInfo = Self.jitFeedbackUserInfo(for: jitFeedbackContext)
+    }
 
     // Use screen capture reset category for reset notifications (adds "Reset Now" button)
     if title == Self.screenCaptureResetTitle {
@@ -950,7 +1153,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     storeNotificationMetadata(
       id: notificationId,
       title: title,
+      message: message,
       assistantId: assistantId,
+      context: context,
+      jitFeedbackContext: jitFeedbackContext,
       authorizationSnapshot: authorizationSnapshot
     )
 
@@ -1148,13 +1354,19 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   private func storeNotificationMetadata(
     id: String,
     title: String,
+    message: String = "",
     assistantId: String,
+    context: FloatingBarNotificationContext? = nil,
+    jitFeedbackContext: JITTriggerFeedbackContext? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     notificationMetadata[id] = NotificationMetadata(
       title: title,
+      message: message,
       assistantId: assistantId,
+      context: context,
+      jitFeedbackContext: jitFeedbackContext,
       authorizationSnapshot: authorizationSnapshot
     )
     notificationMetadataOrder.append(id)

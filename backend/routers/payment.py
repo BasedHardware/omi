@@ -37,6 +37,7 @@ from utils.subscription import (
     price_ids_match_plan_and_interval,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.subscription_events import record_subscription_event
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -1036,6 +1037,11 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         'customer.subscription.created',
     ]:
         subscription_obj = event['data']['object']
+        record_subscription_event(
+            stripe_event_type=event['type'],
+            subscription_obj=subscription_obj,
+            previous_attributes=event.get('data', {}).get('previous_attributes'),
+        )
         uid = subscription_obj.get('metadata', {}).get('uid')
 
         if not uid:

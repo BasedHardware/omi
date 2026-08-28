@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
-import { getPayload, setPayload } from "@/lib/payload-cache";
+import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import { toGrafanaActivationPayload } from "@/lib/activation-compat";
 import {
   rollUpActivationCohort,
@@ -139,18 +139,16 @@ export async function GET(request: NextRequest) {
     const cached =
       await getPayload<Awaited<ReturnType<typeof computeActivation>>>(key);
     if (cached) {
-      return NextResponse.json({
-        ...toGrafanaActivationPayload(cached.data),
-        freshAt: cached.freshAt,
-      });
+      return NextResponse.json(
+        withFreshness(toGrafanaActivationPayload(cached.data), cached.freshAt),
+      );
     }
 
     const payload = await computeActivation(days);
     await setPayload(key, payload);
-    return NextResponse.json({
-      ...toGrafanaActivationPayload(payload),
-      freshAt: Date.now(),
-    });
+    return NextResponse.json(
+      withFreshness(toGrafanaActivationPayload(payload), Date.now()),
+    );
   } catch (error: any) {
     console.error("Activation error:", error);
     return NextResponse.json(

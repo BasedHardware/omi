@@ -356,3 +356,122 @@ enum ChatBubbleIdentity {
       && isDuplicate.0 == isDuplicate.1
   }
 }
+
+/// A task Omi proposed while listening, rendered in chat as a card the reader can
+/// act on. INVARIANT I1: the proposal is a pending Candidate — it is not in the
+/// task list, and "Add to Tasks" is the gesture that puts it there. This replaces
+/// the old "✓ Saved to Tasks" receipt, which announced a write the user never asked
+/// for.
+///
+/// Carried through the transcript inside the message text, the same way
+/// `BackgroundAgentSummary` is, so it survives a reload with no schema change:
+///   `[Suggested task id=<candidateID>] <description>`
+struct SuggestedTaskChatCard: Equatable {
+  let candidateID: String
+  let description: String
+
+  private static let marker = "[Suggested task id="
+
+  static func encode(candidateID: String, description: String) -> String {
+    "\(marker)\(candidateID)] \(description)"
+  }
+
+  static func parse(_ text: String) -> SuggestedTaskChatCard? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.hasPrefix(marker), let close = trimmed.firstIndex(of: "]") else { return nil }
+    let idStart = trimmed.index(trimmed.startIndex, offsetBy: marker.count)
+    let candidateID = String(trimmed[idStart..<close]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let description = String(trimmed[trimmed.index(after: close)...])
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !candidateID.isEmpty, !description.isEmpty else { return nil }
+    return SuggestedTaskChatCard(candidateID: candidateID, description: description)
+  }
+}
+
+/// Chat presentation of a suggested task. Mirrors `ChatProactivePushRow`'s chrome so
+/// the two read as one family, and adds the single action that matters.
+struct ChatSuggestedTaskRow: View {
+  let card: SuggestedTaskChatCard
+
+  @State private var isAdded = false
+  @State private var isAdding = false
+  @State private var failed = false
+
+  var body: some View {
+    HStack(alignment: .top, spacing: OmiSpacing.sm) {
+      Image(systemName: "checklist")
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundColor(Ink.secondary)
+        .frame(width: 24, height: 24)
+        .background(Ink.rowFill, in: Circle())
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+        Text("Suggested task")
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .foregroundColor(Ink.secondary)
+        Text(card.description)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.primary)
+          .textSelection(.enabled)
+        if failed {
+          Text("That didn't sync. Try again.")
+            .scaledFont(size: OmiType.micro)
+            .foregroundColor(Ink.secondary)
+        }
+        Button {
+          add()
+        } label: {
+          HStack(spacing: OmiSpacing.xxs) {
+            Image(systemName: isAdded ? "checkmark" : "plus")
+            Text(isAdded ? "Added to Tasks" : "Add to Tasks")
+          }
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(isAdded ? Ink.listeningGreen : Ink.primary)
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.xxs)
+          .background(
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+              .fill(Ink.rowFillHover)
+          )
+        }
+        .buttonStyle(.plain)
+        .disabled(isAdded || isAdding)
+        .opacity(isAdding ? 0.5 : 1)
+        .accessibilityIdentifier("chat-suggested-task-add")
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Ink.rowFill)
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+        .stroke(Ink.glassEdge, lineWidth: 1)
+    )
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Suggested task: \(card.description)")
+  }
+
+  private func add() {
+    guard !isAdded, !isAdding else { return }
+    isAdding = true
+    failed = false
+    Task { @MainActor in
+      let store = SuggestedTasksStore.shared
+      // A card can outlive the loaded page (reopened history), so make sure the
+      // candidate set is present before resolving against it.
+      if store.candidates.isEmpty {
+        await store.load()
+      }
+      let taskID = await store.doNow(candidateID: card.candidateID, editedTitle: nil)
+      isAdding = false
+      if taskID != nil {
+        isAdded = true
+      } else {
+        failed = true
+      }
+    }
+  }
+}

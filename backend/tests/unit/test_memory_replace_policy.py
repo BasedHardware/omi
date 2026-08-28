@@ -104,9 +104,9 @@ def test_cascade_delete_cleans_memories_before_conversation_doc():
     fn_start = source.index("def delete_conversation(")
     fn_end = source.index("\n@router.", fn_start)
     body = source[fn_start:fn_end]
-    conv_delete_idx = body.index("conversations_db.delete_conversation")
+    conv_delete_idx = body.index("delete_conversation_and_frame_evidence")
     cascade_idx = body.index("if cascade:")
-    memories_idx = body.index("retract_conversation_memories")
+    memories_idx = body.index("memory_service.retract_conversation_memories")
     action_items_idx = body.index("delete_action_items_for_conversation")
     assert cascade_idx < memories_idx < conv_delete_idx
     assert cascade_idx < action_items_idx < conv_delete_idx
@@ -586,6 +586,11 @@ def test_canonical_capture_logs_text_free_regime_and_attribution_decision(monkey
         "distinct_speaker_ids": 2,
         "memory_id": mock_service.replace_conversation_memories.call_args.args[2][0]["id"],
         "model_about": "primary_user",
+        # One speaker was flagged as the owner here. 0 (owner never identified) and
+        # >1 (impossible -- an account has one owner) are the states that decide
+        # whether anything from this conversation can ever be promoted, and neither
+        # is derivable from distinct_speaker_ids.
+        "owner_speaker_ids": 1,
         "stage": "capture",
         "subject_attribution": "third_party",
         "uid": "uid-decision-log",

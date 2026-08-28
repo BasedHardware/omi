@@ -3215,6 +3215,10 @@
     "accountCutoverMigrationInProgressMessage": "Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.",
     "accountCutoverMigrationRollbackMessage": "Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.",
     "accountCutoverOpenStore": "Avaa kauppa",
+    "chatScopeToday": "Täna",
+    "chatScopeThisWeek": "Sel nädalal",
+    "chatScopeAbout": "Teave: {title}",
+    "askAboutThisConversation": "Küsi selle kohta",
     "sendRawAudioToOmi": "Saada töötlemata heli Omisse",
     "sendRawAudioToOmiDescription": "Lülita välja, et töötlemata heli Omisse ei saadetaks. Transkriptsioone ja pilvefunktsioonide jaoks vajalikke andmeid võidakse endiselt Omisse saata.",
     "findDevice": "Leia",
@@ -3227,5 +3231,8 @@
     "appReEnableFailedTitle": "Uuesti sisselülitamine ebaõnnestus",
     "appReEnableFailedBody": "Seda rakendust ei õnnestunud uuesti sisse lülitada. Proovi uuesti.",
     "appDisabledOn": "Välja lülitatud {date}.",
-    "appDisabledLastError": "Viimane viga: {error}."
+    "appDisabledLastError": "Viimane viga: {error}.",
+    "prerecordedTranscript": "Eelsalvestatud",
+    "pendantRecordingSyncBlocked": "Pendant salvestab endiselt, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja sünkrooni uuesti.",
+    "pendantFullSyncBlocked": "Pendanti mälu on täis ja see on endiselt salvestusrežiimis, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja seejärel sünkrooni uuesti."
 }
