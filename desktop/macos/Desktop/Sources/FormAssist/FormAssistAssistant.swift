@@ -52,16 +52,53 @@ struct FormAssistFill: Sendable, Equatable, Decodable {
   }
 }
 
+/// One field of the form as the card shows it. Every empty field the user can act on
+/// becomes a row, because a field Omi silently dropped is indistinguishable from one it
+/// never saw — and the difference is the whole reason the card is worth reading.
+struct FormAssistRow: Sendable, Equatable {
+  enum Outcome: Sendable, Equatable {
+    case filled(FormAssistFill)
+    /// Asked, and nothing the user has stored answers it.
+    case noMemory
+    /// Answered, but not confidently enough to put on the clipboard.
+    case notSure
+    /// Never asked: a protected characteristic or a term the user negotiates.
+    case skipped
+  }
+
+  let label: String
+  let outcome: Outcome
+
+  var fill: FormAssistFill? {
+    guard case .filled(let fill) = outcome else { return nil }
+    return fill
+  }
+
+  /// What the card says in place of a value. Phrased as what Omi did, not as an error:
+  /// "no memory" tells the user what to store next, which "unavailable" does not.
+  var hint: String? {
+    switch outcome {
+    case .filled: return nil
+    case .noMemory: return "no memory"
+    case .notSure: return "not sure"
+    case .skipped: return "skipped"
+    }
+  }
+}
+
 struct FormAssistResult: AssistantResult {
-  let fills: [FormAssistFill]
+  let rows: [FormAssistRow]
   let appName: String
   let windowFrame: CGRect?
+
+  var fills: [FormAssistFill] { rows.compactMap(\.fill) }
 
   func toDictionary() -> [String: Any] {
     [
       "app": appName,
+      "fieldCount": rows.count,
       "fillCount": fills.count,
-      "labels": fills.map(\.label),
+      "labels": rows.map(\.label),
     ]
   }
 }
@@ -94,14 +131,18 @@ private enum FormAssistCard {
   ) {
     showing = fingerprint
     let overlay = CloudConnectorGuidanceOverlay.shared
-    let size = overlay.fieldCopyCardSize(
-      title: title, subtitle: subtitle, fieldCount: fields.count)
     let screen = NSScreen.screens.first { $0.frame.intersects(anchor ?? .zero) } ?? NSScreen.main
+    let maxHeight = screen.map {
+      FormAssistCardPlacement.maxCardHeight(visibleFrame: $0.visibleFrame)
+    }
+    let size = overlay.fieldCopyCardSize(
+      title: title, subtitle: subtitle, fieldCount: fields.count, maxHeight: maxHeight)
     let placement = screen.map {
       FormAssistCardPlacement.frame(cardSize: size, visibleFrame: $0.visibleFrame)
     }
     overlay.presentFieldCopyCard(
-      title: title, subtitle: subtitle, fields: fields, near: anchor, at: placement)
+      title: title, subtitle: subtitle, fields: fields, near: anchor, at: placement,
+      maxHeight: maxHeight)
   }
 
   static func dismissIfMine() {
@@ -159,7 +200,6 @@ actor FormAssistAssistant: ProactiveAssistant {
   /// "Datasaur" in a heartbeat, and cannot eyeball a paragraph as fast.
   private let minConfidence = 0.6
   private let minDraftConfidence = 0.75
-  private let maxRows = 12
 
   init() throws {
     geminiClient = try GeminiClient(
@@ -276,11 +316,11 @@ actor FormAssistAssistant: ProactiveAssistant {
     evaluationsToday.append(now)
     do {
       let image = await windowImage(windowID: snapshot.windowID)
-      let fills = try await resolveFills(snapshot: snapshot, memories: memories, image: image)
+      let rows = try await resolveRows(snapshot: snapshot, memories: memories, image: image)
       let result = FormAssistResult(
-        fills: fills, appName: snapshot.appName, windowFrame: snapshot.windowFrame)
+        rows: rows, appName: snapshot.appName, windowFrame: snapshot.windowFrame)
       remember(result, for: snapshot.fingerprint)
-      guard !fills.isEmpty else {
+      guard !result.fills.isEmpty else {
         log("FormAssist: nothing to offer for \(snapshot.emptyFields.count) fields in \(snapshot.appName)")
         return
       }
@@ -352,108 +392,99 @@ actor FormAssistAssistant: ProactiveAssistant {
 
   // MARK: - Judgment
 
-  private func resolveFills(
+  private func resolveRows(
+    snapshot: FormSnapshot,
+    memories: [String],
+    image: Data?
+  ) async throws -> [FormAssistRow] {
+    // The roster the card shows is every empty field, in the order the user tabs
+    // through them. Only the answerable subset is worth a model call.
+    let roster = snapshot.emptyFields
+    let answerable = roster.filter { !FormAssistSensitiveFields.isSensitive($0.label) }
+    guard !answerable.isEmpty else { return [] }
+
+    // Copying a stored detail and composing an answer are opposite jobs, and one call
+    // asked to do both across twenty fields does neither well — it returns the two
+    // trivial names and abandons the prose. Splitting them gives each call one job and
+    // a short list, which is the condition under which drafts actually come back.
+    let prose = answerable.filter(\.wantsProse).map(\.label)
+    let facts = answerable.filter { !$0.wantsProse }.map(\.label)
+
+    async let factFills = ask(.fact, labels: facts, snapshot: snapshot, memories: memories, image: image)
+    async let draftFills = ask(.draft, labels: prose, snapshot: snapshot, memories: memories, image: image)
+
+    return FormAssistFillPolicy.rows(
+      try await factFills + draftFills,
+      forFields: roster.map(\.label),
+      minConfidence: minConfidence,
+      minDraftConfidence: minDraftConfidence)
+  }
+
+  /// One model call, for one kind of answer. The kind is imposed here rather than asked
+  /// for: the call already knows which fields it was given, so a mislabelled response
+  /// cannot slip a paragraph past the bar a copied fact has to clear.
+  private func ask(
+    _ kind: FormAssistFill.Kind,
+    labels: [String],
     snapshot: FormSnapshot,
     memories: [String],
     image: Data?
   ) async throws -> [FormAssistFill] {
-    let labels = FormAssistSensitiveFields.answerable(snapshot.emptyFields.map(\.label))
     guard !labels.isEmpty else { return [] }
     log(
-      "FormAssist: asking about \(labels.count) fields with \(memories.count) memories"
+      "FormAssist: asking for \(labels.count) \(kind.rawValue)s with \(memories.count) memories"
         + " — \(labels.joined(separator: " | "))")
+
     let prompt = """
       == THE FORM IN FRONT OF THE USER ==
       App: \(snapshot.appName)
       Window: \(snapshot.windowTitle.isEmpty ? "(no title)" : snapshot.windowTitle)
-      \(image == nil ? "No screenshot available." : "The attached screenshot is that window right now.")
+      \(image == nil
+        ? "No screenshot available."
+        : "The attached screenshot is that window right now. It shows only the part of the page that is scrolled into view; fields listed below may sit far outside it, and that is normal.")
 
-      == EMPTY FIELDS, AS THE ACCESSIBILITY TREE NAMES THEM ==
+      == FIELDS TO ANSWER, AS THE ACCESSIBILITY TREE NAMES THEM ==
       \(labels.map { "- \($0)" }.joined(separator: "\n"))
 
       == WHAT OMI KNOWS ABOUT THIS USER ==
       \(memories.map { "- \($0)" }.joined(separator: "\n"))
       """
 
+    let systemPrompt = kind == .draft ? Self.draftPrompt : Self.factPrompt
     let response = try await {
       if let image {
         return try await geminiClient.sendRequest(
           prompt: prompt,
           imageData: image,
-          systemPrompt: Self.systemPrompt,
+          systemPrompt: systemPrompt,
           responseSchema: Self.responseSchema
         )
       }
       return try await geminiClient.sendRequest(
         prompt: prompt,
-        systemPrompt: Self.systemPrompt,
+        systemPrompt: systemPrompt,
         responseSchema: Self.responseSchema
       )
     }()
     guard let data = response.data(using: .utf8) else { return [] }
     let decoded = try JSONDecoder().decode(FormAssistModelResponse.self, from: data)
-    // Labels, kinds and confidences only — never the values, which are the user's own
-    // details and belong on the clipboard rather than in a log.
+    // Labels and confidences only — never the values, which are the user's own details
+    // and belong on the clipboard rather than in a log.
     log(
-      "FormAssist: model returned "
-        + decoded.fills.map { "\($0.label)[\($0.kind.rawValue) \(Int($0.confidence * 100))]" }
-        .joined(separator: ", "))
-    return FormAssistFillPolicy.accepted(
-      decoded.fills,
-      forLabels: labels,
-      minConfidence: minConfidence,
-      minDraftConfidence: minDraftConfidence,
-      limit: maxRows)
+      "FormAssist: \(kind.rawValue) call returned "
+        + decoded.fills.map { "\($0.label)[\(Int($0.confidence * 100))]" }.joined(separator: ", "))
+    return decoded.fills.map {
+      FormAssistFill(label: $0.label, value: $0.value, confidence: $0.confidence, kind: kind)
+    }
   }
 
-  private static let systemPrompt = """
-    You help a user fill in a form using what is already known about them.
-
-    You are given the labels of the empty fields, a screenshot of the window, and the
-    facts Omi has stored about this user. Use the screenshot to see what a field is
-    really asking — the heading above it, the hint beside it, how much room it gives —
-    and answer under the label you were given, copied exactly as written.
-
-    There are two kinds of answer.
-
-    FACT — the field asks for something the user simply is or has: a name, a school, an
-    employer, a link, a list of skills, a title, a location. Take the value out of the
-    facts and give it in the form the field wants. Reformatting what is there is fine:
-    splitting a full name into first and last, listing languages the user's own facts
-    already list, giving a company name without the role around it. Set kind="fact".
-
-    DRAFT — the field asks a question in prose, and the box is big: why this company,
-    describe your experience with X, what are you looking for, tell us about a project,
-    anything else we should know. Write the answer the user would write, in their voice.
-    Two to five sentences unless the field clearly wants more. Set kind="draft".
-
-    Draft generously. The card marks these as drafts and the user edits before sending,
-    so a strong honest starting point is worth far more to them than a blank box — a
-    form where only the name is filled in has barely helped at all. If the facts show
-    relevant work, draft the answer.
-
-    You have two sources for a draft, and both are legitimate:
-    - The facts: the user's real projects, employers, technologies, results, studies.
-      Every concrete claim in the draft comes from here.
-    - The screenshot: the role, the company, and what this job is asking for are on the
-      page in front of you. Connecting the user's real experience to what the page
-      actually asks for is exactly the draft that helps — that is not inventing anything
-      about the company, it is reading the page.
-
-    So "Why <company>?" is answerable whenever the facts show work that genuinely bears
-    on the role described on screen: say what the user has built and why that leads here.
-    Do not claim to have used the company's product, admired it for years, or met anyone
-    there unless a fact says so.
-
-    NEVER, for either kind:
+  /// Shared by both calls. Everything here is about what must never reach the
+  /// clipboard, and it does not change with the kind of answer being asked for.
+  private static let groundRules = """
+    NEVER:
     - Invent an employer, a date, a degree, a metric, a tool, or an achievement. If the
       facts do not support the answer, leave the field out. Two right answers beat ten
       where six are guesses.
-    - Answer a question the facts have nothing to bear on. If the question is about
-      experience the user's facts do not show — a domain they have not worked in, a tool
-      they have not used — leave it out rather than claiming it. Silence is the honest
-      answer to "do you have experience selling to engineering teams" when every fact
-      says they build the systems instead.
     - State enthusiasm, availability, salary, notice period, visa status, or a
       willingness to relocate that no fact establishes.
     - Assume anything about the user that the facts do not say — where they are from,
@@ -461,8 +492,68 @@ actor FormAssistAssistant: ProactiveAssistant {
       the only source; nothing about a name or a school implies anything further.
 
     Values go on the user's clipboard and into a real submission, so a wrong one costs
-    far more than a missing one. Confidence is how sure you are that the facts support
-    this exact answer: below 0.6 for a fact and below 0.75 for a draft means leave it out.
+    far more than a missing one.
+    """
+
+  private static let factPrompt = """
+    You are given the labels of some fields on a form the user is filling in, and the
+    facts Omi has stored about them. For each field the facts can answer, give the value
+    to paste.
+
+    These fields ask for something the user simply is or has: a name, a school, an
+    employer, a link, a list of skills, a title, a location, a phone number. Take the
+    value out of the facts and give it in the form the field wants. Reformatting what is
+    there is fine: splitting a full name into first and last, listing languages the
+    user's own facts already list, giving a company name without the role around it.
+
+    Answer every field the facts cover. A field whose answer is not in the facts is left
+    out — say nothing rather than guess.
+
+    \(groundRules)
+
+    Confidence is how sure you are that the facts support this exact answer. Below 0.6,
+    leave the field out.
+    """
+
+  private static let draftPrompt = """
+    You write the answers to the open questions on a form, using what is already known
+    about the user. Every field you are given is a question asked in prose with a box
+    big enough to answer it in: why this company, describe your experience with X, what
+    are you looking for, tell us about a project, anything else we should know.
+
+    Write the answer the user would write, in their own voice. Match the length the
+    question implies — a couple of sentences for a short one, two to five for an open
+    one, a line for a question that only wants a yes or no with a reason.
+
+    Draft generously. The card marks these as drafts and the user edits before sending,
+    so a strong honest starting point is worth far more to them than a blank box — a
+    form where only the name is filled in has barely helped at all. If the facts show
+    relevant work, draft the answer. Answering three of four questions and leaving the
+    fourth is a good outcome; leaving all four is a failure.
+
+    You have two sources, and both are legitimate:
+    - The facts: the user's real projects, employers, technologies, results, studies.
+      Every concrete claim in the draft comes from here.
+    - The page: the role, the company, and what the job asks for. Connecting the user's
+      real experience to what the page asks for is exactly the draft that helps — that
+      is not inventing anything about the company, it is reading the page. The
+      screenshot may not have scrolled to a given field; answer it from its label
+      anyway.
+
+    So "Why <company>?" is answerable whenever the facts show work that genuinely bears
+    on the role: say what the user has built and why that leads here. Do not claim to
+    have used the company's product, admired it for years, or met anyone there unless a
+    fact says so.
+
+    Leave a question out when the facts have nothing to bear on it — a domain the user
+    has not worked in, a tool they have not used. Silence is the honest answer to "do
+    you have experience selling to engineering teams" when every fact says they build
+    the systems instead.
+
+    \(groundRules)
+
+    Confidence is how sure you are that the facts support this answer. Below 0.75, leave
+    the question out.
     """
 
   private static let responseSchema = GeminiRequest.GenerationConfig.ResponseSchema(
@@ -478,14 +569,8 @@ actor FormAssistAssistant: ProactiveAssistant {
               type: "string", description: "The field label, copied exactly as given."),
             "value": .init(type: "string", description: "The value to paste."),
             "confidence": .init(type: "number", description: "0.0-1.0 confidence in this value."),
-            "kind": .init(
-              type: "string",
-              enum: ["fact", "draft"],
-              description:
-                "fact = the user's own detail, taken from a stored fact. draft = an answer written for them from several facts, for a question asked in prose."
-            ),
           ],
-          required: ["label", "value", "confidence", "kind"]
+          required: ["label", "value", "confidence"]
         )
       )
     ],
@@ -512,22 +597,25 @@ actor FormAssistAssistant: ProactiveAssistant {
       return
     }
 
-    let fields = result.fills.map {
+    let fields = result.rows.map { row in
       CloudConnectorCopyField(
-        id: $0.label,
-        label: $0.kind == .draft ? "\($0.label) (draft)" : $0.label,
-        value: $0.value,
+        id: row.label,
+        label: row.fill?.kind == .draft ? "\(row.label) (draft)" : row.label,
+        value: row.fill?.value ?? "",
+        hint: row.hint,
         masksValue: false
       )
     }
-    log("FormAssist: offering \(fields.count) values in \(result.appName)")
+    let filled = result.fills.count
+    log("FormAssist: offering \(filled) of \(fields.count) fields in \(result.appName)")
     cardWindowKey = windowKey
 
     await MainActor.run {
       FormAssistCard.present(
         fingerprint: fingerprint,
         title: "Omi can fill this",
-        subtitle: "From your memories. Copy each value into \(result.appName).",
+        subtitle: "\(filled) of \(fields.count) fields from your memories. "
+          + "Copy each into \(result.appName).",
         fields: fields,
         near: result.windowFrame
       )
@@ -616,9 +704,19 @@ enum FormAssistSensitiveFields {
     "social security", "national id",
   ]
 
+  /// Fields that ask the user to agree to something rather than to state something.
+  /// No stored fact can consent on their behalf, so these are refused for the same
+  /// reason as the terms above — and keeping them out of the prompt matters twice
+  /// over: a list padded with questions nothing can answer pulls the whole response
+  /// conservative, which is how a real application lost its drafts to boilerplate.
+  private static let consentTerms = [
+    "arbitration", "agreement to", "terms and conditions", "privacy policy",
+    "ai policy", "acknowledge", "i certify", "e-signature", "electronic signature",
+  ]
+
   static func isSensitive(_ label: String) -> Bool {
     let lowered = label.lowercased()
-    return terms.contains { lowered.contains($0) }
+    return (terms + consentTerms).contains { lowered.contains($0) }
   }
 
   static func answerable(_ labels: [String]) -> [String] {
@@ -626,37 +724,68 @@ enum FormAssistSensitiveFields {
   }
 }
 
-/// The bar a model-proposed value has to clear to reach the clipboard.
+/// The bar a model-proposed value has to clear to reach the clipboard, and the account
+/// of every field that did not clear it.
 enum FormAssistFillPolicy {
   /// A drafted paragraph the user has to read before sending. Beyond this it is not a
   /// form answer any more, and the card cannot show enough of it to be reviewed.
   static let maxDraftLength = 1_500
 
-  static func accepted(
+  /// One row per field the user still has to fill in, in the order they meet them.
+  ///
+  /// `fields` is the whole empty-field roster, not the answerable subset: a field
+  /// filtered out for being a protected characteristic is still a field the user is
+  /// looking at, and saying Omi skipped it is more honest than leaving it off the card
+  /// as though it were never there.
+  static func rows(
     _ fills: [FormAssistFill],
-    forLabels labels: [String],
+    forFields fields: [String],
     minConfidence: Double,
-    minDraftConfidence: Double = 0.75,
-    limit: Int
-  ) -> [FormAssistFill] {
-    let known = Set(labels.map { $0.lowercased() })
-    var seen = Set<String>()
-    var output: [FormAssistFill] = []
+    minDraftConfidence: Double = 0.75
+  ) -> [FormAssistRow] {
+    var proposed: [String: FormAssistFill] = [:]
     for fill in fills {
       let label = fill.label.trimmingCharacters(in: .whitespacesAndNewlines)
       let value = fill.value.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !label.isEmpty, !value.isEmpty else { continue }
-      // A label the scan never reported is a field the model invented.
-      guard known.contains(label.lowercased()), !seen.contains(label.lowercased()) else { continue }
-      guard !FormAssistSensitiveFields.isSensitive(label) else { continue }
-      let bar = fill.kind == .draft ? minDraftConfidence : minConfidence
-      guard fill.confidence >= bar else { continue }
-      guard fill.kind != .draft || value.count <= maxDraftLength else { continue }
-      seen.insert(label.lowercased())
+      // The model may answer the same field twice; the first answer is the one it
+      // committed to, and a second is a reconsideration the user cannot adjudicate.
+      guard proposed[label.lowercased()] == nil else { continue }
+      proposed[label.lowercased()] = FormAssistFill(
+        label: label, value: value, confidence: fill.confidence, kind: fill.kind)
+    }
+
+    var seen = Set<String>()
+    var output: [FormAssistRow] = []
+    for field in fields {
+      let label = field.trimmingCharacters(in: .whitespacesAndNewlines)
+      // Two fields captioned the same are one row: the answer is keyed by label, so a
+      // second row would repeat it — and duplicate ids crash the card's `ForEach`.
+      guard !label.isEmpty, seen.insert(label.lowercased()).inserted else { continue }
       output.append(
-        FormAssistFill(label: label, value: value, confidence: fill.confidence, kind: fill.kind))
-      if output.count == limit { break }
+        FormAssistRow(
+          label: label,
+          outcome: outcome(
+            for: label,
+            proposal: proposed[label.lowercased()],
+            minConfidence: minConfidence,
+            minDraftConfidence: minDraftConfidence)))
     }
     return output
+  }
+
+  private static func outcome(
+    for label: String,
+    proposal: FormAssistFill?,
+    minConfidence: Double,
+    minDraftConfidence: Double
+  ) -> FormAssistRow.Outcome {
+    guard !FormAssistSensitiveFields.isSensitive(label) else { return .skipped }
+    guard let proposal else { return .noMemory }
+    let bar = proposal.kind == .draft ? minDraftConfidence : minConfidence
+    guard proposal.confidence >= bar else { return .notSure }
+    // A draft past the length the card can show is one the user cannot review here.
+    guard proposal.kind != .draft || proposal.value.count <= maxDraftLength else { return .notSure }
+    return .filled(proposal)
   }
 }

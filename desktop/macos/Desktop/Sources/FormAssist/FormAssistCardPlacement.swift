@@ -12,6 +12,13 @@ import Foundation
 enum FormAssistCardPlacement {
   static let margin: CGFloat = 16
 
+  /// The tallest the card may be: half the display it lands on. A form with more fields
+  /// than that scrolls inside the card rather than growing down the screen — the card
+  /// sits over the form the user is reading, so covering all of it is never right.
+  static func maxCardHeight(visibleFrame: CGRect) -> CGFloat {
+    max(0, visibleFrame.height / 2)
+  }
+
   static func frame(cardSize: CGSize, visibleFrame: CGRect) -> CGRect {
     CGRect(
       x: max(visibleFrame.minX + margin, visibleFrame.maxX - cardSize.width - margin),

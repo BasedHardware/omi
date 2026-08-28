@@ -111,44 +111,71 @@ final class FormSnapshotFingerprintTests: XCTestCase {
 final class FormAssistFillPolicyTests: XCTestCase {
   private let labels = ["First name", "Email", "Portfolio URL"]
 
-  private func accepted(_ fills: [FormAssistFill]) -> [FormAssistFill] {
-    FormAssistFillPolicy.accepted(fills, forLabels: labels, minConfidence: 0.6, limit: 8)
+  private func rows(_ fills: [FormAssistFill]) -> [FormAssistRow] {
+    FormAssistFillPolicy.rows(fills, forFields: labels, minConfidence: 0.6)
   }
 
   func testKeepsConfidentValuesForRealFields() {
-    let fills = accepted([FormAssistFill(label: "Email", value: "a@b.com", confidence: 0.9)])
-    XCTAssertEqual(fills.map(\.value), ["a@b.com"])
+    let rows = rows([FormAssistFill(label: "Email", value: "a@b.com", confidence: 0.9)])
+    XCTAssertEqual(rows.compactMap(\.fill).map(\.value), ["a@b.com"])
+  }
+
+  /// The card is the whole form, so the user can see what Omi could not answer rather
+  /// than guessing whether it even looked.
+  func testEveryEmptyFieldGetsARowInFormOrder() {
+    let rows = rows([FormAssistFill(label: "Email", value: "a@b.com", confidence: 0.9)])
+    XCTAssertEqual(rows.map(\.label), labels)
+    XCTAssertEqual(rows.map(\.hint), ["no memory", nil, "no memory"])
+    XCTAssertEqual(rows[1].fill?.value, "a@b.com")
   }
 
   func testDropsFieldsTheScanNeverReported() {
-    XCTAssertTrue(
-      accepted([FormAssistFill(label: "Salary expectation", value: "$200k", confidence: 0.99)]).isEmpty)
+    let rows = rows([FormAssistFill(label: "Salary expectation", value: "$200k", confidence: 0.99)])
+    XCTAssertEqual(rows.map(\.label), labels)
+    XCTAssertTrue(rows.compactMap(\.fill).isEmpty)
   }
 
-  func testDropsLowConfidenceAndEmptyValues() {
-    let fills = accepted([
+  /// The two ways a field goes unanswered read differently on the card, because they
+  /// tell the user different things to do about it.
+  func testLowConfidenceReadsAsNotSureAndSilenceAsNoMemory() {
+    let rows = rows([
       FormAssistFill(label: "First name", value: "Yash", confidence: 0.4),
       FormAssistFill(label: "Email", value: "   ", confidence: 0.95),
     ])
-    XCTAssertTrue(fills.isEmpty)
+    XCTAssertEqual(rows.map(\.outcome), [.notSure, .noMemory, .noMemory])
+    XCTAssertEqual(rows.map(\.hint), ["not sure", "no memory", "no memory"])
   }
 
   func testKeepsOnlyTheFirstAnswerPerField() {
-    let fills = accepted([
+    let rows = rows([
       FormAssistFill(label: "Email", value: "work@b.com", confidence: 0.9),
       FormAssistFill(label: "email", value: "old@b.com", confidence: 0.95),
     ])
-    XCTAssertEqual(fills.map(\.value), ["work@b.com"])
+    XCTAssertEqual(rows.compactMap(\.fill).map(\.value), ["work@b.com"])
   }
 
-  func testHonoursTheRowLimit() {
-    let fills = FormAssistFillPolicy.accepted(
-      labels.map { FormAssistFill(label: $0, value: "x", confidence: 0.9) },
-      forLabels: labels,
-      minConfidence: 0.6,
-      limit: 2
+  /// Duplicate ids crash the card's `ForEach`, and two fields captioned the same get
+  /// the same answer anyway.
+  func testTwoFieldsWithTheSameLabelBecomeOneRow() {
+    let rows = FormAssistFillPolicy.rows(
+      [FormAssistFill(label: "Email", value: "a@b.com", confidence: 0.9)],
+      forFields: ["Email", "email", " Email "],
+      minConfidence: 0.6
     )
-    XCTAssertEqual(fills.count, 2)
+    XCTAssertEqual(rows.map(\.label), ["Email"])
+  }
+
+  /// Nothing bounds the row count any more: the card scrolls, so a long form is shown
+  /// in full rather than truncated to whatever used to fit.
+  func testEveryFieldOfALongFormIsShown() {
+    let many = (1...40).map { "Field \($0)" }
+    let rows = FormAssistFillPolicy.rows(
+      many.map { FormAssistFill(label: $0, value: "x", confidence: 0.9) },
+      forFields: many,
+      minConfidence: 0.6
+    )
+    XCTAssertEqual(rows.count, 40)
+    XCTAssertEqual(rows.compactMap(\.fill).count, 40)
   }
 }
 
@@ -350,6 +377,58 @@ final class FormAssistCardPlacementTests: XCTestCase {
     let frame = FormAssistCardPlacement.frame(cardSize: card, visibleFrame: small)
     XCTAssertTrue(small.contains(frame))
   }
+
+  /// The card sits over the form the user is reading, so a long one scrolls at half the
+  /// display rather than growing down it.
+  @MainActor
+  func testALongFormStopsAtHalfTheScreenAndScrolls() {
+    let subtitle = "3 of 40 fields from your memories."
+    let short = CGRect(x: 0, y: 0, width: 1512, height: 900)
+    let size = CloudConnectorGuidanceOverlay.fieldCopyCardSize(
+      title: "Omi can fill this", subtitle: subtitle, fieldCount: 40,
+      maxHeight: FormAssistCardPlacement.maxCardHeight(visibleFrame: short))
+
+    XCTAssertEqual(size.height, 450)
+    XCTAssertTrue(short.contains(FormAssistCardPlacement.frame(cardSize: size, visibleFrame: short)))
+
+    // A form that already fits inside half the screen is not padded out to it.
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.fieldCopyCardSize(
+        title: "Omi can fill this", subtitle: subtitle, fieldCount: 5,
+        maxHeight: FormAssistCardPlacement.maxCardHeight(visibleFrame: short)
+      ).height,
+      96 + 5 * 30)
+  }
+}
+
+/// Which model call a field is routed to. Getting this wrong is what made a real
+/// application come back with two names and no drafts.
+final class FormAssistFieldRoutingTests: XCTestCase {
+  private func field(_ label: String, multiline: Bool = false) -> FormField {
+    FormField(label: label, isEmpty: true, isSecure: false, isMultiline: multiline)
+  }
+
+  func testABigBoxWantsProseEvenWithAFlatLabel() {
+    XCTAssertTrue(field("Additional Information", multiline: true).wantsProse)
+    XCTAssertFalse(field("Additional Information").wantsProse)
+  }
+
+  /// The signal that survives below the fold, where the screenshot cannot see the field.
+  func testAQuestionWantsProseEvenInAOneLineBox() {
+    XCTAssertTrue(field("Why Anthropic?").wantsProse)
+    XCTAssertFalse(field("First Name").wantsProse)
+  }
+
+  /// Nothing Omi stores can consent on the user's behalf, and a list padded with
+  /// boilerplate nothing can answer is what pulled the whole response conservative.
+  func testConsentFieldsAreRefusedLikeProtectedOnes() {
+    XCTAssertEqual(
+      FormAssistSensitiveFields.answerable([
+        "First Name", "Please read the arbitration agreement below",
+        "Agreement to Arbitrate", "AI Policy for Application", "Why Anthropic?",
+      ]),
+      ["First Name", "Why Anthropic?"])
+  }
 }
 
 /// Drafted answers are held higher than copied facts, and some fields are never
@@ -357,34 +436,43 @@ final class FormAssistCardPlacementTests: XCTestCase {
 final class FormAssistDraftPolicyTests: XCTestCase {
   private let labels = ["Full name", "Why Anthropic?", "Gender", "Desired salary"]
 
-  private func accepted(_ fills: [FormAssistFill]) -> [FormAssistFill] {
-    FormAssistFillPolicy.accepted(
-      fills, forLabels: labels, minConfidence: 0.6, minDraftConfidence: 0.75, limit: 12)
+  private func fills(_ fills: [FormAssistFill]) -> [FormAssistFill] {
+    FormAssistFillPolicy.rows(
+      fills, forFields: labels, minConfidence: 0.6, minDraftConfidence: 0.75
+    ).compactMap(\.fill)
   }
 
   func testDraftsClearAHigherBarThanFacts() {
-    let fills = accepted([
+    let kept = fills([
       FormAssistFill(label: "Full name", value: "Yashwanth", confidence: 0.65, kind: .fact),
       FormAssistFill(label: "Why Anthropic?", value: "Because…", confidence: 0.65, kind: .draft),
     ])
-    XCTAssertEqual(fills.map(\.label), ["Full name"])
+    XCTAssertEqual(kept.map(\.label), ["Full name"])
   }
 
   func testAConfidentDraftIsKept() {
-    let fills = accepted([
+    let kept = fills([
       FormAssistFill(label: "Why Anthropic?", value: "I have shipped…", confidence: 0.8, kind: .draft)
     ])
-    XCTAssertEqual(fills.map(\.kind), [.draft])
+    XCTAssertEqual(kept.map(\.kind), [.draft])
   }
 
   /// Protected characteristics and negotiated terms are filtered before the model sees
-  /// them; this pins that a model answering them anyway still cannot reach the card.
-  func testProtectedAndNegotiatedFieldsAreNeverAnswered() {
-    let fills = accepted([
-      FormAssistFill(label: "Gender", value: "Male", confidence: 0.99, kind: .fact),
-      FormAssistFill(label: "Desired salary", value: "$200k", confidence: 0.99, kind: .fact),
-    ])
-    XCTAssertTrue(fills.isEmpty)
+  /// them; this pins that a model answering them anyway still cannot reach the card —
+  /// the row appears, saying Omi skipped it, and carries no value to copy.
+  func testProtectedAndNegotiatedFieldsAreShownAsSkippedAndNeverAnswered() {
+    let rows = FormAssistFillPolicy.rows(
+      [
+        FormAssistFill(label: "Gender", value: "Male", confidence: 0.99, kind: .fact),
+        FormAssistFill(label: "Desired salary", value: "$200k", confidence: 0.99, kind: .fact),
+      ],
+      forFields: labels,
+      minConfidence: 0.6
+    )
+    let sensitive = rows.filter { ["Gender", "Desired salary"].contains($0.label) }
+    XCTAssertEqual(sensitive.map(\.outcome), [.skipped, .skipped])
+    XCTAssertEqual(sensitive.map(\.hint), ["skipped", "skipped"])
+    XCTAssertTrue(sensitive.compactMap(\.fill).isEmpty)
   }
 
   func testSensitiveLabelsAreStrippedBeforeTheModelSeesThem() {
@@ -397,9 +485,9 @@ final class FormAssistDraftPolicyTests: XCTestCase {
 
   func testARunawayDraftIsDropped() {
     let long = String(repeating: "a", count: FormAssistFillPolicy.maxDraftLength + 1)
-    let fills = accepted([
+    let kept = fills([
       FormAssistFill(label: "Why Anthropic?", value: long, confidence: 0.9, kind: .draft)
     ])
-    XCTAssertTrue(fills.isEmpty)
+    XCTAssertTrue(kept.isEmpty)
   }
 }

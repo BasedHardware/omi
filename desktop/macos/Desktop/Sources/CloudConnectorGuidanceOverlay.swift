@@ -8,18 +8,23 @@ struct CloudConnectorCopyField: Identifiable, Sendable {
   let id: String
   let label: String
   let value: String
+  /// Shown where the value would go when there is none, saying why this row is blank.
+  /// Without one an empty row still reads "leave blank", which is what assisted setup
+  /// means by it.
+  let hint: String?
   /// When true, the on-screen preview is masked but copy still uses `value`.
   let masksValue: Bool
 
-  init(id: String, label: String, value: String, masksValue: Bool? = nil) {
+  init(id: String, label: String, value: String, hint: String? = nil, masksValue: Bool? = nil) {
     self.id = id
     self.label = label
     self.value = value
+    self.hint = hint
     self.masksValue = masksValue ?? Self.defaultMasksValue(label: label, value: value)
   }
 
   var displayValue: String {
-    if value.isEmpty { return "leave blank" }
+    if value.isEmpty { return hint ?? "leave blank" }
     return masksValue ? String(repeating: "•", count: 12) : value
   }
 
@@ -455,21 +460,26 @@ final class CloudConnectorGuidanceOverlay {
     subtitle: String,
     fields: [CloudConnectorCopyField],
     near anchor: CGRect?,
-    at preferredFrame: CGRect? = nil
+    at preferredFrame: CGRect? = nil,
+    maxHeight: CGFloat? = nil
   ) {
     presentFieldCopyCard(
       title: title,
       subtitle: subtitle,
       sections: [CloudConnectorCopySection(id: "fields", title: "", fields: fields)],
       near: anchor,
-      at: preferredFrame
+      at: preferredFrame,
+      maxHeight: maxHeight
     )
   }
 
   /// The card's size for a given row count, so a caller can place it itself.
-  func fieldCopyCardSize(title: String, subtitle: String, fieldCount: Int) -> CGSize {
+  func fieldCopyCardSize(
+    title: String, subtitle: String, fieldCount: Int, maxHeight: CGFloat? = nil
+  ) -> CGSize {
     Self.fieldCopyCardSize(
-      title: title, subtitle: subtitle, fieldCount: fieldCount, sectionTitleCount: 0)
+      title: title, subtitle: subtitle, fieldCount: fieldCount, sectionTitleCount: 0,
+      maxHeight: maxHeight)
   }
 
   func presentFieldCopyCard(
@@ -477,7 +487,8 @@ final class CloudConnectorGuidanceOverlay {
     subtitle: String,
     sections: [CloudConnectorCopySection],
     near anchor: CGRect?,
-    at preferredFrame: CGRect? = nil
+    at preferredFrame: CGRect? = nil,
+    maxHeight: CGFloat? = nil
   ) {
     dismissTask?.cancel()
     closeCurrentOverlay()
@@ -488,7 +499,8 @@ final class CloudConnectorGuidanceOverlay {
       title: title,
       subtitle: subtitle,
       fieldCount: fields.count,
-      sectionTitleCount: CloudConnectorCopySection.visibleTitleCount(sections)
+      sectionTitleCount: CloudConnectorCopySection.visibleTitleCount(sections),
+      maxHeight: maxHeight
     )
     let screen = Self.screen(forAnchor: anchor)
     let frame =
@@ -551,13 +563,18 @@ final class CloudConnectorGuidanceOverlay {
     title: String,
     subtitle: String,
     fieldCount: Int,
-    sectionTitleCount: Int = 0
+    sectionTitleCount: Int = 0,
+    maxHeight: CGFloat? = nil
   ) -> CGSize {
     // Match instruction-card subtitle wrapping: long copy needs extra header height.
     let compactSubtitleThreshold = 86
     let headerHeight: CGFloat = subtitle.count <= compactSubtitleThreshold ? 96 : 118
     let sectionHeaderHeight = CGFloat(sectionTitleCount) * 24
-    return CGSize(width: 460, height: headerHeight + CGFloat(fieldCount) * 30 + sectionHeaderHeight)
+    let natural = headerHeight + CGFloat(fieldCount) * 30 + sectionHeaderHeight
+    // A caller with a bound gets a card that stops there and scrolls its rows instead.
+    // Never below the header plus one row, however little room was offered.
+    let height = maxHeight.map { min(natural, max(headerHeight + 30, $0)) } ?? natural
+    return CGSize(width: 460, height: height)
   }
 
   private static func screen(forAnchor anchor: CGRect?) -> NSScreen {
@@ -1045,11 +1062,17 @@ private struct CloudConnectorFieldCopyCardView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       CloudConnectorCardHeaderView(title: title, subtitle: subtitle, onDismiss: onDismiss)
 
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        ForEach(sections) { section in
-          sectionView(section)
+      ScrollView {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          ForEach(sections) { section in
+            sectionView(section)
+          }
         }
+        // The list keeps the card's full width whether or not it needs to scroll.
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
+      // A card that already fits must not rubber-band when the user drags it.
+      .scrollBounceBehavior(.basedOnSize)
     }
     .padding(.leading, OmiSpacing.lg)
     .padding(.trailing, OmiSpacing.md)

@@ -57,6 +57,22 @@ struct FormField: Sendable, Equatable {
   let label: String
   let isEmpty: Bool
   let isSecure: Bool
+  /// A box built for more than one line. The accessibility role knows this even when the
+  /// field is far below the fold, where a screenshot of the window cannot see it.
+  let isMultiline: Bool
+
+  init(label: String, isEmpty: Bool, isSecure: Bool, isMultiline: Bool = false) {
+    self.label = label
+    self.isEmpty = isEmpty
+    self.isSecure = isSecure
+    self.isMultiline = isMultiline
+  }
+
+  /// Whether this field wants prose written for it rather than a stored detail copied
+  /// into it. A big box says so outright; so does a label phrased as a question.
+  var wantsProse: Bool {
+    isMultiline || label.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?")
+  }
 }
 
 /// Cheap identity of the window in front of the user, readable without walking the
@@ -207,7 +223,8 @@ enum FormFieldScanner {
       return FormField(
         label: label,
         isEmpty: element.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-        isSecure: isSecure(element, label: label)
+        isSecure: isSecure(element, label: label),
+        isMultiline: element.role.lowercased().contains("textarea")
       )
     }
   }
