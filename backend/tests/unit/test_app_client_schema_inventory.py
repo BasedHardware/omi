@@ -4,12 +4,19 @@ import json
 import re
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from scripts import inventory_app_client_schemas
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
+
+
+def test_repo_relative_path_uses_forward_slashes_on_windows(monkeypatch):
+    windows_root = PureWindowsPath('C:/repo')
+    monkeypatch.setattr(inventory_app_client_schemas, 'ROOT_DIR', windows_root)
+
+    assert inventory_app_client_schemas.repo_relative_path(windows_root / 'app/lib/model.dart') == 'app/lib/model.dart'
 
 
 def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():

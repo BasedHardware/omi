@@ -69,6 +69,11 @@ RAW_DECODE_RE = re.compile(
 WIRE_DECODE_RE = re.compile(r'wire\.Generated[A-Za-z0-9_]+\.fromJson|\.fromGenerated\s*\(|fromGeneratedWireJson')
 
 
+def repo_relative_path(path: Path) -> str:
+    """Return a stable repository path for JSON reports and diagnostics."""
+    return path.relative_to(ROOT_DIR).as_posix()
+
+
 def _collect_wire_backed_type_names() -> list[str]:
     """Collect Dart type names whose fromJson delegates to wire.Generated* parsers.
 
@@ -113,7 +118,7 @@ class DartSchemaFile:
 
     def to_report(self) -> dict[str, Any]:
         return {
-            'path': str(self.path.relative_to(ROOT_DIR)),
+            'path': repo_relative_path(self.path),
             'classes': self.classes,
             'enums': self.enums,
             'fromJson': self.from_json_count,
@@ -137,7 +142,7 @@ class AppRoute:
 
     def to_report(self) -> dict[str, Any]:
         return {
-            'path': str(self.path.relative_to(ROOT_DIR)),
+            'path': repo_relative_path(self.path),
             'route': self.route,
             'normalized_route': self.normalized_route,
             'line': self.line,
@@ -185,7 +190,7 @@ class DartDecodeSite:
 
     def to_report(self) -> dict[str, Any]:
         return {
-            'path': str(self.path.relative_to(ROOT_DIR)),
+            'path': repo_relative_path(self.path),
             'line': self.line,
             'kind': self.kind,
             'snippet': self.snippet,
@@ -220,7 +225,7 @@ class AppOperationManifestItem:
         raw_request_sites = [site for site in raw_sites if site.context == 'request_encode']
         generated_backed_sites = [site for site in self.decode_sites if site.generated_backed]
         return {
-            'path': str(self.path.relative_to(ROOT_DIR)),
+            'path': repo_relative_path(self.path),
             'route': self.route,
             'normalized_route': self.normalized_route,
             'line': self.line,
@@ -984,11 +989,11 @@ def build_report(spec_path: Path) -> dict[str, Any]:
     unmodeled_operations = [operation for operation in openapi_operations if operation.unmodeled_success_response]
     return {
         'dart_schema_dirs': [
-            str(APP_SCHEMA_DIR.relative_to(ROOT_DIR)),
-            str(APP_API_DIR.relative_to(ROOT_DIR)),
-            *(str(path.relative_to(ROOT_DIR)) for path in MODEL_REST_DTO_FILES if path.exists()),
+            repo_relative_path(APP_SCHEMA_DIR),
+            repo_relative_path(APP_API_DIR),
+            *(repo_relative_path(path) for path in MODEL_REST_DTO_FILES if path.exists()),
         ],
-        'app_client_openapi': str(spec_path.relative_to(ROOT_DIR)),
+        'app_client_openapi': repo_relative_path(spec_path),
         'openapi_schema_count': len(load_openapi_schema_names(spec_path)),
         'openapi_schemas': load_openapi_schema_names(spec_path),
         'openapi_path_count': len(openapi_paths),
