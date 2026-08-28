@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-repository-text-io-inherits-host-locale",
+  "violated_contract": "Repository text artifacts must be decoded and encoded consistently on every supported host; relying on the process locale makes UTF-8 source and generated files unreadable on Windows code pages such as CP936.",
+  "canonical_prevention": "Declare UTF-8 on every pathlib text read and write in portable generator scripts and their contract tests, and enforce that property with an AST-based test covering all app-client generator surfaces.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_app_client_generator_utf8_contract.py"
+  ],
+  "evidence_prs": [
+    9759
+  ],
+  "scope_hints": [
+    "backend/scripts/generate_*",
+    "backend/tests/unit/test_app_client_*_generator.py"
+  ],
+  "status": "open"
+}
