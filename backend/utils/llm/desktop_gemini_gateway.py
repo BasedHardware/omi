@@ -127,6 +127,7 @@ def gemini_body_to_openai_chat(
 
     contents = payload.get('contents')
     tool_name_by_id: dict[str, str] = {}
+    tool_id_by_name: dict[str, str] = {}
     tool_ordinal = 0
     if isinstance(contents, list):
         for content in contents:
@@ -142,14 +143,15 @@ def gemini_body_to_openai_chat(
                     response = part.get('functionResponse')
                     name = response.get('name') if isinstance(response, Mapping) else None
                     if not isinstance(name, str) or not name:
-                        name = tool_name_by_id.get(_tool_call_id('', tool_ordinal - 1), '')
+                        name = tool_name_by_id.get(_tool_call_id('', max(tool_ordinal - 1, 0)), '')
                     payload_out = response.get('response') if isinstance(response, Mapping) else None
                     if not isinstance(payload_out, Mapping):
                         payload_out = {}
+                    call_id = tool_id_by_name.get(name or '') or _tool_call_id(name or 'fn', max(tool_ordinal - 1, 0))
                     messages.append(
                         {
                             'role': 'tool',
-                            'tool_call_id': _tool_call_id(name or 'fn', tool_ordinal),
+                            'tool_call_id': call_id,
                             'name': name or 'fn',
                             'content': json.dumps(dict(payload_out)),
                         }
@@ -166,6 +168,8 @@ def gemini_body_to_openai_chat(
                     arguments: dict[str, Any] = dict(raw_args) if isinstance(raw_args, Mapping) else {}
                     call_id = _tool_call_id(name, tool_ordinal)
                     tool_name_by_id[call_id] = name
+                    if name:
+                        tool_id_by_name[name] = call_id
                     tool_ordinal += 1
                     tool_calls.append(
                         {

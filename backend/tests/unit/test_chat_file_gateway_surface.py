@@ -21,6 +21,8 @@ from utils.llm.gateway_client import (  # noqa: E402
     FILE_CHAT_DOCUMENTS_AUTO_LANE_ID,
     FILE_CHAT_VISION_AUTO_LANE_ID,
     LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
+    LLM_GATEWAY_USER_UID_HEADER,
+    LLM_GATEWAY_USAGE_FEATURE_HEADER,
 )
 
 _MINIMAL_PDF = b'%PDF-1.1\n%%EOF\n'
@@ -94,6 +96,8 @@ async def test_stream_completion_uses_gateway_client_and_lane_under_gateway_mode
     assert kwargs['model'] == FILE_CHAT_VISION_AUTO_LANE_ID
     assert kwargs['stream'] is True
     assert 'max_completion_tokens' in kwargs
+    assert kwargs['extra_headers'][LLM_GATEWAY_USER_UID_HEADER] == 'uid-1'
+    assert kwargs['extra_headers'][LLM_GATEWAY_USAGE_FEATURE_HEADER] == 'file_chat_vision'
     direct_client.chat.completions.create.assert_not_called()
 
 
@@ -122,7 +126,10 @@ def test_sync_completion_uses_gateway_client_under_gateway_mode(monkeypatch):
             result = tool._ask_files('q', _pdf_files())
 
     assert result == 'ok'
-    assert gateway_client.chat.completions.create.call_args.kwargs['model'] == FILE_CHAT_DOCUMENTS_AUTO_LANE_ID
+    kwargs = gateway_client.chat.completions.create.call_args.kwargs
+    assert kwargs['model'] == FILE_CHAT_DOCUMENTS_AUTO_LANE_ID
+    assert kwargs['extra_headers'][LLM_GATEWAY_USER_UID_HEADER] == 'uid-1'
+    assert kwargs['extra_headers'][LLM_GATEWAY_USAGE_FEATURE_HEADER] == 'file_chat_documents'
 
 
 def test_completions_stay_direct_when_gateway_mode_is_misconfigured_in_prod(monkeypatch):

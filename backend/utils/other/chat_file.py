@@ -299,7 +299,7 @@ class FileChatTool:
                         messages=messages,
                         stream=True,
                         max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
-                        extra_headers=file_chat_feature_header(model),
+                        extra_headers=file_chat_feature_header(model, uid=self.uid),
                     )
                 else:
                     client = _get_async_openai()
@@ -338,7 +338,7 @@ class FileChatTool:
                     model=model,
                     messages=messages,
                     max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
-                    extra_headers=file_chat_feature_header(model),
+                    extra_headers=file_chat_feature_header(model, uid=self.uid),
                 )
             elif model.startswith('gpt-5'):
                 response = openai.chat.completions.create(

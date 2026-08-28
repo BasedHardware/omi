@@ -327,7 +327,10 @@ class VertexGeminiProvider(VertexPTPolicyMixin):
         self._overflow_enabled_env = overflow_enabled_env
         self._probe_ttl_seconds = probe_ttl_seconds
         self._now = now
-        token_supplier = VertexAccessTokenSupplier(now=now)
+        # PT probe TTL is monotonic; ADC expiry is wall-clock. Do not share
+        # the PT clock with the token supplier or tokens never refresh
+        # (`monotonic() < expiry.timestamp()` stays true forever).
+        token_supplier = VertexAccessTokenSupplier()
         self._access_token_supplier = access_token_supplier or token_supplier.get_access_token
         # PT promotion latch and learned reachability, moved from the desktop
         # proxy: positive observations latch for the process, negative ones

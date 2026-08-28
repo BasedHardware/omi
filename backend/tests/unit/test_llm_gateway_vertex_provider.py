@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 import httpx
 import pytest
@@ -271,6 +272,19 @@ async def test_vertex_access_token_refresh_runs_in_critical_executor(monkeypatch
 
     assert await supplier.get_access_token() == 'adc-token'
     assert calls == [critical_executor]
+
+
+def test_vertex_provider_does_not_bind_pt_clock_to_token_supplier():
+    """PT probe TTL is monotonic; ADC expiry is wall-clock.
+
+    Sharing the PT `now` with VertexAccessTokenSupplier makes
+    `monotonic() < expiry.timestamp()` stay true forever, so tokens never
+    refresh after the first fetch.
+    """
+    provider = VertexGeminiProvider(http_client=httpx.AsyncClient(), now=lambda: 0.0)
+    supplier = provider._access_token_supplier.__self__
+    assert isinstance(supplier, VertexAccessTokenSupplier)
+    assert supplier._now is time.time
 
 
 @pytest.mark.asyncio

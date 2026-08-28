@@ -111,8 +111,10 @@ def test_gemini_tool_loop_round_trips_function_calls():
     tool_result = request['messages'][2]
     assert tool_result['role'] == 'tool'
     assert json.loads(tool_result['content']) == {'status': 'ok'}
-    # The tool result resolves its function through the assistant tool_call id.
+    # The tool result must reuse the assistant tool_call id, not mint a new one
+    # after the ordinal has already advanced.
     assert tool_result['name'] == 'take_photo'
+    assert tool_result['tool_call_id'] == assistant['tool_calls'][0]['id']
 
     # And the response side: an OpenAI tool_calls completion becomes a Gemini
     # functionCall candidate the Mac app can decode.

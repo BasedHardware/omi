@@ -620,9 +620,17 @@ def get_file_chat_gateway_sync_client() -> OpenAI:
     return _file_chat_gateway_sync_client
 
 
-def file_chat_feature_header(lane_id: str) -> dict[str, str]:
+def file_chat_feature_header(lane_id: str, *, uid: str | None = None) -> dict[str, str]:
+    """Per-request file-chat headers: feature plus the user the spend belongs to.
+
+    The cached SDK client only carries service auth. Attribution has to go on
+    the request or the gateway ledger row is unattributed.
+    """
     feature = FILE_CHAT_DOCUMENTS_FEATURE if lane_id == FILE_CHAT_DOCUMENTS_AUTO_LANE_ID else FILE_CHAT_VISION_FEATURE
-    return {LLM_GATEWAY_USAGE_FEATURE_HEADER: feature}
+    headers = _gateway_usage_headers(feature=feature)
+    if uid:
+        headers[LLM_GATEWAY_USER_UID_HEADER] = uid
+    return headers
 
 
 def _embedding_vectors(body: object) -> list[list[float]]:
