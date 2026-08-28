@@ -1677,6 +1677,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     animationDuration: TimeInterval = 0.3,
     anchorTop: Bool = false
   ) {
+    // A quiet answer never grows the bar. Guarded at this choke point rather than at each
+    // caller: the response panel is opened from the query starting, the answer arriving, the
+    // content-height observer, and the agent-chat resize — patching them individually left
+    // the panel showing anyway, because whichever one was missed put it straight back.
+    // Only expansion is blocked; collapsing back to the pill still works.
+    if makeResizable, state.answersQuietly {
+      return
+    }
+
     // Cancel any pending resizeToFixedHeight work item to prevent stale resizes
     resizeWorkItem?.cancel()
     resizeWorkItem = nil
@@ -2271,6 +2280,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   private func resizeToResponseHeight(animated: Bool = false) {
+    // A quiet answer stays in the notch. Guarded here rather than at the caller because the
+    // panel is opened from several places — the query starting, and the answer arriving.
+    guard !state.answersQuietly else { return }
     let responseHeight = responseHeightConfiguration()
 
     // Preserve manual response sizing across follow-up sends. The window may
@@ -2285,6 +2297,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   private func beginMainResponseHeight(animated: Bool = false) {
+    guard !state.answersQuietly else { return }
     let responseHeight = responseHeightConfiguration()
     let initialSize = NSSize(width: expandedContentWidth, height: responseHeight.initialHeight)
     resizeAnchored(to: initialSize, makeResizable: true, animated: animated, anchorTop: true)
@@ -3746,6 +3759,7 @@ class FloatingControlBarManager {
     // Re-wire onSendQuery for typed follow-ups (force fromVoice:false after voice turns).
     window.onSendQuery = { [weak self, weak window, weak provider] message in
       guard let self = self, let window = window, let provider = provider else { return }
+      window.state.answersQuietly = false
       Task { @MainActor in
         await self.withQueryTracer(query: message, fromVoice: false) {
           await self.routeQuery(message, barWindow: window, provider: provider, fromVoice: false)
@@ -4033,7 +4047,28 @@ class FloatingControlBarManager {
   /// the whole recording lifecycle. A wake word owns no turn — the words were already
   /// transcribed by the time it fires — so it uses the visible surface.
   func submitSpokenCommand(_ command: String) {
+    window?.state.answersQuietly = false
     sendFollowUpQuery(command, fromVoice: true)
+  }
+
+  /// Set for exactly one query and consumed by `prepareVisibleQueryState`. A one-shot flag
+  /// rather than a parameter because that method is reached through `routeQuery`/
+  /// `sendAIQuery`, which are shared with typed queries and push-to-talk.
+  private static var suppressNextVisibleSurface = false
+
+  /// Hands-free: speak the answer and leave the bar in the notch.
+  ///
+  /// Hands and eyes are elsewhere — that is the premise of a wake word — so growing the bar
+  /// into a response panel covers a fifth of the screen for no one's benefit. The response
+  /// glow already signals that Omi is working, and the answer is spoken. The exchange is
+  /// still recorded; it is simply not put in front of you.
+  @discardableResult
+  func submitHandsFreeCommand(_ command: String) -> Bool {
+    let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    Self.suppressNextVisibleSurface = true
+    sendFollowUpQuery(trimmed, fromVoice: true)
+    return true
   }
 
   func sendFollowUpQuery(
@@ -4663,7 +4698,13 @@ class FloatingControlBarManager {
     chatCancellable?.cancel()
     chatCancellable = nil
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
-    barWindow.beginVisibleMainQuery(message, fromVoice: fromVoice, animated: true)
+    // Called twice for one query — once by `routeQuery` to show the thinking state, again
+    // by `sendAIQuery`. The latch is consumed by the first, so this may only ever *set*
+    // quiet; clearing here let the second call undo the first and reopen the panel.
+    let presentsSurface = !Self.suppressNextVisibleSurface
+    Self.suppressNextVisibleSurface = false
+    barWindow.beginVisibleMainQuery(
+      message, fromVoice: fromVoice, animated: true, presentsSurface: presentsSurface)
   }
 
   private func isActiveQueryGeneration(_ generation: Int) -> Bool {
@@ -5233,9 +5274,14 @@ extension FloatingControlBarWindow {
   /// Switch from the Ask Omi input panel to the response-sized surface before
   /// routing a visible query. Keeping this transition in the window preserves
   /// the invariant that conversation state and NSPanel sizing move together.
-  func beginVisibleMainQuery(_ message: String, fromVoice: Bool, animated: Bool = true) {
+  func beginVisibleMainQuery(
+    _ message: String, fromVoice: Bool, animated: Bool = true, presentsSurface: Bool = true
+  ) {
     cancelInputHeightObserver()
     state.currentQueryFromVoice = fromVoice
+    // Cleared by any query that does present a surface, so a quiet wake-word answer never
+    // leaks its silence into the next typed question.
+    if !presentsSurface { state.answersQuietly = true }
     state.markAIDraftSubmitted(message)
     state.displayedQuery = message
     state.clearCurrentAnswerAnchors()

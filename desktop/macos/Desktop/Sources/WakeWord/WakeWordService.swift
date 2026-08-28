@@ -22,6 +22,10 @@ final class WakeWordService {
     // presents `.voiceOnly` and owns a `VoiceTurnID` for the whole recording lifecycle,
     // while a wake word owns no turn — the words were already transcribed when it fired.
     guard AssistantSettings.shared.wakeWordUsesRealtime else {
+      // Hands-free answers stay in the notch: spoken, with the response glow, and without
+      // the bar growing into a panel. The visible surface remains the fallback.
+      if FloatingControlBarManager.shared.submitHandsFreeCommand(command) { return }
+      log("WakeWord: answering on the visible surface instead")
       FloatingControlBarManager.shared.submitSpokenCommand(command)
       return
     }

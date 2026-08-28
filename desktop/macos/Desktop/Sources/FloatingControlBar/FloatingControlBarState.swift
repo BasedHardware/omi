@@ -333,6 +333,15 @@ class FloatingControlBarState: NSObject, ObservableObject {
   @Published private(set) var localAnswerOverride: ChatMessage? = nil
   @Published var lastConversationActivityAt: Date? = nil
   @Published var activeAgentChatPillID: UUID? = nil
+  /// This query answers in the notch: spoken, with the existing response glow, and without
+  /// growing the bar into a response panel.
+  ///
+  /// Set for a wake-word command, where hands and eyes are elsewhere and a panel covering a
+  /// fifth of the screen is the opposite of what was asked for. It has to survive the whole
+  /// query rather than just its start: the answer's arrival presents `.mainResponse` again
+  /// on its own, which is why suppressing only the initial expansion left the panel showing.
+  @Published var answersQuietly: Bool = false
+
   @Published var conversationSurface: FloatingConversationSurface = .closed
   private var activeAIDraftKey = ChatDraftKey.floatingMain
   private var isRestoringAIDraft = false
