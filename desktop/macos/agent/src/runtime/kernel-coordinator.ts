@@ -511,7 +511,16 @@ export class AgentRuntimeKernel extends KernelSessions {
     const chain = metadata[AGENT_FALLBACK_CHAIN_KEY];
     if (!Array.isArray(chain)) return null;
 
-    const untried = chain.filter((id): id is string => typeof id === "string" && id.length > 0);
+    // Run metadata is caller-supplied, so the chain is re-validated on read
+    // rather than trusted. Only a real production adapter that is actually
+    // registered in this runtime can be retried, which makes explicit what was
+    // previously only implied by chains being built solely by
+    // `resolveAgentRoute`: a hand-written `agentFallbackChain` cannot point the
+    // retry at an arbitrary or unregistered provider.
+    const untried = chain.filter(
+      (id): id is string =>
+        typeof id === "string" && isProductionAdapterId(id) && this.registry.has(id),
+    );
     if (untried.length === 0) return null;
 
     const prompt = typeof input.prompt === "string" ? input.prompt : "";

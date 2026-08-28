@@ -387,6 +387,10 @@ Rules (fail the PR if any break):
    observe the failure it is meant to recover from. The untried chain rides on run
    metadata (`agentFallbackChain`) and `agent-fallback.ts` subscribes to
    `run.failed`. The retry records what it replaced in `agentFallbackFrom`.
+   Because that metadata is caller-supplied, `agentFallbackPlanForRun`
+   re-validates the chain on read — a retry may only target a production
+   adapter that is currently registered — so a hand-written chain cannot point
+   the retry at an arbitrary or unregistered provider.
 5. **Alias and negation rules are a cross-platform contract.** They are
    implemented twice (macOS + Windows) and pinned by
    `contracts/parity/agent_routing.json`; change behaviour by editing the fixture,

@@ -280,6 +280,31 @@ describe("the fallback chain survives on the run", () => {
     expect(plan.metadata[AGENT_FALLBACK_FROM_KEY]).toEqual(["acp"]);
   });
 
+  it("ignores a hand-written chain naming something that is not an adapter", async () => {
+    // Run metadata is caller-supplied. An explicit adapterId means the control
+    // tool stamps no chain of its own, so this metadata reaches the kernel
+    // unchanged — and must still not be able to steer the retry.
+    const kernel = kernelWith("acp", "hermes");
+    const spawned = await spawn(kernel, "fix the failing test", "hostile-1", {
+      adapterId: "hermes",
+      metadata: { [AGENT_FALLBACK_CHAIN_KEY]: ["definitely-not-an-adapter"] },
+    });
+
+    expect(kernel.agentFallbackPlanForRun(spawned.run.runId)).toBeNull();
+  });
+
+  it("ignores a chain naming an adapter this runtime has not registered", async () => {
+    // codex is a real production adapter, but it is not connected here; a retry
+    // must not be pointed at a provider the runtime cannot actually run.
+    const kernel = kernelWith("acp", "hermes");
+    const spawned = await spawn(kernel, "fix the failing test", "hostile-2", {
+      adapterId: "hermes",
+      metadata: { [AGENT_FALLBACK_CHAIN_KEY]: ["codex"] },
+    });
+
+    expect(kernel.agentFallbackPlanForRun(spawned.run.runId)).toBeNull();
+  });
+
   it("returns no plan for a run that does not exist", () => {
     const kernel = kernelWith("acp");
     expect(kernel.agentFallbackPlanForRun("run-does-not-exist")).toBeNull();
