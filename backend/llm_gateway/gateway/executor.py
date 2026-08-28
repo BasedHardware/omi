@@ -28,7 +28,12 @@ from llm_gateway.gateway.providers import (
     ProviderResponse,
 )
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, apply_output_budget
-from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, select_lkg_route_for_failure
+from llm_gateway.gateway.resolver import (
+    ResolvedEmbeddingRoute,
+    ResolvedRoute,
+    is_lkg_eligible,
+    select_lkg_route_for_failure,
+)
 from llm_gateway.gateway.schemas import (
     CredentialMode,
     FailureClass,
@@ -147,6 +152,87 @@ async def execute_chat_completion(
             last_error = exc
 
     raise last_error
+
+
+async def execute_embedding(
+    resolved_route: ResolvedEmbeddingRoute,
+    credential_context: CredentialContext,
+    provider_registry: 'ProviderRegistry',
+    *,
+    attempt_trace: AttemptTrace | None = None,
+) -> dict[str, Any]:
+    """Run one embeddings request through its lane's provider."""
+    route = resolved_route.route
+    _validate_credential_mode(route, credential_context)
+    provider_ref = route.primary
+    provider = provider_registry.provider_for(provider_ref.provider)
+    create_embedding = getattr(provider, 'create_embedding', None) if provider is not None else None
+    if provider is None or not callable(create_embedding):
+        error = _unsupported_provider_error(provider_ref, credential_context)
+        if isinstance(error, GatewayError):
+            raise error
+        raise GatewayInvalidRouteConfigError(f'provider does not support embeddings: {provider_ref.provider}')
+    if credential_context.mode == CredentialMode.BYOK and not credential_context.has_provider_key(
+        provider_ref.provider
+    ):
+        raise GatewayCredentialFailureError(
+            f'BYOK key is required for provider {provider_ref.provider}',
+            failure_class=FailureClass.MISSING_BYOK_KEY,
+            param='credentials',
+        )
+
+    validated = resolved_route.validated_request
+    request: dict[str, Any] = {'model': provider_ref.model, 'input': list(validated.inputs)}
+    if validated.task_type is not None:
+        request['task_type'] = validated.task_type
+    if validated.title is not None:
+        request['title'] = validated.title
+
+    deadline_monotonic = monotonic() + route.timeouts.request_ms / 1000.0
+    max_attempts = max(route.retry.max_attempts, 1)
+    for retry_ordinal in range(1, max_attempts + 1):
+        timeout_ms = int((deadline_monotonic - monotonic()) * 1000)
+        if timeout_ms <= 0:
+            raise GatewayProviderFailureError(
+                'provider request deadline exhausted',
+                failure_class=FailureClass.TIMEOUT_BEFORE_OUTPUT,
+            )
+        try:
+            response = await create_embedding(
+                request,
+                provider_ref=provider_ref,
+                credentials=credential_context,
+                timeout_ms=timeout_ms,
+            )
+        except ProviderFailure as exc:
+            error = _map_provider_failure(exc, credential_context, provider_ref)
+            if attempt_trace is not None:
+                attempt_trace.record(
+                    provider=provider_ref.provider,
+                    configured_model=provider_ref.model,
+                    route_artifact_id=route.route_artifact_id,
+                    fallback_reason=None,
+                    retry_ordinal=retry_ordinal,
+                    outcome='error',
+                    error_class=exc.failure_class.value,
+                    usage_status=UsageStatus.INDETERMINATE,
+                )
+            if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
+                raise error
+            continue
+        if attempt_trace is not None:
+            attempt_trace.record(
+                provider=provider_ref.provider,
+                configured_model=provider_ref.model,
+                route_artifact_id=route.route_artifact_id,
+                fallback_reason=None,
+                retry_ordinal=retry_ordinal,
+                outcome='success',
+                error_class='none',
+                metadata=response.accounting,
+            )
+        return dict(response.response)
+    raise error
 
 
 def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:

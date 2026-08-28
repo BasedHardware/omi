@@ -25,6 +25,15 @@ from utils.http_client import (
     get_desktop_gemini_stream_client,
 )
 from utils.llm import vertex_pt_routing as ptr
+from utils.llm.desktop_gemini_gateway import (
+    DesktopGeminiGatewayError,
+    desktop_gateway_actions,
+    desktop_gateway_text_lane,
+    gateway_desktop_chat,
+    gateway_desktop_chat_stream,
+    gateway_desktop_embed_content,
+)
+from utils.llm.gateway_client import should_route_features_through_gateway
 from utils.llm.desktop_llm_stub import (
     llm_stub_enabled,
     stub_gemini_proxy_json,
@@ -70,13 +79,15 @@ VERTEX_PT_MODEL = ptr.PT_MODEL_CURRENT
 # on it, with no deploy. See backend/docs/vertex-pt-flash.md.
 VERTEX_PT_TARGET_MODEL = ptr.PT_MODEL_TARGET
 # Emergency operator pins. Both beat auto-detection so a bad promotion or a
-# bad overflow target can be corrected without shipping code.
-_PT_MODEL_OVERRIDE_ENV = 'OMI_VERTEX_PT_MODEL'
-_OVERFLOW_MODEL_OVERRIDE_ENV = 'OMI_GEMINI_OVERFLOW_MODEL'
-_OVERFLOW_ENABLED_ENV = 'OMI_GEMINI_OVERFLOW_ENABLED'
+# bad overflow target can be corrected without shipping code. The env names
+# live in vertex_pt_routing so the gateway's provider and this kill-switch
+# path read the same strings.
+_PT_MODEL_OVERRIDE_ENV = ptr.PT_MODEL_OVERRIDE_ENV
+_OVERFLOW_MODEL_OVERRIDE_ENV = ptr.OVERFLOW_MODEL_OVERRIDE_ENV
+_OVERFLOW_ENABLED_ENV = ptr.OVERFLOW_ENABLED_ENV
 # Data-residency pin for the families that have no regional endpoint. `us`
 # keeps inference in the US multi-region; `global` would widen it worldwide.
-_MULTI_REGION_LOCATION_ENV = 'OMI_VERTEX_GLOBAL_LOCATION'
+_MULTI_REGION_LOCATION_ENV = ptr.MULTI_REGION_LOCATION_ENV
 # How long a PT-capacity observation is trusted before it is re-probed. Bounds
 # both the promotion delay after the order lands and the cost of probing.
 _PT_PROBE_TTL_SECONDS = 600.0
@@ -1315,6 +1326,157 @@ def _proxy_issue_class(status_code: int) -> str:
     return 'invalid_response'
 
 
+def _company_paid_via_gateway(model: str, action: str) -> bool:
+    """Whether this request's model call hops the LLM gateway.
+
+    Company-paid text and single-embed traffic only: BYOK keeps the thin
+    direct AI Studio path (the gateway Vertex adapter fail-closes BYOK) and
+    batchEmbedContents stays on AI Studio because the Vertex batch wire shape
+    is not compatible. FEATURE_MODE=off keeps the legacy direct Vertex path.
+    """
+    if get_byok_key('gemini'):
+        return False
+    if action not in desktop_gateway_actions():
+        return False
+    try:
+        if not should_route_features_through_gateway():
+            return False
+    except RuntimeError:
+        return False
+    if action == 'embedContent':
+        return model == ptr.DESKTOP_EMBEDDING_MODEL
+    return desktop_gateway_text_lane(model) is not None
+
+
+def _gateway_error_response(error: DesktopGeminiGatewayError, telemetry: 'ProxyTelemetry') -> Response:
+    if error.status_code == 429:
+        status_code, retryable, retry_after = 429, True, 30
+    elif error.status_code >= 500:
+        status_code, retryable, retry_after = 503, True, _PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS
+    else:
+        status_code, retryable, retry_after = error.status_code, False, None
+    telemetry.complete(
+        outcome=error.code,
+        status_code=status_code,
+        retryable=retryable,
+        upstream_status=error.status_code,
+        phase='gateway',
+    )
+    return _error_response(
+        telemetry,
+        status_code=status_code,
+        code=error.code,
+        message=error.message,
+        phase='gateway',
+        retryable=retryable,
+        upstream_status=error.status_code,
+        retry_after=retry_after,
+    )
+
+
+async def _proxy_via_gateway(
+    request: Request,
+    body: bytes,
+    *,
+    model: str,
+    action: str,
+    streaming: bool,
+    uid: str,
+    telemetry: ProxyTelemetry,
+) -> Response:
+    """Company-paid hop through the LLM gateway; this proxy stays the BFF."""
+    telemetry.provider = 'llm_gateway'
+    telemetry.credential_source = 'omi_gateway'
+    telemetry.phase = 'gateway'
+    try:
+        if action == 'embedContent':
+            result = await _cancel_on_disconnect(request, gateway_desktop_embed_content(body, uid=uid))
+            content = json.dumps({'embedding': {'values': result.values}}, separators=(',', ':')).encode()
+            telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
+            return Response(
+                content,
+                media_type='application/json',
+                headers=_response_headers(telemetry),
+            )
+        if streaming:
+
+            async def stream_gateway() -> AsyncIterator[bytes]:
+                try:
+                    async for chunk in gateway_desktop_chat_stream(body, model=model, uid=uid):
+                        yield chunk
+                    telemetry.complete(outcome='success', status_code=200, retryable=False, phase='gateway')
+                except DesktopGeminiGatewayError as error:
+                    status_code = 429 if error.status_code == 429 else 503 if error.status_code >= 500 else 502
+                    telemetry.complete(outcome=error.code, status_code=status_code, retryable=True, phase='gateway')
+                    yield _stream_error_event(code=error.code, phase='gateway', telemetry=telemetry)
+                except (httpx.TimeoutException, TimeoutError):
+                    telemetry.complete(outcome='provider_timeout', status_code=504, retryable=False, phase='gateway')
+                    yield _stream_error_event(code='provider_timeout', phase='gateway', telemetry=telemetry)
+                except httpx.HTTPError:
+                    telemetry.complete(
+                        outcome='provider_transport_error', status_code=502, retryable=False, phase='gateway'
+                    )
+                    yield _stream_error_event(code='provider_transport_error', phase='gateway', telemetry=telemetry)
+
+            return StreamingResponse(
+                stream_gateway(),
+                media_type='text/event-stream',
+                headers=_response_headers(telemetry),
+            )
+        result = await _cancel_on_disconnect(request, gateway_desktop_chat(body, model=model, action=action, uid=uid))
+        payload = dict(result.gemini_payload)
+        telemetry.observe_gemini_response(payload)
+        telemetry.complete(outcome='success', status_code=200, retryable=False, upstream_status=200, phase='gateway')
+        return Response(
+            json.dumps(payload, separators=(',', ':')).encode(),
+            media_type='application/json',
+            headers=_response_headers(telemetry),
+        )
+    except DesktopGeminiGatewayError as error:
+        return _gateway_error_response(error, telemetry)
+    except ClientDisconnected:
+        telemetry.complete(outcome='client_cancelled', status_code=499, retryable=False, phase='gateway')
+        return _error_response(
+            telemetry,
+            status_code=499,
+            code='client_cancelled',
+            message='Client disconnected before the Gemini request completed',
+            phase='gateway',
+            retryable=False,
+        )
+    except httpx.TimeoutException as error:
+        phase = _timeout_phase(error)
+        telemetry.complete(outcome=f'{phase}_timeout', status_code=504, retryable=False, phase='gateway')
+        return _error_response(
+            telemetry,
+            status_code=504,
+            code='provider_timeout',
+            message=f'Gemini gateway timed out during {phase}',
+            phase='gateway',
+            retryable=False,
+        )
+    except TimeoutError:
+        telemetry.complete(outcome='provider_deadline_exceeded', status_code=504, retryable=False, phase='gateway')
+        return _error_response(
+            telemetry,
+            status_code=504,
+            code='provider_deadline_exceeded',
+            message='Gemini gateway request exceeded the Omi logical deadline',
+            phase='gateway',
+            retryable=False,
+        )
+    except httpx.HTTPError:
+        telemetry.complete(outcome='provider_transport_error', status_code=502, retryable=False, phase='gateway')
+        return _error_response(
+            telemetry,
+            status_code=502,
+            code='provider_transport_error',
+            message='Gemini gateway transport failed',
+            phase='gateway',
+            retryable=False,
+        )
+
+
 async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Response:
     try:
         _, _, action = _path_parts(path)
@@ -1400,6 +1562,15 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
             )
         telemetry.phase = 'metering'
         path = await _meter_server_request(uid, path, model, action)
+        if _company_paid_via_gateway(model, action):
+            # The gateway owns pin/overflow/host policy for company-paid
+            # traffic; the requested model (post quota-demotion) picks the
+            # lane and this proxy keeps only its BFF limits.
+            body = _sanitize(body, action, max_output_tokens=_output_token_cap())
+            telemetry.shape = _payload_shape(body)
+            return await _proxy_via_gateway(
+                request, body, model=model, action=action, streaming=streaming, uid=uid, telemetry=telemetry
+            )
         path = _retarget_path(*_path_parts(path))
         _, model, action = _path_parts(path)
         telemetry.model = model

@@ -62,6 +62,7 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/llm/providers.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/gateway_anthropic.py', 'AsyncAnthropic'),
+    DirectUse('utils/llm/clients.py', 'ChatAnthropic'),
     DirectUse('utils/llm/clients.py', 'ChatOpenAI'),
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
@@ -69,13 +70,16 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/other/chat_file.py', 'AsyncOpenAI'),
     DirectUse('utils/other/chat_file.py', 'openai.chat.completions'),
     DirectUse('utils/other/chat_file.py', 'openai.files'),
+    # gateway_client.py constructs SDK clients pointed at the gateway itself
+    # (OpenAI-compatible surface); these never reach a provider directly.
+    DirectUse('utils/llm/gateway_client.py', 'AsyncOpenAI'),
+    DirectUse('utils/llm/gateway_client.py', 'OpenAI'),
     DirectUse('utils/retrieval/agentic.py', 'anthropic_client.messages'),
     DirectUse('routers/omni_relay.py', 'GEMINI_API_KEY'),
     DirectUse('routers/omni_relay.py', 'OPENAI_API_KEY'),
 }
 INVENTORIED_DIRECT_EXCEPTION_FILES = {
     'routers/desktop_proactivity.py',
-    'utils/other/chat_file.py',
     'routers/omni_relay.py',
 }
 
@@ -150,7 +154,7 @@ def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():
     inventory = _load_inventory()
 
     assert inventory['schema_version'] == 'llm_model_endpoint_inventory.v1'
-    assert inventory['out_of_scope_surfaces']
+    assert isinstance(inventory['out_of_scope_surfaces'], list)
     for surface in inventory['surfaces']:
         assert surface['surface']
         assert surface['code_path']
@@ -196,7 +200,6 @@ def test_direct_exception_files_follow_their_declared_gateway_policy():
 
     assert all(len(policies) == 1 for policies in policies_by_file.values())
     policy_by_file = {rel_path: next(iter(policies)) for rel_path, policies in policies_by_file.items()}
-    assert policy_by_file['utils/other/chat_file.py'] == 'acknowledged'
     assert policy_by_file['routers/desktop_proactivity.py'] == 'acknowledged'
     assert policy_by_file['routers/omni_relay.py'] == 'blocked'
 
@@ -212,17 +215,19 @@ def test_direct_exception_files_follow_their_declared_gateway_policy():
             raise AssertionError(f'unknown direct gateway policy {policy!r} for {rel_path}')
 
 
-def test_acknowledged_file_chat_surface_is_observed_without_a_gateway_block():
-    """Static regression guard for PR #11419's acknowledged file-chat direct surface.
+def test_file_chat_completions_hop_the_gateway_in_feature_mode():
+    """File chat's model call is gateway-routed; only the kill-switch path stays direct.
 
-    Behavioral upload coverage lives in test_chat_file_gateway_surface.py; this tripwire
-    keeps the acknowledged implementation from regressing to the fail-closed gate.
+    Static tripwire for the file-chat gateway lanes: under
+    OMI_LLM_GATEWAY_FEATURE_MODE=gateway the completions call must go through
+    the gateway client, never a raw direct SDK call, and the surface must not
+    swing back to the fail-closed blocking gate. Behavioral coverage lives in
+    test_chat_file_gateway_surface.py.
     """
     source = (BACKEND_DIR / 'utils/other/chat_file.py').read_text(encoding='utf-8')
 
-    assert "record_direct_exception_surface(surface=_FILE_CHAT_SURFACE)" in source or (
-        "record_direct_exception_surface(surface='file_chat.openai_files_chat_completions')" in source
-    )
+    assert 'get_file_chat_gateway_async_client' in source
+    assert 'file_chat_auto_lane_id' in source
     assert 'raise_if_gateway_feature_mode_blocks_direct_model_surface' not in source
 
 

@@ -1,18 +1,8 @@
 schema_version: llm_model_endpoint_inventory.v1
 scope:
-  in_scope: backend chat/completion/generation/model calls, including streaming, tool calling, image generation, file chat, realtime relay, and provider web search
-  out_of_scope: embeddings/vector APIs only
-out_of_scope_surfaces:
-  - surface: openai_embeddings
-    code_path: backend/utils/llm/clients.py:OpenAIEmbeddings,generate_embedding
-    provider_model: openai/text-embedding-3-large
-    request_shape: embedding
-    reason: Embeddings are explicitly out of scope for this phase.
-  - surface: gemini_screen_activity_query_embedding
-    code_path: backend/utils/llm/clients.py:gemini_embed_query
-    provider_model: gemini/embedding-001
-    request_shape: embedding
-    reason: Embeddings are explicitly out of scope for this phase.
+  in_scope: backend chat/completion/generation/model calls, including streaming, tool calling, image generation, file chat, realtime relay, provider web search, and embeddings
+  out_of_scope: none
+out_of_scope_surfaces: []
 model_config_features:
   status: gateway_lane_generated_from_model_config
   source_of_truth: backend/utils/llm/model_config.py
@@ -72,11 +62,14 @@ model_config_features:
     tool_calling:
       - chat_agent
       - memory_l2
+    file_chat:
+      - file_chat_vision
+      - file_chat_documents
     provider_search:
       - web_search
     pinned:
       - fair_use
-  gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, native Vertex Gemini, openrouter, perplexity, and anthropic.
+  gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, native Vertex Gemini, openrouter, perplexity, and anthropic; OpenAI-compatible /v1/embeddings surface with openai and native Vertex :predict adapters.
   migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway and does not retain a direct-provider fallback; gateway Gemini uses native Vertex generateContent authenticated by GKE Workload Identity; Gemini BYOK remains unsupported and fails closed.
   test_guardrail_coverage:
     - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
@@ -126,18 +119,39 @@ surfaces:
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_client_config.py::test_app_icon_generation_always_uses_gateway
   - surface: file_chat_vision
     code_path: backend/utils/other/chat_file.py:_ask_files_stream
-    current_provider_model: openai/gpt-5.6-luna
-    request_shape: streaming vision chat completion (image_url)
-    gateway_lane_capability_needed: gateway-owned vision chat lane or file-chat replacement retrieval path
-    migration_status: acknowledged_direct_file_lifecycle_surface; intentionally remains direct during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and records direct-exception telemetry without raising (PR #11419)
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+    current_provider_model: gateway lane omi:auto:file-chat-vision (openai/gpt-5.6-luna); direct OpenAI only when OMI_LLM_GATEWAY_FEATURE_MODE is off
+    request_shape: streaming vision chat completion (image_url data URIs)
+    gateway_lane_capability_needed: generated omi:auto:file-chat-vision lane with image_url content parts
+    migration_status: gateway_routed_file_chat; OpenAI Files upload/download stays direct by design (file bytes/file_id lifecycle, no model tokens) and the completions call hops the gateway in feature mode
+    test_guardrail_coverage: backend/tests/unit/test_chat_file_gateway_surface.py and backend/tests/unit/test_chat_file_completions.py
   - surface: file_chat_completions
     code_path: backend/utils/other/chat_file.py:FileChatTool
-    current_provider_model: openai/gpt-4.1 Chat Completions file parts for PDFs (gpt-5.6-luna remains image-only)
+    current_provider_model: gateway lane omi:auto:file-chat-documents (openai/gpt-4.1 file parts for PDFs; gpt-5.6-luna remains image-only); direct OpenAI only when OMI_LLM_GATEWAY_FEATURE_MODE is off
     request_shape: file upload purpose=user_data, streaming chat completion file input parts
-    gateway_lane_capability_needed: gateway-owned file lifecycle or replacement retrieval path
-    migration_status: acknowledged_direct_file_lifecycle_surface; intentionally remains direct during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and records direct-exception telemetry without raising (PR #11419). Assistants/Threads retired after the 2026-08-26 sunset.
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+    gateway_lane_capability_needed: generated omi:auto:file-chat-documents lane with OpenAI file content parts
+    migration_status: gateway_routed_file_chat; Assistants/Threads retired after the 2026-08-26 sunset; OpenAI Files upload/download stays direct by design
+    test_guardrail_coverage: backend/tests/unit/test_chat_file_gateway_surface.py and backend/tests/unit/test_chat_file_completions.py
+  - surface: desktop_gemini_proxy
+    code_path: backend/routers/desktop_proxy.py:_proxy_unobserved
+    current_provider_model: gateway lanes omi:auto:desktop-vertex-{flash,pro,target,flash-lite} and omi:auto:gemini-embeddings for company-paid generateContent/streamGenerateContent/embedContent; Gemini BYOK keeps a thin direct AI Studio path; batchEmbedContents stays direct AI Studio
+    request_shape: Gemini JSON proxied for desktop clients; translated to OpenAI shape at the BFF (utils/llm/desktop_gemini_gateway.py) and back to Gemini native in the gateway Vertex adapter
+    gateway_lane_capability_needed: desktop vertex lanes with PT pin/overflow and multi-region host policy in VertexGeminiProvider; OpenAI-shaped /v1/embeddings with task_type pass-through
+    migration_status: gateway_routed_desktop_vertex; the BFF keeps auth, trial paywall, redis metering, body limits, and model allowlist; PT pin/overflow/host policy moved into the gateway provider via vertex_pt_routing (no second policy); FEATURE_MODE=off keeps the legacy direct Vertex path
+    test_guardrail_coverage: backend/tests/unit/test_desktop_proxy.py and backend/tests/unit/test_vertex_pt_routing.py
+  - surface: openai_embeddings
+    code_path: backend/utils/llm/clients.py:_OpenAIEmbeddingsProxy
+    current_provider_model: gateway lane omi:auto:openai-embeddings (openai/text-embedding-3-large); BYOK OpenAI keys are forwarded to the gateway with the omi-paid lane as fallback; direct OpenAIEmbeddings only when OMI_LLM_GATEWAY_FEATURE_MODE is off
+    request_shape: OpenAI embeddings (embed_query/embed_documents, sync and async) for vector_db, mcp, app integrations, and conversation structuring
+    gateway_lane_capability_needed: OpenAI-compatible /v1/embeddings surface on the gateway with accounting
+    migration_status: gateway_routed_embeddings; FEATURE_MODE=off keeps the direct LangChain OpenAIEmbeddings kill-switch path
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py and backend/tests/unit/test_embeddings_gateway.py
+  - surface: gemini_screen_activity_query_embedding
+    code_path: backend/utils/llm/clients.py:gemini_embed_query
+    current_provider_model: gateway lane omi:auto:gemini-embeddings (Vertex gemini-embedding-001 :predict) in feature mode; Gemini BYOK keys keep the thin direct AI Studio embedding-001 path because the gateway Vertex adapter fail-closes BYOK
+    request_shape: single RETRIEVAL_QUERY embedding for screen-activity search
+    gateway_lane_capability_needed: OpenAI-shaped /v1/embeddings with task_type/title pass-through onto the Vertex predict adapter
+    migration_status: gateway_routed_embeddings; FEATURE_MODE=off keeps the direct AI Studio kill-switch path
+    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py and backend/tests/unit/test_embeddings_gateway.py
   - surface: omni_realtime_relay
     code_path: backend/routers/omni_relay.py
     current_provider_model: openai realtime or gemini live selected by client query

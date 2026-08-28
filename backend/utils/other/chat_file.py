@@ -16,8 +16,13 @@ from pydantic import ValidationError
 import database.chat as chat_db
 from models.chat import ChatSession, FileChat
 from utils.executors import db_executor, run_blocking
-from utils.llm.gateway_client import should_route_features_through_gateway
-from utils.llm.gateway_observability import record_direct_exception_surface
+from utils.llm.gateway_client import (
+    file_chat_auto_lane_id,
+    file_chat_feature_header,
+    get_file_chat_gateway_async_client,
+    get_file_chat_gateway_sync_client,
+    should_route_features_through_gateway,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,9 +30,11 @@ logger = logging.getLogger(__name__)
 # Images stay on the live-verified vision lane. PDF file parts use gpt-4.1: official
 # Chat Completions file-input examples document that model; gpt-5.6-luna is verified
 # for image_url only and is not pinned for an untested file-part contract.
+# In gateway feature mode both lanes are omi:auto:file-chat-* gateway lanes, so the
+# model call lands in the gateway ledger; OpenAI Files upload/download stays direct
+# (file bytes/file_id lifecycle, no model tokens).
 _FILE_CHAT_VISION_MODEL = "gpt-5.6-luna"
 _FILE_CHAT_DOCUMENT_MODEL = "gpt-4.1"
-_FILE_CHAT_SURFACE = "file_chat.openai_files_chat_completions"
 _FILE_CHAT_COMPLETION_TOKENS = 2048
 
 
@@ -98,17 +105,17 @@ def _get_async_openai() -> AsyncOpenAI:
     return _async_openai
 
 
-def _record_direct_file_chat_surface() -> None:
-    """File chat has no gateway lane (OpenAI Files + Chat Completions), so under gateway
-    feature mode it stays an acknowledged direct surface: counted, never blocked.
-    A misconfigured gateway rollout (should_route_features_through_gateway raising) must
-    not block it either."""
+def _file_chat_gateway_enabled() -> bool:
+    """Whether the model call uses the gateway file-chat lanes.
+
+    A misconfigured prod rollout (should_route_features_through_gateway raising)
+    must not break file chat: it degrades to the direct kill-switch path exactly
+    like FEATURE_MODE=off.
+    """
     try:
-        routed = should_route_features_through_gateway()
+        return should_route_features_through_gateway()
     except RuntimeError:
-        routed = True
-    if routed:
-        record_direct_exception_surface(surface=_FILE_CHAT_SURFACE)
+        return False
 
 
 def _file_is_pdf(name: str, mime_type: str) -> bool:
@@ -126,7 +133,11 @@ def _reraise_provider_file_error(error: Exception) -> NoReturn:
 
 
 def _completion_model(files: List[FileChat]) -> str:
-    if files and any(f.is_pdf() for f in files):
+    """Model id for the completions call: a gateway lane id in gateway mode."""
+    pdf = files and any(f.is_pdf() for f in files)
+    if _file_chat_gateway_enabled():
+        return file_chat_auto_lane_id(pdf=pdf)
+    if pdf:
         return _FILE_CHAT_DOCUMENT_MODEL
     return _FILE_CHAT_VISION_MODEL
 
@@ -199,7 +210,9 @@ class FileChatTool:
 
     @staticmethod
     def upload(file_path: Union[str, Path]) -> Dict[str, Any]:
-        _record_direct_file_chat_surface()
+        # OpenAI Files upload/download stays direct by design: it is the file
+        # bytes/file_id lifecycle, not a model call; only the completions hop
+        # is gateway-metered.
         result: Dict[str, Any] = {}
         file = File(file_path)
         file.get_mime_type()
@@ -239,7 +252,6 @@ class FileChatTool:
 
     def process_chat_with_file(self, question: str, file_ids: List[str]) -> str:
         """Process chat with file attachments (non-streaming, agentic tool path)."""
-        _record_direct_file_chat_surface()
         files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=9)
         files = _safe_file_chats(files_data)
         return self._ask_files(question, files)
@@ -251,7 +263,6 @@ class FileChatTool:
         callback: Optional[_StreamingCallbackProtocol] = None,
     ) -> str:
         """Process chat with file attachments (streaming)."""
-        _record_direct_file_chat_surface()
         # Offloaded: the Firestore read is sync and blocks the event loop in this async path.
         # If this pre-stream setup fails, signal the streaming callback's end before propagating
         # so it is not left dangling.
@@ -280,21 +291,32 @@ class FileChatTool:
             try:
                 messages = await self._completion_messages(question, files)
                 model = _completion_model(files)
-                client = _get_async_openai()
-                if model.startswith('gpt-5'):
-                    stream = await client.chat.completions.create(
+                if _file_chat_gateway_enabled():
+                    # Gateway lanes accept max_completion_tokens on every model
+                    # and stay in the ledger; typed SDK errors keep their meaning.
+                    stream = await get_file_chat_gateway_async_client().chat.completions.create(
                         model=model,
                         messages=messages,
                         stream=True,
                         max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                        extra_headers=file_chat_feature_header(model),
                     )
                 else:
-                    stream = await client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        stream=True,
-                        max_tokens=_FILE_CHAT_COMPLETION_TOKENS,
-                    )
+                    client = _get_async_openai()
+                    if model.startswith('gpt-5'):
+                        stream = await client.chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            stream=True,
+                            max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                        )
+                    else:
+                        stream = await client.chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            stream=True,
+                            max_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                        )
             except (openai.NotFoundError, openai.BadRequestError) as error:
                 _reraise_provider_file_error(error)
             async for chunk in stream:
@@ -311,7 +333,14 @@ class FileChatTool:
         try:
             messages = self._completion_messages_sync(question, files)
             model = _completion_model(files)
-            if model.startswith('gpt-5'):
+            if _file_chat_gateway_enabled():
+                response = get_file_chat_gateway_sync_client().chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                    extra_headers=file_chat_feature_header(model),
+                )
+            elif model.startswith('gpt-5'):
                 response = openai.chat.completions.create(
                     model=model,
                     messages=messages,

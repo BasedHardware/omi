@@ -71,6 +71,8 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'memory_l2': ('gpt-5.6-luna', 'openai'),
     'memory_l2_flex': ('gpt-5.6-luna', 'openai'),
     'chat_responses': ('gpt-5.6-luna', 'openai'),
+    'file_chat_vision': ('gpt-5.6-luna', 'openai'),
+    'file_chat_documents': ('gpt-4.1', 'openai'),
     'chat_extraction': ('gpt-5.6-luna', 'openai'),
     'chat_graph': ('gpt-5.6-luna', 'openai'),
     'goals': ('gpt-5.6-luna', 'openai'),

@@ -115,6 +115,14 @@ REQUEST_TYPE_HEADER = 'X-Vertex-AI-LLM-Request-Type'
 REQUEST_TYPE_DEDICATED = 'dedicated'
 REQUEST_TYPE_SHARED = 'shared'
 
+# Operator env knobs, named here so the desktop BFF's kill-switch path and the
+# gateway's Vertex adapter read the same strings instead of redeclaring them.
+PT_MODEL_OVERRIDE_ENV = 'OMI_VERTEX_PT_MODEL'
+OVERFLOW_MODEL_OVERRIDE_ENV = 'OMI_GEMINI_OVERFLOW_MODEL'
+OVERFLOW_ENABLED_ENV = 'OMI_GEMINI_OVERFLOW_ENABLED'
+MULTI_REGION_LOCATION_ENV = 'OMI_VERTEX_GLOBAL_LOCATION'
+REGIONAL_LOCATION_ENV = 'GCP_LOCATION'
+
 
 def _normalize(model: str) -> str:
     return (model or '').strip()
@@ -325,3 +333,42 @@ def is_provisioned_capacity_absent(status: int, message: str) -> bool:
     if 'provisioned throughput' not in text and 'dedicated' not in text:
         return False
     return any(token in text for token in ('not found', 'no provisioned', 'does not exist', 'not configured'))
+
+
+# --- Desktop company-paid lane contract ------------------------------------
+# The desktop BFF stays the auth/limit boundary, but the serving decision for
+# company-paid Gemini text lives here (single policy module): it is consumed by
+# the LLM gateway's Vertex adapter (`VertexGeminiProvider`) and mirrored by the
+# gateway lane generator, never forked at the BFF.
+
+# Gateway auto-lane id per desktop-requested text model. Lane ids cannot carry
+# dots (LaneId schema), so each anchor model gets a stable semantic slug.
+DESKTOP_TEXT_LANES: dict[str, str] = {
+    PT_MODEL_CURRENT: 'omi:auto:desktop-vertex-flash',
+    'gemini-2.5-pro': 'omi:auto:desktop-vertex-pro',
+    PT_MODEL_TARGET: 'omi:auto:desktop-vertex-target',
+    'gemini-2.5-flash-lite': 'omi:auto:desktop-vertex-flash-lite',
+}
+DESKTOP_EMBEDDING_MODEL = 'gemini-embedding-001'
+
+
+def desktop_text_lane_id(model: str) -> str | None:
+    """Gateway lane id for a desktop-requested company-paid text model."""
+    return DESKTOP_TEXT_LANES.get(_normalize(model))
+
+
+def desktop_serving_model(model: str, *, target_dedicated_ready: bool, override: str = '') -> str:
+    """The model that actually serves a company-paid desktop request for `model`.
+
+    The pin policy the desktop proxy ran in-process before the gateway move:
+      * `gemini-2.5-pro`    -> the migration target (never the $10/M on-demand pro)
+      * `PT_MODEL_CURRENT`  -> whichever model currently owns prepaid capacity
+      * client-pinned models serve as themselves (flash-lite stays the cheap floor;
+        3.1-flash-lite becomes `dedicated` automatically once it holds the order)
+    """
+    normalized = _normalize(model)
+    if normalized == 'gemini-2.5-pro':
+        return PT_MODEL_TARGET
+    if normalized == PT_MODEL_CURRENT:
+        return resolve_pt_model(target_dedicated_ready=target_dedicated_ready, override=override)
+    return normalized
