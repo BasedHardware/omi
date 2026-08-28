@@ -2637,7 +2637,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         frame: frame,
         screenFrame: screenFrame,
         isResizable: styleMask.contains(.resizable),
-        isUserDragging: isUserDragging
+        isUserDragging: isUserDragging,
+        isConversationOpen: state.conversationSurface.isOpen
       )
     else { return }
     log(

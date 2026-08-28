@@ -102,14 +102,20 @@ enum FloatingControlBarGeometry {
   /// bug). Whenever a resize leaves the top edge somewhere other than the
   /// screen top while the island is in its non-interactive chrome state,
   /// the frame is re-anchored instead of trusted.
+  /// `isConversationOpen` is the chrome/content boundary: an open conversation
+  /// surface (input, response, agent chat) is user content whose frame the user
+  /// may have moved or resized — Spaces transitions and content growth on it
+  /// must never be snapped back to the screen-top chrome anchor. Only the
+  /// closed-surface island (idle pill, hover menu) is chrome this guard owns.
   static func notchTopReanchoredFrame(
     frame: NSRect,
     screenFrame: NSRect,
     isResizable: Bool,
     isUserDragging: Bool,
+    isConversationOpen: Bool,
     epsilon: CGFloat = 0.5
   ) -> NSRect? {
-    guard !isResizable, !isUserDragging else { return nil }
+    guard !isResizable, !isUserDragging, !isConversationOpen else { return nil }
     guard screenFrame.width > 0, screenFrame.height > 0 else { return nil }
     let desiredTop = screenFrame.maxY
     guard abs(frame.maxY - desiredTop) > epsilon else { return nil }
