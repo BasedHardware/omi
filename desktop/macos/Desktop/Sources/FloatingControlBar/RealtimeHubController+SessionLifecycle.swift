@@ -10,7 +10,10 @@ extension RealtimeHubController {
   /// Open the WS now if it isn't already (no-op if already warm). BYOK → connect
   /// client-direct with the user's key. Otherwise, if signed in → mint a server-side
   /// ephemeral token and connect with it.
-  func ensureWarm() {
+  /// `userInitiated: true` = direct user intent (PTT, launch, input-return);
+  /// see `admitWarmRequest` — passive callers cannot clear an away deferral.
+  func ensureWarm(userInitiated: Bool = false) {
+    guard admitWarmRequest(userInitiated: userInitiated) else { return }
     #if DEBUG
       // The local-profile action owns an already-installed hermetic transport.
       // Re-entering normal warm-up here would replace it and mint a real provider

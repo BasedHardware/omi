@@ -32,6 +32,10 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeScreenEvidence.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+WarmRecovery.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionVoiceConfig.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubVoicePolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/UserInputPresence.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession+TransportTermination.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionTypes.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift

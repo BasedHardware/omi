@@ -326,7 +326,7 @@ class PushToTalkManager: ObservableObject {
     RealtimeHubController.shared.setup()
     // Hermetic local harness has no Firebase SDK and no live realtime providers.
     if !DesktopLocalProfile.isEnabled {
-      RealtimeHubController.shared.ensureWarm()
+      RealtimeHubController.shared.ensureWarm(userInitiated: true)
     }
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
   }
@@ -1794,7 +1794,7 @@ class PushToTalkManager: ObservableObject {
       // behind a global fence with no captured-turn owner.
       _ = RealtimeHubController.shared.beginTurn(turnID: turnID)
     }
-    RealtimeHubController.shared.ensureWarm()
+    RealtimeHubController.shared.ensureWarm(userInitiated: true)
     guard startMicrophoneCapture else { return }
     if let builtIn = preferredPTTInputOverrideDeviceID() {
       log("PushToTalkManager: waiting for realtime hub — buffering built-in mic audio")
