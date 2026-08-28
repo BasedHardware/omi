@@ -62,6 +62,20 @@ final class CaptureArchiveTests: XCTestCase {
     XCTAssertNotNil(repository.errorMessage)
   }
 
+  func testOfflineDetailKeepsAValidatedCachedCaptureSelected() async {
+    let cached = archiveCapture(id: "cached-omi")
+    let repository = CaptureArchiveRepository(
+      remote: CaptureArchiveRemoteFake(error: ArchiveTestError.offline),
+      local: CaptureArchiveLocalFake(rows: [cached], count: 1)
+    )
+
+    let detail = await repository.loadDetail(id: cached.id)
+
+    XCTAssertNil(detail)
+    XCTAssertEqual(repository.selectedCapture?.id, cached.id)
+    XCTAssertNotNil(repository.errorMessage)
+  }
+
   func testArchivePaginationCarriesOmiQueryAndAdvancesByVisibleRows() async {
     let first = archiveCapture(id: "omi-1")
     let second = archiveCapture(id: "omi-2")
@@ -75,6 +89,40 @@ final class CaptureArchiveTests: XCTestCase {
     XCTAssertEqual(repository.captures.map(\.id), ["omi-1", "omi-2"])
     XCTAssertEqual(remote.listQueries.map(\.offset), [0, 1])
     XCTAssertTrue(remote.listQueries.allSatisfy { $0.source == .omi && !$0.includeDiscarded })
+  }
+
+  func testCaptureFocusRoutingOnlyAcknowledgesTheMatchingArchiveRecordAfterResolution() {
+    let focus = ChatFirstPendingFocus.capture(id: "omi-1", momentTs: 18)
+    XCTAssertEqual(
+      CaptureArchiveFocusRoutingPolicy.initialMoment(for: focus, captureID: "omi-1"),
+      18
+    )
+    XCTAssertNil(CaptureArchiveFocusRoutingPolicy.initialMoment(for: focus, captureID: "omi-2"))
+    XCTAssertNil(
+      CaptureArchiveFocusRoutingPolicy.resolvedFocus(
+        for: focus,
+        captureID: "omi-1",
+        didResolve: false
+      )
+    )
+    XCTAssertEqual(
+      CaptureArchiveFocusRoutingPolicy.resolvedFocus(
+        for: focus,
+        captureID: "omi-1",
+        didResolve: true
+      ),
+      focus
+    )
+
+    let noMoment = ChatFirstPendingFocus.capture(id: "omi-1", momentTs: nil)
+    XCTAssertEqual(
+      CaptureArchiveFocusRoutingPolicy.resolvedFocus(
+        for: noMoment,
+        captureID: "omi-1",
+        didResolve: true
+      ),
+      noMoment
+    )
   }
 
   func testRefreshReplacesSelectedCaptureWithTheRefreshedFirstPageRow() async {
@@ -105,6 +153,44 @@ final class CaptureArchiveTests: XCTestCase {
 
     XCTAssertTrue(repository.captures.isEmpty)
     XCTAssertNil(repository.selectedCapture)
+  }
+
+  func testClearingSelectionDismissesTheCanonicalDetail() {
+    let selected = archiveCapture(id: "omi-1")
+    let repository = CaptureArchiveRepository(
+      remote: CaptureArchiveRemoteFake(rows: [selected], count: 1),
+      local: CaptureArchiveLocalFake()
+    )
+
+    repository.select(selected)
+    repository.clearSelection()
+
+    XCTAssertNil(repository.selectedCapture)
+  }
+
+  func testRuntimeOwnerChangeClearsThePreviousOwnersArchiveProjection() async {
+    let capture = archiveCapture(id: "omi-1")
+    let remote = CaptureArchiveRemoteFake(rows: [capture], count: 1)
+    let repository = CaptureArchiveRepository(
+      remote: remote,
+      local: CaptureArchiveLocalFake()
+    )
+    await repository.loadInitial()
+    repository.select(capture)
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertTrue(repository.captures.isEmpty)
+    XCTAssertNil(repository.selectedCapture)
+    XCTAssertNil(repository.count)
+    XCTAssertFalse(repository.isLoading)
+    XCTAssertNil(repository.errorMessage)
+
+    remote.rows = [archiveCapture(id: "new-owner-omi")]
+    await repository.loadInitial()
+
+    XCTAssertEqual(repository.captures.map(\.id), ["new-owner-omi"])
+    XCTAssertEqual(remote.listQueries.count, 2)
   }
 
   func testConversationEndpointIncludesSourceInSharedListAndCountFilters() {

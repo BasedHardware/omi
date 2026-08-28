@@ -516,10 +516,12 @@ private struct ChatFirstConversationsHost: View {
   var body: some View {
     Group {
       if showsCaptureArchive || pendingCaptureToken != "none" {
-        // Capture links retain their specialized playback/timestamp owner;
-        // ordinary Conversations navigation uses the established full editor.
+        // Capture links retain the source-scoped archive browser, while the
+        // selected record opens in the same canonical detail view used by
+        // ordinary Conversations navigation.
         CaptureArchivePage(
           navigation: navigation,
+          appState: appState,
           chatProvider: chatProvider,
           automationRuntime: automationRuntime
         )

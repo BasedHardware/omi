@@ -109,6 +109,7 @@ final class CaptureArchiveRepository: ObservableObject {
   private var hasLoaded = false
   private var activeDetailLoadToken = 0
   private var activeListLoadToken = 0
+  private nonisolated(unsafe) var ownerChangeObserver: NSObjectProtocol?
 
   init(
     remote: any CaptureArchiveRemoteDataSource = LiveCaptureArchiveRemoteDataSource(),
@@ -116,6 +117,19 @@ final class CaptureArchiveRepository: ObservableObject {
   ) {
     self.remote = remote
     self.local = local
+    ownerChangeObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange, object: nil, queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.resetForRuntimeOwnerChange()
+      }
+    }
+  }
+
+  deinit {
+    if let ownerChangeObserver {
+      NotificationCenter.default.removeObserver(ownerChangeObserver)
+    }
   }
 
   var hasMore: Bool {
@@ -176,6 +190,28 @@ final class CaptureArchiveRepository: ObservableObject {
 
   func select(_ capture: ServerConversation) {
     selectedCapture = capture
+  }
+
+  /// Selection is the archive's only detail-presentation state. Clearing it
+  /// also fences any detail request that was still resolving for the old row.
+  func clearSelection() {
+    activeDetailLoadToken += 1
+    selectedCapture = nil
+  }
+
+  /// An in-place account switch only posts `runtimeOwnerDidChange`. Fence all
+  /// in-flight work and discard the previous owner's source-scoped projection
+  /// before the next appearance reloads it for the new owner.
+  private func resetForRuntimeOwnerChange() {
+    activeDetailLoadToken += 1
+    activeListLoadToken += 1
+    hasLoaded = false
+    captures = []
+    selectedCapture = nil
+    count = nil
+    isLoading = false
+    isLoadingMore = false
+    errorMessage = nil
   }
 
   /// Detail always revalidates from the source-scoped list's selected capture.

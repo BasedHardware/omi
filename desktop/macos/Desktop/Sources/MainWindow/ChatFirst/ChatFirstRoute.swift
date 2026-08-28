@@ -220,6 +220,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   private let analytics: @MainActor (ChatFirstAnalyticsEvent) -> Void
   private var goalLinkResolutionGeneration: UInt = 0
   private var conversationLinkResolutionGeneration: UInt = 0
+  private nonisolated(unsafe) var ownerChangeObserver: NSObjectProtocol?
 
   init(
     defaults: UserDefaults = .standard,
@@ -246,6 +247,19 @@ final class ChatFirstShellNavigation: ObservableObject {
     lastAcknowledgedFocusKind = nil
     focusedEntityID = nil
     isFocusedEntityAcknowledged = false
+    ownerChangeObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange, object: nil, queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.resetOwnerScopedTransientState()
+      }
+    }
+  }
+
+  deinit {
+    if let ownerChangeObserver {
+      NotificationCenter.default.removeObserver(ownerChangeObserver)
+    }
   }
 
   func selectPrimary(
@@ -440,6 +454,16 @@ final class ChatFirstShellNavigation: ObservableObject {
     pendingFocusDestination = nil
     focusedEntityID = nil
     isFocusedEntityAcknowledged = false
+  }
+
+  /// Persisted route preference is owner-neutral, but fetched records and
+  /// entity focus are not. An in-place account switch must invalidate both the
+  /// values and any async link resolution that could repopulate them.
+  private func resetOwnerScopedTransientState() {
+    invalidateLinkResolutions()
+    pendingConversation = nil
+    clearFocus()
+    lastAcknowledgedFocusKind = nil
   }
 
   private func invalidateLinkResolutions() {

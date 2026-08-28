@@ -157,6 +157,29 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertNil(navigation.pendingFocus)
   }
 
+  func testRuntimeOwnerChangeClearsTransientConversationAndFocusRouting() throws {
+    let suiteName = "ChatFirstShellTests.owner-change.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    navigation.open(conversation: conversation(id: "owner-a-conversation"))
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertNil(navigation.pendingConversation)
+
+    navigation.open(focus: .capture(id: "owner-a-capture", momentTs: 12))
+    let staleGeneration = navigation.beginConversationLinkResolution()
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertNil(navigation.pendingFocus)
+    XCTAssertNil(navigation.focusedEntityID)
+    XCTAssertFalse(navigation.isFocusedEntityAcknowledged)
+    XCTAssertFalse(navigation.isCurrentConversationLinkResolution(staleGeneration))
+  }
+
   func testBackNavigationReturnsToChatFromPrimaryAndSettingsRoutes() throws {
     let suiteName = "ChatFirstShellTests.escape-navigation.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

@@ -7,6 +7,52 @@ enum ConversationDetailPane: Equatable {
   case transcript
 }
 
+enum ConversationDetailRequestGate {
+  static func canApply(
+    requestGeneration: Int,
+    currentGeneration: Int,
+    isCancelled: Bool
+  ) -> Bool {
+    !isCancelled && requestGeneration == currentGeneration
+  }
+}
+
+/// A parent can replace a conversation row without changing its identity
+/// (rename, folder move, processing completion). Keying detail work only by ID
+/// leaves the open panel pinned to the old value, so these visible revisions
+/// participate in the request identity as well.
+struct ConversationDetailRequestToken: Hashable {
+  let conversationID: String
+  let updatedAt: Date?
+  let title: String
+  let folderID: String?
+  let status: String
+
+  init(conversation: ServerConversation) {
+    self.init(
+      conversationID: conversation.id,
+      updatedAt: conversation.updatedAt,
+      title: conversation.title,
+      folderID: conversation.folderId,
+      status: String(describing: conversation.status)
+    )
+  }
+
+  init(
+    conversationID: String,
+    updatedAt: Date?,
+    title: String,
+    folderID: String?,
+    status: String
+  ) {
+    self.conversationID = conversationID
+    self.updatedAt = updatedAt
+    self.title = title
+    self.folderID = folderID
+    self.status = status
+  }
+}
+
 struct ConversationDetailProcessingLayout<Banner: View, Content: View>: View {
   let isProcessing: Bool
   let banner: Banner
@@ -42,6 +88,14 @@ struct ConversationDetailView: View {
   var onDelete: (() -> Void)?
   var onTitleUpdated: ((String) -> Void)?
 
+  /// Optional capture-archive context. The archive owns the list/filter; this
+  /// canonical detail owns the source-specific playback affordances so an Omi
+  /// capture never gets a second full detail presentation.
+  var initialCaptureMomentTimestamp: TimeInterval? = nil
+  var onCaptureFocusResolved: ((Bool) -> Void)? = nil
+  var onDiscussInChat: (() -> Void)? = nil
+  var onOpenLinkedTask: ((String) -> Void)? = nil
+
   // People (speaker naming). Owned here, not injected: every surface that can
   // present a conversation detail — Conversations, Memories, Dashboard citations —
   // must offer the same speaker assignment. Requiring callers to thread closures
@@ -51,6 +105,10 @@ struct ConversationDetailView: View {
   @ObservedObject private var automation = ConversationDetailAutomationState.shared
 
   @StateObject private var appProvider = AppProvider()
+  /// Playback belongs to the canonical detail, not to the capture browser.
+  /// This keeps the signed URL and AVPlayer lifecycle scoped to whichever
+  /// conversation detail is currently visible.
+  @StateObject private var capturePlayback = CapturePlaybackController()
   /// This note's screenshots, owned here rather than inside the summary because both halves of the
   /// note read them: the strip is in the summary, and the banner is the *header's* background.
   /// Constructing it is free — the initialiser only captures closures — and it starts no work
@@ -87,6 +145,13 @@ struct ConversationDetailView: View {
   @State private var editedTitle = ""
   @State private var isUpdatingTitle = false
   @State private var isDeleting = false
+
+  // Capture deep-link focus state. A successful acknowledgement is terminal;
+  // unresolved attempts intentionally remain retryable when audio is refreshed.
+  @State private var didResolveInitialCaptureFocus = false
+  @State private var detailLoadGeneration = 0
+  @State private var detailReadyConversationID: String?
+  @State private var captureFocusGeneration = 0
 
   // Speaker naming state
   @State private var selectedSegmentForNaming: TranscriptSegment? = nil
@@ -161,6 +226,22 @@ struct ConversationDetailView: View {
     transcriptOpen ? .transcript : .summary
   }
 
+  /// The canonical detail only renders capture playback for first-party Omi
+  /// captures. Other conversation sources retain the same summary/transcript
+  /// editor without advertising unavailable audio controls.
+  static func showsCapturePlayback(for source: ConversationSource?) -> Bool {
+    source == .omi
+  }
+
+  private var capturePlaybackTaskID: String {
+    let moment = initialCaptureMomentTimestamp.map { String($0) } ?? "none"
+    return "\(conversation.id):\(detailReadyConversationID ?? "loading"):\(moment)"
+  }
+
+  private var detailRequestToken: ConversationDetailRequestToken {
+    ConversationDetailRequestToken(conversation: conversation)
+  }
+
   var body: some View {
     Group {
       switch Self.visiblePane(transcriptOpen: showTranscriptDrawer) {
@@ -217,14 +298,28 @@ struct ConversationDetailView: View {
         hasAppeared = true
       }
     }
-    .onChange(of: conversation.id) { _, conversationId in
-      showTranscriptDrawer = ConversationDetailAutomationState.shared.syncPresentedDetail(
-        conversationId: conversationId,
-        transcriptDrawerOpen: showTranscriptDrawer
-      )
+    .onChange(of: detailRequestToken) { previous, current in
+      detailLoadGeneration &+= 1
+      detailReadyConversationID = nil
+      isLoadingConversation = false
+      isEnrichingDeferred = false
+      loadedConversation = nil
+      if previous.conversationID != current.conversationID {
+        captureFocusGeneration &+= 1
+        showTranscriptDrawer = ConversationDetailAutomationState.shared.syncPresentedDetail(
+          conversationId: current.conversationID,
+          transcriptDrawerOpen: showTranscriptDrawer
+        )
+        didResolveInitialCaptureFocus = false
+        capturePlayback.clear()
+      }
     }
     .onDisappear {
+      detailLoadGeneration &+= 1
+      captureFocusGeneration &+= 1
+      detailReadyConversationID = nil
       ConversationDetailAutomationState.shared.clear(conversationId: conversation.id)
+      capturePlayback.clear()
     }
     .onChange(of: showTranscriptDrawer) { _, newValue in
       ConversationDetailAutomationState.shared.setTranscriptDrawerOpen(
@@ -234,39 +329,62 @@ struct ConversationDetailView: View {
       guard automation.openConversationId == conversation.id, isOpen else { return }
       showTranscriptDrawer = true
     }
-    .task {
+    .task(id: detailRequestToken) {
+      detailLoadGeneration &+= 1
+      let requestGeneration = detailLoadGeneration
+      let requestedConversation = conversation
+      detailReadyConversationID = nil
+
       preferredSummaryAppId =
         UserDefaults.standard.string(forKey: .preferredSummarizationAppId).flatMap { $0.isEmpty ? nil : $0 }
       await appProvider.fetchApps()
+      guard isCurrentDetailRequest(requestGeneration) else { return }
       await AppState.current?.fetchPeople()
-      AnalyticsManager.shared.conversationDetailOpened(conversationId: conversation.id)
+      guard isCurrentDetailRequest(requestGeneration) else { return }
+      AnalyticsManager.shared.conversationDetailOpened(conversationId: requestedConversation.id)
 
       // All detail reads go through the repository. It can paint a complete
       // cached detail immediately, but always revalidates server-owned fields.
-      if conversation.deferred || conversation.status == .processing {
+      if requestedConversation.deferred || requestedConversation.status == .processing {
         isEnrichingDeferred = true
         var attempts = 0
         while attempts < 15 {
-          guard let appState = AppState.current else { break }
-          let fetched = await appState.loadConversationDetail(conversation) { cached in
+          guard isCurrentDetailRequest(requestGeneration), let appState = AppState.current else { break }
+          let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
+            guard isCurrentDetailRequest(requestGeneration) else { return }
             loadedConversation = cached
           }
+          guard isCurrentDetailRequest(requestGeneration) else { return }
           loadedConversation = fetched
           if fetched.status != .processing { break }
           attempts += 1
           try? await Task.sleep(nanoseconds: 2_000_000_000)
         }
+        guard isCurrentDetailRequest(requestGeneration) else { return }
         isEnrichingDeferred = false
-        return
+      } else {
+        isLoadingConversation = true
+        if let appState = AppState.current {
+          let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
+            guard isCurrentDetailRequest(requestGeneration) else { return }
+            loadedConversation = cached
+          }
+          guard isCurrentDetailRequest(requestGeneration) else { return }
+          loadedConversation = fetched
+        }
+        guard isCurrentDetailRequest(requestGeneration) else { return }
+        isLoadingConversation = false
       }
 
-      isLoadingConversation = true
-      if let appState = AppState.current {
-        loadedConversation = await appState.loadConversationDetail(conversation) { cached in
-          loadedConversation = cached
-        }
-      }
-      isLoadingConversation = false
+      guard isCurrentDetailRequest(requestGeneration) else { return }
+      detailReadyConversationID = requestedConversation.id
+    }
+    .task(id: capturePlaybackTaskID) {
+      guard detailReadyConversationID == conversation.id else { return }
+      captureFocusGeneration &+= 1
+      let requestGeneration = captureFocusGeneration
+      didResolveInitialCaptureFocus = false
+      await prepareCapturePlaybackIfNeeded(requestGeneration: requestGeneration)
     }
     .onReceive(
       NotificationCenter.default.publisher(for: .desktopAutomationShowConversationTranscriptRequested)
@@ -478,6 +596,26 @@ struct ConversationDetailView: View {
 
   private var inlineActionButtons: some View {
     HStack(spacing: OmiSpacing.sm) {
+      if let onDiscussInChat {
+        Button(action: onDiscussInChat) {
+          HStack(spacing: OmiSpacing.xs) {
+            Image(systemName: "bubble.left.and.bubble.right")
+              .scaledFont(size: OmiType.caption)
+            Text("Discuss in Chat")
+              .scaledFont(size: OmiType.caption, weight: .medium)
+          }
+          .foregroundColor(Ink.secondary)
+          .padding(.horizontal, OmiSpacing.md)
+          .padding(.vertical, OmiSpacing.xs)
+          .background(Capsule().fill(Ink.rowFillHover))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Discuss this conversation in Chat")
+        // Preserve the capture archive's automation contract while the
+        // presentation itself moves into the canonical detail.
+        .accessibilityIdentifier("chat-first-capture-discuss-\(conversation.id)")
+      }
+
       // Copy share link (minting flips visibility to shared; the control
       // discloses and confirms that itself).
       ConversationShareLinkButton(
@@ -600,10 +738,12 @@ struct ConversationDetailView: View {
 
   private func updateTitle() async {
     guard !editedTitle.isEmpty else { return }
+    let requestGeneration = detailLoadGeneration
     isUpdatingTitle = true
     defer { isUpdatingTitle = false }
 
     await AppState.current?.updateConversationTitle(conversation.id, title: editedTitle)
+    guard isCurrentDetailRequest(requestGeneration) else { return }
     onTitleUpdated?(editedTitle)
   }
 
@@ -652,6 +792,13 @@ struct ConversationDetailView: View {
   private var summaryBeforeScreenshots: some View {
     let selection = ConversationSummarySelection.primarySummary(for: displayConversation)
 
+    // Omi captures use the same detail shell as every other conversation. The
+    // only source-specific addition is this compact playback panel; the
+    // capture browser no longer owns a competing summary/transcript layout.
+    if Self.showsCapturePlayback(for: displayConversation.source) {
+      capturePlaybackSection
+    }
+
     // Overview section (selected app result, or the structured fallback)
     if !selection.content.isEmpty {
       overviewSection
@@ -693,6 +840,101 @@ struct ConversationDetailView: View {
 
     // Suggested apps section
     suggestedAppsSection
+  }
+
+  // MARK: - Capture Playback
+
+  @ViewBuilder
+  private var capturePlaybackSection: some View {
+    ConversationCapturePlaybackSection(
+      capture: displayConversation,
+      playback: capturePlayback,
+      onPrepare: { startCapturePlaybackPreparation() },
+      onRefresh: { startCapturePlaybackPreparation(forceRefresh: true) },
+      onSeek: { segment in
+        Task { _ = await capturePlayback.seekToMoment(wallOffset: segment.start) }
+      }
+    )
+  }
+
+  /// Resolve the capture's signed URL after the canonical detail has loaded.
+  /// A nil moment is acknowledged once preparation returns any honest state;
+  /// an explicit moment is acknowledged only after exact aggregate seeking.
+  @MainActor
+  private func prepareCapturePlaybackIfNeeded(
+    forceRefresh: Bool = false,
+    requestGeneration: Int
+  ) async {
+    guard isCurrentCaptureFocusRequest(requestGeneration) else { return }
+    guard Self.showsCapturePlayback(for: displayConversation.source) else {
+      if initialCaptureMomentTimestamp == nil {
+        reportInitialCaptureFocus(resolved: true)
+      } else {
+        reportInitialCaptureFocus(resolved: false)
+      }
+      return
+    }
+
+    guard
+      let resolution = await capturePlayback.prepare(
+        for: displayConversation,
+        forceRefresh: forceRefresh
+      )
+    else { return }
+    guard isCurrentCaptureFocusRequest(requestGeneration) else { return }
+
+    guard let requestedMoment = initialCaptureMomentTimestamp else {
+      reportInitialCaptureFocus(resolved: true)
+      return
+    }
+
+    let didCompleteSeek = await capturePlayback.seekToMoment(wallOffset: requestedMoment)
+    guard isCurrentCaptureFocusRequest(requestGeneration) else { return }
+    let resolved = CaptureFocusAcknowledgementPolicy.canAcknowledge(
+      requestedMoment: requestedMoment,
+      resolution: resolution,
+      didCompleteSeek: didCompleteSeek
+    )
+    reportInitialCaptureFocus(resolved: resolved)
+  }
+
+  @MainActor
+  private func startCapturePlaybackPreparation(forceRefresh: Bool = false) {
+    captureFocusGeneration &+= 1
+    let requestGeneration = captureFocusGeneration
+    didResolveInitialCaptureFocus = false
+    Task {
+      await prepareCapturePlaybackIfNeeded(
+        forceRefresh: forceRefresh,
+        requestGeneration: requestGeneration
+      )
+    }
+  }
+
+  private func isCurrentDetailRequest(_ requestGeneration: Int) -> Bool {
+    ConversationDetailRequestGate.canApply(
+      requestGeneration: requestGeneration,
+      currentGeneration: detailLoadGeneration,
+      isCancelled: Task.isCancelled
+    )
+  }
+
+  private func isCurrentCaptureFocusRequest(_ requestGeneration: Int) -> Bool {
+    ConversationDetailRequestGate.canApply(
+      requestGeneration: requestGeneration,
+      currentGeneration: captureFocusGeneration,
+      isCancelled: Task.isCancelled
+    )
+  }
+
+  private func reportInitialCaptureFocus(resolved: Bool) {
+    // Keep failed attempts retryable (for example, when aggregate audio is
+    // still pending), but never send a second success callback for one detail.
+    if resolved {
+      guard !didResolveInitialCaptureFocus else { return }
+      didResolveInitialCaptureFocus = true
+    }
+    onCaptureFocusResolved?(resolved)
   }
 
   // MARK: - Transcript Drawer
@@ -963,19 +1205,34 @@ struct ConversationDetailView: View {
   // MARK: - Metadata Section
 
   private var metadataSection: some View {
-    HStack(spacing: OmiSpacing.md) {
-      // Source chip (device indicator)
-      sourceChip
+    let participantLabels = Array(Set(displayConversation.transcriptSegments.compactMap(\.speaker))).sorted()
+    return VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(spacing: OmiSpacing.md) {
+        // Source chip (device indicator)
+        sourceChip
 
-      // Duration chip
-      metadataChip(icon: "hourglass", text: displayConversation.formattedDuration)
+        // Duration chip
+        metadataChip(icon: "hourglass", text: displayConversation.formattedDuration)
 
-      // Category chip
-      if !displayConversation.structured.category.isEmpty && displayConversation.structured.category != "other" {
-        metadataChip(icon: "tag", text: displayConversation.structured.category.capitalized)
+        // Category chip
+        if !displayConversation.structured.category.isEmpty && displayConversation.structured.category != "other" {
+          metadataChip(icon: "tag", text: displayConversation.structured.category.capitalized)
+        }
+
+        Spacer()
       }
 
-      Spacer()
+      if let address = displayConversation.geolocation?.address, !address.isEmpty {
+        Label(address, systemImage: "mappin.and.ellipse")
+          .scaledFont(size: OmiType.caption)
+          .foregroundStyle(Ink.secondary)
+      }
+
+      if !participantLabels.isEmpty {
+        Label(participantLabels.joined(separator: ", "), systemImage: "person.2")
+          .scaledFont(size: OmiType.caption)
+          .foregroundStyle(Ink.secondary)
+      }
     }
   }
 
@@ -1104,6 +1361,7 @@ struct ConversationDetailView: View {
   // MARK: - Reprocess
 
   private func reprocessWithApp(_ app: OmiApp) async {
+    let requestGeneration = detailLoadGeneration
     isReprocessing = true
     defer {
       isReprocessing = false
@@ -1119,6 +1377,7 @@ struct ConversationDetailView: View {
     // otherwise it silently clears apps_results and produces no summary.
     if !app.enabled {
       await appProvider.enableApp(app)
+      guard isCurrentDetailRequest(requestGeneration) else { return }
     }
 
     do {
@@ -1128,7 +1387,9 @@ struct ConversationDetailView: View {
         conversationId: conversation.id,
         appId: app.id
       )
+      guard isCurrentDetailRequest(requestGeneration) else { return }
       loadedConversation = updated
+      AppState.current?.replaceConversation(updated)
     } catch {
       logError("Failed to reprocess conversation", error: error)
     }
@@ -1191,7 +1452,23 @@ struct ConversationDetailView: View {
 
             Spacer(minLength: OmiSpacing.sm)
 
-            addToTasksButton(for: item)
+            if let taskID = item.targetTaskID, let onOpenLinkedTask {
+              Button {
+                onOpenLinkedTask(taskID)
+              } label: {
+                HStack(spacing: OmiSpacing.xxs) {
+                  Image(systemName: "checklist")
+                  Text("Open linked task")
+                }
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
+              }
+              .buttonStyle(.plain)
+              .accessibilityIdentifier("chat-first-capture-task-\(taskID)")
+              .help("Open the task linked to this action item")
+            } else {
+              addToTasksButton(for: item)
+            }
 
             Button {
               ConversationDetailAutomationState.shared.requestOpen(
@@ -1276,6 +1553,133 @@ struct ConversationDetailView: View {
     .background(Ink.surface)
   }
 #endif
+
+/// Source-specific controls embedded in the canonical conversation detail.
+/// This is deliberately a section, rather than another page-level detail
+/// view: summary, transcript, title editing, sharing, and deletion remain
+/// owned by `ConversationDetailView` for every conversation source.
+private struct ConversationCapturePlaybackSection: View {
+  let capture: ServerConversation
+  @ObservedObject var playback: CapturePlaybackController
+  let onPrepare: () -> Void
+  let onRefresh: () -> Void
+  let onSeek: (TranscriptSegment) -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      HStack(spacing: OmiSpacing.sm) {
+        Image(systemName: "waveform")
+          .scaledFont(size: OmiType.body)
+          .foregroundStyle(Ink.secondary)
+        Text("Playback")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundStyle(Ink.secondary)
+        Spacer()
+      }
+
+      playbackControls
+
+      if !capture.transcriptSegments.isEmpty {
+        Divider().overlay(Ink.separator.opacity(0.45))
+        moments
+      }
+    }
+    .padding(OmiSpacing.lg)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+        .fill(Ink.rowFillHover.opacity(0.45))
+    )
+    .accessibilityIdentifier("conversation-detail-capture-playback")
+  }
+
+  @ViewBuilder
+  private var playbackControls: some View {
+    if playback.isResolving {
+      HStack(spacing: OmiSpacing.sm) {
+        ProgressView()
+        Text("Preparing audio")
+          .scaledFont(size: OmiType.body)
+          .foregroundStyle(Ink.secondary)
+      }
+      .accessibilityLabel("Preparing capture audio")
+    } else if let resolution = playback.resolution {
+      HStack(spacing: OmiSpacing.md) {
+        switch resolution {
+        case .readyAggregate, .fileFallback:
+          Button {
+            playback.playOrPause()
+          } label: {
+            Label("Play audio", systemImage: "play.fill")
+          }
+          .buttonStyle(.bordered)
+          .accessibilityLabel("Play capture audio")
+          .accessibilityIdentifier("chat-first-capture-play")
+        case .pending, .locked, .unavailable, .noAudio:
+          Button("Check audio", action: onRefresh)
+            .buttonStyle(.bordered)
+            .disabled(capture.isLocked)
+            .accessibilityLabel("Check capture audio")
+            .accessibilityIdentifier("chat-first-capture-check-audio-\(capture.id)")
+        }
+
+        Text(resolution.userFacingMessage)
+          .scaledFont(size: OmiType.caption)
+          .foregroundStyle(Ink.secondary)
+      }
+    } else {
+      Button("Prepare audio", action: onPrepare)
+        .buttonStyle(.bordered)
+        .accessibilityLabel("Prepare capture audio")
+        .accessibilityIdentifier("chat-first-capture-prepare-audio")
+    }
+  }
+
+  private var moments: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      Text("Timestamped moments")
+        .scaledFont(size: OmiType.body, weight: .semibold)
+        .foregroundStyle(Ink.secondary)
+
+      ForEach(Array(capture.transcriptSegments.prefix(12))) { segment in
+        Button {
+          onSeek(segment)
+        } label: {
+          HStack(alignment: .top, spacing: OmiSpacing.md) {
+            Text(Self.shortTimestamp(for: segment.start))
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundStyle(Ink.secondary)
+              .frame(width: 60, alignment: .leading)
+            Text(segment.text)
+              .scaledFont(size: OmiType.body)
+              .foregroundStyle(Ink.primary)
+              .lineLimit(2)
+            Spacer(minLength: 0)
+            Image(systemName: "play.circle")
+              .foregroundStyle(Ink.secondary)
+          }
+          .padding(.vertical, OmiSpacing.xs)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!canSeekMoment(segment))
+        .accessibilityLabel("Seek to \(Self.shortTimestamp(for: segment.start)): \(segment.text)")
+        .accessibilityHint(canSeekMoment(segment) ? "Seeks the capture audio" : "Audio is still preparing")
+        .accessibilityIdentifier("chat-first-capture-moment-\(segment.id)")
+      }
+    }
+  }
+
+  private func canSeekMoment(_ segment: TranscriptSegment) -> Bool {
+    guard case .readyAggregate(let artifact) = playback.resolution else { return false }
+    return artifact.artifactOffset(forWallOffset: segment.start) != nil
+  }
+
+  private static func shortTimestamp(for offset: TimeInterval) -> String {
+    let totalSeconds = max(0, Int(offset))
+    return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+  }
+}
 
 // Preview helper
 extension ServerConversation {

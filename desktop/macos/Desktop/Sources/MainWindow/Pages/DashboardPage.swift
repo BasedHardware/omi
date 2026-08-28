@@ -246,6 +246,7 @@ struct DashboardPage: View {
   @State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports
   @State private var appsPopupPresentationID = UUID()
   @State private var isLoadingCitation = false
+  @State private var citationLoadGeneration: UInt64 = 0
   @State private var isCaptureMonitoring = false
   @State private var isTogglingCapture = false
   @State private var isTogglingListening = false
@@ -521,6 +522,11 @@ struct DashboardPage: View {
       }
       .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
         syncCaptureState()
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+        citationLoadGeneration &+= 1
+        citedConversation = nil
+        isLoadingCitation = false
       }
       .onReceive(NotificationCenter.default.publisher(for: .whatMattersNowContextDidRefresh)) { notification in
         guard let projection = notification.object as? OmiAPI.WhatMattersNowProjection else { return }
@@ -1883,18 +1889,22 @@ struct DashboardPage: View {
       return
     }
 
+    citationLoadGeneration &+= 1
+    let requestGeneration = citationLoadGeneration
     isLoadingCitation = true
 
     Task {
       do {
         let conversation = try await APIClient.shared.getConversation(id: citation.id)
         await MainActor.run {
+          guard requestGeneration == citationLoadGeneration else { return }
           citedConversation = conversation
           isLoadingCitation = false
         }
       } catch {
         logError("Failed to fetch cited conversation", error: error)
         await MainActor.run {
+          guard requestGeneration == citationLoadGeneration else { return }
           isLoadingCitation = false
         }
       }

@@ -126,6 +126,7 @@ struct ConversationsPage: View {
       // folder sheets) otherwise keeps rendering the previous account's rows even
       // after AppState and the repository reset.
       .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+        selectedConversation = nil
         searchQuery = ""
         searchResults = []
         isSearching = false
@@ -142,6 +143,12 @@ struct ConversationsPage: View {
         isMerging = false
         mergeError = nil
         isLiveTranscriptExpanded = false
+      }
+      .onReceive(appState.$conversations) { conversations in
+        guard let selectedConversation,
+          let refreshed = conversations.first(where: { $0.id == selectedConversation.id })
+        else { return }
+        self.selectedConversation = refreshed
       }
       .dismissableSheet(isPresented: $showCreateFolderSheet) {
         FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })

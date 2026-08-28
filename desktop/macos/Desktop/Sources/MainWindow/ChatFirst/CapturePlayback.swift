@@ -2,7 +2,7 @@ import AVFoundation
 import Combine
 import Foundation
 
-/// Narrow, page-owned playback boundary for the capture archive. A ready
+/// Narrow playback boundary owned by the canonical conversation detail. A ready
 /// aggregate artifact is the only state that promises exact moment seeking.
 protocol CapturePlaybackProviding: Sendable {
   func resolvePlayback(for capture: ServerConversation) async -> CapturePlaybackResolution
@@ -127,8 +127,8 @@ struct LiveCapturePlaybackProvider: CapturePlaybackProviding {
   }
 }
 
-/// `AVPlayer` lifecycle stays inside the archive. Signed URLs are held only in
-/// the player item for the active page and are never persisted or logged.
+/// `AVPlayer` lifecycle stays inside the visible canonical detail. Signed URLs
+/// are held only in the player item and are never persisted or logged.
 @MainActor
 final class CapturePlaybackController: ObservableObject {
   @Published private(set) var resolution: CapturePlaybackResolution?

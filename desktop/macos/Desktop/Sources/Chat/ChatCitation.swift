@@ -561,6 +561,40 @@ extension ChatMessage {
       })
   }
 
+  /// The adapter's terminal result is the complete provider response. Streaming
+  /// deltas are only a low-latency projection and may legally omit the final
+  /// chunk, so a successful turn must settle its visible answer from this text
+  /// before citation decoration and journal persistence.
+  mutating func applyAuthoritativeTerminalAnswer(_ terminalText: String) {
+    guard !terminalText.isEmpty else { return }
+
+    text = terminalText
+    let lastToolIndex = contentBlocks.lastIndex { block in
+      if case .toolCall = block { return true }
+      return false
+    }
+    let answerStartIndex = lastToolIndex.map { $0 + 1 } ?? contentBlocks.startIndex
+    var reconciled: [ChatContentBlock] = []
+    var replacedAnswerText = false
+
+    for (index, block) in contentBlocks.enumerated() {
+      guard index >= answerStartIndex, case .text(let id, _) = block else {
+        reconciled.append(block)
+        continue
+      }
+      if !replacedAnswerText {
+        reconciled.append(.text(id: id, text: terminalText))
+        replacedAnswerText = true
+      }
+    }
+
+    if !replacedAnswerText {
+      let insertionIndex = lastToolIndex.map { min($0 + 1, reconciled.count) } ?? 0
+      reconciled.insert(.text(id: "\(id):terminal", text: terminalText), at: insertionIndex)
+    }
+    contentBlocks = reconciled
+  }
+
   mutating func applySelectedSourceFallback(
     selectedReferences: [ChatCitationReference],
     requestedSources: Bool,
