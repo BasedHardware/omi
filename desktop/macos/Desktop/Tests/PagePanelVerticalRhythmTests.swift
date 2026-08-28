@@ -54,4 +54,15 @@ final class PagePanelVerticalRhythmTests: XCTestCase {
       RewindSearchLayout.panelGap,
       "all destination surfaces must use the same search-to-content gap")
   }
+
+  func testPageListsStartFullyOpaqueAndKeepOnlyTheOverflowCueBelow() {
+    XCTAssertEqual(
+      PageGlass.topFade,
+      0,
+      "the first visible row must not be faded when a page loads at its resting scroll position")
+    XCTAssertGreaterThan(
+      PageGlass.bottomFade,
+      0,
+      "the bottom edge may still signal that additional content continues below the viewport")
+  }
 }

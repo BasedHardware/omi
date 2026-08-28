@@ -236,7 +236,7 @@ struct SpineStream: View {
       guard let anchor else { return }
       Task { @MainActor in viewport.report(dayID: anchor.dayID, hour: anchor.hour) }
     }
-    .glassScrollFade(top: 6, bottom: 18)
+    .glassScrollFade(bottom: 18)
   }
 
   /// A layout-neutral reporter behind each row. A `GeometryReader` in a `background` never affects
