@@ -3731,6 +3731,31 @@ final class DesktopAutomationActionRegistry {
         ?? "[[MARKER:speaker-naming]] Harness Speaker"
       let segmentIndex = max(0, Int(params["segmentIndex"] ?? "") ?? 0)
 
+      // Raw mode: drive assignSpeakerToSegments with the ids exactly as given,
+      // without resolving the conversation first — the seam that exercises the
+      // local-first fallback for conversations the backend does not have yet.
+      if let rawConversationId = params["rawConversationId"]?.trimmingCharacters(
+        in: .whitespacesAndNewlines), !rawConversationId.isEmpty
+      {
+        let rawSegmentIds = (params["rawSegmentIds"] ?? "").split(separator: ",").map(String.init)
+        guard !rawSegmentIds.isEmpty else { return ["error": "rawSegmentIds required in raw mode"] }
+        guard let person = await appState.createPerson(name: personName) else {
+          return ["error": "failed to create person"]
+        }
+        let assigned = await appState.assignSpeakerToSegments(
+          conversationId: rawConversationId,
+          segmentIds: rawSegmentIds,
+          personId: person.id,
+          isUser: false
+        )
+        return [
+          "raw_mode": "true",
+          "assigned": assigned ? "true" : "false",
+          "conversation_id": rawConversationId,
+          "person_id": person.id,
+        ]
+      }
+
       var conversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
       if conversationId == "latest" || conversationId?.isEmpty != false {
         if appState.conversations.isEmpty {

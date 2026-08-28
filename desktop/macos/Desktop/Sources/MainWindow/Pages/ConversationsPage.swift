@@ -76,21 +76,6 @@ struct ConversationsPage: View {
               }
             }
           },
-          people: appState.people,
-          onFetchPeople: {
-            await appState.fetchPeople()
-          },
-          onCreatePerson: { name in
-            await appState.createPerson(name: name)
-          },
-          onAssignSpeaker: { conversationId, segmentIds, personId, isUser in
-            await appState.assignSpeakerToSegments(
-              conversationId: conversationId,
-              segmentIds: segmentIds,
-              personId: personId,
-              isUser: isUser
-            )
-          }
         )
       } else {
         // Main view with recording header and conversation list
