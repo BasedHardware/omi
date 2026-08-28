@@ -2040,6 +2040,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get memoryDeleted => 'خاطره حذف شد.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'بازگشت';
 
   @override
@@ -9842,6 +9845,20 @@ class AppLocalizationsFa extends AppLocalizations {
   String get accountCutoverOpenStore => 'فتح المتجر';
 
   @override
+  String get chatScopeToday => 'امروز';
+
+  @override
+  String get chatScopeThisWeek => 'این هفته';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'درباره: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'درباره این بپرسید';
+
+  @override
   String get sendRawAudioToOmi => 'ارسال صدای خام به Omi';
 
   @override
@@ -9853,4 +9870,47 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'اشتراک‌گذاری اطلاعات تشخیصی ممکن نشد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get appDisabledTitle => 'این برنامه غیرفعال است و نمی‌توان آن را نصب کرد.';
+
+  @override
+  String get appDisabledWebhookFailures => 'نقطه پایانی آن ۷۲ ساعت پیاپی ناموفق بود، بنابراین ارسال‌ها متوقف شد.';
+
+  @override
+  String get appDisabledGeneric => 'توسط Omi غیرفعال شد.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'ابتدا نقطه پایانی را درست کنید — فعال‌سازی مجدد هر نشانی اینترنتی پیکربندی‌شده را دوباره بررسی می‌کند.';
+
+  @override
+  String get appReEnable => 'فعال‌سازی مجدد';
+
+  @override
+  String get appReEnableFailedTitle => 'فعال‌سازی مجدد ممکن نشد';
+
+  @override
+  String get appReEnableFailedBody => 'این برنامه دوباره فعال نشد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'در $date غیرفعال شد.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'آخرین خطا: $error';
+  }
+
+  @override
+  String get prerecordedTranscript => 'از پیش ضبط‌شده';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant هنوز در حال ضبط است، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'حافظه Pendant پر است و همچنان در حالت ضبط قرار دارد، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.';
 }

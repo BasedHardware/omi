@@ -71,6 +71,7 @@ def _sample_tiered_memory_dict(memory_id: str = "mem-1") -> dict:
 
 def _purge_stub_memory_modules() -> None:
     import sys
+    from types import ModuleType
 
     for name in list(sys.modules):
         if not (name.startswith("utils.memory") or name in {"database.memories", "database.vector_db"}):
@@ -78,6 +79,21 @@ def _purge_stub_memory_modules() -> None:
         mod = sys.modules.get(name)
         if not isinstance(getattr(mod, "__file__", None), str):
             sys.modules.pop(name, None)
+
+    # Pytest collects later test modules before fixture teardown.  Their real,
+    # file-backed submodules therefore remain in sys.modules even when the
+    # synthetic package shell used above is removed.  Restore the corresponding
+    # parent attributes so dotted monkeypatch resolution observes the same module
+    # graph as a normal Python import.
+    for name, mod in list(sys.modules.items()):
+        if not (name.startswith("utils.memory.") or name in {"database.memories", "database.vector_db"}):
+            continue
+        if not isinstance(getattr(mod, "__file__", None), str):
+            continue
+        parent_name, child_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if isinstance(parent, ModuleType):
+            setattr(parent, child_name, mod)
 
 
 def _load_memory_service(monkeypatch):
@@ -132,7 +148,14 @@ def _reset_universal_memory(monkeypatch):
 def service_mod(monkeypatch):
     # Import isolation and module graph repair belong to setup, not the unit
     # behavior's measured call phase.
-    return _load_memory_service(monkeypatch)
+    module = _load_memory_service(monkeypatch)
+    try:
+        yield module
+    finally:
+        # Do not leak synthetic package shells into later test modules in the
+        # same pytest process; string-based monkeypatch resolution must see the
+        # real utils.memory package topology regardless of collection order.
+        _purge_stub_memory_modules()
 
 
 def test_arbitrary_uids_share_one_universal_reader(service_mod):

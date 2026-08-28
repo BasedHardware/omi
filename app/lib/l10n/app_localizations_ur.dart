@@ -2041,6 +2041,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get memoryDeleted => 'یاد حذف ہو گئی۔';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'واپس لیں';
 
   @override
@@ -9854,6 +9857,20 @@ class AppLocalizationsUr extends AppLocalizations {
   String get accountCutoverOpenStore => 'فتح المتجر';
 
   @override
+  String get chatScopeToday => 'آج';
+
+  @override
+  String get chatScopeThisWeek => 'اس ہفتے';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title کے بارے میں';
+  }
+
+  @override
+  String get askAboutThisConversation => 'اس کے بارے میں پوچھیں';
+
+  @override
   String get sendRawAudioToOmi => 'خام آڈیو Omi کو بھیجیں';
 
   @override
@@ -9865,4 +9882,47 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'تشخیصی معلومات شیئر نہیں کی جا سکیں۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String get appDisabledTitle => 'یہ ایپ غیر فعال ہے اور اسے انسٹال نہیں کیا جا سکتا۔';
+
+  @override
+  String get appDisabledWebhookFailures => 'اس کا اینڈ پوائنٹ مسلسل 72 گھنٹے ناکام رہا، اس لیے ترسیل روک دی گئی۔';
+
+  @override
+  String get appDisabledGeneric => 'اسے Omi نے غیر فعال کیا تھا۔';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'پہلے اینڈ پوائنٹ درست کریں — دوبارہ فعال کرنے پر ہر ترتیب شدہ URL دوبارہ جانچا جاتا ہے۔';
+
+  @override
+  String get appReEnable => 'دوبارہ فعال کریں';
+
+  @override
+  String get appReEnableFailedTitle => 'دوبارہ فعال نہیں ہو سکا';
+
+  @override
+  String get appReEnableFailedBody => 'اس ایپ کو دوبارہ فعال نہیں کیا جا سکا۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date کو غیر فعال کیا گیا۔';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'آخری خرابی: $error';
+  }
+
+  @override
+  String get prerecordedTranscript => 'پہلے سے ریکارڈ شدہ';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant ابھی بھی ریکارڈ کر رہا ہے، اس لیے محفوظ شدہ آڈیو منتقل نہیں کی جا سکتی۔ ریکارڈنگ روکنے کے لیے Pendant کا بٹن دبائیں، پھر دوبارہ مطابقت پذیری کریں۔';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant کی اسٹوریج بھر گئی ہے اور یہ ابھی بھی ریکارڈنگ موڈ میں ہے، اس لیے محفوظ شدہ آڈیو منتقل نہیں کی جا سکتی۔ ریکارڈنگ روکنے کے لیے Pendant کا بٹن دبائیں، پھر دوبارہ مطابقت پذیری کریں۔';
 }

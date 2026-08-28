@@ -107,7 +107,6 @@ backend-main:http:GET:/v1/conversations
 backend-main:http:GET:/v1/conversations/count
 backend-main:http:GET:/v1/conversations/{conversation_id}
 backend-main:http:GET:/v1/conversations/{conversation_id}/action-items
-backend-main:http:GET:/v1/conversations/{conversation_id}/photos
 backend-main:http:GET:/v1/conversations/{conversation_id}/recording
 backend-main:http:GET:/v1/conversations/{conversation_id}/shared
 backend-main:http:GET:/v1/conversations/{conversation_id}/suggested-apps

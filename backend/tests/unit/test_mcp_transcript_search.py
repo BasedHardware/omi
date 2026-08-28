@@ -57,6 +57,37 @@ def test_snippet_empty_when_no_transcript_match():
     assert build_transcript_match_snippets(segments, "budget review") == []
 
 
+def test_snippet_unicode_multi_term_match():
+    segments = [
+        {"id": "s0", "text": "Reunión sobre el presupuesto Q3", "start": 1.0, "end": 3.0, "speaker_id": 0},
+    ]
+    snippets = build_transcript_match_snippets(segments, "presupuesto Q3")
+    assert len(snippets) == 1
+    assert "presupuesto" in snippets[0]["text"].casefold()
+
+
+def test_merge_typesense_page_prefers_transcript_on_page_one():
+    from utils.conversations.mcp_transcript_search import merge_typesense_page_with_transcript_hits
+
+    assert merge_typesense_page_with_transcript_hits(
+        ["ts1", "ts2"],
+        ["tr1", "ts1"],
+        page=1,
+        per_page=3,
+    ) == ["tr1", "ts1", "ts2"]
+
+
+def test_merge_typesense_page_keeps_typesense_order_after_page_one():
+    from utils.conversations.mcp_transcript_search import merge_typesense_page_with_transcript_hits
+
+    assert merge_typesense_page_with_transcript_hits(
+        ["ts3", "ts4"],
+        ["tr1"],
+        page=2,
+        per_page=10,
+    ) == ["ts3", "ts4"]
+
+
 def test_merge_prefers_transcript_ids_then_summary():
     assert merge_summary_and_transcript_ids(["t1", "t2"], ["s1", "t1", "s2"], limit=3) == ["t1", "t2", "s1"]
 
@@ -144,3 +175,29 @@ def test_attach_snippets_to_conversations():
     assert out[0]["id"] == "c1"
     assert len(out[0]["match_snippets"]) == 1
     assert "ACME contract" in out[0]["match_snippets"][0]["text"]
+
+
+def test_transcript_only_phrase_gets_timed_snippet_for_seek():
+    """Typesense title/overview miss spoken words; hydrated segments still yield seek times."""
+    out = attach_match_snippets_to_conversations(
+        [
+            {
+                "id": "spoken-only",
+                "structured": {"title": "Standup", "overview": "Team sync"},
+                "transcript_segments": [
+                    {
+                        "id": "s1",
+                        "text": "Ship the ACME contract by Friday",
+                        "start": 42.0,
+                        "end": 46.5,
+                    },
+                ],
+            }
+        ],
+        "ACME contract",
+    )
+    assert len(out) == 1
+    snippet = out[0]["match_snippets"][0]
+    assert snippet["start"] == 42.0
+    assert snippet["end"] == 46.5
+    assert snippet["start_ms"] == 42000

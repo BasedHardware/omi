@@ -1,7 +1,7 @@
 """Route-level contract tests for the meeting-summary share endpoints.
 
 Drives the real mounted router with only the auth edge overridden, so the
-recipient-membership rejection and the publish→send→rollback ordering are
+owner-typed recipient bounds and the publish→send→rollback ordering are
 exercised through the same code paths the desktop client calls.
 """
 
@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import pytest
 from fastapi import FastAPI
+
+from utils.conversations import share_email
 from fastapi.testclient import TestClient
 
 from routers import conversations as conversations_router
@@ -26,6 +28,7 @@ def _conversation() -> dict:
             'calendar_meeting_context': {
                 'calendar_event_id': 'evt-1',
                 'title': 'Weekly sync',
+                'calendar_source': 'google_calendar',
                 'participants': [
                     {'name': 'Owner', 'email': 'owner@acme.com'},
                     {'name': 'Sarah Chen', 'email': 'sarah@acme.com'},
@@ -86,16 +89,36 @@ def _stub_data_layer(monkeypatch):
     monkeypatch.setattr(conversations_router.conversations_db, 'set_conversation_visibility_if_unchanged', guarded_set)
     monkeypatch.setattr(conversations_router.share_email, 'consume_daily_send_quota', lambda uid, n: True)
 
+    # Two ledgers, same split the Firestore layer keeps: 'in_flight' is a
+    # dispatch claim, 'sent' is a delivery that happened.
+    state['in_flight'] = []
+
     def reserve(uid, cid, emails):
-        claimed = [e for e in emails if e not in state['sent']]
-        state['sent'].extend(claimed)
-        return claimed
+        to_dispatch, already_sent, in_flight_elsewhere = [], [], []
+        for email in emails:
+            if email in state['sent']:
+                already_sent.append(email)
+            elif email in state['in_flight']:
+                in_flight_elsewhere.append(email)
+            else:
+                to_dispatch.append(email)
+                state['in_flight'].append(email)
+        return to_dispatch, already_sent, in_flight_elsewhere
 
     monkeypatch.setattr(conversations_router.conversations_db, 'reserve_share_email_recipients', reserve)
+
+    def confirm(uid, cid, emails):
+        for email in emails:
+            if email in state['in_flight']:
+                state['in_flight'].remove(email)
+            if email not in state['sent']:
+                state['sent'].append(email)
+
+    monkeypatch.setattr(conversations_router.conversations_db, 'confirm_share_email_recipients', confirm)
     monkeypatch.setattr(
         conversations_router.conversations_db,
         'release_share_email_recipients',
-        lambda uid, cid, emails: [state['sent'].remove(e) for e in emails if e in state['sent']],
+        lambda uid, cid, emails: [state['in_flight'].remove(e) for e in emails if e in state['in_flight']],
     )
     monkeypatch.setattr(
         conversations_router.redis_db, 'store_conversation_to_uid', lambda cid, uid: state['redis'].add(cid)
@@ -122,12 +145,40 @@ def test_share_recipients_excludes_owner():
     assert response.json() == {'recipients': [{'name': 'Sarah Chen', 'email': 'sarah@acme.com'}]}
 
 
-def test_share_email_rejects_foreign_recipient(_stub_data_layer):
+def test_share_email_sends_to_an_address_the_owner_typed(monkeypatch, _stub_data_layer):
+    """The Share control lets the owner type the recipient, so detection only prefills."""
+    monkeypatch.setattr(
+        conversations_router.share_email,
+        'send_summary_email',
+        lambda *, uid, conversation, recipient_emails: {'sent_to': recipient_emails},
+    )
     response = _client().post(
         f'/v1/conversations/{CONV_ID}/share-email',
-        json={'recipient_emails': ['attacker@evil.com']},
+        json={'recipient_emails': ['someone-not-on-the-invite@acme.com']},
+    )
+    assert response.status_code == 200
+    assert response.json() == {'sent_to': ['someone-not-on-the-invite@acme.com']}
+    assert _stub_data_layer['visibility'] == 'shared'
+
+
+def test_share_email_rejects_an_unusable_address(_stub_data_layer):
+    response = _client().post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['not-an-email']},
     )
     assert response.status_code == 400
+    assert _stub_data_layer['visibility'] == 'private'
+    assert _stub_data_layer['redis'] == set()
+
+
+def test_share_email_rejects_more_than_the_per_send_cap(_stub_data_layer):
+    """The request schema owns the cap, so an oversized send never reaches the handler."""
+    too_many = [f'p{index}@acme.com' for index in range(share_email.MAX_RECIPIENTS + 1)]
+    response = _client().post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': too_many},
+    )
+    assert response.status_code == 422
     assert _stub_data_layer['visibility'] == 'private'
     assert _stub_data_layer['redis'] == set()
 
@@ -146,6 +197,49 @@ def test_share_email_success_publishes_and_sends(monkeypatch, _stub_data_layer):
     assert response.json() == {'sent_to': ['sarah@acme.com']}
     assert _stub_data_layer['visibility'] == 'shared'
     assert CONV_ID in _stub_data_layer['redis']
+
+
+def test_share_email_success_emits_summary_shared_telemetry(monkeypatch, _stub_data_layer):
+    """Delivered shares feed the admin K-factor; a successful send must emit
+    exactly one 'Conversation Summary Shared' event with the delivered count."""
+    monkeypatch.setattr(
+        conversations_router.share_email,
+        'send_summary_email',
+        lambda *, uid, conversation, recipient_emails: {'sent_to': recipient_emails},
+    )
+    events = []
+    monkeypatch.setattr(
+        conversations_router,
+        'emit_posthog_event',
+        lambda distinct_id, event, properties: events.append((distinct_id, event, properties)),
+    )
+    response = _client().post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['sarah@acme.com']},
+    )
+    assert response.status_code == 200
+    assert events == [
+        (UID, 'Conversation Summary Shared', {'conversation_id': CONV_ID, 'recipient_count': 1, 'channel': 'email'})
+    ]
+
+
+def test_share_email_failed_send_emits_no_telemetry(monkeypatch, _stub_data_layer):
+    def failing_send(*, uid, conversation, recipient_emails):
+        raise RuntimeError('email provider rejected the send')
+
+    monkeypatch.setattr(conversations_router.share_email, 'send_summary_email', failing_send)
+    events = []
+    monkeypatch.setattr(
+        conversations_router,
+        'emit_posthog_event',
+        lambda distinct_id, event, properties: events.append(event),
+    )
+    response = _client().post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['sarah@acme.com']},
+    )
+    assert response.status_code == 502
+    assert events == []
 
 
 def test_share_email_provider_failure_rolls_back_visibility(monkeypatch, _stub_data_layer):
@@ -390,3 +484,71 @@ def test_publish_contention_with_private_visibility_fails_without_sending(monkey
     assert dispatched == []
     assert refunds == [1]
     assert _stub_data_layer['sent'] == []
+
+
+def test_overlapping_request_is_not_told_a_dispatch_in_flight_was_sent(monkeypatch, _stub_data_layer):
+    """Request B overlaps A, then A fails definitively.
+
+    B must not be told the mail went out — A's claim was only a dispatch in
+    progress, and it released. Nothing was sent, and nothing claimed otherwise.
+    """
+    monkeypatch.setattr(
+        conversations_router.share_email,
+        'send_summary_email',
+        lambda **kw: (_ for _ in ()).throw(RuntimeError('provider rejected')),
+    )
+    client = _client()
+
+    # A claims the recipient and is mid-dispatch; B arrives while that claim is live.
+    _stub_data_layer['in_flight'].append('sarah@acme.com')
+    overlapping = client.post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['sarah@acme.com']},
+    )
+    assert overlapping.status_code == 409
+    assert 'sent_to' not in overlapping.json()
+
+    # A now fails definitively and releases its claim.
+    _stub_data_layer['in_flight'].remove('sarah@acme.com')
+    assert _stub_data_layer['sent'] == []
+
+    # The retry is the first real dispatch, and it is the only one.
+    sends = []
+    monkeypatch.setattr(
+        conversations_router.share_email,
+        'send_summary_email',
+        lambda *, uid, conversation, recipient_emails: sends.append(list(recipient_emails))
+        or {'sent_to': recipient_emails},
+    )
+    retry = client.post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['sarah@acme.com']},
+    )
+    assert retry.status_code == 200
+    assert retry.json() == {'sent_to': ['sarah@acme.com']}
+    assert sends == [['sarah@acme.com']]
+    assert _stub_data_layer['sent'] == ['sarah@acme.com']
+    assert _stub_data_layer['in_flight'] == []
+
+    # A later repeat is a no-op: the recipient is in the sent ledger now.
+    again = client.post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['sarah@acme.com']},
+    )
+    assert again.status_code == 200
+    assert sends == [['sarah@acme.com']]
+
+
+def test_failed_dispatch_leaves_nothing_in_the_sent_ledger(monkeypatch, _stub_data_layer):
+    monkeypatch.setattr(
+        conversations_router.share_email,
+        'send_summary_email',
+        lambda **kw: (_ for _ in ()).throw(RuntimeError('provider rejected')),
+    )
+    response = _client().post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['sarah@acme.com']},
+    )
+    assert response.status_code == 502
+    assert _stub_data_layer['sent'] == []
+    assert _stub_data_layer['in_flight'] == []

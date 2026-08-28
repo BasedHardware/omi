@@ -18,6 +18,7 @@ if str(BACKEND_DIR) not in sys.path:
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
 from routers import desktop_proxy
+from utils.observability import journeys
 
 
 def make_request(
@@ -25,6 +26,7 @@ def make_request(
     *,
     query_string: bytes = b"",
     workload: str | None = None,
+    platform: str | None = None,
 ) -> Request:
     sent = False
     pending = asyncio.Event()
@@ -39,6 +41,8 @@ def make_request(
     headers = [(b"x-omi-request-id", b"request-12345678")]
     if workload is not None:
         headers.append((b"x-omi-workload", workload.encode()))
+    if platform is not None:
+        headers.append((b"x-app-platform", platform.encode()))
     return Request(
         {
             "type": "http",
@@ -140,11 +144,11 @@ def test_vertex_embedding_translation_round_trip():
 
 @pytest.mark.asyncio
 async def test_gemini_proxy_rejects_paywalled_desktop_user(monkeypatch):
-    async def run_blocking(_, function, *args):
-        return function(*args)
+    async def run_blocking(_, function, *args, **kwargs):
+        return function(*args, **kwargs)
 
     monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_proxy, "is_desktop_trial_paywalled", lambda uid, platform: True)
+    monkeypatch.setattr(desktop_proxy, "is_desktop_trial_paywalled", lambda uid, platform, **kwargs: True)
 
     with pytest.raises(HTTPException) as error:
         await desktop_proxy._authorized_desktop_user("user")
@@ -475,6 +479,80 @@ def test_provider_timeout_has_typed_non_retryable_terminal_response(monkeypatch)
     assert event["outcome"] == "provider_timeout"
     assert event["phase"] == "provider"
     assert "private prompt" not in output.getvalue()
+
+
+@pytest.mark.parametrize("upstream_status", [502, 503])
+def test_provider_availability_fault_authorizes_client_replay(monkeypatch, upstream_status):
+    """An upstream 502/503 delivered nothing, so the caller may re-issue it.
+
+    Both desktop clients read this decision off the wire: macOS gates
+    `shouldAutoRetry` on `X-Omi-Retryable`, and the Windows Gemini and rewind
+    embedding clients retry only on a 429 or a 503 status. Reporting a
+    non-retryable 502 revoked replay on both at once.
+    """
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
+    telemetry = desktop_proxy.ProxyTelemetry(make_request(), streaming=False)
+    response = httpx.Response(upstream_status, request=httpx.Request("POST", "https://provider.invalid"))
+
+    result = desktop_proxy._provider_error(response, telemetry)
+
+    assert result.status_code == 503
+    assert result.headers["x-omi-error-class"] == "provider_unavailable"
+    assert result.headers["x-omi-retryable"] == "true"
+    assert result.headers["retry-after"] == str(desktop_proxy._PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS)
+    event = json.loads(output.getvalue())
+    assert event["outcome"] == "provider_unavailable"
+    assert event["upstream_status"] == upstream_status
+    assert event["retryable"] is True
+
+
+def test_provider_internal_error_stays_terminal(monkeypatch):
+    """500 is not an availability signal — it can be a verdict on the request,
+    so it keeps the terminal 502 rather than inviting a replay of the same body."""
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", io.StringIO())
+    telemetry = desktop_proxy.ProxyTelemetry(make_request(), streaming=False)
+    response = httpx.Response(500, request=httpx.Request("POST", "https://provider.invalid"))
+
+    result = desktop_proxy._provider_error(response, telemetry)
+
+    assert result.status_code == 502
+    assert result.headers["x-omi-retryable"] == "false"
+
+
+@pytest.mark.asyncio
+async def test_proxy_reports_upstream_unavailable_as_retryable(monkeypatch):
+    """The whole non-stream route, from dispatch to the headers the client sees."""
+
+    class UnavailableClient:
+        async def post(self, *args, **kwargs):
+            return httpx.Response(
+                503,
+                json={"error": {"code": 503, "message": "The service is currently unavailable."}},
+                request=httpx.Request("POST", "https://provider.invalid"),
+            )
+
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    async def route(path, _model, _action, _query, **_kwargs):
+        return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "ai_studio", "server_key", "global")
+
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", io.StringIO())
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_client", lambda: UnavailableClient())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
+
+    response = await desktop_proxy._proxy(
+        make_request(), "models/gemini-embedding-001:batchEmbedContents", False, "user"
+    )
+
+    assert response.status_code == 503
+    assert response.headers["x-omi-retryable"] == "true"
+    assert response.headers["x-omi-error-class"] == "provider_unavailable"
+    assert "currently unavailable" not in response.body.decode()
 
 
 @pytest.mark.asyncio
@@ -1636,3 +1714,79 @@ def test_byok_pro_is_still_honoured_because_the_user_pays_for_it(monkeypatch):
     model: a BYOK user asking for Pro gets Pro on their own key."""
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "user-key")
     assert _retarget("models/gemini-2.5-pro:generateContent") == ("models/gemini-2.5-pro:generateContent")
+
+
+def _capture_proxy_journeys(monkeypatch):
+    terminal = []
+    monkeypatch.setattr(journeys, 'record_client_journey_accepted', lambda *_: None)
+    monkeypatch.setattr(
+        journeys,
+        'record_client_journey_terminal',
+        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None: terminal.append(
+            (journey, client_kind, outcome, issue_class)
+        ),
+    )
+    return terminal
+
+
+@pytest.mark.asyncio
+async def test_desktop_proxy_proactivity_journey_requires_content_and_terminal_marker(monkeypatch):
+    terminal = _capture_proxy_journeys(monkeypatch)
+
+    async def source():
+        yield b'data: {"candidates":[{"content":{"parts":[{"text":"suggestion"}]}}]}\n\n'
+        yield b'data: {"candidates":[{"content":{"parts":[{"text":""}]},"finishReason":"STOP"}]}\n\n'
+
+    async def unobserved(*_args, **_kwargs):
+        return desktop_proxy.StreamingResponse(source(), media_type='text/event-stream')
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_unobserved', unobserved)
+    response = await desktop_proxy._proxy(
+        make_request(workload='maintenance', platform='macos'),
+        'models/gemini-2.5-flash-lite:streamGenerateContent',
+        True,
+        'user-1',
+    )
+    assert [chunk async for chunk in response.body_iterator]
+    assert terminal == [('desktop_proactivity', 'desktop_macos', 'success', None)]
+
+
+@pytest.mark.asyncio
+async def test_desktop_proxy_proactivity_journey_catches_post_200_error_event(monkeypatch):
+    terminal = _capture_proxy_journeys(monkeypatch)
+
+    async def source():
+        yield b'data: {"error":"provider_timeout","phase":"body"}\n\n'
+
+    async def unobserved(*_args, **_kwargs):
+        return desktop_proxy.StreamingResponse(source(), media_type='text/event-stream')
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_unobserved', unobserved)
+    response = await desktop_proxy._proxy(
+        make_request(workload='maintenance', platform='windows'),
+        'models/gemini-2.5-flash-lite:streamGenerateContent',
+        True,
+        'user-1',
+    )
+    assert [chunk async for chunk in response.body_iterator]
+    assert terminal == [('desktop_proactivity', 'desktop_windows', 'failure', 'provider_error')]
+
+
+@pytest.mark.asyncio
+async def test_desktop_proxy_proactivity_journey_marks_redis_cap_degraded(monkeypatch):
+    terminal = _capture_proxy_journeys(monkeypatch)
+
+    async def capped(*_args, **_kwargs):
+        raise desktop_proxy._GeminiRateLimitExceeded('daily cap', retryable=False, retry_after=60)
+
+    monkeypatch.setattr(desktop_proxy, '_proxy_unobserved', capped)
+    with pytest.raises(desktop_proxy.HTTPException) as error:
+        await desktop_proxy._proxy(
+            make_request(workload='maintenance', platform='linux'),
+            'models/gemini-2.5-flash-lite:generateContent',
+            False,
+            'user-1',
+        )
+
+    assert error.value.status_code == 429
+    assert terminal == [('desktop_proactivity', 'desktop_linux', 'degraded', 'quota_capped')]

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MACOS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [ "$#" -lt 1 ]; then
+    echo "Usage: scripts/omi-jit-qa <local-dev-gcp|deployed-dev> [run.sh options]" >&2
+    exit 2
+fi
+
+target="$1"
+shift
+case "$target" in
+    local-dev-gcp|deployed-dev) ;;
+    *)
+        echo "ERROR: target must be local-dev-gcp or deployed-dev" >&2
+        exit 2
+        ;;
+esac
+
+export OMI_APP_NAME="omi-jit-qa"
+export OMI_JIT_QA_TARGET="$target"
+# The reserved bundle starts with an empty Rewind profile. Copying production
+# screenshots/history into a dev-routed app is never an implicit launch step.
+export OMI_SKIP_REWIND_SEED=1
+cd "$MACOS_ROOT"
+exec "$MACOS_ROOT/run.sh" "$@"

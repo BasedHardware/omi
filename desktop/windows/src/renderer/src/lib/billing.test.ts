@@ -26,6 +26,14 @@ import {
   startCheckout,
   type CheckoutDeps
 } from './billing'
+import {
+  canonicalPlanId,
+  decodePlan,
+  encodePlan,
+  parsePlanResponse,
+  planDisplayName,
+  UNKNOWN_PLAN_TITLE
+} from './billingPlans'
 import type {
   Subscription,
   SubscriptionPlan,
@@ -33,6 +41,8 @@ import type {
   TrialMetadata,
   UserSubscriptionResponse
 } from './omiApi.generated'
+
+type TestSubscription = Omit<Subscription, 'plan'> & { plan?: string }
 
 // billing.ts imports the axios client at module load; the pure helpers under
 // test never touch it, so a bare stub is enough to let the module import.
@@ -59,7 +69,7 @@ const CATALOG: SubscriptionPlan[] = [
   }
 ]
 
-function sub(partial: Partial<Subscription>): Subscription {
+function sub(partial: Partial<TestSubscription>): TestSubscription {
   return { plan: 'basic', status: 'active', cancel_at_period_end: false, ...partial }
 }
 
@@ -88,6 +98,64 @@ describe('resolvePlanTitle', () => {
   it('maps operator to Operator and architect to Architect', () => {
     expect(resolvePlanTitle(sub({ plan: 'operator' }), CATALOG)).toBe('Operator')
     expect(resolvePlanTitle(sub({ plan: 'architect' }), CATALOG)).toBe('Architect')
+  })
+  it.each([
+    ['plus', 'Plus'],
+    ['unlimited_v2', 'Unlimited'],
+    ['pro', 'Architect']
+  ] as const)('handles the known wire plan %s', (wirePlan, title) => {
+    expect(resolvePlanTitle(sub({ plan: wirePlan }), undefined)).toBe(title)
+    expect(hasPaidSubscription(sub({ plan: wirePlan }))).toBe(true)
+  })
+  it('uses neutral copy and no paid capability for an unknown future plan', () => {
+    const future = sub({ plan: 'future_plan_123' })
+    expect(resolvePlanTitle(future, CATALOG)).toBe(UNKNOWN_PLAN_TITLE)
+    expect(hasPaidSubscription(future)).toBe(false)
+    expect(currentPlanSubtitle(future, CATALOG)).toBe('Your plan details are unavailable.')
+  })
+  it('keeps unknown plans neutral even when a BYOK flag is present', () => {
+    expect(resolvePlanTitle(sub({ plan: 'future_plan_123', features: ['byok'] }), CATALOG)).toBe(
+      UNKNOWN_PLAN_TITLE
+    )
+  })
+})
+
+describe('lossless plan decoding', () => {
+  const FIXTURE_PLANS = [
+    'basic',
+    'plus',
+    'unlimited',
+    'unlimited_v2',
+    'operator',
+    'architect',
+    'pro',
+    'future_plan_123'
+  ] as const
+
+  it.each(FIXTURE_PLANS)('decodes and re-encodes %s without throwing', (wirePlan) => {
+    const decoded = decodePlan(wirePlan)
+    expect(decoded).toBeDefined()
+    expect(encodePlan(decoded)).toBe(wirePlan)
+  })
+  it('maps the legacy pro alias to Architect for capability decisions', () => {
+    expect(canonicalPlanId(decodePlan('pro'))).toBe('architect')
+    expect(planDisplayName('pro')).toBe('Architect')
+  })
+  it('preserves an unknown plan as unknown rather than rewriting it to Basic', () => {
+    const decoded = decodePlan('future_plan_123')
+    expect(decoded).toEqual({ kind: 'unknown', raw: 'future_plan_123' })
+    expect(canonicalPlanId(decoded)).toBeUndefined()
+    expect(planDisplayName(decoded)).toBe(UNKNOWN_PLAN_TITLE)
+  })
+  it('does not classify prototype keys as known plans', () => {
+    const decoded = decodePlan('__proto__')
+    expect(decoded).toEqual({ kind: 'unknown', raw: '__proto__' })
+    expect(canonicalPlanId(decoded)).toBeUndefined()
+    expect(planDisplayName(decoded)).toBe(UNKNOWN_PLAN_TITLE)
+  })
+  it('parses the API response boundary while retaining the future wire value', () => {
+    const response = parsePlanResponse({ subscription: { plan: 'future_plan_123' } })
+    expect(response.subscription.plan).toBe('future_plan_123')
   })
 })
 
@@ -150,6 +218,14 @@ describe('isCurrentSubscriptionOperator', () => {
     expect(isCurrentSubscriptionOperator(sub({ current_price_id: 'price_op_m' }), undefined)).toBe(
       false
     )
+  })
+})
+
+describe('canonical plan aliases', () => {
+  it('uses the pro alias as Architect for current-plan and purchase decisions', () => {
+    const architect = CATALOG.find((plan) => plan.id === 'architect')!
+    expect(isCurrentCatalogPlan(architect, sub({ plan: 'pro' }), CATALOG)).toBe(true)
+    expect(canPurchasePlan(CATALOG[0], sub({ plan: 'pro' }))).toBe(false)
   })
 })
 

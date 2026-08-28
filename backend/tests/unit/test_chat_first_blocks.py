@@ -146,7 +146,7 @@ def test_chat_first_validate_admits_only_an_active_omi_capture_link(monkeypatch)
     monkeypatch.setattr(
         chat_first_router.conversations_db,
         'get_conversation',
-        lambda uid, conversation_id: {
+        lambda uid, conversation_id, **_kwargs: {
             'id': conversation_id,
             'source': 'omi',
             'discarded': False,
@@ -168,7 +168,7 @@ def test_chat_first_validate_rejects_non_omi_or_discarded_capture_links(monkeypa
     monkeypatch.setattr(
         chat_first_router.conversations_db,
         'get_conversation',
-        lambda uid, conversation_id: {
+        lambda uid, conversation_id, **_kwargs: {
             'id': conversation_id,
             'source': 'desktop',
             'discarded': False,
@@ -189,7 +189,7 @@ def test_chat_first_validate_admits_completed_desktop_conversation_link(monkeypa
     monkeypatch.setattr(
         chat_first_router.conversations_db,
         'get_conversation',
-        lambda uid, conversation_id: {
+        lambda uid, conversation_id, **_kwargs: {
             'id': conversation_id,
             'source': 'desktop',
             'status': 'completed',
@@ -229,7 +229,7 @@ def test_chat_first_validate_rejects_ambient_desktop_conversation_link(monkeypat
     monkeypatch.setattr(
         chat_first_router.conversations_db,
         'get_conversation',
-        lambda uid, conversation_id: {
+        lambda uid, conversation_id, **_kwargs: {
             'id': conversation_id,
             'source': 'desktop',
             'status': 'completed',

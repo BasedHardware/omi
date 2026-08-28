@@ -263,12 +263,14 @@ describe('ConversationSplitView review regressions', () => {
     await waitFor(() =>
       expect(screen.getByTestId('recap-detail')).toHaveTextContent('Remote recap detail'),
     );
-    expect(harness.setContext).toHaveBeenCalledWith({
-      type: 'recap',
-      id: 'remote-recap',
-      title: 'Remote recap detail',
-      summary: 'remote-recap overview',
-    });
+    await waitFor(() =>
+      expect(harness.setContext).toHaveBeenCalledWith({
+        type: 'recap',
+        id: 'remote-recap',
+        title: 'Remote recap detail',
+        summary: 'remote-recap overview',
+      }),
+    );
   });
 
   it('ignores a stale recap response after the deep-link ID changes', async () => {

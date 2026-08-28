@@ -79,11 +79,6 @@ class CategoryMemoriesPage extends StatelessWidget {
   }
 
   void _showQuickEditSheet(BuildContext context, Memory memory, MemoriesProvider provider) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => MemoryEditSheet(memory: memory, provider: provider, onDelete: (_, __, ___) {}),
-    );
+    showMemoryQuickEditSheet(context, memory, provider);
   }
 }

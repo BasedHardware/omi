@@ -2025,6 +2025,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get memoryDeleted => 'Hukommelse slettet';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Fortryd';
 
   @override
@@ -9827,6 +9830,20 @@ class AppLocalizationsDa extends AppLocalizations {
   String get accountCutoverOpenStore => 'Åbn butik';
 
   @override
+  String get chatScopeToday => 'I dag';
+
+  @override
+  String get chatScopeThisWeek => 'Denne uge';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Om: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Spørg om dette';
+
+  @override
   String get sendRawAudioToOmi => 'Send rå lyd til Omi';
 
   @override
@@ -9838,4 +9855,46 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Diagnostikken kunne ikke deles. Prøv igen.';
+
+  @override
+  String get appDisabledTitle => 'Denne app er deaktiveret og kan ikke installeres.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Dens endpoint fejlede 72 timer i træk, så leveringerne blev stoppet.';
+
+  @override
+  String get appDisabledGeneric => 'Den blev deaktiveret af Omi.';
+
+  @override
+  String get appDisabledOwnerHint => 'Ret endpointet først — genaktivering tjekker hver konfigureret URL igen.';
+
+  @override
+  String get appReEnable => 'Genaktivér';
+
+  @override
+  String get appReEnableFailedTitle => 'Kunne ikke genaktivere';
+
+  @override
+  String get appReEnableFailedBody => 'Denne app kunne ikke genaktiveres. Prøv igen.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Deaktiveret den $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Seneste fejl: $error.';
+  }
+
+  @override
+  String get prerecordedTranscript => 'Forudoptaget';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Din Pendant optager stadig, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser igen.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Din Pendants lager er fuldt, og den er stadig i optagetilstand, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser derefter igen.';
 }

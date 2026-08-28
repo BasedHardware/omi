@@ -17,6 +17,13 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 typedef FetchMemoriesRequest = Future<GetMemoriesResult> Function({int limit, int offset, bool thisDeviceOnly});
+typedef FetchLedgerHistoryRequest = Future<GetLedgerHistoryResult> Function({int limit, int offset});
+typedef ReviewMemoryRequest = Future<bool> Function(String memoryId, bool value);
+typedef EditMemoryRequest = Future<EditMemoryResult> Function(String memoryId, String value);
+typedef RevertMemoryRequest = Future<RevertMemoryResult> Function(String memoryId, String operationId);
+
+Future<GetLedgerHistoryResult> _noLedgerHistory({int limit = 500, int offset = 0}) async =>
+    const GetLedgerHistoryResult([], supported: false);
 
 class MemoriesProvider extends ChangeNotifier {
   List<Memory> _memories = [];
@@ -26,6 +33,8 @@ class MemoriesProvider extends ChangeNotifier {
   bool _showOnlyManual = false;
   bool _filterThisDeviceOnly = false;
   bool _deviceScopeSupported = true;
+  bool _ledgerHistorySupported = false;
+  bool _ledgerHistoryTruncated = false;
   Future<void>? _clientDeviceInitialization;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
@@ -34,12 +43,31 @@ class MemoriesProvider extends ChangeNotifier {
   ConnectivityProvider? _connectivityProvider;
   bool _isSyncing = false;
   int _sessionGeneration = 0;
+  int _loadSequence = 0;
+  int _ledgerProjectionRevision = 0;
   final FetchMemoriesRequest _fetchMemoriesRequest;
+  final FetchLedgerHistoryRequest _fetchLedgerHistoryRequest;
   final Future<bool> Function(String) _deleteMemoryRequest;
+  final ReviewMemoryRequest _reviewMemoryRequest;
+  final EditMemoryRequest _editMemoryRequest;
+  final RevertMemoryRequest _revertMemoryRequest;
+  final Set<String> _revertingMemoryIds = {};
+  final Map<String, String> _revertOperationIds = {};
 
-  MemoriesProvider({FetchMemoriesRequest? fetchMemoriesRequest, Future<bool> Function(String)? deleteMemoryRequest})
-      : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
-        _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer;
+  MemoriesProvider({
+    FetchMemoriesRequest? fetchMemoriesRequest,
+    FetchLedgerHistoryRequest? fetchLedgerHistoryRequest,
+    Future<bool> Function(String)? deleteMemoryRequest,
+    ReviewMemoryRequest? reviewMemoryRequest,
+    EditMemoryRequest? editMemoryRequest,
+    RevertMemoryRequest? revertMemoryRequest,
+  })  : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
+        _fetchLedgerHistoryRequest =
+            fetchLedgerHistoryRequest ?? (fetchMemoriesRequest == null ? getLedgerHistory : _noLedgerHistory),
+        _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer,
+        _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
+        _editMemoryRequest = editMemoryRequest ?? editMemoryServer,
+        _revertMemoryRequest = revertMemoryRequest ?? revertMemoryServer;
 
   List<Memory> get memories => _memories;
   bool get loading => _loading;
@@ -49,6 +77,67 @@ class MemoriesProvider extends ChangeNotifier {
   bool get filterThisDeviceOnly => _filterThisDeviceOnly;
   bool get hasPendingMemories => SharedPreferencesUtil().pendingMemories.isNotEmpty;
   int get pendingMemoriesCount => SharedPreferencesUtil().pendingMemories.length;
+  bool get ledgerHistorySupported => _ledgerHistorySupported;
+  bool get ledgerHistoryTruncated => _ledgerHistoryTruncated;
+
+  bool isRevertingMemory(String memoryId) => _revertingMemoryIds.contains(memoryId);
+
+  bool canRevertSupersededFact(Memory memory) {
+    if (!_isEligibleSupersededFact(memory)) return false;
+    final alreadyRestored = _memories.any(
+      (candidate) =>
+          candidate.isCurrentKnowledgeLedgerRow &&
+          candidate.evidence.any(
+            (evidence) => evidence['source_type'] == 'explicit_user_revert' && evidence['source_id'] == memory.id,
+          ),
+    );
+    if (alreadyRestored) return false;
+    final currentTail = _matchingCurrentTail(memory);
+    return currentTail == null || currentTail.content.trim() != memory.content.trim();
+  }
+
+  static bool _isEligibleSupersededFact(Memory memory) {
+    return memory.ledgerSchemaVersion == 'knowledge_ledger.v1' &&
+        memory.ledgerKind == KnowledgeLedgerKind.fact &&
+        memory.intentBacked &&
+        !memory.deleted &&
+        !memory.isLocked &&
+        memory.userReview != false &&
+        memory.invalidAt != null &&
+        (memory.supersededBy ?? '').trim().isNotEmpty;
+  }
+
+  List<Memory> get currentLedgerFacts => _memories
+      .where(
+        (memory) => memory.isCurrentKnowledgeLedgerRow && memory.ledgerKind == KnowledgeLedgerKind.fact,
+      )
+      .toList(growable: false)
+    ..sort(_ledgerOrder);
+
+  List<Memory> get currentLedgerPlaybooks =>
+      _memories.where((memory) => memory.isCurrentKnowledgeLedgerRow && memory.isLedgerPlaybook).toList(growable: false)
+        ..sort(_ledgerOrder);
+
+  List<Memory> get currentLedgerTriggers =>
+      _memories.where((memory) => memory.isCurrentKnowledgeLedgerRow && memory.isLedgerTrigger).toList(growable: false)
+        ..sort(_ledgerOrder);
+
+  List<Memory> get historicalLedgerRows =>
+      _memories.where((memory) => memory.isHistoricalKnowledgeLedgerRow).toList(growable: false)
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+  static int _ledgerOrder(Memory a, Memory b) {
+    final weight = b.curationWeight.compareTo(a.curationWeight);
+    if (weight != 0) return weight;
+    final slot = (a.ledgerSlot ?? '').compareTo(b.ledgerSlot ?? '');
+    if (slot != 0) return slot;
+    // Match the canonical backend/macOS renderer exactly. Recency authority
+    // between concurrently open same-slot rows remains a ratification gate;
+    // clients must not silently invent a different winner meanwhile.
+    final validAt = (a.validAt ?? a.updatedAt).compareTo(b.validAt ?? b.updatedAt);
+    if (validAt != 0) return validAt;
+    return a.id.compareTo(b.id);
+  }
 
   List<Memory> get filteredMemories {
     return _memories.where((memory) {
@@ -144,10 +233,14 @@ class MemoriesProvider extends ChangeNotifier {
     _showOnlyManual = false;
     _searchQuery = '';
     _filterThisDeviceOnly = false;
+    _ledgerHistorySupported = false;
+    _ledgerHistoryTruncated = false;
     categories = [];
     selectedCategory = null;
     _loading = false;
     _isSyncing = false;
+    _revertingMemoryIds.clear();
+    _revertOperationIds.clear();
     _cancelDeletionTimer();
     _lastDeletedMemory = null;
     _pendingDeletionId = null;
@@ -223,6 +316,8 @@ class MemoriesProvider extends ChangeNotifier {
 
   Future<void> loadMemories({int limit = 100}) async {
     final generation = _sessionGeneration;
+    final loadSequence = ++_loadSequence;
+    final ledgerProjectionRevision = _ledgerProjectionRevision;
     // Snapshot the pending-deletion ID before any await: a refresh that
     // started during the undo window must still suppress the deleted item
     // even if _finalizeDeletion() clears the field while the fetch is in
@@ -233,7 +328,7 @@ class MemoriesProvider extends ChangeNotifier {
 
     if (_filterThisDeviceOnly) {
       await _ensureClientDeviceInitialized();
-      if (generation != _sessionGeneration) {
+      if (generation != _sessionGeneration || loadSequence != _loadSequence) {
         return;
       }
     }
@@ -244,17 +339,61 @@ class MemoriesProvider extends ChangeNotifier {
     final all = <Memory>[];
     var offset = 0;
     var deviceScopeSupported = true;
+    var ledgerHistorySupported = false;
+    var ledgerHistoryTruncated = false;
     for (var page = 0; page < maxPages; page++) {
       final result = await _fetchMemoriesRequest(limit: limit, offset: offset, thisDeviceOnly: _filterThisDeviceOnly);
-      if (generation != _sessionGeneration) {
+      if (generation != _sessionGeneration || loadSequence != _loadSequence) {
         return;
       }
       deviceScopeSupported = result.deviceScopeSupported;
       all.addAll(result.memories);
-      if (result.memories.length < limit) {
+      // A truncated page is an honest partial response with no resumable cursor;
+      // stop loading instead of continuing with an unstable offset.
+      if (result.truncated || result.memories.length < limit) {
+        if (result.truncated) {
+          Logger.warning('MemoriesProvider: server returned a truncated list; stopping at $offset rows');
+        }
         break;
       }
       offset += result.memories.length;
+    }
+    // History is an additive owner-scoped projection, fetched independently
+    // from the current list because GET /v3/memories intentionally filters
+    // rejected and closed rows. Device-scoped history has no ratified server
+    // contract, so the "This device" view remains current-only.
+    if (!_filterThisDeviceOnly) {
+      final seen = all.map((memory) => memory.id).toSet();
+      const historyPageSize = 500;
+      const maxHistoryPages = 10;
+      var historyOffset = 0;
+      var historyRowsLoaded = 0;
+      for (var page = 0; page < maxHistoryPages; page++) {
+        final result = await _fetchLedgerHistoryRequest(limit: historyPageSize, offset: historyOffset);
+        if (generation != _sessionGeneration || loadSequence != _loadSequence) return;
+        ledgerHistorySupported = result.supported;
+        if (!result.supported) break;
+        all.addAll(result.memories.where((memory) => seen.add(memory.id)));
+        historyRowsLoaded += result.memories.length;
+        if (result.truncated || result.memories.length < historyPageSize) {
+          ledgerHistoryTruncated = result.truncated;
+          break;
+        }
+        historyOffset += result.memories.length;
+        if (page == maxHistoryPages - 1) ledgerHistoryTruncated = true;
+      }
+      if (ledgerHistoryTruncated) {
+        Logger.warning('MemoriesProvider: ledger history is partial; loaded $historyRowsLoaded rows');
+      }
+    }
+    if (generation != _sessionGeneration ||
+        loadSequence != _loadSequence ||
+        ledgerProjectionRevision != _ledgerProjectionRevision) {
+      if (generation == _sessionGeneration && loadSequence == _loadSequence) {
+        _loading = false;
+        notifyListeners();
+      }
+      return;
     }
     // Keep an optimistic delete hidden throughout its undo window. Use the
     // snapshot taken before the fetch so a concurrent finalization that
@@ -266,6 +405,8 @@ class MemoriesProvider extends ChangeNotifier {
     final effectiveTombstoneId = currentTombstoneId ?? tombstoneId;
     _memories = effectiveTombstoneId != null ? all.where((memory) => memory.id != effectiveTombstoneId).toList() : all;
     _deviceScopeSupported = deviceScopeSupported;
+    _ledgerHistorySupported = ledgerHistorySupported;
+    _ledgerHistoryTruncated = ledgerHistoryTruncated;
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
@@ -274,6 +415,9 @@ class MemoriesProvider extends ChangeNotifier {
         _memories.add(pending);
       }
     }
+    _revertOperationIds.removeWhere(
+      (memoryId, _) => !_memories.any((memory) => memory.id == memoryId && canRevertSupersededFact(memory)),
+    );
 
     _loading = false;
     _setCategories();
@@ -316,6 +460,234 @@ class MemoriesProvider extends ChangeNotifier {
       _isSyncing = false;
       notifyListeners();
     }
+  }
+
+  /// Apply an explicit user review through canonical backend authority.
+  ///
+  /// The local change is optimistic so the control responds immediately, but
+  /// it is rolled back if the server rejects or cannot persist the decision.
+  Future<bool> reviewMemory(Memory memory, bool value) async {
+    final index = _memories.indexWhere((candidate) => candidate.id == memory.id);
+    if (index == -1 || memory.isLocked) return false;
+    final generation = _sessionGeneration;
+    final previousReview = memory.userReview;
+    final previousReviewed = memory.reviewed;
+    memory.userReview = value;
+    memory.reviewed = true;
+    notifyListeners();
+
+    bool persisted;
+    try {
+      persisted = await _reviewMemoryRequest(memory.id, value);
+    } catch (error) {
+      Logger.warning('MemoriesProvider: review persistence failed for ${memory.id}: $error');
+      persisted = false;
+    }
+    if (generation != _sessionGeneration) return false;
+    if (!persisted) {
+      memory.userReview = previousReview;
+      memory.reviewed = previousReviewed;
+      notifyListeners();
+      return false;
+    }
+    return true;
+  }
+
+  /// Append an authoritative current replacement for one superseded v1 fact.
+  ///
+  /// This is deliberately non-optimistic: the historical row remains
+  /// untouched and no replacement becomes visible until the backend returns a
+  /// fully validated canonical row. A session change discards the late result.
+  Future<bool> revertSupersededFact(Memory memory) async {
+    final sourceIndex = _memories.indexWhere((candidate) => candidate.id == memory.id);
+    if (sourceIndex == -1 || !canRevertSupersededFact(memory) || isRevertingMemory(memory.id)) return false;
+
+    final generation = _sessionGeneration;
+    if (!_revertingMemoryIds.add(memory.id)) return false;
+    // Retain one idempotency key across all ambiguous failures. A transport
+    // error or lost response may follow a committed append; rotating the key
+    // would let a user retry append the same historical value again.
+    final operationId = _revertOperationIds.putIfAbsent(memory.id, () => const Uuid().v4());
+    notifyListeners();
+
+    try {
+      RevertMemoryResult result;
+      try {
+        result = await _revertMemoryRequest(memory.id, operationId);
+      } catch (error) {
+        Logger.warning('MemoriesProvider: fact revert failed for ${memory.id}: $error');
+        return false;
+      }
+      if (generation != _sessionGeneration || !result.persisted) return false;
+
+      final currentSourceIndex = _memories.indexWhere((candidate) => candidate.id == memory.id);
+      if (currentSourceIndex == -1 ||
+          !_isEligibleSupersededFact(_memories[currentSourceIndex]) ||
+          !_sameRevertSource(memory, _memories[currentSourceIndex])) {
+        return false;
+      }
+      final currentSource = _memories[currentSourceIndex];
+      final replacement = result.authoritativeMemory;
+      final currentTail = _matchingCurrentTail(currentSource);
+      if (replacement == null ||
+          !_isAuthoritativeRevertReplacement(
+            currentSource,
+            replacement,
+            expectedVisibility: currentTail?.visibility,
+          )) {
+        return false;
+      }
+
+      final existingReplacementIndex = _memories.indexWhere((candidate) => candidate.id == replacement.id);
+      if (existingReplacementIndex != -1 &&
+          !_sameAuthoritativeReplacement(_memories[existingReplacementIndex], replacement)) {
+        return false;
+      }
+
+      final staleCurrentTail = currentTail?.id == replacement.id ? null : currentTail;
+      _ledgerProjectionRevision++;
+
+      // The backend atomically closes the current tail when it appends the
+      // restored row. Remove that known-stale current projection before
+      // exposing the replacement; do not forge lifecycle fields locally.
+      if (staleCurrentTail != null) {
+        _memories.removeWhere((candidate) => candidate.id == staleCurrentTail.id);
+      }
+      if (existingReplacementIndex == -1) {
+        _memories.add(replacement);
+      }
+      _setCategories();
+      await _refreshLedgerHistoryAfterRevert(
+        generation,
+        closedTailId: staleCurrentTail?.id,
+        replacementId: replacement.id,
+      );
+      _revertOperationIds.remove(memory.id);
+      return true;
+    } finally {
+      final removed = _revertingMemoryIds.remove(memory.id);
+      if (removed && generation == _sessionGeneration) notifyListeners();
+    }
+  }
+
+  Future<void> _refreshLedgerHistoryAfterRevert(
+    int generation, {
+    required String? closedTailId,
+    required String replacementId,
+  }) async {
+    if (_filterThisDeviceOnly || closedTailId == null || generation != _sessionGeneration) return;
+
+    try {
+      const historyPageSize = 500;
+      const maxHistoryPages = 10;
+      var historyOffset = 0;
+      final refreshedHistory = <String, Memory>{};
+      for (var page = 0; page < maxHistoryPages; page++) {
+        final result = await _fetchLedgerHistoryRequest(limit: historyPageSize, offset: historyOffset);
+        if (generation != _sessionGeneration || !result.supported) return;
+        for (final row in result.memories) {
+          if (row.id != replacementId && row.isHistoricalKnowledgeLedgerRow) {
+            refreshedHistory[row.id] = row;
+          }
+        }
+        if (result.truncated || result.memories.length < historyPageSize) break;
+        historyOffset += result.memories.length;
+      }
+      if (generation != _sessionGeneration) return;
+      for (final row in refreshedHistory.values) {
+        final index = _memories.indexWhere((candidate) => candidate.id == row.id);
+        if (index == -1) {
+          _memories.add(row);
+        } else {
+          _memories[index] = row;
+        }
+      }
+      _setCategories();
+    } catch (error) {
+      Logger.warning('MemoriesProvider: ledger history refresh failed after fact revert: $error');
+    }
+  }
+
+  static bool _sameRevertSource(Memory requested, Memory current) {
+    return requested.id == current.id &&
+        requested.uid == current.uid &&
+        requested.content == current.content &&
+        requested.ledgerSchemaVersion == current.ledgerSchemaVersion &&
+        requested.ledgerKind == current.ledgerKind &&
+        requested.ledgerSlot == current.ledgerSlot &&
+        requested.subjectScope == current.subjectScope &&
+        requested.subjectEntityId == current.subjectEntityId &&
+        requested.supersededBy == current.supersededBy &&
+        requested.invalidAt == current.invalidAt &&
+        requested.curationWeight == current.curationWeight &&
+        requested.userReview == current.userReview;
+  }
+
+  Memory? _matchingCurrentTail(Memory source) {
+    final seen = <String>{source.id};
+    var successorId = (source.supersededBy ?? '').trim();
+    while (successorId.isNotEmpty && seen.add(successorId)) {
+      final matches = _memories.where((candidate) => candidate.id == successorId).toList(growable: false);
+      if (matches.length != 1) break;
+      final successor = matches.single;
+      if (successor.isCurrentKnowledgeLedgerRow && successor.ledgerKind == KnowledgeLedgerKind.fact) {
+        return successor;
+      }
+      successorId = (successor.supersededBy ?? '').trim();
+    }
+
+    // A bounded history page may omit an intermediate link. Never guess the
+    // tail from slot/subject identity: active-row uniqueness is not a client
+    // invariant, and removing a guessed row could hide unrelated knowledge.
+    return null;
+  }
+
+  static bool _isAuthoritativeRevertReplacement(
+    Memory source,
+    Memory replacement, {
+    MemoryVisibility? expectedVisibility,
+  }) {
+    return replacement.id.trim().isNotEmpty &&
+        replacement.id != source.id &&
+        replacement.uid == source.uid &&
+        replacement.ledgerSchemaVersion == 'knowledge_ledger.v1' &&
+        replacement.ledgerKind == KnowledgeLedgerKind.fact &&
+        replacement.intentBacked &&
+        replacement.writeReason == 'direct_user_statement' &&
+        !replacement.deleted &&
+        !replacement.isLocked &&
+        replacement.userReview != false &&
+        replacement.validAt != null &&
+        replacement.invalidAt == null &&
+        (replacement.supersededBy ?? '').trim().isEmpty &&
+        replacement.content.trim() == source.content.trim() &&
+        replacement.ledgerSlot == source.ledgerSlot &&
+        replacement.subjectScope == source.subjectScope &&
+        replacement.subjectEntityId == source.subjectEntityId &&
+        replacement.curationWeight == source.curationWeight &&
+        replacement.evidence.any(
+          (evidence) => evidence['source_type'] == 'explicit_user_revert' && evidence['source_id'] == source.id,
+        ) &&
+        (expectedVisibility == null || replacement.visibility == expectedVisibility);
+  }
+
+  static bool _sameAuthoritativeReplacement(Memory current, Memory returned) {
+    return current.id == returned.id &&
+        current.uid == returned.uid &&
+        current.content == returned.content &&
+        current.ledgerSchemaVersion == returned.ledgerSchemaVersion &&
+        current.ledgerKind == returned.ledgerKind &&
+        current.ledgerSlot == returned.ledgerSlot &&
+        current.subjectScope == returned.subjectScope &&
+        current.subjectEntityId == returned.subjectEntityId &&
+        current.curationWeight == returned.curationWeight &&
+        current.visibility == returned.visibility &&
+        current.validAt == returned.validAt &&
+        current.supersededBy == returned.supersededBy &&
+        current.invalidAt == returned.invalidAt &&
+        current.intentBacked == returned.intentBacked &&
+        current.writeReason == returned.writeReason &&
+        current.userReview == returned.userReview;
   }
 
   Memory? _lastDeletedMemory;
@@ -498,24 +870,56 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<bool> editMemory(Memory memory, String value, [MemoryCategory? category]) async {
-    final success = await editMemoryServer(memory.id, value);
+    if (memory.isKnowledgeLedger &&
+        (memory.deleted ||
+            memory.invalidAt != null ||
+            (memory.supersededBy ?? '').trim().isNotEmpty ||
+            memory.ledgerKind != KnowledgeLedgerKind.fact ||
+            memory.isLocked)) {
+      return false;
+    }
+    final result = await _editMemoryRequest(memory.id, value);
 
-    if (success) {
+    if (result.persisted) {
       final idx = _memories.indexWhere((m) => m.id == memory.id);
       if (idx != -1) {
-        memory.content = value;
-        if (category != null) {
-          memory.category = category;
+        if (memory.isKnowledgeLedger) {
+          final replacement = result.authoritativeMemory;
+          if (replacement == null ||
+              !replacement.isKnowledgeLedger ||
+              replacement.uid != memory.uid ||
+              replacement.id == memory.id ||
+              replacement.content.trim() != value.trim() ||
+              replacement.deleted ||
+              replacement.invalidAt != null ||
+              (replacement.supersededBy ?? '').trim().isNotEmpty ||
+              replacement.ledgerKind != KnowledgeLedgerKind.fact ||
+              !replacement.intentBacked ||
+              replacement.isLocked ||
+              replacement.ledgerSlot != memory.ledgerSlot ||
+              replacement.subjectScope != memory.subjectScope ||
+              replacement.subjectEntityId != memory.subjectEntityId ||
+              replacement.curationWeight != memory.curationWeight ||
+              replacement.visibility != memory.visibility) {
+            return false;
+          }
+          _memories[idx] = replacement;
+        } else {
+          memory.content = value;
+          if (category != null) {
+            memory.category = category;
+          }
+          memory.updatedAt = DateTime.now();
+          memory.edited = true;
+          _memories[idx] = memory;
         }
-        memory.updatedAt = DateTime.now();
-        memory.edited = true;
-        _memories[idx] = memory;
 
         _setCategories();
+        notifyListeners();
       }
     }
 
-    return success;
+    return result.persisted;
   }
 
   Future<void> updateAllMemoriesVisibility(bool makePrivate) async {

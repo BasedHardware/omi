@@ -66,6 +66,27 @@ WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS = {
     "desktop/windows/pnpm-lock.yaml",
 }
 
+# Every value a caller may pass to `--event`. "local" is the pre-push hook; the rest
+# are GitHub event names, and each one is a trigger some workflow that reaches this
+# script actually declares.
+#
+# This is a hard-failure surface, not a hint: argparse rejects an unlisted value and
+# exits 2, so the calling step dies before it writes a single detect-changes output and
+# every job gated on those outputs is skipped. `desktop-swift-ci.yml` declares
+# `workflow_dispatch` and forwards `${{ github.event_name }}` straight through, so every
+# manual run of it failed at "Detect changed paths" — including the recovery hatch that
+# workflow's own `on:` comment documents as the only way to re-mint exact-SHA release
+# evidence for a commit already on main.
+# `test_every_declared_workflow_trigger_is_an_accepted_event` derives the required set
+# from the workflows' own `on:` blocks, so adding a trigger without adding it here fails
+# that test instead of failing the first manual run.
+ACCEPTED_EVENTS = (
+    "local",
+    "pull_request",
+    "push",
+    "workflow_dispatch",
+)
+
 ROUTING_INPUTS = {
     ".github/checks-manifest.yaml",
     ".github/scripts/run_checks.py",
@@ -409,7 +430,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--changed-files", type=Path, required=True)
     parser.add_argument("--base", help="Optional Git revision used to detect deleted inputs and marker removals.")
-    parser.add_argument("--event", choices=("local", "pull_request", "push"), default="local")
+    parser.add_argument("--event", choices=ACCEPTED_EVENTS, default="local")
     parser.add_argument("--github-output", type=Path, help="Append established detect-changes outputs to this file.")
     parser.add_argument("--output", choices=("lines", "json"), default="lines")
     args = parser.parse_args()

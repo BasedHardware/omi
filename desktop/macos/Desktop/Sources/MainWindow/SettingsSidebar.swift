@@ -76,6 +76,10 @@ struct SettingsSearchItem: Identifiable {
       name: "Data Retention", subtitle: "How long to keep screen recordings",
       keywords: ["retention", "storage", "delete old", "keep data"], section: .rewind,
       icon: "clock.arrow.circlepath", settingId: "rewind.retention"),
+    SettingsSearchItem(
+      name: "Meeting Screenshots", subtitle: "Add screenshots of what was on screen to meeting notes",
+      keywords: ["meeting", "screenshots", "notes", "banner", "photos"], section: .rewind,
+      icon: "photo.on.rectangle.angled", settingId: "rewind.meetingnotescreenshots"),
 
     // Transcription
     SettingsSearchItem(
@@ -195,7 +199,7 @@ struct SettingsSearchItem: Identifiable {
 
     // Referral
     SettingsSearchItem(
-      name: "Refer a Friend", subtitle: "Share one free month of Omi Pro",
+      name: "Refer a Friend", subtitle: "Share one free month of Operator",
       keywords: ["refer", "referral", "friend", "gift", "free month", "share link"],
       section: .referral, icon: "gift", settingId: "referral.link"),
 
@@ -271,20 +275,21 @@ struct SettingsSearchItem: Identifiable {
       subtitle: "Configure the floating bar appearance and visibility",
       keywords: ["floating bar", "ask omi", "show bar"], section: .floatingBar, icon: "sparkles",
       settingId: "floatingbar.show"),
-    SettingsSearchItem(
-      name: "Notification Previews",
-      subtitle: "Show assistant notifications under the Floating Bar",
-      keywords: ["notification preview", "floating bar notification", "mute preview", "focus", "dnd"],
-      section: .floatingBar, icon: "sparkles", settingId: "floatingbar.notificationpreviews"),
-    SettingsSearchItem(
-      name: "Background Style", subtitle: "Toggle between solid and transparent background",
-      keywords: ["background", "solid", "transparent", "blur"], section: .floatingBar,
-      icon: "sparkles", settingId: "floatingbar.background"),
-    SettingsSearchItem(
-      name: "Draggable Floating Bar",
-      subtitle: "Allow repositioning the floating bar by dragging it",
-      keywords: ["drag", "move", "reposition", "draggable"], section: .floatingBar,
-      icon: "sparkles", settingId: "floatingbar.draggable"),
+    // HIDDEN DELIBERATELY (Nik, 2026-08-25): search entries for hidden floating-bar rows.
+    // SettingsSearchItem(
+    // name: "Notification Previews",
+    // subtitle: "Show assistant notifications under the Floating Bar",
+    // keywords: ["notification preview", "floating bar notification", "mute preview", "focus", "dnd"],
+    // section: .floatingBar, icon: "sparkles", settingId: "floatingbar.notificationpreviews"),
+    // SettingsSearchItem(
+    // name: "Background Style", subtitle: "Toggle between solid and transparent background",
+    // keywords: ["background", "solid", "transparent", "blur"], section: .floatingBar,
+    // icon: "sparkles", settingId: "floatingbar.background"),
+    // SettingsSearchItem(
+    // name: "Draggable Floating Bar",
+    // subtitle: "Allow repositioning the floating bar by dragging it",
+    // keywords: ["drag", "move", "reposition", "draggable"], section: .floatingBar,
+    // icon: "sparkles", settingId: "floatingbar.draggable"),
     SettingsSearchItem(
       name: "Typed Questions", subtitle: "Speak replies aloud for typed floating-bar questions",
       keywords: ["typed", "text", "speech", "tts", "audio answers"], section: .floatingBar,
@@ -482,9 +487,9 @@ struct SettingsSidebar: View {
       Spacer()
     }
     .frame(width: SettingsSidebarMetrics.expandedWidth)
-    // A half-step of shading, and deliberately not a second material: the window already wears the
-    // glass, and a `.regularMaterial` here would be a *within-window* blur stacked on it — two
-    // materials in one window, which on light glass reads as a grey slab down the side.
+    // A half-step of shading, and deliberately not a second material: the host already wears the
+    // glass (`PageGlassLane` in modern Settings, `LegacySidebarSurface` in old Home), and a
+    // `.regularMaterial` here would be a within-window blur stacked on it.
     .background(Ink.rowFill)
   }
 

@@ -93,7 +93,7 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
     )
     let refreshed = try XCTUnwrap(refreshedItem)
     XCTAssertTrue(refreshed.completed)
-    XCTAssertEqual(refreshed.deleted, true)
+    XCTAssertTrue(refreshed.isRetired)
     XCTAssertEqual(refreshed.dueAt, originalDueAt)
     XCTAssertEqual(refreshed.description, "local description must survive")
   }
@@ -138,7 +138,7 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
 
     let localTask = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: "soft-retired-task")
     let cached = try XCTUnwrap(localTask)
-    XCTAssertEqual(cached.deleted, true)
+    XCTAssertTrue(cached.isRetired)
 
     let todoItems = try await ActionItemStorage.shared.getLocalActionItems(
       limit: 10,

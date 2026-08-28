@@ -2,6 +2,7 @@ import copy
 import hashlib
 import json
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
 
 try:
@@ -23,10 +24,12 @@ from database.firestore_index_registry import (
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
 )
 from database.memory_collections import MemoryCollections
+from database.legal_holds import external_write_fence
 from database import short_term_memories as short_term_db
 from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
+from utils.other.list_budget import ListReadBudget, budgeted_get_all, budgeted_stream_list
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
 
@@ -34,6 +37,26 @@ logger = logging.getLogger(__name__)
 
 memories_collection = 'memories'
 users_collection = 'users'
+
+
+def _account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(function)
+    def wrapped(uid: str, *args: Any, **kwargs: Any) -> Any:
+        database = _get_db(kwargs.get("firestore_client"))
+        with external_write_fence(uid, firestore_client=database):
+            return function(uid, *args, **kwargs)
+
+    return wrapped
+
+
+def _destination_account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(function)
+    def wrapped(prev_uid: str, new_uid: str, *args: Any, **kwargs: Any) -> Any:
+        database = _get_db(kwargs.get("firestore_client"))
+        with external_write_fence(new_uid, firestore_client=database):
+            return function(prev_uid, new_uid, *args, **kwargs)
+
+    return wrapped
 
 
 class MemoryDoc(TypedDict, total=False):
@@ -238,11 +261,17 @@ def _memory_list_sort_key(memory: Dict[str, Any]) -> tuple[float, str]:
     return (-timestamp, str(memory.get('id') or ''))
 
 
-def _stream_memory_list_index_window(memories_ref: Any, order_field: str, candidate_limit: int) -> List[Any]:
+def _stream_memory_list_index_window(
+    memories_ref: Any,
+    order_field: str,
+    candidate_limit: int,
+    *,
+    budget: Optional[ListReadBudget] = None,
+) -> List[Any]:
     query = memories_ref.select(list(_MEMORY_LIST_INDEX_FIELDS)).order_by(
         order_field, direction=firestore.Query.DESCENDING
     )
-    return list(query.limit(candidate_limit).stream())
+    return budgeted_stream_list(query.limit(candidate_limit), budget)
 
 
 def _merge_memory_list_index_docs(
@@ -278,12 +307,15 @@ def list_memory_updated_or_created_index(
     include_invalidated: bool = False,
     *,
     firestore_client: Any = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> List[Dict[str, Any]]:
     """Newest-first historical index rows without content or decrypt.
 
     Streams two candidate windows of ``min(limit+offset, 5000)`` metadata
     documents (``updated_at`` DESC and ``created_at`` DESC), merges them, and
     returns the requested slice. Callers hydrate only the page they will emit.
+    With a ``budget`` both windows charge their fetched rows and each stream
+    gets the budget's per-RPC timeout (#11831).
     """
     database = _get_db(firestore_client)
     memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
@@ -294,14 +326,14 @@ def list_memory_updated_or_created_index(
     if end_date:
         memories_ref = memories_ref.where(filter=FieldFilter('created_at', '<=', end_date))
     candidate_limit = max(1, min(int(limit) + max(int(offset), 0), _MEMORY_LIST_CANDIDATE_WINDOW_MAX))
-    candidate_docs = list(_stream_memory_list_index_window(memories_ref, 'updated_at', candidate_limit))
-    candidate_docs.extend(_stream_memory_list_index_window(memories_ref, 'created_at', candidate_limit))
+    candidate_docs = _stream_memory_list_index_window(memories_ref, 'updated_at', candidate_limit, budget=budget)
+    candidate_docs.extend(_stream_memory_list_index_window(memories_ref, 'created_at', candidate_limit, budget=budget))
     memories = _merge_memory_list_index_docs(candidate_docs, include_invalidated=include_invalidated)
     return memories[max(0, int(offset)) : max(0, int(offset)) + max(1, int(limit))]
 
 
 def _fetch_memory_docs_by_ids(
-    uid: str, memory_ids: List[str], *, firestore_client: Any = None
+    uid: str, memory_ids: List[str], *, firestore_client: Any = None, budget: Optional[ListReadBudget] = None
 ) -> Dict[str, Dict[str, Any]]:
     """Batch-get full historical docs. Does not decrypt — callers that need
     plaintext go through ``prepare_for_read`` or ``_prepare_memory_for_read``."""
@@ -311,7 +343,7 @@ def _fetch_memory_docs_by_ids(
     memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     doc_refs = [memories_ref.document(memory_id) for memory_id in memory_ids]
     by_id: Dict[str, Dict[str, Any]] = {}
-    for doc in database.get_all(doc_refs):
+    for doc in budgeted_get_all(database, doc_refs, budget):
         if getattr(doc, 'exists', True) is False:
             continue
         payload = _typed_doc(doc)
@@ -417,6 +449,7 @@ def _historical_scan_page(
     limit: int,
     start_after: Optional[HistoricalScanCursor],
     firestore_client: Any,
+    budget: Optional[ListReadBudget] = None,
 ) -> tuple[list[dict[str, Any]], list[HistoricalScanCursor], bool]:
     """Shared bounded keyset scan for one historical order field.
 
@@ -425,6 +458,8 @@ def _historical_scan_page(
     is exhausted. Callers filter duplicates / visibility into None slots and
     decrypt only rows they may emit — decrypting the skipped prefix here is
     what left first-page ``read_page`` with no time for the offset fallback.
+    With a ``budget`` the page's stream gets the per-RPC timeout and its rows
+    are charged (#11831).
     """
     database = _get_db(firestore_client)
     memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
@@ -441,7 +476,7 @@ def _historical_scan_page(
                 '__name__': memories_ref.document(cursor_memory_id),
             }
         )
-    snapshots = list(query.limit(bounded_limit).stream())
+    snapshots = budgeted_stream_list(query.limit(bounded_limit), budget)
     payloads: list[dict[str, Any]] = []
     cursors: list[HistoricalScanCursor] = []
     for snapshot in snapshots:
@@ -467,6 +502,7 @@ def scan_memories_updated_at_page(
     limit: int = 100,
     start_after: Optional[HistoricalScanCursor] = None,
     firestore_client: Any = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> tuple[list[dict[str, Any]], list[HistoricalScanCursor], bool]:
     """Bounded updated_at-present historical keyset page (updated_at DESC, __name__ ASC)."""
     return _historical_scan_page(
@@ -476,6 +512,7 @@ def scan_memories_updated_at_page(
         limit=limit,
         start_after=start_after,
         firestore_client=firestore_client,
+        budget=budget,
     )
 
 
@@ -485,12 +522,9 @@ def scan_memories_created_at_page(
     limit: int = 100,
     start_after: Optional[HistoricalScanCursor] = None,
     firestore_client: Any = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> tuple[list[dict[str, Any]], list[HistoricalScanCursor], bool]:
-    """Bounded created_at historical keyset page (created_at DESC, __name__ ASC).
-
-    Callers must filter updated_at-present duplicates so each document is owned
-    by exactly one of the dual streams.
-    """
+    """Bounded created_at historical keyset page with updated_at-present rows filtered by the caller."""
     return _historical_scan_page(
         uid,
         order_field='created_at',
@@ -498,6 +532,7 @@ def scan_memories_created_at_page(
         limit=limit,
         start_after=start_after,
         firestore_client=firestore_client,
+        budget=budget,
     )
 
 
@@ -707,7 +742,13 @@ def get_memory(uid: str, memory_id: str, *, firestore_client: Any = None) -> Opt
     return memory_data
 
 
-def get_memories_by_ids(uid: str, memory_ids: List[str], *, firestore_client: Any = None) -> List[Dict[str, Any]]:
+def get_memories_by_ids(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    firestore_client: Any = None,
+    budget: Optional[ListReadBudget] = None,
+) -> List[Dict[str, Any]]:
     """
     Batch fetch multiple memories by their IDs.
     Uses Firestore's get_all for efficient batch retrieval.
@@ -720,7 +761,7 @@ def get_memories_by_ids(uid: str, memory_ids: List[str], *, firestore_client: An
     memories_ref = user_ref.collection(memories_collection)
 
     doc_refs = [memories_ref.document(memory_id) for memory_id in memory_ids]
-    docs = database.get_all(doc_refs)
+    docs = budgeted_get_all(database, doc_refs, budget)
 
     memories: List[Dict[str, Any]] = []
     for doc in docs:
@@ -1235,6 +1276,7 @@ def delete_memories_for_conversation(uid: str, memory_id: str, *, firestore_clie
     return result
 
 
+@_account_write_gated
 def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
     """
     Unlock both released legacy rows and canonical product-memory rows.
@@ -1300,6 +1342,7 @@ def get_memories_to_migrate(uid: str, target_level: str, *, firestore_client: An
     return to_migrate
 
 
+@_account_write_gated
 def migrate_memories_level_batch(
     uid: str, memory_ids: List[str], target_level: str, *, firestore_client: Any = None
 ) -> None:
@@ -1339,6 +1382,7 @@ def migrate_memories_level_batch(
     batch.commit()
 
 
+@_destination_account_write_gated
 def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, *, firestore_client: Any = None) -> int:
     """
     Migrate memories from one user to another.

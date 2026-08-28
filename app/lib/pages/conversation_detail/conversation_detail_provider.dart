@@ -405,14 +405,20 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  /// Returns the first app result from the conversation if available
-  /// This is typically the summary of the conversation
+  /// Returns the first app result that actually carries content, which is the
+  /// summary of the conversation. An app result with empty content is not a
+  /// summary: returning it suppressed the structured sections (they only render
+  /// when `appId == null`) while `AppResultDetailWidget` fell into its
+  /// "no summary" placeholder, so a conversation with a full sections summary
+  /// rendered as having none. Mirrors desktop's `ConversationSummarySelection`.
   AppResponse? getSummarizedApp() {
-    if (conversation.appResults.isNotEmpty) {
-      return conversation.appResults[0];
+    final appResult = conversation.appResults.firstWhereOrNull((r) => r.content.trim().isNotEmpty);
+    if (appResult != null) {
+      return appResult;
     }
-    // If no appResults but we have structured overview, create a fake AppResponse
-    if (conversation.structured.overview.isNotEmpty) {
+    // If no app result carries content but we have a structured overview or
+    // sections, create a fake AppResponse
+    if (conversation.structured.overview.isNotEmpty || conversation.structured.sections.isNotEmpty) {
       return AppResponse(conversation.structured.overview, appId: null);
     }
     return null;
@@ -507,7 +513,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final suggestedApp = _cachedSuggestedApps.firstWhereOrNull((app) => app.id == appId);
     if (suggestedApp != null) return suggestedApp;
 
-    return null;
+    // The two caches above only fill after the summary sheet fetches. The durable
+    // app catalog (appProvider.apps) is loaded at startup, so a real app_id must
+    // resolve here instead of rendering "Unknown App" until the sheet is opened
+    // (SCA-359).
+    final providerApp = appProvider?.apps.firstWhereOrNull((app) => app.id == appId);
+    return providerApp;
   }
 
   /// Enables an app and updates the cached enabled apps list
@@ -515,7 +526,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<bool> enableApp(App app) async {
     try {
       // Make the server call to enable the app
-      final success = await enableAppServer(app.id);
+      final (success, _) = await enableAppServer(app.id);
       if (_isDisposed) return false;
 
       if (success) {

@@ -4,6 +4,34 @@ import AppKit
 enum PermissionDragGuidance {
   private static var lastPresentedAt: Date?
 
+  /// Open the Accessibility privacy pane and show the same draggable app card
+  /// used by Screen Recording and Full Disk Access. On current macOS releases,
+  /// asking AX to prompt can register the request without showing usable UI, so
+  /// opening Settings alone leaves a fresh named bundle with no obvious row to
+  /// enable.
+  @discardableResult
+  static func openAccessibilitySettings(
+    isAuthorized: () -> Bool = { true },
+    open: (URL) -> Bool = { NSWorkspace.shared.open($0) },
+    suspendForPermissionPrompt: () -> Void = {
+      ShellSummon.suspendForPermissionPrompt()
+    },
+    presentDragGuidance: () -> Void = {
+      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+    }
+  ) -> Bool {
+    guard
+      let url = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    else { return false }
+
+    guard isAuthorized() else { return false }
+    suspendForPermissionPrompt()
+    guard open(url) else { return false }
+    presentDragGuidance()
+    return true
+  }
+
   /// Remove the drag card immediately — the permission was granted or the user
   /// skipped, so the floating icon should not linger.
   static func dismiss() {

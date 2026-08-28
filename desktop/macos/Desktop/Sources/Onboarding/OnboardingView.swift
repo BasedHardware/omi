@@ -643,6 +643,7 @@ struct OnboardingView: View {
     // Restore the real chat projection before revealing the product UI.
     Task {
       await chatProvider.finishOnboardingJournal()
+      OnboardingFlow.markCompleted(for: RuntimeOwnerIdentity.currentOwnerId())
       appState.hasCompletedOnboarding = true
     }
 
@@ -774,6 +775,32 @@ struct OnboardingTrustPreviewCard: View {
 
 // MARK: - Onboarding Video View
 
+/// How much longer the onboarding demo may play sound, counted once per app
+/// session rather than per player.
+///
+/// The demo video loops and its view is rebuilt on every onboarding step, so any
+/// budget attached to a single `AVPlayer`'s item time resets to zero each time
+/// and the music starts over. The deadline is wall-clock and starts at the first
+/// player, so later players open already muted.
+@MainActor
+enum OnboardingDemoAudioAllowance {
+  static let allowance: TimeInterval = 10
+
+  private static var deadline: Date?
+
+  /// Seconds of audio left; zero or less means the player must start muted.
+  static func remaining(now: Date = Date()) -> TimeInterval {
+    let end = deadline ?? now.addingTimeInterval(allowance)
+    deadline = end
+    return end.timeIntervalSince(now)
+  }
+
+  /// Test seam: forget the session's deadline.
+  static func resetForTesting() {
+    deadline = nil
+  }
+}
+
 struct OnboardingVideoView: NSViewRepresentable {
   var cornerRadius: CGFloat = 12
 
@@ -796,6 +823,19 @@ struct OnboardingVideoView: NSViewRepresentable {
       playerView.showsSharingServiceButton = false
       player.play()
 
+      // Onboarding sound gets 10s for the whole session, not 10s per player.
+      // SwiftUI rebuilds this view whenever the step changes, and each rebuild
+      // makes a fresh AVPlayer whose time starts at zero — so a boundary
+      // observer on item time restarted the music on every step.
+      let remaining = OnboardingDemoAudioAllowance.remaining()
+      if remaining <= 0 {
+        player.isMuted = true
+      } else {
+        let mute = DispatchWorkItem { [weak player] in player?.isMuted = true }
+        context.coordinator.muteWorkItem = mute
+        DispatchQueue.main.asyncAfter(deadline: .now() + remaining, execute: mute)
+      }
+
       NotificationCenter.default.addObserver(
         context.coordinator,
         selector: #selector(Coordinator.playerDidFinishPlaying(_:)),
@@ -813,6 +853,11 @@ struct OnboardingVideoView: NSViewRepresentable {
 
   class Coordinator: NSObject {
     var player: AVPlayer?
+    var muteWorkItem: DispatchWorkItem?
+
+    deinit {
+      muteWorkItem?.cancel()
+    }
 
     @objc func playerDidFinishPlaying(_ notification: Notification) {
       player?.seek(to: .zero)

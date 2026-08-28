@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 from typing import Any, cast
@@ -26,11 +27,41 @@ def main() -> int:
         help='render only this Cloud Run job and the shared network flags; services remain full-environment only',
     )
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument(
+        '--state-output',
+        type=Path,
+        help='Write the exact rendered Cloud Run service env, secret refs, and flags as validator state JSON.',
+    )
+    parser.add_argument(
+        '--desktop-state-output',
+        type=Path,
+        help=(
+            'Write the rendered desktop-backend env as expected-env-state JSON for '
+            'attach_cloud_run_gmp_sidecar.py --expected-env-state.'
+        ),
+    )
     args = parser.parse_args()
+    if args.job and args.state_output:
+        parser.error('--state-output is supported only for the full service render')
+    if args.job and args.desktop_state_output:
+        parser.error('--desktop-state-output is supported only for the full service render')
 
     manifest = _load_yaml(args.manifest)
     environments = _as_config_dict(manifest['environments']) or {}
     env_config = _as_config_dict(environments[args.env]) or {}
+
+    if args.desktop_state_output:
+        args.desktop_state_output.write_text(
+            json.dumps(_render_desktop_backend_state(env_config), indent=2, sort_keys=True) + '\n',
+            encoding='utf-8',
+        )
+        # desktop-backend deploys from its own workflow and does not set the
+        # backend service env this script otherwise requires. Rendering the
+        # sidecar guard must not force those callers to supply it, so stop here
+        # unless a backend render was also asked for.
+        if not args.state_output and not args.job:
+            return 0
+
     cloud_run = _as_config_dict(env_config['cloud_run']) or {}
 
     jobs = _as_config_dict(cloud_run.get('jobs')) or {}
@@ -50,8 +81,16 @@ def main() -> int:
     if not args.job:
         desktop_backend = _as_config_dict(env_config.get('desktop_backend')) or {}
         desktop_env = _as_config_dict(desktop_backend.get('env')) or {}
+        desktop_secrets = _as_config_dict(desktop_backend.get('secrets')) or {}
         if desktop_env:
             rendered_outputs.append(('desktop_backend_env_vars', _render_env_vars(desktop_env)))
+        if desktop_secrets:
+            rendered_outputs.extend(
+                (
+                    ('desktop_backend_secrets', _render_secrets(desktop_secrets)),
+                    ('desktop_backend_secret_names', _render_secret_names(desktop_secrets)),
+                )
+            )
         for service, raw_service_config in services.items():
             service_config = _as_config_dict(raw_service_config)
             if service_config is None:
@@ -77,6 +116,11 @@ def main() -> int:
                 (f'{output_prefix}_secret_names', _render_secret_names(job_config.get('secrets', {}))),
             )
         )
+    if args.state_output:
+        args.state_output.write_text(
+            json.dumps(_render_cloud_run_state(env_config), indent=2, sort_keys=True) + '\n',
+            encoding='utf-8',
+        )
     for name, value in rendered_outputs:
         _emit_output(name, value)
     return 0
@@ -90,8 +134,8 @@ def _load_yaml(path: Path) -> ConfigDict:
     return cast(ConfigDict, loaded)
 
 
-def _render_env_vars(env_entries: ConfigDict) -> str:
-    lines: list[str] = []
+def _render_env_entries(env_entries: ConfigDict) -> list[ConfigDict]:
+    rendered: list[ConfigDict] = []
     for name, raw_entry in env_entries.items():
         entry = _as_config_dict(raw_entry)
         if entry is None:
@@ -100,8 +144,15 @@ def _render_env_vars(env_entries: ConfigDict) -> str:
         if value is None:
             # Provisional values belong to services not yet deployed in every environment.
             continue
-        lines.append(f'{name}={_escape_deploy_cloud_run_env_value(value)}')
-    return '\n'.join(lines)
+        rendered.append({'name': str(name), 'value': value})
+    return rendered
+
+
+def _render_env_vars(env_entries: ConfigDict) -> str:
+    return '\n'.join(
+        f'{entry["name"]}={_escape_deploy_cloud_run_env_value(entry["value"])}'
+        for entry in _render_env_entries(env_entries)
+    )
 
 
 def _escape_deploy_cloud_run_env_value(value: str) -> str:
@@ -112,23 +163,40 @@ def _escape_deploy_cloud_run_env_value(value: str) -> str:
     )
 
 
-def _render_secrets(secret_entries: ConfigDict) -> str:
-    lines: list[str] = []
+def _render_secret_entries(secret_entries: ConfigDict) -> list[ConfigDict]:
+    rendered: list[ConfigDict] = []
     for name, raw_entry in secret_entries.items():
         entry = _as_config_dict(raw_entry)
         if entry is None or 'secret' not in entry:
             raise ValueError(f'Cloud Run secret binding {name} must have a secret entry')
         version = entry.get('version', 'latest')
-        lines.append(f'{name}={entry["secret"]}:{version}')
-    return '\n'.join(lines)
+        rendered.append(
+            {
+                'name': str(name),
+                'valueFrom': {
+                    'secretKeyRef': {
+                        'name': str(entry['secret']),
+                        'key': str(version),
+                    }
+                },
+            }
+        )
+    return rendered
+
+
+def _render_secrets(secret_entries: ConfigDict) -> str:
+    return '\n'.join(
+        f'{entry["name"]}={entry["valueFrom"]["secretKeyRef"]["name"]}:{entry["valueFrom"]["secretKeyRef"]["key"]}'
+        for entry in _render_secret_entries(secret_entries)
+    )
 
 
 def _render_secret_names(secret_entries: ConfigDict) -> str:
     return ','.join(secret_entries.keys())
 
 
-def _render_flags(flag_entries: ConfigDict) -> str:
-    flags: list[str] = []
+def _render_flag_values(flag_entries: ConfigDict) -> dict[str, str]:
+    flags: dict[str, str] = {}
     for name, raw_entry in flag_entries.items():
         entry = _as_config_dict(raw_entry)
         if entry is not None:
@@ -137,8 +205,64 @@ def _render_flags(flag_entries: ConfigDict) -> str:
             value = raw_entry
         if value in (None, ''):
             raise ValueError(f'Cloud Run flag {name} must have a value')
-        flags.append(f'{name}={value}')
-    return ' '.join(flags)
+        flags[str(name)] = str(value)
+    return flags
+
+
+def _render_flags(flag_entries: ConfigDict) -> str:
+    return ' '.join(f'{name}={value}' for name, value in _render_flag_values(flag_entries).items())
+
+
+def _render_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
+    """Build validator state from the same values emitted to deploy-cloudrun."""
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    network = _as_config_dict(cloud_run.get('network')) or {}
+    network_flags = _render_flag_values(_as_config_dict(network.get('flags')) or {})
+    services: ConfigDict = {}
+    for service_name, raw_service_config in (_as_config_dict(cloud_run.get('services')) or {}).items():
+        service_config = _as_config_dict(raw_service_config)
+        if service_config is None:
+            raise ValueError(f'Cloud Run service {service_name} must be a mapping')
+        services[str(service_name)] = {
+            'env': _render_state_env(service_config),
+            'flags': dict(network_flags),
+        }
+    # Jobs ship from their own workflows, but their env, secret and forbidden_env contract is
+    # declared in this manifest and validated against this state; omitting them retires that check.
+    jobs: ConfigDict = {}
+    for job_name, raw_job_config in (_as_config_dict(cloud_run.get('jobs')) or {}).items():
+        job_config = _as_config_dict(raw_job_config)
+        if job_config is None:
+            raise ValueError(f'Cloud Run job {job_name} must be a mapping')
+        jobs[str(job_name)] = {
+            'env': _render_state_env(job_config),
+            'flags': _render_flag_values(_as_config_dict(job_config.get('flags')) or {}),
+        }
+    return {'services': services, 'jobs': jobs}
+
+
+def _render_state_env(config: ConfigDict) -> list[ConfigDict]:
+    return [
+        *_render_env_entries(_as_config_dict(config.get('env')) or {}),
+        *_render_secret_entries(_as_config_dict(config.get('secrets')) or {}),
+    ]
+
+
+def _render_desktop_backend_state(env_config: ConfigDict) -> ConfigDict:
+    """Build sidecar-guard state for desktop-backend from the same manifest values.
+
+    Deliberately separate from _render_cloud_run_state: that file is also read by
+    validate-backend-runtime-env.py, which walks cloud_run.services, and
+    desktop-backend is not one of those. Keeping them apart means adding this
+    guard cannot perturb the backend deploy path.
+
+    The manifest owns only part of desktop-backend's env today, and that is fine:
+    attach_cloud_run_gmp_sidecar.py checks the names it is given and ignores the
+    rest, so this asserts a real subset rather than nothing.
+    """
+    desktop_backend = _as_config_dict(env_config.get('desktop_backend')) or {}
+    env_entries = _render_env_entries(_as_config_dict(desktop_backend.get('env')) or {})
+    return {'services': {'desktop-backend': {'env': env_entries}}}
 
 
 def _runtime_value(name: str, entry: ConfigDict, *, allow_missing: bool = False) -> str | None:

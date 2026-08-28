@@ -11,6 +11,20 @@ enum NotificationDismissalKind: String, CaseIterable, Sendable {
   case replaced
 }
 
+/// Closed source for `floating_bar_query_sent`. Historical events omit this
+/// property; dashboards that need continuity with that volume should filter
+/// `source=typed`.
+enum FloatingBarQuerySource: String, CaseIterable, Sendable {
+  case typed
+  case ptt
+  case pttVoiceOnly = "ptt_voice_only"
+  case pttRealtime = "ptt_realtime"
+
+  static func visibleQuery(fromVoice: Bool) -> Self {
+    fromVoice ? .ptt : .typed
+  }
+}
+
 /// Unified analytics manager that sends events to PostHog.
 /// Use this instead of calling PostHogManager directly
 @MainActor
@@ -117,6 +131,16 @@ class AnalyticsManager {
     _ capture: (@MainActor (String?, [String: Any], [String: Any]) -> Void)?
   ) {
     devicePairingTelemetryCaptureForTests = capture
+  }
+
+  /// Scoped observation of floating-bar query telemetry. Nil in production;
+  /// tests install a capture at the same boundary as PostHog.
+  private var floatingBarQueryTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setFloatingBarQueryTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    floatingBarQueryTelemetryCaptureForTests = capture
   }
 
   // MARK: - Initialization
@@ -694,9 +718,41 @@ class AnalyticsManager {
 
   // MARK: - Chat Events
 
-  func chatMessageSent(messageLength: Int, hasSelectedAppContext: Bool = false, source: String) {
+  func chatMessageSent(
+    messageLength: Int, hasSelectedAppContext: Bool = false, source: String,
+    countsAsQuestion: Bool = true
+  ) {
     PostHogManager.shared.chatMessageSent(
       messageLength: messageLength, hasSelectedAppContext: hasSelectedAppContext, source: source)
+    // Every chat surface funnels through here, which makes it the one place
+    // that can count "questions asked" for the rating-prompt trigger. Callers
+    // pass countsAsQuestion: false for sends that are not a NEW accepted
+    // question (retries of a failed turn, busy no-op paths) so the one-time
+    // prompt trigger counts each logical question exactly once.
+    guard countsAsQuestion else { return }
+    Task { @MainActor in
+      RatingPromptManager.shared.recordQuestionAsked()
+    }
+  }
+
+  func desktopRatingSubmitted(rating: Int) {
+    PostHogManager.shared.desktopRatingSubmitted(rating: rating)
+  }
+
+  func desktopPromptShown(promptId: String, promptType: String) {
+    PostHogManager.shared.track(
+      "Desktop Prompt Shown", properties: ["prompt_id": promptId, "prompt_type": promptType])
+  }
+
+  func desktopPromptAnswered(promptId: String, promptType: String, value: String) {
+    PostHogManager.shared.track(
+      "Desktop Prompt Answered",
+      properties: ["prompt_id": promptId, "prompt_type": promptType, "value": value])
+  }
+
+  func desktopPromptDismissed(promptId: String, promptType: String) {
+    PostHogManager.shared.track(
+      "Desktop Prompt Dismissed", properties: ["prompt_id": promptId, "prompt_type": promptType])
   }
 
   // MARK: - Search Events
@@ -1386,11 +1442,13 @@ class AnalyticsManager {
   }
 
   /// Track when an AI query is sent from the floating bar
-  func floatingBarQuerySent(messageLength: Int, hasScreenshot: Bool) {
+  func floatingBarQuerySent(messageLength: Int, hasScreenshot: Bool, source: FloatingBarQuerySource) {
     let props: [String: Any] = [
       "message_length": messageLength,
       "has_screenshot": hasScreenshot,
+      "source": source.rawValue,
     ]
+    floatingBarQueryTelemetryCaptureForTests?("floating_bar_query_sent", props)
     PostHogManager.shared.track("floating_bar_query_sent", properties: props)
   }
 

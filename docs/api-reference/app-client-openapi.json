@@ -1279,6 +1279,7 @@
         "type": "object"
       },
       "ActionItemsResponse": {
+        "description": "List envelope; ``truncated`` is set only when the request's list-read\nbudget ended the aggregate scan early (#11831) — such pages may not be a\ncomplete prefix, so ``has_more`` is forced true as well.",
         "properties": {
           "action_items": {
             "items": {
@@ -1290,6 +1291,11 @@
           "has_more": {
             "default": false,
             "title": "Has More",
+            "type": "boolean"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
             "type": "boolean"
           }
         },
@@ -1691,6 +1697,28 @@
             ],
             "default": false,
             "title": "Disabled"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At"
+          },
+          "disabled_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Error"
           },
           "disabled_reason": {
             "anyOf": [
@@ -2186,6 +2214,28 @@
             ],
             "default": false,
             "title": "Disabled"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At"
+          },
+          "disabled_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Error"
           },
           "disabled_reason": {
             "anyOf": [
@@ -4815,6 +4865,20 @@
         "title": "Body_upload_file_chat_v2_files_post",
         "type": "object"
       },
+      "Body_upload_frame_request_v1_frame_requests__request_id__upload_post": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_frame_request_v1_frame_requests__request_id__upload_post",
+        "type": "object"
+      },
       "Body_upload_profile_v3_upload_audio_post": {
         "properties": {
           "file": {
@@ -5584,6 +5648,18 @@
             "title": "Evidence Refs",
             "type": "array"
           },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
           "goal_id": {
             "anyOf": [
               {
@@ -6084,6 +6160,203 @@
           "data_points"
         ],
         "title": "ChartDataset",
+        "type": "object"
+      },
+      "ChatEvidenceEnvelope": {
+        "description": "Versioned transport envelope for supplemental chat evidence.",
+        "properties": {
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ChatEvidenceReference"
+            },
+            "maxItems": 24,
+            "title": "References",
+            "type": "array"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "schema_version": {
+            "default": 1,
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "type": "integer"
+          }
+        },
+        "title": "ChatEvidenceEnvelope",
+        "type": "object"
+      },
+      "ChatEvidenceReference": {
+        "description": "One bounded, optional source reference attached to a chat answer.\n\nThe answer text remains authoritative.  Clients may render these references\nas supplemental chrome, but an unavailable or future reference must never\nmake the answer itself unreadable.",
+        "properties": {
+          "captured_at_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At Ms"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "end_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "maxLength": 600,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "frame_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Id"
+          },
+          "id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "segment_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Id"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "maxLength": 600,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "state"
+        ],
+        "title": "ChatEvidenceReference",
         "type": "object"
       },
       "ChatFirstSubject": {
@@ -6986,6 +7259,11 @@
             ],
             "title": "Processing Memory Id"
           },
+          "screenshot_sharing_enabled": {
+            "default": true,
+            "title": "Screenshot Sharing Enabled",
+            "type": "boolean"
+          },
           "source": {
             "anyOf": [
               {
@@ -7526,6 +7804,17 @@
             "title": "Base64",
             "type": "string"
           },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -7568,6 +7857,17 @@
               }
             ],
             "title": "Id"
+          },
+          "storage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Id"
           }
         },
         "required": [
@@ -7587,6 +7887,534 @@
           "has_recording"
         ],
         "title": "ConversationRecordingResponse",
+        "type": "object"
+      },
+      "ConversationScreenFrame": {
+        "properties": {
+          "caption": {
+            "maxLength": 160,
+            "title": "Caption",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "content_url": {
+            "title": "Content Url",
+            "type": "string"
+          },
+          "focal_region": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NormalizedRect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ground": {
+            "$ref": "#/components/schemas/ScreenFrameGround"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Labels",
+            "type": "array"
+          },
+          "rank": {
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Rank",
+            "type": "integer"
+          },
+          "role": {
+            "enum": [
+              "banner",
+              "strip"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "source_badge": {
+            "anyOf": [
+              {
+                "enum": [
+                  "code",
+                  "browser",
+                  "document",
+                  "slides",
+                  "product"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Badge"
+          },
+          "thumbnail_url": {
+            "title": "Thumbnail Url",
+            "type": "string"
+          },
+          "url_expires_at": {
+            "format": "date-time",
+            "title": "Url Expires At",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "captured_at",
+          "role",
+          "rank",
+          "caption",
+          "labels",
+          "width",
+          "height",
+          "content_url",
+          "thumbnail_url",
+          "url_expires_at",
+          "ground"
+        ],
+        "title": "ConversationScreenFrame",
+        "type": "object"
+      },
+      "ConversationScreenFrameSet": {
+        "properties": {
+          "adjudicated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adjudicated At"
+          },
+          "banner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationScreenFrame"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "strip": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationScreenFrame"
+            },
+            "maxItems": 6,
+            "title": "Strip",
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "ConversationScreenFrameSet",
+        "type": "object"
+      },
+      "ConversationSearchItem": {
+        "description": "Search hit: base conversation fields plus optional transcript match evidence.",
+        "properties": {
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "apps_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AppResult"
+            },
+            "title": "Apps Results",
+            "type": "array"
+          },
+          "audio_files": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AudioFile"
+            },
+            "title": "Audio Files",
+            "type": "array"
+          },
+          "calendar_event": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalendarEventLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Twilio call SID for phone call conversations",
+            "title": "Call Id"
+          },
+          "client_device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Device Id"
+          },
+          "client_platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Platform"
+          },
+          "conversation_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationAudio"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_protection_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Protection Level"
+          },
+          "deferred": {
+            "default": false,
+            "title": "Deferred",
+            "type": "boolean"
+          },
+          "discarded": {
+            "default": false,
+            "title": "Discarded",
+            "type": "boolean"
+          },
+          "external_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Data"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ID of the folder this conversation belongs to",
+            "title": "Folder Id"
+          },
+          "geolocation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Geolocation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "imported": {
+            "default": false,
+            "title": "Imported",
+            "type": "boolean"
+          },
+          "is_locked": {
+            "default": false,
+            "title": "Is Locked",
+            "type": "boolean"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "match_snippets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptMatchSnippet"
+            },
+            "title": "Match Snippets",
+            "type": "array"
+          },
+          "meeting_dedup_speech_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Dedup Speech S"
+          },
+          "meeting_duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Duration S"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
+          "meeting_treatment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Treatment Reason"
+          },
+          "photos": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConversationPhoto"
+            },
+            "title": "Photos",
+            "type": "array"
+          },
+          "plugins_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PluginResult"
+            },
+            "title": "Plugins Results",
+            "type": "array"
+          },
+          "private_cloud_sync_enabled": {
+            "default": false,
+            "title": "Private Cloud Sync Enabled",
+            "type": "boolean"
+          },
+          "processing_conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Conversation Id"
+          },
+          "processing_memory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Memory Id"
+          },
+          "screenshot_sharing_enabled": {
+            "default": true,
+            "title": "Screenshot Sharing Enabled",
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationSource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "omi"
+          },
+          "starred": {
+            "default": false,
+            "title": "Starred",
+            "type": "boolean"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "completed"
+          },
+          "structured": {
+            "$ref": "#/components/schemas/Structured"
+          },
+          "suggested_summarization_apps": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested Summarization Apps",
+            "type": "array"
+          },
+          "transcript_segments": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegment"
+            },
+            "title": "Transcript Segments",
+            "type": "array"
+          },
+          "transcript_segments_compressed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Transcript Segments Compressed"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "uses_custom_stt": {
+            "default": false,
+            "title": "Uses Custom Stt",
+            "type": "boolean"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/ConversationVisibility",
+            "default": "private"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "structured"
+        ],
+        "title": "ConversationSearchItem",
         "type": "object"
       },
       "ConversationSource": {
@@ -8269,6 +9097,72 @@
           "name"
         ],
         "title": "CreateFolderRequest",
+        "type": "object"
+      },
+      "CreateFrameRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "dedupe_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Dedupe Key",
+            "type": "string"
+          },
+          "device_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Device Id",
+            "type": "string"
+          },
+          "requested_ttl_seconds": {
+            "anyOf": [
+              {
+                "maximum": 518400.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Ttl Seconds"
+          },
+          "screenshot_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screenshot Id"
+          }
+        },
+        "required": [
+          "device_id",
+          "dedupe_key"
+        ],
+        "title": "CreateFrameRequest",
         "type": "object"
       },
       "CreateGoalRequest": {
@@ -11876,6 +12770,419 @@
         "title": "FolderMutationResponse",
         "type": "object"
       },
+      "FrameRequest": {
+        "additionalProperties": false,
+        "description": "Owner-scoped request and its auditable lifecycle state.",
+        "properties": {
+          "account_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "attached_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attached At"
+          },
+          "attempt_number": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Attempt Number",
+            "type": "integer"
+          },
+          "byte_count": {
+            "default": 0,
+            "maximum": 10485760.0,
+            "minimum": 0.0,
+            "title": "Byte Count",
+            "type": "integer"
+          },
+          "claimed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed At"
+          },
+          "cleanup_attempts": {
+            "default": 0,
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Cleanup Attempts",
+            "type": "integer"
+          },
+          "cleanup_next_attempt_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cleanup Next Attempt At"
+          },
+          "cleanup_state": {
+            "$ref": "#/components/schemas/FrameRequestCleanupState",
+            "default": "not_required"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dedupe_key": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Dedupe Key",
+            "type": "string"
+          },
+          "dedupe_window": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Dedupe Window",
+            "type": "integer"
+          },
+          "device_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Device Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "request_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Request Id",
+            "type": "string"
+          },
+          "screenshot_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screenshot Id"
+          },
+          "state": {
+            "$ref": "#/components/schemas/FrameRequestState",
+            "default": "requested"
+          },
+          "storage_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Id"
+          },
+          "terminal_reason": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terminal Reason"
+          },
+          "uid": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Uid",
+            "type": "string"
+          },
+          "uploaded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uploaded At"
+          }
+        },
+        "required": [
+          "request_id",
+          "uid",
+          "device_id",
+          "dedupe_key",
+          "created_at",
+          "expires_at"
+        ],
+        "title": "FrameRequest",
+        "type": "object"
+      },
+      "FrameRequestBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/FrameRequest"
+            },
+            "maxItems": 32,
+            "title": "Requests",
+            "type": "array"
+          }
+        },
+        "title": "FrameRequestBatch",
+        "type": "object"
+      },
+      "FrameRequestCleanupState": {
+        "description": "External-pixel deletion state, independent of lifecycle terminality.",
+        "enum": [
+          "not_required",
+          "pending",
+          "failed",
+          "deleted",
+          "permanent"
+        ],
+        "title": "FrameRequestCleanupState",
+        "type": "string"
+      },
+      "FrameRequestDelivery": {
+        "additionalProperties": false,
+        "description": "Metadata-only queue item delivered to the owning desktop device.",
+        "properties": {
+          "account_generation": {
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "screenshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screenshot Id"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "device_id",
+          "account_generation",
+          "state",
+          "expires_at"
+        ],
+        "title": "FrameRequestDelivery",
+        "type": "object"
+      },
+      "FrameRequestEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "deduplicated": {
+            "default": false,
+            "title": "Deduplicated",
+            "type": "boolean"
+          },
+          "request": {
+            "$ref": "#/components/schemas/FrameRequest"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "title": "FrameRequestEnvelope",
+        "type": "object"
+      },
+      "FrameRequestPromotion": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "conversation_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "device_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Device Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "conversation_id"
+        ],
+        "title": "FrameRequestPromotion",
+        "type": "object"
+      },
+      "FrameRequestState": {
+        "enum": [
+          "requested",
+          "claimed",
+          "uploaded",
+          "attached",
+          "offline",
+          "pruned",
+          "failed",
+          "expired",
+          "cancelled"
+        ],
+        "title": "FrameRequestState",
+        "type": "string"
+      },
+      "FrameRequestStateUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "byte_count": {
+            "default": 0,
+            "maximum": 10485760.0,
+            "minimum": 0.0,
+            "title": "Byte Count",
+            "type": "integer"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "device_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Device Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/FrameRequestState"
+          },
+          "storage_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Id"
+          },
+          "terminal_reason": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terminal Reason"
+          }
+        },
+        "required": [
+          "state",
+          "device_id"
+        ],
+        "title": "FrameRequestStateUpdate",
+        "type": "object"
+      },
       "FullConversation": {
         "properties": {
           "apps_results": {
@@ -11916,7 +13223,7 @@
           "match_snippets": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/TranscriptMatchSnippet"
+              "$ref": "#/components/schemas/routers__mcp__TranscriptMatchSnippet"
             },
             "title": "Match Snippets",
             "type": "array"
@@ -13454,6 +14761,646 @@
         "title": "InterventionSurface",
         "type": "string"
       },
+      "JITDecisionReason": {
+        "enum": [
+          "evaluated",
+          "rollout_enabled",
+          "rollout_disabled",
+          "kill_switch_enabled",
+          "provider_timeout",
+          "configuration_missing",
+          "malformed_response",
+          "provider_error",
+          "flag_absent"
+        ],
+        "title": "JITDecisionReason",
+        "type": "string"
+      },
+      "JITErrorClass": {
+        "enum": [
+          "none",
+          "timeout",
+          "configuration",
+          "malformed",
+          "provider",
+          "absent"
+        ],
+        "title": "JITErrorClass",
+        "type": "string"
+      },
+      "JITProactivityEventReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "budget_day": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "title": "Budget Day",
+            "type": "string"
+          },
+          "budget_timezone": {
+            "default": "UTC",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Budget Timezone",
+            "type": "string"
+          },
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "feedback_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback Id"
+          },
+          "operation": {
+            "enum": [
+              "planned_notification",
+              "ambient_notification",
+              "nano_triage",
+              "full_turn"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "parent_event_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Event Id"
+          },
+          "request_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Request Hash",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "jit_proactivity_event.v1",
+            "default": "jit_proactivity_event.v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "trigger_memory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Memory Id"
+          },
+          "trigger_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Revision"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uid",
+          "event_id",
+          "candidate_id",
+          "operation",
+          "account_generation",
+          "budget_day",
+          "device_id",
+          "created_at",
+          "request_hash"
+        ],
+        "title": "JITProactivityEventReceipt",
+        "type": "object"
+      },
+      "JITProactivityReservationEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "receipt": {
+            "$ref": "#/components/schemas/JITProactivityEventReceipt"
+          },
+          "reserved": {
+            "title": "Reserved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reserved",
+          "receipt"
+        ],
+        "title": "JITProactivityReservationEnvelope",
+        "type": "object"
+      },
+      "JITProactivityReservationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "candidate_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "device_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "planned_notification",
+              "ambient_notification",
+              "nano_triage",
+              "full_turn"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "parent_event_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Event Id"
+          },
+          "trigger_memory_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "pattern": "^[^/]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Memory Id"
+          },
+          "trigger_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Revision"
+          }
+        },
+        "required": [
+          "event_id",
+          "candidate_id",
+          "operation",
+          "account_generation",
+          "device_id"
+        ],
+        "title": "JITProactivityReservationRequest",
+        "type": "object"
+      },
+      "JITRolloutDecisionEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_hit": {
+            "title": "Cache Hit",
+            "type": "boolean"
+          },
+          "cache_ttl_seconds": {
+            "title": "Cache Ttl Seconds",
+            "type": "integer"
+          },
+          "effective": {
+            "$ref": "#/components/schemas/TriState"
+          },
+          "error_class": {
+            "$ref": "#/components/schemas/JITErrorClass"
+          },
+          "kill_switch": {
+            "$ref": "#/components/schemas/TriState"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/JITDecisionReason"
+          },
+          "rollout": {
+            "$ref": "#/components/schemas/TriState"
+          }
+        },
+        "required": [
+          "rollout",
+          "kill_switch",
+          "effective",
+          "reason",
+          "error_class",
+          "cache_hit",
+          "cache_ttl_seconds"
+        ],
+        "title": "JITRolloutDecisionEnvelope",
+        "type": "object"
+      },
+      "JITTriggerActionEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "prompt"
+        ],
+        "title": "JITTriggerActionEnvelope",
+        "type": "object"
+      },
+      "JITTriggerFeedbackEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/JITTriggerFeedbackReceipt"
+          },
+          "trigger_memory_id": {
+            "title": "Trigger Memory Id",
+            "type": "string"
+          },
+          "trigger_revision": {
+            "minimum": 1.0,
+            "title": "Trigger Revision",
+            "type": "integer"
+          },
+          "trigger_status": {
+            "title": "Trigger Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "applied",
+          "trigger_memory_id",
+          "trigger_revision",
+          "trigger_status",
+          "receipt"
+        ],
+        "title": "JITTriggerFeedbackEnvelope",
+        "type": "object"
+      },
+      "JITTriggerFeedbackReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "action": {
+            "enum": [
+              "useful",
+              "false_positive",
+              "snooze",
+              "disable",
+              "missed_or_late"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "applied_trigger_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Trigger Revision"
+          },
+          "event_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "expected_trigger_revision": {
+            "minimum": 1.0,
+            "title": "Expected Trigger Revision",
+            "type": "integer"
+          },
+          "feedback_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "request_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Request Hash",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "jit_trigger_feedback.v1",
+            "default": "jit_trigger_feedback.v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "snoozed_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snoozed Until"
+          },
+          "trigger_memory_id": {
+            "title": "Trigger Memory Id",
+            "type": "string"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uid",
+          "feedback_id",
+          "event_id",
+          "trigger_memory_id",
+          "account_generation",
+          "expected_trigger_revision",
+          "action",
+          "recorded_at",
+          "request_hash"
+        ],
+        "title": "JITTriggerFeedbackReceipt",
+        "type": "object"
+      },
+      "JITTriggerFeedbackRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "action": {
+            "enum": [
+              "useful",
+              "false_positive",
+              "snooze",
+              "disable",
+              "missed_or_late"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "event_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "feedback_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "snoozed_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snoozed Until"
+          },
+          "trigger_memory_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "pattern": "^[^/]+$",
+            "title": "Trigger Memory Id",
+            "type": "string"
+          },
+          "trigger_revision": {
+            "minimum": 1.0,
+            "title": "Trigger Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "feedback_id",
+          "event_id",
+          "trigger_memory_id",
+          "account_generation",
+          "trigger_revision",
+          "action",
+          "recorded_at"
+        ],
+        "title": "JITTriggerFeedbackRequest",
+        "type": "object"
+      },
+      "JITTriggerSnapshotEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "commit_sequence": {
+            "minimum": 0.0,
+            "title": "Commit Sequence",
+            "type": "integer"
+          },
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "head_commit_id": {
+            "title": "Head Commit Id",
+            "type": "string"
+          },
+          "owner_id": {
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/TriggerRuntimePolicy",
+            "default": {
+              "ambiguous_nano_triages_per_day": 8,
+              "embedding": {
+                "enabled": false,
+                "match_similarity": 0.82,
+                "triage_similarity": 0.74
+              },
+              "full_agent_turns_per_candidate": 1,
+              "max_calendar_events": 32,
+              "paid_boundary_refresh_required": true,
+              "planned_notifications_per_trigger_per_day": 1,
+              "schema_version": "jit_trigger_policy.v1",
+              "total_proactive_notifications_per_day": 3,
+              "valid_for_seconds": 30
+            }
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/JITTriggerSnapshotRowEnvelope"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "snapshot_revision": {
+            "title": "Snapshot Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner_id",
+          "account_generation",
+          "head_commit_id",
+          "commit_sequence",
+          "snapshot_revision",
+          "complete",
+          "rows"
+        ],
+        "title": "JITTriggerSnapshotEnvelope",
+        "type": "object"
+      },
+      "JITTriggerSnapshotRowEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/JITTriggerActionEnvelope"
+          },
+          "item_revision": {
+            "title": "Item Revision",
+            "type": "integer"
+          },
+          "memory_id": {
+            "title": "Memory Id",
+            "type": "string"
+          },
+          "snoozed_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snoozed Until"
+          },
+          "trigger_condition_json": {
+            "title": "Trigger Condition Json",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "wakeup_budget_per_day": {
+            "minimum": 1.0,
+            "title": "Wakeup Budget Per Day",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "memory_id",
+          "item_revision",
+          "updated_at",
+          "trigger_condition_json",
+          "action",
+          "wakeup_budget_per_day"
+        ],
+        "title": "JITTriggerSnapshotRowEnvelope",
+        "type": "object"
+      },
       "KnowledgeGraphResponse": {
         "properties": {
           "edge_count": {
@@ -13516,6 +15463,286 @@
         ],
         "title": "KnowledgeGraphResponse",
         "type": "object"
+      },
+      "LedgerMirrorAliasEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "alias_memory_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Alias Memory Id",
+            "type": "string"
+          },
+          "canonical_memory_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Canonical Memory Id",
+            "type": "string"
+          },
+          "reason": {
+            "pattern": "^(canonical_memory_id|superseded_by)$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "source_memory_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Source Memory Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alias_memory_id",
+          "canonical_memory_id",
+          "source_memory_id",
+          "reason"
+        ],
+        "title": "LedgerMirrorAliasEnvelope",
+        "type": "object"
+      },
+      "LedgerMirrorRowEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "canonical_memory_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Memory Id"
+          },
+          "content_purged": {
+            "title": "Content Purged",
+            "type": "boolean"
+          },
+          "item_revision": {
+            "minimum": 1.0,
+            "title": "Item Revision",
+            "type": "integer"
+          },
+          "memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryDB"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "memory_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Memory Id",
+            "type": "string"
+          },
+          "source_state": {
+            "$ref": "#/components/schemas/SourceState"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MemoryItemStatus"
+          }
+        },
+        "required": [
+          "memory_id",
+          "item_revision",
+          "status",
+          "source_state",
+          "content_purged"
+        ],
+        "title": "LedgerMirrorRowEnvelope",
+        "type": "object"
+      },
+      "LedgerMirrorSnapshotEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "aliases": {
+            "items": {
+              "$ref": "#/components/schemas/LedgerMirrorAliasEnvelope"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "chain_revision": {
+            "title": "Chain Revision",
+            "type": "string"
+          },
+          "commit_sequence": {
+            "minimum": 0.0,
+            "title": "Commit Sequence",
+            "type": "integer"
+          },
+          "epoch_id": {
+            "title": "Epoch Id",
+            "type": "string"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "final_page": {
+            "default": false,
+            "title": "Final Page",
+            "type": "boolean"
+          },
+          "head_commit_id": {
+            "title": "Head Commit Id",
+            "type": "string"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "owner_id": {
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "page_revision": {
+            "title": "Page Revision",
+            "type": "string"
+          },
+          "projected_count": {
+            "minimum": 0.0,
+            "title": "Projected Count",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/LedgerMirrorRowEnvelope"
+            },
+            "maxItems": 500,
+            "title": "Rows",
+            "type": "array"
+          },
+          "scanned_count": {
+            "minimum": 0.0,
+            "title": "Scanned Count",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": "knowledge_ledger_mirror.v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_generation": {
+            "minimum": 0.0,
+            "title": "Source Generation",
+            "type": "integer"
+          },
+          "writer_epoch": {
+            "minimum": 0.0,
+            "title": "Writer Epoch",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "owner_id",
+          "account_generation",
+          "source_generation",
+          "writer_epoch",
+          "head_commit_id",
+          "commit_sequence",
+          "epoch_id",
+          "page_revision",
+          "chain_revision",
+          "scanned_count",
+          "projected_count"
+        ],
+        "title": "LedgerMirrorSnapshotEnvelope",
+        "type": "object"
+      },
+      "LedgerPromptSnapshotEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/LedgerPromptSnapshotMode"
+          },
+          "reason": {
+            "maxLength": 64,
+            "title": "Reason",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryDB"
+            },
+            "maxItems": 64,
+            "title": "Rows",
+            "type": "array"
+          },
+          "schema_version": {
+            "default": "knowledge_ledger.v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_head_commit_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Head Commit Id"
+          }
+        },
+        "required": [
+          "mode",
+          "reason"
+        ],
+        "title": "LedgerPromptSnapshotEnvelope",
+        "type": "object"
+      },
+      "LedgerPromptSnapshotMode": {
+        "enum": [
+          "enabled",
+          "compatibility",
+          "disabled",
+          "killed",
+          "unknown"
+        ],
+        "title": "LedgerPromptSnapshotMode",
+        "type": "string"
+      },
+      "LedgerWriteReason": {
+        "enum": [
+          "direct_user_statement",
+          "explicit_remember",
+          "agent_reusable_conclusion",
+          "recurring_workflow",
+          "standing_trigger",
+          "onboarding",
+          "daily_reconciliation",
+          "legacy_migration"
+        ],
+        "title": "LedgerWriteReason",
+        "type": "string"
       },
       "LegacyMaterializePromptsResponse": {
         "additionalProperties": false,
@@ -14822,6 +17049,28 @@
             "title": "Arguments",
             "type": "object"
           },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "canonical_memory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Memory Id"
+          },
           "capture_confidence": {
             "anyOf": [
               {
@@ -14866,6 +17115,11 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "curation_weight": {
+            "default": 0,
+            "title": "Curation Weight",
+            "type": "integer"
           },
           "data_protection_level": {
             "anyOf": [
@@ -14918,6 +17172,11 @@
             "title": "Id",
             "type": "string"
           },
+          "intent_backed": {
+            "default": false,
+            "title": "Intent Backed",
+            "type": "boolean"
+          },
           "invalid_at": {
             "anyOf": [
               {
@@ -14955,6 +17214,16 @@
             "title": "Kg Extracted",
             "type": "boolean"
           },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "layer": {
             "anyOf": [
               {
@@ -14967,6 +17236,27 @@
             "description": "Canonical product lifecycle layer (Q6/WS-K); derived from memory_tier at serialization only.",
             "readOnly": true,
             "title": "Layer"
+          },
+          "ledger_schema_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ledger Schema Version"
+          },
+          "ledger_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryItemStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "manually_added": {
             "default": false,
@@ -15047,6 +17337,17 @@
             ],
             "title": "Scoring"
           },
+          "slot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot"
+          },
           "subject_attribution": {
             "$ref": "#/components/schemas/SubjectAttribution",
             "default": "unknown",
@@ -15063,6 +17364,16 @@
             ],
             "description": "Stable entity id for who/what the fact is about",
             "title": "Subject Entity Id"
+          },
+          "subject_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemorySubjectScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "superseded_by": {
             "anyOf": [
@@ -15082,6 +17393,11 @@
             },
             "title": "Tags",
             "type": "array"
+          },
+          "trigger_condition": {
+            "additionalProperties": true,
+            "title": "Trigger Condition",
+            "type": "object"
           },
           "uid": {
             "title": "Uid",
@@ -15146,6 +17462,16 @@
             ],
             "default": "public",
             "title": "Visibility"
+          },
+          "write_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LedgerWriteReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -15158,6 +17484,50 @@
         ],
         "title": "MemoryDB",
         "type": "object"
+      },
+      "MemoryEditResponse": {
+        "description": "Additive authoritative readback for edits that replace a ledger row.",
+        "properties": {
+          "memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryDB"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "MemoryEditResponse",
+        "type": "object"
+      },
+      "MemoryItemStatus": {
+        "enum": [
+          "active",
+          "superseded",
+          "hidden",
+          "tombstoned"
+        ],
+        "title": "MemoryItemStatus",
+        "type": "string"
+      },
+      "MemoryKind": {
+        "description": "Semantic kind for the intent-backed knowledge ledger.\n\n``tier`` remains a storage-compatibility projection during the client\nmigration. It is not the lifecycle authority for ledger rows.",
+        "enum": [
+          "fact",
+          "document",
+          "trigger"
+        ],
+        "title": "MemoryKind",
+        "type": "string"
       },
       "MemoryLayer": {
         "enum": [
@@ -15241,6 +17611,22 @@
         "title": "MemoryReadStatusRequest",
         "type": "object"
       },
+      "MemoryRevertRequest": {
+        "additionalProperties": false,
+        "description": "Retry-stable client intent for one append-only history restore.",
+        "properties": {
+          "operation_id": {
+            "format": "uuid",
+            "title": "Operation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id"
+        ],
+        "title": "MemoryRevertRequest",
+        "type": "object"
+      },
       "MemoryReviewItemResponse": {
         "additionalProperties": true,
         "properties": {
@@ -15259,6 +17645,16 @@
         ],
         "title": "MemoryReviewItemResponse",
         "type": "object"
+      },
+      "MemorySubjectScope": {
+        "enum": [
+          "primary_user",
+          "user_owned_project",
+          "user_relationship",
+          "third_party"
+        ],
+        "title": "MemorySubjectScope",
+        "type": "string"
       },
       "MemorySummaryRatingResponse": {
         "properties": {
@@ -15466,6 +17862,16 @@
               }
             ],
             "title": "Data Protection Level"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatEvidenceEnvelope"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "files": {
             "default": [],
@@ -15887,6 +18293,35 @@
           "expires_at"
         ],
         "title": "NormalizedContextSnapshot",
+        "type": "object"
+      },
+      "NormalizedRect": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "number"
+          },
+          "width": {
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "NormalizedRect",
         "type": "object"
       },
       "NotificationSettingsResponse": {
@@ -16359,8 +18794,19 @@
         "type": "object"
       },
       "PageContext": {
-        "description": "Page context for chat - indicates what the user is currently viewing.",
+        "description": "Page context for chat - indicates what the user is currently viewing.\n\nWhen ``type`` is ``conversation`` with an ``id``, and/or ``start_date`` /\n``end_date`` are set, retrieval tools hard-scope to that conversation and/or\ntimeframe (#4515). Dates must include a timezone offset\n(YYYY-MM-DDTHH:MM:SS+HH:MM).",
         "properties": {
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
           "id": {
             "anyOf": [
               {
@@ -16371,6 +18817,17 @@
               }
             ],
             "title": "Id"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
           },
           "title": {
             "anyOf": [
@@ -17789,10 +20246,16 @@
             "type": "integer"
           },
           "cost_usd": {
-            "default": 0.0,
-            "minimum": 0.0,
-            "title": "Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
           },
           "input_tokens": {
             "default": 0,
@@ -17814,6 +20277,37 @@
           }
         },
         "title": "RecordLlmUsageBucketRequest",
+        "type": "object"
+      },
+      "ReferralClaimRequest": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ReferralClaimRequest",
+        "type": "object"
+      },
+      "ReferralClaimResponse": {
+        "properties": {
+          "claimed": {
+            "title": "Claimed",
+            "type": "boolean"
+          },
+          "trial_days": {
+            "title": "Trial Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "claimed",
+          "trial_days"
+        ],
+        "title": "ReferralClaimResponse",
         "type": "object"
       },
       "ReferralLinkResponse": {
@@ -17952,6 +20446,16 @@
               }
             ],
             "title": "Data Protection Level"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatEvidenceEnvelope"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "files": {
             "default": [],
@@ -18360,6 +20864,11 @@
             "title": "Appname",
             "type": "string"
           },
+          "captureEligible": {
+            "default": false,
+            "title": "Captureeligible",
+            "type": "boolean"
+          },
           "clientDeviceId": {
             "anyOf": [
               {
@@ -18445,6 +20954,25 @@
       },
       "ScreenActivitySyncRequest": {
         "properties": {
+          "account_generation": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "deviceRetentionSeconds": {
+            "anyOf": [
+              {
+                "maximum": 518400.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deviceretentionseconds"
+          },
           "rows": {
             "items": {
               "$ref": "#/components/schemas/ScreenActivityRow"
@@ -18459,6 +20987,255 @@
         "title": "ScreenActivitySyncRequest",
         "type": "object"
       },
+      "ScreenActivitySyncResponse": {
+        "additionalProperties": false,
+        "description": "Additive sync response; old clients decode the two required fields.",
+        "properties": {
+          "frame_requests": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FrameRequestDelivery"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Requests"
+          },
+          "last_id": {
+            "title": "Last Id",
+            "type": "integer"
+          },
+          "synced": {
+            "title": "Synced",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "synced",
+          "last_id"
+        ],
+        "title": "ScreenActivitySyncResponse",
+        "type": "object"
+      },
+      "ScreenFrameAdjudicationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ScreenFrameCandidateIn"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "purpose": {
+            "const": "meeting_note_v1",
+            "title": "Purpose",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/ScreenFrameSubjectIn"
+          }
+        },
+        "required": [
+          "schema_version",
+          "attempt_id",
+          "purpose",
+          "subject",
+          "candidates"
+        ],
+        "title": "ScreenFrameAdjudicationRequest",
+        "type": "object"
+      },
+      "ScreenFrameAdjudicationResponse": {
+        "properties": {
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "frame_set": {
+            "$ref": "#/components/schemas/ConversationScreenFrameSet"
+          },
+          "outcome": {
+            "enum": [
+              "committed",
+              "no_approved_frames"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt_id",
+          "outcome",
+          "frame_set"
+        ],
+        "title": "ScreenFrameAdjudicationResponse",
+        "type": "object"
+      },
+      "ScreenFrameCandidateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes_base64": {
+            "title": "Bytes Base64",
+            "type": "string"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "client_frame_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Client Frame Id",
+            "type": "string"
+          },
+          "declared_height": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Declared Height",
+            "type": "integer"
+          },
+          "declared_width": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Declared Width",
+            "type": "integer"
+          },
+          "mime_type": {
+            "enum": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "sha256_base64": {
+            "maxLength": 44,
+            "minLength": 44,
+            "title": "Sha256 Base64",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_frame_id",
+          "captured_at",
+          "mime_type",
+          "declared_width",
+          "declared_height",
+          "sha256_base64",
+          "bytes_base64"
+        ],
+        "title": "ScreenFrameCandidateIn",
+        "type": "object"
+      },
+      "ScreenFrameGround": {
+        "additionalProperties": false,
+        "description": "Gradient stops derived from the canonical bytes at approval time.\n\nBoth clients render the banner from these; neither samples pixels. A\nsigned cross-origin URL cannot be read back from a canvas (no guaranteed\nCORS headers), and two independent extractions (Swift on macOS, JS on\nweb) would drift from each other anyway. Extracted once, server-side,\nfrom the canonical JPEG — see utils/screen_frames/palette.py, a port of\ndesktop/macos/Desktop/Sources/MeetingScreenshots/MeetingBannerPalette.swift.",
+        "properties": {
+          "is_neutral": {
+            "title": "Is Neutral",
+            "type": "boolean"
+          },
+          "stops": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Stops",
+            "type": "array"
+          }
+        },
+        "required": [
+          "stops",
+          "is_neutral"
+        ],
+        "title": "ScreenFrameGround",
+        "type": "object"
+      },
+      "ScreenFrameSettings": {
+        "additionalProperties": false,
+        "description": "The account-level setting gating screen-frame egress admission\n(contract §6, setting_key=\"meeting_note_screenshots_enabled\"). Shared and\nauthoritative across every device — desktop, web, a reinstall — because\nit protects the user from themselves (accidentally leaving the feature\non), not third parties from the user; the privacy judge is what protects\npeople appearing in frames. It does not need to be tamper-proof, only\nconsistent, so it is a plain user-profile field, not a signed claim.",
+        "properties": {
+          "meeting_note_screenshots_enabled": {
+            "title": "Meeting Note Screenshots Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "meeting_note_screenshots_enabled"
+        ],
+        "title": "ScreenFrameSettings",
+        "type": "object"
+      },
+      "ScreenFrameSettingsUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "meeting_note_screenshots_enabled": {
+            "title": "Meeting Note Screenshots Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "meeting_note_screenshots_enabled"
+        ],
+        "title": "ScreenFrameSettingsUpdateRequest",
+        "type": "object"
+      },
+      "ScreenFrameSharingUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "ScreenFrameSharingUpdateRequest",
+        "type": "object"
+      },
+      "ScreenFrameSubjectIn": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "conversation",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "ScreenFrameSubjectIn",
+        "type": "object"
+      },
       "SearchConversationsResponse": {
         "properties": {
           "current_page": {
@@ -18467,7 +21244,7 @@
           },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/Conversation"
+              "$ref": "#/components/schemas/ConversationSearchItem"
             },
             "title": "Items",
             "type": "array"
@@ -19413,6 +22190,11 @@
             ],
             "title": "Processing Memory Id"
           },
+          "screenshot_sharing_enabled": {
+            "default": true,
+            "title": "Screenshot Sharing Enabled",
+            "type": "boolean"
+          },
           "source": {
             "anyOf": [
               {
@@ -19705,7 +22487,7 @@
           "match_snippets": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/TranscriptMatchSnippet"
+              "$ref": "#/components/schemas/routers__mcp__TranscriptMatchSnippet"
             },
             "title": "Match Snippets",
             "type": "array"
@@ -19878,6 +22660,16 @@
         ],
         "title": "SnapshotReceipt",
         "type": "object"
+      },
+      "SourceState": {
+        "enum": [
+          "active",
+          "missing",
+          "tombstoned",
+          "purged"
+        ],
+        "title": "SourceState",
+        "type": "string"
       },
       "SpeakerAnalytics": {
         "properties": {
@@ -22373,7 +25165,7 @@
         "type": "object"
       },
       "TranscriptMatchSnippet": {
-        "description": "Grep-style transcript evidence for MCP search hits (#6621).",
+        "description": "Grep-style transcript hit returned on conversation search for seek-to-moment UX.",
         "properties": {
           "end": {
             "anyOf": [
@@ -22702,6 +25494,15 @@
         "title": "Translation",
         "type": "object"
       },
+      "TriState": {
+        "enum": [
+          "enabled",
+          "disabled",
+          "unknown"
+        ],
+        "title": "TriState",
+        "type": "string"
+      },
       "TrialMetadata": {
         "description": "Structured trial state for desktop clients to render countdown UI.",
         "properties": {
@@ -22757,6 +25558,112 @@
           }
         },
         "title": "TrialMetadata",
+        "type": "object"
+      },
+      "TriggerEmbeddingPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "match_similarity": {
+            "default": 0.82,
+            "title": "Match Similarity",
+            "type": "number"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "triage_similarity": {
+            "default": 0.74,
+            "title": "Triage Similarity",
+            "type": "number"
+          }
+        },
+        "title": "TriggerEmbeddingPolicy",
+        "type": "object"
+      },
+      "TriggerRuntimePolicy": {
+        "additionalProperties": false,
+        "description": "Versioned, backend-authored budgets consumed by every JIT client.",
+        "properties": {
+          "ambiguous_nano_triages_per_day": {
+            "default": 8,
+            "title": "Ambiguous Nano Triages Per Day",
+            "type": "integer"
+          },
+          "embedding": {
+            "$ref": "#/components/schemas/TriggerEmbeddingPolicy"
+          },
+          "full_agent_turns_per_candidate": {
+            "default": 1,
+            "title": "Full Agent Turns Per Candidate",
+            "type": "integer"
+          },
+          "max_calendar_events": {
+            "default": 32,
+            "title": "Max Calendar Events",
+            "type": "integer"
+          },
+          "paid_boundary_refresh_required": {
+            "default": true,
+            "title": "Paid Boundary Refresh Required",
+            "type": "boolean"
+          },
+          "planned_notifications_per_trigger_per_day": {
+            "default": 1,
+            "title": "Planned Notifications Per Trigger Per Day",
+            "type": "integer"
+          },
+          "schema_version": {
+            "default": "jit_trigger_policy.v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "total_proactive_notifications_per_day": {
+            "default": 3,
+            "title": "Total Proactive Notifications Per Day",
+            "type": "integer"
+          },
+          "valid_for_seconds": {
+            "default": 30,
+            "title": "Valid For Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "TriggerRuntimePolicy",
         "type": "object"
       },
       "TriggerType": {
@@ -23760,6 +26667,22 @@
             "title": "Chat Messages",
             "type": "array"
           },
+          "conversation_keyframe_jobs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Conversation Keyframe Jobs",
+            "type": "array"
+          },
+          "conversation_photo_manifest": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Conversation Photo Manifest",
+            "type": "array"
+          },
           "conversations": {
             "items": {
               "additionalProperties": true,
@@ -23768,6 +26691,33 @@
             "title": "Conversations",
             "type": "array"
           },
+          "frame_requests": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Frame Requests",
+            "type": "array"
+          },
+          "frame_vision_receipts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Frame Vision Receipts",
+            "type": "array"
+          },
+          "jit_data": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "title": "Jit Data",
+            "type": "object"
+          },
           "memories": {
             "items": {
               "additionalProperties": true,
@@ -23775,6 +26725,28 @@
             },
             "title": "Memories",
             "type": "array"
+          },
+          "memory_ledger_data": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "title": "Memory Ledger Data",
+            "type": "object"
+          },
+          "memory_review_data": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "title": "Memory Review Data",
+            "type": "object"
           },
           "people": {
             "items": {
@@ -23787,6 +26759,17 @@
           "profile": {
             "additionalProperties": true,
             "title": "Profile",
+            "type": "object"
+          },
+          "task_data": {
+            "additionalProperties": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "title": "Task Data",
             "type": "object"
           }
         },
@@ -25140,6 +28123,86 @@
         "title": "ScreenActivityRow",
         "type": "object"
       },
+      "routers__mcp__TranscriptMatchSnippet": {
+        "description": "Grep-style transcript evidence for MCP search hits (#6621).",
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "end_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          },
+          "segment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Id"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TranscriptMatchSnippet",
+        "type": "object"
+      },
       "routers__memories__BatchMemoriesRequest": {
         "properties": {
           "memories": {
@@ -25376,7 +28439,7 @@
     },
     "/v1/action-items": {
       "get": {
-        "description": "Get action items for the current user.",
+        "description": "Get action items for the current user.\n\nLarge accounts can outrun the request budget; such reads return the honest\npartial page with ``truncated=true``, ``has_more=true``, and the\n``X-Omi-List-Truncated: true`` header instead of a bare middleware 504\n(#11831).",
         "operationId": "get_action_items_v1_action_items_get",
         "parameters": [
           {
@@ -33253,7 +36316,7 @@
     },
     "/v1/conversations": {
       "get": {
-        "description": "List responses may omit detail-only fields such as transcript_segments. Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript.",
+        "description": "List responses may omit detail-only fields such as transcript_segments. Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript. Large accounts can outrun the request budget; such responses return a partial newest-first array with the X-Omi-List-Truncated: true header instead of a 504 (#11831).",
         "operationId": "get_conversations_v1_conversations_get",
         "parameters": [
           {
@@ -35759,6 +38822,118 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/photos/{photo_id}/image": {
+      "get": {
+        "description": "Serve owner-authorized frame evidence from conversation-lifetime storage.",
+        "operationId": "get_conversation_photo_image_v1_conversations__conversation_id__photos__photo_id__image_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "photo_id",
+            "required": true,
+            "schema": {
+              "title": "Photo Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Photo Image",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/recording": {
       "get": {
         "operationId": "conversation_has_audio_recording_v1_conversations__conversation_id__recording_get",
@@ -35976,6 +39151,379 @@
         "summary": "Reprocess Conversation",
         "tags": [
           "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/screenshot-sharing": {
+      "patch": {
+        "operationId": "update_conversation_screenshot_sharing_v1_conversations__conversation_id__screenshot_sharing_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenFrameSharingUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Conversation Screenshot Sharing",
+        "tags": [
+          "screen_frames"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/screenshots": {
+      "delete": {
+        "operationId": "delete_all_conversation_screenshots_v1_conversations__conversation_id__screenshots_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Delete All Conversation Screenshots",
+        "tags": [
+          "screen_frames"
+        ]
+      },
+      "get": {
+        "operationId": "get_conversation_screenshots_v1_conversations__conversation_id__screenshots_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Screenshots",
+        "tags": [
+          "screen_frames"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/screenshots/{frame_id}": {
+      "delete": {
+        "operationId": "delete_conversation_screenshot_v1_conversations__conversation_id__screenshots__frame_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "frame_id",
+            "required": true,
+            "schema": {
+              "title": "Frame Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Delete Conversation Screenshot",
+        "tags": [
+          "screen_frames"
         ]
       }
     },
@@ -36313,7 +39861,7 @@
     },
     "/v1/conversations/{conversation_id}/share-email": {
       "post": {
-        "description": "One-click send of the meeting summary to detected participants.\n\nRecipients are validated against the calendar-detected set so this can\nnever relay to arbitrary addresses. Sending makes the conversation\nlink-visible first (same contract as copying the share link) so the\nemailed link resolves.",
+        "description": "Send the meeting summary to the addresses the owner chose.\n\nThe card lets the owner type a recipient, so the address is theirs to pick\nrather than something we detected; detection only prefills the field. What\nkeeps this from being an open relay is unchanged: the sender must own the\nconversation, the mail carries only that conversation's own summary and\nshare link with the owner as reply-to, the request schema caps how many\naddresses one send may carry, and a per-owner daily quota bounds the total.\nSending\nmakes the conversation link-visible first (same contract as copying the\nshare link) so the emailed link resolves.",
         "operationId": "send_conversation_share_email_v1_conversations__conversation_id__share_email_post",
         "parameters": [
           {
@@ -36541,6 +40089,60 @@
         "summary": "Get Shared Conversation By Id",
         "tags": [
           "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/shared/screenshots": {
+      "get": {
+        "description": "Public, unauthenticated. Returns an empty set unless the conversation\nis currently shareable AND screenshot_sharing_enabled is true — never a\n404, so this route cannot be used to probe whether a conversation_id\nexists (contract §1/§9, and matches the existing\nGET /v1/conversations/{id}/shared 404-avoidance pattern for public\nconversation lookups... except this one specifically must not leak\nexistence via status code, so it always returns 200).",
+        "operationId": "get_shared_conversation_screenshots_v1_conversations__conversation_id__shared_screenshots_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationScreenFrameSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Shared Conversation Screenshots",
+        "tags": [
+          "screen_frames"
         ]
       }
     },
@@ -39834,6 +43436,706 @@
         ]
       }
     },
+    "/v1/frame-requests": {
+      "post": {
+        "operationId": "create_frame_request_v1_frame_requests_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFrameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameRequestEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Create Frame Request"
+      }
+    },
+    "/v1/frame-requests/pending": {
+      "get": {
+        "operationId": "get_pending_frame_requests_v1_frame_requests_pending_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account_generation",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Account Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 32,
+              "maximum": 32,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameRequestBatch"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Pending Frame Requests"
+      }
+    },
+    "/v1/frame-requests/status/{request_id}": {
+      "get": {
+        "description": "Return honest owner-scoped lifecycle state without exposing pixels.",
+        "operationId": "get_frame_request_status_v1_frame_requests_status__request_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account_generation",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Account Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameRequestEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Frame Request Status"
+      }
+    },
+    "/v1/frame-requests/temporary/{request_id}/image": {
+      "get": {
+        "description": "Read one uploaded, unattached temporary frame for JIT vision.\n\nConversation evidence is deliberately excluded: permanent images remain\nreachable only through the conversation-owned endpoint. This read neither\npromotes nor extends the temporary request's at-most-seven-day expiry.",
+        "operationId": "consume_temporary_frame_request_image_v1_frame_requests_temporary__request_id__image_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account_generation",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Account Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Consume Temporary Frame Request Image"
+      }
+    },
+    "/v1/frame-requests/{request_id}/promote": {
+      "post": {
+        "description": "Promote uploaded pixels into conversation-lifetime photo evidence.",
+        "operationId": "promote_frame_request_v1_frame_requests__request_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrameRequestPromotion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameRequestEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Promote Frame Request"
+      }
+    },
+    "/v1/frame-requests/{request_id}/state": {
+      "post": {
+        "operationId": "update_frame_request_state_v1_frame_requests__request_id__state_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrameRequestStateUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameRequestEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Frame Request State"
+      }
+    },
+    "/v1/frame-requests/{request_id}/upload": {
+      "post": {
+        "description": "Store an owner-authorized pixel and then commit its bounded metadata.",
+        "operationId": "upload_frame_request_v1_frame_requests__request_id__upload_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account_generation",
+            "required": true,
+            "schema": {
+              "title": "Account Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_frame_request_v1_frame_requests__request_id__upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameRequestEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Upload Frame Request"
+      }
+    },
     "/v1/goals": {
       "get": {
         "description": "Get the current active goal for the user (backward compatibility).",
@@ -42809,6 +47111,499 @@
         "tags": [
           "integrations"
         ]
+      }
+    },
+    "/v1/jit/knowledge-ledger/mirror-snapshot": {
+      "get": {
+        "operationId": "get_knowledge_ledger_mirror_snapshot_v1_jit_knowledge_ledger_mirror_snapshot_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerMirrorSnapshotEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Knowledge Ledger Mirror Snapshot"
+      }
+    },
+    "/v1/jit/knowledge-ledger/prompt-snapshot": {
+      "get": {
+        "operationId": "get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerPromptSnapshotEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Knowledge Ledger Prompt Snapshot"
+      }
+    },
+    "/v1/jit/proactivity/reservations": {
+      "post": {
+        "description": "Reserve one content-free cross-device budget immediately before work.",
+        "operationId": "reserve_jit_proactivity_v1_jit_proactivity_reservations_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JITProactivityReservationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JITProactivityReservationEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Reserve Jit Proactivity"
+      }
+    },
+    "/v1/jit/rollout-decision": {
+      "get": {
+        "operationId": "get_jit_rollout_decision_v1_jit_rollout_decision_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JITRolloutDecisionEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Jit Rollout Decision"
+      }
+    },
+    "/v1/jit/trigger-feedback": {
+      "post": {
+        "description": "Persist one explicit, content-free user feedback event.\n\nThis privacy/user-authority path intentionally remains available while the\nproactive rollout is disabled or killed. It performs no matching, model\nwork, notification, or automatic trigger rewrite.",
+        "operationId": "post_jit_trigger_feedback_v1_jit_trigger_feedback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JITTriggerFeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JITTriggerFeedbackEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Post Jit Trigger Feedback"
+      }
+    },
+    "/v1/jit/trigger-snapshot": {
+      "get": {
+        "description": "Return an exhaustive action-bearing watchlist only for admitted owners.",
+        "operationId": "get_jit_trigger_snapshot_v1_jit_trigger_snapshot_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JITTriggerSnapshotEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Jit Trigger Snapshot"
       }
     },
     "/v1/knowledge-graph": {
@@ -46883,11 +51678,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "integer"
-                  },
-                  "title": "Response Sync Screen Activity V1 Screen Activity Sync Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ScreenActivitySyncResponse"
                 }
               }
             },
@@ -46913,6 +51704,256 @@
           }
         ],
         "summary": "Sync Screen Activity"
+      }
+    },
+    "/v1/screen-frame-egress/adjudications": {
+      "post": {
+        "operationId": "adjudicate_screen_frames_v1_screen_frame_egress_adjudications_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenFrameAdjudicationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenFrameAdjudicationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Adjudicate Screen Frames",
+        "tags": [
+          "screen_frames"
+        ]
+      }
+    },
+    "/v1/screen-frame-egress/settings": {
+      "get": {
+        "description": "Account-level, shared across every device (desktop, web, a\nreinstall) — this is the setting the adjudication route's admission\ncheck reads (contract §6). It protects the user from themselves, not\nthird parties from the user (the privacy judge does that), so it lives\nas a plain user-profile field rather than a signed claim.",
+        "operationId": "get_screen_frame_settings_v1_screen_frame_egress_settings_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenFrameSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Screen Frame Settings",
+        "tags": [
+          "screen_frames"
+        ]
+      },
+      "patch": {
+        "operationId": "update_screen_frame_settings_v1_screen_frame_egress_settings_patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenFrameSettingsUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenFrameSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Screen Frame Settings",
+        "tags": [
+          "screen_frames"
+        ]
       }
     },
     "/v1/stripe/connect-accounts": {
@@ -51392,7 +56433,7 @@
     },
     "/v1/users/export": {
       "get": {
-        "description": "Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts.",
+        "description": "Export all user data for GDPR/CCPA compliance from a disk-backed spool.",
         "operationId": "export_all_user_data_v1_users_export_get",
         "parameters": [
           {
@@ -52655,6 +57696,93 @@
           }
         ],
         "summary": "Get Referral Link",
+        "tags": [
+          "referrals"
+        ]
+      }
+    },
+    "/v1/users/me/referral/claim": {
+      "post": {
+        "operationId": "claim_referral_v1_users_me_referral_claim_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralClaimResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Claim Referral",
         "tags": [
           "referrals"
         ]
@@ -59241,6 +64369,7 @@
         ]
       },
       "get": {
+        "description": "List memories, newest first, as a bare JSON array.\n\nLarge accounts can outrun the request budget; such reads return an honest\npartial array with the ``X-Omi-List-Truncated: true`` header and no\n``X-Omi-Memory-Next-Cursor`` instead of a bare middleware 504 (#11831).",
         "operationId": "get_memories_v3_memories_get",
         "parameters": [
           {
@@ -59647,6 +64776,108 @@
           }
         ],
         "summary": "Create Memories Batch",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/v3/memories/ledger-history": {
+      "get": {
+        "description": "Return explicit owner-scoped rejected and closed ledger rows.\n\n``GET /v3/memories`` remains the current product view and continues to\nfilter these rows.  This history endpoint is intentionally read-only and\ncanonical-only; it returns rows newest-first by ``updated_at`` then\n``memory_id`` (``limit`` is capped at 500 and the compatibility\n``offset + limit`` window at 5000).  The provider window is bounded to 500\nrows plus one sentinel; an incomplete provider/budget window is marked with\n``X-Omi-List-Truncated: true``.  Tombstoned and hidden rows are never\nresurrected for history UI.",
+        "operationId": "get_ledger_history_v3_memories_ledger_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MemoryDB"
+                  },
+                  "title": "Response Get Ledger History V3 Memories Ledger History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Ledger History",
         "tags": [
           "memories"
         ]
@@ -60121,7 +65352,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MemoryMutationResponse"
+                  "$ref": "#/components/schemas/MemoryEditResponse"
                 }
               }
             },
@@ -60349,6 +65580,103 @@
           }
         ],
         "summary": "Update Memory Read Status",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/v3/memories/{memory_id}/revert": {
+      "post": {
+        "description": "Append a fresh current fact from one closed ledger history row.",
+        "operationId": "revert_memory_v3_memories__memory_id__revert_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryRevertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryEditResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Revert Memory",
         "tags": [
           "memories"
         ]

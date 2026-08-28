@@ -193,6 +193,8 @@ interface NotificationStats {
   enabledDisabled: {
     enabled: number;
     disabled: number;
+    /** Users with no `notifications_enabled` field — neither on nor off. */
+    unset: number;
     total: number;
   };
 }
@@ -258,14 +260,7 @@ interface KFactorData {
   available: boolean;
   kFactor: number | null;
   reason: string;
-  proxy?: {
-    newUsers: number;
-    sharers: number;
-    shareEvents: number;
-    shareRatePct: number;
-    sharesPerSharer: number;
-    sharesPerNewUser: number;
-  };
+  funnel?: { issued: number; captured: number; granted: number };
 }
 
 interface MacosVersionBreakdown {
@@ -275,10 +270,13 @@ interface MacosVersionBreakdown {
 }
 
 interface MacosVersionStatsData {
+  /** Serve-time label derived from `freshAt` — the date the data is FROM. */
   date: string;
+  freshAt?: number;
   activeUsers: number;
   channelBreakdown: MacosVersionBreakdown[];
   versionBreakdown: MacosVersionBreakdown[];
+  truncated?: boolean;
 }
 
 interface ProfitabilityPoint {
@@ -295,7 +293,8 @@ interface ProfitabilityData {
   activeUsers?: ProfitabilityPoint[];
   revenue: ProfitabilityPoint[];
   cost: ProfitabilityPoint[];
-  costPerUser?: ProfitabilityPoint[];
+  /** Nullable: cost/user is unmeasurable on days with no billing data. */
+  costPerUser?: Array<{ date: string; desktop: number | null; mobile: number | null; total: number | null }>;
   conversion: ProfitabilityPoint[];
   summary: {
     mrr: number;
@@ -439,8 +438,6 @@ export default function AnalyticsPage() {
   const [retentionView, setRetentionView] = useState<"average" | "cohorts">("average");
   const [cumulativeWindow, setCumulativeWindow] = useState<"7d" | "30d" | "all">("all");
   const [profitDays, setProfitDays] = useState<30 | 60 | 90>(30);
-  const [desktopCostInput, setDesktopCostInput] = useState("1.20");
-  const [mobileCostInput, setMobileCostInput] = useState("0.30");
 
   const swrOpts = { revalidateOnFocus: false };
 
@@ -495,13 +492,12 @@ export default function AnalyticsPage() {
   const { data: crashRate, isLoading: crashRateLoading } =
     useSWR<CrashRateData>(token ? ["/api/omi/stats/crash-rate?days=30", token] : null, authFetcher, swrOpts);
 
-  const profitQuery = useMemo(() => {
-    const dc = parseFloat(desktopCostInput);
-    const mc = parseFloat(mobileCostInput);
-    const dcSafe = Number.isFinite(dc) && dc >= 0 ? dc : 1.2;
-    const mcSafe = Number.isFinite(mc) && mc >= 0 ? mc : 0.3;
-    return `days=${profitDays}&desktop_cost=${dcSafe}&mobile_cost=${mcSafe}`;
-  }, [profitDays, desktopCostInput, mobileCostInput]);
+  // `days` only. Sending desktop_cost/mobile_cost re-injected invented
+  // per-user costs AND missed the precomputed cache entirely (the cache key
+  // includes the cost params, and precompute writes the no-cost-params key),
+  // so the dashboard paid for a full inline recompute to display made-up
+  // numbers. Cost now comes from billing, via the route's own defaults.
+  const profitQuery = useMemo(() => `days=${profitDays}`, [profitDays]);
 
   const { data: profitability, isLoading: profitLoading, error: profitError } =
     useSWR<ProfitabilityData>(
@@ -774,10 +770,12 @@ export default function AnalyticsPage() {
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} minTickGap={30} />
               <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `$${Number(v).toFixed(2)}`} width={56} />
-              <Tooltip contentStyle={tooltipStyle} labelFormatter={fullDate} formatter={(v: number, name) => [`$${Number(v).toFixed(2)}`, name]} />
+              {/* A null cost/user is unmeasurable (no billing data, or no active
+                  users that day) — it must read as a gap, not as $0.00. */}
+              <Tooltip contentStyle={tooltipStyle} labelFormatter={fullDate} formatter={(v, name) => [v == null ? "n/a" : `$${Number(v).toFixed(2)}`, name]} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="desktop" stroke="#f59e0b" strokeWidth={2} dot={false} name="Desktop $/user" />
-              <Line type="monotone" dataKey="mobile" stroke="#ef4444" strokeWidth={2} dot={false} name="Mobile $/user" />
+              <Line type="monotone" dataKey="desktop" stroke="#f59e0b" strokeWidth={2} dot={false} name="Desktop $/user" connectNulls={false} />
+              <Line type="monotone" dataKey="mobile" stroke="#ef4444" strokeWidth={2} dot={false} name="Mobile $/user" connectNulls={false} />
             </LineChart>
           </ResponsiveContainer>
         ),
@@ -970,7 +968,7 @@ export default function AnalyticsPage() {
       {
         id: "macos-active-versions",
         title: "macOS Active Versions",
-        subtitle: `Active users for ${macosVersionStats?.date ?? "today"}, split by release channel and app version`,
+        subtitle: `Active users as of ${macosVersionStats?.date ?? "—"}, split by release channel and app version`,
         icon: <Monitor className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 8 },
         render: () => (
@@ -1277,7 +1275,7 @@ export default function AnalyticsPage() {
       {
         id: "notif-settings",
         title: "Notification Settings",
-        subtitle: "Based on the desktop notifications_enabled toggle. Missing values default to enabled.",
+        subtitle: "Based on the desktop notifications_enabled toggle. Users with no value set are counted separately, not as enabled.",
         icon: <Bell className="h-4 w-4" />,
         initialLayout: { cols: 6, rows: 4 },
         render: () => (
@@ -1293,6 +1291,7 @@ export default function AnalyticsPage() {
                 <div className="text-right text-sm text-muted-foreground">
                   <div>{notificationEnabledDisabled?.enabled?.toLocaleString() ?? "--"} enabled</div>
                   <div>{notificationEnabledDisabled?.disabled?.toLocaleString() ?? "--"} disabled</div>
+                  <div>{notificationEnabledDisabled?.unset?.toLocaleString() ?? "--"} not set</div>
                 </div>
               </div>
               <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted">
@@ -1815,14 +1814,13 @@ export default function AnalyticsPage() {
   const netWauChange = calculatePeriodChange(netWauNow, netWauPrev, "vs previous complete week");
 
   const growthGoalItems = useMemo<ChartItem[]>(() => {
-    const kFactorValue = kFactorData?.available && kFactorData.kFactor != null
-      ? kFactorData.kFactor.toFixed(2)
+    const referralGrants = kFactorData?.funnel?.granted;
+    const kFactorValue = kFactorData?.available && referralGrants != null
+      ? referralGrants.toLocaleString()
       : "Not tracked";
-    const kFactorSubtitle = kFactorData?.available && kFactorData.kFactor != null
-      ? "Target ≥0.60"
-      : kFactorData?.proxy
-        ? `${kFactorData.proxy.sharesPerNewUser.toFixed(2)} shares/user · conversion missing`
-        : "Referral conversion is not instrumented yet";
+    const kFactorSubtitle = kFactorData?.funnel
+      ? `${kFactorData.funnel.issued} issued / ${kFactorData.funnel.captured} captured / ${kFactorData.funnel.granted} granted`
+      : kFactorData?.reason ?? "Referral funnel is unavailable";
 
     return [
       {
@@ -1951,7 +1949,7 @@ export default function AnalyticsPage() {
       },
       {
         id: "kpi-k-factor",
-        title: "K-Factor",
+        title: "Referral grants",
         variant: "kpi",
         icon: <Share2 className="h-3.5 w-3.5" />,
         initialLayout: { cols: 3, rows: 1 },
@@ -2159,18 +2157,6 @@ export default function AnalyticsPage() {
             >{d}d</button>
           ))}
         </div>
-        <label className="flex items-center gap-1 text-xs text-muted-foreground">
-          Desktop $/user/day
-          <input type="number" step="0.01" min="0" value={desktopCostInput}
-            onChange={(e) => setDesktopCostInput(e.target.value)}
-            className="w-16 rounded-md border border-input bg-background px-2 py-1 text-xs" />
-        </label>
-        <label className="flex items-center gap-1 text-xs text-muted-foreground">
-          Mobile $/user/day
-          <input type="number" step="0.01" min="0" value={mobileCostInput}
-            onChange={(e) => setMobileCostInput(e.target.value)}
-            className="w-16 rounded-md border border-input bg-background px-2 py-1 text-xs" />
-        </label>
         {profitability?.summary.partial && (
           <span className="ml-auto inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
             <AlertTriangle className="h-3 w-3" /> Partial data
@@ -2341,7 +2327,7 @@ export default function AnalyticsPage() {
           <div className="text-2xl font-bold">{notificationEnabledDisabled?.enabled?.toLocaleString() ?? "--"}</div>
           <p className="text-xs text-muted-foreground">
             {notificationEnabledDisabled
-              ? `${((notificationEnabledDisabled.enabled / notificationEnabledDisabled.total) * 100).toFixed(1)}% of users`
+              ? `${((notificationEnabledDisabled.enabled / notificationEnabledDisabled.total) * 100).toFixed(1)}% of users explicitly enabled`
               : "Loading"}
           </p>
         </div>

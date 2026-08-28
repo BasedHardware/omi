@@ -73,6 +73,19 @@ export function omiReasoningEffortFromRelayContext(raw: string): string | undefi
   }
 }
 
+export type OmiBuiltInToolPolicy = "default" | "read_only";
+
+/** Kernel-minted adapter-native authority. Unknown or malformed context fails
+ * closed; only an explicit kernel-written default token enables mutation. */
+export function omiBuiltInToolPolicyFromRelayContext(raw: string): OmiBuiltInToolPolicy {
+  try {
+    const parsed = JSON.parse(raw) as { builtInToolPolicy?: unknown };
+    return parsed.builtInToolPolicy === "default" ? "default" : "read_only";
+  } catch {
+    return "read_only";
+  }
+}
+
 async function omiRelayContextRaw(): Promise<string | undefined> {
   const contextFile = process.env.OMI_CONTEXT_FILE;
   if (!contextFile) return undefined;
@@ -348,9 +361,18 @@ export function classifyFileWrite(filePath: string): DenyDecision | null {
 }
 
 /** Classify a whole tool_call event by dispatching on toolName.
- *  When OMI_YOLO_MODE=1, all tool calls are allowed (no denylist).
- *  Yolo mode is gated by the adapter — only forwarded from dev builds. */
-export function inspectToolCall(event: ToolCallEvent): DenyDecision | null {
+ *  When OMI_YOLO_MODE=1, the ordinary interactive denylist is bypassed.
+ *  Kernel read-only authority remains mandatory in every build. */
+export function inspectToolCall(
+  event: ToolCallEvent,
+  builtInToolPolicy: OmiBuiltInToolPolicy = "default",
+): DenyDecision | null {
+  if (
+    builtInToolPolicy === "read_only"
+    && ["bash", "write", "edit", "edit-diff"].includes(event.toolName)
+  ) {
+    return { blocked: true, reason: "Ask-mode service runs have read-only adapter authority" };
+  }
   if (process.env.OMI_YOLO_MODE === "1") {
     process.stderr.write(`[omi-provider] YOLO bypass: ${event.toolName}\n`);
     return null;
@@ -813,13 +835,12 @@ export default function omiProvider(pi: ExtensionAPI): void {
   const baseUrl = process.env.OMI_API_BASE_URL || "https://api.omi.me/v2";
   const apiKey = process.env.OMI_API_KEY || "";
 
-  // BYOK: the Swift app sets OMI_BYOK_* env vars (all four, or none) when the user
-  // is on the free plan with their own provider keys. Attach them as X-BYOK-*
-  // headers on every request to the omi backend so it (a) applies the request-level
-  // all-four-keys paywall exemption and (b) routes inference through the user's own
-  // Anthropic key instead of Omi's server key. We only attach the complete set —
-  // the backend's has_all_byok_keys() requires all four to be present.
+  // BYOK: the Swift app sets OMI_BYOK_* env vars for the selected LLM provider and
+  // optional Deepgram key. Attach configured capabilities as X-BYOK-* headers on
+  // every request so the backend applies the LLM BYOK quota exemption and routes
+  // inference through the selected provider key instead of Omi's server key.
   const byokMap: Array<[string, string]> = [
+    ["OMI_BYOK_OPENROUTER", "X-BYOK-OpenRouter"],
     ["OMI_BYOK_OPENAI", "X-BYOK-OpenAI"],
     ["OMI_BYOK_ANTHROPIC", "X-BYOK-Anthropic"],
     ["OMI_BYOK_GEMINI", "X-BYOK-Gemini"],
@@ -830,9 +851,9 @@ export default function omiProvider(pi: ExtensionAPI): void {
     const value = process.env[envName];
     if (value && value.length > 0) byokHeaders[headerName] = value;
   }
-  const byokActive = Object.keys(byokHeaders).length === byokMap.length;
+  const byokActive = Object.keys(byokHeaders).length > 0;
   if (byokActive) {
-    process.stderr.write(`[omi-provider] BYOK active — attaching ${byokMap.length} X-BYOK headers\n`);
+    process.stderr.write(`[omi-provider] BYOK active — attaching ${Object.keys(byokHeaders).length} X-BYOK headers\n`);
   }
 
   pi.registerProvider("omi", {
@@ -866,11 +887,14 @@ export default function omiProvider(pi: ExtensionAPI): void {
 
   pi.on("tool_call", async (event): Promise<ToolCallEventResult | void> => {
     let decision: DenyDecision | null = null;
+    let builtInToolPolicy: OmiBuiltInToolPolicy = "read_only";
     try {
-      decision = inspectToolCall(event);
+      const relayContext = await omiRelayContextRaw();
+      builtInToolPolicy = relayContext === undefined
+        ? "read_only"
+        : omiBuiltInToolPolicyFromRelayContext(relayContext);
     } catch (err) {
-      // Never let classifier bugs block execution. Fail-open for the
-      // denylist and log the error through the audit channel.
+      // Authority transport failures fail closed for adapter mutations.
       const msg = err instanceof Error ? err.message : String(err);
       void appendAudit({
         ts: new Date().toISOString(),
@@ -880,8 +904,8 @@ export default function omiProvider(pi: ExtensionAPI): void {
         reason: `classifier threw: ${msg}`,
         summary: summarizeInput(event),
       });
-      return undefined;
     }
+    decision = inspectToolCall(event, builtInToolPolicy);
 
     void appendAudit({
       ts: new Date().toISOString(),

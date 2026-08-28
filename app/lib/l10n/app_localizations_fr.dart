@@ -2060,6 +2060,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get memoryDeleted => 'Mémoire supprimée.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Annuler';
 
   @override
@@ -9929,6 +9932,20 @@ class AppLocalizationsFr extends AppLocalizations {
   String get accountCutoverOpenStore => 'Ouvrir le store';
 
   @override
+  String get chatScopeToday => 'Aujourd’hui';
+
+  @override
+  String get chatScopeThisWeek => 'Cette semaine';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'À propos de : $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Demander à ce sujet';
+
+  @override
   String get sendRawAudioToOmi => 'Envoyer l\'audio brut à Omi';
 
   @override
@@ -9940,4 +9957,47 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Impossible de partager le diagnostic. Veuillez réessayer.';
+
+  @override
+  String get appDisabledTitle => 'Cette app est désactivée et ne peut pas être installée.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Son endpoint a échoué pendant 72 heures d\'affilée, les envois ont donc été arrêtés.';
+
+  @override
+  String get appDisabledGeneric => 'Elle a été désactivée par Omi.';
+
+  @override
+  String get appDisabledOwnerHint => 'Corrigez d\'abord l\'endpoint : la réactivation revérifie chaque URL configurée.';
+
+  @override
+  String get appReEnable => 'Réactiver';
+
+  @override
+  String get appReEnableFailedTitle => 'Réactivation impossible';
+
+  @override
+  String get appReEnableFailedBody => 'Cette app n\'a pas pu être réactivée. Veuillez réessayer.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Désactivée le $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Dernière erreur : $error.';
+  }
+
+  @override
+  String get prerecordedTranscript => 'Préenregistré';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Votre Pendant est encore en train d\'enregistrer, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l\'enregistrement, puis synchronisez à nouveau.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Le stockage de votre Pendant est plein et il est encore en mode enregistrement, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l\'enregistrement, puis synchronisez à nouveau.';
 }

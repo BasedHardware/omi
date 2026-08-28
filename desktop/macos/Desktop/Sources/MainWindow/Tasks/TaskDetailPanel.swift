@@ -9,7 +9,6 @@ struct TaskDetailPanel: View {
   let onDismiss: () -> Void
   let onToggle: () -> Void
   let onEdit: () -> Void
-  let onInvestigate: (() -> Void)?
   let onOpenChat: (() -> Void)?
   let onIncrementIndent: (() -> Void)?
   let onDecrementIndent: (() -> Void)?
@@ -28,7 +27,6 @@ struct TaskDetailPanel: View {
     onDismiss: @escaping () -> Void,
     onToggle: @escaping () -> Void,
     onEdit: @escaping () -> Void,
-    onInvestigate: (() -> Void)? = nil,
     onOpenChat: (() -> Void)? = nil,
     onIncrementIndent: (() -> Void)? = nil,
     onDecrementIndent: (() -> Void)? = nil,
@@ -39,7 +37,6 @@ struct TaskDetailPanel: View {
     self.onDismiss = onDismiss
     self.onToggle = onToggle
     self.onEdit = onEdit
-    self.onInvestigate = onInvestigate
     self.onOpenChat = onOpenChat
     self.onIncrementIndent = onIncrementIndent
     self.onDecrementIndent = onDecrementIndent
@@ -172,40 +169,55 @@ struct TaskDetailPanel: View {
       } else {
         VStack(spacing: OmiSpacing.xs) {
           ForEach(content.linkedSources) { source in
-            Button {
-              TaskDetailSourceNavigator.open(source.route)
-            } label: {
-              HStack(spacing: OmiSpacing.sm) {
-                Image(systemName: source.systemImage)
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.secondary)
-                  .frame(width: 20)
-                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-                  Text(source.title)
-                    .scaledFont(size: OmiType.caption, weight: .medium)
-                    .foregroundColor(Ink.primary)
-                  Text(source.subtitle)
-                    .scaledFont(size: OmiType.micro)
-                    .foregroundColor(Ink.secondary)
-                    .lineLimit(1)
-                }
-                Spacer(minLength: OmiSpacing.xs)
-                Image(systemName: "arrow.up.right")
-                  .scaledFont(size: OmiType.micro, weight: .semibold)
-                  .foregroundColor(Ink.secondary)
-              }
-              .padding(OmiSpacing.sm)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-                  .fill(Ink.rowFillHover)
-              )
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("task-detail-source-\(source.id)")
+            linkedSourceButton(source)
           }
         }
       }
+    }
+  }
+
+  @ViewBuilder
+  private func linkedSourceButton(_ source: TaskDetailSourceLink) -> some View {
+    if case .rewindFrame(let screenshotID) = source.route {
+      RewindEvidenceCardView(
+        card: RewindEvidenceCardModel(screenshotID: screenshotID),
+        onOpen: { lease in
+          TaskDetailSourceNavigator.open(source.route, rewindLease: lease)
+        }
+      )
+      .accessibilityIdentifier("task-detail-source-\(source.id)")
+    } else {
+      Button {
+        TaskDetailSourceNavigator.open(source.route)
+      } label: {
+        HStack(spacing: OmiSpacing.sm) {
+          Image(systemName: source.systemImage)
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+            .frame(width: 20)
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+            Text(source.title)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(Ink.primary)
+            Text(source.subtitle)
+              .scaledFont(size: OmiType.micro)
+              .foregroundColor(Ink.secondary)
+              .lineLimit(1)
+          }
+          Spacer(minLength: OmiSpacing.xs)
+          Image(systemName: "arrow.up.right")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundColor(Ink.secondary)
+        }
+        .padding(OmiSpacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+            .fill(Ink.rowFillHover)
+        )
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("task-detail-source-\(source.id)")
     }
   }
 
@@ -232,11 +244,10 @@ struct TaskDetailPanel: View {
   @ViewBuilder
   private var contextSection: some View {
     let metadata = task.parsedMetadata ?? [:]
-    if task.contextSummary != nil || task.currentActivity != nil || task.agentPlan != nil
+    if task.contextSummary != nil || task.currentActivity != nil
       || metadata["context_summary"] as? String != nil
       || metadata["current_activity"] as? String != nil
       || metadata["reasoning"] as? String != nil
-      || metadata["agent_plan"] as? String != nil
     {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         sectionTitle("Context")
@@ -249,9 +260,6 @@ struct TaskDetailPanel: View {
           }
           if let reasoning = metadata["reasoning"] as? String, !reasoning.isEmpty {
             detailBlock("Reasoning", reasoning)
-          }
-          if let plan = task.agentPlan ?? metadata["agent_plan"] as? String, !plan.isEmpty {
-            detailBlock("Agent plan", String(plan.prefix(2000)))
           }
         }
       }
@@ -270,14 +278,6 @@ struct TaskDetailPanel: View {
         )
         actionButton(title: "Edit task", systemImage: "pencil", action: onEdit, identifier: "task-detail-edit")
 
-        if let onInvestigate {
-          actionButton(
-            title: "Execute with Omi",
-            systemImage: "sparkles",
-            action: onInvestigate,
-            identifier: "task-detail-execute"
-          )
-        }
         if let onOpenChat {
           actionButton(
             title: task.workstreamId == nil ? "Work on this with Omi" : "Open thread",

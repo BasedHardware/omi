@@ -355,6 +355,17 @@ function select_ios_device() {
   return 1
 }
 
+# True if $1 is the id of a physical iOS device rather than a simulator, per
+# `flutter devices --machine`'s own "emulator" field.
+function _ios_device_is_physical() {
+  local device_id="$1"
+  local devices_json
+  devices_json=$(flutter devices --machine 2>/dev/null) || return 1
+  local emulator
+  emulator=$(echo "$devices_json" | jq -r --arg id "$device_id" '.[] | select(.id == $id) | .emulator')
+  [[ "$emulator" == "false" ]]
+}
+
 # #########
 # Build iOS
 # #########
@@ -364,6 +375,13 @@ function run_build_ios() {
   check_ios_prerequisites || return 1
   local device_id
   device_id=$(select_ios_device) || return 1
+  if [[ "$flavor" == "dev" && -z "${OMI_DEV_HOST:-}" ]] && _ios_device_is_physical "$device_id"; then
+    echo "⚠️  Building for a physical device with OMI_DEV_HOST unset — the dev backend" >&2
+    echo "   will default to 127.0.0.1, which on the device is itself, not this Mac." >&2
+    echo "   Set OMI_DEV_HOST to this Mac's LAN or Tailscale address before running" >&2
+    echo "   both setup.sh and make dev-up, or the app will hang waiting for the" >&2
+    echo "   backend. See the physical-device tip in docs/doc/developer/AppSetup.mdx." >&2
+  fi
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
     && dart run build_runner build \

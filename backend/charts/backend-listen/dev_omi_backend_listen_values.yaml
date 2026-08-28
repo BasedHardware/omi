@@ -122,6 +122,12 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: MODULATE_API_KEY
+  - name: SONIOX_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: SONIOX_API_KEY
+        optional: true
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -157,6 +163,8 @@ env:
     value: "true"
   - name: MEETING_RECEIPT_RECONCILER_ENABLED
     value: "false"
+  - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
+    value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED

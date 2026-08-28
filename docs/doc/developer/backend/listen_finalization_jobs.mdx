@@ -139,3 +139,52 @@ To replay a terminal job safely:
 Do not replay `blocked_byok` using Omi credentials. A durable offline BYOK
 design needs a separate approved credential broker with its own retention,
 rotation, deletion, audit, and IAM review.
+
+## Abandoned BYOK jobs
+
+A `requires_byok` job can only ever execute inside a live pusher session that
+presents the user's request-scoped keys. Both BYOK transitions
+(`_resume_blocked_byok_job_txn` and `_mark_finalization_retryable_txn`) delete
+`reconcile_after_at` on purpose, so the row is invisible to the credential-free
+replay query, and `_claim_finalization_job_txn` separately refuses
+`requires_byok` jobs for the Cloud Tasks worker. When that session ends without
+finishing, nothing owns the row at all: it accumulates in `queued` forever, and
+a conversation still bound to it can sit on `processing` forever with it.
+
+`reconcile_abandoned_byok_finalization_jobs()` gives those rows an owner for one
+purpose only: a truthful terminal. It is **not** a replay path. It never
+finalizes a conversation, never brokers or substitutes a credential, and never
+touches `blocked_byok` (that state is still legitimately waiting for a live
+session, and it is already visible on its own gauge).
+
+* Eligible: `requires_byok`, status `queued` or `leased` with an expired lease,
+  and a server-owned last-activity instant older than
+  `LISTEN_FINALIZATION_BYOK_ABANDONED_SECONDS` (default fourteen days, clamped
+  to a one-day floor and a 90-day ceiling). A row whose age cannot be established is
+  skipped, never terminalized.
+* Terminal: `dead_letter` with `last_failure_code = byok_session_abandoned`,
+  distinct from `final_attempt_failed`, and projection shard deltas moved so the
+  metric denominator stays correct.
+* The bound conversation is closed in the same transaction **only** when it is
+  still `processing`, not `deferred`, and still bound to this exact job
+  generation. It becomes
+  `completed` (not `failed`/`discarded`, as on the worker dead-letter path) so
+  the user's recording stays retrievable and can be reprocessed with their own
+  keys. Many stranded rows bind a conversation the inline pusher lane already
+  finalized: those job rows are orphaned bookkeeping and only the job is closed.
+* Work is bounded per invocation (fixed page size, capped scan, single-equality
+  query on `requires_byok`) and eventually complete through a persisted, rotated
+  CAS cursor, exactly like the stale bare-`processing` sweep.
+
+The sweep is gated by `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED`, default
+`true` in every environment. It ships on because no environment can rehearse
+it: dev holds zero BYOK jobs, so an off-by-default flag would defer the
+disposition of stranded rows indefinitely without producing any evidence, and
+a resumed BYOK row is reachable by no consumer in the meantime. The bounded
+age is the safety control; the flag exists to **stop** the sweep during an
+incident, not to stage its rollout. To stop it, set the value to `false` in
+`backend/deploy/runtime_env/_base.yaml` and both backend-listen chart values
+and deploy -- a `kubectl set env` override survives only until the next deploy
+of any commit. Outcomes surface on
+`listen_finalization_byok_abandonments_total{outcome=...}`
+(`abandoned_conversation_closed`, `abandoned_bookkeeping`, `skipped`, `error`).

@@ -427,6 +427,32 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 }
 
+/// One headed block of the conversation's written summary.
+///
+/// The backend moved the substance of a summary out of `overview` and into these when the notes
+/// pipeline landed: `overview` became a single short compatibility paragraph, and the headed
+/// detail — what was discussed, the friction, the follow-ups — lives here. The generated wire DTO
+/// has carried them since; this domain model did not, so every desktop surface was rendering the
+/// compatibility paragraph and calling it the summary.
+struct SummarySection: Codable, Equatable, Identifiable {
+  var id: String { heading }
+  let heading: String
+  let bodyMarkdown: String
+  let sourceSegmentIDs: [String]
+
+  init(heading: String, bodyMarkdown: String, sourceSegmentIDs: [String] = []) {
+    self.heading = heading
+    self.bodyMarkdown = bodyMarkdown
+    self.sourceSegmentIDs = sourceSegmentIDs
+  }
+
+  init(_ wire: OmiAPI.Section) {
+    heading = wire.heading
+    bodyMarkdown = wire.bodyMarkdown
+    sourceSegmentIDs = wire.sourceSegmentIds ?? []
+  }
+}
+
 struct Structured: Codable, Equatable {
   var title: String
   let overview: String
@@ -434,6 +460,9 @@ struct Structured: Codable, Equatable {
   let category: String
   let actionItems: [ActionItem]
   let events: [Event]
+  /// The headed blocks the backend writes the real summary into. Empty for captures processed
+  /// before the notes pipeline, which is why every reader must fall back to `overview`.
+  let sections: [SummarySection]
 
   init(from decoder: Decoder) throws {
     // Schema authority: OmiAPI.Structured (generated from app-client OpenAPI).
@@ -451,6 +480,7 @@ struct Structured: Codable, Equatable {
     }
     actionItems = (wire.actionItems ?? []).map(ActionItem.init)
     events = (wire.events ?? []).map(Event.init)
+    sections = (wire.sections ?? []).map(SummarySection.init)
   }
 
   init(_ wire: OmiAPI.Structured) {
@@ -464,6 +494,7 @@ struct Structured: Codable, Equatable {
     }
     actionItems = (wire.actionItems ?? []).map(ActionItem.init)
     events = (wire.events ?? []).map(Event.init)
+    sections = (wire.sections ?? []).map(SummarySection.init)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -484,12 +515,17 @@ struct Structured: Codable, Equatable {
         title: $0.title
       )
     }
+    let sectionsWire = sections.map {
+      OmiAPI.Section(
+        bodyMarkdown: $0.bodyMarkdown, heading: $0.heading, sourceSegmentIds: $0.sourceSegmentIDs)
+    }
     let wire = OmiAPI.Structured(
       actionItems: actionItemsWire,
       category: OmiAPI.CategoryEnum(rawValue: category),
       emoji: emoji,
       events: eventsWire,
       overview: overview,
+      sections: sectionsWire,
       title: title
     )
     try wire.encode(to: encoder)
@@ -502,7 +538,8 @@ struct Structured: Codable, Equatable {
     emoji: String,
     category: String,
     actionItems: [ActionItem],
-    events: [Event]
+    events: [Event],
+    sections: [SummarySection] = []
   ) {
     self.title = title
     self.overview = overview
@@ -510,6 +547,7 @@ struct Structured: Codable, Equatable {
     self.category = category
     self.actionItems = actionItems
     self.events = events
+    self.sections = sections
   }
 }
 
@@ -788,12 +826,17 @@ typealias Geolocation = OmiAPI.Geolocation
 struct ConversationPhoto: Codable, Identifiable {
   let id: String
   let base64: String
+  let contentType: String?
+  let storageId: String?
   let description: String?
   let createdAt: Date
   let discarded: Bool
 
   enum CodingKeys: String, CodingKey {
-    case id, base64, description
+    case id, base64
+    case contentType = "content_type"
+    case storageId = "storage_id"
+    case description
     case createdAt = "created_at"
     case discarded
   }
@@ -802,6 +845,8 @@ struct ConversationPhoto: Codable, Identifiable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
     base64 = try container.decodeIfPresent(String.self, forKey: .base64) ?? ""
+    contentType = try container.decodeIfPresent(String.self, forKey: .contentType)
+    storageId = try container.decodeIfPresent(String.self, forKey: .storageId)
     description = try container.decodeIfPresent(String.self, forKey: .description)
     createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
     discarded = try container.decodeIfPresent(Bool.self, forKey: .discarded) ?? false
@@ -813,6 +858,8 @@ struct ConversationPhoto: Codable, Identifiable {
   init(_ wire: OmiAPI.ConversationPhoto) {
     self.id = wire.id ?? UUID().uuidString
     self.base64 = wire.base64
+    self.contentType = wire.contentType
+    self.storageId = wire.storageId
     self.description = wire.description_
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

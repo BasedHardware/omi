@@ -30,7 +30,9 @@ vi.mock('electron', () => ({
     handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown): void => {
       handlers.set(channel, fn)
     }
-  }
+  },
+  BrowserWindow: { getAllWindows: (): unknown[] => [] },
+  webContents: { getAllWebContents: (): unknown[] => [] }
 }))
 vi.mock('../agentKernel/store', () => ({ SqliteAgentStore: class {} }))
 vi.mock('../agentKernel/kernel', () => ({ AgentRuntimeKernel: class {} }))
@@ -50,6 +52,8 @@ vi.mock('../agentKernel/toolRelayBridge', () => ({
 vi.mock('../codingAgent/piMono', () => ({
   PiMonoAdapter: vi.fn(function (this: Record<string, unknown>) {
     this.updateAuthToken = vi.fn(() => Promise.resolve(true))
+    this.updateByokEnv = vi.fn(() => Promise.resolve(true))
+    this.revokeAndStop = vi.fn(() => Promise.resolve())
   }),
   PiMonoRuntimeAdapter: vi.fn(function (this: Record<string, unknown>) {
     this.adapterId = 'pi-mono'
@@ -74,6 +78,10 @@ import {
   __setByokKeyStoreForTests
 } from '../codingAgent/piMonoSession'
 import type { ByokKeyStore } from '../agentKernel/byokStore'
+import {
+  rendererConversationBinding,
+  resetRendererConversationBindingForTests
+} from '../jit/rendererConversationBinding'
 
 const verify = vi.mocked(verifyFirebaseIdToken)
 const noByok = { getAllKeys: () => ({}) } as unknown as ByokKeyStore
@@ -93,6 +101,7 @@ beforeEach(() => {
   verify.mockReset()
   verify.mockResolvedValue(null)
   resetControlPlaneForTests()
+  resetRendererConversationBindingForTests()
   __resetPiMonoSessionForTests()
   __setByokKeyStoreForTests(noByok)
   registerPiMonoHandlers()
@@ -154,5 +163,32 @@ describe('pimono:setSession — control-plane owner wiring', () => {
     await setSession({ token: '', desktopApiBase: base }) // coerces to null → cleared
     expect(verify).not.toHaveBeenCalled()
     expect(controlPlaneOwnerId()).toBe(DEFAULT_LOCAL_OWNER_ID)
+  })
+
+  it('adopts a renderer selection reported before auth only after verification', async () => {
+    const selection = handlers.get('jit:rendererSelectionChanged')
+    if (!selection) throw new Error('jit:rendererSelectionChanged was not registered')
+
+    expect(selection({}, 'chat-before-auth')).toBe(false)
+    expect(rendererConversationBinding()).toBeNull()
+
+    verify.mockResolvedValue('account-A')
+    await setSession({ token: 'genuine-A', desktopApiBase: base })
+
+    expect(rendererConversationBinding()?.deletionKey).toBe('chat-before-auth')
+  })
+
+  it('rejects a renderer selection after sign-out and clears the old binding', async () => {
+    verify.mockResolvedValue('account-A')
+    await setSession({ token: 'genuine-A', desktopApiBase: base })
+    const selection = handlers.get('jit:rendererSelectionChanged')
+    if (!selection) throw new Error('jit:rendererSelectionChanged was not registered')
+    expect(selection({}, 'chat-A')).toBe(true)
+    expect(rendererConversationBinding()?.deletionKey).toBe('chat-A')
+
+    await setSession(null)
+
+    expect(selection({}, 'chat-old')).toBe(false)
+    expect(rendererConversationBinding()).toBeNull()
   })
 })

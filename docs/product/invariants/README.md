@@ -55,6 +55,7 @@ to handle a rule in flux — not delaying the lock.
 | INV-MEM-3 | No legacy fallback after canonical selection | locked | [memory-canonical-fail-closed.md](./memory-canonical-fail-closed.md) |
 | INV-MEM-4 | Canonical promotion is the sole Long-term authority | locked | [memory-promotion-authority.md](./memory-promotion-authority.md) |
 | INV-MEM-5 | Universal memory and task authority | locked | [universal-memory-task-authority.md](./universal-memory-task-authority.md) |
+| INV-MEM-6 | Intent-backed knowledge ledger | proposed | [intent-backed-knowledge-ledger.md](./intent-backed-knowledge-ledger.md) |
 | INV-AGENT-* | Agent control-plane contracts | locked | [agent-control-plane.md](./agent-control-plane.md) |
 | INV-INT-1 | Integrations harness over heuristics | locked | [integrations.md](./integrations.md) |
 | INV-UI-1 | No purple; neutral accents | locked | [brand-ui.md](./brand-ui.md) |
@@ -63,6 +64,7 @@ to handle a rule in flux — not delaying the lock.
 | INV-DATA-1 | Production-family customer data-plane continuity | locked | [data-plane-continuity.md](./data-plane-continuity.md) |
 | INV-NAV-1 | Feature parity across desktop shells | locked | [desktop-shell-feature-parity.md](./desktop-shell-feature-parity.md) |
 | INV-TASK-1 | Complete dated task buckets with bounded No Deadline paging | locked | [task-dated-bucket-completeness.md](./task-dated-bucket-completeness.md) |
+| INV-TASK-2 | Automatic task capture proposes, it never writes | locked | [task-capture-suggestion-only.md](./task-capture-suggestion-only.md) |
 | INV-VOICE-1 | One desktop voice-turn lifecycle owner | locked | [desktop-voice-turns.md](./desktop-voice-turns.md) |
 | INV-CUTOVER-1 | Whole-account cohort cutover authority | locked | [account-cohort-cutover.md](./account-cohort-cutover.md) |
 

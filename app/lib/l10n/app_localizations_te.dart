@@ -2051,6 +2051,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get memoryDeleted => 'జ్ఞాపకం తొలగించబడింది.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'మరలుచేయండి';
 
   @override
@@ -9890,6 +9893,20 @@ class AppLocalizationsTe extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
+  String get chatScopeToday => 'ఈ రోజు';
+
+  @override
+  String get chatScopeThisWeek => 'ఈ వారం';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title గురించి';
+  }
+
+  @override
+  String get askAboutThisConversation => 'దీని గురించి అడగండి';
+
+  @override
   String get sendRawAudioToOmi => 'ముడి ఆడియోను Omiకి పంపండి';
 
   @override
@@ -9901,4 +9918,48 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'డయాగ్నొస్టిక్స్‌ను షేర్ చేయలేకపోయాము. దయచేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get appDisabledTitle => 'ఈ యాప్ నిలిపివేయబడింది, ఇన్‌స్టాల్ చేయలేరు.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'దీని ఎండ్‌పాయింట్ వరుసగా 72 గంటలు విఫలమైంది, అందుకే డెలివరీలు ఆపివేయబడ్డాయి.';
+
+  @override
+  String get appDisabledGeneric => 'దీన్ని Omi నిలిపివేసింది.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'ముందుగా ఎండ్‌పాయింట్‌ను సరిచేయండి — తిరిగి ప్రారంభించినప్పుడు కాన్ఫిగర్ చేసిన ప్రతి URL మళ్లీ తనిఖీ చేయబడుతుంది.';
+
+  @override
+  String get appReEnable => 'తిరిగి ప్రారంభించు';
+
+  @override
+  String get appReEnableFailedTitle => 'తిరిగి ప్రారంభించలేకపోయాము';
+
+  @override
+  String get appReEnableFailedBody => 'ఈ యాప్‌ను తిరిగి ప్రారంభించలేకపోయాము. దయచేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date న నిలిపివేయబడింది.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'చివరి లోపం: $error';
+  }
+
+  @override
+  String get prerecordedTranscript => 'ముందుగా రికార్డ్ చేసినది';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant ఇంకా రికార్డ్ చేస్తోంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయలేము. రికార్డింగ్ ఆపడానికి Pendant బటన్ నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant నిల్వ నిండిపోయింది మరియు అది ఇంకా రికార్డింగ్ మోడ్‌లో ఉంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయడం సాధ్యం కాదు. రికార్డింగ్ ఆపడానికి Pendant బటన్‌ను నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.';
 }

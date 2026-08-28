@@ -46,7 +46,9 @@ from utils.llm.private_context import (
     openai_messages_carry_private_tool_output,
 )
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
+from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
+from utils.observability.journeys import ClientJourneyAttempt
 from utils.other import endpoints as auth
 from utils.subscription import enforce_desktop_chat_quota
 
@@ -1003,10 +1005,24 @@ def _openai_usage_as_anthropic(usage: object) -> SimpleNamespace:
 
 async def _record_usage(uid: str, usage: object) -> None:
     if get_byok_key('anthropic'):
+
+        def _exclude(record_uid: str) -> None:
+            llm_usage_db.record_llm_cost_exclusion(
+                record_uid,
+                bucket='desktop_chat',
+                account='omi',
+                cost_exclusion='byok_provider_cost',
+                firestore_client=get_customer_firestore_client(),
+            )
+
+        await run_blocking(db_executor, _exclude, uid)
         return
     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens = _usage_values(usage)
     total_tokens = input_tokens + output_tokens + cache_read_tokens + cache_write_tokens
-    cost = _web_search_requests(usage) * _WEB_SEARCH_COST_PER_REQUEST
+    web_search_requests = _web_search_requests(usage)
+    cost = web_search_requests * _WEB_SEARCH_COST_PER_REQUEST
+    cost_status = 'partial' if web_search_requests else 'missing'
+    cost_exclusion = 'provider_token_cost_not_recorded'
 
     def _write(
         record_uid: str,
@@ -1024,7 +1040,9 @@ async def _record_usage(uid: str, usage: object) -> None:
             cache_read,
             cache_write,
             combined_tokens,
-            cost_usd,
+            cost_usd if cost_status != 'missing' else None,
+            cost_status=cost_status,
+            cost_exclusion=cost_exclusion,
             firestore_client=get_customer_firestore_client(),
         )
 
@@ -1301,8 +1319,10 @@ def _gateway_feature_for_lane(lane_id: str) -> str:
     return 'chat_agent'
 
 
-def _gateway_request_headers(request_id: str, lane_id: str = CHAT_AGENT_AUTO_LANE_ID) -> dict[str, str]:
-    headers = llm_gateway_headers(feature=_gateway_feature_for_lane(lane_id))
+def _gateway_request_headers(
+    request_id: str, lane_id: str = CHAT_AGENT_AUTO_LANE_ID, platform: str | None = None
+) -> dict[str, str]:
+    headers = llm_gateway_headers(feature=_gateway_feature_for_lane(lane_id), platform=platform)
     headers['X-Omi-Request-ID'] = request_id
     return headers
 
@@ -1356,7 +1376,7 @@ async def _stream_gateway(
             async with get_llm_gateway_client().stream(
                 'POST',
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                headers=_gateway_request_headers(request_id, lane_id),
+                headers=_gateway_request_headers(request_id, lane_id, platform),
                 json=gateway_payload,
             ) as response:
                 if response.status_code >= 400:
@@ -1463,8 +1483,99 @@ async def _web_search_authorized(uid: str, *, from_mode: str = 'anthropic_web_se
     return 'authorized'
 
 
-@router.post('/v2/chat/completions', response_model=None)
-async def chat_completions(
+class _DesktopChatStreamOutcome:
+    """Incrementally prove an OpenAI-compatible stream delivered an answer."""
+
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+        self.has_content = False
+        self.has_terminal = False
+        self.has_error = False
+
+    def observe(self, item: object) -> None:
+        if isinstance(item, str):
+            chunk = item.encode('utf-8')
+        elif isinstance(item, (bytes, bytearray, memoryview)):
+            chunk = bytes(item)
+        else:
+            return
+        self._buffer.extend(chunk)
+        normalized = bytes(self._buffer).replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+        self._buffer = bytearray(normalized)
+        while b'\n\n' in self._buffer:
+            frame, _, remainder = self._buffer.partition(b'\n\n')
+            self._buffer = bytearray(remainder)
+            data = b'\n'.join(line[5:].lstrip() for line in frame.splitlines() if line.startswith(b'data:'))
+            if not data:
+                continue
+            if data.strip() == b'[DONE]':
+                self.has_terminal = True
+                continue
+            try:
+                payload = json.loads(data)
+            except (TypeError, ValueError):
+                continue
+            if isinstance(payload, Mapping):
+                if payload.get('error'):
+                    self.has_error = True
+                if _desktop_chat_payload_has_content(payload):
+                    self.has_content = True
+
+    def failure_when(self, item: object) -> bool:
+        self.observe(item)
+        return self.has_error
+
+    def success_when(self, _item: object) -> bool:
+        return self.has_content and self.has_terminal
+
+
+def _desktop_chat_payload_has_content(payload: Mapping[str, object]) -> bool:
+    choices = payload.get('choices')
+    if not isinstance(choices, list):
+        return False
+    for choice in choices:
+        if not isinstance(choice, Mapping):
+            continue
+        message = choice.get('message')
+        delta = choice.get('delta')
+        for value in (message, delta):
+            if not isinstance(value, Mapping):
+                continue
+            content = value.get('content')
+            if isinstance(content, str) and content.strip():
+                return True
+            tool_calls = value.get('tool_calls')
+            if isinstance(tool_calls, list) and tool_calls:
+                return True
+    return False
+
+
+def _desktop_chat_issue_class(exc: BaseException) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return 'upstream_timeout'
+    if isinstance(exc, HTTPException):
+        if exc.status_code in {408, 504}:
+            return 'upstream_timeout'
+        if exc.status_code == 503:
+            return 'dependency_unavailable'
+        if exc.status_code >= 500:
+            return 'provider_error'
+        return 'upstream_rejected'
+    if isinstance(exc, httpx.HTTPStatusError):
+        return 'upstream_rejected'
+    return 'provider_error'
+
+
+def _desktop_chat_client_kind(x_app_platform: object, user_agent: object) -> ClientKind:
+    headers: dict[str, str] = {}
+    if isinstance(x_app_platform, str):
+        headers['x-app-platform'] = x_app_platform
+    if isinstance(user_agent, str):
+        headers['user-agent'] = user_agent
+    return resolve_client_kind_from_headers(headers)
+
+
+async def _chat_completions_unobserved(
     body: dict[str, object],
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
@@ -1571,7 +1682,7 @@ async def chat_completions(
             async with get_llm_gateway_semaphore():
                 response = await get_llm_gateway_client().post(
                     f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                    headers=_gateway_request_headers(request_id, public_model),
+                    headers=_gateway_request_headers(request_id, public_model, x_app_platform),
                     json=gateway_payload,
                 )
             response.raise_for_status()
@@ -1632,3 +1743,56 @@ async def chat_completions(
             'X-Request-Id': request_id,
         },
     )
+
+
+@router.post('/v2/chat/completions', response_model=None)
+async def chat_completions(
+    body: dict[str, object],
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
+    x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
+    user_agent: str | None = Header(None, alias='User-Agent'),
+) -> JSONResponse | StreamingResponse:
+    attempt = ClientJourneyAttempt(
+        'desktop_chat',
+        _desktop_chat_client_kind(x_app_platform, user_agent),
+    )
+    try:
+        response = await _chat_completions_unobserved(
+            body,
+            uid=uid,
+            x_app_platform=x_app_platform,
+            x_omi_chat_contract_version=x_omi_chat_contract_version,
+            x_omi_request_id=x_omi_request_id,
+        )
+    except asyncio.CancelledError:
+        attempt.cancel()
+        raise
+    except Exception as exc:
+        attempt.fail(_desktop_chat_issue_class(exc))
+        raise
+
+    if isinstance(response, StreamingResponse):
+        outcome = _DesktopChatStreamOutcome()
+        response.body_iterator = attempt.observe_stream(
+            response.body_iterator,
+            success_when=outcome.success_when,
+            failure_when=outcome.failure_when,
+            failure_class='provider_error',
+            missing_success_class='empty_answer',
+        )
+        return response
+
+    try:
+        payload = json.loads(bytes(response.body))
+    except (TypeError, ValueError):
+        attempt.fail('invalid_response')
+    else:
+        if isinstance(payload, Mapping) and payload.get('error'):
+            attempt.fail('provider_error')
+        elif isinstance(payload, Mapping) and _desktop_chat_payload_has_content(payload):
+            attempt.succeed()
+        else:
+            attempt.fail('empty_answer')
+    return response

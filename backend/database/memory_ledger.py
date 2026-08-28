@@ -8,7 +8,10 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
 
 from database import projection_repair
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.legal_holds import assert_no_destructive_operation_transaction
+from database.memory_collections import MemoryCollections
 from models.memories import confidence_fields_for_evidence
 from models.memory_state_head import (
     trusted_memory_state_head_fields_from_control,
@@ -46,6 +49,7 @@ memory_state_collection = 'memory_state'
 memory_state_document = 'head'
 memory_apply_control_document = 'apply_control'
 memory_commits_collection = 'memory_commits'
+MEMORY_COMMIT_PRIVACY_PURGE_PAGE_SIZE = 100
 
 
 class HeadConflict(Exception):
@@ -53,6 +57,73 @@ class HeadConflict(Exception):
         super().__init__(f"Memory ledger head moved from {expected_parent} to {current_head}")
         self.expected_parent = expected_parent
         self.current_head = current_head
+
+
+class LegacyCommitPrivacyFence(RuntimeError):
+    """A legacy ledger mutation cannot prove it is safe after deletion."""
+
+
+def _document(database: Any, path: str) -> Any:
+    document = getattr(database, 'document', None)
+    if callable(document):
+        return document(path)
+    collection_name, document_id = path.split('/', 1)
+    return database.collection(collection_name).document(document_id)
+
+
+def _mutation_memory_ids(mutations: List[Dict[str, Any]]) -> set[str]:
+    ids: set[str] = set()
+    for entry in mutations:
+        fact = entry.get('fact')
+        if isinstance(fact, dict):
+            fact_id = fact.get('id')
+            if isinstance(fact_id, str) and fact_id:
+                ids.add(fact_id)
+        for key in ('fact_id', 'target_fact_id', 'by'):
+            value = entry.get(key)
+            if isinstance(value, str) and value:
+                ids.add(value)
+    return ids
+
+
+def _assert_legacy_commit_privacy_fences(
+    *,
+    transaction: Any,
+    database: Any,
+    uid: str,
+    mutations: List[Dict[str, Any]],
+) -> None:
+    """Serialize legacy commits with deletion and reject retired identities."""
+
+    assert_no_destructive_operation_transaction(transaction, database, uid=uid)
+    deletion_ref = _document(database, f'account_deletions/{uid}')
+    deletion_snapshot = deletion_ref.get(transaction=transaction)
+    deletion_payload = deletion_snapshot.to_dict() if getattr(deletion_snapshot, 'exists', False) else {}
+    deletion_status = normalize_account_deletion_status(
+        marker_exists=bool(getattr(deletion_snapshot, 'exists', False)),
+        raw_status=deletion_payload.get('wipe_status') if isinstance(deletion_payload, dict) else None,
+    )
+    if account_deletion_blocks_access(deletion_status):
+        raise LegacyCommitPrivacyFence('legacy memory commit blocked by account deletion')
+
+    memory_ids = sorted(_mutation_memory_ids(mutations))
+    if len(memory_ids) > 200:
+        raise LegacyCommitPrivacyFence('legacy memory commit identity inventory is too large')
+    collections = MemoryCollections(uid=uid)
+    for memory_id in memory_ids:
+        item_snapshot = _document(database, f'{collections.memory_items}/{memory_id}').get(transaction=transaction)
+        item_payload = item_snapshot.to_dict() if getattr(item_snapshot, 'exists', False) else None
+        override_snapshot = _document(database, f'{collections.memory_historical_overrides}/{memory_id}').get(
+            transaction=transaction
+        )
+        override_payload = override_snapshot.to_dict() if getattr(override_snapshot, 'exists', False) else None
+        if (
+            isinstance(item_payload, dict)
+            and item_payload.get('status') == 'tombstoned'
+            or isinstance(override_payload, dict)
+            and override_payload.get('status') == 'tombstoned'
+        ):
+            raise LegacyCommitPrivacyFence('legacy memory commit references a privacy-deleted memory')
 
 
 def _state_head_write_payload(
@@ -121,6 +192,267 @@ def refine_fact(fact_id: str, arg_changes: Dict[str, Any]) -> Dict[str, Any]:
 
 def retract_fact(fact_id: str, reason: str = '') -> Dict[str, Any]:
     return mutation('retract_fact', fact_id=fact_id, reason=reason)
+
+
+def _value_references_memory_id(value: Any, target_ids: set[str]) -> bool:
+    if isinstance(value, str):
+        return value in target_ids
+    if isinstance(value, dict):
+        return any(_value_references_memory_id(item, target_ids) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_value_references_memory_id(item, target_ids) for item in value)
+    return False
+
+
+def purge_legacy_memory_commits_for_memories(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    firestore_client: Any = None,
+) -> List[str]:
+    """Delete legacy content-bearing commits that reference privacy-deleted IDs.
+
+    Canonical apply commits in the shared collection are content-free and have
+    no ``mutations`` field. Legacy commits embed entire facts, corrections, and
+    evidence; deleting the document also removes its content-derived ID path.
+    The legacy head is retired compatibility state and is never repaired into a
+    second authority after this privacy purge.
+    """
+
+    target_ids = {memory_id for memory_id in memory_ids if memory_id}
+    if not target_ids:
+        return []
+    database: Any = firestore_client or db
+    collection = database.collection(users_collection).document(uid).collection(memory_commits_collection)
+    query = collection.order_by('__name__')
+    cursor: Any = None
+    purged: List[str] = []
+    while True:
+        page_query = query.start_after(cursor) if cursor is not None else query
+        page = list(page_query.limit(MEMORY_COMMIT_PRIVACY_PURGE_PAGE_SIZE).stream())
+        if not page:
+            break
+        for document in page:
+            payload = document.to_dict()
+            mutations = payload.get('mutations') if isinstance(payload, dict) else None
+            if isinstance(mutations, list) and _value_references_memory_id(mutations, target_ids):
+                document.reference.delete()
+                purged.append(str(document.id))
+        if len(page) < MEMORY_COMMIT_PRIVACY_PURGE_PAGE_SIZE:
+            break
+        cursor = page[-1]
+    return purged
+
+
+def _iter_collection_documents(collection: Any) -> Any:
+    query = collection.order_by('__name__')
+    cursor: Any = None
+    while True:
+        page_query = query.start_after(cursor) if cursor is not None else query
+        page = list(page_query.limit(MEMORY_COMMIT_PRIVACY_PURGE_PAGE_SIZE).stream())
+        if not page:
+            return
+        yield from page
+        if len(page) < MEMORY_COMMIT_PRIVACY_PURGE_PAGE_SIZE:
+            return
+        cursor = page[-1]
+
+
+def purge_canonical_privacy_history_for_memories(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    firestore_client: Any = None,
+    preserve_source_replacement_receipts: bool = False,
+) -> Dict[str, List[str]]:
+    """Remove pre-delete canonical history whose IDs or payload encode content.
+
+    The new deletion operation/commit/outbox events are content-free privacy
+    history and remain. Older operations and their commits/outbox rows are
+    removed whole because their document IDs digest the plaintext logical
+    payload; in-place redaction would leave a dictionary oracle in the path.
+    A mixed legacy commit is removed whole when any mutation references a
+    deleted identity. This never removes unrelated canonical memory rows.
+    """
+
+    target_ids = {memory_id for memory_id in memory_ids if memory_id}
+    if not target_ids:
+        return {}
+    database: Any = firestore_client or db
+    user_ref = database.collection(users_collection).document(uid)
+    removed: Dict[str, List[str]] = {}
+    deleted_operation_ids: set[str] = set()
+
+    for document in _iter_collection_documents(user_ref.collection('memory_operations')):
+        payload = document.to_dict()
+        if not isinstance(payload, dict):
+            continue
+        if _value_references_memory_id(payload, target_ids):
+            document.reference.delete()
+            deleted_operation_ids.add(str(document.id))
+    if deleted_operation_ids:
+        removed['memory_operations'] = sorted(deleted_operation_ids)
+
+    removed_commits: List[str] = []
+    for document in _iter_collection_documents(user_ref.collection(memory_commits_collection)):
+        payload = document.to_dict()
+        if not isinstance(payload, dict):
+            continue
+        if payload.get('operation_id') in deleted_operation_ids or _value_references_memory_id(payload, target_ids):
+            document.reference.delete()
+            removed_commits.append(str(document.id))
+    if removed_commits:
+        removed['memory_commits'] = sorted(removed_commits)
+
+    removed_outbox: List[str] = []
+    for document in _iter_collection_documents(user_ref.collection('memory_outbox')):
+        payload = document.to_dict()
+        if isinstance(payload, dict) and (
+            payload.get('operation_id') in deleted_operation_ids or _value_references_memory_id(payload, target_ids)
+        ):
+            document.reference.delete()
+            removed_outbox.append(str(document.id))
+    if removed_outbox:
+        removed['memory_outbox'] = sorted(removed_outbox)
+
+    for collection_name in ('memory_ledger_reopens', 'jit_trigger_feedback', 'jit_proactivity_events'):
+        removed_ids: List[str] = []
+        for document in _iter_collection_documents(user_ref.collection(collection_name)):
+            payload = document.to_dict()
+            if isinstance(payload, dict) and _value_references_memory_id(payload, target_ids):
+                document.reference.delete()
+                removed_ids.append(str(document.id))
+        if removed_ids:
+            removed[collection_name] = sorted(removed_ids)
+
+    for document in _iter_collection_documents(user_ref.collection('jit_proactivity_daily_budgets')):
+        payload = document.to_dict()
+        if not isinstance(payload, dict):
+            continue
+        planned = payload.get('planned_by_trigger')
+        if not isinstance(planned, dict) or not target_ids.intersection(planned):
+            continue
+        document.reference.update(
+            {'planned_by_trigger': {key: value for key, value in planned.items() if key not in target_ids}}
+        )
+
+    if not preserve_source_replacement_receipts:
+        removed_replacements = purge_source_replacement_receipts_for_memories(
+            uid,
+            list(target_ids),
+            firestore_client=database,
+        )
+        if removed_replacements:
+            removed['memory_source_replacements'] = removed_replacements
+    return removed
+
+
+def purge_source_replacement_receipts_for_memories(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    firestore_client: Any = None,
+) -> List[str]:
+    target_ids = {memory_id for memory_id in memory_ids if memory_id}
+    if not target_ids:
+        return []
+    database: Any = firestore_client or db
+    collection = database.collection(users_collection).document(uid).collection('memory_source_replacements')
+    removed: List[str] = []
+    for document in _iter_collection_documents(collection):
+        payload = document.to_dict()
+        if isinstance(payload, dict) and _value_references_memory_id(payload, target_ids):
+            document.reference.delete()
+            removed.append(str(document.id))
+    return sorted(removed)
+
+
+@_typed_transactional
+def _finalize_canonical_privacy_tombstones_transaction(
+    transaction: Any,
+    database: Any,
+    collections: MemoryCollections,
+    target_ids: List[str],
+) -> None:
+    """Atomically remove one already-bounded tombstoned lineage.
+
+    Tombstone creation is transaction-bounded below Firestore's mutation cap,
+    so the corresponding item/evidence/assertion removal also fits.  Keeping
+    this final physical step atomic is the retry inventory: a failed commit
+    leaves every content-free tombstone in place so any lineage member can
+    reconstruct the complete cleanup set on the next request.
+    """
+
+    item_refs: List[Any] = []
+    evidence_refs: Dict[str, Any] = {}
+    assertion_refs: List[Any] = []
+    for memory_id in target_ids:
+        item_ref = database.document(f"{collections.memory_items}/{memory_id}")
+        snapshot = item_ref.get(transaction=transaction)
+        payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("status") != "tombstoned":
+            raise RuntimeError("canonical privacy finalization requires a tombstoned item")
+        item_refs.append(item_ref)
+        assertion_refs.append(database.document(f"{collections.memory_graph_assertions}/{memory_id}"))
+        evidence_rows = payload.get("evidence")
+        if not isinstance(evidence_rows, list):
+            continue
+        for evidence in evidence_rows:
+            if not isinstance(evidence, dict):
+                continue
+            evidence_id = evidence.get("evidence_id")
+            if not isinstance(evidence_id, str) or not evidence_id or evidence_id in evidence_refs:
+                continue
+            evidence_ref = database.document(f"{collections.memory_evidence}/{evidence_id}")
+            evidence_snapshot = evidence_ref.get(transaction=transaction)
+            evidence_payload = evidence_snapshot.to_dict() if getattr(evidence_snapshot, "exists", False) else None
+            if isinstance(evidence_payload, dict) and evidence_payload.get("source_state") == "tombstoned":
+                evidence_refs[evidence_id] = evidence_ref
+
+    # Firestore forbids reads after writes, so stage deletes only after the
+    # complete lineage and evidence validation pass above.
+    for evidence_ref in evidence_refs.values():
+        transaction.delete(evidence_ref)
+    for assertion_ref in assertion_refs:
+        transaction.delete(assertion_ref)
+    for item_ref in item_refs:
+        transaction.delete(item_ref)
+
+
+def finalize_canonical_privacy_tombstones(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    firestore_client: Any = None,
+    preserve_source_replacement_receipts: bool = False,
+) -> None:
+    """Remove deterministic IDs after every derived provider is scrubbed.
+
+    The caller must first prove vector/search/graph absence. This final step
+    removes content-derived item/evidence paths and all old history while the
+    server-keyed V2 anti-resurrection receipt remains for 30 days.
+    """
+
+    target_ids = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
+    if not target_ids:
+        return
+    database: Any = firestore_client or db
+    collections = MemoryCollections(uid=uid)
+    purge_canonical_privacy_history_for_memories(
+        uid,
+        target_ids,
+        firestore_client=database,
+        preserve_source_replacement_receipts=preserve_source_replacement_receipts,
+    )
+    transaction = database.transaction()
+    _finalize_canonical_privacy_tombstones_transaction(
+        transaction,
+        database,
+        collections,
+        target_ids,
+    )
 
 
 def add_evidence(fact_id: str, evidence: Dict[str, Any]) -> Dict[str, Any]:
@@ -320,6 +652,13 @@ def _append_commit_transaction(
     if current_head != expected_parent:
         raise HeadConflict(expected_parent, current_head)
 
+    _assert_legacy_commit_privacy_fences(
+        transaction=transaction,
+        database=database,
+        uid=uid,
+        mutations=mutations,
+    )
+
     # Build the state-head payload (including any apply_control fallback read)
     # before staging any writes: Firestore forbids a transactional read after a
     # write and raises ReadAfterWriteError otherwise.
@@ -363,6 +702,12 @@ def _append_commit_with_builder_transaction(
     built = mutation_builder(transaction)
     mutations: List[Dict[str, Any]] = cast(List[Dict[str, Any]], built.get('mutations') or [])
     projection_writer = built.get('projection_writer')
+    _assert_legacy_commit_privacy_fences(
+        transaction=transaction,
+        database=database,
+        uid=uid,
+        mutations=mutations,
+    )
     commit = build_commit(expected_parent, mutations, run_id=run_id, commit_time=commit_time)
     commit_ref = user_ref.collection(memory_commits_collection).document(commit['commit_id'])
     commit_snapshot = commit_ref.get(transaction=transaction)

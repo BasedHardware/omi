@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import { getOptionalStripe } from '@/lib/stripe';
-import { getPayload, setPayload } from '@/lib/payload-cache';
+import { getPayload, setPayload, withFreshness } from '@/lib/payload-cache';
 import {
   AllSubscriptionSourcesFailedError,
   fetchOmiSubscriptions,
@@ -112,12 +112,12 @@ export async function GET(request: NextRequest) {
 
     const cached = await getPayload<Awaited<ReturnType<typeof computeSubscriptionTrends>>>(key);
     if (cached) {
-      return NextResponse.json(cached.data);
+      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
     }
 
     const payload = await computeSubscriptionTrends(months);
     await setPayload(key, payload);
-    return NextResponse.json(payload);
+    return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (error) {
     if (error instanceof AllSubscriptionSourcesFailedError) {
       return NextResponse.json({ error: error.message }, { status: 502 });

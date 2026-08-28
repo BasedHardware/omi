@@ -55,7 +55,7 @@ final class SBOnboardingModel: ObservableObject {
   enum Step: Int, CaseIterable {
     case promise, name, howHeard, language, role
     case mic, systemAudio, screen, files, accessibility, automation
-    case shortcutOpen, shortcutTalk, screenDemo, agents, context, capture
+    case shortcutOpen, shortcutTalk, screenDemo, agents, context, capture, referral
   }
 
   /// "How did you hear about Omi?" options (mirrors the legacy step).
@@ -328,7 +328,9 @@ final class SBOnboardingModel: ObservableObject {
       return "The more I can see, the more I can help. Connect anything you want me to know:"
     case .capture:
       return
-        "You're all set, \(name). One last thing: should I listen all the time, or only during your meetings?"
+        "You're all set, \(name). Should I listen all the time, or only during your meetings?"
+    case .referral:
+      return "Want to invite a friend? They'll get one free month."
     }
   }
 
@@ -689,6 +691,10 @@ final class SBOnboardingModel: ObservableObject {
 
   func capture(_ selection: CaptureSelection) {
     AssistantSettings.shared.audioRecordingMode = selection.audioRecordingMode
+    advance(userAnswer: nil, to: .referral)
+  }
+
+  func finishReferral() {
     complete()
   }
 
@@ -721,11 +727,26 @@ final class SBOnboardingModel: ObservableObject {
     OnboardingChatPersistence.clear()
     ChatDraftStore.shared.clear(.onboardingMain)
     ChatDraftStore.shared.clear(.onboardingFloating)
+    // **Mark onboarding done before anything can await, and before the last window can close.**
+    //
+    // `applicationShouldTerminateAfterLastWindowClosed` returns true while this flag is false --
+    // deliberately, so a half-finished onboarding does not leave a menu-bar process behind. That
+    // makes the flag load-bearing for process lifetime, not just for which view renders. Setting
+    // it after `await finishOnboardingJournal()` left a window in which the onboarding window had
+    // already gone away and the flag was still false, and the app quit on the user at the exact
+    // moment they finished. It then reran onboarding on next launch, because the flag never got
+    // written -- observed twice in a row on a bundle whose onboarding was not pre-seeded.
+    //
+    // The `[weak self]` made it worse rather than safer: `teardownAll()` runs at the top of this
+    // function, so a deallocated model meant `guard let self else { return }` skipped the write
+    // entirely and onboarding could never complete at all.
+    //
+    // The journal is genuinely async and genuinely optional. Completion is neither.
+    OnboardingFlow.markCompleted(for: RuntimeOwnerIdentity.currentOwnerId())
+    appState.hasCompletedOnboarding = true
     onComplete?()
-    Task { [weak self] in
-      guard let self else { return }
-      await self.chatProvider.finishOnboardingJournal()
-      self.appState.hasCompletedOnboarding = true
+    Task { [chatProvider] in
+      await chatProvider.finishOnboardingJournal()
     }
   }
 
@@ -733,6 +754,10 @@ final class SBOnboardingModel: ObservableObject {
   /// tab (with the personalized opener), without force-enabling capture or screen
   /// analysis the user chose to bypass. They can turn those on later.
   func skip() {
+    if step == .referral {
+      complete()
+      return
+    }
     finishOnboardingHandoff(clearOnboardingChatFlag: false)
   }
 

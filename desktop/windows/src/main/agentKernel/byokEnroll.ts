@@ -16,6 +16,7 @@ import { validateAllByokKeys, type FetchLike } from './byokValidator'
 import { byokFingerprint } from '../../shared/byokFingerprint'
 import {
   BYOK_PROVIDERS,
+  BYOK_LLM_PROVIDERS,
   isByokActive,
   type ByokEnrollResult,
   type ByokKeys
@@ -77,11 +78,12 @@ async function deleteActivate(
 /**
  * Validate the current key set and reconcile the backend BYOK activation.
  *
- * - Not all four present → never validate; ensure the backend is OFF; no results.
- * - All four present → live-validate all in parallel:
- *   - all authenticate → POST fingerprints (active) unless the backend call fails.
- *   - any fail → DELETE (inactive) and return the per-key results so the UI can
- *     show which provider rejected.
+ * - No LLM key present → never validate; ensure the backend is OFF; no results.
+ * - At least one LLM key present → live-validate all configured keys in parallel:
+ *   - at least one LLM key authenticates → POST fingerprints (active) unless the
+ *     backend call fails.
+ *   - every LLM key fails → DELETE (inactive) and return the per-key results so
+ *     the UI can show which provider rejected.
  */
 export async function enrollByok(opts: {
   keys: ByokKeys
@@ -97,21 +99,27 @@ export async function enrollByok(opts: {
 
   if (!isByokActive(keys)) {
     await deleteActivate(apiBase, token, backendFetch)
-    return { active: false, results: {} }
+    return { active: false, results: {}, enrolledFingerprints: {} }
   }
 
   const results = await validateAllByokKeys(keys, opts.validateFetch)
-  const allOk = BYOK_PROVIDERS.every((p) => results[p]?.ok)
+  const allOk = BYOK_LLM_PROVIDERS.some((p) => results[p]?.ok)
   if (!allOk) {
     await deleteActivate(apiBase, token, backendFetch)
-    return { active: false, results }
+    return { active: false, results, enrolledFingerprints: {} }
   }
 
   const fingerprints: Record<string, string> = {}
-  for (const p of BYOK_PROVIDERS) fingerprints[p] = byokFingerprint(keys[p] as string)
+  for (const p of BYOK_PROVIDERS) {
+    if (keys[p]?.trim() && results[p]?.ok) fingerprints[p] = byokFingerprint(keys[p] as string)
+  }
   const posted = await postActivate(apiBase, token, fingerprints, backendFetch)
-  if (!posted.ok) return { active: false, results, backendError: posted.error }
-  return { active: true, results }
+  if (!posted.ok) {
+    // The POST failed, so the backend may still hold the previous enrollment —
+    // omit `enrolledFingerprints` and let callers keep their prior evidence.
+    return { active: false, results, backendError: posted.error }
+  }
+  return { active: true, results, enrolledFingerprints: fingerprints }
 }
 
 /**

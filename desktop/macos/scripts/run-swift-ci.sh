@@ -67,7 +67,10 @@ case "${1:-}" in
     [ "$#" -eq 1 ] || usage
     select_toolchain
     cd "$MACOS_DIR"
-    rm -rf Desktop/.build
+    # No `rm -rf Desktop/.build`: CI restores a release .build cache written
+    # from main pushes, and hosted runners start clean anyway, so a forced
+    # cold build only converted every cached run back into a ~20-minute one.
+    # The release-notification-regression mode below also reuses this build.
     xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
     ;;
   --release-notification-regression)

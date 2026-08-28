@@ -2,6 +2,18 @@ import Combine
 import Foundation
 import SwiftUI
 
+enum RewindCitationFocusResolution: Equatable {
+  case found(Screenshot)
+  case unavailable
+  case staleOwner
+}
+
+enum RewindCitationFocusAdmission: Equatable {
+  case focused
+  case unavailable
+  case staleOwner
+}
+
 /// View model for the Rewind page
 @MainActor
 class RewindViewModel: ObservableObject {
@@ -93,10 +105,12 @@ class RewindViewModel: ObservableObject {
   static let timelineSampleTarget = 500
   typealias TimelineScreenshotLoader =
     @Sendable (_ start: Date, _ end: Date, _ targetCount: Int, _ appFilter: String?) async throws -> [Screenshot]
+  typealias CitationScreenshotLoader = @Sendable (_ screenshotID: Int64) async throws -> Screenshot?
 
   private var visibleTimelineRange: ClosedRange<Double>?
   private var timelineLoadID = UUID()
   private let timelineScreenshotLoader: TimelineScreenshotLoader
+  private let citationScreenshotLoader: CitationScreenshotLoader
 
   /// Set by RewindPage when the transcript/notes panel is expanded.
   /// Auto-refresh skips when true so the view tree stays stable and @State is preserved.
@@ -112,9 +126,13 @@ class RewindViewModel: ObservableObject {
     timelineScreenshotLoader: @escaping TimelineScreenshotLoader = { start, end, targetCount, appFilter in
       try RewindDatabase.shared.getScreenshotsSampled(
         from: start, to: end, targetCount: targetCount, appFilter: appFilter)
+    },
+    citationScreenshotLoader: @escaping CitationScreenshotLoader = { screenshotID in
+      try RewindDatabase.shared.getScreenshot(id: screenshotID)
     }
   ) {
     self.timelineScreenshotLoader = timelineScreenshotLoader
+    self.citationScreenshotLoader = citationScreenshotLoader
     // Debounce search queries
     $searchQuery
       .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
@@ -151,10 +169,7 @@ class RewindViewModel: ObservableObject {
   private func resetForOwnerChange() {
     searchTask?.cancel()
     ownerReloadTask?.cancel()
-    timelineLoadID = UUID()
-    isCitationFocusInProgress = false
-    pinnedCitationScreenshot = nil
-    suppressNextEmptySearch = false
+    invalidateCitationFocus()
     screenshots = []
     selectedScreenshot = nil
     searchQuery = ""
@@ -187,6 +202,17 @@ class RewindViewModel: ObservableObject {
       guard !Task.isCancelled else { return }
       await self?.loadInitialData()
     }
+  }
+
+  /// Cancel any in-flight citation admission immediately when the owner changes. The exact owner
+  /// lease is still checked at every async boundary, but this also stops a pending timeline read
+  /// from re-admitting a row after the page has reset for the next owner.
+  func invalidateCitationFocus() {
+    searchTask?.cancel()
+    timelineLoadID = UUID()
+    isCitationFocusInProgress = false
+    pinnedCitationScreenshot = nil
+    suppressNextEmptySearch = false
   }
 
   /// Refresh timeline only if viewing today and not actively searching.
@@ -568,10 +594,11 @@ class RewindViewModel: ObservableObject {
     visibleTimelineRange = startOfDay.timeIntervalSince1970...endOfDay.timeIntervalSince1970
 
     do {
-      var results = try await RewindDatabase.shared.getScreenshotsSampled(
-        from: startOfDay,
-        to: endOfDay,
-        targetCount: Self.timelineSampleTarget
+      var results = try await timelineScreenshotLoader(
+        startOfDay,
+        endOfDay,
+        Self.timelineSampleTarget,
+        selectedApp
       )
       guard ownerSnapshot.isCurrent() else { return }
 
@@ -674,10 +701,40 @@ class RewindViewModel: ObservableObject {
   /// evenly sampled subset. Returning `false` is intentional: the page must not claim focus while a
   /// stale, deleted, or owner-invalid row is still selected.
   @discardableResult
-  func focusCitationScreenshot(_ screenshot: Screenshot) async -> Bool {
+  func focusCitationScreenshot(
+    _ screenshot: Screenshot,
+    ownerLease: RewindCaptureOwnerSnapshot? = nil
+  ) async -> Bool {
+    await focusCitationScreenshotResult(screenshot, ownerLease: ownerLease) == .focused
+  }
+
+  /// Resolve the destination row under the exact owner lease captured by the citation handoff.
+  /// The second local lookup in `focusCitationScreenshotResult` closes the deletion race between
+  /// click-time validation and timeline insertion.
+  func resolveCitationRequest(
+    _ request: RewindCitationFocusState.Request
+  ) async -> RewindCitationFocusResolution {
+    guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return .staleOwner }
+
+    do {
+      guard let screenshot = try await citationScreenshotLoader(request.screenshotID) else {
+        return RewindCitationFocusState.isCurrent(owner: request.owner) ? .unavailable : .staleOwner
+      }
+      guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return .staleOwner }
+      return .found(screenshot)
+    } catch {
+      return RewindCitationFocusState.isCurrent(owner: request.owner) ? .unavailable : .staleOwner
+    }
+  }
+
+  func focusCitationScreenshotResult(
+    _ screenshot: Screenshot,
+    ownerLease suppliedOwnerLease: RewindCaptureOwnerSnapshot? = nil
+  ) async -> RewindCitationFocusAdmission {
     guard let screenshotID = screenshot.id,
-      let ownerSnapshot = RewindCaptureOwnerSnapshot.capture()
-    else { return false }
+      let ownerSnapshot = suppliedOwnerLease ?? RewindCaptureOwnerSnapshot.capture(),
+      RewindCitationFocusState.isCurrent(owner: ownerSnapshot)
+    else { return .staleOwner }
 
     isCitationFocusInProgress = true
     pinnedCitationScreenshot = screenshot
@@ -692,26 +749,49 @@ class RewindViewModel: ObservableObject {
 
     defer {
       isCitationFocusInProgress = false
-      if !ownerSnapshot.isCurrent() { pinnedCitationScreenshot = nil }
+      if !RewindCitationFocusState.isCurrent(owner: ownerSnapshot) { pinnedCitationScreenshot = nil }
     }
 
     await loadScreenshotsForDate(selectedDate, ownerSnapshot: ownerSnapshot)
-    guard ownerSnapshot.isCurrent() else { return false }
+    guard RewindCitationFocusState.isCurrent(owner: ownerSnapshot) else { return .staleOwner }
 
     // Active chunks are deliberately not displayable until finalized. Do not append one merely to
     // make the row appear focused; that would produce a timeline marker for an unreadable frame.
-    if await VideoChunkEncoder.shared.currentChunkPath == screenshot.videoChunkPath {
-      return false
+    let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
+    guard RewindCitationFocusState.isCurrent(owner: ownerSnapshot) else { return .staleOwner }
+    if let activeChunk, activeChunk == screenshot.videoChunkPath {
+      return .unavailable
     }
 
-    if !screenshots.contains(where: { $0.id == screenshotID }) {
-      screenshots = Self.insertingCitationTarget(screenshot, into: screenshots)
+    // The click-time row may have been pruned while the sampled day query was in flight. Re-read
+    // the canonical local row under the same owner lease immediately before any insertion, and
+    // use that read as the authoritative metadata for the focus.
+    let validatedScreenshot: Screenshot?
+    do {
+      validatedScreenshot = try await citationScreenshotLoader(screenshotID)
+    } catch {
+      return RewindCitationFocusState.isCurrent(owner: ownerSnapshot) ? .unavailable : .staleOwner
     }
-    guard let focused = screenshots.first(where: { $0.id == screenshotID }) else { return false }
+    guard let validatedScreenshot else {
+      return RewindCitationFocusState.isCurrent(owner: ownerSnapshot) ? .unavailable : .staleOwner
+    }
+    guard RewindCitationFocusState.isCurrent(owner: ownerSnapshot) else { return .staleOwner }
+    guard validatedScreenshot.id == screenshotID else { return .unavailable }
+
+    if !screenshots.contains(where: { $0.id == screenshotID }) {
+      // This is the last owner check before old-owner pixels/paths can enter the new timeline.
+      guard RewindCitationFocusState.isCurrent(owner: ownerSnapshot) else { return .staleOwner }
+      pinnedCitationScreenshot = validatedScreenshot
+      screenshots = Self.insertingCitationTarget(validatedScreenshot, into: screenshots)
+    }
+    guard RewindCitationFocusState.isCurrent(owner: ownerSnapshot) else { return .staleOwner }
+    guard let focused = screenshots.first(where: { $0.id == screenshotID }) else {
+      return .unavailable
+    }
     selectScreenshot(focused)
     // Keep the exact row pinned through the viewport reveal that RewindPage performs next. That
     // debounced sample owns clearing the pin after it has reinserted the target if necessary.
-    return true
+    return .focused
   }
 
   /// Preserve one exact row alongside an otherwise sampled list. The helper is deterministic and

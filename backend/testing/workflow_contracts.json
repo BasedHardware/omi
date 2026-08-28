@@ -676,6 +676,41 @@
       ]
     },
     {
+      "id": "cloud_run_metrics_egress_deploy",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_cloud_run_metrics_egress.yml",
+        "backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml",
+        "backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml"
+      ],
+      "tests": [
+        "tests/unit/test_cloud_run_metrics_egress_workflow.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "reviewed Cloud Run application exporter values are automatically installed in development after merge",
+        "production metrics egress deploys only through an explicit protected-environment dispatch from main",
+        "the isolated exporter and its Prometheus scrape configuration use pinned charts and atomic Helm upgrades"
+      ]
+    },
+    {
+      "id": "jit_qa_vertex_gateway",
+      "risk": "high",
+      "sources": [
+        "scripts/dev-harness/dev_harness/jit_vertex_gateway.py"
+      ],
+      "tests": [
+        "tests/unit/test_jit_qa_vertex_gateway.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "only the local backend service identity can call the development Vertex broker",
+        "BYOK headers, tool calls, multimodal content, oversized requests, and excess concurrency fail closed",
+        "output tokens and response bytes remain bounded for streaming and non-streaming responses",
+        "the broker accepts only development ADC with the development quota project"
+      ]
+    },
+    {
       "id": "ci_changed_path_selection",
       "risk": "high",
       "sources": [

@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
@@ -10,8 +10,11 @@ import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
+from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import delete_vector, delete_transcript_chunk_vectors
+import database.vector_db as vector_db
 from utils.other.storage import delete_conversation_audio_files
+from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
     BulkAssignSegmentsRequest,
@@ -28,6 +31,7 @@ from models.conversation import (
     SetConversationActionItemsStateRequest,
     SetConversationEventsStateRequest,
     TestPromptRequest,
+    TranscriptMatchSnippet,
     UpdateActionItemDescriptionRequest,
     UpdateSegmentTextRequest,
     UpdateSummaryRequest,
@@ -36,6 +40,11 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.render import conversation_to_dict
+from utils.conversations.mcp_transcript_search import (
+    attach_match_snippets_to_conversations,
+    merge_typesense_page_with_transcript_hits,
+    search_transcript_conversation_ids,
+)
 from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
@@ -48,11 +57,13 @@ from models.shared import StatusResponse
 from utils.conversations.process_conversation import (
     AppUsageAttribution,
     process_conversation,
+    run_first_open_derived_work,
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
+from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.retraction_scope import retraction_can_be_skipped
@@ -72,7 +83,14 @@ from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
+from utils.journey_metrics_contract import resolve_client_kind
 from utils.product_telemetry import emit_product_event
+from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
+from utils.other.list_budget import (
+    OMI_LIST_TRUNCATED_HEADER,
+    OMI_LIST_TRUNCATED_VALUE,
+    list_read_budget_for_request,
+)
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -89,7 +107,9 @@ router = APIRouter()
 
 
 def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = conversations_db.get_conversation(
+        uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
+    )
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -191,12 +211,52 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     return conversation
 
 
+def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
+    """Claim once and run in the background; failure remains retryable."""
+    conversation_id = conversation.get('id')
+    if not conversation_id or not conversation.get('jit_first_open'):
+        return
+    try:
+        token = conversations_db.claim_authorized_first_open_work(uid, conversation_id, conversation.get('source'))
+    except Exception as error:
+        logger.warning('JIT first-open claim failed uid=%s conv=%s: %s', uid, conversation_id, error)
+        return
+    if token is None:
+        return
+
+    def _run() -> None:
+        succeeded = False
+        try:
+            latest = conversations_db.get_conversation(uid, conversation_id)
+            if latest is None:
+                raise RuntimeError('conversation disappeared before first-open work')
+            run_first_open_derived_work(uid, latest, token)
+            succeeded = True
+        except Exception as error:
+            logger.exception('JIT first-open worker failed uid=%s conv=%s: %s', uid, conversation_id, error)
+        finally:
+            try:
+                conversations_db.finish_first_open_work(uid, conversation_id, token, succeeded=succeeded)
+            except Exception as error:
+                logger.exception(
+                    'JIT first-open lease finalization failed uid=%s conv=%s: %s', uid, conversation_id, error
+                )
+
+    submit_with_context(postprocess_executor, _run)
+
+
 class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
 
 
+class ConversationSearchItem(Conversation):
+    """Search hit: base conversation fields plus optional transcript match evidence."""
+
+    match_snippets: List[TranscriptMatchSnippet] = []
+
+
 class SearchConversationsResponse(BaseModel):
-    items: List[Conversation]
+    items: List[ConversationSearchItem]
     total_pages: int
     current_page: int
     per_page: int
@@ -335,6 +395,7 @@ def finalize_conversation(
             force_process=True,
             extra_updates=extra_updates or None,
             require_cloud_tasks=True,
+            client_kind=resolve_client_kind(x_app_platform=conversation.client_platform, user_agent=None),
         )
     except lifecycle_service.FinalizationDispatchUnavailable as error:
         raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable') from error
@@ -520,10 +581,14 @@ def _resolve_bulk_segment_indices(conversation: Conversation, requested_ids: Lis
     tags=['conversations'],
     description=(
         "List responses may omit detail-only fields such as transcript_segments. "
-        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript."
+        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript. "
+        "Large accounts can outrun the request budget; such responses return a partial "
+        "newest-first array with the X-Omi-List-Truncated: true header instead of a 504 (#11831)."
     ),
 )
 def get_conversations(
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
     limit: PositiveLimit = 100,
     offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
@@ -558,6 +623,10 @@ def get_conversations(
     _reject_oversized_filter(status_filter, "statuses")
     _reject_oversized_filter(source_list, "sources")
 
+    # Request-scoped budget: the server-side offset is charged before the
+    # query and the page stream runs under the derived per-RPC timeout, so a
+    # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
+    budget = list_read_budget_for_request(request, route='conversations')
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
@@ -569,9 +638,13 @@ def get_conversations(
         end_date=end_date,
         folder_id=folder_id,
         starred=starred,
+        budget=budget,
     )
 
     redact_conversations_for_list(conversations)
+    if budget.truncated and response is not None:
+        response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
+    budget.observe('truncated' if budget.truncated else 'complete')
     return conversations
 
 
@@ -642,6 +715,8 @@ def get_conversation_by_id(
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred'):
         conversation = _enrich_deferred_conversation(uid, conversation)
+    else:
+        _dispatch_first_open_work(uid, conversation)
     return conversation
 
 
@@ -852,7 +927,9 @@ def patch_conversation_segment_text(
 @router.get(
     "/v1/conversations/{conversation_id}/photos", response_model=List[ConversationPhoto], tags=['conversations']
 )
-def get_conversation_photos(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_conversation_photos(
+    conversation_id: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "frame_requests:read"))
+):
     _get_valid_conversation_by_id(uid, conversation_id)
     return conversations_db.get_conversation_photos(uid, conversation_id)
 
@@ -880,14 +957,11 @@ def delete_conversation(
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
 
     if cascade:
-        # Delete associated memories and action items before removing the conversation doc
-        # so a partial failure cannot orphan derived data.
+        # Delete associated memories and action items first so partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
         memory_service = MemoryService(db_client=db_client)
-        # Retraction is fenced with canonical intake (MEMORY_MODE). Skipping it
-        # when there is provably nothing to retract keeps delete working while
-        # the fence is closed; anything real still raises rather than orphaning
-        # live memories against a deleted conversation.
+        # Retraction is fenced with canonical intake; skip only when there is provably nothing to retract.
+        # Any real memory still raises instead of being orphaned by conversation deletion.
         if not retraction_can_be_skipped(uid, conversation_id, memory_service=memory_service, db_client=db_client):
             try:
                 memory_service.retract_conversation_memories(uid, conversation_id)
@@ -905,7 +979,18 @@ def delete_conversation(
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
-    conversations_db.delete_conversation(uid, conversation_id)
+    # Screen frames (meeting-note screenshots) are primary conversation
+    # content, not cascade-only derived data, so this runs unconditionally
+    # and synchronously — unlike audio_files above, a conversation typically
+    # carries at most 7 of these (contract §7 cap), so the GCS fan-out here
+    # is cheap. Must run before delete_conversation below: Firestore does
+    # not cascade subcollection deletes, and the GCS objects have no other
+    # cleanup path once the parent doc (and the frame_id it's keyed under)
+    # is gone.
+    delete_conversation_screen_frames(uid, conversation_id)
+
+    delete_conversation_and_frame_evidence(uid, conversation_id)
+
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)
 
@@ -1365,27 +1450,39 @@ def get_conversation_share_recipients(conversation_id: str, uid: str = Depends(a
 def send_conversation_share_email(
     conversation_id: str, request: SendShareEmailRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
-    """One-click send of the meeting summary to detected participants.
+    """Send the meeting summary to the addresses the owner chose.
 
-    Recipients are validated against the calendar-detected set so this can
-    never relay to arbitrary addresses. Sending makes the conversation
-    link-visible first (same contract as copying the share link) so the
-    emailed link resolves.
+    The card lets the owner type a recipient, so the address is theirs to pick
+    rather than something we detected; detection only prefills the field. What
+    keeps this from being an open relay is unchanged: the sender must own the
+    conversation, the mail carries only that conversation's own summary and
+    share link with the owner as reply-to, the request schema caps how many
+    addresses one send may carry, and a per-owner daily quota bounds the total.
+    Sending
+    makes the conversation link-visible first (same contract as copying the
+    share link) so the emailed link resolves.
     """
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    detected = {recipient['email'] for recipient in share_email.get_share_recipients(uid, conversation)}
     requested = share_email.normalized_recipient_emails(request.recipient_emails)
-    unknown = [email for email in requested if email not in detected]
-    if unknown:
-        raise HTTPException(status_code=400, detail='Recipients must be detected meeting participants')
+    if not requested:
+        raise HTTPException(status_code=400, detail='A valid recipient email is required')
 
     # Idempotency under concurrency: a Firestore transaction atomically claims
     # the not-yet-emailed recipients, so simultaneous duplicate requests can
-    # never both dispatch to the same address; repeats return success without
-    # a duplicate email.
-    to_dispatch = conversations_db.reserve_share_email_recipients(uid, conversation_id, requested)
+    # never both dispatch to the same address. A repeat of an address that was
+    # definitively sent returns success without a duplicate email; an address
+    # some other request is dispatching *right now* is not reported as sent,
+    # because that dispatch may still fail and release its claim.
+    to_dispatch, already_sent, in_flight_elsewhere = conversations_db.reserve_share_email_recipients(
+        uid, conversation_id, requested
+    )
     if not to_dispatch:
-        return {'sent_to': requested}
+        if in_flight_elsewhere:
+            raise HTTPException(
+                status_code=409,
+                detail='That summary is already being sent to this recipient — check back in a moment',
+            )
+        return {'sent_to': already_sent}
 
     if not share_email.consume_daily_send_quota(uid, len(to_dispatch)):
         conversations_db.release_share_email_recipients(uid, conversation_id, to_dispatch)
@@ -1433,12 +1530,27 @@ def send_conversation_share_email(
         redis_db.remove_public_conversation(conversation_id)
 
     def _send():
-        # The reservation above is the durable ledger entry — nothing to write
-        # after the provider accepts, so no failure after a successful dispatch
-        # can trigger the visibility rollback (a delivered email keeps a live
-        # link).
+        # The claim taken above only says "dispatching"; the sent ledger is
+        # written once the provider accepted, and it is what makes a later
+        # repeat a no-op. Recording it is the last step, so no failure after a
+        # successful dispatch can trigger the visibility rollback (a delivered
+        # email keeps a live link).
         share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=to_dispatch)
-        return {'sent_to': requested}
+        # Viral-loop telemetry: summary shares feed the admin K-factor. Emitted
+        # only after the provider accepted, so the count is delivered shares.
+        emit_posthog_event(
+            uid,
+            'Conversation Summary Shared',
+            {'conversation_id': conversation_id, 'recipient_count': len(to_dispatch), 'channel': 'email'},
+        )
+        try:
+            conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
+        except Exception:
+            # Delivery already happened; a lost ledger write can only cost a
+            # duplicate on a later retry, which is strictly better than
+            # reporting a failure for mail the recipient holds.
+            logger.exception('share email: failed to record delivered recipients')
+        return {'sent_to': sorted(set(already_sent) | set(to_dispatch))}
 
     def _release_reservation_and_quota():
         try:
@@ -1450,8 +1562,16 @@ def send_conversation_share_email(
     try:
         return share_email.publish_then_send(publish=_publish, unpublish=_unpublish, send=_send)
     except share_email.AmbiguousDeliveryError as e:
-        # Delivery may have happened: reservation and quota stand (no duplicate
-        # on retry) and the link stays published.
+        # Delivery may have happened, so the claim is promoted to the sent
+        # ledger rather than left in flight or released: a retry must not risk
+        # a duplicate in the recipient's inbox, and a claim nobody ever
+        # resolves would block the address until its TTL expires. Quota stands
+        # and the link stays published. The caller still gets 504 — we do not
+        # know that it arrived, and only the ledger pretends otherwise.
+        try:
+            conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
+        except Exception:
+            logger.exception('share email: failed to record ambiguous dispatch')
         raise HTTPException(status_code=504, detail=str(e))
     except ValueError as e:
         _release_reservation_and_quota()
@@ -1620,30 +1740,63 @@ def search_conversations_endpoint(
         )
     except ConversationSearchUnavailableError:
         raise HTTPException(status_code=503, detail="Search temporarily unavailable")
-    conversation_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
+    typesense_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
+    effective_page = search_results.get('current_page', 1)
+    effective_per_page = search_results.get('per_page', 10)
+    # Spoken-word hits (optional transcript-chunk index) are merged on page 1 only so
+    # Typesense pagination stays stable. Snippets still attach for every hydrated hit.
+    # Over-fetch candidates on page 1 so lock/speaker/date filters can still fill per_page
+    # without permanently dropping displaced Typesense hits that lost the merge race.
+    transcript_ids: List[str] = []
+    merge_cap = effective_per_page
+    if effective_page == 1 and (search_request.query or '').strip():
+        merge_cap = min(max(effective_per_page * 3, effective_per_page), 250)
+        transcript_ids = search_transcript_conversation_ids(
+            uid,
+            search_request.query,
+            limit=merge_cap,
+            starts_at=start_timestamp,
+            ends_at=end_timestamp,
+            search_transcript_chunks=vector_db.search_transcript_chunks,
+        )
+    conversation_ids = merge_typesense_page_with_transcript_hits(
+        typesense_ids,
+        transcript_ids,
+        page=effective_page,
+        per_page=merge_cap,
+    )
     conversations = conversations_db.get_conversations_by_id_without_photos(
         uid,
         conversation_ids,
         include_discarded=bool(search_request.include_discarded),
     )
+    # Preserve merge order (transcript-first on page 1); Firestore fetch may reshuffle.
+    by_id = {c.get('id'): c for c in conversations if c.get('id')}
+    conversations = [by_id[cid] for cid in conversation_ids if cid in by_id]
     # Typesense filters locked hits, but the index can lag Firestore. Re-check after hydration
     # so search never leaks that a locked conversation matched a query.
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     # Speaker filtering happens here, not in Typesense: the index has no transcript_segments field, so
     # asking Typesense for one 400'd and 500'd the request. The hydrated Firestore documents do carry
     # transcript_segments, so match against those.
+    # Date filter also re-applies here: transcript-chunk hits can arrive with one-sided chunk
+    # metadata gaps; keep them consistent with Typesense + exact-reference paths.
     conversations = [
         conversation
         for conversation in conversations
         if conversation_matches_speaker(conversation, search_request.speaker_id)
+        and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
     ]
+    # Attach grep-style transcript snippets (start/end for seek-to-moment) before list redaction
+    # clears segments on locked rows.
+    if (search_request.query or '').strip():
+        conversations = attach_match_snippets_to_conversations(conversations, search_request.query)
+    conversations = conversations[:effective_per_page]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
     # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
     # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.
-    effective_page = search_results.get('current_page', 1)
-    effective_per_page = search_results.get('per_page', 10)
     search_results['total_pages'] = effective_page + 1 if len(conversations) >= effective_per_page else effective_page
     return search_results
 

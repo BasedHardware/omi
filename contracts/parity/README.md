@@ -21,16 +21,32 @@ cross-platform decision instead of a single-platform drive-by.
 | `day_keys.json` | Local-calendar-day identity of a UTC instant (conversation day grouping) |
 | `wire_action_item.json` | Action item wire decode: due_at instant equality across ISO offset forms, and the null / missing / unparseable agreement set |
 | `section_labels.json` | Relative day labels (Today / Yesterday / Tomorrow) as calendar-day relationships, including DST transition days |
+| `jit_runtime_contract_matrix.json` | Additive JIT ledger/evidence compatibility across legacy, v1, and future-version payloads |
 | `agent_routing.json` | Which coding agent a spoken task names: alias matching on word boundaries, and clause-scoped negation |
 
 ## Conformance suites
 
 | Platform | Suite | Runs |
 |---|---|---|
-| Backend (fixture integrity + serialization contract) | `backend/tests/unit/test_parity_contracts.py` | `backend/test.sh`, CI Backend unit suite |
+| Backend/API and standalone MCP | `backend/tests/unit/test_parity_contracts.py`, `backend/testing/contracts/test_jit_runtime_contract_matrix.py` | Backend unit suite and Desktop Backend Contracts CI |
 | Flutter app | `app/test/parity/parity_contracts_test.dart` | `app/test.sh`, CI Flutter tests |
-| Windows desktop | `desktop/windows/src/renderer/src/lib/parityContracts.test.ts` | `npm test` in `desktop/windows`, CI Desktop Windows tests |
-| macOS desktop | Adapter pending. The fixtures already encode the macOS model (`fold_overdue`, `categoryFor` in `desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift`); a `ParityContractsTests.swift` reading this directory is the follow-up for a machine that can run the Swift test lane. |
+| Windows desktop | `desktop/windows/src/renderer/src/lib/parityContracts.test.ts`, `desktop/windows/src/shared/knowledgeLedger.test.ts` | `npm test` in `desktop/windows`, CI Desktop Windows tests |
+| macOS desktop | JIT matrix: `desktop/macos/Desktop/Tests/ServerMemoryV17DecodingTests.swift`. Task/day adapter remains pending. | Desktop Swift CI |
+| Web app | `web/app/src/lib/__tests__/knowledgeLedger.test.ts` | `web/app/test.sh`, CI Web App checks |
+
+The JIT runtime matrix is additionally consumed by the shipped mobile, macOS,
+Windows, and web adapters plus the backend and standalone MCP suites. It proves
+that a mixed response keeps all authoritative text readable, grants ledger
+authority only to `knowledge_ledger.v1`, and makes future evidence inert by
+mapping its semantics to `unknown` or omitting its references. It does not
+activate JIT retrieval, trigger evaluation, frame requests, or any production
+rollout gate.
+
+The macOS adapter exercises both sides of that boundary: `ServerMemory` keeps
+all text while recognizing only the v1 ledger authority, and `ChatMessageDB`
+keeps chat text while ignoring the unrecognized evidence envelope rather than
+projecting it into metadata or content blocks. This proves inert compatibility;
+it does not claim that macOS renders structured chat evidence.
 
 `agent_routing.json` is a runtime rule rather than a renderer one, so it has its own
 per-platform suites alongside the table above:

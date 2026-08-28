@@ -12,6 +12,7 @@ from typing import Any
 
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
+from database.firestore_read_metrics import FirestoreReadSite
 from utils.conversations.meeting_treatment import meeting_treatment_verdict
 from utils.task_intelligence.proactive_engine import (
     persist_capture_arrival_intent,
@@ -119,7 +120,9 @@ def repair_meeting_receipt_intent(receipt: Mapping[str, Any]) -> bool:
     conversation_id = receipt.get('conversation_id')
     if not isinstance(uid, str) or not isinstance(conversation_id, str):
         return False
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = conversations_db.get_conversation(
+        uid, conversation_id, read_site=FirestoreReadSite.MEETING_RECEIPT_RECONCILER
+    )
     if not conversation:
         return False
     return persist_receipt_intent(uid, conversation, receipt) is not None

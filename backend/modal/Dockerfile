@@ -31,6 +31,7 @@ apt-get -y install cuda-runtime-13-2 && \
 rm -rf /var/lib/apt/lists/* cuda-repo-debian13-13-2-local_13.2.1-595.58.03-1_amd64.deb
 
 COPY --from=builder /opt/venv /opt/venv
+COPY backend/config /app/config
 COPY backend/database /app/database
 COPY backend/utils /app/utils
 COPY backend/models /app/models

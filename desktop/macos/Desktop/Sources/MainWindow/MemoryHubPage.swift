@@ -37,6 +37,13 @@ struct MemoryHubPage: View {
   /// Rewind lives on the shell rail, not in this hub, so the Activity spine's way into it has to be
   /// supplied by the host that owns the rail index. Hosts without one leave the card inert.
   var onOpenRewind: (() -> Void)? = nil
+  /// How the host opens one exact conversation.
+  ///
+  /// The chat-first shell supplies its typed deep link (`navigation.open(conversation:)`), which
+  /// carries the record to the Conversations host. Hosts without one fall back to the automation
+  /// singleton below — correct for the modern shell, where this page mounts `ConversationsPageHost`
+  /// itself and that host is guaranteed to be the one that consumes the request.
+  var onOpenConversationRecord: ((ServerConversation) -> Void)? = nil
 
   private var destination: MemoryHubDestination {
     MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
@@ -52,16 +59,31 @@ struct MemoryHubPage: View {
     )
   }
 
-  /// The hub wears its own switcher. It used to live in the top bar's `Library` hover menu, which
-  /// made the window's chrome responsible for one page's three views — and made Brain Map reachable
-  /// only by hovering. A page's tabs belong to the page (INV-NAV-1: same destinations, same owner).
+  /// **The hub wears no switcher.** It used to carry one directly above Activity's own filter row —
+  /// two chip rows a few points apart, sharing three of their words, doing different things. The
+  /// row that survived is Activity's, and every chip in it navigates (`ActivityDestinationChip`),
+  /// so the hub's four pages are reached from one place with one rule. Landing on any of them and
+  /// pressing `Activity` in the top bar comes back to that row (INV-NAV-1).
   var body: some View {
-    VStack(spacing: 0) {
-      MemoryHubSwitcher(selection: destination, onSelect: select)
-        .padding(.top, 22)
-        .padding(.horizontal, 28)
-        .padding(.bottom, 4)
-      hubContent
+    hubContent
+  }
+
+  /// Puts the way back to Activity on the page itself.
+  ///
+  /// Activity's chip row is what opened this page, and the row stayed behind on Activity's panel.
+  /// The top-bar pill does return, but that is window chrome answering for a control the page
+  /// offered — the page has to carry its own way back (INV-NAV-1).
+  @ViewBuilder
+  private func backToActivity<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack {
+        ActivityBackButton { select(.activity) }
+        Spacer(minLength: 0)
+      }
+      .padding(.top, 18)
+      .padding(.horizontal, 28)
+      .padding(.bottom, 6)
+      content()
     }
   }
 
@@ -82,31 +104,55 @@ struct MemoryHubPage: View {
       ActivityHubTab(
         appState: appState,
         memoriesViewModel: memoriesViewModel,
-        onOpenConversation: { id in
-          ConversationDetailAutomationState.shared.requestOpen(
-            conversationId: id, showTranscript: false)
-          select(.conversations)
+        onOpenConversation: { conversation in
+          // Clicking a conversation in Activity used to write its id into the automation singleton
+          // and then call `select(.conversations)` — a plain destination change, which is the one
+          // primitive defined to *discard* an unconsumed deep link (`selectPrimary` nils
+          // `pendingConversation`). The id was dropped a frame after it was written and the user
+          // landed on the conversation list. When the host owns a typed deep link, use it.
+          if let onOpenConversationRecord {
+            onOpenConversationRecord(conversation)
+          } else {
+            ConversationDetailAutomationState.shared.requestOpen(
+              conversationId: conversation.id, showTranscript: false)
+            select(.conversations)
+          }
+        },
+        onOpenMemory: { memory in
+          // Same gate the Brain Map's citations use: leave Activity only once the memory is really
+          // open, so an unresolvable memory does not strand the user on an empty detail panel.
+          Task {
+            await MemoryAtlasCitationOpen.open(
+              id: memory.id, in: memoriesViewModel, leave: { select(.memories) })
+          }
         },
         onOpenBrainMap: { select(.brainMap) },
-        onOpenRewind: { onOpenRewind?() }
+        onOpenRewind: { onOpenRewind?() },
+        onOpenHubDestination: select
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .memories:
-      adaptiveContent(
-        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel),
-        conversationID: viewModelContainer.memoriesViewModel.linkedConversation?.id
-      )
+      backToActivity {
+        adaptiveContent(
+          MemoriesPage(viewModel: viewModelContainer.memoriesViewModel),
+          conversationID: viewModelContainer.memoriesViewModel.linkedConversation?.id
+        )
+      }
     case .conversations:
-      ConversationsPageHost(appState: appState)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      backToActivity {
+        ConversationsPageHost(appState: appState)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
     case .brainMap:
-      brainMapDestination
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // The lifecycle capability is established by the first authoritative
-        // memory response. Without this, opening straight into a persisted
-        // Brain Map destination would resolve the compatibility graph before
-        // the server capability was known purely because Memories was never visited.
-        .task { await memoriesViewModel.loadMemoriesIfNeeded() }
+      backToActivity {
+        brainMapDestination
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+      // The lifecycle capability is established by the first authoritative
+      // memory response. Without this, opening straight into a persisted
+      // Brain Map destination would resolve the compatibility graph before
+      // the server capability was known purely because Memories was never visited.
+      .task { await memoriesViewModel.loadMemoriesIfNeeded() }
     }
   }
 

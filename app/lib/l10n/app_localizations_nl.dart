@@ -2047,6 +2047,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get memoryDeleted => 'Herinnering verwijderd.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Ongedaan maken';
 
   @override
@@ -9869,6 +9872,20 @@ class AppLocalizationsNl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Store openen';
 
   @override
+  String get chatScopeToday => 'Vandaag';
+
+  @override
+  String get chatScopeThisWeek => 'Deze week';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Over: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Hiernaar vragen';
+
+  @override
   String get sendRawAudioToOmi => 'Onbewerkte audio naar Omi sturen';
 
   @override
@@ -9880,4 +9897,47 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Kon de diagnostiek niet delen. Probeer het opnieuw.';
+
+  @override
+  String get appDisabledTitle => 'Deze app is uitgeschakeld en kan niet worden geïnstalleerd.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Het endpoint faalde 72 uur achter elkaar, daarom is de bezorging gestopt.';
+
+  @override
+  String get appDisabledGeneric => 'De app is door Omi uitgeschakeld.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Repareer eerst het endpoint — bij het opnieuw inschakelen wordt elke ingestelde URL opnieuw gecontroleerd.';
+
+  @override
+  String get appReEnable => 'Opnieuw inschakelen';
+
+  @override
+  String get appReEnableFailedTitle => 'Opnieuw inschakelen mislukt';
+
+  @override
+  String get appReEnableFailedBody => 'Deze app kon niet opnieuw worden ingeschakeld. Probeer het opnieuw.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Uitgeschakeld op $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Laatste fout: $error.';
+  }
+
+  @override
+  String get prerecordedTranscript => 'Vooraf opgenomen';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Je Pendant is nog aan het opnemen, dus de opgeslagen audio kan niet worden overgezet. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer opnieuw.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'De opslag van je Pendant is vol en hij staat nog in de opnamemodus, dus de opgeslagen audio kan niet worden overgedragen. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer daarna opnieuw.';
 }

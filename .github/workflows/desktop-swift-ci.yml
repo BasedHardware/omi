@@ -40,7 +40,10 @@ jobs:
         id: changed
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            DIFF_BASE="${{ github.event.pull_request.base.sha }}"
+            # Resolve the base live against the checkout (matching detect-changes)
+            # rather than the event-payload base.sha, which can be stale for a
+            # queued run (FC-stale-event-payload-diff-base, #10785).
+            DIFF_BASE="origin/${{ github.base_ref }}"
           else
             DIFF_BASE="${{ github.event.before }}"
           fi
@@ -96,16 +99,20 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
     runs-on: macos-15
-    # A cold runner currently needs about 60 minutes for manifest checks,
-    # launcher coverage, the full debug suite, and the independent release-mode
-    # UserNotifications regression. Leave headroom so a successful final link
-    # is not cancelled by the job deadline.
+    # Bounds manifest checks, launcher coverage, and the full debug suite.
+    # (The release-mode UserNotifications regression lives in the Release
+    # Compile job, next to the release build it consumes.) Generous headroom
+    # so a successful final link is not cancelled by the job deadline.
     timeout-minutes: 90
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          # Static-check diffing needs full history; blob:none keeps that while
+          # skipping the ~1.25 GB of blob download that made this checkout cost
+          # a macOS-runner minute per run.
           fetch-depth: 0
+          filter: blob:none
 
       - name: Select and assert pinned Xcode 16.4
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
@@ -125,6 +132,11 @@ jobs:
       - name: Install uv for manifest checks
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' }}
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          # Exact version resolves locally; an unset version means "latest",
+          # which fetches the astral-sh/versions manifest and has hard-failed
+          # CI on that network call. Matches backend/Dockerfile UV_VERSION.
+          version: "0.11.13"
 
       - name: Run macOS-scoped manifest checks
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' }}
@@ -181,15 +193,41 @@ jobs:
         run: |
           # Discovery, not a hardcoded list — a new tests/test-*.sh runs here
           # automatically, mirroring swift-test-suites.sh's auto-discovery.
+          # Three-way parallel (the hosted runner has 3 cores): the serial loop
+          # cost 9.3 min p50, which was 13% of all macOS-runner demand. Each
+          # test logs to its own file so parallel output cannot interleave;
+          # failing logs are replayed in full at the end.
+          log_dir="$(mktemp -d)"
+          # The skip hand list stays a `case` pattern: check-launcher-test-skips.py
+          # parses this exact shape to hold it equal to the # discovery-skip markers.
           for t in tests/test-*.sh; do
-            echo "== $t"
             case "$t" in
               tests/test-mounted-navigation-latency.sh|tests/test-named-bundle-resources.sh)
                 continue
                 ;;
             esac
-            bash "$t"
+            printf '%s\n' "$t"
+          done \
+            | xargs -P 3 -I{} bash -c '
+                t="$1"
+                log_dir="$2"
+                log="$log_dir/$(basename "$t").log"
+                if bash "$t" >"$log" 2>&1; then
+                  echo "== PASS $t"
+                else
+                  echo "== FAIL $t"
+                  touch "$log.failed"
+                fi
+              ' _ {} "$log_dir"
+          failed=0
+          for marker in "$log_dir"/*.failed; do
+            [ -e "$marker" ] || continue
+            failed=1
+            log="${marker%.failed}"
+            echo "--- $(basename "$log" .log) output ---"
+            cat "$log"
           done
+          exit "$failed"
 
       # Debug build+test only on the PR critical path. Release compile is a
       # separate job (main push, or PRs that touch Package.swift) so we do not
@@ -201,20 +239,15 @@ jobs:
         env:
           # Each isolated worker receives a copy-on-write clone of the prebuilt
           # SwiftPM scratch directory, so filtered suites do not contend on the
-          # shared Desktop/.build lock. Two workers are a measured first step;
-          # do not increase without macOS-runner evidence.
-          OMI_SWIFT_TEST_SUITE_WORKERS: "2"
+          # shared Desktop/.build lock. Batching collapsed per-invocation
+          # SwiftPM startup (the reason two workers were the measured ceiling),
+          # so three workers now match the runner's three cores; measure-block
+          # suites carry a doubled per-suite budget to absorb the added CPU
+          # contention. Evidence: PR #12247's runs. Drop back to "2" if the
+          # performance harness starts timing out.
+          OMI_SWIFT_TEST_SUITE_WORKERS: "3"
           OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS: "300"
         run: ./scripts/run-swift-ci.sh --test
-
-      # This is part of the already-required Desktop Swift Build & Tests check,
-      # so the release planner cannot tag notification-boundary changes until
-      # the pinned release compiler has exercised the callback handoff.
-      - name: Test UserNotifications callback regression in release mode
-        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' && needs.changes.outputs.should_notification_release_regression == 'true' }}
-        id: desktop_notification_regression
-        working-directory: desktop/macos
-        run: ./scripts/run-swift-ci.sh --release-notification-regression
 
       # Preserve resolved dependency downloads after a failed test command, but
       # do not archive Desktop/.build: its PR-scoped 5.3 GB cache misses in
@@ -232,11 +265,9 @@ jobs:
         env:
           STATIC_REQUIRED: ${{ needs.changes.outputs.should_run_static }}
           TESTS_REQUIRED: ${{ needs.changes.outputs.should_run_tests }}
-          NOTIFICATION_REQUIRED: ${{ needs.changes.outputs.should_notification_release_regression }}
           STATIC_OUTCOME: ${{ steps.macos_manifest_checks.outcome }}
           LAUNCHER_OUTCOME: ${{ steps.desktop_launcher_tests.outcome }}
           TEST_OUTCOME: ${{ steps.desktop_swift_tests.outcome }}
-          NOTIFICATION_OUTCOME: ${{ steps.desktop_notification_regression.outcome }}
         run: |
           require_success() {
             local required="$1"
@@ -251,7 +282,6 @@ jobs:
           require_success "$STATIC_REQUIRED" "macOS manifest checks" "$STATIC_OUTCOME"
           require_success "$TESTS_REQUIRED" "desktop launcher script tests" "$LAUNCHER_OUTCOME"
           require_success "$TESTS_REQUIRED" "desktop Swift tests" "$TEST_OUTCOME"
-          require_success "$NOTIFICATION_REQUIRED" "notification release regression" "$NOTIFICATION_OUTCOME"
 
   desktop-swift:
     # Keep this name a literal: desktop release planning looks this check up by
@@ -261,15 +291,17 @@ jobs:
     # skipped on every commit that did not touch desktop paths, and left the
     # planner reporting "missing" instead of the truth.
     name: Desktop Swift Build & Tests
-    needs: [changes, desktop-swift-verify]
+    needs: [changes, desktop-swift-verify, desktop-swift-release-compile]
     if: ${{ always() && needs.changes.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Require static contracts and Swift tests
         env:
           VERIFY_RESULT: ${{ needs.desktop-swift-verify.result }}
+          RELEASE_RESULT: ${{ needs.desktop-swift-release-compile.result }}
           STATIC_REQUIRED: ${{ needs.changes.outputs.should_run_static }}
           TESTS_REQUIRED: ${{ needs.changes.outputs.should_run_tests }}
+          RELEASE_REQUIRED: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
         run: |
           if [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ]; then
             test "$VERIFY_RESULT" = success
@@ -277,11 +309,25 @@ jobs:
             test "$VERIFY_RESULT" = skipped
           fi
 
+          # The release-mode lane (whole-module-optimization compile and the
+          # UserNotifications release regression) now reports only through the
+          # Release Compile job, so this required check must hard-fail on it
+          # too — otherwise a release-only Sendable break merges on a green
+          # debug lane again (#11373/#11374).
+          if [ "$RELEASE_REQUIRED" = true ]; then
+            test "$RELEASE_RESULT" = success
+          else
+            test "$RELEASE_RESULT" = skipped
+          fi
+
   desktop-swift-release-compile:
     # Literal for the same reason as `desktop-swift` above.
     name: Desktop Swift Release Compile
     needs: changes
-    if: needs.changes.outputs.should_release_compile == 'true'
+    # The notification flag is structurally a subset of should_release_compile
+    # (every notification input is a releasable desktop path), but gate on both
+    # so a future pathspec change cannot silently skip the regression's runner.
+    if: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -293,9 +339,63 @@ jobs:
       - name: Select and assert pinned Xcode 16.4
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
 
+      # Same dependency cache as the verify job: without it every release
+      # compile re-resolves all SwiftPM dependencies (~1 min of clone traffic).
+      - name: Restore SwiftPM dependency cache
+        id: release-swiftpm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-swift-build-xcode164-
+
+      # Unlike the verify job's Desktop/.build (PR-scoped, always misses), this
+      # cache is written from main pushes, so it is readable by every PR and
+      # every later main push. A warm restore turns the ~20 min cold release
+      # build into an incremental one.
+      - name: Restore release build products
+        id: release-build-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: desktop/macos/Desktop/.build
+          key: ${{ runner.os }}-desktop-swift-release-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-swift-release-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}-
+            ${{ runner.os }}-desktop-swift-release-xcode164-
+
       - name: Install Swift system dependencies
         run: brew install pkg-config webp
 
-      - name: Clean release compile
+      - name: Release compile
         working-directory: desktop/macos
         run: ./scripts/run-swift-ci.sh --release-compile
+
+      # Runs here, not in the verify job: the regression needs release-mode
+      # artifacts, and building them twice on two hosted Macs cost ~31 min per
+      # notification-boundary change. The release planner requires this job's
+      # check ("Desktop Swift Release Compile") by exact name on the source
+      # SHA, and the Build & Tests aggregate hard-fails on this job's result,
+      # so both release tagging and PR merges still gate on it.
+      - name: Test UserNotifications callback regression in release mode
+        if: ${{ needs.changes.outputs.should_notification_release_regression == 'true' }}
+        working-directory: desktop/macos
+        run: ./scripts/run-swift-ci.sh --release-notification-regression
+
+      - name: Save SwiftPM dependency cache
+        if: ${{ github.event_name == 'push' && steps.release-swiftpm-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
+
+      # Save only from main pushes: PR-scoped saves are unreadable by other
+      # refs and would spend upload minutes for nothing.
+      - name: Save release build products
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/cache/save@v6
+        with:
+          path: desktop/macos/Desktop/.build
+          key: ${{ runner.os }}-desktop-swift-release-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}-${{ github.sha }}

@@ -179,6 +179,34 @@ final class ContextProactivityEngineTests: XCTestCase {
       "a resurface with no citation of either kind stays vetoed")
   }
 
+  func testRetrievedRefsGroundInsightAndSuggestOnly() {
+    // The answer to a question the user is writing lives in retrieved history,
+    // not in this screen's bucket — an insight/suggest citing a hop-validated
+    // retrieved ref must survive the veto even with no bucket grounding.
+    for decision in ["insight", "suggest"] {
+      XCTAssertTrue(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: [], factIDs: [],
+          retrievedRefs: ["memory:abc"]))
+    }
+    // task_candidate keeps the strict bucket invariant regardless of retrieval.
+    XCTAssertFalse(
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "task_candidate", entryRefs: [], factIDs: [],
+        retrievedRefs: ["memory:abc"]))
+    // No retrieved refs -> unchanged behavior for every type.
+    for decision in ["insight", "suggest", "task_candidate"] {
+      XCTAssertFalse(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: [], factIDs: [], retrievedRefs: []))
+    }
+    // resurface keeps its bucket/fact-only rule: retrieval never grounds it.
+    XCTAssertFalse(
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "resurface", entryRefs: [], factIDs: [],
+        retrievedRefs: ["conversation:xyz"]))
+  }
+
   @MainActor
   func testPresentationFreeGateRebuildSuppressesMasterChanges() throws {
     let suiteName = "ContextProactivityEngineTests.\(UUID().uuidString)"
@@ -1125,5 +1153,39 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
         VALUES (?, 1, ?, 'bucket', 'Test App', 'raw', 'normalized', ?, ?, ?, ?, ?, ?)
         """,
       arguments: [id, poolEpoch, "reference-\(id)", startedAt, endedAt, outcome, startedAt, startedAt])
+  }
+
+  func testClampedStripsInlineRefTokensFromVisibleText() {
+    let decision = ContextDirectorDecision(
+      decision: "insight",
+      title: "Download link [memory:abc-123]",
+      message: "The link is omi.me/desktop. [memory:3fe5b70f-f445-4580-b353-7b0d2560de3f]",
+      reasoning: "r",
+      bucketEntryRefs: ["memory:abc-123"],
+      factIDs: []
+    ).clamped()
+    XCTAssertEqual(decision.title, "Download link")
+    XCTAssertEqual(decision.message, "The link is omi.me/desktop.")
+    XCTAssertEqual(decision.bucketEntryRefs, ["memory:abc-123"], "citations stay citations")
+  }
+
+  @MainActor
+  func testDwellCaptureGuardRejectsSameAppTitleSwitch() async {
+    // Prime the tracker (buckets disabled so no store writes), then a same-app
+    // title switch must invalidate the old context for the dwell capture guard.
+    _ = await AssistantCoordinator.shared.checkContextSwitch(
+      newApp: "GuardTestApp", newWindowTitle: "Original Title", bucketsEnabled: false)
+    XCTAssertTrue(
+      AssistantCoordinator.shared.isTracking(app: "GuardTestApp", windowTitle: "Original Title"))
+    _ = await AssistantCoordinator.shared.checkContextSwitch(
+      newApp: "GuardTestApp", newWindowTitle: "Different Document", bucketsEnabled: false)
+    XCTAssertFalse(
+      AssistantCoordinator.shared.isTracking(app: "GuardTestApp", windowTitle: "Original Title"),
+      "a same-app title switch during the async capture must drop the stale frame")
+    XCTAssertFalse(
+      AssistantCoordinator.shared.isTracking(app: "OtherApp", windowTitle: "Different Document"))
+    XCTAssertTrue(
+      AssistantCoordinator.shared.isTracking(
+        app: "GuardTestApp", windowTitle: "Different Document"))
   }
 }

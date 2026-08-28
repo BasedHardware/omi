@@ -8,6 +8,8 @@ unlock_all_memories. The fake below models the real 500-write limit by raising o
 commit, so the pre-fix single-batch code fails here.
 """
 
+from contextlib import nullcontext
+
 import database.memories as memories
 
 _FIRESTORE_BATCH_LIMIT = 500
@@ -153,8 +155,9 @@ class _UnlockDb:
         return _UnlockBatch(self)
 
 
-def test_unlock_all_memories_updates_legacy_and_canonical_lock_fields():
+def test_unlock_all_memories_updates_legacy_and_canonical_lock_fields(monkeypatch):
     fake = _UnlockDb()
+    monkeypatch.setattr(memories, "external_write_fence", lambda *args, **kwargs: nullcontext())
 
     memories.unlock_all_memories("u1", firestore_client=fake)
 

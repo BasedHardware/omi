@@ -23,6 +23,7 @@ model_config_features:
   request_shapes:
     plain_chat:
       - conv_action_items
+      - wake_word_adjudication
       - conv_app_result
       - conv_discard
       - conv_folder
@@ -59,6 +60,7 @@ model_config_features:
       - desktop_proactive_reasoning
       - external_structure
       - proactive_notification
+      - screen_frame_judge
       - translation
       - trends
       - what_matters_now

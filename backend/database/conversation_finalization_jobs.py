@@ -18,7 +18,10 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations as conversations_db
 from database._client import document_id_from_seed, get_firestore_client
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
-from database.firestore_index_registry import MEETING_RECEIPTS_DUE_QUERY
+from database.firestore_index_registry import (
+    FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    MEETING_RECEIPTS_DUE_QUERY,
+)
 
 CONVERSATIONS_COLLECTION = 'conversations'
 FINALIZATION_JOBS_COLLECTION = 'conversation_finalization_jobs'
@@ -39,6 +42,14 @@ DEFAULT_RECONCILE_STALE_SECONDS = 300
 # job, and its request thread is not killed by the HTTP timeout, so the orphan
 # window must exceed any plausible live synchronous process_conversation run.
 DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS = 900
+# A BYOK job can only ever run inside a live pusher session that presents the
+# user's request-scoped keys. Once that session is gone nothing owns the row:
+# the Cloud Tasks worker refuses `requires_byok` jobs and the credential-free
+# reconciler only selects rows carrying `reconcile_after_at`, which every BYOK
+# transition deletes. Seven days is deliberately far longer than any plausible
+# reconnect window.
+DEFAULT_BYOK_ABANDONED_AFTER_SECONDS = 14 * 86_400
+BYOK_ABANDONED_FAILURE_CODE = 'byok_session_abandoned'
 MEETING_RECEIPT_SCHEMA_VERSION = 1
 MEETING_RECEIPT_RECONCILE_AFTER = timedelta(minutes=10)
 
@@ -66,6 +77,22 @@ class FinalizationFanoutClaim(TypedDict):
 
     status: str
     fanout_key: str | None
+
+
+class ByokAbandonment(TypedDict):
+    """Terminal disposition of one stranded BYOK finalization job.
+
+    ``status`` is ``abandoned`` only when this call committed the terminal;
+    ``fenced`` means an expected ownership CAS loss and ``missing`` an absent
+    row.  ``conversation_outcome`` separates the two very different real shapes:
+    ``closed`` (the bound conversation was still ``processing`` and this call
+    ended its lifecycle) from ``already_terminal`` / ``unbound`` / ``missing``
+    (the conversation was finalized by the inline pusher lane, or moved on, and
+    the job row was pure orphaned bookkeeping).
+    """
+
+    status: str
+    conversation_outcome: str
 
 
 class FinalizationClaim(TypedDict):
@@ -111,13 +138,37 @@ def get_stale_processing_orphan_after() -> timedelta:
     return timedelta(seconds=min(86_400, max(300, seconds)))
 
 
+def get_byok_abandoned_after() -> timedelta:
+    """Return the bounded age after which a stranded BYOK job is abandoned.
+
+    Bounds the server-owned last-activity instant on the job. Clamped to a
+    one-day floor, so a live session that legitimately reconnects always wins,
+    and a 90-day ceiling, so an operator misconfiguration cannot defer the
+    disposition of an unownable row for an unbounded period. Classified as a
+    reliability recovery knob; the deploy default is unset, so the built-in
+    14-day default applies.
+    """
+    try:
+        seconds = int(
+            os.getenv('LISTEN_FINALIZATION_BYOK_ABANDONED_SECONDS', str(DEFAULT_BYOK_ABANDONED_AFTER_SECONDS))
+        )
+    except ValueError:
+        seconds = DEFAULT_BYOK_ABANDONED_AFTER_SECONDS
+    return timedelta(seconds=min(90 * 86_400, max(86_400, seconds)))
+
+
 def _claim_result(
     status: str,
     lease_epoch: int | None = None,
     attempt_count: int = 0,
     created_at: datetime | None = None,
 ) -> FinalizationClaim:
-    return {'status': status, 'lease_epoch': lease_epoch, 'attempt_count': attempt_count, 'created_at': created_at}
+    return {
+        'status': status,
+        'lease_epoch': lease_epoch,
+        'attempt_count': attempt_count,
+        'created_at': created_at,
+    }
 
 
 def _is_current_lease(job: dict[str, Any], dispatch_generation: int, lease_epoch: int) -> bool:
@@ -298,6 +349,7 @@ def _create_or_get_finalization_intent_txn(
         'finalization_revision': revision,
         'status': status,
         'requires_byok': requires_byok,
+        'client_platform': conversation.get('client_platform'),
         # REST finalization has historically forced enrichment while the listen
         # pipeline retains its existing default. Persist the choice with the
         # immutable finalization generation so a replay cannot change it.
@@ -1402,6 +1454,7 @@ def get_stale_processing_orphan_candidates(
 STALE_PROCESSING_SWEEP_STATE_COLLECTION = 'conversation_recovery_state'
 STALE_PROCESSING_SWEEP_STATE_DOC = 'stale_processing_sweep'
 MEETING_RECEIPT_SWEEP_STATE_DOC = 'meeting_receipt_backfill_sweep'
+BYOK_ABANDONMENT_SWEEP_STATE_DOC = 'byok_abandonment_sweep'
 
 
 def get_stale_processing_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
@@ -1663,8 +1716,291 @@ def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_c
     return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
 
 
+def _job_last_activity_at(job: Mapping[str, Any]) -> datetime | None:
+    """Return the most recent server-owned activity instant on a job."""
+    for field in ('updated_at', 'created_at'):
+        value = job.get(field)
+        if isinstance(value, datetime):
+            return value
+    return None
+
+
+def get_abandoned_byok_job_candidates(
+    *,
+    abandoned_after: timedelta,
+    limit: int = 100,
+    max_scan: int = 2000,
+    resume_after_path: str | None = None,
+    firestore_client: Any = None,
+) -> dict[str, Any]:
+    """Return a bounded window of BYOK jobs that no consumer can ever claim again.
+
+    A ``requires_byok`` job is executable only by a live pusher session holding
+    the user's request-scoped keys. Every BYOK transition deletes
+    ``reconcile_after_at`` on purpose, so such a row is invisible to
+    ``get_finalization_replay_candidates``; the Cloud Tasks worker separately
+    refuses it in ``_claim_finalization_job_txn``. Once the session ends the row
+    is owned by nobody at all. This sweep gives it an owner for exactly one
+    purpose: a truthful terminal. It never replays finalization, and it never
+    reads, brokers, or substitutes a credential.
+
+    Eligibility (all client-side, re-verified inside the terminal transaction):
+
+    * ``status`` in ``queued`` / ``leased`` -- terminal rows are done, and
+      ``blocked_byok`` is deliberately excluded because that state is still
+      legitimately waiting for a live session to present keys, and it is already
+      visible on the ``blocked_byok`` gauge.
+    * an expired lease, if ``leased`` -- a live worker still owns a valid lease.
+    * a server-owned last-activity instant older than ``abandoned_after``. A row
+      whose age cannot be established is skipped rather than terminalized.
+
+    The cross-collection sweep is a single-equality query on
+    ``requires_byok == True``, served by Firestore's automatic single-field index
+    (no composite index is registered or deployed). Because exclusion happens
+    after the page cap, the sweep pages with a ``start_after`` cursor and stops
+    after ``max_scan`` rows; the caller persists ``resume_after_path`` (or
+    ``None`` once ``exhausted``) so repeated bounded sweeps cover the whole
+    collection and a stable terminal prefix cannot starve a later stranded row.
+
+    Returns ``{'candidates', 'resume_after_path', 'exhausted'}``.
+    """
+    client = _client(firestore_client)
+    now = _now()
+    cutoff = now - abandoned_after
+    page_size = max(1, min(limit, 100))
+    collection = client.collection(FINALIZATION_JOBS_COLLECTION)
+    collected: list[dict[str, Any]] = []
+    scanned = 0
+    last_path: str | None = None
+    exhausted = False
+
+    cursor_snapshot: Any = None
+    if resume_after_path:
+        fetched = client.document(resume_after_path).get()
+        if getattr(fetched, 'exists', False):
+            cursor_snapshot = fetched
+        # A vanished cursor document wraps the sweep back to the top (safe re-scan).
+
+    while len(collected) < limit and scanned < max_scan:
+        query = collection.where(filter=firestore.FieldFilter('requires_byok', '==', True)).limit(page_size)
+        if cursor_snapshot is not None:
+            query = query.start_after(cursor_snapshot)
+        page = list(query.stream())
+        if not page:
+            exhausted = True  # reached the tail of the collection from the cursor
+            break
+        for snapshot in page:
+            scanned += 1
+            if scanned > max_scan:
+                break
+            reference = getattr(snapshot, 'reference', None)
+            last_path = getattr(reference, 'path', None) or f'{FINALIZATION_JOBS_COLLECTION}/{snapshot.id}'
+            job = snapshot.to_dict() or {}
+            status = str(job.get('status') or '')
+            if status not in ('queued', 'leased'):
+                continue
+            if status == 'leased':
+                lease_expires_at = job.get('lease_expires_at')
+                if isinstance(lease_expires_at, datetime) and lease_expires_at > now:
+                    continue  # a live worker still owns this lease
+            last_activity = _job_last_activity_at(job)
+            if last_activity is None or last_activity > cutoff:
+                continue  # unknown age, or still inside the reconnect window
+            collected.append(job | {'job_id': snapshot.id, 'last_activity_at': last_activity})
+            if len(collected) >= limit:
+                break
+        if scanned > max_scan:
+            break  # bounded work for this invocation; the cursor persists progress
+        if len(page) < page_size:
+            exhausted = True  # partial page => reached the tail
+            break
+        cursor_snapshot = page[-1]
+
+    return {
+        'candidates': collected,
+        'resume_after_path': None if exhausted else last_path,
+        'exhausted': exhausted,
+    }
+
+
+def _byok_abandonment(status: str, conversation_outcome: str = 'none') -> ByokAbandonment:
+    return {'status': status, 'conversation_outcome': conversation_outcome}
+
+
+def _abandon_byok_finalization_job_txn(
+    transaction: Any,
+    job_ref: Any,
+    expected_status: str,
+    expected_dispatch_generation: int,
+    expected_lease_epoch: int,
+    cutoff: datetime,
+    now: datetime,
+    conversation_ref_for_job: Callable[[str, str], Any] | None = None,
+    projection_collection: Any | None = None,
+) -> ByokAbandonment:
+    """Terminalize exactly the scanned unownable BYOK generation, fencing every live owner.
+
+    Verified inside the transaction, immediately before the write: the job still
+    requires BYOK, is still non-terminal and not ``blocked_byok``, still carries
+    the scanned status / dispatch generation / lease epoch (so a live session
+    that resumed or claimed it in the meantime wins), holds no unexpired lease,
+    and is still older than the abandonment cutoff. Any divergence is an expected
+    CAS fencing, never a terminalization of live work.
+
+    The terminal is honest: ``dead_letter`` with ``last_failure_code``
+    ``byok_session_abandoned``, distinct from ``final_attempt_failed``. No
+    finalization is attempted and no fanout is delivered.
+
+    The bound conversation is read before the first write, so its terminal (when
+    it is still ``processing``) commits atomically with the job's. It is moved to
+    ``completed`` rather than ``failed``/``discarded``: exactly the choice
+    ``complete_orphan_conversation`` makes, so the user's recording stays
+    retrievable and reprocessable with their own keys instead of being hidden.
+    """
+    snapshot = job_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return _byok_abandonment('missing')
+    job = snapshot.to_dict() or {}
+    status = str(job.get('status') or '')
+    if not bool(job.get('requires_byok')):
+        return _byok_abandonment('fenced')
+    if status not in ('queued', 'leased') or status != expected_status:
+        return _byok_abandonment('fenced')
+    if int(job.get('dispatch_generation') or 1) != expected_dispatch_generation:
+        return _byok_abandonment('fenced')
+    if int(job.get('lease_epoch') or 0) != expected_lease_epoch:
+        return _byok_abandonment('fenced')
+    if status == 'leased':
+        lease_expires_at = job.get('lease_expires_at')
+        if isinstance(lease_expires_at, datetime) and lease_expires_at > now:
+            return _byok_abandonment('fenced')
+    last_activity = _job_last_activity_at(job)
+    if last_activity is None or last_activity > cutoff:
+        return _byok_abandonment('fenced')
+
+    uid = job.get('uid')
+    conversation_id = job.get('conversation_id')
+    conversation_ref = None
+    conversation: Any = None
+    if (
+        conversation_ref_for_job is not None
+        and isinstance(uid, str)
+        and uid
+        and isinstance(conversation_id, str)
+        and conversation_id
+    ):
+        # Read the bound conversation before the first transaction write: the
+        # customer must never be left on `processing` by a crash between two
+        # independent writes.
+        conversation_ref = conversation_ref_for_job(uid, conversation_id)
+        conversation_snapshot = conversation_ref.get(transaction=transaction)
+        conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
+
+    transaction.update(
+        job_ref,
+        {
+            'status': 'dead_letter',
+            'updated_at': now,
+            'terminal_at': now,
+            'terminal_outcome': 'failure',
+            'finalization_outcome': BYOK_ABANDONED_FAILURE_CODE,
+            'lease_expires_at': now,
+            'reconcile_after_at': firestore.DELETE_FIELD,
+            # Nothing was ever delivered to an external integration.
+            'fanout_status': 'fenced',
+            'fanout_fenced_at': now,
+            'last_failure_code': BYOK_ABANDONED_FAILURE_CODE,
+        },
+    )
+    _record_projection_delta(
+        transaction,
+        projection_collection,
+        job,
+        queued=-1 if status == 'queued' else 0,
+        leased=-1 if status == 'leased' else 0,
+        dead_letter=1,
+        failure=1,
+    )
+
+    if conversation_ref is None or not isinstance(conversation, Mapping):
+        return _byok_abandonment('abandoned', 'missing')
+    if conversation.get('finalization_job_id') != job_ref.id or conversation.get('finalization_revision') != job.get(
+        'finalization_revision'
+    ):
+        return _byok_abandonment('abandoned', 'unbound')
+    if conversation.get('status') != 'processing' or conversation.get('discarded'):
+        # The inline pusher lane already finalized this conversation; the job row
+        # was orphaned bookkeeping, so only the job needed a terminal.
+        return _byok_abandonment('abandoned', 'already_terminal')
+    if conversation.get('deferred'):
+        # A desktop lazy row intentionally stays on `processing` and is owned by
+        # its own lane, exactly as the bare-`processing` sweep treats it.
+        return _byok_abandonment('abandoned', 'deferred')
+    transaction.update(conversation_ref, {'status': 'completed', 'finalization_status': 'dead_letter'})
+    return _byok_abandonment('abandoned', 'closed')
+
+
+def abandon_byok_finalization_job(
+    job_id: str,
+    *,
+    expected_status: str,
+    expected_dispatch_generation: int,
+    expected_lease_epoch: int,
+    abandoned_after: timedelta,
+    firestore_client: Any = None,
+) -> ByokAbandonment:
+    """Close one unownable BYOK job through its generation/ownership fence."""
+    client = _client(firestore_client)
+    now = _now()
+    transaction = client.transaction()
+    transactional = firestore.transactional(_abandon_byok_finalization_job_txn)
+    return transactional(
+        transaction,
+        _job_ref(client, job_id),
+        expected_status,
+        expected_dispatch_generation,
+        expected_lease_epoch,
+        now - abandoned_after,
+        now,
+        lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
+        client.collection(FINALIZATION_PROJECTION_COLLECTION),
+    )
+
+
+def get_byok_abandonment_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
+    """Return the persisted BYOK sweep cursor and its CAS generation."""
+    client = _client(firestore_client)
+    snapshot = (
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(BYOK_ABANDONMENT_SWEEP_STATE_DOC).get()
+    )
+    if not getattr(snapshot, 'exists', False):
+        return {'resume_after_path': None, 'generation': 0}
+    data = snapshot.to_dict() or {}
+    path = data.get('resume_after_path')
+    return {
+        'resume_after_path': path if isinstance(path, str) else None,
+        'generation': int(data.get('generation', 0)),
+    }
+
+
+def advance_byok_abandonment_sweep_cursor(
+    expected_generation: int, new_resume_after_path: str | None, *, firestore_client: Any = None
+) -> bool:
+    """Atomically advance the BYOK sweep cursor; ``None`` rotates the next sweep to the top."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_advance_stale_processing_sweep_cursor_txn)
+    return transactional(
+        transaction,
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(BYOK_ABANDONMENT_SWEEP_STATE_DOC),
+        expected_generation,
+        new_resume_after_path,
+        _now(),
+    )
+
+
 def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, float | int]:
-    """Read one generation's fixed shard fan-in plus a bounded overdue-age sample.
+    """Read one generation's fixed shard fan-in plus the oldest unfinished job.
 
     This deliberately never aggregates ``conversation_finalization_jobs``. A
     backend-listen replica performs exactly ``FINALIZATION_PROJECTION_SHARD_COUNT``
@@ -1704,13 +2040,29 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
             if isinstance(value, (int, float)):
                 totals[name] += int(value)
 
+    # The age of the oldest unfinished job is asked of ``status`` directly, one
+    # ordered single-document read per nonterminal status.  The previous
+    # implementation paged ``reconcile_after_at <= now`` instead, which made the
+    # gauge structurally unable to see the population it exists to report:
+    # ``reconcile_after_at`` is deleted outright on the BYOK resume and BYOK
+    # retry paths, so every BYOK job was invisible to it and the gauge read 0
+    # while hundreds of jobs sat unfinished for weeks.  Ordering by
+    # ``created_at`` also makes this the actual oldest row rather than the
+    # oldest of an arbitrary page.  Cost stays bounded and independent of
+    # terminal history: one indexed read per nonterminal status.
     oldest_age_seconds = 0.0
-    # The bounded due page prevents historical terminal rows from making the
-    # periodic metric collection an ever-growing Firestore scan.
-    for snapshot in jobs_collection.where('reconcile_after_at', '<=', now).limit(100).stream():
-        created_at = (snapshot.to_dict() or {}).get('created_at')
-        if isinstance(created_at, datetime):
-            oldest_age_seconds = max(oldest_age_seconds, max(0.0, (now - created_at).total_seconds()))
+    for status in sorted(NONTERMINAL_JOB_STATUSES):
+        oldest_query = (
+            FINALIZATION_OLDEST_NONTERMINAL_QUERY.build(
+                jobs_collection, {'status': status}, field_filter_factory=FieldFilter
+            )
+            .order_by('created_at')
+            .limit(1)
+        )
+        for snapshot in oldest_query.stream():
+            created_at = (snapshot.to_dict() or {}).get('created_at')
+            if isinstance(created_at, datetime):
+                oldest_age_seconds = max(oldest_age_seconds, max(0.0, (now - created_at).total_seconds()))
     return {
         'accepted': totals['accepted'],
         'success': totals['success'],

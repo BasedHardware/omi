@@ -138,6 +138,91 @@ private enum ServerMemoryAliasDecodeError {
   }
 }
 
+/// Domain adapter for the generated memory-evidence DTO. Evidence is retained
+/// only as a bounded local mirror; it is never prompt authority.
+struct ServerMemoryEvidence: Codable, Equatable {
+  let artifactRef: [String: OmiAnyCodable]?
+  let captureConfidence: Double?
+  let clientDeviceId: String?
+  let createdAt: String?
+  let evidenceId: String
+  let extractorId: String?
+  let extractorVersion: String?
+  let independenceGroup: String
+  let redactionStatus: String?
+  let sourceId: String?
+  let sourceSignal: String?
+  let sourceType: String?
+
+  init(
+    artifactRef: [String: OmiAnyCodable]?,
+    captureConfidence: Double?,
+    clientDeviceId: String?,
+    createdAt: String?,
+    evidenceId: String,
+    extractorId: String?,
+    extractorVersion: String?,
+    independenceGroup: String,
+    redactionStatus: String?,
+    sourceId: String?,
+    sourceSignal: String?,
+    sourceType: String?
+  ) {
+    self.artifactRef = artifactRef
+    self.captureConfidence = captureConfidence
+    self.clientDeviceId = clientDeviceId
+    self.createdAt = createdAt
+    self.evidenceId = evidenceId
+    self.extractorId = extractorId
+    self.extractorVersion = extractorVersion
+    self.independenceGroup = independenceGroup
+    self.redactionStatus = redactionStatus
+    self.sourceId = sourceId
+    self.sourceSignal = sourceSignal
+    self.sourceType = sourceType
+  }
+
+  init(_ wire: OmiAPI.Evidence) {
+    artifactRef = wire.artifactRef
+    captureConfidence = wire.captureConfidence
+    clientDeviceId = wire.clientDeviceId
+    createdAt = wire.createdAt
+    evidenceId = wire.evidenceId
+    extractorId = wire.extractorId
+    extractorVersion = wire.extractorVersion
+    independenceGroup = wire.independenceGroup
+    redactionStatus = wire.redactionStatus
+    sourceId = wire.sourceId
+    sourceSignal = wire.sourceSignal
+    sourceType = wire.sourceType
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case artifactRef = "artifact_ref"
+    case captureConfidence = "capture_confidence"
+    case clientDeviceId = "client_device_id"
+    case createdAt = "created_at"
+    case evidenceId = "evidence_id"
+    case extractorId = "extractor_id"
+    case extractorVersion = "extractor_version"
+    case independenceGroup = "independence_group"
+    case redactionStatus = "redaction_status"
+    case sourceId = "source_id"
+    case sourceSignal = "source_signal"
+    case sourceType = "source_type"
+  }
+}
+
+/// The wire field has three materially different meanings for cache sync.
+/// An omitted field is a compatibility response, a valid field (including an
+/// empty array) is an authoritative replacement, and an invalid field must
+/// never erase a previously validated local mirror.
+enum ServerMemoryEvidenceState: Equatable {
+  case absent
+  case valid([ServerMemoryEvidence])
+  case invalid
+}
+
 struct ServerMemory: Decodable, Identifiable {
   let id: String
   let content: String
@@ -176,10 +261,25 @@ struct ServerMemory: Decodable, Identifiable {
   let captureDeviceIds: [String]
   // Short headline for notification preview (advice/tips only)
   let headline: String?
+  /// Additive canonical-ledger fields. Kept as strings so an older desktop
+  /// can mirror unknown ledger values without making them prompt-eligible.
+  let ledgerMetadata: [String: String]
+  /// Optional generated-v3 evidence retained in a bounded local mirror.
+  let evidenceState: ServerMemoryEvidenceState
+  var evidence: [ServerMemoryEvidence] {
+    guard case .valid(let values) = evidenceState else { return [] }
+    return values
+  }
+  /// Whether the optional evidence field was present and valid on the wire.
+  /// An omitted or malformed field must not erase a local mirror.
+  var evidenceIsExplicit: Bool {
+    if case .valid = evidenceState { return true }
+    return false
+  }
 
   enum CodingKeys: String, CodingKey {
     case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning,
-      headline, tier, layer
+      headline, tier, layer, evidence
     case memoryId = "memory_id"
     case memoryTier = "memory_tier"
     case createdAt = "created_at"
@@ -190,6 +290,8 @@ struct ServerMemory: Decodable, Identifiable {
     case userReview = "user_review"
     case manuallyAdded = "manually_added"
     case sourceApp = "source_app"
+    case appId = "app_id"
+    case captureConfidence = "capture_confidence"
     case contextSummary = "context_summary"
     case isRead = "is_read"
     case isDismissed = "is_dismissed"
@@ -198,6 +300,24 @@ struct ServerMemory: Decodable, Identifiable {
     case windowTitle = "window_title"
     case primaryCaptureDevice = "primary_capture_device"
     case captureDeviceIds = "capture_device_ids"
+    case ledgerSchemaVersion = "ledger_schema_version"
+    case ledgerKind = "kind"
+    case ledgerSubjectScope = "subject_scope"
+    case ledgerSubjectEntityId = "subject_entity_id"
+    case ledgerSlot = "slot"
+    case ledgerBody = "body"
+    case ledgerIntentBacked = "intent_backed"
+    case ledgerCurationWeight = "curation_weight"
+    case ledgerStatus = "status"
+    case ledgerInvalidAt = "invalid_at"
+    case ledgerValidTo = "valid_to"
+    case ledgerSupersededBy = "superseded_by"
+    case ledgerValidAt = "valid_at"
+    case ledgerObjectEntityIds = "object_entity_ids"
+    case ledgerQualifiers = "qualifiers"
+    case ledgerArguments = "arguments"
+    case ledgerTriggerCondition = "trigger_condition"
+    case ledgerWriteReason = "write_reason"
   }
 
   init(from decoder: Decoder) throws {
@@ -233,14 +353,17 @@ struct ServerMemory: Decodable, Identifiable {
     }
 
     content = try wire?.content ?? container.decode(String.self, forKey: .content)
-    category = wire?.category.map(MemoryCategory.init) ?? .system
+    category =
+      wire?.category.map(MemoryCategory.init)
+      ?? (try? container.decode(MemoryCategory.self, forKey: .category))
+      ?? .system
     capturedAt = try container.decodeIfPresent(Date.self, forKey: .capturedAt)
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     let std = ISO8601DateFormatter()
-    let createdAtString = wire?.createdAt
+    let createdAtString = wire?.createdAt ?? (try? container.decode(String.self, forKey: .createdAt))
     createdAt = (createdAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? capturedAt ?? Date()
-    let updatedAtString = wire?.updatedAt
+    let updatedAtString = wire?.updatedAt ?? (try? container.decode(String.self, forKey: .updatedAt))
     updatedAt = (updatedAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? createdAt
     expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
 
@@ -280,26 +403,97 @@ struct ServerMemory: Decodable, Identifiable {
       self.tier = .longTerm
     }
 
-    conversationId = wire?.conversationId
-    reviewed = wire?.reviewed ?? false
-    userReview = wire?.userReview
-    visibility = wire?.visibility ?? "private"
-    manuallyAdded = wire?.manuallyAdded ?? false
-    scoring = wire?.scoring
+    conversationId = wire?.conversationId ?? (try? container.decode(String.self, forKey: .conversationId))
+    reviewed = wire?.reviewed ?? (try? container.decode(Bool.self, forKey: .reviewed)) ?? false
+    userReview = wire?.userReview ?? (try? container.decode(Bool.self, forKey: .userReview))
+    visibility = wire?.visibility ?? (try? container.decode(String.self, forKey: .visibility)) ?? "private"
+    manuallyAdded =
+      wire?.manuallyAdded ?? (try? container.decode(Bool.self, forKey: .manuallyAdded)) ?? false
+    scoring = wire?.scoring ?? (try? container.decode(String.self, forKey: .scoring))
     source = try container.decodeIfPresent(String.self, forKey: .source)
-    confidence = wire?.captureConfidence
-    sourceApp = wire?.appId
+    confidence =
+      wire?.captureConfidence
+      ?? (try? container.decode(Double.self, forKey: .captureConfidence))
+      ?? (try? container.decode(Double.self, forKey: .confidence))
+    sourceApp =
+      wire?.appId
+      ?? (try? container.decode(String.self, forKey: .appId))
+      ?? (try? container.decode(String.self, forKey: .sourceApp))
     contextSummary = try container.decodeIfPresent(String.self, forKey: .contextSummary)
     isRead = try container.decodeIfPresent(Bool.self, forKey: .isRead) ?? false
     isDismissed = try container.decodeIfPresent(Bool.self, forKey: .isDismissed) ?? false
-    tags = wire?.tags ?? []
+    tags = wire?.tags ?? (try? container.decode([String].self, forKey: .tags)) ?? []
     reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
     currentActivity = try container.decodeIfPresent(String.self, forKey: .currentActivity)
     inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
     windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle)
-    primaryCaptureDevice = wire?.primaryCaptureDevice
-    captureDeviceIds = wire?.captureDeviceIds ?? []
-    headline = wire?.headline
+    primaryCaptureDevice =
+      wire?.primaryCaptureDevice ?? (try? container.decode(String.self, forKey: .primaryCaptureDevice))
+    captureDeviceIds =
+      wire?.captureDeviceIds ?? (try? container.decode([String].self, forKey: .captureDeviceIds)) ?? []
+    headline = wire?.headline ?? (try? container.decode(String.self, forKey: .headline))
+
+    // The generated DTO enforces the required evidence identity fields, but
+    // optional malformed evidence must not reject the authoritative memory
+    // text. The domain adapter applies count/size bounds and fails closed.
+    if !container.contains(.evidence) {
+      evidenceState = .absent
+    } else if (try? container.decodeNil(forKey: .evidence)) == true {
+      evidenceState = .invalid
+    } else {
+      do {
+        let decodedEvidence = try container.decode([OmiAPI.Evidence].self, forKey: .evidence)
+        evidenceState = MemoryLedgerEvidence.normalize(decodedEvidence).map(ServerMemoryEvidenceState.valid) ?? .invalid
+      } catch {
+        evidenceState = .invalid
+      }
+    }
+
+    var metadata: [String: String] = [:]
+    func addString(_ key: CodingKeys) {
+      if let value = try? container.decode(String.self, forKey: key), !value.isEmpty {
+        metadata[key.rawValue] = value
+      }
+    }
+    addString(.ledgerSchemaVersion)
+    addString(.ledgerKind)
+    addString(.ledgerSubjectScope)
+    addString(.ledgerSubjectEntityId)
+    addString(.ledgerSlot)
+    addString(.ledgerBody)
+    addString(.ledgerStatus)
+    addString(.ledgerInvalidAt)
+    addString(.ledgerValidTo)
+    addString(.ledgerSupersededBy)
+    addString(.ledgerValidAt)
+    addString(.ledgerWriteReason)
+    if let value = try? container.decode(Bool.self, forKey: .ledgerIntentBacked) {
+      metadata[CodingKeys.ledgerIntentBacked.rawValue] = value ? "true" : "false"
+    }
+    if let value = try? container.decode(Int.self, forKey: .ledgerCurationWeight) {
+      metadata[CodingKeys.ledgerCurationWeight.rawValue] = String(value)
+    }
+    func addCanonicalJSON(_ key: CodingKeys, maximumCharacters: Int? = nil) {
+      guard let value = try? container.decode([String: OmiAnyCodable].self, forKey: key) else { return }
+      let object = value.mapValues(\.value)
+      guard let json = MemoryLedgerMetadata.canonicalJSONString(object, maximumCharacters: maximumCharacters) else {
+        return
+      }
+      metadata[key.rawValue + "_json"] = json
+    }
+    func addCanonicalJSONArray(_ key: CodingKeys) {
+      guard let value = try? container.decode([String].self, forKey: key),
+        let json = MemoryLedgerMetadata.canonicalJSONString(value)
+      else { return }
+      metadata[key.rawValue + "_json"] = json
+    }
+    addCanonicalJSONArray(.ledgerObjectEntityIds)
+    addCanonicalJSON(.ledgerQualifiers)
+    addCanonicalJSON(.ledgerArguments)
+    addCanonicalJSON(
+      .ledgerTriggerCondition,
+      maximumCharacters: MemoryLedgerMetadata.maxTriggerConditionCharacters)
+    ledgerMetadata = metadata
   }
 
   var isPublic: Bool {
@@ -514,6 +708,38 @@ extension APIClient {
   private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
   private static let defaultDeleteSupportedHeader = "X-Omi-Memory-Default-Delete-Supported"
   private static let nextCursorHeader = "X-Omi-Memory-Next-Cursor"
+  private static let listTruncatedHeader = "X-Omi-List-Truncated"
+
+  enum KnowledgeLedgerPromptAuthority: String, Decodable, Equatable, Sendable {
+    case disabled
+    case enabled
+    case killed
+    case compatibility
+    case unknown
+  }
+
+  struct KnowledgeLedgerPromptSnapshot: Decodable {
+    let schemaVersion: String
+    let authority: KnowledgeLedgerPromptAuthority
+    let reason: String
+    let sourceHeadCommitID: String?
+    let memories: [ServerMemory]
+
+    var isAuthoritative: Bool {
+      authority == .enabled
+        && schemaVersion == KnowledgeLedgerPromptProjection.schemaVersion
+        && sourceHeadCommitID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        && Set(memories.map(\.id)).count == memories.count
+    }
+
+    enum CodingKeys: String, CodingKey {
+      case schemaVersion = "schema_version"
+      case authority = "mode"
+      case reason
+      case sourceHeadCommitID = "source_head_commit_id"
+      case memories = "rows"
+    }
+  }
 
   struct MemoryListPage {
     let memories: [ServerMemory]
@@ -521,6 +747,7 @@ extension APIClient {
     let canonicalLifecycleExposed: Bool
     let deviceScopeSupported: Bool?
     let defaultMemoryDeleteSupported: Bool
+    let truncated: Bool
   }
 
   /// Fetches memories from the API with optional filtering
@@ -617,13 +844,28 @@ extension APIClient {
     let defaultMemoryDeleteSupported =
       httpResponse.value(forHTTPHeaderField: Self.defaultDeleteSupportedHeader) == "true"
     let nextCursor = httpResponse.value(forHTTPHeaderField: Self.nextCursorHeader)
+    let truncated = httpResponse.value(forHTTPHeaderField: Self.listTruncatedHeader) == "true"
     return MemoryListPage(
       memories: memories,
       nextCursor: nextCursor?.isEmpty == false ? nextCursor : nil,
       canonicalLifecycleExposed: canonicalLifecycleExposed,
       deviceScopeSupported: deviceScopeSupported,
-      defaultMemoryDeleteSupported: defaultMemoryDeleteSupported
+      defaultMemoryDeleteSupported: defaultMemoryDeleteSupported,
+      truncated: truncated
     )
+  }
+
+  /// Read the dedicated server-owned snapshot decision. The backend returns
+  /// `enabled` only after the shared JIT rollout and kill-switch decision,
+  /// migration completion and generation-fenced zero-legacy receipt, privacy
+  /// filtering, and strict response bounds all pass for this exact owner.
+  func getKnowledgeLedgerPromptSnapshot(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> KnowledgeLedgerPromptSnapshot {
+    try await get(
+      "v1/jit/knowledge-ledger/prompt-snapshot",
+      expectedOwnerId: authorizationSnapshot.ownerID,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Managed LLM synthesis takes longer than a normal API call (the profile route runs two

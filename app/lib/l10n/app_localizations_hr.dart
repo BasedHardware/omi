@@ -2043,6 +2043,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get memoryDeleted => 'Uspomena Obrisana.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Vrati Unazad';
 
   @override
@@ -9877,6 +9880,20 @@ class AppLocalizationsHr extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
+  String get chatScopeToday => 'Danas';
+
+  @override
+  String get chatScopeThisWeek => 'Ovaj tjedan';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'O: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Pitaj o ovome';
+
+  @override
   String get sendRawAudioToOmi => 'Šalji neobrađeni zvuk u Omi';
 
   @override
@@ -9888,4 +9905,48 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Dijagnostiku nije bilo moguće podijeliti. Pokušaj ponovno.';
+
+  @override
+  String get appDisabledTitle => 'Ova je aplikacija onemogućena i ne može se instalirati.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Njezina krajnja točka nije radila 72 sata zaredom pa je isporuka zaustavljena.';
+
+  @override
+  String get appDisabledGeneric => 'Onemogućila ju je Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Najprije popravi krajnju točku — ponovno omogućivanje iznova provjerava svaki konfigurirani URL.';
+
+  @override
+  String get appReEnable => 'Ponovno omogući';
+
+  @override
+  String get appReEnableFailedTitle => 'Ponovno omogućivanje nije uspjelo';
+
+  @override
+  String get appReEnableFailedBody => 'Ovu aplikaciju nije bilo moguće ponovno omogućiti. Pokušaj ponovno.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Onemogućeno $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Posljednja pogreška: $error.';
+  }
+
+  @override
+  String get prerecordedTranscript => 'Unaprijed snimljeno';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant još uvijek snima pa se pohranjeni zvuk ne može prenijeti. Pritisnite gumb na Pendantu da zaustavite snimanje, a zatim ponovno sinkronizirajte.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pohrana Pendanta je puna i još je u načinu snimanja, pa se pohranjeni zvuk ne može prenijeti. Pritisnite gumb na Pendantu da zaustavite snimanje, a zatim ponovno sinkronizirajte.';
 }

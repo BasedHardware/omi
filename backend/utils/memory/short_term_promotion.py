@@ -128,7 +128,7 @@ def _canonical_outbox_side_effects(*, db_client: Any) -> CanonicalMemoryOutboxSi
         return _delete_atom_projection_and_citations(uid, memory_id, db_client=db_client)
 
     def vector_upsert(item: MemoryItem, commit_id: str) -> bool:
-        return sync_canonical_memory_vector(item, projection_commit_id=commit_id)
+        return sync_canonical_memory_vector(item, projection_commit_id=commit_id, db_client=db_client)
 
     return CanonicalMemoryOutboxSideEffects(
         projection_upsert=projection_upsert,

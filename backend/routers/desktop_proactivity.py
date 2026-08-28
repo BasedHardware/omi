@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -10,12 +11,13 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from jsonschema import Draft202012Validator, SchemaError, ValidationError
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from database._client import get_customer_firestore_client
 from database import redis_db, users as users_db
+from config.plan_catalog import DESKTOP_PROFILE_DEFAULTS
 from models.users import PlanType, Subscription
 from utils.env_loader import EnvStage, resolve_stage_from_env
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -25,12 +27,12 @@ from utils.llm.gateway_client import llm_gateway_headers
 from utils.llm.gateway_observability import record_direct_exception_surface
 from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS, has_cacheable_prefix
 from utils.llm.providers import get_openai_api_key
+from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
+from utils.observability.journeys import ClientJourneyAttempt
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import (
-    DESKTOP_ACCESS_TIER_ARCHITECT,
     DESKTOP_ACCESS_TIER_FREE,
-    DESKTOP_ACCESS_TIER_FULL,
     effective_desktop_access_tier,
     is_desktop_trial_paywalled,
 )
@@ -39,19 +41,19 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _MAX_REQUEST_BYTES = 5 * 1024 * 1024
-_QUOTA_WINDOW_SECONDS = 24 * 60 * 60
-# Explicit per-tier ceilings. These are deliberately not a constant multiple of
-# a shared base row: measured desktop dogfooding runs ~37 extraction calls per
-# hour of active use, so the architect extraction ceiling is sized for a genuine
-# 24-hour day (~888 calls) plus burst headroom, while reasoning is sized for a
-# background reconciler that batches ~2 calls per pass on top of the per-visit
-# gate and director calls. Lower tiers are sized for a partial day and stay
-# governed by the device-side frequency gate.
-_TIER_DAILY_LIMITS: dict[str, dict[str, int]] = {
-    DESKTOP_ACCESS_TIER_FREE: {"proactive_extraction": 150, "proactive_reasoning": 60},
-    DESKTOP_ACCESS_TIER_FULL: {"proactive_extraction": 1000, "proactive_reasoning": 500},
-    DESKTOP_ACCESS_TIER_ARCHITECT: {"proactive_extraction": 2000, "proactive_reasoning": 1000},
-}
+_QUOTA_WINDOW_SECONDS = redis_db.PROACTIVE_QUOTA_COMMITTED_WINDOW_SECONDS
+# The gateway client bounds each provider attempt at 20 seconds and the
+# structured-output recovery path allows one retry. A 90-second Redis lease
+# leaves headroom for rollout refreshes and executor scheduling while still
+# expiring quickly after cancellation or process death.
+_QUOTA_LEASE_SECONDS = redis_db.PROACTIVE_QUOTA_LEASE_SECONDS
+# The catalog owns these profile allocations. They are deliberately not a
+# constant multiple of a shared base row: measured desktop dogfooding runs
+# ~37 extraction calls per hour of active use, so the architect extraction
+# ceiling is sized for a genuine 24-hour day (~888 calls) plus burst headroom,
+# while reasoning is sized for a background reconciler that batches ~2 calls per
+# pass on top of the per-visit gate and director calls. Lower tiers are sized
+# for a partial day and stay governed by the device-side frequency gate.
 _OPERATION_LANES = {
     "proactive_extraction": "omi:auto:desktop-proactive-extraction",
     "proactive_reasoning": "omi:auto:desktop-proactive-reasoning",
@@ -92,6 +94,7 @@ class ProactiveQuotaState:
     limit: int
     remaining: int
     reset_seconds: int
+    reservation_token: str
 
 
 _QUOTA_LIMIT_HEADER = "X-Proactive-Quota-Limit"
@@ -129,7 +132,8 @@ def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str,
     payload = _gateway_payload(request)
     gateway_url = os.getenv("OMI_LLM_GATEWAY_URL", "").strip()
     if gateway_url:
-        headers = llm_gateway_headers(feature=f"desktop_{request.operation.value}")
+        # This surface is desktop-only traffic, so the platform is known statically.
+        headers = llm_gateway_headers(feature=f"desktop_{request.operation.value}", platform="desktop")
         headers["X-Omi-User-Uid"] = uid
         headers["X-Omi-Request-ID"] = request_id
         return _ProviderRequest(
@@ -161,15 +165,6 @@ def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str,
     # fields; prompt_cache_key is a real OpenAI field and is kept.
     payload.pop("prompt_cache_options", None)
     payload.pop("metadata", None)
-    record_fallback(
-        component="llm_gateway",
-        from_mode="gateway",
-        to_mode="direct_openai",
-        reason="config_incomplete",
-        outcome="recovered",
-        log=logger,
-    )
-    record_direct_exception_surface(surface="desktop_context_proactivity.dev_direct_openai")
     return _ProviderRequest(
         url="https://api.openai.com/v1/chat/completions",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -182,10 +177,13 @@ def _quota_limit_for_subscription(operation: ProactiveOperation, subscription: S
     """Return the server-authoritative proactive ceiling for a verified plan."""
     plan = subscription.plan if subscription is not None else PlanType.basic
     tier = effective_desktop_access_tier(plan, subscription)
-    # Keep the lookup total: an unrecognised tier resolves to the free row
-    # rather than raising, so a new tier string can never 500 the lane.
-    limits = _TIER_DAILY_LIMITS.get(tier, _TIER_DAILY_LIMITS[DESKTOP_ACCESS_TIER_FREE])
-    return limits[operation.value]
+    # Keep the lookup total: an unrecognised tier resolves to the catalog's
+    # free profile rather than raising, so a new tier string can never 500 the
+    # lane. The router owns the meter and reservation mechanics; the catalog
+    # owns the per-profile allocation.
+    profile = DESKTOP_PROFILE_DEFAULTS.get(tier, DESKTOP_PROFILE_DEFAULTS[DESKTOP_ACCESS_TIER_FREE])
+    limits = profile['proactivity_daily']
+    return int(limits[operation.value])
 
 
 class ProactiveOperation(str, Enum):
@@ -268,33 +266,116 @@ async def _consume_quota(uid: str, operation: ProactiveOperation) -> ProactiveQu
             uid,
         )
         limit = _quota_limit_for_subscription(operation, subscription)
-        allowed, remaining, reset_seconds = await run_blocking(
+        allowed, remaining, reset_seconds, reservation_token = await run_blocking(
             critical_executor,
-            redis_db.reserve_rate_limit,
+            redis_db.reserve_proactive_rate_limit,
             uid,
             f"desktop_{operation_value}",
             limit,
             _QUOTA_WINDOW_SECONDS,
+            lease_seconds=_QUOTA_LEASE_SECONDS,
         )
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Proactive metering is temporarily unavailable") from exc
-    state = ProactiveQuotaState(limit=limit, remaining=remaining, reset_seconds=reset_seconds)
+    state = ProactiveQuotaState(
+        limit=limit,
+        remaining=remaining,
+        reset_seconds=reset_seconds,
+        reservation_token=reservation_token or "",
+    )
     if not allowed:
         raise HTTPException(
             status_code=429,
             detail="Proactive request limit exceeded",
             headers=_quota_headers(state, include_retry_after=True),
         )
+    if not state.reservation_token:
+        raise HTTPException(status_code=503, detail="Proactive metering lease is unavailable")
     return state
 
 
-async def _release_quota(uid: str, operation: ProactiveOperation) -> None:
+async def _renew_quota(uid: str, operation: ProactiveOperation, reservation_token: str) -> None:
+    if not reservation_token:
+        raise HTTPException(status_code=503, detail="Proactive metering lease is unavailable")
+    try:
+        renewed, _ = await run_blocking(
+            critical_executor,
+            redis_db.renew_proactive_rate_limit,
+            uid,
+            f"desktop_{operation.value}",
+            reservation_token,
+            window=_QUOTA_WINDOW_SECONDS,
+            lease_seconds=_QUOTA_LEASE_SECONDS,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Proactive metering is temporarily unavailable") from exc
+    if not renewed:
+        raise HTTPException(status_code=503, detail="Proactive metering lease expired")
+
+
+async def _finalize_quota(uid: str, operation: ProactiveOperation, reservation_token: str) -> int:
+    if not reservation_token:
+        raise HTTPException(status_code=503, detail="Proactive metering lease is unavailable")
+    try:
+        finalized, reset_seconds = await run_blocking(
+            critical_executor,
+            redis_db.finalize_proactive_rate_limit,
+            uid,
+            f"desktop_{operation.value}",
+            reservation_token,
+            window=_QUOTA_WINDOW_SECONDS,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Proactive metering is temporarily unavailable") from exc
+    if not finalized:
+        raise HTTPException(status_code=503, detail="Proactive metering lease expired")
+    return reset_seconds
+
+
+_pending_proactive_finalizations: set[asyncio.Task[int]] = set()
+
+
+async def _finalize_quota_after_success(
+    uid: str,
+    operation: ProactiveOperation,
+    reservation_token: str,
+) -> int:
+    """Submit successful-work finalization even if response delivery is cancelled.
+
+    The task is strongly retained only until its Redis call settles. It is not
+    part of the ordinary background-task registry and is never cancellation- or
+    shutdown-drained: process death intentionally leaves the pending lease to
+    expire, while request cancellation after validation cannot prevent a
+    submitted finalization from counting successful provider work.
+    """
+    finalization_task = asyncio.create_task(
+        _finalize_quota(uid, operation, reservation_token),
+        name="proactive-quota-finalize",
+    )
+    _pending_proactive_finalizations.add(finalization_task)
+
+    def observe_finalization(completed: asyncio.Task[int]) -> None:
+        _pending_proactive_finalizations.discard(completed)
+        if completed.cancelled():
+            return
+        error = completed.exception()
+        if error is not None:
+            logger.error("Proactive quota finalization failed: %s", type(error).__name__)
+
+    finalization_task.add_done_callback(observe_finalization)
+    return await asyncio.shield(finalization_task)
+
+
+async def _release_quota(uid: str, operation: ProactiveOperation, reservation_token: str) -> None:
+    if not reservation_token:
+        return
     try:
         await run_blocking(
             critical_executor,
-            redis_db.release_rate_limit,
+            redis_db.release_proactive_rate_limit,
             uid,
             f"desktop_{operation.value}",
+            reservation_token,
         )
     except Exception:
         logger.exception("Failed to release proactive quota reservation uid=%s operation=%s", uid, operation.value)
@@ -539,12 +620,18 @@ def _record_length_retry_outcome(provider_request: _ProviderRequest, outcome: st
 async def _post_provider_completion(
     provider_request: _ProviderRequest,
     *,
+    uid: str,
+    operation: ProactiveOperation,
+    reservation_token: str,
     max_completion_tokens: int | None = None,
 ) -> Any:
-    payload = provider_request.payload
-    if max_completion_tokens is not None:
-        payload = {**payload, "max_completion_tokens": max_completion_tokens}
     async with get_llm_gateway_semaphore():
+        # Queue before the gateway slot is not paid provider work.  Do not let
+        # an unbounded wait consume lease time.
+        await _renew_quota(uid, operation, reservation_token)
+        payload = provider_request.payload
+        if max_completion_tokens is not None:
+            payload = {**payload, "max_completion_tokens": max_completion_tokens}
         response = await get_llm_gateway_client().post(
             provider_request.url,
             headers=provider_request.headers,
@@ -554,12 +641,44 @@ async def _post_provider_completion(
     return response.json()
 
 
-@router.post("/v1/desktop/proactivity/completions", response_model=ProactiveCompletionEnvelope)
-async def proactive_completion(
+def _proactivity_client_kind(x_app_platform: object, user_agent: object) -> ClientKind:
+    headers: dict[str, str] = {}
+    if isinstance(x_app_platform, str):
+        headers['x-app-platform'] = x_app_platform
+    if isinstance(user_agent, str):
+        headers['user-agent'] = user_agent
+    return resolve_client_kind_from_headers(headers)
+
+
+def _proactivity_issue_class(exc: BaseException) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return 'upstream_timeout'
+    if isinstance(exc, HTTPException):
+        if exc.status_code in {408, 504}:
+            return 'upstream_timeout'
+        if exc.status_code == _INVALID_STRUCTURED_OUTPUT_STATUS:
+            return 'invalid_response'
+        if exc.status_code == 503:
+            return 'dependency_unavailable'
+        if exc.status_code >= 500:
+            return 'provider_error'
+        return 'upstream_rejected'
+    if isinstance(exc, httpx.HTTPStatusError):
+        return 'upstream_rejected'
+    return 'provider_error'
+
+
+async def _proactive_completion_unobserved(
     request: ProactiveCompletionRequest,
     response: Response,
     uid: str = Depends(_authorized_desktop_user),
 ) -> ProactiveCompletionEnvelope:
+    # This route is the released proactivity lane that shipped desktop clients
+    # poll continuously. It is deliberately NOT gated on the JIT cohort: gating
+    # it would silently kill context-bucket extraction for the entire deployed
+    # fleet the moment the backend ships, long before any client migrates to
+    # the JIT trigger runtime. The JIT lanes enforce admission on their own
+    # reservation routes; retiring this lane is a later, explicit operation.
     operation = request.operation.value
     lane = _OPERATION_LANES[operation]
     if llm_stub_enabled():
@@ -574,15 +693,33 @@ async def proactive_completion(
             response=response_body,
         )
 
-    quota = await _consume_quota(uid, request.operation)
-    _apply_quota_headers(response, quota)
+    quota: ProactiveQuotaState | None = None
+    quota_reserved = False
+    quota_released = False
+
+    async def release_quota_once() -> None:
+        nonlocal quota_released
+        if not quota_reserved or quota_released:
+            return
+        quota_released = True
+        assert quota is not None
+        await _release_quota(uid, request.operation, quota.reservation_token)
+
     request_id = str(uuid4())
     provider_request: _ProviderRequest | None = None
     length_retry_attempted = False
     try:
+        quota = await _consume_quota(uid, request.operation)
+        quota_reserved = True
+        _apply_quota_headers(response, quota)
         provider_request = _proactive_provider_request(request, uid, request_id)
         attempted_max_completion_tokens = provider_request.payload["max_completion_tokens"]
-        response_body = await _post_provider_completion(provider_request)
+        response_body = await _post_provider_completion(
+            provider_request,
+            uid=uid,
+            operation=request.operation,
+            reservation_token=quota.reservation_token,
+        )
         if _should_retry_truncated_structured_output(
             response_body,
             request,
@@ -607,17 +744,25 @@ async def proactive_completion(
             )
             response_body = await _post_provider_completion(
                 provider_request,
+                uid=uid,
+                operation=request.operation,
+                reservation_token=quota.reservation_token,
                 max_completion_tokens=retry_max,
             )
-    except HTTPException:
+    except asyncio.CancelledError:
+        # Cancellation is a failed attempt after reservation. Release exactly
+        # once, but keep cancellation visible to the request/task owner.
+        await release_quota_once()
+        raise
+    except HTTPException as exc:
         if length_retry_attempted and provider_request is not None:
             _record_length_retry_outcome(provider_request, "exhausted")
-        await _release_quota(uid, request.operation)
+        await release_quota_once()
         raise
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         if length_retry_attempted and provider_request is not None:
             _record_length_retry_outcome(provider_request, "exhausted")
-        await _release_quota(uid, request.operation)
+        await release_quota_once()
         if isinstance(exc, httpx.HTTPStatusError):
             logger.warning(
                 "desktop_proactivity_provider_http_error operation=%s fallback_class=%s status=%s",
@@ -636,14 +781,14 @@ async def proactive_completion(
     if not isinstance(response_body, dict):
         if length_retry_attempted:
             _record_length_retry_outcome(provider_request, "exhausted")
-        await _release_quota(uid, request.operation)
+        await release_quota_once()
         raise HTTPException(status_code=502, detail="Proactive model returned an invalid response")
     try:
         _validate_gateway_output(response_body, request)
     except HTTPException as exc:
         if length_retry_attempted:
             _record_length_retry_outcome(provider_request, "exhausted")
-        await _release_quota(uid, request.operation)
+        await release_quota_once()
         logger.warning(
             "desktop_proactivity_invalid_structured_output operation=%s fallback_class=%s "
             "provider_model=%s status=%s detail=%s",
@@ -654,11 +799,35 @@ async def proactive_completion(
             exc.detail,
         )
         raise
-    if length_retry_attempted:
-        _record_length_retry_outcome(provider_request, "recovered")
     usage = _usage_envelope(response_body)
     provider_model = response_body.get("model")
     assert provider_request is not None
+    assert quota is not None
+    finalized_reset_seconds = await _finalize_quota_after_success(uid, request.operation, quota.reservation_token)
+    _apply_quota_headers(
+        response,
+        ProactiveQuotaState(
+            limit=quota.limit,
+            remaining=quota.remaining,
+            reset_seconds=finalized_reset_seconds,
+            reservation_token=quota.reservation_token,
+        ),
+    )
+    if length_retry_attempted:
+        _record_length_retry_outcome(provider_request, "recovered")
+    if provider_request.fallback_class == "dev_direct_openai":
+        # A direct provider is only a recovered fallback once the response has
+        # passed schema validation and the reservation has been committed. Do
+        # not emit recovery telemetry for provider or output-validation errors.
+        record_fallback(
+            component="llm_gateway",
+            from_mode="gateway",
+            to_mode="direct_openai",
+            reason="config_incomplete",
+            outcome="recovered",
+            log=logger,
+        )
+        record_direct_exception_surface(surface="desktop_context_proactivity.dev_direct_openai")
     return ProactiveCompletionEnvelope(
         operation=request.operation,
         lane=lane,
@@ -694,3 +863,30 @@ def _validate_gateway_output(response: Mapping[str, Any], request: ProactiveComp
             validator.validate(decoded)
         except (json.JSONDecodeError, ValidationError, TypeError) as exc:
             raise _invalid_structured_output() from exc
+
+
+@router.post("/v1/desktop/proactivity/completions", response_model=ProactiveCompletionEnvelope)
+async def proactive_completion(
+    request: ProactiveCompletionRequest,
+    response: Response,
+    uid: str = Depends(_authorized_desktop_user),
+    x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    user_agent: str | None = Header(None, alias='User-Agent'),
+) -> ProactiveCompletionEnvelope:
+    attempt = ClientJourneyAttempt(
+        'desktop_proactivity',
+        _proactivity_client_kind(x_app_platform, user_agent),
+    )
+    try:
+        result = await _proactive_completion_unobserved(request, response, uid=uid)
+    except asyncio.CancelledError:
+        attempt.cancel()
+        raise
+    except Exception as exc:
+        if isinstance(exc, HTTPException) and exc.status_code == 429:
+            attempt.degrade('quota_capped')
+        else:
+            attempt.fail(_proactivity_issue_class(exc))
+        raise
+    attempt.succeed()
+    return result

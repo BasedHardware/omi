@@ -33,6 +33,40 @@ export function conversationIdForSession(store: AgentStore, sessionId: string): 
   return row ? String(row.conversation_id) : null
 }
 
+/**
+ * Resolve a renderer/backend deletion key to every canonical kernel
+ * conversation it owns.  The renderer's v2 chat-session id is the
+ * `surface_conversations.external_ref_id`; the kernel session id and canonical
+ * conversation id are separate opaque values.  Deletion code must therefore
+ * never guess that a renderer id is already a kernel conversation id.
+ *
+ * The owner fence is required because the local kernel database survives
+ * sign-out and may contain cleanup-only rows from the previous account.
+ */
+export function conversationIdsForDeletion(
+  store: AgentStore,
+  ownerId: string,
+  deletionKey: string
+): string[] {
+  const key = deletionKey.trim()
+  const owner = ownerId.trim()
+  if (!key || !owner) return []
+  const rows = store.allRows(
+    `SELECT DISTINCT conversation_id
+       FROM surface_conversations
+      WHERE owner_id = ?
+        AND (external_ref_id = ? OR agent_session_id = ? OR conversation_id = ?)
+      ORDER BY last_active_at_ms DESC`,
+    [owner, key, key, key]
+  )
+  return rows
+    .map((row) => String(row.conversation_id ?? '').trim())
+    .filter(
+      (conversationId, index, all) =>
+        conversationId.length > 0 && all.indexOf(conversationId) === index
+    )
+}
+
 export function listRecentConversationTurns(
   store: AgentStore,
   conversationId: string,

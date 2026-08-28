@@ -4,6 +4,7 @@ MEMORY_PROTECTED_COLLECTIONS = [
     "memory_items",
     "memory_operations",
     "memory_source_replacements",
+    "memory_ledger_reopens",
     "memory_outbox",
     "memory_control",
     "memory_state",

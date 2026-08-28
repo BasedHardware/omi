@@ -18,7 +18,10 @@ vi.mock('electron', () => ({
     isEncryptionAvailable: (): boolean => true,
     encryptString: (s: string): Buffer => Buffer.from(s, 'utf8'),
     decryptString: (b: Buffer): string => b.toString('utf8')
-  }
+  },
+  BrowserWindow: { getAllWindows: (): unknown[] => [] },
+  ipcMain: { on: (): void => {}, handle: (): void => {} },
+  webContents: { getAllWebContents: (): unknown[] => [] }
 }))
 
 import { ByokKeyStore } from '../agentKernel/byokStore'
@@ -29,6 +32,9 @@ import {
   piMonoManagedApiBaseUrl,
   registerPiMonoAdapter,
   unregisterPiMonoAdapter,
+  ensureFreshPiMonoSession,
+  notifyPiMonoByokChanged,
+  resolvePiMonoSpawnCredentials,
   __resetPiMonoSessionForTests,
   __setByokKeyStoreForTests,
   type PiMonoAuthTarget
@@ -36,9 +42,17 @@ import {
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
-/** A fake adapter recording updateAuthToken calls. */
-function fakeAdapter(): PiMonoAuthTarget & { updateAuthToken: ReturnType<typeof vi.fn> } {
-  return { updateAuthToken: vi.fn(async () => true) }
+/** A fake adapter recording credential-restart calls. */
+function fakeAdapter(): PiMonoAuthTarget & {
+  updateAuthToken: ReturnType<typeof vi.fn>
+  updateByokEnv: ReturnType<typeof vi.fn>
+  revokeAndStop: ReturnType<typeof vi.fn>
+} {
+  return {
+    updateAuthToken: vi.fn(async () => true),
+    updateByokEnv: vi.fn(async () => true),
+    revokeAndStop: vi.fn(async () => {})
+  }
 }
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
@@ -62,6 +76,21 @@ describe('configurePiMonoSession / getPiMonoSession', () => {
     configurePiMonoSession({ token: 'tok-1', desktopApiBase: 'https://api.example/v2' })
     configurePiMonoSession(null)
     expect(getPiMonoSession()).toBeNull()
+  })
+
+  it('stops the live adapter on sign-out so a later spawn cannot reuse the departed token', async () => {
+    const adapter = fakeAdapter()
+    registerPiMonoAdapter(adapter)
+    configurePiMonoSession({ token: 'tok-1', desktopApiBase: 'https://api.example/v2' })
+    adapter.updateAuthToken.mockClear()
+    adapter.revokeAndStop.mockClear()
+
+    configurePiMonoSession(null)
+    await flush()
+
+    expect(getPiMonoSession()).toBeNull()
+    expect(adapter.revokeAndStop).toHaveBeenCalledTimes(1)
+    expect(adapter.updateAuthToken).not.toHaveBeenCalled()
   })
 
   it('rejects a malformed payload (missing/blank fields → null)', () => {
@@ -137,7 +166,9 @@ describe('token refresh → adapter restart', () => {
     const adapter: PiMonoAuthTarget = {
       updateAuthToken: vi.fn(async () => {
         throw new Error('spawn failed')
-      })
+      }),
+      updateByokEnv: vi.fn(async () => true),
+      revokeAndStop: vi.fn(async () => {})
     }
     registerPiMonoAdapter(adapter)
 
@@ -172,7 +203,7 @@ describe('piMonoManagedApiBaseUrl (adds the /v2 segment the OpenAI SDK needs)', 
   })
 })
 
-describe('getPiMonoByokEnv (all-or-nothing, separate from the Firebase session)', () => {
+describe('getPiMonoByokEnv (capability-scoped, separate from the Firebase session)', () => {
   it('injects the complete OMI_BYOK_* set when all four keys are stored', () => {
     const store = new ByokKeyStore(
       join(dir, `byok-full-${Math.random().toString(36).slice(2)}.json`)
@@ -191,7 +222,7 @@ describe('getPiMonoByokEnv (all-or-nothing, separate from the Firebase session)'
     })
   })
 
-  it('returns {} at 3/4 keys (never a partial injection)', () => {
+  it('returns configured keys without requiring an unrelated Deepgram key', () => {
     const store = new ByokKeyStore(
       join(dir, `byok-partial-${Math.random().toString(36).slice(2)}.json`)
     )
@@ -200,7 +231,11 @@ describe('getPiMonoByokEnv (all-or-nothing, separate from the Firebase session)'
     store.setKey('gemini', 'gm-key')
     __setByokKeyStoreForTests(store)
 
-    expect(getPiMonoByokEnv()).toEqual({})
+    expect(getPiMonoByokEnv()).toEqual({
+      OMI_BYOK_OPENAI: 'sk-openai',
+      OMI_BYOK_ANTHROPIC: 'sk-ant',
+      OMI_BYOK_GEMINI: 'gm-key'
+    })
   })
 
   it('is independent of the Firebase session (empty even with a live session)', () => {
@@ -210,5 +245,151 @@ describe('getPiMonoByokEnv (all-or-nothing, separate from the Firebase session)'
     __setByokKeyStoreForTests(store)
     configurePiMonoSession({ token: 'tok-1', desktopApiBase: 'https://api.example/v2' })
     expect(getPiMonoByokEnv()).toEqual({})
+  })
+})
+
+describe('ensureFreshPiMonoSession (renderer pull, in-place, no restart)', () => {
+  it('is a no-op when no session is cached', async () => {
+    expect(await ensureFreshPiMonoSession()).toBeNull()
+  })
+
+  it('keeps the cached session when no refresher is wired', async () => {
+    configurePiMonoSession({ token: 'stale', desktopApiBase: 'https://desktop.example' })
+    expect(await ensureFreshPiMonoSession()).toMatchObject({ token: 'stale' })
+  })
+
+  it('swaps in a pulled token without restarting the adapter', async () => {
+    const { setTokenRefresher } = await import('../assistants/core/session')
+    configurePiMonoSession({ token: 'stale', desktopApiBase: 'https://desktop.example' })
+    const adapter = fakeAdapter()
+    registerPiMonoAdapter(adapter)
+    adapter.updateAuthToken.mockClear()
+
+    setTokenRefresher(async () => ({
+      apiBase: 'https://api.example',
+      desktopApiBase: 'https://desktop.example',
+      token: 'fresh'
+    }))
+    try {
+      const next = await ensureFreshPiMonoSession()
+      expect(next?.token).toBe('fresh')
+      expect(getPiMonoSession()?.token).toBe('fresh')
+      expect(adapter.updateAuthToken).not.toHaveBeenCalled()
+    } finally {
+      setTokenRefresher(null)
+    }
+  })
+
+  it('resolvePiMonoSpawnCredentials force-refreshes and re-reads BYOK', async () => {
+    const { setTokenRefresher } = await import('../assistants/core/session')
+    const store = new ByokKeyStore(
+      join(dir, `byok-resolve-${Math.random().toString(36).slice(2)}.json`)
+    )
+    store.setKey('openai', 'sk-openai')
+    store.setKey('anthropic', 'sk-ant')
+    store.setKey('gemini', 'gm-key')
+    store.setKey('deepgram', 'dg-key')
+    __setByokKeyStoreForTests(store)
+    configurePiMonoSession({ token: 'stale', desktopApiBase: 'https://desktop.example' })
+    setTokenRefresher(async () => ({
+      apiBase: 'https://api.example',
+      desktopApiBase: 'https://desktop.example',
+      token: 'fresh'
+    }))
+    try {
+      const creds = await resolvePiMonoSpawnCredentials()
+      expect(creds).toMatchObject({
+        authToken: 'fresh',
+        omiApiBaseUrl: 'https://desktop.example/v2',
+        byokEnv: {
+          OMI_BYOK_OPENAI: 'sk-openai',
+          OMI_BYOK_ANTHROPIC: 'sk-ant',
+          OMI_BYOK_GEMINI: 'gm-key',
+          OMI_BYOK_DEEPGRAM: 'dg-key'
+        }
+      })
+    } finally {
+      setTokenRefresher(null)
+    }
+  })
+
+  it('does not resurrect a session that was cleared during the pull', async () => {
+    const { setTokenRefresher } = await import('../assistants/core/session')
+    configurePiMonoSession({ token: 'stale', desktopApiBase: 'https://desktop.example' })
+    let resolvePull!: (
+      v: {
+        apiBase: string
+        desktopApiBase: string
+        token: string
+      } | null
+    ) => void
+    setTokenRefresher(
+      () =>
+        new Promise((r) => {
+          resolvePull = r
+        })
+    )
+    try {
+      const pending = ensureFreshPiMonoSession()
+      configurePiMonoSession(null)
+      resolvePull({
+        apiBase: 'https://api.example',
+        desktopApiBase: 'https://desktop.example',
+        token: 'late'
+      })
+      expect(await pending).toBeNull()
+      expect(getPiMonoSession()).toBeNull()
+    } finally {
+      setTokenRefresher(null)
+    }
+  })
+})
+
+describe('notifyPiMonoByokChanged', () => {
+  it('is a no-op when no adapter is registered', () => {
+    expect(() => notifyPiMonoByokChanged()).not.toThrow()
+  })
+
+  it('hands the current BYOK env to the live adapter', async () => {
+    const store = new ByokKeyStore(
+      join(dir, `byok-notify-${Math.random().toString(36).slice(2)}.json`)
+    )
+    store.setKey('openai', 'sk-openai')
+    store.setKey('anthropic', 'sk-ant')
+    store.setKey('gemini', 'gm-key')
+    store.setKey('deepgram', 'dg-key')
+    __setByokKeyStoreForTests(store)
+    const adapter = fakeAdapter()
+    registerPiMonoAdapter(adapter)
+    configurePiMonoSession({ token: 'tok-1', desktopApiBase: 'https://api.example/v2' })
+    adapter.updateByokEnv.mockClear()
+    notifyPiMonoByokChanged()
+    await flush()
+    expect(adapter.updateByokEnv).toHaveBeenCalledWith({
+      OMI_BYOK_OPENAI: 'sk-openai',
+      OMI_BYOK_ANTHROPIC: 'sk-ant',
+      OMI_BYOK_GEMINI: 'gm-key',
+      OMI_BYOK_DEEPGRAM: 'dg-key'
+    })
+  })
+
+  it('does not restart the adapter from BYOK after sign-out', async () => {
+    const store = new ByokKeyStore(
+      join(dir, `byok-notify-signout-${Math.random().toString(36).slice(2)}.json`)
+    )
+    store.setKey('openai', 'sk-openai')
+    store.setKey('anthropic', 'sk-ant')
+    store.setKey('gemini', 'gm-key')
+    store.setKey('deepgram', 'dg-key')
+    __setByokKeyStoreForTests(store)
+    const adapter = fakeAdapter()
+    registerPiMonoAdapter(adapter)
+    configurePiMonoSession({ token: 'tok-1', desktopApiBase: 'https://api.example/v2' })
+    configurePiMonoSession(null)
+    adapter.updateByokEnv.mockClear()
+
+    notifyPiMonoByokChanged()
+    await flush()
+    expect(adapter.updateByokEnv).not.toHaveBeenCalled()
   })
 })

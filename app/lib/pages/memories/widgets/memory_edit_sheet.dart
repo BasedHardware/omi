@@ -7,6 +7,20 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'delete_confirmation.dart';
 
+void showMemoryQuickEditSheet(
+  BuildContext context,
+  Memory memory,
+  MemoriesProvider provider, {
+  Function(BuildContext, Memory, MemoriesProvider)? onDelete,
+}) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (context) => MemoryEditSheet(memory: memory, provider: provider, onDelete: onDelete),
+  );
+}
+
 class MemoryEditSheet extends StatefulWidget {
   final Memory memory;
   final MemoriesProvider provider;
@@ -198,6 +212,14 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
 
   Future<void> _handleSave() async {
     if (contentController.text.trim().isEmpty) return;
+    if (widget.memory.isKnowledgeLedger &&
+        (widget.memory.deleted ||
+            widget.memory.invalidAt != null ||
+            (widget.memory.supersededBy ?? '').trim().isNotEmpty ||
+            widget.memory.ledgerKind != KnowledgeLedgerKind.fact ||
+            widget.memory.isLocked)) {
+      return;
+    }
 
     setState(() {
       _isSaving = true;

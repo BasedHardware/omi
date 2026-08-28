@@ -18,6 +18,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
+import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 
 class AutoSyncPage extends StatefulWidget {
   const AutoSyncPage({super.key});
@@ -175,7 +176,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         default:
           title = s.isFetchingConversations ? l.syncCardProcessing : l.syncCardUploadingTitle;
       }
-      action = _statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
+      action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
     } else if (p.isRateLimited) {
       title = syncCooldownTitle(p.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
@@ -188,12 +189,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     } else if (attention > 0) {
       title = l.syncCardNeedsAttention(attention);
       titleColor = Colors.orangeAccent;
-      action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () async {
+      action = statusActionPill(l.sync, Colors.deepPurpleAccent, () async {
         if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
       });
     } else if (readyToBackUp > 0) {
       title = l.syncCardReadyCount(readyToBackUp);
-      action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () async {
+      action = statusActionPill(l.sync, Colors.deepPurpleAccent, () async {
         if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
       });
     } else if (hasAnyRecording) {
@@ -245,20 +246,6 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           ),
           if (action != null) ...[const SizedBox(width: 10), action],
         ],
-      ),
-    );
-  }
-
-  Widget _statusActionPill(String label, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(100)),
-        child: Text(
-          label,
-          style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
-        ),
       ),
     );
   }

@@ -19,13 +19,26 @@ from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
+from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
-from utils.other.storage import list_audio_chunks
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
+from .first_open_obligations import (
+    FIRST_OPEN_EFFECTS,
+    claim_authorized_first_open_work,
+    claim_first_open_work,
+    commit_first_open_app_result,
+    commit_first_open_app_usage,
+    commit_first_open_conversation_patch,
+    commit_first_open_folder_count,
+    complete_first_open_effect,
+    finish_first_open_work,
+    first_open_effect_is_authorized,
+    initialize_first_open_work,
+)
 
 logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
-
 
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
 _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
@@ -316,7 +329,7 @@ def _document_data_with_revision(document) -> Optional[Dict[str, Any]]:
     return data
 
 
-def _prepare_photo_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
+def prepare_photo_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     data = copy.deepcopy(data)
     data['data_protection_level'] = level
     if level == 'enhanced' and 'base64' in data and isinstance(data['base64'], str):
@@ -404,6 +417,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             transaction.set(conversation_ref, write_data, merge=True)
             return
 
+        write_data.setdefault('has_photos', False)
         transaction.set(conversation_ref, write_data)
 
     _write_processing_result(transaction)
@@ -494,6 +508,7 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
         del conversation_data['audio_base64_url']
     if 'photos' in conversation_data:
         del conversation_data['photos']
+    conversation_data.setdefault('has_photos', False)
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
@@ -506,10 +521,13 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversation(uid, conversation_id):
+def get_conversation(uid, conversation_id, *, read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = _document_data_with_revision(conversation_ref.get())
+    record_document_read(
+        read_site, FirestoreReadOutcome.HIT if conversation_data is not None else FirestoreReadOutcome.MISS
+    )
     return conversation_data
 
 
@@ -671,10 +689,18 @@ def get_conversations_without_photos(
     categories: Optional[List[str]] = None,
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
+    budget: Optional[ListReadBudget] = None,
 ):
     """
     Same as get_conversations but without loading photos.
     Much faster for list endpoints and bulk operations where full photo base64 isn't needed.
+
+    With a request ``budget`` (#11831) the server-side ``offset()`` is charged
+    before the query — Firestore bills and streams every skipped row, so a
+    large offset consumes real read work — and the page's stream runs under
+    the budget's per-RPC timeout with each fetched row charged. An offset
+    that exhausts the allowance returns an empty, explicitly truncated page
+    instead of pretending to be complete.
     """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -710,10 +736,26 @@ def get_conversations_without_photos(
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
+    if budget is not None and offset > 0:
+        # Charge the skipped prefix before querying: Firestore streams (and
+        # bills) every offset row even though none is yielded here.
+        try:
+            budget.charge(offset)
+        except ListReadBudgetExhausted:
+            return []
+
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
-    conversations = [_document_data_with_revision(doc) for doc in conversations_ref.stream()]
+    conversations = []
+    try:
+        for doc in budgeted_stream_iter(conversations_ref, budget):
+            conversations.append(_document_data_with_revision(doc))
+    except ListReadBudgetExhausted:
+        # Deadline or allowance ended mid-page: rows already fetched stay in
+        # the list as an honest created_at-DESC prefix; the budget remains
+        # flagged truncated so the route marks the response (#11831).
+        pass
     conversations = [conversation for conversation in conversations if conversation is not None]
     return conversations
 
@@ -724,18 +766,21 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
-    offset = 0
+    cursor = None
     while True:
-        batch_ref = conversations_ref.limit(batch_size).offset(offset)
+        batch_ref = conversations_ref.limit(batch_size)
+        if cursor is not None:
+            batch_ref = batch_ref.start_after(cursor)
         batch = []
-        for doc in batch_ref.stream():
+        snapshots = list(batch_ref.stream())
+        for doc in snapshots:
             conv = doc.to_dict()
             conv = _prepare_conversation_for_read(conv, uid) or conv
             batch.append(conv)
         yield from batch
-        if len(batch) < batch_size:
+        if len(snapshots) < batch_size:
             break
-        offset += batch_size
+        cursor = snapshots[-1]
 
 
 def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bool:
@@ -1046,30 +1091,58 @@ def delete_conversation(uid, conversation_id):
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversations_by_id(uid, conversation_ids, include_discarded: bool = False):
-    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded)
+def get_conversations_by_id(
+    uid,
+    conversation_ids,
+    include_discarded: bool = False,
+    *,
+    read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+):
+    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
-def get_conversations_by_id_without_photos(uid, conversation_ids, include_discarded: bool = False):
-    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded)
+def get_conversations_by_id_without_photos(
+    uid,
+    conversation_ids,
+    include_discarded: bool = False,
+    *,
+    read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+):
+    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
 
 
-def _get_conversations_by_id(uid, conversation_ids, include_discarded: bool = False):
+def _get_conversations_by_id(
+    uid,
+    conversation_ids,
+    include_discarded: bool = False,
+    *,
+    read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
 
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
     docs = db.get_all(doc_refs)
 
+    hits = 0
+    misses = 0
     conversations_by_id = {}
     for doc in docs:
         if doc.exists:
+            hits += 1
             data = doc.to_dict()
             if data.get('discarded') and not include_discarded:
                 continue
             data.setdefault('id', doc.id)
             conversations_by_id[str(data['id'])] = data
+        else:
+            misses += 1
+
+    if hits:
+        record_document_read(read_site, FirestoreReadOutcome.HIT, count=hits)
+    if misses:
+        record_document_read(read_site, FirestoreReadOutcome.MISS, count=misses)
 
     return [
         conversations_by_id[str(conversation_id)]
@@ -1485,15 +1558,44 @@ def update_conversation_segments(
 # ***********************************
 
 
-def reserve_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> list[str]:
-    """Atomically claim not-yet-emailed recipients for this request.
+# A claim this old is treated as abandoned: the process that took it died
+# mid-dispatch, and holding the recipient hostage forever would make the send
+# unretryable. Comfortably longer than the provider request timeout.
+SHARE_EMAIL_CLAIM_TTL_SECONDS = 180
 
-    A Firestore transaction reads the sent ledger and writes the claimed
-    subset in one step, so two concurrent requests can never both claim the
-    same recipient. Returns the subset this caller owns dispatching.
+
+def _in_flight_field(email: str) -> str:
+    """Field path for one recipient's dispatch claim.
+
+    An address contains characters (dots, `@`) that Firestore's field-path
+    syntax reads as structure, so the segment is quoted by the client's own
+    FieldPath rather than by hand — escaping only the dots still left `@`
+    unparseable and failed the write.
     """
+    from google.cloud.firestore_v1.field_path import FieldPath
+
+    return FieldPath('share_email_in_flight', email).to_api_repr()
+
+
+def reserve_share_email_recipients(
+    uid: str, conversation_id: str, emails: list[str], *, now_epoch: float | None = None
+) -> tuple[list[str], list[str], list[str]]:
+    """Atomically decide who this request owns dispatching.
+
+    Returns ``(to_dispatch, already_sent, in_flight_elsewhere)``.
+
+    Two ledgers, deliberately distinct. ``share_email_sent_to`` means an email
+    definitively went out; ``share_email_in_flight`` means some request is
+    dispatching right now. Collapsing them lets a concurrent duplicate report
+    success for a send that is still in flight — and if that send then fails and
+    releases its claim, nobody sent anything while somebody was told otherwise.
+    A caller that finds a live claim it does not own is told so, not lied to.
+    """
+    import time as _time
+
     from google.cloud import firestore as gc_firestore
 
+    stamp = now_epoch if now_epoch is not None else _time.time()
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
@@ -1501,24 +1603,60 @@ def reserve_share_email_recipients(uid: str, conversation_id: str, emails: list[
     def _reserve(transaction):
         snapshot = conversation_ref.get(transaction=transaction)
         data = snapshot.to_dict() or {}
-        already = {e for e in (data.get('share_email_sent_to') or []) if isinstance(e, str)}
-        claimed = [e for e in emails if e not in already]
-        if claimed:
-            transaction.update(conversation_ref, {'share_email_sent_to': gc_firestore.ArrayUnion(claimed)})
-        return claimed
+        sent = {e for e in (data.get('share_email_sent_to') or []) if isinstance(e, str)}
+        raw_in_flight = data.get('share_email_in_flight')
+        in_flight = raw_in_flight if isinstance(raw_in_flight, dict) else {}
+
+        to_dispatch: list[str] = []
+        already_sent: list[str] = []
+        in_flight_elsewhere: list[str] = []
+        claims: dict[str, float] = {}
+        for email in emails:
+            if email in sent:
+                already_sent.append(email)
+                continue
+            claimed_at = in_flight.get(email)
+            fresh = isinstance(claimed_at, (int, float)) and (stamp - claimed_at) < SHARE_EMAIL_CLAIM_TTL_SECONDS
+            if fresh:
+                in_flight_elsewhere.append(email)
+                continue
+            to_dispatch.append(email)
+            claims[_in_flight_field(email)] = stamp
+
+        if claims:
+            transaction.update(conversation_ref, claims)
+        return to_dispatch, already_sent, in_flight_elsewhere
 
     return run_transactional(db, _reserve)
 
 
-def release_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> None:
-    """Release a reservation after a definitive send failure so retries work."""
+def confirm_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> None:
+    """Record a definitive send and drop its in-flight claim, in that order."""
     from google.cloud import firestore as gc_firestore
 
     if not emails:
         return
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'share_email_sent_to': gc_firestore.ArrayRemove(emails)})
+    update: dict[str, object] = {'share_email_sent_to': gc_firestore.ArrayUnion(emails)}
+    for email in emails:
+        update[_in_flight_field(email)] = gc_firestore.DELETE_FIELD
+    conversation_ref.update(update)
+
+
+def release_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> None:
+    """Drop claims after a definitive failure so a retry can dispatch again.
+
+    Only the in-flight claim is dropped; nothing is removed from the sent
+    ledger, because a recipient only lands there once delivery was definitive.
+    """
+    from google.cloud import firestore as gc_firestore
+
+    if not emails:
+        return
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({_in_flight_field(email): gc_firestore.DELETE_FIELD for email in emails})
 
 
 def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):
@@ -1626,7 +1764,7 @@ def set_postprocessing_status(
     conversation_id: str,
     status: PostProcessingStatus,
     fail_reason: str = None,
-    model: PostProcessingModel = PostProcessingModel.fal_whisperx,
+    model: PostProcessingModel = PostProcessingModel.prerecorded,
 ):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -1686,6 +1824,7 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
     soniox_ref = conversation_ref.collection('soniox_streaming')
     speechmatics_ref = conversation_ref.collection('speechmatics_streaming')
     whisperx_ref = conversation_ref.collection('fal_whisperx')
+    prerecorded_ref = conversation_ref.collection('prerecorded')
 
     # Sort each provider's segments by start time, tolerating a legacy/partial doc missing 'start'
     # (a bare x['start'] would KeyError and 500 the whole transcripts response).
@@ -1696,6 +1835,9 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
             sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x.get('start', 0))
         ),
         'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x.get('start', 0))),
+        'prerecorded': list(
+            sorted([doc.to_dict() for doc in prerecorded_ref.stream()], key=lambda x: x.get('start', 0))
+        ),
     }
 
 
@@ -1728,8 +1870,8 @@ def store_conversation_photos(
             photo_ref = photos_ref.document(photo_id)
             data = photo.model_dump()
             data['id'] = photo_id
-            transaction.set(photo_ref, _prepare_photo_for_write(data, uid, level))
-        transaction.update(conversation_ref, {'has_content': True})
+            transaction.set(photo_ref, prepare_photo_for_write(data, uid, level))
+        transaction.update(conversation_ref, {'has_content': True, 'has_photos': True})
         return True
 
     return _store(transaction)

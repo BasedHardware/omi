@@ -255,6 +255,49 @@ struct QueryShellSubmission: Equatable, Sendable {
   }
 }
 
+// MARK: - Send accounting
+
+/// **The submit/retry ledger for the query shell's single send path.** The view
+/// delegates every send decision here so the exactly-once question accounting
+/// the rating prompt depends on is executable in tests, not view-private glue:
+/// a resolved submit counts as one asked question and remembers itself for
+/// `Try again`; a retry re-sends that SAME question and never counts again.
+struct QueryShellSendLedger: Equatable, Sendable {
+  struct Plan: Equatable, Sendable {
+    let question: String
+    /// Whether this emission advances the rating-prompt question counter.
+    let countsAsQuestion: Bool
+  }
+
+  private(set) var lastAskedQuestion = ""
+
+  /// A resolved submission — the one place a NEW question enters the send path.
+  /// A busy provider yields no plan at all: Return during an active send would
+  /// be rejected by ChatProvider anyway, so it must neither dispatch nor count
+  /// (nor overwrite the question 'Try again' would re-send). Planning mutates
+  /// nothing — only `recordAccepted` commits state, so a send ChatProvider
+  /// rejects asynchronously leaves the ledger exactly as it was.
+  func planSubmit(_ question: String?, providerBusy: Bool = false) -> Plan? {
+    guard !providerBusy, let question, !question.isEmpty else { return nil }
+    return Plan(question: question, countsAsQuestion: true)
+  }
+
+  /// Called from ChatProvider's `onAccepted` — the send is really in flight,
+  /// so NOW the question becomes what 'Try again' re-sends.
+  mutating func recordAccepted(_ plan: Plan) {
+    if plan.countsAsQuestion {
+      lastAskedQuestion = plan.question
+    }
+  }
+
+  /// `Try again` on a failed turn: the same logical question, so it keeps the
+  /// analytics event but never re-counts toward the rating prompt.
+  func planRetry() -> Plan? {
+    guard !lastAskedQuestion.isEmpty else { return nil }
+    return Plan(question: lastAskedQuestion, countsAsQuestion: false)
+  }
+}
+
 // MARK: - Where Home's controls send you
 
 /// **Every way out of Home, as a value.** Home shows rows it does not own: a conversation, a memory,

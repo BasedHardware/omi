@@ -30,7 +30,9 @@ from utils.llm.desktop_llm_stub import (
     stub_gemini_proxy_json,
     stub_gemini_proxy_stream_chunks,
 )
+from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
+from utils.observability.journeys import ClientJourneyAttempt
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import is_desktop_trial_paywalled
 
@@ -116,6 +118,9 @@ _TOTAL_TIMEOUT_SECONDS = 75.0
 _CREDENTIAL_TIMEOUT_SECONDS = 5.0
 _POOL_WAIT_SECONDS = 5.0
 _DISCONNECT_POLL_SECONDS = 0.1
+# Both desktop clients already back off on their own (macOS 1s/2s, Windows
+# 400/800ms, two retries each), so this only floors how soon a replay may start.
+_PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS = 1
 
 _REQUEST_ID_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:-]{7,63}$')
 _REVISION_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,126}$')
@@ -1009,6 +1014,20 @@ def _provider_error(response: httpx.Response, telemetry: ProxyTelemetry) -> Resp
             False,
             None,
         )
+    elif status in {502, 503}:
+        # An upstream availability fault is a capacity signal, not a verdict on
+        # the request: nothing was delivered, so re-issuing is safe. This proxy
+        # delegates the re-issue to the caller, and both desktop clients gate on
+        # what it reports here — macOS on `X-Omi-Retryable`, Windows on seeing
+        # 503 itself. Collapsing it into a non-retryable 502 revoked that
+        # authorization on both, so one provider blip failed the user's call.
+        code, proxy_status, message, retryable, retry_after = (
+            'provider_unavailable',
+            503,
+            'Gemini provider is temporarily unavailable',
+            True,
+            _PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS,
+        )
     elif status >= 500:
         code, proxy_status, message, retryable, retry_after = (
             'provider_unavailable',
@@ -1211,7 +1230,145 @@ async def _stream_provider(
             semaphore.release()
 
 
+class _DesktopProactivityStreamOutcome:
+    """Prove a Gemini SSE stream emitted content and a terminal candidate."""
+
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+        self.has_content = False
+        self.has_terminal = False
+        self.has_error = False
+
+    def observe(self, item: object) -> None:
+        if isinstance(item, str):
+            chunk = item.encode('utf-8')
+        elif isinstance(item, (bytes, bytearray, memoryview)):
+            chunk = bytes(item)
+        else:
+            return
+        self._buffer.extend(chunk)
+        normalized = bytes(self._buffer).replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+        self._buffer = bytearray(normalized)
+        while b'\n\n' in self._buffer:
+            frame, _, remainder = self._buffer.partition(b'\n\n')
+            self._buffer = bytearray(remainder)
+            data = b'\n'.join(line[5:].lstrip() for line in frame.splitlines() if line.startswith(b'data:'))
+            if not data:
+                continue
+            if data.strip() == b'[DONE]':
+                continue
+            try:
+                payload = json.loads(data)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(payload, Mapping):
+                continue
+            if payload.get('error'):
+                self.has_error = True
+            content, terminal = _gemini_payload_outcome(payload)
+            self.has_content = self.has_content or content
+            self.has_terminal = self.has_terminal or terminal
+
+    def failure_when(self, item: object) -> bool:
+        self.observe(item)
+        return self.has_error
+
+    def success_when(self, _item: object) -> bool:
+        return self.has_content and self.has_terminal
+
+
+def _gemini_payload_outcome(payload: Mapping[str, object]) -> tuple[bool, bool]:
+    has_content = False
+    has_terminal = False
+    candidates = payload.get('candidates')
+    if not isinstance(candidates, list):
+        return has_content, has_terminal
+    for candidate in candidates:
+        if not isinstance(candidate, Mapping):
+            continue
+        finish_reason = candidate.get('finishReason', candidate.get('finish_reason'))
+        has_terminal = has_terminal or isinstance(finish_reason, str) and bool(finish_reason.strip())
+        content = candidate.get('content')
+        parts = content.get('parts') if isinstance(content, Mapping) else None
+        if not isinstance(parts, list):
+            continue
+        for part in parts:
+            text = part.get('text') if isinstance(part, Mapping) else None
+            if isinstance(text, str) and text.strip():
+                has_content = True
+    return has_content, has_terminal
+
+
+def _proxy_client_kind(request: Request) -> ClientKind:
+    return resolve_client_kind_from_headers(request.headers)
+
+
+def _proxy_issue_class(status_code: int) -> str:
+    if status_code in {408, 504}:
+        return 'upstream_timeout'
+    if status_code == 503:
+        return 'dependency_unavailable'
+    if status_code >= 500:
+        return 'provider_error'
+    if status_code >= 400:
+        return 'upstream_rejected'
+    return 'invalid_response'
+
+
 async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Response:
+    try:
+        _, _, action = _path_parts(path)
+    except (HTTPException, ValueError):
+        return await _proxy_unobserved(request, path, streaming, uid)
+    if action not in {'generateContent', 'streamGenerateContent'}:
+        return await _proxy_unobserved(request, path, streaming, uid)
+
+    attempt = ClientJourneyAttempt('desktop_proactivity', _proxy_client_kind(request))
+    try:
+        response = await _proxy_unobserved(request, path, streaming, uid)
+    except asyncio.CancelledError:
+        attempt.cancel()
+        raise
+    except Exception as exc:
+        if isinstance(exc, HTTPException) and exc.status_code == 429:
+            attempt.degrade('quota_capped')
+        elif isinstance(exc, HTTPException):
+            attempt.fail(_proxy_issue_class(exc.status_code))
+        elif isinstance(exc, (httpx.TimeoutException, TimeoutError)):
+            attempt.fail('upstream_timeout')
+        else:
+            attempt.fail('provider_error')
+        raise
+
+    if isinstance(response, StreamingResponse):
+        outcome = _DesktopProactivityStreamOutcome()
+        response.body_iterator = attempt.observe_stream(
+            response.body_iterator,
+            success_when=outcome.success_when,
+            failure_when=outcome.failure_when,
+            failure_class='provider_error',
+            missing_success_class='empty_answer',
+        )
+        return response
+
+    if response.status_code >= 400:
+        attempt.fail(_proxy_issue_class(response.status_code))
+        return response
+    try:
+        payload = json.loads(bytes(response.body))
+    except (TypeError, ValueError):
+        attempt.fail('invalid_response')
+    else:
+        if isinstance(payload, Mapping) and payload.get('error'):
+            attempt.fail('provider_error')
+        elif isinstance(payload, Mapping) and _gemini_payload_outcome(payload)[0]:
+            attempt.succeed()
+        else:
+            attempt.fail('empty_answer')
+    return response
+
+
+async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: str) -> Response:
     telemetry = ProxyTelemetry(request, streaming=streaming)
     try:
         body = await _read_request_body(request)
@@ -1425,7 +1582,13 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
 
 
 async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
-    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, 'desktop'):
+    if await run_blocking(
+        db_executor,
+        is_desktop_trial_paywalled,
+        uid,
+        'desktop',
+        required_byok_provider='gemini',
+    ):
         raise HTTPException(status_code=402, detail='trial_expired')
     return uid
 

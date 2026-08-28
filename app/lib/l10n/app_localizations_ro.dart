@@ -2051,6 +2051,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get memoryDeleted => 'Amintire ștearsă.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Anulează';
 
   @override
@@ -9889,6 +9892,20 @@ class AppLocalizationsRo extends AppLocalizations {
   String get accountCutoverOpenStore => 'Deschide magazinul';
 
   @override
+  String get chatScopeToday => 'Astăzi';
+
+  @override
+  String get chatScopeThisWeek => 'Săptămâna aceasta';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Despre: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Întreabă despre asta';
+
+  @override
   String get sendRawAudioToOmi => 'Trimite sunetul brut către Omi';
 
   @override
@@ -9900,4 +9917,47 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get diagnosticsShareFailed => 'Diagnosticul nu a putut fi partajat. Încearcă din nou.';
+
+  @override
+  String get appDisabledTitle => 'Această aplicație este dezactivată și nu poate fi instalată.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Endpointul ei a eșuat 72 de ore la rând, așa că livrările au fost oprite.';
+
+  @override
+  String get appDisabledGeneric => 'A fost dezactivată de Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Repară mai întâi endpointul — reactivarea verifică din nou fiecare URL configurat.';
+
+  @override
+  String get appReEnable => 'Reactivează';
+
+  @override
+  String get appReEnableFailedTitle => 'Reactivarea a eșuat';
+
+  @override
+  String get appReEnableFailedBody => 'Această aplicație nu a putut fi reactivată. Încearcă din nou.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Dezactivată pe $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Ultima eroare: $error.';
+  }
+
+  @override
+  String get prerecordedTranscript => 'Preînregistrat';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant încă înregistrează, așa că sunetul stocat nu poate fi transferat. Apasă butonul Pendant pentru a opri înregistrarea, apoi sincronizează din nou.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Spațiul de stocare al Pendantului este plin și acesta este încă în modul de înregistrare, așa că audio-ul stocat nu poate fi transferat. Apăsați butonul Pendantului pentru a opri înregistrarea, apoi sincronizați din nou.';
 }

@@ -4,6 +4,24 @@ import XCTest
 @testable import Omi_Computer
 
 final class ScreenActivityLosslessSyncTests: XCTestCase {
+  func testFrameRequestPayloadCarriesLocalExclusionAttestationAndBoundedRetention() throws {
+    let payload = ScreenActivitySyncService.frameRequestSyncPayload(
+      rows: [["id": 42]], accountGeneration: 7, retentionDays: 1)
+    XCTAssertEqual(payload["deviceRetentionSeconds"] as? Int, 86_400)
+    let rows = try XCTUnwrap(payload["rows"] as? [[String: Any]])
+    XCTAssertEqual(rows.first?["captureEligible"] as? Bool, true)
+    XCTAssertEqual(ScreenActivitySyncService.boundedDeviceRetentionSeconds(retentionDays: 30), 518_400)
+    XCTAssertNil(ScreenActivitySyncService.boundedDeviceRetentionSeconds(retentionDays: 0))
+  }
+
+  func testFrameRequestRecoveryRetriesClaimedUploadsButNotUploadedPixels() {
+    XCTAssertTrue(ScreenActivitySyncService.shouldClaimFrameRequest(state: "requested"))
+    XCTAssertFalse(ScreenActivitySyncService.shouldClaimFrameRequest(state: "claimed"))
+    XCTAssertTrue(ScreenActivitySyncService.shouldUploadFrameRequest(state: "requested"))
+    XCTAssertTrue(ScreenActivitySyncService.shouldUploadFrameRequest(state: "claimed"))
+    XCTAssertFalse(ScreenActivitySyncService.shouldUploadFrameRequest(state: "uploaded"))
+  }
+
   func testMigrationPreservesPopulatedLegacyRowsAndStartsThemPending() throws {
     let queue = try makeLegacyQueue()
     try queue.write { db in

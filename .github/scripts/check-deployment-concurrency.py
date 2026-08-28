@@ -64,6 +64,9 @@ LOCK_CONTRACTS = {
         "firestore-schema-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}"
     ),
     "gcp_backend_auto_dev.yml": LockContract("deploy-backend-stack-development"),
+    "gcp_cloud_run_metrics_egress.yml": LockContract(
+        "deploy-cloud-run-metrics-egress-${{ github.event.inputs.environment || 'development' }}"
+    ),
     "gcp_backend_listen_helm.yml": LockContract(
         "deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}"
     ),
@@ -75,11 +78,20 @@ LOCK_CONTRACTS = {
     "gcp_frontend.yml": LockContract(
         "deploy-cloud-run-frontend-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
+    "gcp_frame_request_retention_job.yml": LockContract(
+        "deploy-frame-request-retention-${{ github.event.inputs.environment }}"
+    ),
     "gcp_llm_gateway.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
     "gcp_memory_maintenance_job.yml": LockContract(
         "deploy-cloud-run-memory-maintenance-job-${{ github.event.inputs.environment }}"
     ),
     "gcp_memory_maintenance_job_auto_dev.yml": LockContract("deploy-cloud-run-memory-maintenance-job-development"),
+    "gcp_daily_memory_sweep_job.yml": LockContract(
+        "deploy-cloud-run-daily-memory-sweep-job-${{ github.event.inputs.environment }}"
+    ),
+    "gcp_daily_memory_sweep_job_auto_dev.yml": LockContract(
+        "deploy-cloud-run-daily-memory-sweep-job-development"
+    ),
     "gcp_models.yml": LockContract("deploy-gke-vad-${{ github.event.inputs.environment }}"),
     "gcp_nllb_translation.yml": LockContract("deploy-gke-nllb-translation-${{ github.event.inputs.environment }}"),
     "gcp_notifications_job.yml": LockContract(
@@ -664,6 +676,7 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         ("gcp_backend_listen_helm.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_memory_maintenance_job.yml", "gcp_memory_maintenance_job_auto_dev.yml"),
+        ("gcp_daily_memory_sweep_job.yml", "gcp_daily_memory_sweep_job_auto_dev.yml"),
         ("gcp_backend_pusher.yml", "gcp_backend_pusher_auto_deploy.yml"),
     )
     for manual, automatic in family_pairs:
@@ -678,8 +691,10 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         "gcp_firestore_indexes.yml",
         "gcp_backend_listen_helm.yml",
         "gcp_diarizer.yml",
+        "gcp_frame_request_retention_job.yml",
         "gcp_llm_gateway.yml",
         "gcp_memory_maintenance_job.yml",
+        "gcp_daily_memory_sweep_job.yml",
         "gcp_models.yml",
         "gcp_nllb_translation.yml",
         "gcp_notifications_job.yml",

@@ -22,15 +22,17 @@ extension SettingsContentView {
     VStack(spacing: OmiSpacing.xxl) {
       advancedCategoryHeader(title: "AI Setup", icon: "cpu")
       aiSetupSubsection
-      // The three assistants that read your screen, and the throttle they share. Each card carries
-      // the switch that stops its assistant — which, until this pane rendered them, no surface in the
-      // app did. `advanced.taskassistant` is also where the Tasks page's gear button deep-links.
-      advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
-      taskAssistantSubsection
-      advancedCategoryHeader(title: "Insight Assistant", icon: ProactiveNotificationBadge.insightSystemImage)
-      insightAssistantSubsection
-      advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
-      memoryAssistantSubsection
+      // HIDDEN DELIBERATELY (Nik, 2026-08-25): the Task/Insight/Memory Assistant panes are
+      // intentionally not rendered. This is product direction, not dead code — do NOT re-wire
+      // them the way 73c7f85fbc ("give the three proactive assistants a pane you can reach")
+      // did after the last hide. The assistants themselves keep running with their stored
+      // settings; only the settings UI is hidden.
+      // advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
+      // taskAssistantSubsection
+      // advancedCategoryHeader(title: "Insight Assistant", icon: ProactiveNotificationBadge.insightSystemImage)
+      // insightAssistantSubsection
+      // advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
+      // memoryAssistantSubsection
       advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
       analysisThrottleSubsection
       advancedCategoryHeader(title: "Profile & Stats", icon: "brain")

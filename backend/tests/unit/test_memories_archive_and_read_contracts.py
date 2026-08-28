@@ -21,6 +21,7 @@ os.environ.setdefault(
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import (
+    MAX_MEMORY_ARGUMENTS_JSON_BYTES,
     MemoryItem,
     MemoryItemStatus,
     MemoryLayer,
@@ -191,6 +192,26 @@ def test_read_canonical_memories_excludes_archive_unless_explicit(monkeypatch):
     assert with_archive[1].memory_tier == MemoryLayer.archive
 
 
+def test_memory_item_projection_preserves_canonical_arguments():
+    now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
+    item = _item("mem-arguments", tier=MemoryLayer.long_term, content="Lives in Austin", updated_at=now)
+    item = item.model_copy(
+        update={
+            "ledger_schema_version": "knowledge_ledger.v1",
+            "arguments": {"location": "Austin", "aliases": ["ATX"]},
+        }
+    )
+
+    projected = memory_item_to_memorydb(item)
+
+    assert projected.arguments == {"location": "Austin", "aliases": ["ATX"]}
+    projected.arguments["aliases"].append("Austin")
+    assert item.arguments == {"location": "Austin", "aliases": ["ATX"]}
+
+    oversized = item.model_copy(update={"arguments": {"detail": "x" * MAX_MEMORY_ARGUMENTS_JSON_BYTES}})
+    assert memory_item_to_memorydb(oversized).arguments == {}
+
+
 def test_include_archive_pagination_and_locked_privacy(monkeypatch):
     now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
     locked_archive = _item(
@@ -231,7 +252,7 @@ def test_include_archive_pagination_and_locked_privacy(monkeypatch):
 def test_get_memories_forwards_include_archive():
     mem_mod = _load_memories_router()
     service = MagicMock()
-    service.read_page.return_value = types.SimpleNamespace(memories=[], next_cursor=None)
+    service.read_page.return_value = types.SimpleNamespace(memories=[], next_cursor=None, truncated=False)
     scope_request = types.SimpleNamespace(device_scope="all", client_device_id=None)
     with (
         patch.object(mem_mod, "MemoryService", return_value=service),
@@ -250,6 +271,43 @@ def test_get_memories_forwards_include_archive():
             x_device_id_hash=None,
         )
     assert service.read_page.call_args.kwargs["include_archive"] is True
+
+
+def test_ledger_history_route_is_explicit_owner_scoped_and_bounded():
+    mem_mod = _load_memories_router()
+    service = MagicMock()
+    service.read_ledger_history_page.return_value = types.SimpleNamespace(
+        memories=(), truncated=True, scanned_count=501
+    )
+    budget = MagicMock(truncated=False)
+    response_headers = {}
+
+    def capture_response(values, _exposure, headers=None):
+        response_headers.update(headers or {})
+        return values
+
+    with (
+        patch.object(mem_mod, "MemoryService", return_value=service),
+        patch.object(mem_mod, "list_read_budget_for_request", return_value=budget),
+        patch.object(mem_mod, "memory_list_response", side_effect=capture_response),
+    ):
+        result = mem_mod.get_ledger_history(
+            response=MagicMock(),
+            request=None,
+            limit=50,
+            offset=2,
+            uid="uid-1",
+        )
+
+    assert result == ()
+    service.read_ledger_history_page.assert_called_once_with(
+        "uid-1",
+        limit=50,
+        offset=2,
+        budget=budget,
+    )
+    budget.observe.assert_called_once_with("truncated")
+    assert response_headers[mem_mod.OMI_LIST_TRUNCATED_HEADER] == mem_mod.OMI_LIST_TRUNCATED_VALUE
 
 
 def test_update_memory_read_status_persists_through_service():
@@ -302,3 +360,46 @@ def test_memory_item_to_memorydb_round_trips_read_dismiss_state():
     assert memory.is_read is True
     assert memory.is_dismissed is True
     assert truncate_locked_memory_preview(memory).content == "tip"
+
+
+def test_memory_item_to_memorydb_preserves_canonical_alias_for_portability():
+    now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
+    item = _item(
+        "alias-row",
+        tier=MemoryLayer.long_term,
+        content="legacy alias",
+        updated_at=now,
+    ).model_copy(update={"canonical_memory_id": "canonical-row"})
+
+    projected = memory_item_to_memorydb(item)
+
+    assert projected.canonical_memory_id == "canonical-row"
+    assert projected.model_dump(mode="json")["canonical_memory_id"] == "canonical-row"
+
+
+def test_ledger_history_route_answers_empty_without_scan_outside_rollout():
+    """Fleet-cost guard: the memories tab calls this on every load for every
+    user; outside the JIT rollout (including unknown/error states) the route
+    must answer empty without paying the bounded provider scan."""
+
+    mem_mod = _load_memories_router()
+    service = MagicMock()
+    with (
+        patch.object(mem_mod, "MemoryService", return_value=service),
+        patch.object(
+            mem_mod,
+            "resolve_jit_rollout_sync",
+            return_value=types.SimpleNamespace(permits_work=False),
+        ),
+        patch.object(mem_mod, "memory_list_response", side_effect=lambda values, _exposure, headers=None: values),
+    ):
+        result = mem_mod.get_ledger_history(
+            response=MagicMock(),
+            request=None,
+            limit=50,
+            offset=0,
+            uid="uid-1",
+        )
+
+    assert result == []
+    service.read_ledger_history_page.assert_not_called()

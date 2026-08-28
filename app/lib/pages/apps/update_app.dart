@@ -8,7 +8,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/apps/widgets/api_keys_widget.dart';
-import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'widgets/app_metadata_widget.dart';
@@ -200,8 +200,17 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                                 Navigator.push(
                                                   context,
                                                   MaterialPageRoute(
-                                                    builder: (context) =>
-                                                        FullScreenImageViewer(imageUrl: provider.thumbnailUrls[index]),
+                                                    builder: (context) => MediaViewerPage(
+                                                      items: provider.thumbnailUrls
+                                                          .map((url) => MediaViewerItem(
+                                                                imageUrl: url,
+                                                              ))
+                                                          .toList(),
+                                                      initialIndex: index,
+                                                      maxScaleMultiplier: 2,
+                                                      showCloseButton: true,
+                                                      wrapBodyInSafeArea: false,
+                                                    ),
                                                   ),
                                                 );
                                               },

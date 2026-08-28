@@ -2,6 +2,61 @@ import XCTest
 
 @testable import Omi_Computer
 
+private final class CloudOAuthDisconnectURLProtocol: URLProtocol, @unchecked Sendable {
+  private static let lock = NSLock()
+  private nonisolated(unsafe) static var requests: [(method: String, path: String)] = []
+
+  static func reset() {
+    lock.lock()
+    requests.removeAll()
+    lock.unlock()
+  }
+
+  static var capturedRequests: [(method: String, path: String)] {
+    lock.lock()
+    defer { lock.unlock() }
+    return requests
+  }
+
+  override class func canInit(with request: URLRequest) -> Bool { true }
+
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+  override func startLoading() {
+    let method = request.httpMethod ?? "GET"
+    let path = request.url?.path ?? ""
+    Self.lock.lock()
+    Self.requests.append((method: method, path: path))
+    Self.lock.unlock()
+
+    let body =
+      method == "GET"
+      ? Data("{\"grants\":[{\"id\":\"grant-123\",\"client_id\":\"omi-chatgpt-prod\",\"status\":\"active\"}]}".utf8)
+      : Data()
+    let statusCode = method == "DELETE" ? 204 : 200
+    guard let requestURL = request.url,
+      let response = HTTPURLResponse(
+        url: requestURL, statusCode: statusCode, httpVersion: nil, headerFields: nil)
+    else {
+      client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+      return
+    }
+    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    if !body.isEmpty {
+      client?.urlProtocol(self, didLoad: body)
+    }
+    client?.urlProtocolDidFinishLoading(self)
+  }
+
+  override func stopLoading() {}
+}
+
+extension APIClient {
+  fileprivate func setTestAuthHeaderForMemoryExportTests(_ value: String) {
+    testAuthHeader = value
+  }
+}
+
 final class MemoryExportStatusTests: XCTestCase {
   private var tempHome: URL!
 
@@ -87,6 +142,33 @@ final class MemoryExportStatusTests: XCTestCase {
     XCTAssertFalse(status.isConfigured)
     XCTAssertFalse(status.hasConnection)
     XCTAssertEqual(presentation.primaryActionTitle, "Add Omi to ChatGPT")
+  }
+
+  func testDisconnectCloudAuthorizationRevokesGrantAndClearsProjection() async throws {
+    CloudOAuthDisconnectURLProtocol.reset()
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [CloudOAuthDisconnectURLProtocol.self]
+    let apiClient = APIClient(session: URLSession(configuration: configuration))
+    await apiClient.setTestAuthHeaderForMemoryExportTests("Bearer test-token")
+    let service = MemoryExportService(apiClient: apiClient)
+    let connectedAtKey = memoryExportDefaultsKey("memoryExportConnectedAt", destination: .chatgpt)
+    let detailKey = memoryExportDefaultsKey("memoryExportDetail", destination: .chatgpt)
+
+    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: connectedAtKey)
+    UserDefaults.standard.set("Authorized through ChatGPT (cloud)", forKey: detailKey)
+
+    let status = try await service.disconnectCloudOAuthConnection(for: .chatgpt)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.isConfigured)
+    XCTAssertNil(UserDefaults.standard.object(forKey: connectedAtKey))
+    XCTAssertNil(UserDefaults.standard.object(forKey: detailKey))
+    let requests = CloudOAuthDisconnectURLProtocol.capturedRequests
+    XCTAssertEqual(requests.count, 2)
+    XCTAssertEqual(requests[0].method, "GET")
+    XCTAssertEqual(requests[0].path, "/v1/mcp/oauth/grants")
+    XCTAssertEqual(requests[1].method, "DELETE")
+    XCTAssertEqual(requests[1].path, "/v1/mcp/oauth/grants/grant-123")
   }
 
   func testCachedCloudGrantStatusReadSignalsInferredConnectorAuthority() async {
@@ -380,13 +462,15 @@ final class MemoryExportStatusTests: XCTestCase {
         nextCursor: "cursor-a",
         canonicalLifecycleExposed: true,
         deviceScopeSupported: true,
-        defaultMemoryDeleteSupported: true),
+        defaultMemoryDeleteSupported: true,
+        truncated: false),
       APIClient.MemoryListPage(
         memories: [Self.sampleMemory(id: "m3")],
         nextCursor: nil,
         canonicalLifecycleExposed: true,
         deviceScopeSupported: true,
-        defaultMemoryDeleteSupported: true),
+        defaultMemoryDeleteSupported: true,
+        truncated: false),
     ]
     var pageIndex = 0
     let values = try await MemoryExportService.fetchAllCursorPages(pageSize: 2) { _, cursor in
@@ -405,7 +489,8 @@ final class MemoryExportStatusTests: XCTestCase {
       nextCursor: "cursor-a",
       canonicalLifecycleExposed: true,
       deviceScopeSupported: true,
-      defaultMemoryDeleteSupported: true)
+      defaultMemoryDeleteSupported: true,
+      truncated: false)
 
     do {
       _ = try await MemoryExportService.fetchAllCursorPages(pageSize: 2) { _, _ in page }
@@ -415,6 +500,26 @@ final class MemoryExportStatusTests: XCTestCase {
         return XCTFail("Unexpected export error: \(error)")
       }
       XCTAssertTrue(message.contains("repeated a continuation token"))
+    }
+  }
+
+  func testExportCursorPaginationRejectsTruncatedPage() async throws {
+    let page = APIClient.MemoryListPage(
+      memories: [Self.sampleMemory(id: "m1")],
+      nextCursor: nil,
+      canonicalLifecycleExposed: true,
+      deviceScopeSupported: true,
+      defaultMemoryDeleteSupported: true,
+      truncated: true)
+
+    do {
+      _ = try await MemoryExportService.fetchAllCursorPages(pageSize: 2) { _, _ in page }
+      XCTFail("A truncated page must not produce a successful complete export")
+    } catch let error as MemoryExportError {
+      guard case .requestFailed(let message) = error else {
+        return XCTFail("Unexpected export error: \(error)")
+      }
+      XCTAssertTrue(message.contains("truncated"))
     }
   }
 
@@ -464,6 +569,10 @@ final class MemoryExportStatusTests: XCTestCase {
       defaults.removeObject(forKey: "memoryExportLastExportPath.\(destination.rawValue)")
       defaults.removeObject(forKey: "memoryExportConnectedAt.\(destination.rawValue)")
     }
+  }
+
+  private func memoryExportDefaultsKey(_ prefix: String, destination: MemoryExportDestination) -> String {
+    "\(prefix).\(destination.rawValue)"
   }
 
   private func storeOwnedMCPKey(userId: String = "test-user", key: String = "test-key") {

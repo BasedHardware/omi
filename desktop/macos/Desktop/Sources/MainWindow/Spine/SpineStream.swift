@@ -92,8 +92,12 @@ struct SpineStream: View {
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject var tasksStore: TasksStore
 
-  /// Hands a conversation to the page that owns conversations.
-  let onOpenConversation: (String) -> Void
+  /// Hands a conversation to the page that owns conversations. The whole record, not its id: the
+  /// row already holds it, and handing over an id forced the receiver to look it back up against a
+  /// list that may not have loaded yet.
+  let onOpenConversation: (ServerConversation) -> Void
+  /// Hands a memory to the page that owns memories.
+  let onOpenMemory: (SpineMemory) -> Void
   /// Hands the day's memories to the surface that owns the graph.
   let onOpenBrainMap: () -> Void
   /// Hands a frame to Rewind.
@@ -194,10 +198,20 @@ struct SpineStream: View {
                 SpineRowView(
                   row: row,
                   showsIndent: store.kind == .everything,
-                  onOpenConversation: { onOpenConversation($0.id) },
+                  onOpenConversation: onOpenConversation,
+                  onOpenMemory: onOpenMemory,
                   onToggleTask: { task in Task { await tasksStore.toggleTask(task) } },
                   onToggleStar: toggleStar,
-                  onOpenMoment: { _ in onOpenRewind() },
+                  // Clicking a moment used to discard the moment and navigate to the Rewind
+                  // page — the one thing the user did not ask for, since what they clicked was a
+                  // specific frame they wanted to read. Quick Look shows that frame at full
+                  // resolution, in place, and arrows along the rest of the strip.
+                  onOpenMoment: { moment, strip in
+                    ScreenFrameQuickLook.shared.present(
+                      strip.map { QuickLookFrame(screenshot: $0.screenshot) },
+                      startingAt: String(moment.id))
+                  },
+                  onShowAllMoments: onOpenRewind,
                   onOpenBrainMap: onOpenBrainMap
                 )
                 .background(anchor(for: row, in: day))

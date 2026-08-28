@@ -1,0 +1,23 @@
+apiVersion: monitoring.googleapis.com/v1beta
+kind: RunMonitoring
+metadata:
+  name: omi-cloud-run-application-metrics
+spec:
+  endpoints:
+    - port: 9090
+      path: /metrics
+      interval: 30s
+      timeout: 10s
+      metricRelabeling:
+        - action: keep
+          sourceLabels:
+            - __name__
+          regex: omi_.*
+  targetLabels:
+    metadata:
+      - service
+  limits:
+    samples: 10000
+    labels: 30
+    labelNameLength: 100
+    labelValueLength: 256

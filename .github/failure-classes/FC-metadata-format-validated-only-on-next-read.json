@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-metadata-format-validated-only-on-next-read",
+  "violated_contract": "A value written into shared platform metadata must satisfy the parser of every tool that later reads that metadata, not merely the API that accepts the write. When the writing API is permissive and a different consumer is strict, the write succeeds and the failure surfaces on the next unrelated operation against the same resource, pointing away from the change that caused it.",
+  "canonical_prevention": "Write the strictest form every known consumer accepts, and assert that form in the writer's own test against the consumer's actual validation rule rather than a hand-copied expectation. Where the consumer is a vendored tool, copy its rule verbatim into the test so a vendor upgrade that tightens it fails locally instead of on the next deploy.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/attach_cloud_run_gmp_sidecar.py",
+    "backend/tests/unit/test_attach_cloud_run_gmp_sidecar.py"
+  ],
+  "evidence_prs": [11998],
+  "scope_hints": [
+    "backend/scripts/attach_cloud_run_gmp_sidecar.py",
+    "backend/deploy/cloud_run_gmp_sidecar.yaml",
+    ".github/actions/deploy-backend-stack/action.yml"
+  ],
+  "status": "open"
+}

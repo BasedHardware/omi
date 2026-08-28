@@ -27,12 +27,17 @@ tests/unit/test_memory_visibility_export_fixes.py::test_developer_list_requests_
 # Exhaustive compatibility and deployment regressions intentionally traverse large synthetic
 # Firestore datasets or repository manifests while remaining hermetic unit tests.
 tests/services/users/test_data_export.py::test_iter_user_data_export_paginates_complete_collections
+# Exercises the complete FastAPI export route so memory preflight failure is proven to occur
+# before streaming response headers; the full TestClient boundary costs ~0.17s CPU in isolation.
+tests/routers/test_users.py::test_export_all_user_data_returns_500_before_streaming_headers_when_memory_preflight_fails
 tests/unit/test_bounded_firestore_list_reads.py::test_knowledge_graph_route_exposes_truncation
 tests/unit/test_memory_replace_policy.py::test_universal_reextract_failure_preserves_existing_memories
 tests/unit/test_backend_runtime_env_validator.py::test_runtime_manifest_rejects_retired_per_user_memory_inventory
 tests/unit/test_backend_runtime_env_validator.py::test_repo_parakeet_admission_deploy_contract_is_explicit
 # Repository-manifest render/validation paths parse the full checked-in runtime contract while
 # remaining hermetic; their CPU cost fluctuates narrowly around the unit guard threshold.
+tests/unit/test_backend_runtime_env_validator.py::test_repo_rendered_cloud_run_artifact_matches_manifest
+tests/unit/test_backend_runtime_env_validator.py::test_parakeet_selected_without_endpoint_is_rejected_for_rendered_cloud_run_state
 tests/unit/test_backend_runtime_env_validator.py::test_repo_ilb_endpoints_use_http_scheme[prod]
 tests/unit/test_backend_runtime_env_validator.py::test_parakeet_admission_deploy_contract_rejects_missing_or_invalid_values[PARAKEET_STREAM_CAPACITY-0-PARAKEET_STREAM_CAPACITY must be an integer >= 1]
 # Same group: each renders the desktop-backend compose contract end to end. Measured 0.10-0.13s
@@ -90,6 +95,10 @@ tests/unit/test_backend_runtime_env_validator.py::test_cloud_run_state_rejects_o
 tests/unit/test_backend_runtime_env_validator.py::test_cloud_run_state_reports_missing_gateway_url
 tests/unit/test_backend_runtime_env_validator.py::test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outputs
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_passes_for_repo_manifest
+# Each parameter renders and validates the complete runtime manifest after injecting the three
+# forbidden daily-sweep bindings; this is the same hermetic manifest path as the entries above.
+tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_and_posthog_bindings[dev]
+tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_and_posthog_bindings[prod]
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_empty_surface_allowlist
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_mismatched_surface_allowlist
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_missing_job
@@ -285,3 +294,14 @@ tests/unit/test_merge_audio_chunk_copy_failure.py::test_merge_propagates_custom_
 tests/unit/test_agent_proxy_async_boundaries.py::test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expires
 # First test amortizes the file-isolated utils.llm.clients import into its call phase.
 tests/unit/test_prompt_cache_wire_payload.py::test_get_llm_forwards_explicit_cache_options_and_production_cache_key
+# Suppressed-prefix expansion round walks 500 historical stubs with status batches;
+# ~0.5s CPU before and after the list-read budget threading (structural, unchanged test).
+tests/unit/test_memory_offset_read_cost.py::test_status_lookups_are_not_repeated_across_expansion_rounds
+# 20k-row large-offset fixture intentionally crosses the legacy 10k boundary to charge
+# server-side offset() work; the in-memory doc list construction is hermetic but structural.
+tests/unit/test_list_read_budget_contract.py::test_conversations_large_offsets_are_served_and_charged[20000-19000-1000]
+# First test in the file-isolated memories router suite amortizes the module import.
+tests/unit/test_memories_archive_and_read_contracts.py::test_get_memories_forwards_include_archive
+# Full listen-runtime bootstrap (STT selection, fair-use, onboarding admission)
+# sits exactly at the 0.30s CPU budget under a saturated pre-push fanout.
+tests/unit/test_listen_runtime_regressions.py::test_bootstrap_forces_single_language_before_selecting_stt_for_onboarding

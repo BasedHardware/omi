@@ -207,6 +207,11 @@ class PostHogManager {
     return PostHogSDK.shared.getFeatureFlag(flag)
   }
 
+  /// The SDK's own flag-delivery signal (posted on the main queue after the
+  /// initial preload and after every reload) — re-exported so observers get a
+  /// compile-checked symbol instead of a raw notification-name string.
+  static var featureFlagsDidLoad: Notification.Name { PostHogSDK.didReceiveFeatureFlags }
+
   /// Reload feature flags
   func reloadFeatureFlags() {
     guard isInitialized else { return }
@@ -501,14 +506,21 @@ extension PostHogManager {
   // but it actually tracks when a conversation/recording is created, not a "memory".
   // This matches Flutter's naming for analytics consistency.
 
-  func conversationCreated(conversationId _: String, source: String, durationSeconds: Int? = nil) {
+  static func conversationCreatedProperties(source: String, durationSeconds: Int?) -> [String: Any] {
     var properties: [String: Any] = [
-      "source": source
+      "conversation_source": source
     ]
     if let duration = durationSeconds {
       properties["duration_seconds"] = duration
     }
-    track("Memory Created", properties: properties)
+    return properties
+  }
+
+  func conversationCreated(conversationId _: String, source: String, durationSeconds: Int? = nil) {
+    track(
+      "Memory Created",
+      properties: Self.conversationCreatedProperties(source: source, durationSeconds: durationSeconds)
+    )
   }
 
   func memoryDeleted(conversationId: String) {
@@ -675,6 +687,15 @@ extension PostHogManager {
       "Feedback Submitted",
       properties: [
         "feedback_length": feedbackLength
+      ])
+  }
+
+  func desktopRatingSubmitted(rating: Int) {
+    track(
+      "Desktop Rating Submitted",
+      properties: [
+        "rating": rating,
+        "trigger": "third_question",
       ])
   }
 

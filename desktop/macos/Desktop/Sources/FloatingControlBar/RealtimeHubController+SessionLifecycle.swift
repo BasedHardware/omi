@@ -60,7 +60,7 @@ extension RealtimeHubController {
       return
     }
 
-    if let key = APIKeyService.byokKey(provider.byokProvider) {
+    if let key = APIKeyService.selectedRealtimeBYOKKey(for: provider.byokProvider) {
       let fingerprint = APIKeyService.byokFingerprint(key)
       guard
         CredentialHealthManager.shared.canUseBYOK(

@@ -83,6 +83,25 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
   return spans;
 }
 
+/// Renders the structured summary's sections as headed markdown blocks so they go
+/// through the same markdown renderer (and styling) as the overview above them.
+String sectionsToMarkdown(List<Section> sections) {
+  final blocks = <String>[];
+  for (final section in sections) {
+    final heading = section.heading.trim();
+    final body = section.bodyMarkdown.trim();
+    if (heading.isEmpty && body.isEmpty) continue;
+    if (heading.isEmpty) {
+      blocks.add(body);
+    } else if (body.isEmpty) {
+      blocks.add('## $heading');
+    } else {
+      blocks.add('## $heading\n\n$body');
+    }
+  }
+  return blocks.join('\n\n');
+}
+
 class GetSummaryWidgets extends StatelessWidget {
   final String searchQuery;
   const GetSummaryWidgets({super.key, this.searchQuery = ''});
@@ -855,12 +874,24 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
     _exitEditing();
   }
 
+  /// Attribution label for the summary source. A first-party summary (notes v2
+  /// structured overview, `appId == null`) is Omi's own "Summary" — the same name
+  /// the bottom pill and desktop use; "Unknown App" is reserved for an app result
+  /// whose catalog lookup failed (SCA-359).
+  String _summarySourceLabel(BuildContext context) {
+    if (widget.app != null) return widget.app!.name.decodeString;
+    return widget.appResponse.appId == null ? context.l10n.summary : context.l10n.unknownApp;
+  }
+
   @override
   Widget build(BuildContext context) {
     final String content = widget.appResponse.content.trim().decodeString;
+    // Sections belong to Omi's own structured summary; an app summary replaces them.
+    final String sectionsContent =
+        widget.appResponse.appId == null ? sectionsToMarkdown(widget.conversation.structured.sections) : '';
 
     if (widget.asSliver) {
-      return _buildSliver(context, content);
+      return _buildSliver(context, content, sectionsContent);
     }
 
     return Container(
@@ -871,7 +902,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: content.isEmpty
+            child: content.isEmpty && sectionsContent.isEmpty
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -907,8 +938,10 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                       ),
           ),
 
+          if (sectionsContent.isNotEmpty && !_isEditing) ConversationMarkdownWidget(content: sectionsContent),
+
           // App info in a more subtle format below the content - only show if content is not empty
-          if (content.isNotEmpty && !_isEditing)
+          if ((content.isNotEmpty || sectionsContent.isNotEmpty) && !_isEditing)
             GestureDetector(
               onTap: () async {
                 if (widget.app != null) {
@@ -975,7 +1008,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  widget.app != null ? widget.app!.name.decodeString : context.l10n.unknownApp,
+                                  _summarySourceLabel(context),
                                   maxLines: 1,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w500,
@@ -1286,8 +1319,8 @@ class GetGeolocationWidgets extends StatelessWidget {
 }
 
 extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
-  Widget _buildSliver(BuildContext context, String content) {
-    if (content.isEmpty || _isEditing) {
+  Widget _buildSliver(BuildContext context, String content, String sectionsContent) {
+    if ((content.isEmpty && sectionsContent.isEmpty) || _isEditing) {
       return SliverMainAxisGroup(
         slivers: [
           SliverToBoxAdapter(
@@ -1327,15 +1360,21 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
 
     return SliverMainAxisGroup(
       slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.only(bottom: 20),
-          sliver: ConversationMarkdownSliver(
-            content: content,
-            searchQuery: widget.searchQuery,
-            currentResultIndex: widget.currentResultIndex,
-            onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+        if (content.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.only(bottom: 20),
+            sliver: ConversationMarkdownSliver(
+              content: content,
+              searchQuery: widget.searchQuery,
+              currentResultIndex: widget.currentResultIndex,
+              onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+            ),
           ),
-        ),
+        if (sectionsContent.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.only(bottom: 20),
+            sliver: ConversationMarkdownSliver(content: sectionsContent),
+          ),
         SliverToBoxAdapter(child: _buildAppAttribution(context)),
       ],
     );
@@ -1397,7 +1436,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.app != null ? widget.app!.name.decodeString : context.l10n.unknownApp,
+                          _summarySourceLabel(context),
                           maxLines: 1,
                           style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 14),
                         ),

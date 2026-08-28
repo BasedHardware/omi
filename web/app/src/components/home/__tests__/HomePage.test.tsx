@@ -118,6 +118,8 @@ vi.mock('@/components/chat/RecordingStage', () => ({ RecordingStage: () => null 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  loadHistory.mockReset();
+  loadHistory.mockResolvedValue(undefined);
   Element.prototype.scrollIntoView = vi.fn();
   window.requestAnimationFrame = (callback) => {
     callback(0);
@@ -159,5 +161,33 @@ describe('Home Currents ordering', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start live test' }));
 
     expect(startLive).toHaveBeenCalledTimes(1);
+  });
+
+  it('places Currents in view after history loads', async () => {
+    render(<HomePage />);
+
+    await waitFor(() => expect(loadHistory).toHaveBeenCalledTimes(1));
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  });
+
+  it('does not snap Currents back into view after the reader scrolls history', async () => {
+    let resolveHistory!: (value: undefined) => void;
+    loadHistory.mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolveHistory = resolve;
+        }),
+    );
+
+    render(<HomePage />);
+    const history = await screen.findByRole('region', { name: 'Chat history' });
+    fireEvent.wheel(history);
+
+    const scrollIntoView = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
+    scrollIntoView.mockClear();
+    resolveHistory(undefined);
+
+    await waitFor(() => expect(loadHistory).toHaveBeenCalledTimes(1));
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 });
