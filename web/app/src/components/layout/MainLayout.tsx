@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname, useSearchParams } from '@tschk/moonshine-next/navigation';
-import { motion } from 'framer-motion';
 import dynamic from '@tschk/moonshine-next/dynamic';
-import { Sidebar, MobileMenuButton } from './Sidebar';
+import Image from '@tschk/moonshine-next/image';
+import { Sidebar } from './Sidebar';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
 import { BottomNavigation } from './BottomNavigation';
 import {
@@ -100,46 +100,50 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
         <ChatAppRouter />
         {/* Prefetch memories in background for instant page load */}
         <MemoriesPrefetcher />
-        <div className="h-screen w-screen bg-bg-primary flex overflow-hidden">
+        <div className="flex h-screen w-screen overflow-hidden bg-bg-primary">
           {/* Sidebar */}
           <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
           {/* Main content area - flex row to support push/slide panels */}
-          <div className="flex-1 flex min-w-0 h-full overflow-hidden">
+          <div className="flex h-full min-w-0 flex-1 overflow-hidden">
             {/* Main content */}
-            <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden pb-16 lg:pb-0">
+            <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden pb-[76px] lg:pb-0">
               {/* Header - conditionally shown */}
               {!hideHeader && (
                 <header
                   className={cn(
                     'flex-shrink-0',
-                    'flex items-center gap-4 px-4 py-4 lg:px-8',
+                    'flex items-center gap-3 px-4 py-3.5 lg:gap-4 lg:px-8 lg:py-4',
                     'bg-bg-primary/80 backdrop-blur-md',
                     'border-b border-bg-tertiary',
                   )}
                 >
-                  <MobileMenuButton onClick={() => setSidebarOpen(true)} />
+                  {/* No burger here on purpose: on mobile the bottom bar's
+                      Profile button is the single entry point to the sidebar,
+                      so navigation has one source of truth per surface. */}
+
+                  {/* Logo on mobile */}
+                  <Image
+                    src="/omi-white.webp"
+                    alt="Omi"
+                    width={48}
+                    height={19}
+                    className="object-contain lg:hidden"
+                  />
 
                   {title && (
-                    <h1 className="text-xl font-display font-semibold text-text-primary">
+                    <h1 className="truncate font-display text-xl font-semibold text-text-primary">
                       {title}
                     </h1>
                   )}
                 </header>
               )}
 
-              {/* Mobile menu button when header is hidden */}
-              {hideHeader && (
-                <div className="lg:hidden absolute top-4 left-4 z-30">
-                  <MobileMenuButton onClick={() => setSidebarOpen(true)} />
-                </div>
-              )}
-
               {/* Content pane. Desktop insets the pane from the window edge by
                   OmiSpacing.md (12) and rounds it to OmiChrome.windowRadius
                   (26), so the shell reads as a card floating over the window
                   rather than a full-bleed page. */}
-              <div className="flex-1 min-h-0 p-0 sm:p-3">
+              <div className="min-h-0 flex-1 p-0 sm:p-3">
                 <div
                   className={cn(
                     'h-full w-full overflow-hidden',
@@ -147,28 +151,14 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                     'sm:shadow-[0_14px_26px_rgba(0,0,0,0.22)]',
                   )}
                 >
-                  {/* Keyed on the pathname so each destination fades and lifts
-                      in.
-
-                      Deliberately not wrapped in `AnimatePresence
-                      initial={false}`: every route registers its own copy of
-                      this layout, so navigating remounts the whole shell. That
-                      makes each navigation look like a first render, and
-                      `initial={false}` exists precisely to suppress the enter
-                      animation on a first render — so the transition never
-                      played on any page. A plain keyed `initial` animates on
-                      both a remount and an in-place key change. There is no
-                      exit animation for the same reason: the outgoing tree is
-                      already gone by the time the new one mounts. */}
-                  <motion.div
-                    key={pathname}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                    className="h-full"
-                  >
-                    {children}
-                  </motion.div>
+                  {/* Deliberately NOT keyed by pathname and NOT animated:
+                      keying remounts the whole shell on every navigation,
+                      which reads as a page refresh and resets scroll and
+                      in-progress state. React reconciles the swapped route
+                      subtree in place instead. No AnimatePresence wrapper for
+                      the same reason — navigating should not replay an enter
+                      animation. */}
+                  <div className="h-full">{children}</div>
                 </div>
               </div>
             </main>
@@ -182,7 +172,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
           </div>
 
           {/* Bottom navigation - mobile only */}
-          <BottomNavigation onOpenSidebar={() => setSidebarOpen(true)} />
+          <BottomNavigation onOpenMenu={() => setSidebarOpen(true)} />
 
           {/* Recording indicator - handles its own fixed positioning and animates with panels */}
           <HeaderRecordingIndicator />
