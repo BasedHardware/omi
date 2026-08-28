@@ -19,6 +19,8 @@ from typing import TextIO
 
 POLL_SECONDS = 0.2
 STATUS_INTERVAL_SECONDS = 5.0
+WINDOWS_ATOMIC_REPLACE_RETRY_SECONDS = 0.01
+WINDOWS_ATOMIC_REPLACE_TIMEOUT_SECONDS = 2.0
 MAX_PR_BODY_FINGERPRINT_BYTES = 1024 * 1024
 FORWARDED_SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK")
 FINGERPRINT_ENV_NAMES = (
@@ -239,7 +241,15 @@ def signal_child(
 def atomic_json(path: Path, value: dict) -> None:
     temporary = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(temporary, path)
+    deadline = time.monotonic() + WINDOWS_ATOMIC_REPLACE_TIMEOUT_SECONDS
+    while True:
+        try:
+            os.replace(temporary, path)
+            return
+        except PermissionError:
+            if not IS_WINDOWS or time.monotonic() >= deadline:
+                raise
+            time.sleep(WINDOWS_ATOMIC_REPLACE_RETRY_SECONDS)
 
 
 def read_json(path: Path) -> dict:

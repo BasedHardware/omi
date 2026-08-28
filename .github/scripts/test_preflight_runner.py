@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ctypes
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shutil
@@ -12,6 +13,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import types
 import unittest
 from unittest import mock
@@ -150,6 +152,91 @@ class OutputFlushTests(unittest.TestCase):
 
         self.assertEqual(stream.flush.call_count, 2)
         wait.assert_not_called()
+
+
+class AtomicJsonTests(unittest.TestCase):
+    def test_windows_retries_a_transient_replace_sharing_violation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "status.json"
+            original_replace = runner.os.replace
+            calls = 0
+
+            def replace_after_transient_failure(source: Path, destination: Path) -> None:
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise PermissionError("destination is open")
+                original_replace(source, destination)
+
+            with (
+                mock.patch.object(runner, "IS_WINDOWS", True),
+                mock.patch.object(
+                    runner.os,
+                    "replace",
+                    side_effect=replace_after_transient_failure,
+                ),
+                mock.patch.object(runner.time, "sleep") as sleep,
+            ):
+                runner.atomic_json(path, {"phase": "passed"})
+
+        self.assertEqual(calls, 2)
+        sleep.assert_called_once_with(runner.WINDOWS_ATOMIC_REPLACE_RETRY_SECONDS)
+
+    def test_non_windows_permission_error_is_not_retried(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "status.json"
+            with (
+                mock.patch.object(runner, "IS_WINDOWS", False),
+                mock.patch.object(
+                    runner.os,
+                    "replace",
+                    side_effect=PermissionError("denied"),
+                ) as replace,
+                mock.patch.object(runner.time, "sleep") as sleep,
+            ):
+                with self.assertRaises(PermissionError):
+                    runner.atomic_json(path, {"phase": "failed"})
+
+        replace.assert_called_once()
+        sleep.assert_not_called()
+
+    @unittest.skipUnless(os.name == "nt", "native Windows file-sharing contract")
+    def test_windows_waits_for_a_reader_to_release_the_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "status.json"
+            path.write_text('{"phase": "running"}\n', encoding="utf-8")
+            reader_ready = threading.Event()
+            release_reader = threading.Event()
+
+            def hold_reader() -> None:
+                with path.open(encoding="utf-8"):
+                    reader_ready.set()
+                    release_reader.wait(timeout=0.2)
+
+            reader = threading.Thread(target=hold_reader)
+            reader.start()
+            self.assertTrue(
+                reader_ready.wait(timeout=5),
+                "reader did not open the status file",
+            )
+            original_sleep = runner.time.sleep
+            try:
+                with mock.patch.object(
+                    runner.time,
+                    "sleep",
+                    wraps=original_sleep,
+                ) as sleep:
+                    runner.atomic_json(path, {"phase": "passed"})
+            finally:
+                release_reader.set()
+                reader.join(timeout=5)
+
+            self.assertFalse(reader.is_alive(), "reader did not release the status file")
+            self.assertGreaterEqual(sleep.call_count, 1)
+            self.assertEqual(
+                json.loads(path.read_text(encoding="utf-8")),
+                {"phase": "passed"},
+            )
 
 
 class SignalChildTests(unittest.TestCase):
