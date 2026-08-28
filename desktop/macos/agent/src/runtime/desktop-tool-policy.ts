@@ -75,7 +75,7 @@ const TASK_WRITE_TOOLS = new Set([
   "set_user_preferences",
   "complete_onboarding",
 ]);
-const MEMORY_WRITE_TOOLS = new Set(["create_memory"]);
+const MEMORY_WRITE_TOOLS = new Set(["create_memory", "create_memories"]);
 // JIT knowledge-ledger write verbs (save_playbook, create_standing_trigger,
 // close_fact) mutate the same backend memory/knowledge store as create_memory,
 // so they share its bundle rather than inventing a new one.
