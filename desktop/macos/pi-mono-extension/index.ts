@@ -34,6 +34,12 @@ import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/dist/runtime/node-tools.js";
 import {
+  isStdioServer,
+  loadLocalMcpConfig,
+} from "../agent/dist/runtime/user-extensions.js";
+import { McpHttpClient } from "../agent/dist/runtime/mcp-http-client.js";
+import { McpStdioClient } from "../agent/dist/runtime/mcp-stdio-client.js";
+import {
   buildToolAvailabilitySnapshot,
   toolNamesForAdapter,
   toolsForAdapter,
@@ -828,10 +834,91 @@ export async function __registerOmiToolsForTest(pi: ExtensionAPI): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
+// User-added remote MCP servers (managed from the desktop Apps page)
+// ---------------------------------------------------------------------------
+
+function mcpToolName(serverName: string, toolName: string): string {
+  return `mcp_${serverName}_${toolName}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+      timer.unref?.();
+    }),
+  ]);
+}
+
+async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
+  const logErr = (msg: string) => process.stderr.write(`[user-mcp] ${msg}\n`);
+  const servers = loadLocalMcpConfig(process.env.OMI_LOCAL_MCP_FILE, new Set(), logErr);
+  await Promise.all(servers.map(async (server) => {
+    let client: McpHttpClient | McpStdioClient;
+    let discoveryTimeoutMs: number;
+    if (isStdioServer(server)) {
+      client = new McpStdioClient(server.command, server.args, server.env);
+      // A first `npx <package>` run downloads the package; give it room.
+      discoveryTimeoutMs = 30_000;
+    } else {
+      const bearer = server.headers?.find((header) => header.name === "Authorization")?.value;
+      client = new McpHttpClient(server.url, bearer?.replace(/^Bearer\s+/i, ""));
+      discoveryTimeoutMs = 5000;
+    }
+    let tools;
+    try {
+      tools = await withTimeout(client.listTools(), discoveryTimeoutMs);
+    } catch (err) {
+      process.stderr.write(
+        `[user-mcp] ${server.name}: tool discovery failed, server skipped: ${err instanceof Error ? err.message : err}\n`,
+      );
+      if (client instanceof McpStdioClient) client.dispose();
+      return;
+    }
+    for (const tool of tools) {
+      const schema = tool.inputSchema as {
+        properties?: Record<string, unknown>;
+        required?: unknown;
+        additionalProperties?: unknown;
+      };
+      const properties = schema.properties
+        ? typeBoxPropertiesForInputSchema({
+            type: "object",
+            properties: schema.properties,
+            required: Array.isArray(schema.required) ? schema.required as string[] : [],
+            additionalProperties: schema.additionalProperties === true,
+          })
+        : {};
+      pi.registerTool(defineTool({
+        name: mcpToolName(server.name, tool.name),
+        label: `${server.name}: ${tool.name}`,
+        description: `${tool.description || tool.name} (from the ${server.name} MCP server)`,
+        parameters: Type.Object(properties, { additionalProperties: schema.additionalProperties === true }),
+        async execute(_toolCallId, params) {
+          let text: string;
+          try {
+            text = await client.callTool(tool.name, (params ?? {}) as Record<string, unknown>);
+          } catch (err) {
+            text = `Error calling ${tool.name}: ${err instanceof Error ? err.message : err}`;
+          }
+          return { content: [{ type: "text" as const, text }], details: undefined };
+        },
+      }));
+    }
+    process.stderr.write(`[user-mcp] ${server.name}: registered ${tools.length} tools\n`);
+  }));
+}
+
+export async function __registerUserMcpToolsForTest(pi: ExtensionAPI): Promise<void> {
+  await registerUserMcpTools(pi);
+}
+
+// ---------------------------------------------------------------------------
 // Extension entry point
 // ---------------------------------------------------------------------------
 
-export default function omiProvider(pi: ExtensionAPI): void {
+export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   const baseUrl = process.env.OMI_API_BASE_URL || "https://api.omi.me/v2";
   const apiKey = process.env.OMI_API_KEY || "";
 
@@ -940,6 +1027,11 @@ export default function omiProvider(pi: ExtensionAPI): void {
   // Register Omi-specific tools (execute_sql, semantic_search, etc.)
   // These forward to Swift via the OMI_BRIDGE_PIPE Unix socket.
   void registerOmiTools(pi);
+
+  // Remote MCP servers the user added from the Apps page. Awaited (pi waits
+  // for async extension factories) so the tools exist before the first prompt;
+  // each server is capped at 5s and a failing server is skipped, never fatal.
+  await registerUserMcpTools(pi);
 }
 
 // ---------------------------------------------------------------------------

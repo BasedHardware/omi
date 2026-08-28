@@ -3,6 +3,7 @@ import { createInterface, type Interface as ReadlineInterface } from "readline";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { resolveAcpPermission, resolveExternalAcpPermission } from "../runtime/desktop-tool-policy.js";
+import { userSkillsPluginOptions } from "../runtime/user-extensions.js";
 import { adapterCapabilitiesFor, type ProductionAdapterId } from "./interface.js";
 import type {
   AdapterAttemptContext,
@@ -487,10 +488,17 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   onProcessExit?: () => void;
 
   async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
+    // User-authored skills ship as a local Claude plugin the desktop app
+    // maintains; absent or invalid plugin dir means no skills, never a failure.
+    const skillsOptions = userSkillsPluginOptions(process.env.OMI_USER_SKILLS_DIR);
+    const meta = {
+      ...(input.systemPrompt ? { systemPrompt: input.systemPrompt } : {}),
+      ...(skillsOptions ? { claudeCode: { options: skillsOptions } } : {}),
+    };
     const result = (await this.request("session/new", {
       cwd: input.cwd,
       mcpServers: this.sessionMcpServersMode === "empty" ? [] : input.mcpServers ?? [],
-      ...(input.systemPrompt ? { _meta: { systemPrompt: input.systemPrompt } } : {}),
+      ...(Object.keys(meta).length > 0 ? { _meta: meta } : {}),
     })) as { sessionId: string };
 
     if (input.model && this.supportsSessionSetModel) {

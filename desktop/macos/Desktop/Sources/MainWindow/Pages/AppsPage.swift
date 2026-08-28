@@ -215,6 +215,10 @@ struct AppsPage: View {
   @State private var exportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
   @State private var viewAllSection: String? = nil  // "featured", "integrations", "notifications"
   @State private var selectedKind: AppsCatalogKind = .all
+  @State private var showAddMcpServerSheet = false
+  @State private var selectedLocalMcpServer: LocalMcpStore.Entry?
+  @State private var showAddSkillSheet = false
+  @State private var editingSkill: LocalSkillsStore.Skill?
 
   var body: some View {
     GeometryReader { proxy in
@@ -266,6 +270,24 @@ struct AppsPage: View {
       }
       scheduleAppSearch(for: newValue)
     }
+    .dismissableSheet(isPresented: $showAddMcpServerSheet) {
+      AddMcpServerSheet(appProvider: appProvider, onDismiss: { showAddMcpServerSheet = false })
+        .frame(width: 520, height: 520)
+    }
+    .dismissableSheet(item: $selectedLocalMcpServer) { server in
+      LocalMcpDetailSheet(
+        server: server, appProvider: appProvider, onDismiss: { selectedLocalMcpServer = nil }
+      )
+      .frame(width: 520, height: 380)
+    }
+    .dismissableSheet(isPresented: $showAddSkillSheet) {
+      SkillEditorSheet(appProvider: appProvider, editingSkill: nil, onDismiss: { showAddSkillSheet = false })
+        .frame(width: 560, height: 640)
+    }
+    .dismissableSheet(item: $editingSkill) { skill in
+      SkillEditorSheet(appProvider: appProvider, editingSkill: skill, onDismiss: { editingSkill = nil })
+        .frame(width: 560, height: 640)
+    }
     .dismissableSheet(item: $selectedApp) { app in
       AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedApp = nil })
         .frame(width: 500, height: 650)
@@ -315,6 +337,7 @@ struct AppsPage: View {
     }
     .onAppear {
       consumeAutomationPresentationCommand()
+      Task { await appProvider.fetchUserExtensions() }
       // If apps are already loaded, notify sidebar to clear loading indicator
       if !appProvider.isLoading {
         NotificationCenter.default.post(name: .appsPageDidLoad, object: nil)
@@ -707,6 +730,18 @@ struct AppsPage: View {
     ExportsSection(statuses: exportStatuses) { destination in
       selectDestination(destination)
     }
+
+    McpServersSection(
+      appProvider: appProvider,
+      onAdd: { showAddMcpServerSheet = true },
+      onSelectLocal: { selectedLocalMcpServer = $0 }
+    )
+
+    SkillsSection(
+      appProvider: appProvider,
+      onAdd: { showAddSkillSheet = true },
+      onSelect: { editingSkill = $0 }
+    )
 
     marketplaceSections
   }

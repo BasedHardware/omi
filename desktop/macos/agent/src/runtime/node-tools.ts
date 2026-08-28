@@ -13,7 +13,11 @@ export interface DiscoveredSkill {
 }
 
 function configuredSkillRoots(workspace = process.env.OMI_WORKSPACE ?? ""): string[] {
+  // OMI_USER_SKILLS_DIR is the desktop-managed plugin of skills the user
+  // created in the Apps page; its skills/ subdir follows the same layout.
+  const userSkillsDir = process.env.OMI_USER_SKILLS_DIR ?? "";
   return [
+    userSkillsDir ? resolve(userSkillsDir, "skills") : "",
     workspace ? resolve(workspace, ".claude", "skills") : "",
     resolve(homedir(), ".claude", "skills"),
   ].filter(Boolean);

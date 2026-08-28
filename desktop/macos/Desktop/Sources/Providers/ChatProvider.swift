@@ -1374,6 +1374,7 @@ class ChatProvider: ObservableObject {
   private var sessionInvalidateObserver: AnyCancellable?
 
   private var refreshAllObserver: AnyCancellable?
+  private var userSkillsObserver: AnyCancellable?
 
   // MARK: - Streaming Buffer
   /// Accumulates text and thinking deltas during streaming and flushes them to
@@ -1554,6 +1555,16 @@ class ChatProvider: ObservableObject {
       .sink { [weak self] _ in
         Task { @MainActor in
           await self?.refreshJournalProjection()
+        }
+      }
+
+    // A skill saved or toggled in the Apps page changed the on-disk catalog;
+    // re-discover so the next message's compact catalog includes it.
+    userSkillsObserver = NotificationCenter.default.publisher(for: .omiUserSkillsDidChange)
+      .receive(on: DispatchQueue.main)
+      .sink { [weak self] _ in
+        Task { @MainActor in
+          await self?.discoverClaudeConfig()
         }
       }
 
@@ -3261,6 +3272,21 @@ class ChatProvider: ObservableObject {
     if let skillDirs = try? fm.contentsOfDirectory(atPath: skillsDir) {
       for dir in skillDirs.sorted() {
         let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
+        if fm.fileExists(atPath: skillPath),
+          let content = try? String(contentsOfFile: skillPath, encoding: .utf8)
+        {
+          let desc = extractSkillDescription(from: content)
+          skills.append((name: dir, description: desc, path: skillPath))
+        }
+      }
+    }
+
+    // Skills the user created in Omi's Apps page, stored locally at
+    // ~/.omi/skills. Same layout as ~/.claude/skills.
+    let userSkillsDir = LocalSkillsStore.skillsDirURL.path
+    if let skillDirs = try? fm.contentsOfDirectory(atPath: userSkillsDir) {
+      for dir in skillDirs.sorted() where !skills.contains(where: { $0.name == dir }) {
+        let skillPath = "\(userSkillsDir)/\(dir)/SKILL.md"
         if fm.fileExists(atPath: skillPath),
           let content = try? String(contentsOfFile: skillPath, encoding: .utf8)
         {

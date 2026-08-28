@@ -1,0 +1,3 @@
+{
+  "change": "Bring your own MCP servers and skills: add them on the Apps page (local commands or remote URLs with API key or OAuth sign-in) and chat can use their tools, all stored as plain files under ~/.omi"
+}

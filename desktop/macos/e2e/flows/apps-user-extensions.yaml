@@ -1,0 +1,65 @@
+version: 2
+name: apps-user-extensions
+tier: manual
+description: User-managed MCP servers and skills on the Apps page — add a local server, add a skill, confirm both land under ~/.omi
+app: com.omi.computer-macos
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AgentExtensionsSections.swift
+  - desktop/macos/Desktop/Sources/Chat/LocalMcpStore.swift
+  - desktop/macos/Desktop/Sources/Chat/LocalMcpStore+OAuth.swift
+  - desktop/macos/Desktop/Sources/Chat/LocalSkillsStore.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Apps page shows the MCP Servers and Skills sections
+    do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8). Scroll until the 'MCP Servers' and 'Skills' sections are visible. Each has an add control."
+    expect:
+      interactive_count: { min: 10 }
+      text_visible:
+        - MCP Servers
+        - Skills
+
+  - id: S2
+    name: Add a local stdio server
+    # The store is what the sheet writes through; the section list is what reads it back. A
+    # round trip through both is the only assertion that proves the on-disk format the rest of
+    # the runtime consumes, rather than in-memory state the next launch will not see.
+    do: "Click add on the MCP Servers section. In the sheet, choose the local command lane, name the server 'harness-calc', set the command to a local stdio MCP server, and save. Verify the sheet dismisses and 'harness-calc' appears as a row in the MCP Servers section."
+    expect:
+      interactive_count: { min: 3 }
+      text_visible:
+        - harness-calc
+
+  - id: S3
+    name: The server round-trips through ~/.omi/mcp.json
+    do: "Confirm ~/.omi/mcp.json now contains an mcpServers entry named 'harness-calc' with the command and args entered in S2, in the standard client format."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S4
+    name: Add a skill by paste
+    do: "Click add on the Skills section. Paste a short SKILL.md body with a name and description into the editor and save. Verify the sheet dismisses and the skill appears as a row in the Skills section."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S5
+    name: The skill round-trips through ~/.omi/skills
+    do: "Confirm ~/.omi/skills/<slug>/SKILL.md exists for the skill saved in S4, with normalized frontmatter carrying its name and description."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S6
+    name: A dead server never breaks the page
+    # Fail-open is the whole contract: the runtime skips what it cannot reach. The page must make
+    # the same choice, or one unreachable server costs the user every other extension they added.
+    do: "Add a remote MCP server pointing at an unreachable URL (for example http://127.0.0.1:1/mcp) with no auth. Verify the row is added, the section still renders every other server, and no error dialog blocks the page."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S7
+    name: Remove what the flow added
+    do: "Open each row added by this flow and delete it, then confirm the MCP Servers and Skills sections no longer list them."
+    expect:
+      interactive_count: { min: 3 }

@@ -21,6 +21,8 @@ class AppProvider: ObservableObject {
   @Published var summaryApps: [OmiApp] = []  // Apps with memories capability
   @Published var notificationApps: [OmiApp] = []  // Apps with proactive_notification capability
   @Published var enabledApps: [OmiApp] = []
+  @Published var localSkills: [LocalSkillsStore.Skill] = []  // User-authored skills on disk
+  @Published var localMcpServers: [LocalMcpStore.Entry] = []  // ~/.omi/mcp.json entries
   @Published var categories: [OmiAppCategory] = []
   @Published var capabilities: [OmiAppCapability] = []
 
@@ -404,6 +406,12 @@ class AppProvider: ObservableObject {
     } catch {
       logError("Failed to fetch enabled apps", error: error)
     }
+  }
+
+  /// Re-scan the user's local skills and MCP servers under ~/.omi.
+  func fetchUserExtensions() async {
+    localSkills = LocalSkillsStore.listSkills()
+    localMcpServers = LocalMcpStore.listServers()
   }
 
   // MARK: - App Management

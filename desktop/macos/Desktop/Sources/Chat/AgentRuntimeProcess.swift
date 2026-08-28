@@ -2666,6 +2666,13 @@ actor AgentRuntimeProcess {
       env.removeValue(forKey: "PLAYWRIGHT_MCP_EXTENSION_TOKEN")
     }
 
+    // User-managed local skills and MCP servers (~/.omi). The runtime reads
+    // both per session, so a file change is enough to apply; OAuth tokens in
+    // mcp.json are refreshed here so sessions always start with a live token.
+    env["OMI_USER_SKILLS_DIR"] = LocalSkillsStore.rootURL.path
+    env["OMI_LOCAL_MCP_FILE"] = LocalMcpStore.fileURL.path
+    Task { await LocalMcpStore.refreshExpiredTokens() }
+
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)

@@ -234,6 +234,11 @@ do not hand-edit those paths to match a specific machine.
 - `users/{uid}/fcm_tokens` - Token ID prefix = platform (ios_, android_, macos_)
 - `users/{uid}/memories` - Extracted memories
 
+### User MCP Servers & Skills (Apps page)
+User-managed MCP servers (~/.omi/mcp.json, incl. native OAuth) and skills
+(`~/.omi/skills/<slug>/SKILL.md`), fully local and fail-open. Contract and
+runtime wiring: [`docs/agents/desktop-user-extensions.md`](../../docs/agents/desktop-user-extensions.md).
+
 ### Known Limitations
 - Firestore has no collection group indexes for `source` field
 - Counting users by platform requires iterating all users (slow)

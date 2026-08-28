@@ -613,6 +613,12 @@ export class PiMonoAdapter implements HarnessAdapter {
       delete env.OMI_CHAT_FIRST_CONTROL_GENERATION;
     }
     env.OMI_CONTEXT_FILE = this.contextFilePath;
+    // User-authored skills from the Apps page: point pi's agent dir at the
+    // managed plugin root so pi's native skill catalog discovers
+    // skills/<slug>/SKILL.md there (auth/provider still come from env above).
+    if (process.env.OMI_USER_SKILLS_DIR) {
+      env.PI_CODING_AGENT_DIR = process.env.OMI_USER_SKILLS_DIR;
+    }
     // Forward OMI_BRIDGE_PIPE so the extension can register omi-tools
     // (execute_sql, semantic_search, etc.) that forward to Swift.
     // The shared runtime process sets the pipe in process.env before starting pi-mono.

@@ -181,6 +181,7 @@ import type {
   ConversationTurnStatus,
 } from "./runtime/types.js";
 import { createStdoutLineSender } from "./stdout-line-sender.js";
+import { loadLocalMcpConfig, type UserMcpServer } from "./runtime/user-extensions.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1365,7 +1366,7 @@ function buildMcpServers(
   cwd?: string,
   sessionKey?: string,
   context?: McpServerBuildContext
-): McpServerConfig[] {
+): Array<McpServerConfig | UserMcpServer> {
   const servers: McpServerConfig[] = [];
 
   if (context?.includeSwiftBackedTools !== false) {
@@ -1434,7 +1435,16 @@ function buildMcpServers(
     });
   }
 
-  return servers;
+  // User-added MCP servers from ~/.omi/mcp.json (standard Claude Desktop
+  // format: stdio commands, plain URLs, API keys, and OAuth tokens the app
+  // keeps fresh). Read per session so changes apply without a restart.
+  const localServers = loadLocalMcpConfig(
+    process.env.OMI_LOCAL_MCP_FILE,
+    new Set(servers.map((s) => s.name)),
+    logErr,
+  );
+
+  return [...servers, ...localServers];
 }
 
 function requireControlSessionPolicy(sessionId: string | undefined, ownerId: string | undefined) {
