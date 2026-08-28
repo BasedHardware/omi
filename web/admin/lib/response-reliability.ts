@@ -41,10 +41,20 @@ export interface ReliabilityFailureReason {
   count: number;
 }
 
+/**
+ * Which telemetry the voice numbers were actually built from. The reader picks
+ * `physical_shortcut` rows when any exist and otherwise falls back to the
+ * legacy `floating_voice` rows — two different populations. Without this field
+ * a silent switch between them looks like a step change in reliability.
+ * `null` when voice telemetry is unavailable and no voice numbers were built.
+ */
+export type ReliabilityVoiceSource = "physical_shortcut" | "floating_voice";
+
 export interface ResponseReliabilitySeries {
   days: number;
   generatedAt: number;
   partial: boolean;
+  voiceSource: ReliabilityVoiceSource | null;
   availability: {
     chat: boolean;
     voice: boolean;
@@ -376,6 +386,8 @@ export function buildResponseReliabilityPayload({
     }
   }
 
+  let voiceSource: ReliabilityVoiceSource | null = null;
+
   if (voiceAvailable) {
     const hasPhysicalVoiceRows = voiceRows.some(
       (rawRow) =>
@@ -384,6 +396,7 @@ export function buildResponseReliabilityPayload({
           "physical_shortcut" &&
         numberValue((rawRow as VoiceRow)[6]) > 0,
     );
+    voiceSource = hasPhysicalVoiceRows ? "physical_shortcut" : "floating_voice";
     for (const rawRow of voiceRows) {
       if (!Array.isArray(rawRow)) continue;
       const [
@@ -492,6 +505,7 @@ export function buildResponseReliabilityPayload({
     days: safeDays,
     generatedAt: now.getTime(),
     partial: !chatAvailable || !voiceAvailable || truncated,
+    voiceSource,
     availability: {
       chat: chatAvailable,
       voice: voiceAvailable,

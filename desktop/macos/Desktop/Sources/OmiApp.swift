@@ -318,6 +318,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     runStartupSystemMaintenance()
     pruneExpiredAgentToolOutputs()
+    // A Quick Look panel that was open when the app was force-quit or crashed left full-resolution
+    // screenshots in the temp directory, and its close handler never ran. This is the first moment
+    // anything of ours can take them off disk.
+    ScreenFrameQuickLook.purgeStaleScratch()
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
@@ -522,6 +526,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     // Route completed background-agent results into live voice sessions.
     AgentCompletionVoiceDelivery.shared.start()
+
+    // Drain explicit JIT feedback queued during an offline session as soon as
+    // the app launches; the client also retries on owner restoration, app
+    // activation, and periodic network recovery.
+    Task { await JITTriggerFeedbackClient.shared.installLifecycleRetry() }
 
     Task { await ContextWorkstreamReconciler.shared.start() }
 

@@ -10781,6 +10781,10 @@
     "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
     "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
     "accountCutoverOpenStore": "Buka toko",
+    "chatScopeToday": "Ngayon",
+    "chatScopeThisWeek": "Ngayong linggo",
+    "chatScopeAbout": "Tungkol sa: {title}",
+    "askAboutThisConversation": "Itanong tungkol dito",
     "sendRawAudioToOmi": "Ipadala ang raw na audio sa Omi",
     "sendRawAudioToOmiDescription": "I-off para hindi maipadala ang raw na audio sa Omi. Maaari pa ring ipadala sa Omi ang mga transcript at data na kailangan ng mga cloud feature.",
     "findDevice": "Hanapin",
@@ -10793,5 +10797,8 @@
     "appReEnableFailedTitle": "Hindi ma-enable muli",
     "appReEnableFailedBody": "Hindi ma-enable muli ang app na ito. Pakisubukan ulit.",
     "appDisabledOn": "Na-disable noong {date}.",
-    "appDisabledLastError": "Huling error: {error}."
+    "appDisabledLastError": "Huling error: {error}.",
+    "prerecordedTranscript": "Paunang-rekord",
+    "pendantRecordingSyncBlocked": "Nagre-record pa rin ang Pendant, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.",
+    "pendantFullSyncBlocked": "Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli."
 }

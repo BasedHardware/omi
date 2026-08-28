@@ -191,7 +191,7 @@ class TestExtractionSeamFanOut:
         assert "_extract_memories(uid, conversation)" in source
         assert "submit_with_context(postprocess_executor, _extract_memories" not in source
         assert "submit_with_context(postprocess_executor, _save_action_items" in source
-        assert "submit_with_context(postprocess_executor, _update_goal_progress" in source
+        assert "submit_with_context(postprocess_executor, update_goal_progress" in source
 
     def test_fan_out_invokes_memory_action_item_and_goal_paths_separately(self):
         """Functional: mocked postprocess submits must hit three different callables."""
@@ -239,7 +239,7 @@ class TestExtractionSeamFanOut:
             patch.object(pc.redis_db, "get_conversation_meeting_id", return_value=None),
             patch.object(pc, "_get_structured", return_value=(structured, False)),
             patch.object(pc, "_get_conversation_obj", return_value=conversation),
-            patch.object(pc, "_trigger_apps"),
+            patch.object(pc, "trigger_conversation_apps"),
             patch.object(pc, "_extract_memories", extract_memories),
             patch.object(pc.conversations_db, "upsert_conversation"),
             patch.object(pc, "submit_with_context", side_effect=_capture_submit),
@@ -250,7 +250,7 @@ class TestExtractionSeamFanOut:
         submitted_fns = {fn.__name__ for fn, _ in submitted if callable(fn) and hasattr(fn, "__name__")}
         extract_memories.assert_called_once_with("uid-boundary", conversation)
         assert "_save_action_items" in submitted_fns
-        assert "_update_goal_progress" in submitted_fns
+        assert "update_goal_progress" in submitted_fns
         assert "_extract_memories" not in submitted_fns
 
 

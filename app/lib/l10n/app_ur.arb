@@ -10781,6 +10781,10 @@
     "accountCutoverMigrationInProgressMessage": "حسابك قيد الترحيل. ميزات المنتج متوقفة مؤقتًا حتى انتهاء الترحيل.",
     "accountCutoverMigrationRollbackMessage": "حسابك قيد الصيانة بعد التراجع عن الترحيل. قد تُعزل بعض البيانات الأحدث.",
     "accountCutoverOpenStore": "فتح المتجر",
+    "chatScopeToday": "آج",
+    "chatScopeThisWeek": "اس ہفتے",
+    "chatScopeAbout": "{title} کے بارے میں",
+    "askAboutThisConversation": "اس کے بارے میں پوچھیں",
     "sendRawAudioToOmi": "خام آڈیو Omi کو بھیجیں",
     "sendRawAudioToOmiDescription": "خام آڈیو کو Omi بھیجے جانے سے روکنے کے لیے اسے بند کریں۔ ٹرانسکرپٹس اور کلاؤڈ فیچرز کے لیے درکار ڈیٹا اب بھی Omi کو بھیجا جا سکتا ہے۔",
     "findDevice": "تلاش کریں",
@@ -10793,5 +10797,8 @@
     "appReEnableFailedTitle": "دوبارہ فعال نہیں ہو سکا",
     "appReEnableFailedBody": "اس ایپ کو دوبارہ فعال نہیں کیا جا سکا۔ براہ کرم دوبارہ کوشش کریں۔",
     "appDisabledOn": "{date} کو غیر فعال کیا گیا۔",
-    "appDisabledLastError": "آخری خرابی: {error}"
+    "appDisabledLastError": "آخری خرابی: {error}",
+    "prerecordedTranscript": "پہلے سے ریکارڈ شدہ",
+    "pendantRecordingSyncBlocked": "Pendant ابھی بھی ریکارڈ کر رہا ہے، اس لیے محفوظ شدہ آڈیو منتقل نہیں کی جا سکتی۔ ریکارڈنگ روکنے کے لیے Pendant کا بٹن دبائیں، پھر دوبارہ مطابقت پذیری کریں۔",
+    "pendantFullSyncBlocked": "Pendant کی اسٹوریج بھر گئی ہے اور یہ ابھی بھی ریکارڈنگ موڈ میں ہے، اس لیے محفوظ شدہ آڈیو منتقل نہیں کی جا سکتی۔ ریکارڈنگ روکنے کے لیے Pendant کا بٹن دبائیں، پھر دوبارہ مطابقت پذیری کریں۔"
 }

@@ -46,7 +46,10 @@
           "POSTHOG_PROJECT_ID": "WEB_ADMIN_POSTHOG_PROJECT_ID:latest",
           "POSTHOG_HOST": "WEB_ADMIN_POSTHOG_HOST:latest",
           "GOAFFPRO_ACCESS_TOKEN": "GOAFFPRO_ACCESS_TOKEN:latest",
-          "CRON_SECRET": "WEB_ADMIN_CRON_SECRET:latest"
+          "CRON_SECRET": "WEB_ADMIN_CRON_SECRET:latest",
+          "GCP_BILLING_SA_JSON": "WEB_ADMIN_GCP_BILLING_SA_JSON:latest",
+          "ADMIN_ANTHROPIC_COST_API_KEY": "WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest",
+          "ADMIN_OPENAI_COST_API_KEY": "WEB_ADMIN_OPENAI_COST_API_KEY:latest"
         },
         "remove_runtime_secrets": [
           "ANTHROPIC_API_KEY",

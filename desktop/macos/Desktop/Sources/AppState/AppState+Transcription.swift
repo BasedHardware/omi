@@ -840,9 +840,15 @@ extension AppState {
       title: "Omi Needs Microphone Access",
       message:
         "macOS is not letting Omi hear the microphone. Enable Omi under "
-        + "System Settings → Privacy & Security → Microphone, then start recording again.")
-    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-      NSWorkspace.shared.open(url)
+        + "System Settings → Privacy & Security → Microphone, then start recording again."
+    ) {
+      // Pause before the hand-off. NSWorkspace.open can return while Omi is
+      // still the active app, and a queued alert must not attach a sheet that
+      // System Settings then covers. didBecomeActive resumes the queue.
+      self.alertPresenter.pauseQueueUntilAppActive()
+      if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+        NSWorkspace.shared.open(url)
+      }
     }
   }
 

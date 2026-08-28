@@ -93,7 +93,11 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
         self.assertIn("run-swift-ci.sh --test", verify_job)
         self.assertIn("run-swift-ci.sh --release-compile", release_job)
-        self.assertIn("run-swift-ci.sh --release-notification-regression", verify_job)
+        # The release-mode regression runs next to the release build it
+        # consumes; a second release build on the verify runner cost ~31 min
+        # of scarce hosted-macOS time per notification-boundary change.
+        self.assertIn("run-swift-ci.sh --release-notification-regression", release_job)
+        self.assertNotIn("run-swift-ci.sh --release-notification-regression", verify_job)
 
     def test_change_detection_happens_before_macos_allocation(self):
         """#9440: non-desktop changes must not claim a costly macOS runner."""
@@ -173,7 +177,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("name: Desktop Swift Release Compile", self.jobs["desktop-swift-release-compile"])
 
     def test_notification_boundary_runs_targeted_release_regression(self):
-        job = self.jobs["desktop-swift-verify"]
+        job = self.jobs["desktop-swift-release-compile"]
         for path in (
             "desktop/macos/Desktop/Sources/AppState/AppState+Permissions.swift",
             "desktop/macos/Desktop/Sources/NotificationProbe.swift",
@@ -194,11 +198,19 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
         self.assertIn("name: Desktop Swift Build & Tests", gate)
         self.assertIn("desktop-swift-verify", gate)
+        self.assertIn("desktop-swift-release-compile", gate)
         self.assertIn("always()", gate)
         self.assertIn("STATIC_REQUIRED", gate)
         self.assertIn("TESTS_REQUIRED", gate)
+        self.assertIn("RELEASE_REQUIRED", gate)
         self.assertIn('test "$VERIFY_RESULT" = success', gate)
         self.assertIn('test "$VERIFY_RESULT" = skipped', gate)
+        # The release lane (WMO compile + UserNotifications release regression)
+        # reports through the Release Compile job; the required check must fail
+        # closed on it so release-only breaks cannot merge on a green debug
+        # lane (#11373/#11374).
+        self.assertIn('test "$RELEASE_RESULT" = success', gate)
+        self.assertIn('test "$RELEASE_RESULT" = skipped', gate)
 
     def test_full_swift_suite_is_selected_only_for_its_inputs(self):
         """Asset/config candidates retain static evidence without a second Mac job."""
@@ -228,7 +240,6 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             ("macos_manifest_checks", "STATIC_OUTCOME"),
             ("desktop_launcher_tests", "LAUNCHER_OUTCOME"),
             ("desktop_swift_tests", "TEST_OUTCOME"),
-            ("desktop_notification_regression", "NOTIFICATION_OUTCOME"),
         ):
             with self.subTest(step_id=step_id):
                 self.assertIn(f"id: {step_id}", job)
@@ -237,12 +248,12 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("always() && !cancelled()", job)
         self.assertIn("Require independent macOS phase verdicts", job)
 
-    def test_ci_uses_isolated_swiftpm_build_directories_for_two_workers(self):
+    def test_ci_uses_isolated_swiftpm_build_directories_per_worker(self):
         """#10507: parallel suites require isolated build and runtime state."""
         verify_job = self.jobs["desktop-swift-verify"]
         suite_runner = _suite_runner_text()
 
-        self.assertIn('OMI_SWIFT_TEST_SUITE_WORKERS: "2"', verify_job)
+        self.assertIn('OMI_SWIFT_TEST_SUITE_WORKERS: "3"', verify_job)
         self.assertIn("copy-on-write clone", verify_job)
         self.assertIn("--scratch-path", suite_runner)
         self.assertIn("cp -cR", suite_runner)

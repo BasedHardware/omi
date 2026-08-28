@@ -199,10 +199,6 @@ def _desktop_transcribe_isolation():
         _deepgram.LiveTranscriptionEvents = MagicMock()
         sys.modules.setdefault('deepgram', _deepgram)
 
-        _fal_client = ModuleType('fal_client')
-        _fal_client.submit = MagicMock()
-        sys.modules.setdefault('fal_client', _fal_client)
-
         def _parse_options_header(value):
             if value is None:
                 return b'', {}
@@ -354,6 +350,7 @@ def _desktop_transcribe_isolation():
         # be a real function (not MagicMock) or it corrupts decorated function signatures.
         for _ufull in [
             'utils.llm',
+            'utils.llm.gateway_client',
             'utils.llm.memories',
             'utils.llm.persona',
             'utils.llm.chat',

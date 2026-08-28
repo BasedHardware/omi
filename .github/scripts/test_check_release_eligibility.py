@@ -206,7 +206,7 @@ class WorkflowContractTests(unittest.TestCase):
         cases = (
             (
                 "missing setup",
-                "    - name: Set up uv for canonical checks\n      uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84\n      with:\n        enable-cache: true\n        cache-dependency-glob: backend/openapi-requirements.txt\n\n",
+                "    - name: Set up uv for canonical checks\n      uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84\n      with:\n        # Exact version resolves locally; an unset version means \"latest\",\n        # which fetches the astral-sh/versions manifest and has hard-failed\n        # CI on that network call. Matches backend/Dockerfile UV_VERSION.\n        version: \"0.11.13\"\n        enable-cache: true\n        cache-dependency-glob: backend/openapi-requirements.txt\n\n",
                 "",
                 "release eligibility is missing its uv setup step",
             ),
@@ -230,7 +230,7 @@ class WorkflowContractTests(unittest.TestCase):
             ),
             (
                 "setup after preflight",
-                "    - name: Set up uv for canonical checks\n      uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84\n      with:\n        enable-cache: true\n        cache-dependency-glob: backend/openapi-requirements.txt\n\n",
+                "    - name: Set up uv for canonical checks\n      uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84\n      with:\n        # Exact version resolves locally; an unset version means \"latest\",\n        # which fetches the astral-sh/versions manifest and has hard-failed\n        # CI on that network call. Matches backend/Dockerfile UV_VERSION.\n        version: \"0.11.13\"\n        enable-cache: true\n        cache-dependency-glob: backend/openapi-requirements.txt\n\n",
                 "",
                 "release eligibility must set up uv before the canonical preflight",
             ),

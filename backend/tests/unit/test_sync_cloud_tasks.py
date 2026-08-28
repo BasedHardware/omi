@@ -976,6 +976,7 @@ def _load_sync_router_for_fast_path():
         'database.users',
         'database.user_usage',
         'database.sync_ledger',
+        'database.firestore_read_metrics',
         'firebase_admin',
         'google',
         'google.cloud',

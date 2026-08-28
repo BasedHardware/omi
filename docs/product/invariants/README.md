@@ -55,6 +55,7 @@ to handle a rule in flux — not delaying the lock.
 | INV-MEM-3 | No legacy fallback after canonical selection | locked | [memory-canonical-fail-closed.md](./memory-canonical-fail-closed.md) |
 | INV-MEM-4 | Canonical promotion is the sole Long-term authority | locked | [memory-promotion-authority.md](./memory-promotion-authority.md) |
 | INV-MEM-5 | Universal memory and task authority | locked | [universal-memory-task-authority.md](./universal-memory-task-authority.md) |
+| INV-MEM-6 | Intent-backed knowledge ledger | proposed | [intent-backed-knowledge-ledger.md](./intent-backed-knowledge-ledger.md) |
 | INV-AGENT-* | Agent control-plane contracts | locked | [agent-control-plane.md](./agent-control-plane.md) |
 | INV-INT-1 | Integrations harness over heuristics | locked | [integrations.md](./integrations.md) |
 | INV-UI-1 | No purple; neutral accents | locked | [brand-ui.md](./brand-ui.md) |

@@ -2044,6 +2044,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get memoryDeleted => 'Minne borttaget.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Ångra';
 
   @override
@@ -9846,6 +9849,20 @@ class AppLocalizationsSv extends AppLocalizations {
   String get accountCutoverOpenStore => 'Öppna butik';
 
   @override
+  String get chatScopeToday => 'Idag';
+
+  @override
+  String get chatScopeThisWeek => 'Den här veckan';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Om: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Fråga om detta';
+
+  @override
   String get sendRawAudioToOmi => 'Skicka rått ljud till Omi';
 
   @override
@@ -9889,4 +9906,15 @@ class AppLocalizationsSv extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Senaste fel: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Förinspelat';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant spelar fortfarande in, så det lagrade ljudet kan inte överföras. Tryck på Pendantens knapp för att stoppa inspelningen och synkronisera igen.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Lagringen på din Pendant är full och den är fortfarande i inspelningsläge, så det lagrade ljudet kan inte överföras. Tryck på Pendantens knapp för att stoppa inspelningen och synkronisera sedan igen.';
 }

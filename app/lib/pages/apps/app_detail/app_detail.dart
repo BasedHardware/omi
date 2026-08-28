@@ -23,7 +23,7 @@ import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -1213,7 +1213,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => FullScreenImageViewer(imageUrl: app.thumbnailUrls[index]),
+                                  builder: (context) => MediaViewerPage(
+                                    items: app.thumbnailUrls
+                                        .map((url) => MediaViewerItem(
+                                              imageUrl: url,
+                                            ))
+                                        .toList(),
+                                    initialIndex: index,
+                                    maxScaleMultiplier: 2,
+                                    showCloseButton: true,
+                                    wrapBodyInSafeArea: false,
+                                  ),
                                 ),
                               );
                             },

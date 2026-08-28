@@ -43,6 +43,12 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
+          # Pin the resolved uv, not just the action commit. An unset version means
+          # "latest", which the action resolves by fetching the astral-sh/versions
+          # manifest over the network; that fetch has hard-failed a Repo Checks run.
+          # An exact version resolves locally and skips the manifest request. Keep it
+          # equal to backend/Dockerfile's UV_VERSION so CI matches the runtime image.
+          version: "0.11.13"
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
 
@@ -112,6 +118,9 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
+          # See the metadata-preflight job: an exact version keeps the action from
+          # fetching the astral-sh/versions manifest to resolve "latest".
+          version: "0.11.13"
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
 

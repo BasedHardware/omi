@@ -139,6 +139,12 @@ class _AppsListState extends State<_AppsList> {
     }
   }
 
+  // The fetch is done, whatever it came back with. Without this flag "empty" and
+  // "still loading" are indistinguishable: both fetches swallow their errors into
+  // empty lists, so the sheet stayed in the skeleton forever for anyone without a
+  // single installed template.
+  bool _loaded = false;
+
   Future<void> _fetchApps() async {
     try {
       await Future.wait([
@@ -147,6 +153,10 @@ class _AppsListState extends State<_AppsList> {
       ]);
     } catch (e) {
       Logger.debug('Error fetching apps: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _loaded = true);
+      }
     }
   }
 
@@ -227,7 +237,7 @@ class _AppsListState extends State<_AppsList> {
     final enabledApps = widget.provider.cachedEnabledConversationApps;
     final suggestedApps = widget.provider.cachedSuggestedApps;
 
-    final isLoading = enabledApps.isEmpty && suggestedApps.isEmpty;
+    final isLoading = !_loaded && enabledApps.isEmpty && suggestedApps.isEmpty;
 
     if (isLoading) {
       return _buildShimmerLoading();

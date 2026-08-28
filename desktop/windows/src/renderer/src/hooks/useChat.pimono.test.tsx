@@ -137,6 +137,18 @@ const lastAssistant = (
 
 describe('useChat — pi_mono engine', () => {
   it('streams deltas, resolves with the final text, and persists BOTH turns to the shared thread', async () => {
+    const evidence = {
+      schemaVersion: 1,
+      references: [
+        {
+          id: 'conversation-1',
+          kind: 'conversation_summary' as const,
+          state: 'available' as const,
+          conversationId: 'conversation-1',
+          metadata: {}
+        }
+      ]
+    }
     const result = await mountPiMono()
     let p: Promise<void>
     await act(async () => {
@@ -157,12 +169,14 @@ describe('useChat — pi_mono engine', () => {
         requestId: sendArgs!.requestId,
         ok: true,
         text: 'Hi there',
+        evidence,
         terminalStatus: 'succeeded'
       })
       await p
     })
 
     expect(lastAssistant(result.current.history)?.content).toBe('Hi there')
+    expect(result.current.history.at(-1)?.evidence).toEqual(evidence)
     // The model gets the context-prepended prompt; the transcript gets the clean
     // user text — the raw-vs-contexted split at the heart of INV-CHAT-1.
     expect(sendArgs).toMatchObject({ prompt: 'SCREEN_CTX\n\nhello', cleanUserText: 'hello' })
@@ -177,6 +191,8 @@ describe('useChat — pi_mono engine', () => {
     expect('sessionId' in userReq).toBe(false)
     expect(aiReq).toMatchObject({ text: 'Hi there', sender: 'ai' })
     expect('sessionId' in aiReq).toBe(false)
+    expect(JSON.parse(String(aiReq.metadata))).toEqual({ evidence })
+    expect(persisted.at(-1)?.at(-1)?.evidence).toEqual(evidence)
   })
 
   it('surfaces FRIENDLY copy on a failed turn (never the raw error) and does NOT write an error line to the shared thread', async () => {

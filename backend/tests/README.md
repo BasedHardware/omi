@@ -25,6 +25,17 @@ component coverage.
 `test.sh` runs selected files in isolated pytest processes by default and parallelizes them with
 `BACKEND_PYTEST_WORKERS`. This keeps legacy module-stubbing tests from polluting each other while still avoiding
 the old serial file-by-file run. Set `BACKEND_PYTEST_FILE_ISOLATION=0` to try one pytest session with xdist.
+
+`BACKEND_PYTEST_PARALLEL_SESSION=1` is an unfinished experiment kept behind a knob: it isolates only the files in
+`tests/.module_stub_legacy_allowlist` and runs the rest in one xdist session with `--dist=loadfile`. The per-file
+import and collection cost it targets is real (~2200s of summed CPU across ~930 processes), but the predicate is
+not sound yet. `scripts/check_module_stub_pollution.py` only sees *direct* module-scope `sys.modules` writes, while
+the common pattern here is a module-scope call to a same-file helper that writes `sys.modules`, or an import of the
+deprecated `tests/unit/memory_import_isolation`. Measured on the full selection: collecting the 875 non-allowlisted
+files in one process segfaults (upb re-registers an evicted `google.cloud.firestore_v1` descriptor), 11 of 35
+25-file chunks fail collection on their own, and 815 files in one process is OOM-killed — and because every xdist
+worker collects the whole selection, memory scales with worker count. Finishing `docs/test_isolation.md`'s
+migration is the prerequisite for turning this on.
 The runner also defaults the common BLAS/OpenMP thread-pool variables to `1`: process-level parallelism is
 already available, while nested native pools oversubscribe the machine and make CPU attribution depend on which
 test first initializes a numerical library. Explicit environment overrides remain available for native-kernel
@@ -58,6 +69,12 @@ time. That import cost is structural, not a per-test regression; existing over-t
 grandfathered in `tests/fast_unit_duration_allowlist.txt` (one node ID per line). To shrink that list, run a
 single pytest session instead (`BACKEND_PYTEST_FILE_ISOLATION=0`, pays imports once per worker) or raise the
 failure threshold.
+
+The guard blocks under xdist too. Inside an xdist worker the controller discards `session.exitstatus`, so workers
+hand their offenders back over `workeroutput` and the controller fails the session itself; without that handoff
+the budget silently stopped blocking the moment the suite ran in one parallel session. Because a duration-guard
+failure fails no individual test, it also prints a `BACKEND-UNIT-FAILED-FILE <path>` line that `test.sh` reads so
+the rerun list still names the file.
 
 Genuinely non-unit tests (real `asyncio` sleeps, network/Redis, stress, codebase-wide greps, full-app
 wiring, per-test fresh module reload) must be marked `@pytest.mark.slow` / `@pytest.mark.integration` so they

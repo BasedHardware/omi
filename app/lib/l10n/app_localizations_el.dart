@@ -2058,6 +2058,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get memoryDeleted => 'Η ανάμνηση διαγράφηκε.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Αναίρεση';
 
   @override
@@ -9911,6 +9914,20 @@ class AppLocalizationsEl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Άνοιγμα καταστήματος';
 
   @override
+  String get chatScopeToday => 'Σήμερα';
+
+  @override
+  String get chatScopeThisWeek => 'Αυτή την εβδομάδα';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Σχετικά με: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Ρώτησε γι\' αυτό';
+
+  @override
   String get sendRawAudioToOmi => 'Αποστολή ακατέργαστου ήχου στο Omi';
 
   @override
@@ -9955,4 +9972,15 @@ class AppLocalizationsEl extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Τελευταίο σφάλμα: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Προηχογραφημένο';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Το Pendant εξακολουθεί να ηχογραφεί, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την ηχογράφηση και συγχρονίστε ξανά.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Ο αποθηκευτικός χώρος του Pendant είναι πλήρης και βρίσκεται ακόμα σε λειτουργία εγγραφής, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την εγγραφή και μετά συγχρονίστε ξανά.';
 }

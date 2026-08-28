@@ -77,6 +77,9 @@ environment_shared:
         MEETING_RECEIPT_RECONCILER_ENABLED:
           value: 'false'
           category: rollout
+        LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED:
+          value: 'true'
+          category: rollout
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'false'
           category: rollout
@@ -179,6 +182,9 @@ environment_shared:
       METRICS_SECRET:
         secret: METRICS_SECRET
         version: latest
+      POSTHOG_PROJECT_API_KEY:
+        secret: POSTHOG_PROJECT_API_KEY
+        version: latest
   cloud_run:
     network:
       flags:
@@ -246,6 +252,16 @@ environment_shared:
           POSTHOG_HOST:
             value: https://app.posthog.com
             category: telemetry
+          BUCKET_FRAME_REQUESTS:
+            env_var: BUCKET_FRAME_REQUESTS
+            default: '{env}-omi-frame-requests'
+            provisional: true
+            category: storage_retention
+          BUCKET_FRAME_REQUESTS_TEMPORARY:
+            env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+            default: '{env}-omi-frame-requests-temporary'
+            provisional: true
+            category: storage_retention
           GCP_LOCATION:
             value: us-central1
       backend:
@@ -599,6 +615,17 @@ environment_shared:
         flags:
           --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
         env:
+          BUCKET_FRAME_REQUESTS:
+            env_var: BUCKET_FRAME_REQUESTS
+            default: '{env}-omi-frame-requests'
+            category: storage_retention
+          BUCKET_FRAME_REQUESTS_TEMPORARY:
+            env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+            default: '{env}-omi-frame-requests-temporary'
+            category: storage_retention
+          FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY:
+            value: 'false'
+            category: storage_retention
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
             default: http://127.0.0.1:9
@@ -638,3 +665,83 @@ environment_shared:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'false'
             category: memory_rollout
+      frame-request-retention-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
+          POSTHOG_PROJECT_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
+            version: latest
+        env:
+          OMI_ENV_STAGE:
+            value: '{env}'
+            category: runtime_identity
+          BUCKET_FRAME_REQUESTS:
+            env_var: BUCKET_FRAME_REQUESTS
+            default: '{env}-omi-frame-requests'
+            provisional: false
+            category: storage_retention
+          BUCKET_FRAME_REQUESTS_TEMPORARY:
+            env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+            default: '{env}-omi-frame-requests-temporary'
+            provisional: false
+            category: storage_retention
+      daily-memory-sweep-job:
+        flags:
+          --remove-env-vars: HOSTED_PUSHER_API_URL
+          --task-timeout: 3600s
+        secrets:
+          ENCRYPTION_SECRET:
+            secret: ENCRYPTION_SECRET
+            version: latest
+          OPENAI_API_KEY:
+            secret: OPENAI_API_KEY
+            version: latest
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
+          POSTHOG_PROJECT_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
+            version: latest
+        env:
+          OMI_ENV_STAGE:
+            value: '{env}'
+            category: runtime_identity
+          GOOGLE_CLOUD_PROJECT:
+            value: '{compute_project}'
+          MEMORY_ENABLED:
+            value: 'off'
+            category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
+            value: 'false'
+            category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH:
+            value: 'false'
+            category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
+            value: 'false'
+            category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
+            value: disabled
+            category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES:
+            value: '8'
+            category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
+            value: '0'
+            category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
+            value: 'false'
+            category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
+            value: ''
+            category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
+            value: '3'
+            category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
+            value: 'false'
+            category: memory_rollout
+        forbidden_env:
+        - HOSTED_PUSHER_API_URL

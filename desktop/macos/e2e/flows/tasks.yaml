@@ -16,6 +16,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailPanel.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailPanelPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailSourceNavigator.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/RewindEvidenceCard.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore+BulkSelection.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage+BulkDelete.swift
@@ -47,6 +48,13 @@ steps:
         - Linked sources
         - Details
         - Actions
+
+  - id: S2a-rewind-evidence
+    name: Open exact local Rewind evidence
+    do: "Open a seeded task whose Linked sources include a canonical rewind_frame.v1 reference for this device. Verify its Rewind evidence card is enabled, activate it, and confirm Rewind focuses the exact cited frame. Repeat with the cited local row removed and verify the accessible 'Rewind frame unavailable' state appears instead of another frame. A card without a host navigation handler must remain visibly disabled."
+    expect:
+      text_visible:
+        - Rewind
 
   - id: S2b-enter-select
     name: Enter task multi-select mode

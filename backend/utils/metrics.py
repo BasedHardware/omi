@@ -137,20 +137,28 @@ for _journey in CLIENT_JOURNEYS:
     for _outcome in CLIENT_JOURNEY_OUTCOMES:
         OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(journey=_journey, outcome=_outcome)
 
+# The three gauges below report one GLOBAL Firestore-derived quantity, and every
+# replica publishes the same value. Aggregate them with max(), never sum(): a
+# sum() multiplies the real number by the replica count and, while replicas run
+# different images, mixes two different answers to the same question.
 LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
-    'Age of the oldest queued, leased, or blocked listen finalization job',
+    'Global age of the oldest queued, leased, or blocked listen finalization job; '
+    'replicated per process, aggregate with max() not sum()',
 )
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
-    'Current durable listen finalization job count by non-success status',
+    'Global durable listen finalization job count by non-success status; replicated '
+    'per process, aggregate with max() not sum(). dead_letter is cumulative and only '
+    'ever rises: it is an all-time terminal total, not a backlog',
     ['status'],
 )
 
 LISTEN_FINALIZATION_DURABLE_JOBS = Gauge(
     'listen_finalization_durable_jobs',
-    'Authoritative Firestore finalization jobs by closed durable lifecycle state',
+    'Global authoritative Firestore finalization jobs by closed durable lifecycle '
+    'state; replicated per process, aggregate with max() not sum()',
     ['state'],
 )
 
@@ -174,6 +182,17 @@ LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL = Counter(
 # series, distinguishing no stranded rows from a missing scrape target.
 for _outcome in ('completed', 'migrated', 'skipped', 'error'):
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
+
+LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL = Counter(
+    'listen_finalization_byok_abandonments_total',
+    'Stranded BYOK finalization job dispositions by the abandonment sweep',
+    ['outcome'],
+)
+
+# Zero-initialize the closed outcome set so an idle process exports every
+# series, distinguishing no stranded rows from a missing scrape target.
+for _outcome in ('abandoned_conversation_closed', 'abandoned_bookkeeping', 'skipped', 'error'):
+    LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome=_outcome)
 
 LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
     'llm_gateway_chat_extraction_requests_total',
@@ -329,6 +348,18 @@ OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL = Counter(
     ['provider', 'stage'],
 )
 
+OMI_VAD_GATE_AUDIO_SECONDS_TOTAL = Counter(
+    'omi_vad_gate_audio_seconds_total',
+    'Live VAD gate audio seconds by gate outcome and mode',
+    ['outcome', 'mode'],
+)
+
+OMI_VAD_GATE_SESSIONS_TOTAL = Counter(
+    'omi_vad_gate_sessions_total',
+    'Live VAD gate sessions by mode',
+    ['mode'],
+)
+
 OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
     'omi_live_stt_terminal_total',
     'Terminal live-STT outcomes for accepted attempts by bounded labels',
@@ -412,6 +443,14 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
     'auth_flow_duration_seconds',
     'Auth flow duration in seconds by provider and terminal state',
     ['provider', 'terminal_state'],
+)
+
+OMI_SUBSCRIPTION_EVENTS = Counter(
+    'omi_subscription_events_total',
+    'Stripe subscription lifecycle events observed via webhook. Counts webhook '
+    'deliveries, which Stripe may retry, so treat these as an operational trend '
+    'signal rather than a billing-grade figure; Stripe remains source of truth.',
+    ['event', 'plan', 'interval', 'reason'],
 )
 
 

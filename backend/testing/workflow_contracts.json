@@ -694,6 +694,23 @@
       ]
     },
     {
+      "id": "jit_qa_vertex_gateway",
+      "risk": "high",
+      "sources": [
+        "scripts/dev-harness/dev_harness/jit_vertex_gateway.py"
+      ],
+      "tests": [
+        "tests/unit/test_jit_qa_vertex_gateway.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "only the local backend service identity can call the development Vertex broker",
+        "BYOK headers, tool calls, multimodal content, oversized requests, and excess concurrency fail closed",
+        "output tokens and response bytes remain bounded for streaming and non-streaming responses",
+        "the broker accepts only development ADC with the development quota project"
+      ]
+    },
+    {
       "id": "ci_changed_path_selection",
       "risk": "high",
       "sources": [

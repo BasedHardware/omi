@@ -2045,6 +2045,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get memoryDeleted => 'Đã xóa ký ức.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Hoàn tác';
 
   @override
@@ -9838,6 +9841,20 @@ class AppLocalizationsVi extends AppLocalizations {
   String get accountCutoverOpenStore => 'Mở cửa hàng';
 
   @override
+  String get chatScopeToday => 'Hôm nay';
+
+  @override
+  String get chatScopeThisWeek => 'Tuần này';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Về: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Hỏi về điều này';
+
+  @override
   String get sendRawAudioToOmi => 'Gửi âm thanh thô đến Omi';
 
   @override
@@ -9880,4 +9897,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Lỗi gần nhất: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Đã ghi sẵn';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant vẫn đang ghi âm nên không thể chuyển âm thanh đã lưu. Nhấn nút trên Pendant để dừng ghi âm, sau đó đồng bộ lại.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Bộ nhớ của Pendant đã đầy và nó vẫn đang ở chế độ ghi âm, nên không thể chuyển âm thanh đã lưu. Nhấn nút của Pendant để dừng ghi âm, sau đó đồng bộ lại.';
 }

@@ -5,7 +5,7 @@ import { cachedPosthogFetch } from "@/lib/posthog";
 export const dynamic = "force-dynamic";
 
 // Module-level cache (30 min TTL)
-let cache: { data: { date: string; thumbs_up: number; thumbs_down: number; ratio: number }[]; days: number; timestamp: number } | null = null;
+let cache: { data: { date: string; thumbs_up: number; thumbs_down: number; ratio: number | null }[]; days: number; timestamp: number } | null = null;
 const CACHE_TTL = 30 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
@@ -65,7 +65,9 @@ export async function GET(request: NextRequest) {
         date: date.slice(0, 10),
         thumbs_up,
         thumbs_down,
-        ratio: total > 0 ? Math.round((thumbs_up / total) * 100) : 0,
+        // null, not 0: a day with no ratings has no ratio. Reporting 0 made it
+        // indistinguishable from a day that was rated all-thumbs-down.
+        ratio: total > 0 ? Math.round((thumbs_up / total) * 100) : null,
       };
     });
 

@@ -692,6 +692,7 @@ def _accounting_context(
         feature=feature.strip(),
         api_surface=api_surface,
         payer=payer,
+        app_platform=caller.app_platform,
     )
 
 

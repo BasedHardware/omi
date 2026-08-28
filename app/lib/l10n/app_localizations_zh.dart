@@ -2000,6 +2000,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryDeleted => '记忆已删除。';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => '撤销';
 
   @override
@@ -9658,6 +9661,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accountCutoverOpenStore => '打开应用商店';
 
   @override
+  String get chatScopeToday => '今天';
+
+  @override
+  String get chatScopeThisWeek => '本周';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '关于：$title';
+  }
+
+  @override
+  String get askAboutThisConversation => '询问此内容';
+
+  @override
   String get sendRawAudioToOmi => '向 Omi 发送原始音频';
 
   @override
@@ -9699,4 +9716,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String appDisabledLastError(String error) {
     return '最后的错误：$error';
   }
+
+  @override
+  String get prerecordedTranscript => '预录';
+
+  @override
+  String get pendantRecordingSyncBlocked => 'Pendant 仍在录音，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
+
+  @override
+  String get pendantFullSyncBlocked => 'Pendant 的存储空间已满，且仍处于录音模式，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
 }

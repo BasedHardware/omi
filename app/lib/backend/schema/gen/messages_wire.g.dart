@@ -186,6 +186,110 @@ class GeneratedChartData {
   }
 }
 
+class GeneratedChatEvidenceReference {
+  final int? capturedAtMs;
+  final String? conversationId;
+  final int? endMs;
+  final String? errorCode;
+  final String? errorMessage;
+  final String? frameId;
+  final String id;
+  final String kind;
+  final Map<String, dynamic>? metadata;
+  final String? requestId;
+  final String? segmentId;
+  final int? startMs;
+  final String state;
+  final String? summary;
+  final String? title;
+
+  const GeneratedChatEvidenceReference({
+    this.capturedAtMs,
+    this.conversationId,
+    this.endMs,
+    this.errorCode,
+    this.errorMessage,
+    this.frameId,
+    required this.id,
+    required this.kind,
+    this.metadata,
+    this.requestId,
+    this.segmentId,
+    this.startMs,
+    required this.state,
+    this.summary,
+    this.title,
+  });
+
+  factory GeneratedChatEvidenceReference.fromJson(Map<String, dynamic> json) {
+    return GeneratedChatEvidenceReference(
+      capturedAtMs: _readFieldValue<int>(_readField(json, const ["captured_at_ms"]), "captured_at_ms", _readInt, requiredField: false, nullable: true),
+      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
+      endMs: _readFieldValue<int>(_readField(json, const ["end_ms"]), "end_ms", _readInt, requiredField: false, nullable: true),
+      errorCode: _readFieldValue<String>(_readField(json, const ["error_code"]), "error_code", _readString, requiredField: false, nullable: true),
+      errorMessage: _readFieldValue<String>(_readField(json, const ["error_message"]), "error_message", _readString, requiredField: false, nullable: true),
+      frameId: _readFieldValue<String>(_readField(json, const ["frame_id"]), "frame_id", _readString, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      metadata: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["metadata"]), "metadata", _readMap, requiredField: false, nullable: true),
+      requestId: _readFieldValue<String>(_readField(json, const ["request_id"]), "request_id", _readString, requiredField: false, nullable: true),
+      segmentId: _readFieldValue<String>(_readField(json, const ["segment_id"]), "segment_id", _readString, requiredField: false, nullable: true),
+      startMs: _readFieldValue<int>(_readField(json, const ["start_ms"]), "start_ms", _readInt, requiredField: false, nullable: true),
+      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
+      summary: _readFieldValue<String>(_readField(json, const ["summary"]), "summary", _readString, requiredField: false, nullable: true),
+      title: _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'captured_at_ms': capturedAtMs,
+      'conversation_id': conversationId,
+      'end_ms': endMs,
+      'error_code': errorCode,
+      'error_message': errorMessage,
+      'frame_id': frameId,
+      'id': id,
+      'kind': kind,
+      'metadata': metadata,
+      'request_id': requestId,
+      'segment_id': segmentId,
+      'start_ms': startMs,
+      'state': state,
+      'summary': summary,
+      'title': title,
+    };
+  }
+}
+
+class GeneratedChatEvidenceEnvelope {
+  final List<GeneratedChatEvidenceReference>? references;
+  final String? requestId;
+  final int schemaVersion;
+
+  const GeneratedChatEvidenceEnvelope({
+    this.references,
+    this.requestId,
+    this.schemaVersion = 1,
+  });
+
+  factory GeneratedChatEvidenceEnvelope.fromJson(Map<String, dynamic> json) {
+    return GeneratedChatEvidenceEnvelope(
+      references: _readFieldValue<List<GeneratedChatEvidenceReference>>(_readField(json, const ["references"]), "references", (value) => _readObjectList(value, GeneratedChatEvidenceReference.fromJson), requiredField: false, nullable: true),
+      requestId: _readFieldValue<String>(_readField(json, const ["request_id"]), "request_id", _readString, requiredField: false, nullable: true),
+      schemaVersion: _required(_readFieldValue<int>(_readField(json, const ["schema_version"]), "schema_version", _readInt, requiredField: false, nullable: false, defaultValue: 1), "schema_version"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'references': references?.map((value) => value.toJson()).toList(),
+      'request_id': requestId,
+      'schema_version': schemaVersion,
+    };
+  }
+}
+
 class GeneratedMessage {
   final String? appId;
   final Map<String, dynamic>? chartData;
@@ -194,6 +298,7 @@ class GeneratedMessage {
   final List<Map<String, dynamic>>? contentBlocks;
   final DateTime createdAt;
   final String? dataProtectionLevel;
+  final GeneratedChatEvidenceEnvelope? evidence;
   final List<GeneratedFileChat> files;
   final List<String> filesId;
   final bool fromExternalIntegration;
@@ -223,6 +328,7 @@ class GeneratedMessage {
     this.contentBlocks,
     required this.createdAt,
     this.dataProtectionLevel,
+    this.evidence,
     this.files = const [],
     this.filesId = const [],
     this.fromExternalIntegration = false,
@@ -254,6 +360,7 @@ class GeneratedMessage {
       contentBlocks: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["content_blocks"]), "content_blocks", _readMapList, requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
+      evidence: _readFieldValue<GeneratedChatEvidenceEnvelope>(_readField(json, const ["evidence"]), "evidence", (value) => _readObject(value, GeneratedChatEvidenceEnvelope.fromJson), requiredField: false, nullable: true),
       files: _required(_readFieldValue<List<GeneratedFileChat>>(_readField(json, const ["files"]), "files", (value) => _readObjectList(value, GeneratedFileChat.fromJson), requiredField: false, nullable: false, defaultValue: const []), "files"),
       filesId: _required(_readFieldValue<List<String>>(_readField(json, const ["files_id"]), "files_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "files_id"),
       fromExternalIntegration: _required(_readFieldValue<bool>(_readField(json, const ["from_external_integration"]), "from_external_integration", _readBool, requiredField: false, nullable: false, defaultValue: false), "from_external_integration"),
@@ -286,6 +393,7 @@ class GeneratedMessage {
       'content_blocks': contentBlocks,
       'created_at': createdAt.toUtc().toIso8601String(),
       'data_protection_level': dataProtectionLevel,
+      'evidence': evidence?.toJson(),
       'files': files.map((value) => value.toJson()).toList(),
       'files_id': filesId,
       'from_external_integration': fromExternalIntegration,
@@ -319,6 +427,7 @@ class GeneratedResponseMessage {
   final List<Map<String, dynamic>>? contentBlocks;
   final DateTime createdAt;
   final String? dataProtectionLevel;
+  final GeneratedChatEvidenceEnvelope? evidence;
   final List<GeneratedFileChat> files;
   final List<String> filesId;
   final bool fromExternalIntegration;
@@ -349,6 +458,7 @@ class GeneratedResponseMessage {
     this.contentBlocks,
     required this.createdAt,
     this.dataProtectionLevel,
+    this.evidence,
     this.files = const [],
     this.filesId = const [],
     this.fromExternalIntegration = false,
@@ -381,6 +491,7 @@ class GeneratedResponseMessage {
       contentBlocks: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["content_blocks"]), "content_blocks", _readMapList, requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
+      evidence: _readFieldValue<GeneratedChatEvidenceEnvelope>(_readField(json, const ["evidence"]), "evidence", (value) => _readObject(value, GeneratedChatEvidenceEnvelope.fromJson), requiredField: false, nullable: true),
       files: _required(_readFieldValue<List<GeneratedFileChat>>(_readField(json, const ["files"]), "files", (value) => _readObjectList(value, GeneratedFileChat.fromJson), requiredField: false, nullable: false, defaultValue: const []), "files"),
       filesId: _required(_readFieldValue<List<String>>(_readField(json, const ["files_id"]), "files_id", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "files_id"),
       fromExternalIntegration: _required(_readFieldValue<bool>(_readField(json, const ["from_external_integration"]), "from_external_integration", _readBool, requiredField: false, nullable: false, defaultValue: false), "from_external_integration"),
@@ -414,6 +525,7 @@ class GeneratedResponseMessage {
       'content_blocks': contentBlocks,
       'created_at': createdAt.toUtc().toIso8601String(),
       'data_protection_level': dataProtectionLevel,
+      'evidence': evidence?.toJson(),
       'files': files.map((value) => value.toJson()).toList(),
       'files_id': filesId,
       'from_external_integration': fromExternalIntegration,

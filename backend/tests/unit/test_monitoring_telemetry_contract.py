@@ -23,8 +23,22 @@ PROD_VALUES = MONITORING / 'kube-prometheus-stack' / 'prod_omi_monitoring_values
 ALERT_RULES = MONITORING / 'alert-rules.json'
 PARAKEET_SERVICEMONITOR = REPO / 'backend/charts/parakeet' / 'templates' / 'servicemonitor.yaml'
 STACKDRIVER_EXPORTER = MONITORING / 'prometheus-stackdriver-exporter' / 'prod_omi_stackdriver_exporter.yaml'
+STACKDRIVER_EXPORTER_DEV = MONITORING / 'prometheus-stackdriver-exporter' / 'dev_omi_stackdriver_exporter.yaml'
 CLOUD_RUN_EXPORTER = MONITORING / 'prometheus-stackdriver-exporter' / 'prod_omi_cloud_run_metrics_exporter.yaml'
 CLOUD_RUN_EXPORTER_DEV = MONITORING / 'prometheus-stackdriver-exporter' / 'dev_omi_cloud_run_metrics_exporter.yaml'
+
+
+def _cpu_millicores(value: object) -> float:
+    text = str(value)
+    return float(text[:-1]) if text.endswith('m') else float(text) * 1000
+
+
+def _memory_mebibytes(value: object) -> float:
+    text = str(value)
+    for suffix, factor in (('Gi', 1024), ('Mi', 1), ('G', 953.7), ('M', 0.9537)):
+        if text.endswith(suffix):
+            return float(text[: -len(suffix)]) * factor
+    return float(text) / (1024 * 1024)
 
 
 def _load_inventory() -> dict[str, Any]:
@@ -114,6 +128,31 @@ def test_stackdriver_exporter_values_present():
     assert any(job['name'] == 'prometheus-stackdriver-metrics' for job in inventory['scrape_jobs'])
 
 
+@pytest.mark.parametrize(
+    'path',
+    (STACKDRIVER_EXPORTER, STACKDRIVER_EXPORTER_DEV),
+    ids=('prod', 'dev'),
+)
+def test_stackdriver_exporter_ingests_firestore_read_count(path):
+    """A Firestore cost runaway is invisible unless this prefix is scraped.
+
+    document/read_count was absent from every Prometheus metric name during the
+    2026-08-23 cost incident, so nothing could alert on it. Both environments
+    are asserted: the dev values file is what the automatic post-merge rollout
+    installs, so leaving it unpinned lets dev drift away from the contract prod
+    is held to (same rationale as the Cloud Run exporter parametrization above).
+    """
+    values = yaml.safe_load(path.read_text(encoding='utf-8'))
+    prefixes = values['stackdriver']['metrics']['prefixes']
+
+    assert (
+        'firestore.googleapis.com/document/read_count' in prefixes
+    ), f'{path.name}: missing the firestore.googleapis.com/document/read_count prefix'
+    # The existing loadbalancing prefixes must survive the edit untouched.
+    assert 'loadbalancing.googleapis.com/https/backend_request_count' in prefixes
+    assert 'loadbalancing.googleapis.com/https/internal/backend_latencies' in prefixes
+
+
 # Cloud Monitoring rejects a filter that mixes AND with OR across resource.labels
 # restrictions ("AND and OR cannot be mixed for 'resource.labels' restrictions",
 # HTTP 400). The exporter answers that rejection per descriptor, so the pod stays
@@ -148,6 +187,34 @@ def test_cloud_run_metrics_exporter_is_scoped_and_rate_limited(path, project_id,
         'create': False,
         'name': service_account,
     }
+
+
+@pytest.mark.parametrize('path', (CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV), ids=('prod', 'dev'))
+def test_cloud_run_metrics_exporter_can_outlast_its_own_scrape(path):
+    """The exporter collects from Cloud Monitoring inline, so it must be sized for it.
+
+    A prod scrape is ~28MB / ~52k series and takes 6-10s. Under a 200m CPU ceiling
+    and a 10s probe timeout the process was killed mid-collection 120 times, held
+    up=0, and recorded scrape_samples_scraped=0 -- while reporting a Deployment
+    that had simply never had anything to collect. Floors, not exact values, so
+    capacity can be raised without editing this test.
+    """
+    values = yaml.safe_load(path.read_text(encoding='utf-8'))
+
+    limits = values['resources']['limits']
+    assert (
+        _cpu_millicores(limits['cpu']) >= 1000
+    ), f'{path.name}: measured steady state is ~238m and a scrape needs ~1 core'
+    assert _memory_mebibytes(limits['memory']) >= 1024, f'{path.name}: measured steady state is ~331Mi'
+
+    # The chart hardcodes both probes and reads no probe values, so a probe block
+    # here would render nothing while looking like configuration. Reject it, and
+    # keep capacity as the lever that actually decides whether a probe survives.
+    for probe in ('livenessProbe', 'readinessProbe'):
+        assert probe not in values, (
+            f'{path.name}: prometheus-stackdriver-exporter templates {probe} with a fixed 10s timeout and '
+            f'exposes no values key for it; this block would be inert'
+        )
 
 
 @pytest.mark.parametrize('path', (CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV), ids=('prod', 'dev'))

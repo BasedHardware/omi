@@ -18,6 +18,10 @@ import { recordFallback, type RecordFallback } from '../observability/fallback'
 import type { AgentRuntimeKernel } from '../agentKernel/kernel'
 import type { AgentEvent } from '../agentKernel/types'
 import type { MainChatEvent, MainChatResult, MainChatSendArgs } from '../../shared/types'
+import {
+  parseChatEvidenceFromRecord,
+  type ChatEvidenceReferenceEnvelope
+} from '../../shared/knowledgeLedger'
 
 /** The main_chat surface the kernel resolves a turn against. */
 const MAIN_CHAT_ADAPTER_ID = 'pi-mono'
@@ -118,6 +122,25 @@ function parsePayload(event: AgentEvent): Record<string, unknown> {
   }
 }
 
+/** Evidence is an additive adapter result field. Keep its transport independent
+ * of the answer text and fail closed if an older/newer adapter stores malformed
+ * result JSON in the kernel run row. */
+function parseKernelEvidence(resultJson: string | null): ChatEvidenceReferenceEnvelope | undefined {
+  if (!resultJson) return undefined
+  try {
+    const parsed: unknown = JSON.parse(resultJson)
+    const direct = parseChatEvidenceFromRecord(parsed)
+    if (direct) return direct
+    if (parsed && typeof parsed === 'object' && 'result' in parsed) {
+      const nested = parseChatEvidenceFromRecord((parsed as { result?: unknown }).result)
+      if (nested) return nested
+    }
+  } catch {
+    // Text/result handling must not fail because optional evidence was malformed.
+  }
+  return undefined
+}
+
 /**
  * Project one persisted kernel event onto the main-chat wire union, or `null` for
  * events the chat UI does not render. Streaming events (`message.delta`,
@@ -170,8 +193,16 @@ export function projectKernelEvent(
       }
       return null
     }
-    case 'message.completed':
-      return { type: 'completed', requestId, runId, text: String(payload.text ?? '') }
+    case 'message.completed': {
+      const evidence = parseChatEvidenceFromRecord(payload)
+      return {
+        type: 'completed',
+        requestId,
+        runId,
+        text: String(payload.text ?? ''),
+        ...(evidence ? { evidence } : {})
+      }
+    }
     case 'run.succeeded':
       return { type: 'run_finished', requestId, runId, status: 'succeeded' }
     case 'run.cancelled':
@@ -339,11 +370,13 @@ export async function runMainChatTurn(
       adapterId: MAIN_CHAT_ADAPTER_ID
     })
 
+    const evidence = parseKernelEvidence(result.run.resultJson)
     return {
       runId: result.run.runId,
       requestId,
       ok: result.terminalStatus === 'succeeded',
       text: result.text,
+      ...(evidence ? { evidence } : {}),
       terminalStatus: result.terminalStatus,
       costUsd: result.run.costUsd ?? undefined,
       error: result.run.errorMessage ?? undefined

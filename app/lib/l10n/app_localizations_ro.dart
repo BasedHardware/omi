@@ -2051,6 +2051,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get memoryDeleted => 'Amintire ștearsă.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Anulează';
 
   @override
@@ -9889,6 +9892,20 @@ class AppLocalizationsRo extends AppLocalizations {
   String get accountCutoverOpenStore => 'Deschide magazinul';
 
   @override
+  String get chatScopeToday => 'Astăzi';
+
+  @override
+  String get chatScopeThisWeek => 'Săptămâna aceasta';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Despre: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Întreabă despre asta';
+
+  @override
   String get sendRawAudioToOmi => 'Trimite sunetul brut către Omi';
 
   @override
@@ -9932,4 +9949,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Ultima eroare: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Preînregistrat';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant încă înregistrează, așa că sunetul stocat nu poate fi transferat. Apasă butonul Pendant pentru a opri înregistrarea, apoi sincronizează din nou.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Spațiul de stocare al Pendantului este plin și acesta este încă în modul de înregistrare, așa că audio-ul stocat nu poate fi transferat. Apăsați butonul Pendantului pentru a opri înregistrarea, apoi sincronizați din nou.';
 }

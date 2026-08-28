@@ -26,10 +26,12 @@ from utils.memory.import_write_guard import (
     import_write_violation_for_guard,
     is_per_file_local_import_tags,
 )
+from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout_sync
 from utils.memory.memory_api_contract import MemoryApiExposure
 from utils.memory.memory_api_response import memory_item_response, memory_list_response
 from utils.memory.memory_system import MemorySystem
 from utils.other.list_budget import (
+    ListReadBudgetExhausted,
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
     list_read_budget_for_request,
@@ -48,12 +50,26 @@ class MemoryMutationResponse(BaseModel):
     status: str
 
 
+class MemoryEditResponse(MemoryMutationResponse):
+    """Additive authoritative readback for edits that replace a ledger row."""
+
+    memory: Optional[MemoryDB] = None
+
+
 class MemoryValueRequest(BaseModel):
     """Canonical body for single-value memory mutations."""
 
     model_config = {"extra": "forbid"}
 
     value: str
+
+
+class MemoryRevertRequest(BaseModel):
+    """Retry-stable client intent for one append-only history restore."""
+
+    model_config = {"extra": "forbid"}
+
+    operation_id: uuid.UUID
 
 
 class MemoryReadStatusRequest(BaseModel):
@@ -515,6 +531,8 @@ async def create_memory_import_batch(
         logger.exception("Memory import ingest failed uid=%s source_type=%s", uid, request.source_type)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     parity_capture.observe("inbound", {"type": "memory_import_result", **result.response.model_dump(mode="json")})
+    parity_capture.persist()
+    return result.response
 
 
 @router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])
@@ -652,6 +670,58 @@ def get_memories(
         budget=budget,
     )
     return _finalize(memories, truncated=budget.truncated, next_cursor=None)
+
+
+@router.get('/v3/memories/ledger-history', tags=['memories'], response_model=List[MemoryDB])
+def get_ledger_history(
+    response: Response,
+    request: Request = None,  # type: ignore[assignment]
+    limit: int = 100,
+    offset: int = 0,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Return explicit owner-scoped rejected and closed ledger rows.
+
+    ``GET /v3/memories`` remains the current product view and continues to
+    filter these rows.  This history endpoint is intentionally read-only and
+    canonical-only; it returns rows newest-first by ``updated_at`` then
+    ``memory_id`` (``limit`` is capped at 500 and the compatibility
+    ``offset + limit`` window at 5000).  The provider window is bounded to 500
+    rows plus one sentinel; an incomplete provider/budget window is marked with
+    ``X-Omi-List-Truncated: true``.  Tombstoned and hidden rows are never
+    resurrected for history UI.
+    """
+
+    # The mobile client calls this on every memories-tab load for every user.
+    # Outside the JIT rollout no ledger history can exist, so answer empty
+    # without paying the bounded 501-row provider scan for the whole fleet.
+    # Unknown/error rollout states also take this cheap path (fail closed).
+    rollout = resolve_jit_rollout_sync(uid, stage=JITDecisionStage.READ_ONLY)
+    if not rollout.permits_work:
+        return memory_list_response([], MemoryApiExposure.CANONICAL, headers={'Cache-Control': 'no-store'})
+
+    db_client = getattr(db_client_module, 'db', None)
+    budget = list_read_budget_for_request(request, route='memories-ledger-history')
+    try:
+        page = MemoryService(db_client=db_client).read_ledger_history_page(
+            uid,
+            limit=limit,
+            offset=offset,
+            budget=budget,
+        )
+    except HTTPException:
+        raise
+    except ListReadBudgetExhausted as exc:
+        raise HTTPException(status_code=503, detail="Ledger history unavailable") from exc
+    except Exception as exc:
+        logger.exception("Ledger history read failed uid=%s", uid)
+        raise HTTPException(status_code=503, detail="Ledger history unavailable") from exc
+
+    headers = {'Cache-Control': 'no-store'}
+    if budget.truncated or page.truncated:
+        headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
+    budget.observe('truncated' if budget.truncated or page.truncated else 'complete')
+    return memory_list_response(page.memories, MemoryApiExposure.CANONICAL, headers=headers)
 
 
 @router.get('/v3/memories/review-queue', tags=['memories'], response_model=List[Dict[str, Any]])
@@ -799,7 +869,37 @@ def review_memory(
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}', tags=['memories'], response_model=MemoryMutationResponse)
+@router.post(
+    '/v3/memories/{memory_id}/revert',
+    tags=['memories'],
+    response_model=MemoryEditResponse,
+)
+def revert_memory(
+    memory_id: str,
+    request: MemoryRevertRequest,
+    response: Response,
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
+    ),
+):
+    """Append a fresh current fact from one closed ledger history row."""
+
+    response.headers['Cache-Control'] = 'no-store'
+    db_client = getattr(db_client_module, 'db', None)
+    restored = MemoryService(db_client=db_client).revert_superseded_ledger_fact(
+        uid,
+        memory_id,
+        str(request.operation_id),
+    )
+    return {'status': 'ok', 'memory': restored}
+
+
+@router.patch(
+    '/v3/memories/{memory_id}',
+    tags=['memories'],
+    response_model=MemoryEditResponse,
+    response_model_exclude_none=True,
+)
 def edit_memory(
     memory_id: str,
     request: Optional[MemoryValueRequest] = Body(default=None),
@@ -817,11 +917,14 @@ def edit_memory(
         raise HTTPException(status_code=422, detail="Missing memory mutation value")
 
     db_client = getattr(db_client_module, 'db', None)
-    _validate_mutable_memory(uid, memory_id, db_client=db_client)
     try:
-        MemoryService(db_client=db_client).update_content(uid, memory_id, mutation_value)
+        updated = MemoryService(db_client=db_client).update_content(uid, memory_id, mutation_value)
+    except HTTPException:
+        raise
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
+    if updated.ledger_schema_version == 'knowledge_ledger.v1':
+        return {'status': 'ok', 'memory': updated}
     return {'status': 'ok'}
 
 

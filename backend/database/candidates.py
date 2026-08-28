@@ -37,7 +37,6 @@ TASK_INTELLIGENCE_CONTROL_DOCUMENT = 'state'
 PENDING_CANDIDATE_SEMANTIC_VERSION = 'task-create.v1'
 WORKSTREAM_CANDIDATE_SEMANTIC_VERSION = 'workstream-create.v1'
 MAX_CANDIDATE_EVIDENCE_REFS = 20
-PENDING_CANDIDATE_REUSE_WINDOW = timedelta(days=14)
 # A suggestion the user does not act on expires and is gone. This is a real
 # stored deadline, not a display filter: every read treats a lapsed pending
 # Candidate as expired.
@@ -431,6 +430,30 @@ def _stored_task_priority(value: Any) -> Optional[TaskPriority]:
         return None
 
 
+def _as_utc(value: Any) -> Optional[datetime]:
+    if not isinstance(value, datetime):
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+def _suggestion_window_has_closed(
+    *,
+    status: str,
+    created_at: Optional[datetime],
+    expires_at: Optional[datetime],
+    now: datetime,
+) -> bool:
+    if status != CandidateStatus.pending.value:
+        return False
+    # Candidates written before suggestions had a deadline carry no `expires_at`.
+    # Derive one from creation so the pre-existing backlog ages out too, with no
+    # backfill.
+    deadline = expires_at or (created_at + SUGGESTION_TTL if created_at is not None else None)
+    if deadline is None:
+        return False
+    return deadline <= now
+
+
 def candidate_has_lapsed(candidate: CandidateRecord, *, now: datetime) -> bool:
     """Whether a pending Candidate's suggestion window has closed.
 
@@ -438,13 +461,30 @@ def candidate_has_lapsed(candidate: CandidateRecord, *, now: datetime) -> bool:
     readable. Every read path must ask this rather than trusting `status`.
     """
 
-    if candidate.status != CandidateStatus.pending:
-        return False
-    # Candidates written before suggestions had a deadline carry no `expires_at`.
-    # Derive one from creation so the pre-existing backlog ages out too, with no
-    # backfill.
-    deadline = candidate.expires_at or (candidate.created_at + SUGGESTION_TTL)
-    return deadline <= now
+    return _suggestion_window_has_closed(
+        status=candidate.status.value,
+        created_at=candidate.created_at,
+        expires_at=candidate.expires_at,
+        now=now,
+    )
+
+
+def stored_candidate_has_lapsed(candidate: dict[str, Any], *, now: datetime) -> bool:
+    """`candidate_has_lapsed` for a stored document that was never parsed into a record.
+
+    The recommendation reader loads canonical state as raw documents, so it cannot
+    ask the record-shaped question. It must still ask the same one: a deadline that
+    only one reader enforces is a deadline the other readers repeal.
+    """
+
+    stored_status = candidate.get('status')
+    status = getattr(stored_status, 'value', stored_status)
+    return _suggestion_window_has_closed(
+        status=str(status) if status else CandidateStatus.pending.value,
+        created_at=_as_utc(candidate.get('created_at')),
+        expires_at=_as_utc(candidate.get('expires_at')),
+        now=now,
+    )
 
 
 def create_candidate(
@@ -559,7 +599,10 @@ def create_candidate(
             claimed_candidate is not None
             and claimed_candidate.status == CandidateStatus.pending
             and claimed_candidate.created_at.tzinfo is not None
-            and claimed_candidate.created_at >= now_value - PENDING_CANDIDATE_REUSE_WINDOW
+            # Reuse is bounded by the suggestion's own life, not by a separate
+            # window: a lapsed pending Candidate is unreadable, so merging a new
+            # capture into it would store a proposal the user can never see.
+            and not candidate_has_lapsed(claimed_candidate, now=now_value)
         )
         if (
             claimed_candidate is not None
@@ -1361,6 +1404,7 @@ __all__ = [
     'pending_candidate_semantic_identity',
     'reconcile_migrated_candidate',
     'candidate_has_lapsed',
+    'stored_candidate_has_lapsed',
     'resolve_candidate_without_mutation',
     'resolve_task_candidate',
     'task_id_for_candidate',

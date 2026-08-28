@@ -2040,6 +2040,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get memoryDeleted => 'Muisto poistettu.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Kumoa';
 
   @override
@@ -9842,6 +9845,20 @@ class AppLocalizationsFi extends AppLocalizations {
   String get accountCutoverOpenStore => 'Avaa kauppa';
 
   @override
+  String get chatScopeToday => 'Tänään';
+
+  @override
+  String get chatScopeThisWeek => 'Tällä viikolla';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Aihe: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Kysy tästä';
+
+  @override
   String get sendRawAudioToOmi => 'Lähetä käsittelemätön ääni Omille';
 
   @override
@@ -9886,4 +9903,15 @@ class AppLocalizationsFi extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Viimeisin virhe: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Esitallenne';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant tallentaa edelleen, joten tallennettua ääntä ei voi siirtää. Pysäytä tallennus painamalla Pendantin painiketta ja synkronoi sitten uudelleen.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendantin muisti on täynnä ja se on yhä äänitystilassa, joten tallennettua ääntä ei voi siirtää. Pysäytä äänitys painamalla Pendantin painiketta ja synkronoi sitten uudelleen.';
 }

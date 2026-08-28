@@ -32,13 +32,36 @@ def main() -> int:
         type=Path,
         help='Write the exact rendered Cloud Run service env, secret refs, and flags as validator state JSON.',
     )
+    parser.add_argument(
+        '--desktop-state-output',
+        type=Path,
+        help=(
+            'Write the rendered desktop-backend env as expected-env-state JSON for '
+            'attach_cloud_run_gmp_sidecar.py --expected-env-state.'
+        ),
+    )
     args = parser.parse_args()
     if args.job and args.state_output:
         parser.error('--state-output is supported only for the full service render')
+    if args.job and args.desktop_state_output:
+        parser.error('--desktop-state-output is supported only for the full service render')
 
     manifest = _load_yaml(args.manifest)
     environments = _as_config_dict(manifest['environments']) or {}
     env_config = _as_config_dict(environments[args.env]) or {}
+
+    if args.desktop_state_output:
+        args.desktop_state_output.write_text(
+            json.dumps(_render_desktop_backend_state(env_config), indent=2, sort_keys=True) + '\n',
+            encoding='utf-8',
+        )
+        # desktop-backend deploys from its own workflow and does not set the
+        # backend service env this script otherwise requires. Rendering the
+        # sidecar guard must not force those callers to supply it, so stop here
+        # unless a backend render was also asked for.
+        if not args.state_output and not args.job:
+            return 0
+
     cloud_run = _as_config_dict(env_config['cloud_run']) or {}
 
     jobs = _as_config_dict(cloud_run.get('jobs')) or {}
@@ -200,13 +223,46 @@ def _render_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
         service_config = _as_config_dict(raw_service_config)
         if service_config is None:
             raise ValueError(f'Cloud Run service {service_name} must be a mapping')
-        env_entries = _render_env_entries(_as_config_dict(service_config.get('env')) or {})
-        secret_entries = _render_secret_entries(_as_config_dict(service_config.get('secrets')) or {})
         services[str(service_name)] = {
-            'env': [*env_entries, *secret_entries],
+            'env': _render_state_env(service_config),
             'flags': dict(network_flags),
         }
-    return {'services': services}
+    # Jobs ship from their own workflows, but their env, secret and forbidden_env contract is
+    # declared in this manifest and validated against this state; omitting them retires that check.
+    jobs: ConfigDict = {}
+    for job_name, raw_job_config in (_as_config_dict(cloud_run.get('jobs')) or {}).items():
+        job_config = _as_config_dict(raw_job_config)
+        if job_config is None:
+            raise ValueError(f'Cloud Run job {job_name} must be a mapping')
+        jobs[str(job_name)] = {
+            'env': _render_state_env(job_config),
+            'flags': _render_flag_values(_as_config_dict(job_config.get('flags')) or {}),
+        }
+    return {'services': services, 'jobs': jobs}
+
+
+def _render_state_env(config: ConfigDict) -> list[ConfigDict]:
+    return [
+        *_render_env_entries(_as_config_dict(config.get('env')) or {}),
+        *_render_secret_entries(_as_config_dict(config.get('secrets')) or {}),
+    ]
+
+
+def _render_desktop_backend_state(env_config: ConfigDict) -> ConfigDict:
+    """Build sidecar-guard state for desktop-backend from the same manifest values.
+
+    Deliberately separate from _render_cloud_run_state: that file is also read by
+    validate-backend-runtime-env.py, which walks cloud_run.services, and
+    desktop-backend is not one of those. Keeping them apart means adding this
+    guard cannot perturb the backend deploy path.
+
+    The manifest owns only part of desktop-backend's env today, and that is fine:
+    attach_cloud_run_gmp_sidecar.py checks the names it is given and ignores the
+    rest, so this asserts a real subset rather than nothing.
+    """
+    desktop_backend = _as_config_dict(env_config.get('desktop_backend')) or {}
+    env_entries = _render_env_entries(_as_config_dict(desktop_backend.get('env')) or {})
+    return {'services': {'desktop-backend': {'env': env_entries}}}
 
 
 def _runtime_value(name: str, entry: ConfigDict, *, allow_missing: bool = False) -> str | None:

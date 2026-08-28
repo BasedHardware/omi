@@ -100,7 +100,8 @@ struct SpineRowView: View {
   let onOpenMemory: (SpineMemory) -> Void
   let onToggleTask: (TaskActionItem) -> Void
   let onToggleStar: (ServerConversation) -> Void
-  let onOpenMoment: (SpineMoment) -> Void
+  let onOpenMoment: (SpineMoment, [SpineMoment]) -> Void
+  let onShowAllMoments: () -> Void
   let onOpenBrainMap: () -> Void
 
   /// An attached row has no timestamp of its own while the conversation above it owns the minute;
@@ -181,7 +182,8 @@ struct SpineRowView: View {
         onToggle: onToggleTask
       )
     case .moments(let shown, let total):
-      SpineMomentsRow(moments: shown, total: total, onOpen: onOpenMoment)
+      SpineMomentsRow(
+        moments: shown, total: total, onOpen: onOpenMoment, onShowAll: onShowAllMoments)
     case .brainMap(let map):
       SpineBrainMapRow(map: map, onOpen: onOpenBrainMap)
     }
@@ -394,7 +396,16 @@ struct SpineTasksRow: View {
 struct SpineMomentsRow: View {
   let moments: [SpineMoment]
   let total: Int
-  let onOpen: (SpineMoment) -> Void
+  /// The tile that was clicked, and the strip it belongs to. The strip travels with it because the
+  /// viewer steps left and right through whatever set it is given, so handing over one frame would
+  /// be handing over a viewer with its arrow keys disabled.
+  let onOpen: (SpineMoment, [SpineMoment]) -> Void
+  /// The rest of the day, on the Rewind page. This is where navigating-to-Rewind went when
+  /// clicking a tile stopped doing it: the caption is the thing that says there are 184 of these,
+  /// so the caption is the honest place to offer the other 176.
+  let onShowAll: () -> Void
+
+  @State private var isHoveringCount = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -404,15 +415,25 @@ struct SpineMomentsRow: View {
       // below them and one line above the next row: a line belonging to neither thing it sat
       // between. Above the tiles it is unambiguously theirs, and it lands on the timestamp beside it.
       if total > moments.count {
-        Text(
-          "\(SpineFormat.number(moments.count)) of \(SpineFormat.plural(total, "moment", "moments"))"
-        )
-        .inkStyle(.statusLabel, color: Ink.secondary)
+        Button(action: onShowAll) {
+          Text(
+            "\(SpineFormat.number(moments.count)) of \(SpineFormat.plural(total, "moment", "moments"))"
+          )
+          .inkStyle(.statusLabel, color: Ink.secondary)
+          .underline(isHoveringCount, pattern: .solid)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHoveringCount = $0 }
+        .help("Show all of this hour in Rewind")
+        .accessibilityHint(Text("Opens Rewind"))
       }
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 9) {
           ForEach(moments) { moment in
-            SpineMomentTile(moment: moment, onOpen: { onOpen(moment) })
+            SpineMomentTile(
+              moment: moment,
+              onOpen: { onOpen(moment, moments) },
+              onShowAll: onShowAll)
           }
         }
         .padding(.vertical, 2)
@@ -464,6 +485,12 @@ struct SpineStripFade: View {
 struct SpineMomentTile: View {
   let moment: SpineMoment
   let onOpen: () -> Void
+  /// The rest of the day, on the Rewind page.
+  ///
+  /// On the tile as well as on the caption, because the caption only exists when the strip is
+  /// truncated — a row of eight or fewer moments has no caption, and without this it would have no
+  /// route to Rewind at all now that clicking a tile opens the frame instead of navigating.
+  let onShowAll: () -> Void
 
   @State private var image: NSImage?
   @State private var isHovering = false
@@ -511,8 +538,13 @@ struct SpineMomentTile: View {
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
     .help(moment.label)
+    .contextMenu {
+      Button("Quick Look", action: onOpen)
+      Divider()
+      Button("Show All in Rewind", action: onShowAll)
+    }
     .accessibilityLabel(Text("\(moment.label), \(moment.appName), \(SpineFormat.time(moment.timestamp))"))
-    .accessibilityHint(Text("Opens Rewind at this moment"))
+    .accessibilityHint(Text("Opens this moment in Quick Look"))
     .task(id: moment.id) {
       // Synchronous cache hit first, so a tile scrolling back into view never flashes an empty well.
       let screenshot = moment.screenshot

@@ -202,7 +202,16 @@ struct SpineStream: View {
                   onOpenMemory: onOpenMemory,
                   onToggleTask: { task in Task { await tasksStore.toggleTask(task) } },
                   onToggleStar: toggleStar,
-                  onOpenMoment: { _ in onOpenRewind() },
+                  // Clicking a moment used to discard the moment and navigate to the Rewind
+                  // page — the one thing the user did not ask for, since what they clicked was a
+                  // specific frame they wanted to read. Quick Look shows that frame at full
+                  // resolution, in place, and arrows along the rest of the strip.
+                  onOpenMoment: { moment, strip in
+                    ScreenFrameQuickLook.shared.present(
+                      strip.map { QuickLookFrame(screenshot: $0.screenshot) },
+                      startingAt: String(moment.id))
+                  },
+                  onShowAllMoments: onOpenRewind,
                   onOpenBrainMap: onOpenBrainMap
                 )
                 .background(anchor(for: row, in: day))

@@ -114,6 +114,7 @@ seam, which is dev-only: the packaged app never opens a CDP port
 | `OMI_SANDBOX=<name>`        | Pin the userData profile suffix (`OMI_SANDBOX=1` = legacy `chat-kg`)                                                                                                                           |
 | `OMI_DEV_NO_REMOTE_DEBUG=1` | Don't open a CDP port for this instance                                                                                                                                                        |
 | `OMI_DEV_HW_GPU=1`          | Use hardware GPU instead of the dev software-render default                                                                                                                                    |
+| `OMI_OZONE=wayland`         | Linux only: run under native Wayland instead of the default XWayland. Needed on compositors with limited XWayland support (e.g. niri), where the main window can otherwise fail to map at all. Costs global shortcuts (push-to-talk/overlay summon) and active-window detection, and the companion bar can't be positioned off-screen. |
 
 ## Troubleshooting
 
@@ -135,6 +136,22 @@ port in 5180-5279>` on this one.
   empty profile. Run `pnpm seed:auth` (or just sign in there once).
 - **Two windows look identical** — check the title-bar suffix (` — <worktree>`) or
   run `pnpm dev:instance` to confirm which port each is on.
+- **`OMI_OZONE=wayland` main window maps but never paints (blank; tray icon
+  works)** — `pnpm dev` forces software rendering by default
+  (`applyDevGpuStability` in `src/main/dev/bench.ts`, aimed at Windows
+  GPU-process crashes), and Chromium's software-compositing path has known
+  presentation bugs on native Wayland. Run with `OMI_DEV_HW_GPU=1` too.
+  Confirmed fix on Asahi Fedora Remix (aarch64) + niri.
+- **Two extra floating windows appear under `OMI_OZONE=wayland`** — the
+  companion bar (`src/main/bar/window.ts`) and the focus-halo glow window
+  (`src/main/glow/glowWindow.ts`, created eagerly at startup) both position
+  themselves with explicit `setBounds({ x, y, ... })` intending to stay
+  parked off-screen; native Wayland doesn't support client-requested
+  top-level placement (only XWayland does), so both float in the screen
+  center instead. Both stay functional (bar right-click menu works; glow
+  still renders its ring when triggered) — tile or ignore them. A real fix
+  needs Wayland layer-shell-aware positioning, which niri supports
+  (wlr-layer-shell) but neither window currently uses.
 
 ## Notes
 

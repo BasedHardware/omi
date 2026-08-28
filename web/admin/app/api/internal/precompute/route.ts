@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   computeProfitability,
+  parseProfitabilityParams,
   profitabilityCacheKey,
 } from "@/app/api/omi/stats/profitability/route";
 import {
@@ -50,6 +51,11 @@ import {
 } from "@/app/api/omi/stats/activation/route";
 import { setPayload } from "@/lib/payload-cache";
 
+// Health payload key for this cron. A future panel/alert reads it to tell
+// "the cron ran and everything succeeded" apart from "the cron has not run
+// since Tuesday" — neither of which the per-metric caches can express.
+export const PRECOMPUTE_STATUS_KEY = "precompute-status:v1";
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
 
@@ -62,7 +68,8 @@ export const maxDuration = 3600;
 //
 // Params MUST match the dashboard's default/initial query so the GET handlers
 // hit the cache. From app/(protected)/dashboard/page.tsx:
-//   profitability: days=30&desktop_cost=1.2&mobile_cost=0.3
+//   profitability: days=30 (no desktop_cost/mobile_cost — the honest default
+//     path: cost comes from billing, not from a per-user assumption)
 //   infra-costs:   days=30 (overhead_monthly omitted → default 57447)
 //   daily-new-users: days=all
 //   macos-versions: (no params)
@@ -75,8 +82,6 @@ export const maxDuration = 3600;
 // Sequential on purpose: PostHog is aggressively rate-limited, so we must NOT
 // fire these concurrently.
 const PROFIT_DAYS = 30;
-const PROFIT_DESKTOP_COST = 1.2;
-const PROFIT_MOBILE_COST = 0.3;
 const INFRA_DAYS = 30;
 const DAILY_NEW_USERS_DAYS = "all";
 const NOTIFICATIONS_DAYS = 30;
@@ -102,28 +107,37 @@ export async function POST(request: NextRequest) {
   const results: Record<string, string> = {};
   const ms: Record<string, number> = {};
 
+  const ok: string[] = [];
+  const failed: Record<string, string> = {};
+
+  // Per-metric isolation is deliberate: one dead upstream must not cost the
+  // other twelve payloads. But a swallowed error used to be indistinguishable
+  // from success in the logs and in the response, so a metric could serve a
+  // week-old payload with nothing anywhere saying why.
   const run = async (name: string, fn: () => Promise<void>) => {
     const t0 = Date.now();
     try {
       await fn();
       results[name] = "ok";
+      ok.push(name);
     } catch (err: any) {
-      results[name] = err?.message || "failed";
+      const message = err?.message || "failed";
+      results[name] = message;
+      failed[name] = message;
+      console.error(`[precompute] ${name} FAILED:`, message, err);
     }
     ms[name] = Date.now() - t0;
   };
 
-  // Profitability
+  // Profitability. Params go through the GET handler's own parser with only
+  // `days` set, so the key written here is byte-identical to the key a request
+  // carrying no cost params looks up.
   await run("profitability", async () => {
-    const payload = await computeProfitability({
-      days: PROFIT_DAYS,
-      desktopCost: PROFIT_DESKTOP_COST,
-      mobileCost: PROFIT_MOBILE_COST,
-    });
-    await setPayload(
-      profitabilityCacheKey(PROFIT_DAYS, PROFIT_DESKTOP_COST, PROFIT_MOBILE_COST),
-      payload,
+    const { days, desktopCost, mobileCost } = parseProfitabilityParams(
+      new URLSearchParams({ days: String(PROFIT_DAYS) }),
     );
+    const payload = await computeProfitability({ days, desktopCost, mobileCost });
+    await setPayload(profitabilityCacheKey(days, desktopCost, mobileCost), payload);
   });
 
   // Infra costs
@@ -194,10 +208,23 @@ export async function POST(request: NextRequest) {
   });
 
   // k-factor: no payload cache — calling compute warms its posthogResults
-  // query cache (Firestore) so the GET serves fast from there.
+  // query cache (Firestore) so the GET serves fast from there. All three
+  // platform scopes are warmed because each Grafana board queries its own.
   await run("kFactor", async () => {
-    await computeKFactor(K_FACTOR_DAYS);
+    await computeKFactor(K_FACTOR_DAYS, "macos");
+    await computeKFactor(K_FACTOR_DAYS, "mobile");
+    await computeKFactor(K_FACTOR_DAYS, "all");
   });
 
-  return NextResponse.json({ ok: true, results, ms });
+  const failedNames = Object.keys(failed);
+  if (failedNames.length > 0) {
+    console.error(
+      `[precompute] run finished with ${failedNames.length} failed metric(s): ${failedNames.join(", ")}`,
+    );
+  }
+
+  const status = { ranAt: Date.now(), ok, failed };
+  await setPayload(PRECOMPUTE_STATUS_KEY, status);
+
+  return NextResponse.json({ ok, failed, results, ms, ranAt: status.ranAt });
 }

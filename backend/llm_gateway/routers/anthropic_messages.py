@@ -89,6 +89,7 @@ async def create_anthropic_message(
         feature=_accounting_feature(caller, fallback=route.lane_id),
         api_surface='anthropic_messages',
         payer='byok' if _anthropic_credential_source(request) == 'service_forwarded_byok' else 'omi',
+        app_platform=caller.app_platform,
     )
     attempt_trace = AttemptTrace()
     body['model'] = route.primary.model

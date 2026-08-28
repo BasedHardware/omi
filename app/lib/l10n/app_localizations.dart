@@ -3963,6 +3963,12 @@ abstract class AppLocalizations {
   /// **'Memory Deleted.'**
   String get memoryDeleted;
 
+  /// Notice shown when the memory history response is truncated
+  ///
+  /// In en, this message translates to:
+  /// **'Some memory history is unavailable. Showing the history received so far.'**
+  String get memoryHistoryPartial;
+
   /// Undo button text
   ///
   /// In en, this message translates to:
@@ -18333,6 +18339,30 @@ abstract class AppLocalizations {
   /// **'Open store'**
   String get accountCutoverOpenStore;
 
+  /// Chat timeframe scope chip for today
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get chatScopeToday;
+
+  /// Chat timeframe scope chip for this week
+  ///
+  /// In en, this message translates to:
+  /// **'This week'**
+  String get chatScopeThisWeek;
+
+  /// Chat scope chip when asking about a specific conversation
+  ///
+  /// In en, this message translates to:
+  /// **'About: {title}'**
+  String chatScopeAbout(String title);
+
+  /// Tooltip for Ask button on conversation detail
+  ///
+  /// In en, this message translates to:
+  /// **'Ask about this'**
+  String get askAboutThisConversation;
+
   /// Toggle label controlling whether Custom STT raw audio is also sent to Omi
   ///
   /// In en, this message translates to:
@@ -18410,6 +18440,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Last error: {error}.'**
   String appDisabledLastError(String error);
+
+  /// Tab label for the prerecorded conversation transcript
+  ///
+  /// In en, this message translates to:
+  /// **'Prerecorded'**
+  String get prerecordedTranscript;
+
+  /// Shown when offline sync stalls because the Limitless Pendant is actively recording; it cannot serve stored audio until recording stops
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant is still recording, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
+  String get pendantRecordingSyncBlocked;
+
+  /// Shown when offline sync stalls because the Limitless Pendant's flash storage is full; a full pendant stays armed in recording mode and serves no stored audio until recording is stopped
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
+  String get pendantFullSyncBlocked;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

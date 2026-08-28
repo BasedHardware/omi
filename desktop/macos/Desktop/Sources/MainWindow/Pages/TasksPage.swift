@@ -191,8 +191,8 @@ enum TaskFilterTag: String, CaseIterable, Identifiable, Hashable {
     switch self {
     case .todo: return !task.completed
     case .done: return task.completed
-    case .removedByAI: return task.deleted == true && task.deletedBy != "user"
-    case .removedByMe: return task.deleted == true && task.deletedBy == "user"
+    case .removedByAI: return task.isRetired && task.deletedBy != "user"
+    case .removedByMe: return task.isRetired && task.deletedBy == "user"
     case .last7Days:
       let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
       if let dueAt = task.dueAt {
@@ -2545,10 +2545,10 @@ class TasksViewModel: ObservableObject {
     guard !statusTags.isEmpty else { return tasks }
 
     return tasks.filter { task in
-      if statusTags.contains(.removedByAI) && task.deleted == true && task.deletedBy != "user" { return true }
-      if statusTags.contains(.removedByMe) && task.deleted == true && task.deletedBy == "user" { return true }
+      if statusTags.contains(.removedByAI) && task.isRetired && task.deletedBy != "user" { return true }
+      if statusTags.contains(.removedByMe) && task.isRetired && task.deletedBy == "user" { return true }
       if statusTags.contains(.done) && task.completed { return true }
-      if statusTags.contains(.todo) && !task.completed && task.deleted != true { return true }
+      if statusTags.contains(.todo) && !task.completed && !task.isRetired { return true }
       return false
     }
   }
@@ -3225,7 +3225,7 @@ class TasksViewModel: ObservableObject {
         priority: task.priority,
         metadata: task.metadata,
         category: task.category,
-        deleted: task.deleted,
+        deleted: task.isRetired,
         deletedBy: task.deletedBy,
         deletedAt: task.deletedAt,
         deletedReason: task.deletedReason,
@@ -3383,6 +3383,9 @@ struct TasksPage: View {
   @ObservedObject var viewModel: TasksViewModel
   @ObservedObject private var suggestedStore = SuggestedTasksStore.shared
   var chatProvider: ChatProvider?
+  /// Optional host-owned route handoff. Keeping this callback at the shell boundary lets the task
+  /// panel render local evidence cards without owning sidebar selection or a second Rewind page.
+  var onOpenRewindEvidence: ((Int64) -> Void)?
 
   // Chat panel state
   // NOTE: NOT @ObservedObject — observing coordinator here would re-render the
@@ -3417,10 +3420,16 @@ struct TasksPage: View {
   @State private var isDraggingDivider = false
   @State private var dragStartWidth: Double = 0
 
-  init(viewModel: TasksViewModel, chatCoordinator: TaskChatCoordinator, chatProvider: ChatProvider? = nil) {
+  init(
+    viewModel: TasksViewModel,
+    chatCoordinator: TaskChatCoordinator,
+    chatProvider: ChatProvider? = nil,
+    onOpenRewindEvidence: ((Int64) -> Void)? = nil
+  ) {
     self.viewModel = viewModel
     self.chatCoordinator = chatCoordinator
     self.chatProvider = chatProvider
+    self.onOpenRewindEvidence = onOpenRewindEvidence
   }
 
   var body: some View {
@@ -3474,7 +3483,8 @@ struct TasksPage: View {
         TaskChatSidePanelView(
           coordinator: chatCoordinator,
           viewModel: viewModel,
-          onClose: { closeChatPanel() }
+          onClose: { closeChatPanel() },
+          onOpenRewindEvidence: onOpenRewindEvidence
         )
         .frame(width: chatPanelWidth)
         .transition(.move(edge: .trailing))
@@ -3608,7 +3618,7 @@ struct TasksPage: View {
   /// Open chat for a task
   private func openChatForTask(_ task: TaskActionItem) {
     log(
-      "TaskChat: openChatForTask called for task \(task.id) (deleted=\(task.deleted ?? false), completed=\(task.completed))"
+      "TaskChat: openChatForTask called for task \(task.id) (retired=\(task.isRetired), completed=\(task.completed))"
     )
     viewModel.detailPanelTaskID = nil
     if !showChatPanel {
@@ -4594,6 +4604,7 @@ private struct TaskChatSidePanelView: View {
   @ObservedObject var coordinator: TaskChatCoordinator
   let viewModel: TasksViewModel
   let onClose: () -> Void
+  let onOpenRewindEvidence: ((Int64) -> Void)?
 
   private var activeTask: TaskActionItem? {
     guard let taskId = coordinator.activeTaskId else { return nil }
@@ -4606,7 +4617,8 @@ private struct TaskChatSidePanelView: View {
         taskState: taskState,
         coordinator: coordinator,
         task: activeTask,
-        onClose: onClose
+        onClose: onClose,
+        onOpenRewindEvidence: onOpenRewindEvidence
       )
     } else {
       TaskChatPanelPlaceholder(
@@ -5497,7 +5509,7 @@ struct TaskRow: View {
 
   /// Whether this task is soft-deleted
   private var isDeletedTask: Bool {
-    task.deleted == true
+    task.isRetired
   }
 
   private var taskRowContent: some View {

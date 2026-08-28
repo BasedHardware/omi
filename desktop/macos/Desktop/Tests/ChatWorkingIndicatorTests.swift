@@ -35,30 +35,19 @@ final class ChatWorkingIndicatorTests: XCTestCase {
     #endif
   }
 
-  func testOnlyTheFinalAssistantMessageOwnsTheOmiMark() {
+  /// Every Omi reply carries the identity mark; limiting it to the newest
+  /// reply left older answers looking unattributed (reverted by request).
+  func testEveryAssistantMessageOwnsTheOmiMark() {
     let messages = [
       ChatMessage(id: "assistant-1", text: "First answer", sender: .ai),
       ChatMessage(id: "user-2", text: "Follow-up", sender: .user),
       ChatMessage(id: "assistant-2", text: "Final answer", sender: .ai),
     ]
 
-    let markedIDs = messages.compactMap { message in
-      message.id == ChatOmiMarkPlacement.finalAssistantMessageID(in: messages)
-        ? message.id
-        : nil
-    }
+    // Mirrors the transcript's gate: the mark follows the sender, not recency.
+    let markedIDs = messages.compactMap { $0.sender == .ai ? $0.id : nil }
 
-    XCTAssertEqual(markedIDs, ["assistant-2"])
-  }
-
-  func testOmiMarkPlacementRequiresAnAssistantMessage() {
-    let messages = [
-      ChatMessage(id: "user-1", text: "Question", sender: .user),
-      ChatMessage(id: "user-2", text: "Follow-up", sender: .user),
-    ]
-
-    XCTAssertNil(ChatOmiMarkPlacement.finalAssistantMessageID(in: []))
-    XCTAssertNil(ChatOmiMarkPlacement.finalAssistantMessageID(in: messages))
+    XCTAssertEqual(markedIDs, ["assistant-1", "assistant-2"])
   }
 
   func testOmiMarkReservesAVisibleRowForAnEmptyStreamingReply() {

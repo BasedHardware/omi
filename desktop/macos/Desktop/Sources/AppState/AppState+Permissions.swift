@@ -11,6 +11,161 @@ import SwiftUI
 /// cannot add storage to it; the value is meaningful only to `notePermissionGrants` below.
 @MainActor private var lastGrantedPermissionCount: Int?
 
+@MainActor
+final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
+  private struct AlertRequest: Equatable {
+    let title: String
+    let message: String
+  }
+
+  private struct PendingAlert {
+    let request: AlertRequest
+    let completion: (@MainActor () -> Void)?
+  }
+
+  typealias BeginSheetModal = (NSAlert, NSWindow, @escaping () -> Void) -> Void
+  struct AppKitAlertOperations {
+    let beginSheetModal: BeginSheetModal
+
+    @MainActor static let live = AppKitAlertOperations { alert, window, completion in
+      alert.beginSheetModal(for: window) { _ in completion() }
+    }
+  }
+  /// Whether `window` can host a sheet right now. Defaults to "has no sheet
+  /// attached" — AppKit raises if a second sheet is attached to one window.
+  typealias SheetHostChecker = (NSWindow) -> Bool
+
+  private let shellWindowProvider: () -> NSWindow?
+  private let appKitOperations: AppKitAlertOperations
+  private let revealMainWindow: () -> Void
+  private let canHostSheet: SheetHostChecker
+  private var pendingAlerts: [PendingAlert] = []
+  private var activeAlert: AlertRequest?
+  private var isPresentingAlert = false
+  private var isRevealingMainWindow = false
+  private var queuePausedUntilForeground = false
+
+  init(
+    shellWindowProvider: @escaping () -> NSWindow? = {
+      AppKitSheetAlertPresenter.presentableShellWindow(
+        ShellSummon.shellWindow(), isActive: NSApp.isActive)
+    },
+    appKitOperations: AppKitAlertOperations? = nil,
+    revealMainWindow: @escaping () -> Void = {
+      if let appDelegate = AppDelegate.summonWindowTarget() {
+        appDelegate.openMainAppWindow()
+      } else {
+        NSApp.activate(ignoringOtherApps: true)
+        ShellSummon.summon()
+      }
+    },
+    canHostSheet: @escaping SheetHostChecker = { $0.attachedSheet == nil }
+  ) {
+    self.shellWindowProvider = shellWindowProvider
+    self.appKitOperations = appKitOperations ?? .live
+    self.revealMainWindow = revealMainWindow
+    self.canHostSheet = canHostSheet
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(applicationDidBecomeActive),
+      name: NSApplication.didBecomeActiveNotification,
+      object: nil)
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(presentPendingAlertIfPossible),
+      name: NSWindow.didBecomeKeyNotification,
+      object: nil)
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(presentPendingAlertIfPossible),
+      name: NSWindow.didEndSheetNotification,
+      object: nil)
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+  }
+
+  func present(title: String, message: String, completion: (@MainActor () -> Void)? = nil) {
+    let request = AlertRequest(title: title, message: message)
+    guard activeAlert != request, !pendingAlerts.contains(where: { $0.request == request }) else { return }
+    pendingAlerts.append(.init(request: request, completion: completion))
+    presentPendingAlertIfPossible()
+  }
+
+  func pauseQueueUntilAppActive() {
+    queuePausedUntilForeground = true
+  }
+
+  @objc private func applicationDidBecomeActive() {
+    queuePausedUntilForeground = false
+    presentPendingAlertIfPossible()
+  }
+
+  @objc private func presentPendingAlertIfPossible() {
+    guard !queuePausedUntilForeground, !isPresentingAlert, !isRevealingMainWindow, !pendingAlerts.isEmpty else {
+      return
+    }
+    let pending = pendingAlerts[0]
+    guard let window = shellWindowProvider() else {
+      revealMainWindowIfNeeded()
+      return
+    }
+    guard canHostSheet(window) else {
+      // The shell already owns a sheet (a SwiftUI sheet, for example). AppKit
+      // cannot attach a second sheet to one window, so keep the request queued
+      // and retry when `NSWindow.didEndSheetNotification` fires.
+      return
+    }
+
+    pendingAlerts.removeFirst()
+    isPresentingAlert = true
+    activeAlert = pending.request
+    let alert = NSAlert()
+    alert.messageText = pending.request.title
+    alert.informativeText = pending.request.message
+    alert.alertStyle = .warning
+    alert.addButton(withTitle: "OK")
+    appKitOperations.beginSheetModal(alert, window) { [weak self] in
+      Task { @MainActor in
+        self?.isPresentingAlert = false
+        self?.activeAlert = nil
+        pending.completion?()
+        // A completion can change the foreground application (for example the
+        // microphone-permission alert opens System Settings once dismissed).
+        // The completion must request the pause explicitly: NSWorkspace.open
+        // can return before macOS deactivates Omi, so a synchronous
+        // shellWindowProvider() check would still drain the next alert.
+        // didBecomeActive resumes the queue when the user comes back.
+        guard let self else { return }
+        if self.queuePausedUntilForeground { return }
+        guard self.shellWindowProvider() != nil else { return }
+        self.presentPendingAlertIfPossible()
+      }
+    }
+  }
+
+  /// The shell window an alert sheet may attach to, or `nil` when it must be
+  /// summoned first. Mirrors `ShellSummon.toggleAction`: a visible but inactive
+  /// shell is usually ordered in behind whatever the user is working in, so
+  /// attaching a sheet to it would leave the warning invisible behind the
+  /// foreground application. Requiring the app to be active forces the reveal
+  /// path (`openMainAppWindow` / `ShellSummon.summon`) before presenting.
+  static func presentableShellWindow(_ window: NSWindow?, isActive: Bool) -> NSWindow? {
+    guard isActive, let window, window.isVisible, !window.isMiniaturized else { return nil }
+    return window
+  }
+
+  private func revealMainWindowIfNeeded() {
+    guard !isRevealingMainWindow else { return }
+    isRevealingMainWindow = true
+    revealMainWindow()
+    isRevealingMainWindow = false
+    guard shellWindowProvider() != nil else { return }
+    presentPendingAlertIfPossible()
+  }
+}
+
 /// The AppKit lookups the accessibility probe depends on, read once on the main
 /// actor and handed to the probe as plain values so the expensive cross-process
 /// AX round trips can run off it.
@@ -496,8 +651,17 @@ extension AppState {
     // AXUIElement/CGEvent calls can synchronously cross the WindowServer. Keep
     // the fire-and-forget API non-blocking for legacy callers; callers that
     // need the answer must await `refreshAccessibilityPermission()`.
+    //
+    // Coalesced, like `checkAutomationPermission`. This is fire-and-forget, so a
+    // repeating caller gets no backpressure from it: the probe crosses into other
+    // processes and blocks for the AX messaging timeout when one of them is wedged,
+    // so unguarded polling stacks probes against exactly the app that cannot answer.
+    // Skipping a tick is free — the next one re-reads the same state.
+    guard !isCheckingAccessibilityPermission else { return }
+    isCheckingAccessibilityPermission = true
     Task { [weak self] in
       _ = await self?.refreshAccessibilityPermission()
+      self?.isCheckingAccessibilityPermission = false
     }
   }
 
@@ -825,11 +989,7 @@ extension AppState {
 
   /// Open Accessibility preferences in System Settings
   func openAccessibilityPreferences() {
-    if let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-    {
-      NSWorkspace.shared.open(url)
-    }
+    PermissionDragGuidance.openAccessibilitySettings()
   }
 
   /// Reset accessibility permission (requires terminal command)
@@ -882,13 +1042,8 @@ extension AppState {
     alert.runModal()
   }
 
-  func showAlert(title: String, message: String) {
-    let alert = NSAlert()
-    alert.messageText = title
-    alert.informativeText = message
-    alert.alertStyle = .warning
-    alert.addButton(withTitle: "OK")
-    alert.runModal()
+  func showAlert(title: String, message: String, completion: (@MainActor () -> Void)? = nil) {
+    alertPresenter.present(title: title, message: message, completion: completion)
   }
 
   // MARK: - Transcription

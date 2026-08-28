@@ -9,8 +9,18 @@
 
 import { ipcMain } from 'electron'
 import { configurePiMonoSession, getPiMonoSession } from '../codingAgent/piMonoSession'
-import { ensurePiMonoAdapterRegistered, setControlPlaneOwner } from '../agentKernel/controlPlane'
+import {
+  ensurePiMonoAdapterRegistered,
+  setControlPlaneOwner,
+  controlPlaneOwnerId,
+  hasKnownControlPlaneOwner
+} from '../agentKernel/controlPlane'
 import { verifyFirebaseIdToken } from '../auth/firebaseIdToken'
+import {
+  clearRendererConversationBinding,
+  fenceRendererConversationOwner,
+  setRendererConversationSelection
+} from '../jit/rendererConversationBinding'
 
 /** Registers the `pimono:*` IPC handlers backing the session store. */
 export function registerPiMonoHandlers(): void {
@@ -34,10 +44,34 @@ export function registerPiMonoHandlers(): void {
     const current = getPiMonoSession()
     const uid = current ? await verifyFirebaseIdToken(current.token) : null
     setControlPlaneOwner(uid)
+    // Keep the renderer-selection projection fenced to the same verified host
+    // owner. A token refresh for the same account preserves the selected chat;
+    // sign-out or an account switch drops it before any JIT analysis can capture
+    // the prior account's deletion key.
+    if (uid) fenceRendererConversationOwner(controlPlaneOwnerId())
+    else clearRendererConversationBinding()
     // Register the managed-cloud pi-mono adapter into the kernel now that a
     // session may be present. Idempotent, and a no-op when signed out (returns
     // false), so the registry stays empty until a real Firebase session exists.
     // DARK: registration only — nothing routes chat to pi-mono until PR-E.
     ensurePiMonoAdapterRegistered()
+  })
+
+  // The renderer reports selection independently of sending. This is the only
+  // writer for the JIT -> renderer deletion association; main-chat turns must
+  // never update a process-global "last chat" value.
+  ipcMain.handle('jit:rendererSelectionChanged', (_e, key: unknown): boolean => {
+    if (!hasKnownControlPlaneOwner()) {
+      // Keep a cold-start selection pending until the verified auth relay wires
+      // the owner. It is only a renderer deletion key (not an authority claim),
+      // and sign-out clears it before another account can adopt it.
+      setRendererConversationSelection(null, typeof key === 'string' ? key : null)
+      return false
+    }
+    setRendererConversationSelection(
+      controlPlaneOwnerId(),
+      typeof key === 'string' || key === null ? key : null
+    )
+    return true
   })
 }

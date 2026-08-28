@@ -1115,6 +1115,10 @@ export class PiMonoAdapter {
         this.handleTurnEnd(event)
         break
 
+      case 'agent_settled':
+        // Advisory upstream event; turn_end remains authoritative for completion.
+        break
+
       case 'agent_start':
       case 'agent_end':
       case 'turn_start':

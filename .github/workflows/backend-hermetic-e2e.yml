@@ -18,7 +18,13 @@ jobs:
   scope:
     name: Detect Hermetic Backend Scope
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    # The full-history fetch (fetch-depth: 0, required to resolve the PR base
+    # live for the scope diff) can exceed two minutes on hosted runners for
+    # large merge refs; the old 2-minute job cap killed the fetch mid-transfer
+    # and the merge gate correctly failed closed on "scope cancelled" with no
+    # code failure. Bound generously like the apt steps below: the cap is a
+    # hang backstop, not a budget the legitimate path must fit under.
+    timeout-minutes: 10
     outputs:
       applies: ${{ steps.scope.outputs.applies }}
     steps:
@@ -32,11 +38,14 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # Resolve the PR base live against the checkout (matching
+          # detect-changes) rather than the event-payload base.sha, which can be
+          # stale for a queued run (FC-stale-event-payload-diff-base, #10785).
+          PR_BASE_REF: origin/${{ github.base_ref }}
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
           case "$EVENT_NAME" in
-            pull_request) base_sha="$PR_BASE_SHA" ;;
+            pull_request) base_sha="$PR_BASE_REF" ;;
             merge_group) base_sha="$MERGE_GROUP_BASE_SHA" ;;
             workflow_dispatch)
               echo "applies=true" >> "$GITHUB_OUTPUT"
@@ -81,6 +90,10 @@ jobs:
         # astral-sh/setup-uv v7, pinned to an immutable commit for CI supply-chain stability.
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
+          # Exact version resolves locally; an unset version means "latest",
+          # which fetches the astral-sh/versions manifest and has hard-failed
+          # CI on that network call. Matches backend/Dockerfile UV_VERSION.
+          version: "0.11.13"
           enable-cache: true
           cache-dependency-glob: backend/pylock*.toml
 
@@ -124,6 +137,10 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
+          # Exact version resolves locally; an unset version means "latest",
+          # which fetches the astral-sh/versions manifest and has hard-failed
+          # CI on that network call. Matches backend/Dockerfile UV_VERSION.
+          version: "0.11.13"
           enable-cache: true
           cache-dependency-glob: backend/pylock*.toml
 
@@ -211,6 +228,10 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
+          # Exact version resolves locally; an unset version means "latest",
+          # which fetches the astral-sh/versions manifest and has hard-failed
+          # CI on that network call. Matches backend/Dockerfile UV_VERSION.
+          version: "0.11.13"
           enable-cache: true
           cache-dependency-glob: backend/pylock*.toml
 
@@ -288,6 +309,10 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
+          # Exact version resolves locally; an unset version means "latest",
+          # which fetches the astral-sh/versions manifest and has hard-failed
+          # CI on that network call. Matches backend/Dockerfile UV_VERSION.
+          version: "0.11.13"
           enable-cache: true
           cache-dependency-glob: backend/pylock*.toml
 
@@ -351,7 +376,13 @@ jobs:
     name: Backend Hermetic Merge Gate
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    if: ${{ always() }}
+    # `!cancelled()` rather than `always()`: with cancel-in-progress above, a
+    # superseding push cancels this run mid-flight, and under `always()` the
+    # gate still executed against `cancelled` upstream results and reported a
+    # hard red with no code cause (3 of the last 4 re-run-to-green cycles on
+    # this workflow were exactly that). A cancelled run's verdict belongs to
+    # the superseding run, so the gate must go neutral, not red.
+    if: ${{ !cancelled() }}
     needs: [scope, hermetic-e2e, listen-pusher-stack-gauntlet, sync-cloud-tasks-stack-gauntlet]
     steps:
       - name: Fail closed on selected hermetic checks
@@ -362,6 +393,16 @@ jobs:
           LISTEN_PUSHER_RESULT: ${{ needs.listen-pusher-stack-gauntlet.result }}
           SYNC_CLOUD_TASKS_RESULT: ${{ needs.sync-cloud-tasks-stack-gauntlet.result }}
         run: |
+          # Belt to the `!cancelled()` suspenders: a partially-cancelled run
+          # (one upstream job cancelled without the gate itself being
+          # cancelled) is still superseded work, not a failure.
+          for result_name in SCOPE_RESULT HERMETIC_E2E_RESULT LISTEN_PUSHER_RESULT SYNC_CLOUD_TASKS_RESULT; do
+            if [[ "${!result_name}" == 'cancelled' ]]; then
+              echo "$result_name was cancelled by a superseding run; deferring to that run's gate."
+              exit 0
+            fi
+          done
+
           if [[ "$SCOPE_RESULT" != 'success' ]]; then
             echo "Hermetic backend scope failed with result: $SCOPE_RESULT" >&2
             exit 1

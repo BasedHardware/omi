@@ -261,6 +261,66 @@ jobs:
           DER_REPORT_ONLY: ${{ github.event.inputs.der_report_only || 'false' }}
           WER_REPORT_ONLY: ${{ github.event.inputs.wer_report_only || 'false' }}
 
+      # Without this gate an unschedulable pod (no free nvidia.com/gpu on the
+      # parakeet node pool) sits Pending until activeDeadlineSeconds expires,
+      # burning the full 45 minutes and reporting a generic job failure.
+      - name: Wait for GPU pod to be scheduled
+        id: pod
+        run: |
+          set -uo pipefail
+
+          POD=""
+          for _ in $(seq 1 30); do
+            POD=$(kubectl -n "$NAMESPACE" get pods -l "job-name=$JOB_NAME" \
+              -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+            if [ -n "$POD" ]; then
+              break
+            fi
+            sleep 2
+          done
+
+          if [ -z "$POD" ]; then
+            echo "=== Recent namespace events ==="
+            kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp 2>&1 | tail -50 || true
+            echo "::error::Job $JOB_NAME created no pod within 60s. Inspect the job controller and namespace quota in $NAMESPACE."
+            exit 1
+          fi
+
+          echo "pod=$POD" >> "$GITHUB_OUTPUT"
+          echo "Waiting up to 5 minutes for a node to accept pod $POD..."
+
+          if ! kubectl -n "$NAMESPACE" wait --for=condition=PodScheduled --timeout=300s \
+              "pod/$POD"; then
+            echo "=== Pod description ==="
+            kubectl -n "$NAMESPACE" describe "pod/$POD" 2>&1 || true
+            echo "=== Recent namespace events ==="
+            kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp 2>&1 | tail -50 || true
+            echo "::error::GPU test pod $POD was not scheduled within 300s: no node on the parakeet dev pool has a free nvidia.com/gpu (the L4 pool is at capacity and another workload holds the remaining GPU). Failing fast instead of burning the 45-minute activeDeadlineSeconds. Free or add GPU capacity on the parakeet node pool, then re-run."
+            exit 1
+          fi
+
+          echo "Pod $POD scheduled."
+
+      # Stream logs live: the job controller deletes the pod when
+      # activeDeadlineSeconds fires, so post-hoc `kubectl logs` on a
+      # deadline-killed run returns nothing.
+      - name: Start streaming pod logs
+        run: |
+          mkdir -p artifacts/parakeet
+          POD='${{ steps.pod.outputs.pod }}'
+          # Retry: the pod is scheduled but may still be pulling the image, and
+          # `kubectl logs -f` returns as soon as the container exits or the
+          # connection drops.
+          (
+            for _ in $(seq 1 90); do
+              if kubectl -n "$NAMESPACE" logs -f "pod/$POD" >> artifacts/parakeet/gpu-test.log 2>&1; then
+                break
+              fi
+              sleep 10
+            done
+          ) >/dev/null 2>&1 || true &
+          echo "Streaming logs from $POD into artifacts/parakeet/gpu-test.log"
+
       - name: Wait for job completion
         run: |
           echo "Waiting for GPU test job to complete (timeout: 45 min)..."
@@ -276,12 +336,37 @@ jobs:
         if: always()
         run: |
           mkdir -p artifacts/parakeet
+          POD='${{ steps.pod.outputs.pod }}'
+
+          # Prefer a complete post-hoc fetch, but keep whatever the background
+          # stream captured when the pod is already gone (deadline kill, or the
+          # pod never ran at all).
+          kubectl -n "$NAMESPACE" logs "job/$JOB_NAME" \
+            > artifacts/parakeet/gpu-test-final.log 2>/dev/null || true
+          if [ -s artifacts/parakeet/gpu-test-final.log ]; then
+            mv artifacts/parakeet/gpu-test-final.log artifacts/parakeet/gpu-test.log
+          else
+            rm -f artifacts/parakeet/gpu-test-final.log
+            echo "Live log fetch returned nothing; using logs streamed during the run."
+          fi
+
           echo "=== GPU Test Job Logs ==="
-          kubectl -n ${{ env.NAMESPACE }} logs job/${{ env.JOB_NAME }} 2>&1 | tee artifacts/parakeet/gpu-test.log || true
+          cat artifacts/parakeet/gpu-test.log 2>/dev/null || echo "(no logs captured)"
           echo ""
           echo "=== Job/Pod Details ==="
-          kubectl -n ${{ env.NAMESPACE }} describe job/${{ env.JOB_NAME }} 2>&1 || true
-          kubectl -n ${{ env.NAMESPACE }} get events --field-selector involvedObject.name=${{ env.JOB_NAME }} 2>&1 || true
+          kubectl -n "$NAMESPACE" describe "job/$JOB_NAME" 2>&1 || true
+          if [ -n "$POD" ]; then
+            kubectl -n "$NAMESPACE" describe "pod/$POD" 2>&1 || true
+          fi
+          echo ""
+          # The old filter matched only the Job object, so the pod's
+          # FailedScheduling events were never shown.
+          echo "=== Events (job + its pods) ==="
+          kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp 2>&1 \
+            | grep -E "(^LAST|$JOB_NAME)" | tail -50 || true
+          echo ""
+          echo "=== Recent namespace events (all) ==="
+          kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp 2>&1 | tail -50 || true
 
       - name: Extract DER diagnostics artifact
         if: always()

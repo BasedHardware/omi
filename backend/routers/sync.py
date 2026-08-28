@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from database import conversations as conversations_db
 from database import fair_use as fair_use_db
 from database import users as users_db
+from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
     SyncLedgerFenceMode,
     TERMINAL_STATUSES,
@@ -389,7 +390,9 @@ def get_audio_signed_urls_endpoint(
     Returns:
         List of audio file info with signed_url (if cached) or status "pending"
     """
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = conversations_db.get_conversation(
+        uid, conversation_id, read_site=FirestoreReadSite.SYNC_AUDIO_URLS_POLL
+    )
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):

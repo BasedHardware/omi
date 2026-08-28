@@ -1,5 +1,4 @@
 import asyncio
-import threading
 from typing import List
 import os
 import time
@@ -19,7 +18,6 @@ from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.async_tasks import gather_safe
 import utils.dev_cache as dev_cache
 
-import database.notifications as notification_db
 import database.dev_api_key as dev_api_key_db
 from database import mem_db
 from database import redis_db
@@ -46,7 +44,7 @@ from database.redis_db import (
     incr_daily_notification_count,
     get_daily_notification_count,
 )
-from models.app import App, ProactiveNotification, UsageHistoryType
+from models.app import App, UsageHistoryType
 from models.chat import Message
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource
@@ -63,6 +61,7 @@ from utils.llm.proactive_notification import (
     FREQUENCY_TO_BASE_THRESHOLD,
     MAX_DAILY_NOTIFICATIONS,
 )
+from utils.llm.temporal import current_date_for_uid
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
@@ -546,6 +545,11 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
         logger.error(f"mentor_proactive goals_failed uid={uid} error={e}")
         goals = []
 
+    # The pipeline's date anchor: without it the prompts fall back to UTC, which is
+    # wrong by up to a day for non-UTC users and desyncs the year guard near local
+    # midnight (SCA-358). Computed once so gate/generate/critic share one "today".
+    current_date = current_date_for_uid(uid)
+
     try:
         recent_notifications = get_app_messages(uid, 'mentor', limit=20)
     except Exception as e:
@@ -561,6 +565,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 goals=goals,
                 current_messages=conversation_messages,
                 recent_notifications=recent_notifications,
+                current_date=current_date,
             )
     except Exception as e:
         logger.error(f"mentor_proactive gate_failed uid={uid} error={e}")
@@ -579,12 +584,18 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
     )
 
     # ── Gather full context (expensive: vector search + recent convos) ───
+    #
+    # The two sources are guarded separately on purpose: semantic search needs an embedding
+    # provider and a vector store, recent-by-time needs neither. Under one shared try/except a
+    # single embedding failure (missing key, quota, provider outage) also took down the
+    # recent-conversations fetch that follows it, leaving the mentor with no past context at
+    # all — silently, because the draft is still written from the live transcript alone.
     past_conversations_str = ''
+    all_past: list[dict] = []
+
+    # Vector search for semantically relevant conversations
     try:
         conversation_text = ' '.join(msg.get('text', '') for msg in conversation_messages)
-        all_past = []
-
-        # Vector search for semantically relevant conversations
         if conversation_text.strip():
             vector = generate_embedding(conversation_text[:2000])
             memory_ids = query_vectors_by_metadata(
@@ -594,19 +605,25 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 vector_convos = conversations_db.get_conversations_by_id(uid, memory_ids)
                 if vector_convos:
                     all_past.extend([c for c in vector_convos if not c.get('is_locked')])
+    except Exception as e:
+        logger.error(f"mentor_proactive vector_search_failed uid={uid} error={e}")
 
-        # Also fetch recent conversations by time for additional context
+    # Also fetch recent conversations by time for additional context
+    try:
         recent_convos = conversations_db.get_conversations(uid, limit=5, offset=0)
         if recent_convos:
             existing_ids = {c.get('id') for c in all_past}
             for rc in recent_convos:
                 if rc.get('id') not in existing_ids and not rc.get('is_locked'):
                     all_past.append(rc)
+    except Exception as e:
+        logger.error(f"mentor_proactive recent_conversations_failed uid={uid} error={e}")
 
+    try:
         if all_past:
             past_conversations_str = conversations_to_string(deserialize_conversations(all_past[:5]))
     except Exception as e:
-        logger.error(f"mentor_proactive past_conversations_failed uid={uid} error={e}")
+        logger.error(f"mentor_proactive past_conversations_render_failed uid={uid} error={e}")
 
     # Resolve the user's output language once so the notification is generated in it, not English
     # (the daily summary already respects this setting) (#5214).
@@ -629,6 +646,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 frequency=frequency,
                 gate_reasoning=relevance.reasoning,
                 output_language=output_language,
+                current_date=current_date,
             )
     except Exception as e:
         logger.error(f"mentor_proactive generate_failed uid={uid} error={e}")
@@ -656,6 +674,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 current_messages=conversation_messages,
                 goals=goals,
                 output_language=output_language,
+                current_date=current_date,
             )
     except Exception as e:
         logger.error(f"mentor_proactive critic_failed uid={uid} error={e}")
@@ -882,6 +901,9 @@ async def _async_trigger_realtime_integrations(
             messages = []
             for key, message in mentor_results.items():
                 messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
+                await run_blocking(
+                    db_executor, redis_db.publish_proactive_message, uid, key, 'Omi', message, conversation_id
+                )
             return messages
         return {}
 
@@ -995,11 +1017,14 @@ async def _async_trigger_realtime_integrations(
     # Merge mentor results with app results
     all_results = {**mentor_results, **results}
 
+    app_name_by_id = {app.id: app.name for app in filtered_apps}
     messages = []
     for key, message in all_results.items():
         if not message:
             continue
         messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
+        title = 'Omi' if key == 'mentor' else app_name_by_id.get(key, 'Omi')
+        await run_blocking(db_executor, redis_db.publish_proactive_message, uid, key, title, message, conversation_id)
 
     return messages
 

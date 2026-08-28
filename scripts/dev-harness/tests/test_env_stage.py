@@ -7,7 +7,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dev_harness import config, safety
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -35,6 +34,29 @@ def test_child_env_for_real_mode() -> None:
     child = config.child_env_for(cfg)
     assert child["PROVIDER_MODE"] == "real"
     assert child["BASE_API_URL"] == cfg.backend_url
+    assert child["OMI_LOCAL_STORAGE_ROOT"] == str(cfg.layout.services_dir / "storage")
+    assert child["OMI_LOCAL_STORAGE_BASE_URL"] == f"{cfg.backend_url}/_local/storage"
+    assert child["BUCKET_SPEECH_PROFILES"] == "speech-profiles"
+    assert child["BUCKET_MEMORIES_RECORDINGS"] == "memories-recordings"
+    assert child["BUCKET_SCREEN_FRAMES"] == "screen-frames"
+    assert child["SCREEN_FRAME_SIGNING_SECRET"] == config.LOCAL_SCREEN_FRAME_SIGNING_SECRET
+    # Without this the harness backend refuses every adjudication with 409, which is
+    # correct for production and useless for the machine meant to exercise the feature.
+    assert child["SCREEN_FRAME_EGRESS_ENABLED"] == "true"
+
+
+def test_offline_mode_still_supplies_the_screen_frame_signing_secret() -> None:
+    # The name matches the provider-credential regex on "SECRET"; it is a harness-local
+    # HMAC key, and refusing it offline would make the egress routes fail closed for the
+    # one mode that needs no external credentials at all.
+    cfg = config.HarnessConfig(
+        repo_root=REPO_ROOT,
+        instance="default",
+        provider_mode="offline",
+        layout=safety.layout_for_instance(REPO_ROOT, "default"),
+    )
+    child = config.child_env_for(cfg)
+    assert child["SCREEN_FRAME_SIGNING_SECRET"] == config.LOCAL_SCREEN_FRAME_SIGNING_SECRET
 
 
 def test_nondefault_port_offset_propagates_to_every_harness_service() -> None:

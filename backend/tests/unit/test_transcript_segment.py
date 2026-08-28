@@ -374,6 +374,82 @@ def test_no_merge_when_stt_provider_differs():
     assert _concat_segments(segments) == input_concat
 
 
+def test_explicit_scoped_speaker_ids_keep_padded_provider_labels_distinct():
+    deepgram = TranscriptSegment(
+        text="Deepgram speaker",
+        speaker="SPEAKER_0",
+        speaker_id=0,
+        speaker_id_scope="connection-a:0",
+        stt_provider="deepgram",
+        is_user=False,
+        start=0.0,
+        end=1.0,
+    )
+    modulate = TranscriptSegment(
+        text="Modulate speaker",
+        speaker="SPEAKER_00",
+        speaker_id=1,
+        speaker_id_scope="connection-a:1",
+        stt_provider="modulate",
+        is_user=False,
+        start=1.0,
+        end=2.0,
+    )
+
+    assert deepgram.speaker_id == 0
+    assert modulate.speaker_id == 1
+    assert deepgram.speaker_id != modulate.speaker_id
+
+
+def test_internal_speaker_identity_fields_persist_without_widening_client_schema():
+    segment = TranscriptSegment(
+        text="Owner statement",
+        speaker="SPEAKER_00",
+        speaker_id=3,
+        speaker_id_scope="connection-a:0",
+        speaker_identity_status="no_match",
+        is_user=False,
+        start=0.0,
+        end=1.0,
+    )
+
+    payload = segment.model_dump()
+    properties = TranscriptSegment.model_json_schema()['properties']
+
+    assert payload['speaker_id_scope'] == "connection-a:0"
+    assert payload['speaker_identity_status'] == "no_match"
+    assert 'speaker_id_scope' not in properties
+    assert 'speaker_identity_status' not in properties
+
+
+def test_no_merge_across_provider_epochs_when_provider_name_is_unchanged():
+    before_reconnect = TranscriptSegment(
+        text="Before reconnect",
+        speaker="SPEAKER_0",
+        speaker_id=0,
+        speaker_id_scope="connection-a:0",
+        stt_provider="deepgram",
+        is_user=False,
+        start=0.0,
+        end=1.0,
+    )
+    after_reconnect = TranscriptSegment(
+        text="after reconnect.",
+        speaker="SPEAKER_0",
+        speaker_id=1,
+        speaker_id_scope="connection-b:0",
+        stt_provider="deepgram",
+        is_user=False,
+        start=1.1,
+        end=2.0,
+    )
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [before_reconnect, after_reconnect])
+
+    assert len(segments) == 2
+    assert [segment.speaker_id for segment in segments] == [0, 1]
+
+
 def test_punctuation_cleanup_normalizes_spacing():
     a = _segment("Hello , world .", speaker="SPEAKER_00", start=0.0, end=1.0)
     input_concat = _concat_texts([a.text])
