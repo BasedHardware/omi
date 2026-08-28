@@ -2469,6 +2469,55 @@ final class DesktopAutomationActionRegistry {
       }
     }
 
+    // Cursor-free notch hover driver: enter/exit run the same pointer update
+    // the tracking view calls from mouse events; state reads the island's
+    // visibility inputs so a stuck reveal or menu can be caught mechanically.
+    register(
+      name: "notch_hover",
+      summary: "Simulate notch pointer enter/exit or read island state (non-prod). action=enter|exit|state",
+      params: ["action"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "notch_hover is disabled on production bundles"]
+      }
+      guard let bar = FloatingControlBarManager.shared.window else {
+        return ["error": "no floating bar window"]
+      }
+      switch params["action"] ?? "state" {
+      case "enter":
+        bar.automationSimulateNotchPointer(inside: true)
+      case "exit":
+        bar.automationSimulateNotchPointer(inside: false)
+      case "state":
+        break
+      default:
+        throw DesktopAutomationActionError.invalidParams("action must be enter, exit, or state")
+      }
+      return bar.automationNotchStateSnapshot
+    }
+
+    // Drives the REAL provider failover the quota/auth close handlers call
+    // (failoverToAlternateProvider), then re-warms, so the cross-provider path
+    // can be exercised without waiting for the shared key to actually throttle.
+    register(
+      name: "realtime_failover",
+      summary: "Fail the realtime hub over to the alternate provider via the production path (non-prod).",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "realtime_failover is disabled on production bundles"]
+      }
+      let controller = RealtimeHubController.shared
+      let from = controller.effectiveProvider.rawValue
+      let started = controller.failoverToAlternateProvider(reason: "quota")
+      controller.ensureWarm()
+      return [
+        "failover_started": started ? "true" : "false",
+        "from": from,
+        "to": controller.effectiveProvider.rawValue,
+      ]
+    }
+
     register(
       name: "seed_subagents",
       summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
@@ -3569,6 +3618,7 @@ final class DesktopAutomationActionRegistry {
 
     registerNotificationActions()
     registerRatingPromptActions()
+    registerRemotePromptActions()
     register(
       name: "rewind_settings_snapshot",
       summary: "Return Rewind settings retention and excluded-app counts"
