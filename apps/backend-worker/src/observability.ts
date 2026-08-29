@@ -74,6 +74,24 @@ export function requestFailedEvent(input: {
   };
 }
 
+export function logRequestCompleted(input: {
+  requestId: string;
+  method: string;
+  route: string;
+  status: number;
+  durationMs: number;
+}): void {
+  console.log(JSON.stringify(requestCompletedEvent(input)));
+}
+
+export function logRequestFailed(input: {
+  requestId: string;
+  name: string;
+  route: string;
+}): void {
+  console.error(JSON.stringify(requestFailedEvent(input)));
+}
+
 export function gatewayFailureEvent(input: {
   message: string;
   correlationId: string;

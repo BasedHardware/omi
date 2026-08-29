@@ -10,7 +10,7 @@ import {
   type CoreEnv,
   type CoreRoute,
 } from "./http-core";
-import { requestCompletedEvent, requestFailedEvent } from "./observability";
+import { logRequestCompleted, logRequestFailed } from "./observability";
 import { backendError } from "./wire";
 
 export function createElysiaApp(env: CoreEnv): Elysia {
@@ -89,15 +89,11 @@ function mount(
 }
 
 function logFailure(context: CoreContext, error: unknown): void {
-  console.error(
-    JSON.stringify(
-      requestFailedEvent({
-        requestId: context.get("requestId") || "unavailable",
-        name: error instanceof Error ? error.name : "Error",
-        route: safeRoute(context.req.routePath),
-      })
-    )
-  );
+  logRequestFailed({
+    requestId: context.get("requestId") || "unavailable",
+    name: error instanceof Error ? error.name : "Error",
+    route: safeRoute(context.req.routePath),
+  });
 }
 
 function observed(
@@ -107,17 +103,13 @@ function observed(
 ): Response {
   const headers = new Headers(response.headers);
   headers.set("x-omi-request-id", context.get("requestId"));
-  console.log(
-    JSON.stringify(
-      requestCompletedEvent({
-        requestId: context.get("requestId") || "unavailable",
-        method: context.req.method,
-        route: safeRoute(context.req.routePath),
-        status: response.status,
-        durationMs: Math.max(0, Date.now() - startedAt),
-      })
-    )
-  );
+  logRequestCompleted({
+    requestId: context.get("requestId") || "unavailable",
+    method: context.req.method,
+    route: safeRoute(context.req.routePath),
+    status: response.status,
+    durationMs: Math.max(0, Date.now() - startedAt),
+  });
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

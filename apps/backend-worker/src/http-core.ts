@@ -395,8 +395,8 @@ export async function handleChatCreate(
   );
   if (resolved.kind === "rejected")
     return backendError("attachment_rejected", "edit_request", 422);
-  const stub = account(context);
-  const admission = await stub.admit(
+  const accountBackend = account(context);
+  const admission = await accountBackend.admit(
     context.get("accountId"),
     body,
     context.env.STAGING_CHAT_LIMIT
