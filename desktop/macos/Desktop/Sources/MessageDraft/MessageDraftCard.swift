@@ -65,7 +65,6 @@ final class MessageDraftCardController: ObservableObject {
   static let shared = MessageDraftCardController()
 
   @Published private(set) var state: MessageDraftCardState = .prompt
-  private(set) var fingerprint: String?
   private var window: NSPanel?
   private var moveObserver: (any NSObjectProtocol)?
   private var targetWindowFrame: CGRect?
@@ -83,7 +82,6 @@ final class MessageDraftCardController: ObservableObject {
   /// being refined; `onDecline` is the ✗, so the assistant can stop offering this
   /// conversation.
   func present(
-    fingerprint: String,
     appDisplayName: String,
     targetWindowFrame: CGRect? = nil,
     restore: MessageDraft? = nil,
@@ -91,7 +89,6 @@ final class MessageDraftCardController: ObservableObject {
     onDecline: @escaping () -> Void
   ) {
     dismiss()
-    self.fingerprint = fingerprint
     self.targetWindowFrame = targetWindowFrame
     self.appDisplayName = appDisplayName
     self.onGenerate = onGenerate
@@ -132,7 +129,6 @@ final class MessageDraftCardController: ObservableObject {
     moveObserver = nil
     window?.close()
     window = nil
-    fingerprint = nil
     onGenerate = nil
     onDecline = nil
     state = .prompt
@@ -178,16 +174,6 @@ final class MessageDraftCardController: ObservableObject {
       frame = FormAssistCardPlacement.frame(cardSize: size, visibleFrame: visible)
     }
     window.setFrame(frame, display: true)
-  }
-
-  /// Whatever moved the card off the visible screen — a drag, a display change — the
-  /// next sweep puts it back where an offer belongs.
-  func ensureVisiblePlacement() {
-    guard let window else { return }
-    guard let visible = placementScreen?.visibleFrame else { return }
-    guard !visible.contains(window.frame) else { return }
-    log("MessageDraftCard: re-placing off-screen card from \(window.frame)")
-    window.setFrame(placementFrame(size: currentSize()), display: true)
   }
 
   /// The screen the conversation is on — the card must appear where the user is

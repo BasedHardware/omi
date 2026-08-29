@@ -3,11 +3,16 @@ import Foundation
 
 /// The one floating panel on screen, and everything about when it is there.
 ///
-/// Every copy card — the offer form assist puts up on its own, and the panels the user
-/// asks for out loud — goes through here, because "which card is on screen" is one
-/// question and answering it in two places is how a card ends up outliving the thing it
-/// was about. A panel belongs to a `PanelContext`: leave that context and it goes, come
-/// back and it returns, and it never survives into a tab that knows nothing about it.
+/// Every card — the offer form assist puts up on its own, the message draft, the panels
+/// the user asks for out loud, the cloud-connector setup values — goes through here,
+/// because "which card is on screen" is one question and answering it in two places is
+/// how a card ends up outliving the thing it was about, or drawn over by another. A panel
+/// belongs to a `PanelContext`: leave that context and it goes, come back and it returns,
+/// and it never survives into a tab that knows nothing about it.
+///
+/// Two kinds of card exist and they render in different windows — a copy card of values,
+/// and the draft card, which takes keystrokes. This owns *which one is up and for how
+/// long*; each presenter still owns its own pixels.
 @MainActor
 enum PanelSession {
   /// Who asked for the panel. An offer nobody asked for may be replaced by one somebody
@@ -17,27 +22,53 @@ enum PanelSession {
     case requested
   }
 
+  /// What the panel is showing, and therefore which window draws it.
+  enum Content {
+    case copy(Copy)
+    case compose(Compose)
+
+    struct Copy {
+      var title: String
+      var subtitle: String
+      /// Sections, not a flat list, because the connector setup card groups values
+      /// behind an advanced disclosure. A card with no grouping is one untitled
+      /// section, which is exactly what the overlay's own field API builds.
+      var sections: [CloudConnectorCopySection]
+      var fields: [CloudConnectorCopyField] {
+        CloudConnectorCopySection.flattenedFields(sections)
+      }
+      var autoDismissAfter: TimeInterval?
+      /// Set while the panel is still an offer nothing has been spent on. Answering it
+      /// clears this, which is also what stops the offer's countdown.
+      var ask: CopyCardAsk?
+    }
+
+    struct Compose {
+      let appDisplayName: String
+      let targetWindowFrame: CGRect?
+      let onGenerate: (String, MessageDraft?) async -> Result<MessageDraft, Error>
+      let onDecline: () -> Void
+      /// The draft as it stands, so hiding the panel on a context change and bringing it
+      /// back does not throw away a model call the user already paid for.
+      var draft: MessageDraft?
+    }
+  }
+
   private struct Panel {
-    var title: String
-    var subtitle: String
-    var fields: [CloudConnectorCopyField]
+    var content: Content
     let grain: PanelContext.Grain
     /// The form this panel answered, so a sweep can tell whether it is still on screen.
     /// Only form panels have one — a draft panel must never be tested by re-running the
     /// compose gate, which refuses a box the user has already pasted into.
     let formFingerprint: String?
-    let origin: Origin
-    var autoDismissAfter: TimeInterval?
-    /// Set while the panel is still an offer nothing has been spent on. Answering it
-    /// clears this, which is also what stops the offer's countdown.
-    var ask: CopyCardAsk?
+    var origin: Origin
   }
 
   private static let watcherID = "panel-session"
 
-  /// Finished content of panels the user asked for out loud, waiting for the voice
-  /// turn's chat write to carry it. A panel leaves with its context; the chat
-  /// transcript is where what it held survives.
+  /// Finished content of panels the user asked for, waiting for the next chat write to
+  /// carry it. A panel leaves with its context; the chat transcript is where what it
+  /// held survives.
   private struct ChatRecord {
     var title: String
     var fields: [CloudConnectorCopyField]
@@ -65,7 +96,11 @@ enum PanelSession {
 
   /// True while a panel of ours is the window on screen.
   static var isPresenting: Bool {
-    showing && CloudConnectorGuidanceOverlay.shared.isPresenting
+    guard showing, let panel = remembered else { return false }
+    switch panel.content {
+    case .copy: return CloudConnectorGuidanceOverlay.shared.isPresenting
+    case .compose: return MessageDraftCardController.shared.isPresenting
+    }
   }
 
   /// The form whose answers are on screen, if any. Lets the periodic scan see that this
@@ -75,12 +110,23 @@ enum PanelSession {
   }
 
   /// True while the panel on screen is still an offer nobody has answered.
-  static var isAsking: Bool { isPresenting && remembered?.ask != nil }
+  static var isAsking: Bool {
+    guard isPresenting, case .copy(let copy) = remembered?.content else { return false }
+    return copy.ask != nil
+  }
 
   /// Whether an unrequested offer may take the screen right now.
+  ///
+  /// Both windows count. Checking only one is how a form offer ended up drawing over a
+  /// live draft card: each surface guarded its own overlay and neither guarded the other.
   static var canPresentAmbient: Bool {
-    guard isPresenting else { return !CloudConnectorGuidanceOverlay.shared.isPresenting }
+    guard isPresenting else { return !anyCardOnScreen }
     return remembered?.origin == .ambient
+  }
+
+  private static var anyCardOnScreen: Bool {
+    CloudConnectorGuidanceOverlay.shared.isPresenting
+      || MessageDraftCardController.shared.isPresenting
   }
 
   // MARK: - Presenting
@@ -97,18 +143,81 @@ enum PanelSession {
     onCancel: (() -> Void)? = nil,
     onUserDismiss: (() -> Void)? = nil
   ) {
+    present(
+      sections: [CloudConnectorCopySection(id: "fields", title: "", fields: fields)],
+      title: title, subtitle: subtitle, grain: grain, origin: origin,
+      formFingerprint: formFingerprint, autoDismissAfter: autoDismissAfter, ask: ask,
+      onCancel: onCancel, onUserDismiss: onUserDismiss)
+  }
+
+  /// A copy card whose values are grouped — the cloud-connector setup card, whose
+  /// provider form hides some fields behind a disclosure.
+  static func present(
+    sections: [CloudConnectorCopySection],
+    title: String,
+    subtitle: String,
+    grain: PanelContext.Grain,
+    origin: Origin,
+    formFingerprint: String? = nil,
+    autoDismissAfter: TimeInterval? = nil,
+    ask: CopyCardAsk? = nil,
+    onCancel: (() -> Void)? = nil,
+    onUserDismiss: (() -> Void)? = nil
+  ) {
+    present(
+      content: .copy(
+        Content.Copy(
+          title: title, subtitle: subtitle, sections: sections,
+          autoDismissAfter: autoDismissAfter, ask: ask)),
+      grain: grain, origin: origin, formFingerprint: formFingerprint,
+      onCancel: onCancel, onUserDismiss: onUserDismiss)
+  }
+
+  /// Put up the draft card. Same ownership rules as a copy card: it belongs to the
+  /// conversation it opened over, and this decides when it leaves.
+  static func presentCompose(
+    fingerprint: String,
+    appDisplayName: String,
+    targetWindowFrame: CGRect?,
+    restore: MessageDraft?,
+    origin: Origin,
+    onGenerate: @escaping (String, MessageDraft?) async -> Result<MessageDraft, Error>,
+    onDecline: @escaping () -> Void
+  ) {
+    present(
+      content: .compose(
+        Content.Compose(
+          appDisplayName: appDisplayName, targetWindowFrame: targetWindowFrame,
+          onGenerate: onGenerate, onDecline: onDecline, draft: restore)),
+      grain: .context, origin: origin, formFingerprint: nil, composeFingerprint: fingerprint,
+      onUserDismiss: onDecline)
+  }
+
+  /// The compose card's own fingerprint, kept apart from `formFingerprint` because the
+  /// liveness sweep must never re-run the compose gate — it refuses a box the user has
+  /// already pasted into, which would take the card away for succeeding.
+  private static var composeFingerprint: String?
+
+  /// True while the draft card for exactly this conversation is up.
+  static func isShowingCompose(_ fingerprint: String) -> Bool {
+    isPresenting && composeFingerprint == fingerprint
+  }
+
+  private static func present(
+    content: Content,
+    grain: PanelContext.Grain,
+    origin: Origin,
+    formFingerprint: String?,
+    composeFingerprint: String? = nil,
+    onCancel: (() -> Void)? = nil,
+    onUserDismiss: (() -> Void)? = nil
+  ) {
     cancelWork?()
+    hideCurrent()
     remembered = Panel(
-      title: title, subtitle: subtitle, fields: fields, grain: grain,
-      formFingerprint: formFingerprint, origin: origin, autoDismissAfter: autoDismissAfter,
-      ask: ask)
-    if origin == .requested {
-      if chatRecords.count >= maxChatRecords { chatRecords.removeFirst() }
-      chatRecords.append(ChatRecord(title: title, fields: fields))
-      liveChatRecordIndex = chatRecords.indices.last
-    } else {
-      liveChatRecordIndex = nil
-    }
+      content: content, grain: grain, formFingerprint: formFingerprint, origin: origin)
+    self.composeFingerprint = composeFingerprint
+    if origin == .requested { beginChatRecord() } else { liveChatRecordIndex = nil }
     owner = currentContext()
     cancelWork = onCancel
     userDismiss = onUserDismiss
@@ -119,11 +228,23 @@ enum PanelSession {
   /// The user took the offer. The ✓ row goes, and with it the countdown an unanswered
   /// offer runs on: what fills the panel from here was asked for, and waiting on it is
   /// not the same as ignoring it.
+  ///
+  /// It also stops being ambient. A ✓ is the user asking, and everything that follows
+  /// from being asked — surviving into the chat transcript, outranking a later offer —
+  /// applies to a panel they bought exactly as it does to one they spoke for.
   static func resolveAsk() {
-    guard var panel = remembered, panel.ask != nil else { return }
-    panel.ask = nil
-    panel.autoDismissAfter = nil
-    remembered = panel
+    guard var panel = remembered, case .copy(var copy) = panel.content, copy.ask != nil
+    else { return }
+    copy.ask = nil
+    copy.autoDismissAfter = nil
+    panel.content = .copy(copy)
+    if panel.origin == .ambient {
+      panel.origin = .requested
+      remembered = panel
+      beginChatRecord()
+    } else {
+      remembered = panel
+    }
     CloudConnectorGuidanceOverlay.shared.resolveFieldCopyAsk()
   }
 
@@ -134,22 +255,22 @@ enum PanelSession {
     title: String? = nil, subtitle: String? = nil, fields: [CloudConnectorCopyField]? = nil,
     forForm fingerprint: String? = nil
   ) {
-    guard var panel = remembered else { return }
+    guard var panel = remembered, case .copy(var copy) = panel.content else { return }
     // A form's answers take seconds, and another form's offer can take the panel while
     // they are in flight. Naming the form means late work goes nowhere rather than into
     // whatever replaced it.
     guard fingerprint == nil || panel.formFingerprint == fingerprint else { return }
-    if let title { panel.title = title }
-    if let subtitle { panel.subtitle = subtitle }
-    if let fields { panel.fields = fields }
-    remembered = panel
-    if let index = liveChatRecordIndex, chatRecords.indices.contains(index) {
-      if let title { chatRecords[index].title = title }
-      if let fields { chatRecords[index].fields = fields }
+    if let title { copy.title = title }
+    if let subtitle { copy.subtitle = subtitle }
+    if let fields {
+      copy.sections = [CloudConnectorCopySection(id: "fields", title: "", fields: fields)]
     }
+    panel.content = .copy(copy)
+    remembered = panel
+    updateLiveChatRecord(title: title, fields: fields)
     guard isPresenting else { return }
     CloudConnectorGuidanceOverlay.shared.updateFieldCopyCard(
-      title: panel.title, subtitle: panel.subtitle, fields: panel.fields)
+      title: copy.title, subtitle: copy.subtitle, sections: copy.sections)
   }
 
   /// Put the remembered panel back up, wherever the user is now, and let that context own
@@ -157,17 +278,18 @@ enum PanelSession {
   /// panel, whose content cost a model call the user should not pay twice.
   @discardableResult
   static func reopen() -> Int? {
-    guard let remembered else { return nil }
+    guard let panel = remembered else { return nil }
     owner = currentContext()
     show()
-    return remembered.fields.count
+    guard case .copy(let copy) = panel.content else { return 1 }
+    return copy.fields.count
   }
 
   /// Takes the panel down for good and stops whatever was filling it in.
   @discardableResult
   static func dismiss() -> Bool {
     let wasShowing = isPresenting
-    if wasShowing { CloudConnectorGuidanceOverlay.shared.dismiss() }
+    hideCurrent()
     forget()
     return wasShowing
   }
@@ -176,6 +298,11 @@ enum PanelSession {
   /// own card without reaching across and closing somebody else's.
   static func dismissForm(_ fingerprint: String) {
     guard remembered?.formFingerprint == fingerprint else { return }
+    dismiss()
+  }
+
+  static func dismissCompose(_ fingerprint: String) {
+    guard composeFingerprint == fingerprint else { return }
     dismiss()
   }
 
@@ -190,15 +317,51 @@ enum PanelSession {
   }
 
   /// The finished content of every panel the user asked for since the last call.
-  /// Cleared on read, so a panel lands in exactly one voice turn. A panel still
-  /// mid-flight — pending rows, no values — yields nothing: it was cancelled or
-  /// empty, and an empty card is not worth a transcript.
+  /// Cleared on read, so a panel lands in exactly one turn. A panel still mid-flight —
+  /// pending rows, no values — yields nothing: it was cancelled or empty, and an empty
+  /// card is not worth a transcript.
   static func takeChatCards() -> [PanelChatCard] {
     defer {
       chatRecords.removeAll()
       liveChatRecordIndex = nil
     }
     return chatRecords.compactMap { chatCard(title: $0.title, fields: $0.fields) }
+  }
+
+  private static func beginChatRecord() {
+    guard let panel = remembered else { return }
+    if chatRecords.count >= maxChatRecords { chatRecords.removeFirst() }
+    switch panel.content {
+    case .copy(let copy):
+      chatRecords.append(ChatRecord(title: copy.title, fields: copy.fields))
+    case .compose(let compose):
+      chatRecords.append(
+        ChatRecord(title: "Draft for \(compose.appDisplayName)", fields: draftFields(compose.draft)))
+    }
+    liveChatRecordIndex = chatRecords.indices.last
+  }
+
+  private static func updateLiveChatRecord(
+    title: String?, fields: [CloudConnectorCopyField]?
+  ) {
+    guard let index = liveChatRecordIndex, chatRecords.indices.contains(index) else { return }
+    if let title { chatRecords[index].title = title }
+    if let fields { chatRecords[index].fields = fields }
+  }
+
+  /// A draft as copyable rows, so the transcript keeps it exactly as the card showed it.
+  private static func draftFields(_ draft: MessageDraft?) -> [CloudConnectorCopyField] {
+    guard let draft else { return [] }
+    var fields: [CloudConnectorCopyField] = []
+    if let subject = draft.subject, !subject.isEmpty {
+      fields.append(
+        CloudConnectorCopyField(
+          id: "draft-subject", label: "Subject", value: subject, masksValue: false))
+    }
+    fields.append(
+      CloudConnectorCopyField(
+        id: "draft-body", label: "", value: draft.body, masksValue: false, wraps: true))
+    return fields
   }
 
   /// One panel as a card: title on the header, the value names as the always-visible
@@ -249,7 +412,7 @@ enum PanelSession {
     guard let front = PanelContext.front(resolvePageURL: thorough) else { return }
     guard front.matches(owner, grain: panel.grain, comparingPageURL: thorough) else {
       guard isPresenting else { return }
-      CloudConnectorGuidanceOverlay.shared.dismiss()
+      hideCurrent()
       showing = false
       return
     }
@@ -263,39 +426,46 @@ enum PanelSession {
       dismiss()
       return
     }
-    guard !isPresenting, !CloudConnectorGuidanceOverlay.shared.isPresenting else { return }
+    guard !isPresenting, !anyCardOnScreen else { return }
     show()
   }
 
   private static func show() {
     guard let panel = remembered else { return }
+    showing = true
+    switch panel.content {
+    case .copy(let copy): showCopy(copy)
+    case .compose(let compose): showCompose(compose)
+    }
+  }
+
+  private static func showCopy(_ copy: Content.Copy) {
     let visibleFrame = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
     let maxHeight = visibleFrame.map(FormAssistCardPlacement.maxCardHeight(visibleFrame:))
     let overlay = CloudConnectorGuidanceOverlay.shared
     let size = overlay.fieldCopyCardSize(
-      title: panel.title,
-      subtitle: panel.subtitle,
-      fieldCount: panel.fields.count,
+      title: copy.title,
+      subtitle: copy.subtitle,
+      fieldCount: copy.fields.count,
       maxHeight: maxHeight,
-      wrappedCharacterCounts: panel.fields.filter(\.wraps).map(\.value.count),
-      hasAsk: panel.ask != nil
+      wrappedCharacterCounts: copy.fields.filter(\.wraps).map(\.value.count),
+      hasAsk: copy.ask != nil
     )
-    showing = true
     overlay.presentFieldCopyCard(
-      title: panel.title,
-      subtitle: panel.subtitle,
-      fields: panel.fields,
+      title: copy.title,
+      subtitle: copy.subtitle,
+      sections: copy.sections,
       near: nil,
       at: visibleFrame.map {
         FormAssistCardPlacement.frame(
           cardSize: size, visibleFrame: $0, offset: PanelPlacementStore.offset)
       },
       maxHeight: maxHeight,
-      autoDismissAfter: panel.autoDismissAfter,
+      autoDismissAfter: copy.autoDismissAfter,
       remembersPosition: true,
       // The offer's ✓ is answered once, wherever the panel is showing: clear the row
       // first, then hand the user's context to whoever asked.
-      ask: panel.ask.map { ask in
+      ask: copy.ask.map { ask in
         CopyCardAsk(
           placeholder: ask.placeholder,
           confirmLabel: ask.confirmLabel,
@@ -314,11 +484,53 @@ enum PanelSession {
     )
   }
 
+  private static func showCompose(_ compose: Content.Compose) {
+    MessageDraftCardController.shared.present(
+      appDisplayName: compose.appDisplayName,
+      targetWindowFrame: compose.targetWindowFrame,
+      restore: compose.draft,
+      // Every draft the card produces is remembered here, so hiding the card on a
+      // context change and bringing it back returns the draft rather than the prompt.
+      onGenerate: { context, refining in
+        let result = await compose.onGenerate(context, refining)
+        if case .success(let draft) = result { PanelSession.recordDraft(draft) }
+        return result
+      },
+      onDecline: {
+        let declined = PanelSession.userDismiss
+        PanelSession.forget()
+        declined?()
+      }
+    )
+  }
+
+  private static func recordDraft(_ draft: MessageDraft) {
+    guard var panel = remembered, case .compose(var compose) = panel.content else { return }
+    compose.draft = draft
+    panel.content = .compose(compose)
+    remembered = panel
+    updateLiveChatRecord(
+      title: "Draft for \(compose.appDisplayName)", fields: draftFields(draft))
+  }
+
+  /// Take down whichever window is currently drawing the panel, leaving the remembered
+  /// content alone. Both are closed rather than just the expected one: a presenter that
+  /// somehow held the screen must not survive a switch to the other kind.
+  private static func hideCurrent() {
+    if CloudConnectorGuidanceOverlay.shared.isPresenting {
+      CloudConnectorGuidanceOverlay.shared.dismiss()
+    }
+    if MessageDraftCardController.shared.isPresenting {
+      MessageDraftCardController.shared.dismiss()
+    }
+  }
+
   private static func forget() {
     cancelWork?()
     cancelWork = nil
     userDismiss = nil
     remembered = nil
+    composeFingerprint = nil
     owner = nil
     showing = false
     FormWatcher.shared.unsubscribe(watcherID)

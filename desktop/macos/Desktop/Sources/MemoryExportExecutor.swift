@@ -351,8 +351,12 @@ enum MemoryExportExecutor {
     if let hint = destination.assistedOverlayHint,
       let sections = destination.assistedSetupSections(key: key)
     {
-      CloudConnectorGuidanceOverlay.shared.presentFieldCopyCard(
-        title: hint.title, subtitle: hint.subtitle, sections: sections, near: nil)
+      // Through PanelSession like every other card: the user asked for this setup, so it
+      // outranks an ambient offer and is not silently replaced by one.
+      PanelSession.present(
+        sections: sections, title: hint.title, subtitle: hint.subtitle,
+        grain: .app, origin: .requested,
+        autoDismissAfter: CloudConnectorGuidanceOverlay.fieldCopyCardLifetime)
       return Outcome(
         taskTitle:
           "Opened \(destination.title) — copy each value from the on-screen card into the form.",

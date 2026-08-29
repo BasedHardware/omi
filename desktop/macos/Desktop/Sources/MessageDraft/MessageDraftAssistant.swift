@@ -46,11 +46,9 @@ actor MessageDraftAssistant: ProactiveAssistant {
   private var drafts: [(fingerprint: String, draft: MessageDraft)] = []
   private let maxRememberedDrafts = 40
 
-  /// The window the card on screen belongs to; leaving it takes the card away.
-  /// The context the card on screen belongs to. Not the window: a browser keeps one
-  /// window across every tab, and a draft written for one conversation must not still be
-  /// on screen over the next.
-  private var cardContext: PanelContext?
+  /// The conversation whose card is up, so a re-offer sweep can tell its own card from
+  /// somebody else's. Where that card lives and when it leaves is `PanelSession`'s.
+  private var offeredFingerprint: String?
   private var isEvaluating = false
 
   /// The last refusal logged, so a quiet screen writes one line, not one per sweep.
@@ -78,10 +76,6 @@ actor MessageDraftAssistant: ProactiveAssistant {
       FormWatcher.shared.subscribe(identifier) { reason in
         Task { await self.evaluate(reason: reason) }
       }
-      // Offering waits for the screen to settle; taking the card away does not.
-      FormWatcher.shared.subscribeImmediate(identifier) {
-        Task { await self.retireCardIfUserLeft() }
-      }
     }
   }
 
@@ -102,7 +96,6 @@ actor MessageDraftAssistant: ProactiveAssistant {
     guard await isEnabled else { return }
 
     guard let key = await MainActor.run(body: { FormFieldScanner.frontWindowKey() }) else { return }
-    await retireCardIfUserLeft()
 
     let excluded = await MainActor.run {
       // The same list the user curated for live suggestions: "do not watch me in this
@@ -124,22 +117,12 @@ actor MessageDraftAssistant: ProactiveAssistant {
       return
     }
 
-    let alreadyMine = await MainActor.run {
-      MessageDraftCardController.shared.isPresenting
-        && MessageDraftCardController.shared.fingerprint == snapshot.fingerprint
-    }
-    guard !alreadyMine else {
-      cardContext = await MainActor.run { PanelContext.front() }
-      await MainActor.run { MessageDraftCardController.shared.ensureVisiblePlacement() }
-      return
-    }
+    guard await MainActor.run(body: { !PanelSession.isShowingCompose(snapshot.fingerprint) })
+    else { return }
 
-    // One overlay at a time, whoever got there first.
-    let blocked = await MainActor.run {
-      CloudConnectorGuidanceOverlay.shared.isPresenting
-        || MessageDraftCardController.shared.isPresenting
-    }
-    guard !blocked else {
+    // One card at a time, whoever got there first — and a panel the user asked for
+    // outranks this offer.
+    guard await MainActor.run(body: { PanelSession.canPresentAmbient }) else {
       refuse(key, "another-card")
       return
     }
@@ -153,14 +136,15 @@ actor MessageDraftAssistant: ProactiveAssistant {
     log(
       "MessageDraft: offering in \(snapshot.context.appName) "
         + "surface=\(snapshot.surface.displayName) reason=\(reason.rawValue)")
-    cardContext = await MainActor.run { PanelContext.front() }
     let restored = drafts.last(where: { $0.fingerprint == snapshot.fingerprint })?.draft
+    offeredFingerprint = snapshot.fingerprint
     await MainActor.run {
-      MessageDraftCardController.shared.present(
+      PanelSession.presentCompose(
         fingerprint: snapshot.fingerprint,
         appDisplayName: snapshot.surface.displayName,
         targetWindowFrame: snapshot.windowFrame,
         restore: restored,
+        origin: .ambient,
         onGenerate: { [weak self] context, refining in
           guard let self else {
             return .failure(MessageDraftError.assistantGone)
@@ -182,16 +166,6 @@ actor MessageDraftAssistant: ProactiveAssistant {
     guard lastRefusal?.key != key || lastRefusal?.reason != reason else { return }
     lastRefusal = (key, reason)
     log("MessageDraft: gate=\(reason) app=\(key.appName)")
-  }
-
-  private func retireCardIfUserLeft() async {
-    guard let cardContext else { return }
-    let stillThere = await MainActor.run {
-      PanelContext.front().map { $0.matches(cardContext, grain: .context) } ?? true
-    }
-    guard !stillThere else { return }
-    self.cardContext = nil
-    await MainActor.run { MessageDraftCardController.shared.dismiss() }
   }
 
   private func recordDecline(_ fingerprint: String) {
@@ -469,10 +443,13 @@ actor MessageDraftAssistant: ProactiveAssistant {
   func clearPendingWork() async {}
 
   func stop() async {
-    cardContext = nil
+    let offered = offeredFingerprint
+    offeredFingerprint = nil
     await MainActor.run {
       FormWatcher.shared.unsubscribe(identifier)
-      MessageDraftCardController.shared.dismiss()
+      // Only this surface's own offer goes; a panel the user asked for is not ours to
+      // close because monitoring stopped.
+      if let offered { PanelSession.dismissCompose(offered) }
     }
   }
 }
