@@ -79,40 +79,13 @@ def try_catch_decorator(func: Callable[..., T]) -> Callable[..., Optional[T]]:
     return wrapper
 
 
-@try_catch_decorator
-def get_generic_cache(path: str) -> Any:
-    key = base64.b64encode(f'{path}'.encode('utf-8'))
-    key = key.decode('utf-8')
-
-    data = r.get(f'cache:{key}')
-    return json.loads(data) if data else None
-
-
-@try_catch_decorator
-def set_generic_cache(path: str, data: object, ttl: Optional[int] = None) -> None:
-    key = base64.b64encode(f'{path}'.encode('utf-8'))
-    key = key.decode('utf-8')
-
-    r.set(f'cache:{key}', json.dumps(data, default=str))
-    if ttl:
-        r.expire(f'cache:{key}', ttl)
-
-
-@try_catch_decorator
-def delete_generic_cache(path: str) -> None:
-    key = base64.b64encode(f'{path}'.encode('utf-8'))
-    key = key.decode('utf-8')
-    r.delete(f'cache:{key}')
-
-
-@try_catch_decorator
-def pop_generic_cache(path: str) -> Any:
-    """Atomically read and remove a generic cache entry (Redis GETDEL)."""
-    key = base64.b64encode(f'{path}'.encode('utf-8'))
-    key = key.decode('utf-8')
-    data = r.getdel(f'cache:{key}')
-    return json.loads(data) if data else None
-
+# Re-exported from generic_cache so existing callers keep importing database.redis_db.
+from database.generic_cache import (  # noqa: E402
+    delete_generic_cache,
+    get_generic_cache,
+    pop_generic_cache,
+    set_generic_cache,
+)
 
 # ******************************************************
 # ********************* APP BY ID **********************

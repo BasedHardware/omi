@@ -1,7 +1,5 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-import base64
-import json
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
 
@@ -18,7 +16,6 @@ from database.firestore_transaction_retry import run_with_transaction_contention
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from database.firestore_index_registry import (
     ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
-    ACTION_ITEMS_CLEANUP_OPEN_CREATED_SCAN_QUERY,
     ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
@@ -504,17 +501,6 @@ def get_action_item(uid: str, action_item_id: str) -> Optional[Dict[str, Any]]:
 # /v1/action-items to hit HTTP_GET_TIMEOUT (30s) → 504 on large accounts.
 _ACTION_ITEMS_LIST_HARD_MAX = 2000
 
-
-def get_action_items_list_scan_cap() -> int:
-    """Public accessor for _ACTION_ITEMS_LIST_HARD_MAX.
-
-    Lets a caller of get_action_items() (e.g. cleanup preview) tell whether the
-    2000-item scan cap may have left tasks out of what it read, without reaching
-    into a private module constant.
-    """
-    return _ACTION_ITEMS_LIST_HARD_MAX
-
-
 # Slack so a handful of soft-deleted rows in a Firestore prefix still fill the page.
 _ACTION_ITEMS_LIST_DELETED_SLACK = 32
 # Lean projection for GET /v1/action-items. Omit `provenance` (evidence arrays dominate
@@ -998,95 +984,6 @@ def get_action_items_count_by_conversation(uid: str, conversation_id: str) -> Di
     # between them can leave completed > total. Cap it so the three values stay internally consistent.
     completed = min(completed, total)
     return {'total': total, 'completed': completed, 'incomplete': max(0, total - completed)}
-
-
-def get_open_action_items_count(uid: str) -> int:
-    """Return the true count of open (incomplete) action items for a user.
-
-    Uses Firestore count() aggregation — no document reads, no _ACTION_ITEMS_LIST_HARD_MAX
-    cap — so callers (e.g. cleanup preview) can tell whether get_action_items()'s 2000-item
-    scan cap left tasks out of what it actually read. "Open" is derived as total minus
-    completed (not a completed==False equality filter) so legacy docs with a missing/null
-    completed field count as open, matching get_action_items' own treatment of them.
-    """
-    base = db.collection('users').document(uid).collection(action_items_collection)
-    total = int(base.count().get()[0][0].value)
-    completed = int(base.where(filter=FieldFilter('completed', '==', True)).count().get()[0][0].value)
-
-    # Exclude soft-retired items, same trade-off as get_action_items_count_by_conversation:
-    # stream just the (rare) deleted subset and subtract, rather than requiring a filtered
-    # composite index.
-    deleted_total = 0
-    deleted_completed = 0
-    for doc in base.where(filter=FieldFilter('deleted', '==', True)).stream():
-        deleted_total += 1
-        if (doc.to_dict() or {}).get('completed'):
-            deleted_completed += 1
-
-    total = max(0, total - deleted_total)
-    completed = max(0, min(completed - deleted_completed, total))
-    return max(0, total - completed)
-
-
-def _parse_cleanup_scan_created_at(value: Any) -> datetime:
-    if value is None:
-        return datetime.min.replace(tzinfo=timezone.utc)
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    if isinstance(value, str):
-        return datetime.fromisoformat(value.rstrip('Z')).replace(tzinfo=timezone.utc)
-    if hasattr(value, 'timestamp'):
-        return datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
-    return datetime.min.replace(tzinfo=timezone.utc)
-
-
-def encode_cleanup_scan_cursor(created_at: datetime, doc_id: str) -> str:
-    """Encode the last scanned open task for deterministic cleanup pagination."""
-    normalized = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
-    payload = {'created_at': normalized.astimezone(timezone.utc).isoformat(), 'id': doc_id}
-    return base64.urlsafe_b64encode(json.dumps(payload, separators=(',', ':')).encode()).decode()
-
-
-def decode_cleanup_scan_cursor(cursor: str) -> tuple[datetime, str]:
-    try:
-        payload = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
-        return _parse_cleanup_scan_created_at(payload['created_at']), str(payload['id'])
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-        raise ValueError('Invalid cleanup scan cursor') from exc
-
-
-def list_open_action_items_for_cleanup(
-    uid: str,
-    *,
-    limit: Optional[int] = None,
-    cursor: Optional[str] = None,
-) -> tuple[List[Dict[str, Any]], Optional[str], int]:
-    """Return one oldest-first page of open action items for cleanup strategies.
-
-    Uses a deterministic ``created_at`` + document-id ordering so repeated preview
-    runs can advance through large accounts via ``cursor`` instead of rescanning
-    the same arbitrary Firestore prefix.
-    """
-    row_cap = min(limit or _ACTION_ITEMS_LIST_HARD_MAX, _ACTION_ITEMS_LIST_HARD_MAX)
-    coll = db.collection('users').document(uid).collection(action_items_collection)
-    query = ACTION_ITEMS_CLEANUP_OPEN_CREATED_SCAN_QUERY.build(
-        coll.select(list(_ACTION_ITEMS_LIST_SELECT_FIELDS)),
-        {'completed': False},
-        field_filter_factory=FieldFilter,
-    ).order_by('created_at', direction=firestore.Query.ASCENDING)
-
-    if cursor:
-        created_at, doc_id = decode_cleanup_scan_cursor(cursor)
-        query = query.start_after({'created_at': created_at, '__name__': coll.document(doc_id)})
-
-    items, docs_read = _stream_action_items_bounded(query, max_docs=_list_scan_budget(row_cap))
-    items.sort(key=lambda item: (_parse_cleanup_scan_created_at(item.get('created_at')), item['id']))
-    page_items = items[:row_cap]
-    next_cursor = None
-    if page_items and (len(items) > row_cap or docs_read >= _list_scan_budget(row_cap)):
-        last = page_items[-1]
-        next_cursor = encode_cleanup_scan_cursor(_parse_cleanup_scan_created_at(last.get('created_at')), last['id'])
-    return page_items, next_cursor, len(page_items)
 
 
 def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[str, Any]]:
@@ -1664,3 +1561,10 @@ def get_scores(uid: str, date: Optional[str] = None, *, firestore_client: Any = 
         'default_tab': default_tab,
         'date': day.strftime('%Y-%m-%d'),
     }
+
+
+from database.action_items_cleanup_scan import (  # noqa: E402
+    get_action_items_list_scan_cap,
+    get_open_action_items_count,
+    list_open_action_items_for_cleanup,
+)
