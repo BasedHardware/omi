@@ -116,3 +116,65 @@ def test_data_plane_db_lazy_proxy_defers_until_first_attribute_access(monkeypatc
     getter.assert_not_called()
     assert client_module.data_plane_db.collection("users") == "lazy-ref"
     getter.assert_called_once_with()
+
+
+def test_uses_mounted_data_plane_credentials_when_available(monkeypatch):
+    _reset_caches(monkeypatch)
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
+    monkeypatch.setenv("OMI_FIRESTORE_DATA_PLANE_PROJECT", "based-hardware")
+
+    fake_credentials = object()
+    monkeypatch.setattr(
+        client_module,
+        "customer_entitlement_service_account",
+        MagicMock(return_value=(fake_credentials, "based-hardware")),
+    )
+    fake_client = SimpleNamespace()
+    firestore_client_ctor = MagicMock(return_value=fake_client)
+    monkeypatch.setattr(client_module.firestore, "Client", firestore_client_ctor)
+    monkeypatch.setattr(
+        client_module,
+        "prepare_google_credentials",
+        MagicMock(side_effect=AssertionError("explicit credentials must not fall back to ADC")),
+    )
+
+    result = client_module.get_data_plane_firestore_client()
+
+    assert result is fake_client
+    firestore_client_ctor.assert_called_once_with(credentials=fake_credentials, project="based-hardware")
+
+
+def test_refuses_mounted_credentials_for_a_different_project(monkeypatch):
+    _reset_caches(monkeypatch)
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
+    monkeypatch.setenv("OMI_FIRESTORE_DATA_PLANE_PROJECT", "based-hardware")
+
+    monkeypatch.setattr(
+        client_module,
+        "customer_entitlement_service_account",
+        MagicMock(return_value=(object(), "some-other-project")),
+    )
+
+    import pytest
+
+    with pytest.raises(RuntimeError, match="does not match the mounted service account"):
+        client_module.get_data_plane_firestore_client()
+
+
+def test_falls_back_to_pinned_adc_without_mounted_credentials(monkeypatch):
+    _reset_caches(monkeypatch)
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
+    monkeypatch.setenv("OMI_FIRESTORE_DATA_PLANE_PROJECT", "based-hardware")
+
+    monkeypatch.setattr(client_module, "customer_entitlement_service_account", MagicMock(return_value=None))
+    fake_client = SimpleNamespace()
+    firestore_client_ctor = MagicMock(return_value=fake_client)
+    prepare_credentials = MagicMock()
+    monkeypatch.setattr(client_module.firestore, "Client", firestore_client_ctor)
+    monkeypatch.setattr(client_module, "prepare_google_credentials", prepare_credentials)
+
+    result = client_module.get_data_plane_firestore_client()
+
+    assert result is fake_client
+    prepare_credentials.assert_called_once()
+    firestore_client_ctor.assert_called_once_with(project="based-hardware")
