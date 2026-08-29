@@ -27,7 +27,10 @@ enum PanelSession {
     /// compose gate, which refuses a box the user has already pasted into.
     let formFingerprint: String?
     let origin: Origin
-    let autoDismissAfter: TimeInterval?
+    var autoDismissAfter: TimeInterval?
+    /// Set while the panel is still an offer nothing has been spent on. Answering it
+    /// clears this, which is also what stops the offer's countdown.
+    var ask: CopyCardAsk?
   }
 
   private static let watcherID = "panel-session"
@@ -49,6 +52,9 @@ enum PanelSession {
   private static var owner: PanelContext?
   private static var showing = false
   private static var cancelWork: (() -> Void)?
+  /// The user's ✗, and only theirs. `cancelWork` also runs when something else takes the
+  /// panel down; a surface that must not offer this again needs the narrower signal.
+  private static var userDismiss: (() -> Void)?
   /// The last app that was not Omi. A panel is presented from a voice turn, and Omi's own
   /// voice UI can hold focus at that moment — without this the panel would be born with
   /// no owner and never leave.
@@ -68,6 +74,9 @@ enum PanelSession {
     isPresenting && remembered?.formFingerprint == fingerprint
   }
 
+  /// True while the panel on screen is still an offer nobody has answered.
+  static var isAsking: Bool { isPresenting && remembered?.ask != nil }
+
   /// Whether an unrequested offer may take the screen right now.
   static var canPresentAmbient: Bool {
     guard isPresenting else { return !CloudConnectorGuidanceOverlay.shared.isPresenting }
@@ -84,12 +93,15 @@ enum PanelSession {
     origin: Origin,
     formFingerprint: String? = nil,
     autoDismissAfter: TimeInterval? = nil,
-    onCancel: (() -> Void)? = nil
+    ask: CopyCardAsk? = nil,
+    onCancel: (() -> Void)? = nil,
+    onUserDismiss: (() -> Void)? = nil
   ) {
     cancelWork?()
     remembered = Panel(
       title: title, subtitle: subtitle, fields: fields, grain: grain,
-      formFingerprint: formFingerprint, origin: origin, autoDismissAfter: autoDismissAfter)
+      formFingerprint: formFingerprint, origin: origin, autoDismissAfter: autoDismissAfter,
+      ask: ask)
     if origin == .requested {
       if chatRecords.count >= maxChatRecords { chatRecords.removeFirst() }
       chatRecords.append(ChatRecord(title: title, fields: fields))
@@ -99,17 +111,34 @@ enum PanelSession {
     }
     owner = currentContext()
     cancelWork = onCancel
+    userDismiss = onUserDismiss
     startWatching()
     show()
+  }
+
+  /// The user took the offer. The ✓ row goes, and with it the countdown an unanswered
+  /// offer runs on: what fills the panel from here was asked for, and waiting on it is
+  /// not the same as ignoring it.
+  static func resolveAsk() {
+    guard var panel = remembered, panel.ask != nil else { return }
+    panel.ask = nil
+    panel.autoDismissAfter = nil
+    remembered = panel
+    CloudConnectorGuidanceOverlay.shared.resolveFieldCopyAsk()
   }
 
   /// Fill in what the panel is showing without rebuilding it — the window, and wherever
   /// the user dragged it, both survive. The remembered copy is updated too, so a panel
   /// hidden mid-flight comes back finished rather than still spinning.
   static func update(
-    title: String? = nil, subtitle: String? = nil, fields: [CloudConnectorCopyField]? = nil
+    title: String? = nil, subtitle: String? = nil, fields: [CloudConnectorCopyField]? = nil,
+    forForm fingerprint: String? = nil
   ) {
     guard var panel = remembered else { return }
+    // A form's answers take seconds, and another form's offer can take the panel while
+    // they are in flight. Naming the form means late work goes nowhere rather than into
+    // whatever replaced it.
+    guard fingerprint == nil || panel.formFingerprint == fingerprint else { return }
     if let title { panel.title = title }
     if let subtitle { panel.subtitle = subtitle }
     if let fields { panel.fields = fields }
@@ -248,7 +277,8 @@ enum PanelSession {
       subtitle: panel.subtitle,
       fieldCount: panel.fields.count,
       maxHeight: maxHeight,
-      wrappedCharacterCounts: panel.fields.filter(\.wraps).map(\.value.count)
+      wrappedCharacterCounts: panel.fields.filter(\.wraps).map(\.value.count),
+      hasAsk: panel.ask != nil
     )
     showing = true
     overlay.presentFieldCopyCard(
@@ -263,15 +293,31 @@ enum PanelSession {
       maxHeight: maxHeight,
       autoDismissAfter: panel.autoDismissAfter,
       remembersPosition: true,
+      // The offer's ✓ is answered once, wherever the panel is showing: clear the row
+      // first, then hand the user's context to whoever asked.
+      ask: panel.ask.map { ask in
+        CopyCardAsk(
+          placeholder: ask.placeholder,
+          confirmLabel: ask.confirmLabel,
+          onConfirm: { context in
+            PanelSession.resolveAsk()
+            ask.onConfirm(context)
+          })
+      },
       // ✗ is the user closing this panel, not the overlay being reused for something
       // else — the difference between forgetting the panel and merely hiding it.
-      onUserDismiss: { PanelSession.forget() }
+      onUserDismiss: {
+        let declined = PanelSession.userDismiss
+        PanelSession.forget()
+        declined?()
+      }
     )
   }
 
   private static func forget() {
     cancelWork?()
     cancelWork = nil
+    userDismiss = nil
     remembered = nil
     owner = nil
     showing = false

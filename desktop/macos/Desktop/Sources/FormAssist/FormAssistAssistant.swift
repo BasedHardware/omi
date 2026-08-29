@@ -138,16 +138,21 @@ actor FormAssistAssistant: ProactiveAssistant {
   private var barrenScans = 0
   private static let barrenScanLimit = 2
 
+  /// Forms the user said no to. An offer declined and then re-offered on the next scan is
+  /// the spam the ✓ exists to prevent, so no is remembered for as long as the app runs.
+  private var declined: Set<String> = []
+
   /// A page load fires several triggers at once, and the model call outlives all of
   /// them. Without this the same form is answered two or three times in parallel.
   private var isEvaluating = false
 
-  private var lastEvaluationAt: Date?
+  private var lastOfferAt: Date?
   private var evaluationsToday: [Date] = []
 
-  /// Bounds on the model call, not on the scan. Someone applying to ten jobs in an hour
-  /// is the case this exists for, so these are loose enough not to be in their way; the
-  /// per-form cache is what actually keeps the call count near one per form.
+  /// The cooldown bounds how often an offer may appear; the daily budget bounds the model
+  /// calls behind the ✓. Someone applying to ten jobs in an hour is the case this exists
+  /// for, so both are loose enough not to be in their way, and the per-form cache is what
+  /// actually keeps the call count near one per form.
   private let cooldown: TimeInterval = 15
   private let dailyEvaluationBudget = 50
   /// A drafted answer is held to a higher bar than a copied fact: the user can eyeball
@@ -240,6 +245,7 @@ actor FormAssistAssistant: ProactiveAssistant {
     guard await MainActor.run(body: { !PanelSession.isShowingForm(snapshot.fingerprint) }) else {
       return
     }
+    guard !declined.contains(snapshot.fingerprint) else { return }
 
     if let previous = offers.last(where: { $0.fingerprint == snapshot.fingerprint }) {
       // Already answered. Re-show what it produced, or stay quiet if it produced nothing
@@ -261,35 +267,141 @@ actor FormAssistAssistant: ProactiveAssistant {
     }
 
     let now = Date()
-    if let lastEvaluationAt, now.timeIntervalSince(lastEvaluationAt) < cooldown { return }
+    if let lastOfferAt, now.timeIntervalSince(lastOfferAt) < cooldown { return }
+    lastOfferAt = now
+    await offer(snapshot: snapshot)
+  }
+
+  // MARK: - The offer
+
+  /// Ask before spending anything.
+  ///
+  /// Reading the form was free — an accessibility walk on the user's own machine.
+  /// Answering it is not: it sends their memories and a picture of their screen off the
+  /// machine for a form they may only have scrolled past. The ✓ is what buys that, so
+  /// nothing above this line happens until the user gives it, and a ✗ means this form is
+  /// never offered again.
+  private func offer(snapshot: FormSnapshot) async {
+    guard RuntimeOwnerIdentity.currentOwnerId() != nil else {
+      log("FormAssist: no signed-in owner, offer withheld")
+      return
+    }
+    let answerable = snapshot.emptyFields.filter { !FormAssistSensitiveFields.isSensitive($0.label) }
+    guard !answerable.isEmpty else { return }
+
+    let fingerprint = snapshot.fingerprint
+    lastOfferedFingerprint = fingerprint
+    log(
+      "FormAssist: offering to fill \(answerable.count) of \(snapshot.emptyFields.count) fields "
+        + "in \(snapshot.appName)")
+
+    // Created here rather than on the ✓ so the panel owns one cancel token for its whole
+    // life: closing the card mid-answer has to reach work that started after the tick.
+    let work = CancellableWork()
+    await MainActor.run {
+      PanelSession.present(
+        title: "Fill this form?",
+        subtitle: Self.offerSubtitle(answerable: answerable),
+        fields: [],
+        grain: .context,
+        origin: .ambient,
+        formFingerprint: fingerprint,
+        // An offer nobody answers should not sit there all day. Accepting it clears the
+        // countdown, because waiting for an answer is not the same as ignoring one.
+        autoDismissAfter: CloudConnectorGuidanceOverlay.fieldCopyCardLifetime,
+        ask: CopyCardAsk(
+          placeholder: "Add context\u{2026}",
+          confirmLabel: "Fill it",
+          onConfirm: { context in
+            Task { await self.fillOffer(snapshot: snapshot, context: context, work: work) }
+          }),
+        onCancel: { work.cancel() },
+        onUserDismiss: { Task { await self.declineOffer(fingerprint) } }
+      )
+    }
+  }
+
+  /// What the offer says it read. The counts come from the accessibility scan that is
+  /// already done and free, and naming them is what separates a proposal from a nag: the
+  /// user can tell at a glance whether Omi is looking at the form they think it is.
+  static func offerSubtitle(answerable: [FormField]) -> String {
+    let prose = answerable.filter(\.wantsProse).count
+    let fields = "\(answerable.count) field\(answerable.count == 1 ? "" : "s")"
+    guard prose > 0 else { return "\(fields) Omi can try from your memories." }
+    return "\(fields) Omi can try, including \(prose) to write."
+  }
+
+  private func declineOffer(_ fingerprint: String) {
+    declined.insert(fingerprint)
+    log("FormAssist: offer declined, this form will not be offered again")
+  }
+
+  /// The user said yes. From here it is the same work the asked-for path does, and the
+  /// panel it fills is the one the offer was already showing in.
+  private func fillOffer(snapshot: FormSnapshot, context: String, work: CancellableWork) async {
+    let now = Date()
     evaluationsToday = evaluationsToday.filter { Calendar.current.isDate($0, inSameDayAs: now) }
     guard evaluationsToday.count < dailyEvaluationBudget else {
       log("FormAssist: daily evaluation budget spent")
-      return
-    }
-
-    let memories = await recallMemories(for: snapshot)
-    guard !memories.isEmpty else {
-      log("FormAssist: skipped (no memories) app=\(snapshot.appName)")
-      return
-    }
-
-    lastEvaluationAt = now
-    evaluationsToday.append(now)
-    do {
-      let image = await windowImage(windowID: snapshot.windowID)
-      let rows = try await resolveRows(snapshot: snapshot, memories: memories, image: image)
-      let result = FormAssistResult(
-        rows: rows, appName: snapshot.appName, windowFrame: snapshot.windowFrame)
-      remember(result, for: snapshot.fingerprint)
-      guard !result.fills.isEmpty else {
-        log("FormAssist: nothing to offer for \(snapshot.emptyFields.count) fields in \(snapshot.appName)")
-        return
+      await MainActor.run {
+        PanelSession.update(
+          subtitle: "Form assist has spent its budget for today.", forForm: snapshot.fingerprint)
       }
-      await deliver(result, fingerprint: snapshot.fingerprint)
-    } catch {
-      logError("FormAssist: fill resolution failed", error: error)
+      return
     }
+    evaluationsToday.append(now)
+
+    let roster = snapshot.emptyFields
+    await MainActor.run {
+      PanelSession.update(
+        subtitle: "Reading your memories\u{2026}",
+        fields: Self.panelFields(roster: roster, fills: [:], answered: []),
+        forForm: snapshot.fingerprint)
+    }
+
+    do {
+      switch try await fill(snapshot: snapshot, roster: roster, context: context, work: work) {
+      case .cancelled:
+        refundEvaluation()
+      case .noEvidence:
+        refundEvaluation()
+        await MainActor.run {
+          PanelSession.update(
+            subtitle: "Nothing Omi has stored could answer this form.", fields: [],
+            forForm: snapshot.fingerprint)
+        }
+      case .rows(let rows):
+        let result = FormAssistResult(
+          rows: rows, appName: snapshot.appName, windowFrame: snapshot.windowFrame)
+        remember(result, for: snapshot.fingerprint)
+        let filled = result.fills.count
+        log("FormAssist: filled \(filled) of \(rows.count) fields in \(snapshot.appName)")
+        await MainActor.run {
+          PanelSession.update(
+            title: filled > 0 ? "Omi can fill this" : "Fill this form?",
+            subtitle: filled > 0
+              ? "\(filled) of \(rows.count) fields from your memories. "
+                + "Copy each into \(snapshot.appName)."
+              : "Nothing Omi has stored answers these \(rows.count) fields.",
+            fields: Self.finalFields(rows: rows),
+            forForm: snapshot.fingerprint)
+        }
+      }
+    } catch is CancellationError {
+      refundEvaluation()
+    } catch {
+      refundEvaluation()
+      logError("FormAssist: fill resolution failed", error: error)
+      await MainActor.run {
+        PanelSession.update(subtitle: "Could not read the form.", forForm: snapshot.fingerprint)
+      }
+    }
+  }
+
+  /// Hand the budget back when the answer never arrived. The budget bounds work that was
+  /// actually done; a cancelled or failed call is not work the user got anything from.
+  private func refundEvaluation() {
+    if !evaluationsToday.isEmpty { evaluationsToday.removeLast() }
   }
 
   // MARK: - On demand
@@ -323,7 +435,6 @@ actor FormAssistAssistant: ProactiveAssistant {
       return .handled("Form assist has spent its budget for today.")
     }
     evaluationsToday.append(now)
-    lastEvaluationAt = now
 
     let roster = snapshot.emptyFields
     let work = CancellableWork()
@@ -340,58 +451,39 @@ actor FormAssistAssistant: ProactiveAssistant {
     }
 
     func abandon(_ message: String) -> OnDemandOutcome {
-      if !evaluationsToday.isEmpty { evaluationsToday.removeLast() }
+      refundEvaluation()
       return .handled(message)
     }
-    func cancelled() async -> Bool { await work.isCancelled }
 
     log(
       "FormAssist: on-demand panel pending with \(roster.count) fields in \(snapshot.appName)"
         + (context.isEmpty ? "" : " context=\(context.count) chars"))
 
-    // Memories are one source, not the only one: the asked-for path also reads the
-    // user's recent work, where the links and documents a form asks about actually live.
-    var evidence = await recallMemories(for: snapshot)
-    if let work = await recentWorkEvidence() { evidence.append(work) }
-    let memories = evidence
-    guard await !cancelled() else { return abandon("Cancelled.") }
-    guard !memories.isEmpty else {
-      _ = await MainActor.run { PanelSession.dismiss() }
-      return abandon("Omi has nothing stored that could answer this form.")
-    }
-    await MainActor.run { PanelSession.update(subtitle: "Writing your answers\u{2026}") }
-
     do {
-      let image = await windowImage(windowID: snapshot.windowID)
-      guard await !cancelled() else { return abandon("Cancelled.") }
-      let rows = try await work.run {
-        try await self.resolveRows(
-          snapshot: snapshot, memories: memories, image: image, userContext: context,
-          onFacts: { facts in
-            let byLabel = Dictionary(facts.map { ($0.label, $0) }, uniquingKeysWith: { first, _ in first })
-            await MainActor.run {
-              PanelSession.update(
-                fields: Self.panelFields(
-                  roster: roster, fills: byLabel, answered: Set(byLabel.keys)))
-            }
-          })
-      }
-      guard await !cancelled() else { return abandon("Cancelled.") }
-      guard rows.contains(where: { $0.fill != nil }) else {
+      switch try await fill(snapshot: snapshot, roster: roster, context: context, work: work) {
+      case .cancelled:
+        return abandon("Cancelled.")
+      case .noEvidence:
         _ = await MainActor.run { PanelSession.dismiss() }
-        return .handled("Nothing Omi knows answers the \(roster.count) fields on this form.")
+        return abandon("Omi has nothing stored that could answer this form.")
+      case .rows(let rows):
+        guard rows.contains(where: { $0.fill != nil }) else {
+          _ = await MainActor.run { PanelSession.dismiss() }
+          return .handled("Nothing Omi knows answers the \(roster.count) fields on this form.")
+        }
+        let filled = rows.filter { $0.fill != nil }.count
+        await MainActor.run {
+          PanelSession.update(
+            subtitle: "\(filled) of \(rows.count) fields from your memories. "
+              + "Copy each into \(snapshot.appName).",
+            fields: Self.finalFields(rows: rows),
+            forForm: snapshot.fingerprint)
+        }
+        log(
+          "FormAssist: on-demand panel with \(filled) of \(rows.count) fields in "
+            + "\(snapshot.appName)")
+        return .handled("Put \(filled) field\(filled == 1 ? "" : "s") on screen to copy.")
       }
-      let filled = rows.filter { $0.fill != nil }.count
-      await MainActor.run {
-        PanelSession.update(
-          subtitle: "\(filled) of \(rows.count) fields from your memories. "
-            + "Copy each into \(snapshot.appName).",
-          fields: Self.finalFields(rows: rows))
-      }
-      log(
-        "FormAssist: on-demand panel with \(filled) of \(rows.count) fields in "
-          + "\(snapshot.appName)")
-      return .handled("Put \(filled) field\(filled == 1 ? "" : "s") on screen to copy.")
     } catch is CancellationError {
       return abandon("Cancelled.")
     } catch {
@@ -399,6 +491,54 @@ actor FormAssistAssistant: ProactiveAssistant {
       _ = await MainActor.run { PanelSession.dismiss() }
       return .handled("Could not read the form.")
     }
+  }
+
+  /// How far a fill got. The caller owns the panel, so it also owns what an empty answer
+  /// looks like: spoken back on the asked-for path, written into the card on the offered
+  /// one, where there is nobody listening.
+  private enum FillOutcome {
+    case rows([FormAssistRow])
+    case noEvidence
+    case cancelled
+  }
+
+  /// Everything that happens once the panel is already on screen: read what Omi knows,
+  /// answer the form, and fill the rows in as the answers land.
+  ///
+  /// Both paths run this. The offer and the spoken request differ in what buys the model
+  /// call, not in the work it does.
+  private func fill(
+    snapshot: FormSnapshot, roster: [FormField], context: String, work: CancellableWork
+  ) async throws -> FillOutcome {
+    let fingerprint = snapshot.fingerprint
+    // Memories are one source, not the only one: recent work is where the links and
+    // documents a form asks about actually live.
+    var collected = await recallMemories(for: snapshot)
+    if let recent = await recentWorkEvidence() { collected.append(recent) }
+    let evidence = collected
+    guard await !work.isCancelled else { return .cancelled }
+    guard !evidence.isEmpty else { return .noEvidence }
+    await MainActor.run {
+      PanelSession.update(subtitle: "Writing your answers\u{2026}", forForm: snapshot.fingerprint)
+    }
+
+    let image = await windowImage(windowID: snapshot.windowID)
+    guard await !work.isCancelled else { return .cancelled }
+    let rows = try await work.run {
+      try await self.resolveRows(
+        snapshot: snapshot, memories: evidence, image: image, userContext: context,
+        onFacts: { facts in
+          let byLabel = Dictionary(
+            facts.map { ($0.label, $0) }, uniquingKeysWith: { first, _ in first })
+          await MainActor.run {
+            PanelSession.update(
+              fields: Self.panelFields(roster: roster, fills: byLabel, answered: Set(byLabel.keys)),
+              forForm: fingerprint)
+          }
+        })
+    }
+    guard await !work.isCancelled else { return .cancelled }
+    return .rows(rows)
   }
 
   /// How the asked-for path ended. `.noForm` belongs to the caller, who still owes the

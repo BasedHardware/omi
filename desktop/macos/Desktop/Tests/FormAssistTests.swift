@@ -430,6 +430,55 @@ final class FormAssistCardPlacementTests: XCTestCase {
       ).height,
       96 + 5 * 30)
   }
+
+  /// The ✓ row is added on top of the row area, never taken out of it: a card whose tick
+  /// got clamped off the bottom is an offer that cannot be accepted.
+  @MainActor
+  func testTheAskRowSurvivesTheHeightCap() {
+    let subtitle = "9 fields Omi can try, including 3 to write."
+    let short = CGRect(x: 0, y: 0, width: 1512, height: 900)
+    let cap = FormAssistCardPlacement.maxCardHeight(visibleFrame: short)
+
+    let asking = CloudConnectorGuidanceOverlay.fieldCopyCardSize(
+      title: "Fill this form?", subtitle: subtitle, fieldCount: 40, maxHeight: cap, hasAsk: true)
+    XCTAssertEqual(asking.height, cap)
+    XCTAssertTrue(short.contains(FormAssistCardPlacement.frame(cardSize: asking, visibleFrame: short)))
+
+    // An offer carries no rows at all: header, then the tick.
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.fieldCopyCardSize(
+        title: "Fill this form?", subtitle: subtitle, fieldCount: 0, maxHeight: cap, hasAsk: true
+      ).height,
+      96 + CloudConnectorGuidanceOverlay.fieldCopyAskRowHeight)
+  }
+}
+
+/// What the offer says before it has spent anything. The counts come from the
+/// accessibility scan, which is already done and free — naming them is what makes the
+/// card a proposal rather than a nag.
+final class FormAssistOfferTests: XCTestCase {
+  private func field(_ label: String, multiline: Bool = false) -> FormField {
+    FormField(label: label, isEmpty: true, isSecure: false, isMultiline: multiline)
+  }
+
+  func testTheOfferNamesTheFieldsAndTheOnesItWouldWrite() {
+    XCTAssertEqual(
+      FormAssistAssistant.offerSubtitle(answerable: [
+        field("First Name"), field("Last Name"), field("Why Anthropic?"),
+        field("Additional Information", multiline: true),
+      ]),
+      "4 fields Omi can try, including 2 to write.")
+  }
+
+  /// A form of plain details promises no writing, and one field is not "1 fields".
+  func testAFormWithNothingToWriteSaysSo() {
+    XCTAssertEqual(
+      FormAssistAssistant.offerSubtitle(answerable: [field("Full name"), field("Email")]),
+      "2 fields Omi can try from your memories.")
+    XCTAssertEqual(
+      FormAssistAssistant.offerSubtitle(answerable: [field("Email")]),
+      "1 field Omi can try from your memories.")
+  }
 }
 
 /// Which model call a field is routed to. Getting this wrong is what made a real
