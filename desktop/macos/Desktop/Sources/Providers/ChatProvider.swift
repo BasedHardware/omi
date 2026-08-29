@@ -4783,12 +4783,17 @@ class ChatProvider: ObservableObject {
     let capturedSessionId = sessionId
     let capturedAppId = overrideAppId ?? selectedAppId
     let journalOrigin = journalOrigin(for: resolvedSurface)
+    let userMessageResources = ChatResource.userMessageResources(
+      attachments: attachmentsForMessage,
+      references: composerReferencesForMessage
+    )
     let userMessage = ChatMessage(
       id: userMessageId,
       clientTurnId: turnAttemptId,
       text: effectivePrompt,
       sender: .user,
       attachments: attachmentsForMessage,
+      resources: userMessageResources,
       turnOwner: turnOwner
     )
     let aiMessageId = turnMessageIds.assistant
@@ -4856,9 +4861,9 @@ class ChatProvider: ObservableObject {
     // Signal to ChatMessagesView only after the complete exchange exists so
     // anchoring can never expose a user row without its response target.
     localSendToken = LocalSendToken(generation: sendGen)
-    // The reference belongs to this accepted turn. Clearing it here keeps the
-    // chip out of the next draft while preserving it through any preflight
-    // failure before the user message was recorded.
+    // The staged reference is now a durable resource on the accepted user
+    // turn. Clearing composer state keeps it out of the next draft without
+    // removing the pill from this message or a later journal replay.
     pendingComposerReferences.removeAll()
     onAccepted?()
 

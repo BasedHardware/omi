@@ -18,6 +18,10 @@ final class ChatComposerReferenceTests: XCTestCase {
     XCTAssertFalse(reference.displayTitle.contains(reference.sourceID))
     XCTAssertEqual(reference.promptCitationSource.kind, .conversation)
     XCTAssertEqual(reference.promptCitationSource.sourceID, "capture-42")
+    XCTAssertEqual(reference.navigationReference.kind, .conversation)
+    XCTAssertEqual(reference.navigationReference.sourceID, "capture-42")
+    XCTAssertEqual(reference.navigationReference.momentTimestampMs, 74_000)
+    XCTAssertTrue(reference.navigationReference.canOpen)
   }
 
   func testStagingReplacesDuplicateAndRemovalOnlyChangesReferenceState() {

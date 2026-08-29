@@ -27,10 +27,13 @@ covers:
   - desktop/macos/Desktop/Sources/Services/KnowledgeGraphToolSupport.swift
   - desktop/macos/Desktop/Sources/Providers/ChatFirstBlockToolExecutor.swift
   - desktop/macos/Desktop/Sources/Chat/ChatFirstBlockValidation.swift
-  # S14-S18 prove a capture is staged as a typed, removable composer reference
-  # without submitting a synthetic raw-ID chat turn or replacing the draft.
+  # S14-S20 prove a capture is staged as a typed, removable composer reference,
+  # then persists on the accepted user turn after the composer clears.
   - desktop/macos/Desktop/Sources/Chat/ChatComposerReference.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatResource.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatConversationReferencePill.swift
   # S8 drives the Tasks-page closure, including its bounded attempt/terminal telemetry.
   - desktop/macos/Desktop/Sources/Chat/ChatFirstAnalytics.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstAutomationRuntime.swift
@@ -207,26 +210,46 @@ steps:
       result.detail.main: "Keep this draft while attaching the conversation"
 
   - id: S17
-    name: Confirm no synthetic chat turn was started and the reference remains visible
+    name: Send the draft with its staged conversation reference
+    bridge.action:
+      name: ask_main_chat
+      params:
+        query: "Acknowledge this attached conversation."
+    expect:
+      result.detail.sent: "Acknowledge this attached conversation."
+
+  - id: S18
+    name: Wait for the accepted turn to finish
+    bridge.action:
+      name: wait_main_chat_idle
+      params:
+        timeoutMs: "120000"
+    expect:
+      result.detail.idle: "true"
+
+  - id: S19
+    name: Confirm the sent user turn retained the typed conversation resource
     bridge.action:
       name: main_chat_snapshot
       params:
-        limit: "1"
+        limit: "4"
     expect:
       result.detail.is_sending: "false"
       result.detail.is_streaming: "false"
+      result.detail.messages_json:
+        contains: "reference:conversation:chat-first-e2e-capture-v1"
 
-  - id: S18
-    name: Confirm the typed reference landed in visibly mounted Chat without exposing transcript content
+  - id: S20
+    name: Confirm Chat stayed mounted and only the composer copy cleared
     bridge.action:
       name: chat_first_runtime_snapshot
     expect:
       result.detail.route: chat
       result.detail.route_visible: "true"
-      result.detail.composer_reference_count: "1"
+      result.detail.composer_reference_count: "0"
       result.detail.completed_visible_task_count: "1"
 
-  - id: S19
+  - id: S21
     name: Confirm the bridge recorded no route failure
     log.expect:
       absent:

@@ -69,6 +69,19 @@ struct ChatComposerReference: Identifiable, Equatable, Sendable {
       createdAt: nil)
   }
 
+  /// Navigation shape for the persisted pill. Its ordinal is presentation-only
+  /// here; the prompt ledger still owns the model-visible citation ordinals.
+  var navigationReference: ChatCitationReference {
+    ChatCitationReference(
+      ordinal: ChatPromptCitationLedger.firstOrdinal,
+      kind: .conversation,
+      sourceID: sourceID,
+      title: displayTitle,
+      preview: preview,
+      momentTimestampMs: momentTimestampMs
+    )
+  }
+
   private static func bounded(_ value: String, limit: Int, flattenLines: Bool = true) -> String {
     let normalized =
       flattenLines

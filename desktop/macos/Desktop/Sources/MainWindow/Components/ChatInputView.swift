@@ -385,7 +385,7 @@ struct ChatComposerReferenceRow: View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: OmiSpacing.sm) {
         ForEach(references) { reference in
-          ChatComposerReferenceChip(
+          ChatConversationReferencePill(
             reference: reference,
             onRemove: { onRemove(reference.id) })
         }
@@ -394,47 +394,6 @@ struct ChatComposerReferenceRow: View {
       .padding(.vertical, OmiSpacing.hairline)
     }
     .frame(maxHeight: 42)
-  }
-}
-
-private struct ChatComposerReferenceChip: View {
-  let reference: ChatComposerReference
-  let onRemove: () -> Void
-
-  var body: some View {
-    HStack(spacing: OmiSpacing.xs) {
-      Image(systemName: reference.kind.systemImage)
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(Ink.secondary)
-      VStack(alignment: .leading, spacing: 0) {
-        Text(reference.displayTitle)
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.primary)
-          .lineLimit(1)
-          .truncationMode(.middle)
-        Text(reference.displaySubtitle)
-          .scaledFont(size: OmiType.micro)
-          .foregroundColor(Ink.secondary)
-          .lineLimit(1)
-      }
-      .frame(maxWidth: 230, alignment: .leading)
-
-      Button(action: onRemove) {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.micro, weight: .semibold)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 18, height: 18)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .accessibilityLabel("Remove \(reference.displayTitle)")
-    }
-    .padding(.horizontal, OmiSpacing.sm)
-    .padding(.vertical, OmiSpacing.xs)
-    .background(Ink.rowFillHover)
-    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous))
-    .accessibilityElement(children: .contain)
-    .accessibilityLabel("Attached \(reference.kind.label): \(reference.displayTitle)")
   }
 }
 
