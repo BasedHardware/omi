@@ -142,11 +142,21 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     XCTAssertEqual(CloudConnectorGuidanceOverlay.dragCardInitialAlpha(reduceMotion: true), 1)
   }
 
+  @MainActor
+  func testDragHelperDirectsUsersToTheAppListWithoutClaimingExactBounds() {
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.dragInstructionText(appName: "Omi"),
+      "Drag Omi into the app list")
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.dragInstructionAccessibilityText(appName: "Omi"),
+      "Press and drag Omi into the Screen & System Audio Recording app list, then release")
+  }
+
   /// Regression for the reported detached icon: the draggable source must begin
   /// immediately beside the in-window permission list, not below the entire
   /// System Settings window.
   @MainActor
-  func testDragCardStartsAdjacentToHighlightedPermissionList() {
+  func testDragCardStartsAdjacentToPermissionAppList() {
     let visible = CGRect(x: 0, y: 0, width: 1_600, height: 1_000)
     let settings = CGRect(x: 600, y: 160, width: 800, height: 640)
     let card = CloudConnectorGuidanceOverlay.dragCardSize(appName: "Omi Dev")
