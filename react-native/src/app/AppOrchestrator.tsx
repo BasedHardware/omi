@@ -604,12 +604,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         <View
           pointerEvents="none"
           style={[styles.pendantStage, compact && styles.pendantStageCompact]}>
-          <View
-            style={[
-              styles.pendantAura,
-              connectedDevice === null && styles.pendantAuraDisconnected,
-            ]}
-          />
           <OmiMark
             accessibilityLabel="Home pendant"
             height={compact ? 210 : 184}
@@ -640,7 +634,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         </View>
         {connectedDevice?.battery !== undefined && (
           <View style={styles.pendantBatteryPill}>
-            <View style={styles.pendantBatteryDot} />
             <Text style={styles.pendantBattery}>
               {connectedDevice.battery}% battery
             </Text>
@@ -758,7 +751,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     <View style={styles.searchHome}>
                       {!compact && (
                         <View style={styles.homeHeading}>
-                          <Text style={styles.homeEyebrow}>HOME</Text>
                           <Text
                             accessibilityRole="header"
                             style={styles.homeTitle}>

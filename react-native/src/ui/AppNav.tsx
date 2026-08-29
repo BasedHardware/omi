@@ -49,7 +49,7 @@ function NavItem({
       style={({pressed}) => [
         styles.navItem,
         compact && styles.navItemCompact,
-        active && compact && styles.navItemActive,
+        active && styles.navItemActive,
         pressed && styles.pressed,
       ]}>
       <Icon
@@ -84,13 +84,8 @@ export function AppNav({
 }) {
   const mobileNavOpacity = useRef(new Animated.Value(0)).current;
   const mobileNavTranslateY = useRef(new Animated.Value(100)).current;
-  const activePillTranslateY = useRef(new Animated.Value(0)).current;
   const railWidth = useRef(new Animated.Value(72)).current;
   const [railExpanded, setRailExpanded] = useState(false);
-  const activeNavigationIndex = navigation.findIndex(
-    item => route === item.label,
-  );
-
   useEffect(() => {
     if (!compact) {
       mobileNavOpacity.setValue(1);
@@ -114,20 +109,6 @@ export function AppNav({
       }),
     ]).start();
   }, [compact, mobileNavOpacity, mobileNavTranslateY, reduceMotion]);
-
-  useEffect(() => {
-    const value = Math.max(activeNavigationIndex, 0) * 52;
-    if (reduceMotion) {
-      activePillTranslateY.setValue(value);
-      return;
-    }
-    Animated.spring(activePillTranslateY, {
-      damping: 42,
-      stiffness: 520,
-      toValue: value,
-      useNativeDriver: true,
-    }).start();
-  }, [activeNavigationIndex, activePillTranslateY, reduceMotion]);
 
   useEffect(() => {
     const value = railExpanded ? 280 : 72;
@@ -181,19 +162,6 @@ export function AppNav({
         </View>
       )}
       <View style={[styles.navItems, compact && styles.navItemsCompact]}>
-        {!compact && (
-          <Animated.View
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            style={[
-              styles.activePill,
-              activeNavigationIndex < 0 && styles.activePillHidden,
-              {
-                transform: [{translateY: activePillTranslateY}],
-              },
-            ]}
-          />
-        )}
         {navigation.map(item => (
           <NavItem
             active={route === item.label}

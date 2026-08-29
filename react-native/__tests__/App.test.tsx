@@ -965,15 +965,7 @@ test('navigates to rewritten-backend read projections and replays the stage tran
     expect.anything(),
     expect.objectContaining({duration: 180, toValue: 1}),
   );
-  expect(Animated.spring).toHaveBeenCalledWith(
-    expect.anything(),
-    expect.objectContaining({
-      damping: 42,
-      stiffness: 520,
-      toValue: 156,
-      useNativeDriver: true,
-    }),
-  );
+  expect(Animated.spring).not.toHaveBeenCalled();
 });
 
 test('exposes the source-grounded destination hierarchy without removed aliases', async () => {
@@ -2995,17 +2987,8 @@ test('removes translation and skips stage fades when reduced motion is enabled',
   ).toHaveBeenCalledWith(0);
 });
 
-test('moves the desktop active pill directly when motion is reduced', async () => {
-  mockReduceMotion = true;
+test('marks the active desktop destination without decorative motion', async () => {
   const renderer = await renderApp();
-  const activePill = renderer.root.find(
-    node =>
-      String(node.type) === 'AnimatedView' &&
-      node.props.accessibilityElementsHidden === true,
-  );
-  const translateY = activePill.props.style.find(
-    (style: {transform?: unknown}) => style?.transform,
-  ).transform[0].translateY;
   const conversations = renderer.root
     .findAll(
       node =>
@@ -3016,7 +2999,8 @@ test('moves the desktop active pill directly when motion is reduced', async () =
 
   await ReactTestRenderer.act(async () => conversations.props.onPress());
 
-  expect(translateY.setValue).toHaveBeenCalledWith(52);
+  expect(conversations.props.accessibilityState).toEqual({selected: true});
+  expect(Animated.spring).not.toHaveBeenCalled();
 });
 
 test('resizes the desktop rail directly when motion is reduced', async () => {
