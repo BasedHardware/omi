@@ -32,10 +32,10 @@ export class McpStdioClient {
     });
     this.child = child;
     // The child must not keep this process alive, and must die with it.
-    child.unref();
-    for (const stream of [child.stdin, child.stdout, child.stderr]) {
+    for (const stream of [child.stdin, child.stderr]) {
       (stream as unknown as { unref?: () => void } | null)?.unref?.();
     }
+    this.holdEventLoop(false);
     process.once("exit", () => child.kill("SIGTERM"));
     child.on("error", (err) => this.failAll(new Error(`MCP server failed to start: ${err.message}`)));
     child.on("exit", (code) => this.failAll(new Error(`MCP server exited (code ${code})`)));
@@ -62,6 +62,20 @@ export class McpStdioClient {
     });
   }
 
+  /**
+   * An idle client must not keep the host process alive, but an in-flight RPC
+   * must: everything unref'd lets the loop drain while a reply is still coming,
+   * which orphans the pending promise instead of resolving or rejecting it.
+   */
+  private holdEventLoop(active: boolean): void {
+    for (const handle of [this.child, this.child?.stdout] as Array<
+      { ref?: () => void; unref?: () => void } | null | undefined
+    >) {
+      if (active) handle?.ref?.();
+      else handle?.unref?.();
+    }
+  }
+
   private failAll(error: Error): void {
     for (const waiter of this.pending.values()) waiter.reject(error);
     this.pending.clear();
@@ -86,8 +100,11 @@ export class McpStdioClient {
     const promise = new Promise<unknown>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
     });
+    this.holdEventLoop(true);
     this.send({ jsonrpc: "2.0", id, method, params });
-    return promise;
+    return promise.finally(() => {
+      if (this.pending.size === 0) this.holdEventLoop(false);
+    });
   }
 
   private ensureInitialized(): Promise<void> {
