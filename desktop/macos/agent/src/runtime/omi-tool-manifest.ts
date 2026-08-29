@@ -786,6 +786,26 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       }),
     },
   },
+  find_and_show: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc("Find and Show", "Find an answer in the user's data and show it to copy.", [
+      "Use when the user asks for their own information that has to be looked up first.",
+    ]),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Find something in the user's own data — memories, profile, recent work, screen history, conversations — and put it on screen with copy buttons. A stronger model does the searching and reading. Use it when they ask for something of theirs to paste or keep that you don't already have in hand: a link, an address, account details, a list of their things, something they wrote or saw. Speak one short line about what went up; never read long values aloud. For text already in front of you, use show_panel instead.",
+      schemaOverride: schema(
+        {
+          question: {
+            type: "string",
+            description: "What the user wants found, in their words, with any constraints they said.",
+          },
+        },
+        ["question"],
+      ),
+    },
+  },
 };
 
 const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
@@ -1696,6 +1716,28 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
     runtimePreconditions: ["Realtime voice only; requires Accessibility permission."],
+    adapters: {},
+  },
+  {
+    name: "find_and_show",
+    label: "Find and Show",
+    description: "Find an answer in the user's own data with a stronger model and show it to copy.",
+    promptSnippet: "find_and_show - Look up the user's data and show the answer on screen",
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        question: {
+          type: "string",
+          description: "What the user wants found, in their words, with any constraints they said.",
+        },
+      },
+      ["question"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only."],
     adapters: {},
   },
   {

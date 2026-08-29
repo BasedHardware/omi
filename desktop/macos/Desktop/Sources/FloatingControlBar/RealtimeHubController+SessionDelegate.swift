@@ -664,6 +664,16 @@ extension RealtimeHubController {
       }
       return .succeeded(result)
 
+    case .findAndShow:
+      let question =
+        (command.input["question"] as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let result = await ProactiveAssistantsPlugin.shared.findAndShowOnDemand(question: question)
+      guard AuthorizedToolExecution.isOwnerCurrent(command.ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      return .succeeded(result)
+
     default:
       return .failed(Self.authorizedRealtimeToolError(code: "wrong_realtime_executor_tool"))
     }

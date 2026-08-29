@@ -732,6 +732,16 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
+      toolName: "find_and_show",
+      title: "Find and Show",
+      latency: .fastNetwork,
+      surfaces: Set([.realtimeHub]),
+      summary: "Find an answer in the user's data and show it to copy.",
+      bullets: [
+      "Use when the user asks for their own information that has to be looked up first."
+    ]
+    ),
+    Capability(
       toolName: "get_local_status",
       title: "Get Local Status",
       latency: .fastLocal,
@@ -773,6 +783,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["ask_higher_model","assist_form","cancel_agent_run","check_permission_status","close_panel","create_action_item","create_calendar_event","draft_message","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","reopen_panel","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","show_panel","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
+    ["ask_higher_model","assist_form","cancel_agent_run","check_permission_status","close_panel","create_action_item","create_calendar_event","draft_message","find_and_show","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","reopen_panel","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","show_panel","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
   }
 }

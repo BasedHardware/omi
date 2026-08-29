@@ -306,19 +306,21 @@ actor FormAssistAssistant: ProactiveAssistant {
   /// The panel goes up before the model call, not after it. Answering a form takes
   /// several seconds; without the pending rows on screen that is several seconds of
   /// nothing happening, which reads as broken rather than busy.
-  func assistOnDemand(context: String) async -> String {
-    guard RuntimeOwnerIdentity.currentOwnerId() != nil else { return "No signed-in Omi account." }
+  func assistOnDemand(context: String) async -> OnDemandOutcome {
+    guard RuntimeOwnerIdentity.currentOwnerId() != nil else {
+      return .handled("No signed-in Omi account.")
+    }
     guard await MainActor.run(body: { AXIsProcessTrusted() }) else {
-      return "Omi needs Accessibility permission to read the form."
+      return .handled("Omi needs Accessibility permission to read the form.")
     }
     guard let snapshot = await MainActor.run(body: { FormFieldScanner.scanFrontmostWindow() }),
       !snapshot.emptyFields.isEmpty
-    else { return "No form with empty fields is in front of you." }
+    else { return .noForm }
 
     let now = Date()
     evaluationsToday = evaluationsToday.filter { Calendar.current.isDate($0, inSameDayAs: now) }
     guard evaluationsToday.count < dailyEvaluationBudget else {
-      return "Form assist has spent its budget for today."
+      return .handled("Form assist has spent its budget for today.")
     }
     evaluationsToday.append(now)
     lastEvaluationAt = now
@@ -337,9 +339,9 @@ actor FormAssistAssistant: ProactiveAssistant {
       )
     }
 
-    func abandon(_ message: String) -> String {
+    func abandon(_ message: String) -> OnDemandOutcome {
       if !evaluationsToday.isEmpty { evaluationsToday.removeLast() }
-      return message
+      return .handled(message)
     }
     func cancelled() async -> Bool { await work.isCancelled }
 
@@ -347,11 +349,15 @@ actor FormAssistAssistant: ProactiveAssistant {
       "FormAssist: on-demand panel pending with \(roster.count) fields in \(snapshot.appName)"
         + (context.isEmpty ? "" : " context=\(context.count) chars"))
 
-    let memories = await recallMemories(for: snapshot)
+    // Memories are one source, not the only one: the asked-for path also reads the
+    // user's recent work, where the links and documents a form asks about actually live.
+    var evidence = await recallMemories(for: snapshot)
+    if let work = await recentWorkEvidence() { evidence.append(work) }
+    let memories = evidence
     guard await !cancelled() else { return abandon("Cancelled.") }
     guard !memories.isEmpty else {
       _ = await MainActor.run { PanelSession.dismiss() }
-      return abandon("Omi has no memories that could answer this form.")
+      return abandon("Omi has nothing stored that could answer this form.")
     }
     await MainActor.run { PanelSession.update(subtitle: "Writing your answers\u{2026}") }
 
@@ -373,7 +379,7 @@ actor FormAssistAssistant: ProactiveAssistant {
       guard await !cancelled() else { return abandon("Cancelled.") }
       guard rows.contains(where: { $0.fill != nil }) else {
         _ = await MainActor.run { PanelSession.dismiss() }
-        return "Nothing Omi knows answers the \(roster.count) fields on this form."
+        return .handled("Nothing Omi knows answers the \(roster.count) fields on this form.")
       }
       let filled = rows.filter { $0.fill != nil }.count
       await MainActor.run {
@@ -385,14 +391,31 @@ actor FormAssistAssistant: ProactiveAssistant {
       log(
         "FormAssist: on-demand panel with \(filled) of \(rows.count) fields in "
           + "\(snapshot.appName)")
-      return "Put \(filled) field\(filled == 1 ? "" : "s") on screen to copy."
+      return .handled("Put \(filled) field\(filled == 1 ? "" : "s") on screen to copy.")
     } catch is CancellationError {
       return abandon("Cancelled.")
     } catch {
       logError("FormAssist: on-demand fill resolution failed", error: error)
       _ = await MainActor.run { PanelSession.dismiss() }
-      return "Could not read the form."
+      return .handled("Could not read the form.")
     }
+  }
+
+  /// How the asked-for path ended. `.noForm` belongs to the caller, who still owes the
+  /// user an answer from their data.
+  enum OnDemandOutcome: Sendable {
+    case handled(String)
+    case noForm
+  }
+
+  /// The user's recent work as one evidence line for the model call. Local and fast;
+  /// best effort, because a form is still answerable from memories alone.
+  private func recentWorkEvidence() async -> String? {
+    let result = await ChatToolExecutor.execute(
+      ToolCall(name: "get_work_context", arguments: [:], thoughtSignature: nil))
+    let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, !trimmed.contains("\"ok\":false") else { return nil }
+    return "Recent work context (JSON): \(String(trimmed.prefix(4_000)))"
   }
 
   /// Every field the user can act on, in tab order: answered ones show their value,

@@ -55,6 +55,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var suggestionAssistant: SuggestionAssistant?
   private var formAssistAssistant: FormAssistAssistant?
   private var messageDraftAssistant: MessageDraftAssistant?
+  private var dataAnswerAssistant: DataAnswerAssistant?
   private var captureTimer: Timer?
   private var analysisDelayTimer: Timer?
   private var isInDelayPeriod = false
@@ -263,12 +264,35 @@ public class ProactiveAssistantsPlugin: NSObject {
   }
 
   /// Answer the form on screen because the user asked for it out loud.
+  ///
+  /// No form on screen is not a dead end: the user still asked for something, so the
+  /// request falls through to the data lookup and the answer lands on the panel anyway.
   func assistFormOnDemand(context: String) async -> String {
     guard let assistant = formAssistAssistant ?? (try? FormAssistAssistant()) else {
       return "Form assist is unavailable."
     }
     formAssistAssistant = assistant
-    return await assistant.assistOnDemand(context: context)
+    switch await assistant.assistOnDemand(context: context) {
+    case .handled(let result):
+      return result
+    case .noForm:
+      let question =
+        context.isEmpty
+        ? "The details this user most likely needs to fill in or copy right now: name, email, phone, links, employer, location."
+        : context
+      let answer = await findAndShowOnDemand(question: question)
+      return
+        "No form with empty fields is in front of the user, so this was looked up from their data instead. \(answer)"
+    }
+  }
+
+  /// Find the spoken request in the user's data because they asked for it out loud.
+  func findAndShowOnDemand(question: String) async -> String {
+    guard let assistant = dataAnswerAssistant ?? (try? DataAnswerAssistant()) else {
+      return "Data lookup is unavailable."
+    }
+    dataAnswerAssistant = assistant
+    return await assistant.answerOnDemand(question: question)
   }
 
   // MARK: - Assistant Management

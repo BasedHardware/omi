@@ -163,6 +163,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .closePanel: stub = "Panel closed."
     case .draftMessage: stub = "Draft is on screen to copy."
     case .assistForm: stub = "Put 3 fields on screen to copy."
+    case .findAndShow: stub = "Found it. Panel is on screen with 2 items to copy: Email, Portfolio."
     case .none: stub = "ok"
     }
     session?.sendToolResult(callId: callId, name: name, output: stub)

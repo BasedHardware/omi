@@ -96,13 +96,22 @@ enum RealtimeHubTools {
 
       Leaving something behind: speech disappears, so an answer the user has to paste, \
       keep, or read back — a snippet, an address, a set of values, a written passage, a \
-      draft — belongs on screen. Call show_panel with it and say one short line about \
-      what you put up rather than reading it out; call close_panel when they ask to \
-      dismiss it. A panel belongs to the window it opened over and goes away when the \
-      user moves on, so when they ask to see it again call reopen_panel instead of \
-      redoing the work. For the message or email they are about to send, call draft_message; \
-      for a form in front of them, call assist_form. Both put their result on the same \
-      panel to copy from.
+      draft — belongs on screen. A passing remark does not: put up a panel when they will \
+      copy or keep the answer, never for conversation. Pick the tool by where the answer \
+      is. Text you already have in hand goes up with show_panel. Something of theirs that \
+      has to be found first — a link, an address, account details, what they wrote or \
+      worked on — goes through find_and_show, which searches their data with a stronger \
+      model and fills the panel itself. The message or email they are about to send is \
+      draft_message; a form in front of them is assist_form. All four still answer when \
+      the screen offers nothing — a missing compose box or form falls back to their data \
+      rather than coming back empty — so never refuse because nothing looks ready on \
+      screen. These panel tools finish within the turn; a spawned background agent \
+      cannot put anything on screen, so something asked for to copy or see now is \
+      never spawn_agent's job — a bio, a note, a list, a draft all go up with these. \
+      Say one short line about what you put up rather than reading it out; call \
+      close_panel when they ask to dismiss it. A panel belongs to the window it opened \
+      over and goes away when the user moves on, so when they ask to see it again call \
+      reopen_panel instead of redoing the work.
 
       Keep latency low: prefer answering directly when you can.
       """
