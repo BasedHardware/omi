@@ -13,7 +13,6 @@ struct ChatFirstShell: View {
   @Binding var highlightedSettingID: String?
   @StateObject private var promptMaterializationCoordinator = ChatFirstPromptMaterializationCoordinator()
   @StateObject private var automationRuntime: ChatFirstAutomationRuntime
-  @State private var conversationsSelectionGeneration = 0
   @AppStorage(MemoryHubDestination.storageKey) private var memoryDestinationRawValue =
     MemoryHubDestination.memories.rawValue
   @AppStorage("topBarNewSince") private var topBarNewSinceRaw: Double = 0
@@ -173,8 +172,7 @@ struct ChatFirstShell: View {
           navigation: navigation,
           appState: appState,
           chatProvider: viewModelContainer.chatProvider,
-          automationRuntime: automationRuntime,
-          explicitSelectionGeneration: conversationsSelectionGeneration
+          automationRuntime: automationRuntime
         )
       }
       .accessibilityIdentifier("chat-first-route-conversations")
@@ -282,9 +280,6 @@ struct ChatFirstShell: View {
   /// leaves the shell rendering Conversations while it believes it is on Memories.
   private func selectHubDestination(_ destination: MemoryHubDestination) {
     memoryDestinationRawValue = destination.rawValue
-    if destination == .conversations {
-      conversationsSelectionGeneration &+= 1
-    }
     navigation.selectPrimary(MemoryHubSelectionPolicy.chatFirstRoute(for: destination))
   }
 
@@ -504,8 +499,8 @@ private struct ChatFirstConversationsHost: View {
   let appState: AppState
   let chatProvider: ChatProvider
   let automationRuntime: ChatFirstAutomationRuntime?
-  let explicitSelectionGeneration: Int
-  @State private var showsCaptureArchive = false
+  @StateObject private var captureRepository = CaptureArchiveRepository()
+  @State private var visibleConversation: ServerConversation?
 
   private var pendingCaptureToken: String {
     guard case .capture(let id, let momentTimestamp) = navigation.pendingFocus else { return "none" }
@@ -514,41 +509,71 @@ private struct ChatFirstConversationsHost: View {
   }
 
   var body: some View {
-    Group {
-      if showsCaptureArchive || pendingCaptureToken != "none" {
-        // Capture links retain the source-scoped archive browser, while the
-        // selected record opens in the same canonical detail view used by
-        // ordinary Conversations navigation.
-        CaptureArchivePage(
-          navigation: navigation,
-          appState: appState,
-          chatProvider: chatProvider,
-          automationRuntime: automationRuntime
-        )
-      } else {
-        ConversationsPageHost(
-          appState: appState,
-          initialConversation: navigation.pendingConversation
-        )
+    ConversationsPageHost(
+      appState: appState,
+      initialConversation: navigation.pendingConversation ?? captureRepository.selectedCapture,
+      initialCaptureMomentTimestamp: captureMoment,
+      onCaptureFocusResolved: acknowledgeCaptureFocus,
+      onDiscussInChat: { conversation in
+        navigation.discuss(.capture(id: conversation.id, momentTimestamp: nil), using: chatProvider)
+      },
+      onOpenLinkedTask: { taskID in
+        navigation.open(focus: .task(id: taskID))
+      },
+      onSelectionChanged: { visibleConversation = $0 }
+    )
+    .task(id: pendingCaptureToken) {
+      await resolvePendingCaptureFocusIfNeeded()
+    }
+    .onAppear { registerAutomationActions() }
+    .onDisappear { automationRuntime?.unregisterCapturePage() }
+  }
+
+  private var captureMoment: TimeInterval? {
+    guard let conversation = navigation.pendingConversation ?? captureRepository.selectedCapture else {
+      return nil
+    }
+    return CaptureConversationFocusRoutingPolicy.initialMoment(
+      for: navigation.pendingFocus,
+      conversationID: conversation.id
+    )
+  }
+
+  private func resolvePendingCaptureFocusIfNeeded() async {
+    guard case .capture(let id, _) = navigation.pendingFocus else { return }
+    captureRepository.clearSelection()
+    _ = await captureRepository.loadDetail(id: id)
+  }
+
+  private func acknowledgeCaptureFocus(_ didResolve: Bool) {
+    guard let conversation = visibleConversation,
+      let focus = CaptureConversationFocusRoutingPolicy.resolvedFocus(
+        for: navigation.pendingFocus,
+        conversationID: conversation.id,
+        didResolve: didResolve
+      )
+    else { return }
+    _ = navigation.acknowledgeFocus(focus)
+  }
+
+  private func registerAutomationActions() {
+    automationRuntime?.registerCapturePage(
+      openCapture: {
+        await captureRepository.loadInitial()
+        guard let capture = captureRepository.captures.first else { return false }
+        captureRepository.select(capture)
+        let detail = await captureRepository.loadDetail(id: capture.id)
+        return detail != nil || captureRepository.selectedCapture?.id == capture.id
+      },
+      discussCapture: {
+        guard let conversation = visibleConversation, conversation.source == .omi else { return false }
+        navigation.discuss(.capture(id: conversation.id, momentTimestamp: nil), using: chatProvider)
+        return true
+      },
+      detailIsVisible: {
+        visibleConversation?.source == .omi
       }
-    }
-    .onAppear {
-      if pendingCaptureToken != "none" { showsCaptureArchive = true }
-    }
-    .onChange(of: pendingCaptureToken) { _, token in
-      if token != "none" { showsCaptureArchive = true }
-    }
-    .onChange(of: explicitSelectionGeneration) { _, _ in
-      showsCaptureArchive = false
-    }
-    // **The latch had no second release.** Once any capture link was followed, `showsCaptureArchive`
-    // stayed true until a tab was explicitly re-selected, so "open this exact conversation" kept
-    // landing in the archive's reduced pane — which reads its own summary and never consumes a
-    // pending record. An exact conversation is precisely the "ordinary Conversations navigation"
-    // the branch above promises the full editor to, so it releases the latch.
-    .onChange(of: navigation.pendingConversation?.id) { _, id in
-      if id != nil { showsCaptureArchive = false }
-    }
+    )
   }
 }
 

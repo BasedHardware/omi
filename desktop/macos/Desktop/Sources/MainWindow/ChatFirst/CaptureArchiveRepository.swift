@@ -1,5 +1,30 @@
 import Foundation
 
+/// Adapts an Omi-capture deep link to the canonical Conversations detail.
+/// The capture repository resolves provenance; this policy keeps focus
+/// acknowledgement tied to the exact record and playback preparation.
+enum CaptureConversationFocusRoutingPolicy {
+  static func initialMoment(
+    for focus: ChatFirstPendingFocus?,
+    conversationID: String
+  ) -> TimeInterval? {
+    guard case .capture(let id, let momentTimestamp) = focus, id == conversationID else { return nil }
+    return momentTimestamp
+  }
+
+  static func resolvedFocus(
+    for focus: ChatFirstPendingFocus?,
+    conversationID: String,
+    didResolve: Bool
+  ) -> ChatFirstPendingFocus? {
+    guard didResolve,
+      case .capture(let id, let momentTimestamp) = focus,
+      id == conversationID
+    else { return nil }
+    return .capture(id: id, momentTs: momentTimestamp)
+  }
+}
+
 /// The capture archive has a single, non-negotiable provenance query. It is
 /// intentionally separate from `ConversationListQuery`, whose legacy callers
 /// may display mixed desktop, phone, and hardware conversations.

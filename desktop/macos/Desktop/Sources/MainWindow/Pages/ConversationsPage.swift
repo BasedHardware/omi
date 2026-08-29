@@ -42,6 +42,10 @@ struct ConversationsPage: View {
   @Binding var selectedConversation: ServerConversation?
   var brainDestination: MemoryHubDestination? = nil
   var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
+  var initialCaptureMomentTimestamp: TimeInterval? = nil
+  var onCaptureFocusResolved: ((Bool) -> Void)? = nil
+  var onDiscussInChat: ((ServerConversation) -> Void)? = nil
+  var onOpenLinkedTask: ((String) -> Void)? = nil
   @ObservedObject private var automation = ConversationDetailAutomationState.shared
 
   /// When true, renders without internal ScrollViews (for embedding in an outer ScrollView)
@@ -215,7 +219,11 @@ struct ConversationsPage: View {
               await appState.refreshConversations()
             }
           }
-        }
+        },
+        initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
+        onCaptureFocusResolved: onCaptureFocusResolved,
+        onDiscussInChat: selected.source == .omi ? { onDiscussInChat?(selected) } : nil,
+        onOpenLinkedTask: onOpenLinkedTask
       )
     } else {
       // Main view with recording header and conversation list

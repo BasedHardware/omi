@@ -91,24 +91,24 @@ final class CaptureArchiveTests: XCTestCase {
     XCTAssertTrue(remote.listQueries.allSatisfy { $0.source == .omi && !$0.includeDiscarded })
   }
 
-  func testCaptureFocusRoutingOnlyAcknowledgesTheMatchingArchiveRecordAfterResolution() {
+  func testCaptureFocusRoutingOnlyAcknowledgesTheMatchingCanonicalConversationAfterResolution() {
     let focus = ChatFirstPendingFocus.capture(id: "omi-1", momentTs: 18)
     XCTAssertEqual(
-      CaptureArchiveFocusRoutingPolicy.initialMoment(for: focus, captureID: "omi-1"),
+      CaptureConversationFocusRoutingPolicy.initialMoment(for: focus, conversationID: "omi-1"),
       18
     )
-    XCTAssertNil(CaptureArchiveFocusRoutingPolicy.initialMoment(for: focus, captureID: "omi-2"))
+    XCTAssertNil(CaptureConversationFocusRoutingPolicy.initialMoment(for: focus, conversationID: "omi-2"))
     XCTAssertNil(
-      CaptureArchiveFocusRoutingPolicy.resolvedFocus(
+      CaptureConversationFocusRoutingPolicy.resolvedFocus(
         for: focus,
-        captureID: "omi-1",
+        conversationID: "omi-1",
         didResolve: false
       )
     )
     XCTAssertEqual(
-      CaptureArchiveFocusRoutingPolicy.resolvedFocus(
+      CaptureConversationFocusRoutingPolicy.resolvedFocus(
         for: focus,
-        captureID: "omi-1",
+        conversationID: "omi-1",
         didResolve: true
       ),
       focus
@@ -116,9 +116,9 @@ final class CaptureArchiveTests: XCTestCase {
 
     let noMoment = ChatFirstPendingFocus.capture(id: "omi-1", momentTs: nil)
     XCTAssertEqual(
-      CaptureArchiveFocusRoutingPolicy.resolvedFocus(
+      CaptureConversationFocusRoutingPolicy.resolvedFocus(
         for: noMoment,
-        captureID: "omi-1",
+        conversationID: "omi-1",
         didResolve: true
       ),
       noMoment

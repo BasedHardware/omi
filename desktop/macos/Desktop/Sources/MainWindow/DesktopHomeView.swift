@@ -1622,6 +1622,13 @@ struct ConversationsPageHost: View {
   /// this value only seeds selection when a link fetched a record that is not
   /// present in the current page.
   var initialConversation: ServerConversation? = nil
+  /// Optional source-specific behavior carried into the canonical detail.
+  /// These values never select a second browser or detail presentation.
+  var initialCaptureMomentTimestamp: TimeInterval? = nil
+  var onCaptureFocusResolved: ((Bool) -> Void)? = nil
+  var onDiscussInChat: ((ServerConversation) -> Void)? = nil
+  var onOpenLinkedTask: ((String) -> Void)? = nil
+  var onSelectionChanged: ((ServerConversation?) -> Void)? = nil
   @State private var selectedConversation: ServerConversation? = nil
   @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
 
@@ -1638,7 +1645,11 @@ struct ConversationsPageHost: View {
       appState: appState,
       selectedConversation: $selectedConversation,
       brainDestination: brainDestination,
-      onSelectBrainDestination: onSelectBrainDestination
+      onSelectBrainDestination: onSelectBrainDestination,
+      initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
+      onCaptureFocusResolved: onCaptureFocusResolved,
+      onDiscussInChat: onDiscussInChat,
+      onOpenLinkedTask: onOpenLinkedTask
     )
     .frame(
       maxWidth: brainDestination != nil || usesAvailableWidth
@@ -1656,9 +1667,13 @@ struct ConversationsPageHost: View {
       if let initialConversation {
         selectedConversation = initialConversation
       }
+      onSelectionChanged?(selectedConversation)
     }
     .onChange(of: initialConversation?.id) { _, _ in
       selectedConversation = initialConversation
+    }
+    .onChange(of: selectedConversation?.id) { _, _ in
+      onSelectionChanged?(selectedConversation)
     }
   }
 }
