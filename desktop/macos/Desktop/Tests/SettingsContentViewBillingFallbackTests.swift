@@ -7,6 +7,7 @@ import XCTest
 /// These shipped disagreeing for the "unlimited" (Neo) plan id — the subtitle
 /// said 200 questions/month while the description said 100 — so a user could
 /// see either number depending which card region they read.
+@MainActor
 final class SettingsContentViewBillingFallbackTests: XCTestCase {
   private func leadingQuestionCount(in text: String?) -> String? {
     guard let first = text?.split(separator: " ").first, first.allSatisfy(\.isNumber) else {
