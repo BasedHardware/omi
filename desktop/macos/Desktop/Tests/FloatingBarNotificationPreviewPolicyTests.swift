@@ -497,4 +497,35 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     XCTAssertEqual(FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: 0), 0)
     XCTAssertEqual(FloatingBarNotificationQueuePolicy.requeueIndex(queueCount: 3), 3)
   }
+
+  // MARK: - Notch-only proactive cards
+
+  /// The whole point: a card that is actually spoken never grows the bar into the panel.
+  func testSpokenCardStaysInTheNotch() {
+    XCTAssertTrue(
+      FloatingBarNotchOnlyCardPolicy.staysInNotch(
+        spokenAloud: true, hasAction: false, isPersistent: false))
+  }
+
+  /// A silent card still takes the panel. This is what keeps the change safe to turn on —
+  /// suppressing the panel for something nobody hears would deliver it to nobody.
+  func testSilentCardStillTakesThePanel() {
+    XCTAssertFalse(
+      FloatingBarNotchOnlyCardPolicy.staysInNotch(
+        spokenAloud: false, hasAction: false, isPersistent: false))
+  }
+
+  /// A card carrying buttons has to be reachable; a glow cannot be clicked.
+  func testCardWithAnActionAlwaysTakesThePanel() {
+    XCTAssertFalse(
+      FloatingBarNotchOnlyCardPolicy.staysInNotch(
+        spokenAloud: true, hasAction: true, isPersistent: false))
+  }
+
+  /// A persistent card is waiting on an explicit decision, so it must stay on screen.
+  func testPersistentCardAlwaysTakesThePanel() {
+    XCTAssertFalse(
+      FloatingBarNotchOnlyCardPolicy.staysInNotch(
+        spokenAloud: true, hasAction: false, isPersistent: true))
+  }
 }

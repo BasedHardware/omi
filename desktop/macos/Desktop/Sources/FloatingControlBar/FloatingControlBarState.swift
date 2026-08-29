@@ -220,6 +220,30 @@ enum FloatingBarNotificationQueuePolicy {
   }
 }
 
+/// Decides whether a proactive card is delivered by the notch alone.
+///
+/// The bar grows to a 508pt panel to show a card. That panel is the right surface for
+/// something the user has to act on, and the wrong one for a remark: it covers the top of
+/// the screen unasked, for a sentence that could have simply been said.
+///
+/// So a card that is *actually spoken* keeps the notch collapsed and rides the response
+/// glow instead. The panel stays the fallback for everything else, which is what makes
+/// this safe to turn on — a card that would be silent is still shown, so nothing is
+/// delivered to nobody.
+///
+/// Two cards always take the panel regardless: one carrying an action has buttons that
+/// have to be reachable, and a persistent card is waiting on an explicit decision. Neither
+/// can be answered by a glow.
+enum FloatingBarNotchOnlyCardPolicy {
+  static func staysInNotch(
+    spokenAloud: Bool,
+    hasAction: Bool,
+    isPersistent: Bool
+  ) -> Bool {
+    spokenAloud && !hasAction && !isPersistent
+  }
+}
+
 enum FloatingBarNotificationAction: Equatable {
   case openWhatMattersNow(recommendationID: String)
   /// Offer to connect an integration the user has open but has not set up.
@@ -262,6 +286,9 @@ struct FloatingBarNotification: Identifiable, Equatable {
   /// acts on it or dismisses it. Reserved for cards whose whole point is an
   /// explicit decision (e.g. the meeting summary share card).
   let isPersistent: Bool
+  /// The card is spoken, so the notch carries it and the bar never grows into the panel.
+  /// See `FloatingBarNotchOnlyCardPolicy`.
+  let staysInNotch: Bool
 
   init(
     ownerID: String,
@@ -275,7 +302,8 @@ struct FloatingBarNotification: Identifiable, Equatable {
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
-    isPersistent: Bool = false
+    isPersistent: Bool = false,
+    staysInNotch: Bool = false
   ) {
     self.ownerID = ownerID
     self.title = title
@@ -289,6 +317,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.insightDeliveryID = insightDeliveryID
     self.screenshotData = screenshotData
     self.isPersistent = isPersistent
+    self.staysInNotch = staysInNotch
   }
 
   static func == (lhs: FloatingBarNotification, rhs: FloatingBarNotification) -> Bool {

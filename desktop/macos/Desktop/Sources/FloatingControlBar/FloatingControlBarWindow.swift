@@ -3464,6 +3464,7 @@ class FloatingControlBarManager {
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
     isPersistent: Bool = false,
+    spokenAloud: Bool = false,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onPresented: (() -> Void)? = nil,
     onDropped: (() -> Void)? = nil
@@ -3490,7 +3491,12 @@ class FloatingControlBarManager {
       suggestionTelemetryIdentity: suggestionTelemetryIdentity,
       insightDeliveryID: insightDeliveryID,
       screenshotData: screenshotData,
-      isPersistent: isPersistent
+      isPersistent: isPersistent,
+      staysInNotch: FloatingBarNotchOnlyCardPolicy.staysInNotch(
+        spokenAloud: spokenAloud,
+        hasAction: action != nil,
+        isPersistent: isPersistent
+      )
     )
     guard let window else {
       log("FloatingControlBarManager: dropping notification because window is not set up")
@@ -4207,6 +4213,43 @@ class FloatingControlBarManager {
     }
     persistNotificationMessageIfNeeded(notification)
 
+    // A live voice session has no eyes. Hand it the card as silent context so a spoken
+    // follow-up has a referent; the typed path gets the same thing via
+    // pendingNotificationContext.
+    NotchCardVoiceDelivery.shared.cardPresented(
+      id: notification.id,
+      text: notificationContextSuffix(
+        message: ChatMessage(text: notification.message, sender: .ai),
+        context: notification.context
+      )
+    )
+
+    // A spoken card is delivered by the notch — the response glow, and Omi saying it —
+    // so there is no panel to raise, nothing to time out, and no reason to displace a card
+    // already on screen. Returning here rather than shrinking the panel later keeps every
+    // surface consistent: `currentNotification` drives the bar's width, its minimum size,
+    // and several reveal guards, so a card that is not shown must never be set as current.
+    //
+    // Reported as delivered all the same. It was.
+    if notification.staysInNotch {
+      notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
+      notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onPresented()
+      if let suggestionIdentity = notification.suggestionTelemetryIdentity {
+        AnalyticsManager.shared.suggestionAssistantDeliveryOutcome(
+          .delivered, identity: suggestionIdentity)
+      }
+      Self.recordAdvicePresentation(notification)
+      AnalyticsManager.shared.notificationSent(
+        notificationId: notification.id.uuidString,
+        title: notification.title,
+        assistantId: notification.assistantId,
+        surface: "floating_bar_notch",
+        suggestionIdentity: notification.suggestionTelemetryIdentity
+      )
+      log("FloatingControlBarManager: card \(notification.id) spoken from the notch, no panel")
+      return true
+    }
+
     if let existing = window.state.currentNotification, existing.id != notification.id {
       notificationDismissWorkItem?.cancel()
       notificationDismissWorkItem = nil
@@ -4222,17 +4265,6 @@ class FloatingControlBarManager {
       notificationAuthorizationSnapshots.removeValue(forKey: existing.id)
       window.dismissNotification(animated: false)
     }
-
-    // A live voice session has no eyes. Hand it the card as silent context so a spoken
-    // follow-up has a referent; the typed path gets the same thing via
-    // pendingNotificationContext.
-    NotchCardVoiceDelivery.shared.cardPresented(
-      id: notification.id,
-      text: notificationContextSuffix(
-        message: ChatMessage(text: notification.message, sender: .ai),
-        context: notification.context
-      )
-    )
 
     // The flag must survive the whole notification chain: when a queued
     // notification is presented the window is already visible from the

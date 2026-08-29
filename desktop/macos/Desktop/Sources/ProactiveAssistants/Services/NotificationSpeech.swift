@@ -73,6 +73,10 @@ final class NotificationSpeechOnDelivery {
         othersCanHear: othersCanHear))
   }
 
+  /// Whether this delivery will actually say something. The card's presentation surface
+  /// depends on it: a spoken card stays in the notch, a silent one takes the panel.
+  var willSpeak: Bool { text != nil }
+
   func notificationWasPresented() {
     guard let text, !hasSpoken else { return }
     hasSpoken = true

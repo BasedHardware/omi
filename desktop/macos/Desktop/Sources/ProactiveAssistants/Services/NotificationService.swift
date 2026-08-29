@@ -917,6 +917,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         insightDeliveryID: insightDeliveryID,
         screenshotData: screenshotData,
         isPersistent: isPersistent,
+        spokenAloud: speech.willSpeak,
         onPresented: recordPresentation
       )
       switch presentation {
@@ -1156,6 +1157,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         context: context,
         jitFeedbackContext: jitFeedbackContext,
         isPersistent: jitFeedbackContext != nil,
+        spokenAloud: speech.willSpeak,
         authorizationSnapshot: authorizationSnapshot,
         onPresented: recordPresented,
         onDropped: onDropped)
