@@ -34,6 +34,7 @@ class AssistantSettings {
   private let wakeWordPhraseKey = "wakeWordPhrase"
   private let wakeWordCooldownKey = "wakeWordCooldown"
   private let wakeWordUsesRealtimeKey = "wakeWordUsesRealtime"
+  private let wakeWordPrefersCloudSTTKey = "wakeWordPrefersCloudSTT"
 
   // MARK: - Default Values
 
@@ -70,6 +71,7 @@ class AssistantSettings {
       wakeWordPhraseKey: defaultWakeWordPhrase,
       wakeWordCooldownKey: defaultWakeWordCooldown,
       wakeWordUsesRealtimeKey: false,
+      wakeWordPrefersCloudSTTKey: false,
     ])
   }
 
@@ -205,6 +207,27 @@ class AssistantSettings {
       UserDefaults.standard.set(newValue, forKey: wakeWordCooldownKey)
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
+  }
+
+  /// Transcribe ambient audio in the cloud while the wake word is on, so the recognizer can
+  /// be told the wake phrase.
+  ///
+  /// Default off, and only consulted when the wake word is enabled. See
+  /// `STTSessionState.resolveMode` for the measurement behind it.
+  var wakeWordPrefersCloudSTT: Bool {
+    get { UserDefaults.standard.bool(forKey: wakeWordPrefersCloudSTTKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: wakeWordPrefersCloudSTTKey)
+      NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Whether the wake word currently needs a recognizer that can be told its name.
+  ///
+  /// Both halves matter: the opt-in only means anything while the wake word is on, and
+  /// leaving it off keeps ambient transcription on-device exactly as today.
+  var wakeWordNeedsRecognizableName: Bool {
+    wakeWordEnabled && wakeWordPrefersCloudSTT
   }
 
   /// Route a fired wake word into the realtime session instead of the text chat path.

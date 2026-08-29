@@ -180,4 +180,87 @@ final class WakeWordSegmentParserTests: XCTestCase {
       WakeWordSegmentParser.command(after: "okay Omi order pizza", wakePhrase: "Omi"),
       "order pizza")
   }
+
+  // MARK: - "Only", the on-device misrendering
+
+  /// The seven live misses this recovers, verbatim from the stored local segments.
+  func testOnlyOpeningACommandIsTheWakeWord() {
+    let cases = [
+      ("Only what is on my calendar.", "what is on my calendar."),
+      ("Only how many tasks do I have?", "how many tasks do I have?"),
+      ("Only open my rewind timeline.", "open my rewind timeline."),
+      ("Only show me my notes.", "show me my notes."),
+      ("Only remind me to call David.", "remind me to call David."),
+      ("Only search my memories for JD", "search my memories for JD"),
+      ("Only what is today's weather?", "what is today's weather?"),
+    ]
+    for (segment, expected) in cases {
+      XCTAssertEqual(
+        WakeWordSegmentParser.command(after: segment, wakePhrase: "Omi"), expected,
+        "failed for \(segment)")
+    }
+  }
+
+  /// Ordinary restrictive "only" is followed by what it restricts, never by an
+  /// interrogative or a bare imperative. None of these may fire.
+  func testOrdinaryOnlyDoesNotFire() {
+    let cases = [
+      "Only three people came to the meeting.",
+      "Only the best ones made it.",
+      "Only if you want to.",
+      "Only when I say so.",
+      "Only where it actually matters.",
+      "Only a couple left.",
+      "Only my manager knows.",
+      "Only about half of them.",
+      // Imperatives read naturally under a restriction. A request verb only counts when
+      // it is aimed at the speaker's own things.
+      "Only do that once.",
+      "Only add salt at the end.",
+      "Only read the first chapter.",
+      "Only tell him if he asks.",
+      "Only show the ones that passed.",
+      "Only send the final version.",
+      "Only open the door for guests.",
+    ]
+    for segment in cases {
+      XCTAssertNil(
+        WakeWordSegmentParser.command(after: segment, wakePhrase: "Omi"),
+        "fired for \(segment)")
+    }
+  }
+
+  /// Mid-sentence "only" is not a wake word at any position — the phrase has to open an
+  /// utterance, same rule the homophones follow.
+  func testMidSentenceOnlyNeverFires() {
+    XCTAssertNil(
+      WakeWordSegmentParser.command(
+        after: "I can only show you what I have.", wakePhrase: "Omi"))
+    XCTAssertNil(
+      WakeWordSegmentParser.command(
+        after: "That's the only thing I want.", wakePhrase: "Omi"))
+  }
+
+  /// The rendering opening a later sentence in the same window still counts — windows close
+  /// on the speaker's pause, so the command shares the segment with earlier speech.
+  func testOnlyOpeningALaterSentenceFires() {
+    XCTAssertEqual(
+      WakeWordSegmentParser.command(
+        after: "recording active for roughly about one hour. Only show me my notes.",
+        wakePhrase: "Omi"),
+      "show me my notes.")
+  }
+
+  /// A greeting in front is corroboration on its own, so the command-head rule steps aside.
+  func testHeyCorroboratesTheRenderingWithoutACommandHead() {
+    XCTAssertEqual(
+      WakeWordSegmentParser.command(after: "hey only order pizza", wakePhrase: "Omi"),
+      "order pizza")
+  }
+
+  /// The rendering alone carries no command.
+  func testBareOnlyIsNotACommand() {
+    XCTAssertNil(WakeWordSegmentParser.command(after: "Only.", wakePhrase: "Omi"))
+    XCTAssertNil(WakeWordSegmentParser.command(after: "Only", wakePhrase: "Omi"))
+  }
 }

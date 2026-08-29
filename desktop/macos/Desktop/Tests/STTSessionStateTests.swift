@@ -206,4 +206,56 @@ final class STTSessionStateTests: XCTestCase {
     XCTAssertTrue(session.appRunForceCloud)
     XCTAssertTrue(session.fallbackInProgress)
   }
+
+  // MARK: - Wake word needs a recognizer that can be told its name
+
+  /// Ambient transcription is on-device by default on Apple Silicon, and the on-device
+  /// recognizer takes a language hint and nothing else — no keyword or vocabulary
+  /// parameter — so it cannot be told that "Omi" is a word. The cloud lane reaches
+  /// `/v4/listen`, which prepends "Omi" to the STT keyword vocabulary server-side
+  /// (`backend/utils/listen_session_bootstrap.py`). Measured on one machine, same script
+  /// and voices, only the lane changed: usable in 12 of 20 utterances on-device against
+  /// 19 of 20 on the cloud lane. Seven of the eight on-device misses came back as "Only",
+  /// which cannot be accepted as a rendering because it opens ordinary sentences.
+  func testWakeWordOptInResolvesToCloudOnAppleSilicon() {
+    let state = STTSessionState()
+    XCTAssertEqual(
+      state.resolveMode(
+        audioSource: .microphone, isAppleSilicon: true, debugForceCloud: false,
+        wakeWordNeedsRecognizableName: true),
+      .cloud)
+  }
+
+  /// Default-config users keep on-device transcription exactly as today. The opt-in is a
+  /// privacy and cost decision, so nothing changes until it is made.
+  func testWithoutTheOptInAppleSiliconStaysOnDevice() {
+    let state = STTSessionState()
+    XCTAssertEqual(
+      state.resolveMode(
+        audioSource: .microphone, isAppleSilicon: true, debugForceCloud: false,
+        wakeWordNeedsRecognizableName: false),
+      .local)
+  }
+
+  /// A session that already fell back to on-device after cloud reconnect exhaustion stays
+  /// there; the opt-in must not drag a failing session back onto the lane it just left.
+  func testSessionForcedLocalIsNotDraggedBackToCloud() {
+    var state = STTSessionState()
+    state.beginCloudToLocalFallback()
+    XCTAssertEqual(
+      state.resolveMode(
+        audioSource: .microphone, isAppleSilicon: true, debugForceCloud: false,
+        wakeWordNeedsRecognizableName: true),
+      .local)
+  }
+
+  /// The pendant already transcribes in the cloud, so the opt-in changes nothing there.
+  func testBleDeviceIsUnaffected() {
+    let state = STTSessionState()
+    XCTAssertEqual(
+      state.resolveMode(
+        audioSource: .bleDevice, isAppleSilicon: true, debugForceCloud: false,
+        wakeWordNeedsRecognizableName: false),
+      .cloud)
+  }
 }

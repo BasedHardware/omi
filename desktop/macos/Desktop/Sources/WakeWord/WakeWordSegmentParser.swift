@@ -21,7 +21,7 @@ enum WakeWordSegmentParser {
         hasBoundary(
           after: candidate.text,
           in: normalized,
-          requiringPunctuation: candidate.requiresPunctuationBreak)
+          requiringPunctuation: candidate.corroboration == .punctuationBreak)
       else { continue }
       guard
         let commandEnd = raw.index(
@@ -31,9 +31,51 @@ enum WakeWordSegmentParser {
       let command = dropLeadingPunctuationAndWhitespace(remainder)
         .trimmingCharacters(in: .whitespacesAndNewlines)
       guard !command.isEmpty else { continue }
+      if candidate.corroboration == .commandHead, !opensLikeACommand(command) { continue }
       return command
     }
     return nil
+  }
+
+  /// Whether what follows the phrase is addressed to an assistant rather than continuing a
+  /// sentence.
+  ///
+  /// This is the whole safety story for `.commandHead` renderings. "Only" is an ordinary
+  /// English adverb, so the word itself proves nothing and the thing said after it has to.
+  ///
+  /// Two shapes qualify. An interrogative, because restrictive "only" needs something to
+  /// restrict and a question word cannot be it — "Only what is on my calendar" is not a
+  /// sentence a person completes. Or a request verb aimed at the speaker's own things
+  /// ("show me", "open my", "remind me"), because that is the part restrictive "only"
+  /// cannot reach: every imperative reads fine under a restriction — "only do that once",
+  /// "only tell him if he asks", "only show the ones that passed" — but none of them are
+  /// asking for the speaker's own calendar or notes.
+  ///
+  /// "when" and "where" are deliberately absent from the interrogatives: "only when I say
+  /// so" and "only where it matters" are ordinary restrictive uses.
+  static let interrogativeHeads: Set<String> = [
+    "what", "what's", "whats", "how", "how's", "hows", "who", "who's", "whos", "why",
+    "which", "whose", "is", "are", "was", "were", "does", "did", "can", "could", "will",
+    "would", "should", "am",
+  ]
+
+  /// Request verbs, which only count when the next word is `me` or `my`.
+  static let requestHeads: Set<String> = [
+    "open", "show", "tell", "give", "find", "search", "remind", "read", "send", "play",
+    "summarize", "summarise", "explain", "schedule", "check", "list", "add", "set",
+  ]
+
+  /// The words that make a request verb self-addressed.
+  static let selfAddressedObjects: Set<String> = ["me", "my", "mine"]
+
+  static func opensLikeACommand(_ command: String) -> Bool {
+    let words = normalize(command)
+      .split(whereSeparator: { $0.isWhitespace })
+      .map { $0.trimmingCharacters(in: .punctuationCharacters) }
+    guard let head = words.first else { return false }
+    if interrogativeHeads.contains(head) { return true }
+    guard requestHeads.contains(head), words.count > 1 else { return false }
+    return selfAddressedObjects.contains(words[1])
   }
 
   /// The segment text, then each sentence inside it that a wake word could open.
@@ -84,17 +126,47 @@ enum WakeWordSegmentParser {
       // On-device recognition has no keyword list, so it also fronts the vowel
       // with an aspirate ("Homi what's the weather?", observed live). Deliberately
       // excludes "homie": it is an ordinary English word, and accepting it as the
-      // wake phrase would fire on real speech. The fix for on-device misses is
-      // keyword boosting on the recognizer, not a longer list here.
+      // wake phrase would fire on real speech.
       "homi", "hommi",
     ]
   ]
 
+  /// Renderings that are ordinary English words, and therefore need the *next* word as
+  /// evidence rather than a punctuation break.
+  ///
+  /// "Only" is the single biggest on-device miss: across a 20-utterance battery on the
+  /// on-device lane, the phrase was usable in 12, and 7 of the 8 misses came back as
+  /// "Only". The cloud lane does not produce it — `/v4/listen` prepends "Omi" to the STT
+  /// keyword vocabulary server-side (`backend/utils/listen_session_bootstrap.py`), and the
+  /// on-device manager has no equivalent (see `STTSessionState.resolveMode`). So this is
+  /// the only thing that raises recognition on the default path.
+  ///
+  /// It cannot ride the punctuation-break rule: a scan of 1,919 stored local segments found
+  /// 15 sentence-initial "Only", every one of them a misrendered wake word, and *not one*
+  /// carried a break after it — they read "Only what is on my calendar", "Only open my
+  /// rewind timeline". The same scan found 8 ordinary uses of "only", all mid-sentence,
+  /// none sentence-initial. Hence `.commandHead`: sentence position plus an assistant-shaped
+  /// next word, which is what actually separates the two populations.
+  static let commandShapedRenderings: [String: [String]] = [
+    "omi": ["only"]
+  ]
+
+  /// What a phrase needs beyond itself before it counts as the wake word.
+  enum Corroboration: Equatable {
+    /// The phrase is its own evidence — nobody says "Omi" mid-conversation by accident.
+    case none
+    /// A punctuation break must follow: the recognizer's own signal that the speaker
+    /// addressed something and then paused.
+    case punctuationBreak
+    /// The remainder must open like a command. For renderings that are ordinary English
+    /// words, the phrase proves nothing and the thing said after it has to.
+    case commandHead
+  }
+
   /// A phrase that may open a wake-word utterance, and how much corroboration it needs.
   struct Candidate: Equatable {
     let text: String
-    /// Whether a punctuation break must follow the phrase for it to count.
-    let requiresPunctuationBreak: Bool
+    let corroboration: Corroboration
   }
 
   /// The literal spelling is a deliberate act: nobody says "Omi" mid-sentence by accident,
@@ -108,19 +180,24 @@ enum WakeWordSegmentParser {
   /// corroboration in its own right — "hey oh me" is not something a person says by
   /// accident — so those forms keep the ordinary word boundary.
   static func candidates(for phrase: String) -> [Candidate] {
-    var result: [Candidate] = [Candidate(text: phrase, requiresPunctuationBreak: false)]
+    var result: [Candidate] = [Candidate(text: phrase, corroboration: .none)]
     for greeting in ["hey", "ok", "okay"] {
-      result.append(Candidate(text: "\(greeting) \(phrase)", requiresPunctuationBreak: false))
+      result.append(Candidate(text: "\(greeting) \(phrase)", corroboration: .none))
     }
     for homophone in sttHomophones[phrase] ?? [] {
-      result.append(Candidate(text: homophone, requiresPunctuationBreak: true))
+      result.append(Candidate(text: homophone, corroboration: .punctuationBreak))
       // Only "hey" corroborates a homophone. It is a vocative — "hey <name>" addresses
       // someone, and nobody produces it before a misheard word by accident. "ok" and
       // "okay" are discourse markers people open sentences with constantly, so
       // "okay oh me and my friend went hiking" would have fired with the command
       // "and my friend went hiking". They still corroborate the literal spelling above,
       // where the phrase itself is already the evidence.
-      result.append(Candidate(text: "hey \(homophone)", requiresPunctuationBreak: false))
+      result.append(Candidate(text: "hey \(homophone)", corroboration: .none))
+    }
+    for rendering in commandShapedRenderings[phrase] ?? [] {
+      result.append(Candidate(text: rendering, corroboration: .commandHead))
+      // A greeting in front is already corroboration, same as for the homophones above.
+      result.append(Candidate(text: "hey \(rendering)", corroboration: .none))
     }
     return result
   }

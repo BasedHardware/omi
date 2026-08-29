@@ -75,7 +75,8 @@ extension AppState {
       sttSession.beginRecording(
         audioSource: effectiveSource,
         isAppleSilicon: Self.isAppleSilicon,
-        debugForceCloud: debugForceCloud
+        debugForceCloud: debugForceCloud,
+        wakeWordNeedsRecognizableName: AssistantSettings.shared.wakeWordNeedsRecognizableName
       )
       let clientConversationId = UUID().uuidString.lowercased()
       currentClientConversationId = sttSession.useLocalSTT ? nil : clientConversationId
