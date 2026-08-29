@@ -62,6 +62,7 @@ import {OmiMark, bundledAssetSource} from '../ui/OmiMark';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
 import {AppNav} from '../ui/AppNav';
 import {Composer} from '../ui/Composer';
+import {DesktopApp} from '../desktop/DesktopApp';
 
 export {omiDotColor};
 
@@ -674,6 +675,25 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       )}
     </ScrollView>
   );
+
+  if (macDesktop && onboardingRequired === false) {
+    return (
+      <PageShell macDesktop workspaceMaterial={false}>
+        <DesktopApp
+          onOpenChat={() => {
+            setRoute('Home');
+            setHomeChatOpen(true);
+          }}
+          onRefresh={() => {
+            refreshReads(false).catch(() => undefined);
+          }}
+          outcomes={readOutcomes}
+          reads={reads}
+          readsPhase={readsPhase}
+        />
+      </PageShell>
+    );
+  }
 
   const shell = (
     <View

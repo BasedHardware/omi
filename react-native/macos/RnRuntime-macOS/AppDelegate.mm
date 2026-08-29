@@ -70,6 +70,7 @@ static NSColor *OmiTitlebarFillColor(void) {
   window.opaque = NO;
   window.backgroundColor = OmiTitlebarFillColor();
   RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
+  rootView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
   rootView.backgroundColor = NSColor.clearColor;
   window.hasShadow = NO;
   window.styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
