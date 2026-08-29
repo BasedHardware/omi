@@ -1,0 +1,16 @@
+{
+    "schema_version": 1,
+    "id": "FC-prereq-check-verifies-presence-not-usability",
+    "violated_contract": "A dev-harness prerequisite check that reports a dependency as available must verify it is actually usable for what the harness needs — the right runtime version, a functioning binary behind the name — not merely that a binary of that name resolves on PATH. A name-only PATH lookup lets an unusable dependency pass the check silently, and the real failure only surfaces later as an opaque downstream timeout (a stuck emulator, a hung health check) that names none of the actual cause.",
+    "canonical_prevention": "Every prerequisite entry that gates a versioned or runtime-dependent tool must probe actual usability — run the binary and parse its reported version, or execute a smoke invocation — before reporting it present, the way `_java_runtime_present` distinguishes macOS's always-on-PATH Java stub from a real JVM and `_node_major_version`/`_firebase_tools_min_node_major` distinguish a present-but-too-old Node from one the repo-pinned firebase-tools can actually run under.",
+    "canonical_prevention_artifact": [
+        "scripts/dev-harness/tests/test_cli.py"
+    ],
+    "evidence_prs": [
+        11569
+    ],
+    "scope_hints": [
+        "scripts/dev-harness/**"
+    ],
+    "status": "open"
+}
