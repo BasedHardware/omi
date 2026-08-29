@@ -89,91 +89,11 @@ static BOOL OmiAuthPeerIsLoopback(int client) {
   return NO;
 }
 
-// The loopback success page. The cloud authorize endpoint only redirects to
-// the http://127.0.0.1 loopback this module owns, so this page is the last
-// thing the auth sheet or Safari tab shows. It matches the product mark —
-// the white eight-dot ring on dark glass — and tries to close itself.
-static NSString *OmiAuthSuccessPageHTML(void) {
-  return @"<!doctype html>"
-      @"<html lang='en'>"
-      @"<head>"
-      @"<meta charset='utf-8'>"
-      @"<meta name='viewport' content='width=device-width, initial-scale=1'>"
-      @"<title>Signed in to Omi</title>"
-      @"<style>"
-      @":root { color-scheme: dark; }"
-      @"* { box-sizing: border-box; margin: 0; padding: 0; }"
-      @"body {"
-      @"  min-height: 100vh;"
-      @"  display: flex;"
-      @"  align-items: center;"
-      @"  justify-content: center;"
-      @"  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;"
-      @"  background:"
-      @"    radial-gradient(120% 90% at 50% 0%, #232624 0%, #191c1a 48%, #121413 100%);"
-      @"  color: #f2f4f1;"
-      @"  -webkit-font-smoothing: antialiased;"
-      @"}"
-      @".card { max-width: 420px; padding: 0 24px; text-align: center; }"
-      @".mark {"
-      @"  display: block;"
-      @"  width: 76px;"
-      @"  height: 76px;"
-      @"  margin: 0 auto 22px;"
-      @"  opacity: 1;"
-      @"}"
-      @"h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }"
-      @"p { color: #b9beb8; font-size: 14px; line-height: 20px; margin-top: 10px; }"
-      @".close {"
-      @"  appearance: none;"
-      @"  border: 0;"
-      @"  border-radius: 999px;"
-      @"  background: #ffffff;"
-      @"  color: #141414;"
-      @"  cursor: pointer;"
-      @"  font: inherit;"
-      @"  font-size: 13px;"
-      @"  font-weight: 600;"
-      @"  margin-top: 22px;"
-      @"  padding: 9px 18px;"
-      @"}"
-      @".close:active { opacity: 0.8; }"
-      @"@media (prefers-reduced-motion: no-preference) {"
-      @"  .mark { animation: omi-settle 480ms cubic-bezier(0.22, 1, 0.36, 1) 60ms backwards; }"
-      @"  @keyframes omi-settle {"
-      @"    from { opacity: 0; transform: translateY(6px); }"
-      @"    to { opacity: 1; transform: none; }"
-      @"  }"
-      @"}"
-      @"</style>"
-      @"</head>"
-      @"<body>"
-      @"<main class='card'>"
-      @"  <svg class='mark' viewBox='0 0 260 260' aria-hidden='true'>"
-      @"    <circle cx='129.5' cy='42.79' r='17.2' fill='#ffffff'/>"
-      @"    <circle cx='194.5' cy='64.5' r='17.2' fill='#ffffff'/>"
-      @"    <circle cx='216.21' cy='129.5' r='17.2' fill='#ffffff'/>"
-      @"    <circle cx='194.5' cy='194.5' r='17.2' fill='#ffffff'/>"
-      @"    <circle cx='129.5' cy='216.21' r='17.2' fill='#ffffff'/>"
-      @"    <circle cx='64.5' cy='194.5' r='17.2' fill='#ffffff'/>"
-      @"    <circle cx='42.79' cy='129.5' r='17.2' fill='#ffffff'/>"
-      @"    <circle cx='64.5' cy='64.5' r='17.2' fill='#ffffff'/>"
-      @"  </svg>"
-      @"  <h1>Signed in to Omi</h1>"
-      @"  <p>Omi is ready on your desktop. This window closes itself; you can also close it now.</p>"
-      @"  <button class='close' onclick='window.close()'>Close window</button>"
-      @"</main>"
-      @"<script>"
-      @"(function () {"
-      @"  var close = function () { try { window.close(); } catch (error) {} };"
-      @"  window.addEventListener('load', function () {"
-      @"    setTimeout(close, 250);"
-      @"    setTimeout(close, 1200);"
-      @"  });"
-      @"})();"
-      @"</script>"
-      @"</body>"
-      @"</html>";
+// Aside cannot close a tab it did not open. After a valid code, replace
+// the leftover product page with about:blank and try close; the app then
+// cancels ASWebAuthenticationSession and comes forward.
+static NSString *OmiAuthBlankCallbackHTML(void) {
+  return @"<!doctype html><html><head><meta charset='utf-8'><script>location.replace('about:blank');try{window.close();}catch(e){}</script></head><body></body></html>";
 }
 
 static NSURL *OmiAuthValidatedCallbackURL(NSString *request, NSString *expectedState, uint16_t port) {
@@ -242,7 +162,7 @@ static NSURL *OmiAuthAcceptCallback(int listener, uint16_t port, NSTimeInterval 
       close(client);
       continue;
     }
-    NSData *page = [OmiAuthSuccessPageHTML() dataUsingEncoding:NSUTF8StringEncoding];
+    NSData *page = [OmiAuthBlankCallbackHTML() dataUsingEncoding:NSUTF8StringEncoding];
     NSString *head = [NSString stringWithFormat:
         @"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
          "Connection: close\r\nContent-Length: %lu\r\n\r\n",

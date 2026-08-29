@@ -332,20 +332,19 @@ test('does not reject sign-in when ASWebAuth cancels while loopback waits', () =
   );
 });
 
-test('serves a branded auto-closing success page and returns the user to the app', () => {
+test('clears the leftover loopback tab and returns the user to the app', () => {
   const auth = readNativeSource('OmiAuthModule.mm');
 
-  expect(auth).not.toContain('Signed in to Omi. You can close this window.');
-  expect(auth).toContain('OmiAuthSuccessPageHTML');
-  expect(auth).toContain('<title>Signed in to Omi</title>');
+  expect(auth).not.toContain('OmiAuthSuccessPageHTML');
+  expect(auth).not.toContain('<title>Signed in to Omi</title>');
+  expect(auth).not.toContain('Signed in to Omi');
+  expect(auth).not.toContain('This window closes itself');
+  expect(auth).not.toContain('<circle ');
+  expect(auth).not.toContain('radial-gradient');
+  expect(auth).toContain("location.replace('about:blank')");
   expect(auth).toContain('window.close()');
-  expect(auth).toContain('setTimeout(close');
   expect(auth).toContain('Content-Length');
-  // The product mark only: eight white dots on dark glass, no rainbow.
-  expect(auth.match(/<circle /g)).toHaveLength(8);
-  expect(auth.match(/fill='#ffffff'/g)).toHaveLength(8);
   expect(auth).not.toContain('hsl(');
-  // The session hands the foreground back to Omi once the code lands.
   expect(auth).toContain('bringOmiToFront');
   expect(auth).toContain('[NSApp activate];');
   expect(auth).toContain('makeKeyAndOrderFront');
@@ -353,6 +352,7 @@ test('serves a branded auto-closing success page and returns the user to the app
     /finishSignInAttempt:[^]*\[self\.authenticationSession cancel\];[^]*OmiAuthSetEnvironmentCloudTokensIgnored\(NO\);[^]*resolve\(value\);[^]*\[self bringOmiToFront\];/,
   );
 });
+
 
 test('fences overlapping native macOS sign-in attempts', () => {
   const auth = readNativeSource('OmiAuthModule.mm');
