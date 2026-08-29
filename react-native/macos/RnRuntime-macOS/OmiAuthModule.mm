@@ -176,7 +176,7 @@ static NSString *OmiAuthSuccessPageHTML(void) {
       @"</html>";
 }
 
-static NSURL *OmiAuthValidatedCallbackURL(NSString *request, NSString *expectedState) {
+static NSURL *OmiAuthValidatedCallbackURL(NSString *request, NSString *expectedState, uint16_t port) {
   NSString *requestLine = [[request componentsSeparatedByString:@"\r\n"] firstObject];
   NSArray<NSString *> *rawParts = [requestLine componentsSeparatedByCharactersInSet:
       NSCharacterSet.whitespaceCharacterSet];
@@ -189,7 +189,7 @@ static NSURL *OmiAuthValidatedCallbackURL(NSString *request, NSString *expectedS
   NSString *target = parts[1];
   if (![target hasPrefix:@"/"] || [target hasPrefix:@"//"] || [target containsString:@"#"]) return nil;
   NSURLComponents *components = [NSURLComponents componentsWithString:
-      [@"http://127.0.0.1" stringByAppendingString:target]];
+      [NSString stringWithFormat:@"http://127.0.0.1:%u%@", port, target]];
   if (components == nil || ![components.path isEqualToString:@"/callback"] ||
       ![components.percentEncodedPath isEqualToString:@"/callback"] ||
       components.fragment.length > 0) {
@@ -201,7 +201,7 @@ static NSURL *OmiAuthValidatedCallbackURL(NSString *request, NSString *expectedS
   return components.URL;
 }
 
-static NSURL *OmiAuthAcceptCallback(int listener, NSTimeInterval timeout, NSString *expectedState) {
+static NSURL *OmiAuthAcceptCallback(int listener, uint16_t port, NSTimeInterval timeout, NSString *expectedState) {
   if (listener < 0) return nil;
   NSTimeInterval deadline = NSDate.date.timeIntervalSince1970 + timeout;
   while (NSDate.date.timeIntervalSince1970 < deadline) {
@@ -233,7 +233,7 @@ static NSURL *OmiAuthAcceptCallback(int listener, NSTimeInterval timeout, NSStri
                                          length:(NSUInteger)count
                                        encoding:NSUTF8StringEncoding];
     }
-    NSURL *callbackURL = OmiAuthValidatedCallbackURL(request ?: @"", expectedState);
+    NSURL *callbackURL = OmiAuthValidatedCallbackURL(request ?: @"", expectedState, port);
     if (callbackURL == nil) {
       const char *invalid =
           "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\n"
@@ -768,7 +768,7 @@ RCT_REMAP_METHOD(signIn,
       [NSURLQueryItem queryItemWithName:@"code_challenge_method" value:@"S256"],
     ];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-      NSURL *callbackURL = OmiAuthAcceptCallback(listener, 180, state);
+      NSURL *callbackURL = OmiAuthAcceptCallback(listener, port, 180, state);
       dispatch_async(dispatch_get_main_queue(), ^{
         if (attempt != self.signInAttempt) return;
         [self completeSignInWithCallback:callbackURL
@@ -782,18 +782,8 @@ RCT_REMAP_METHOD(signIn,
     });
     self.authenticationSession = [[ASWebAuthenticationSession alloc]
         initWithURL:authorize.URL callbackURLScheme:@"http"
-        completionHandler:^(NSURL *callbackURL, NSError *error) {
-      if (error != nil && callbackURL == nil) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-          if (attempt != self.signInAttempt) return;
-          [self completeSignInWithCallback:nil
-                                     state:state
-                                  verifier:verifier
-                               redirectURI:redirectURI
-                                   attempt:attempt
-                                   resolve:resolve
-                                    reject:reject];
-        });
+        completionHandler:^(NSURL *callbackURL, NSError *__unused error) {
+      if (callbackURL == nil) {
         return;
       }
       dispatch_async(dispatch_get_main_queue(), ^{
