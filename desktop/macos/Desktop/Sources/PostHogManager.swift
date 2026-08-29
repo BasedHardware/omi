@@ -1087,6 +1087,15 @@ extension PostHogManager {
     track("Notification Hovered", properties: properties)
   }
 
+  func suggestionFeedbackRecorded(
+    verb: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    var properties: [String: Any] = ["verb": verb]
+    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
+    track("Suggestion Feedback Recorded", properties: properties)
+  }
+
   private func notificationProperties(
     notificationId: String,
     title: String,

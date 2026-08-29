@@ -3765,6 +3765,10 @@ class FloatingControlBarManager {
     guard let verb = parsed.verb,
       let identity = recentNotchCardSuggestionIdentity()
     else { return }
+    AnalyticsManager.shared.suggestionFeedbackRecorded(
+      verb: verb.rawValue,
+      suggestionIdentity: identity
+    )
     Task {
       await InterjectSuggestionFeedbackMutation.record(
         evaluationID: identity.evaluationID,

@@ -28,6 +28,34 @@ final class InterjectVoiceFeedbackRoutingTests: XCTestCase {
     XCTAssertEqual(parsed.spoken, "Just a riff with no marker")
   }
 
+  func testDisplayTextStripsACompleteLeadingToken() {
+    XCTAssertEqual(
+      InterjectVoiceFeedbackRouting.displayText(
+        from: "[[interject:correction]]\nGot it — Thursday."),
+      "Got it — Thursday."
+    )
+    XCTAssertEqual(
+      InterjectVoiceFeedbackRouting.displayText(from: "[[interject:not_a_verb]] still hidden"),
+      "still hidden",
+      "an unknown verb is still machine noise, never rendered"
+    )
+  }
+
+  func testDisplayTextHidesATokenStillStreamingIn() {
+    XCTAssertEqual(InterjectVoiceFeedbackRouting.displayText(from: "[[interject:corr"), "")
+    XCTAssertEqual(InterjectVoiceFeedbackRouting.displayText(from: "[[inter"), "")
+  }
+
+  func testDisplayTextLeavesOrdinaryRepliesUntouched() {
+    XCTAssertEqual(InterjectVoiceFeedbackRouting.displayText(from: "Just a reply"), "Just a reply")
+    XCTAssertEqual(
+      InterjectVoiceFeedbackRouting.displayText(from: "See [[interject:useful]] mid-text"),
+      "See [[interject:useful]] mid-text",
+      "only a leading token is a directive"
+    )
+    XCTAssertEqual(InterjectVoiceFeedbackRouting.displayText(from: ""), "")
+  }
+
   func testSpokenTextHelperMatchesParse() {
     XCTAssertEqual(
       InterjectVoiceFeedbackRouting.spokenText(from: "[[interject:useful]] Thanks — I'll keep that."),

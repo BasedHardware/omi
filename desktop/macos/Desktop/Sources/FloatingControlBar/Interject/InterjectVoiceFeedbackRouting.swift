@@ -38,4 +38,19 @@ enum InterjectVoiceFeedbackRouting {
   static func spokenText(from text: String) -> String {
     parse(text).spoken
   }
+
+  /// Display copy of an assistant message: the classification token never
+  /// renders. A leading token still streaming in (the opener with no `]]`
+  /// yet, or a prefix of the opener) is hidden rather than flashed.
+  static func displayText(from text: String) -> String {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.hasPrefix("[[interject:") {
+      guard trimmed.range(of: "]]") != nil else { return "" }
+      return parse(text).spoken
+    }
+    if !trimmed.isEmpty, "[[interject:".hasPrefix(trimmed) {
+      return ""
+    }
+    return text
+  }
 }
