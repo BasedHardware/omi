@@ -588,6 +588,7 @@ RCT_EXPORT_MODULE(OmiAuth)
   [self.authenticationSession cancel];
   self.authenticationSession = nil;
   [self closeLoopback];
+  [self bringOmiToFront];
   NSURLComponents *form = [[NSURLComponents alloc] init];
   form.queryItems = @[
     [NSURLQueryItem queryItemWithName:@"grant_type" value:@"authorization_code"],
@@ -718,17 +719,15 @@ RCT_REMAP_METHOD(signIn,
       });
     }];
     self.authenticationSession.presentationContextProvider = self;
-    self.authenticationSession.prefersEphemeralWebBrowserSession = NO;
+    self.authenticationSession.prefersEphemeralWebBrowserSession = YES;
     if (![self.authenticationSession start]) {
-      if (![NSWorkspace.sharedWorkspace openURL:authorize.URL]) {
-        [self completeSignInWithCallback:nil
-                                   state:state
-                                verifier:verifier
-                             redirectURI:redirectURI
-                                 attempt:attempt
-                                 resolve:resolve
-                                  reject:reject];
-      }
+      [self completeSignInWithCallback:nil
+                                 state:state
+                              verifier:verifier
+                           redirectURI:redirectURI
+                               attempt:attempt
+                               resolve:resolve
+                                reject:reject];
     }
   });
 }
