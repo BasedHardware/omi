@@ -2161,9 +2161,14 @@ test('keeps macOS Home gated while the auth probe is unresolved', async () => {
 
   expect(
     renderer.root.find(
-      node => node.props.accessibilityLabel === 'First-run onboarding',
+      node => node.props.accessibilityLabel === 'Session check',
     ),
   ).toBeDefined();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toHaveLength(0);
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Home desktop timeline surface',
