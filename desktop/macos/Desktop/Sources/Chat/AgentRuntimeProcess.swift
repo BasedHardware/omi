@@ -1549,7 +1549,8 @@ actor AgentRuntimeProcess {
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
-    reasoningEffort: String? = nil
+    reasoningEffort: String? = nil,
+    jitKnowledgeToolsEnabled: Bool = false
   ) -> [String: Any] {
     var message = protocolEnvelope(
       type: "query",
@@ -1565,6 +1566,11 @@ actor AgentRuntimeProcess {
     if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
     if let producingTurnId, !producingTurnId.isEmpty { message["producingTurnId"] = producingTurnId }
     if let reasoningEffort, !reasoningEffort.isEmpty { message["reasoningEffort"] = reasoningEffort }
+    // UX gate only: the backend independently re-checks JIT entitlement on
+    // every /v1/agent/execute-tool call. Omitted (not `false`) when the
+    // rollout verdict isn't `enabled`, matching how the runtime treats an
+    // absent field as false.
+    if jitKnowledgeToolsEnabled { message["jitKnowledgeToolsEnabled"] = true }
     if let expectedContext {
       message["expectedContextSnapshotVersion"] = expectedContext.version
       message["expectedContextSnapshotGeneration"] = expectedContext.generation
@@ -2360,6 +2366,10 @@ actor AgentRuntimeProcess {
     guard isBridgeReady else { throw BridgeError.stopped }
     try assertAuthorization(authorizationSnapshot)
 
+    // See AgentRuntimeProcess+JITKnowledgeToolsGate.swift: fail-closed UX gate only.
+    let jitKnowledgeToolsEnabled = await Self.resolvedJitKnowledgeToolsEnabled(
+      authorizationSnapshot: authorizationSnapshot)
+
     return try await withCheckedThrowingContinuation { continuation in
       let surfaceRef = surface
       let request = ActiveRequest(
@@ -2394,7 +2404,8 @@ actor AgentRuntimeProcess {
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
-        reasoningEffort: reasoningEffort
+        reasoningEffort: reasoningEffort,
+        jitKnowledgeToolsEnabled: jitKnowledgeToolsEnabled
       )
       sendJson(queryDict)
     }

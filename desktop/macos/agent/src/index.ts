@@ -1384,6 +1384,9 @@ function buildMcpServers(
     if (context?.screenContext === true) {
       omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
     }
+    if (context?.jitKnowledgeToolsEnabled === true) {
+      omiToolsEnv.push({ name: "OMI_JIT_KNOWLEDGE_TOOLS_ENABLED", value: "true" });
+    }
     // Keep the exact surface marker for every typed chat run. Legacy typed
     // chat uses it to project coordinator-only writes (such as create_memory),
     // while the optional chat-first flags remain main-chat rollout-gated below.

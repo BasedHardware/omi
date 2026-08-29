@@ -972,4 +972,33 @@ describe("JsonlTransport kernel-owned query contract", () => {
     expect(adapter.executed).toHaveLength(2);
     store.close();
   });
+
+  it("relays the per-turn JIT knowledge-ledger gate into the MCP build context and run metadata", async () => {
+    let capturedContext: Record<string, unknown> | undefined;
+    const buildMcpServers: McpServerBuilder = (_mode, _cwd, _sessionKey, context) => {
+      capturedContext = context as unknown as Record<string, unknown>;
+      return [];
+    };
+    const { store, session, transport } = fixture(buildMcpServers);
+
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "jit-on",
+      jitKnowledgeToolsEnabled: true,
+    }));
+    expect(capturedContext?.jitKnowledgeToolsEnabled).toBe(true);
+    const onMetadata = JSON.parse(String(store.getRow(
+      "SELECT input_json FROM runs WHERE request_id = ?",
+      ["jit-on"],
+    ).input_json)).metadata;
+    expect(onMetadata.jitKnowledgeToolsEnabled).toBe(true);
+
+    await transport.handleQuery(query(session.sessionId, { requestId: "jit-off" }));
+    expect(capturedContext?.jitKnowledgeToolsEnabled).toBe(false);
+    const offMetadata = JSON.parse(String(store.getRow(
+      "SELECT input_json FROM runs WHERE request_id = ?",
+      ["jit-off"],
+    ).input_json)).metadata;
+    expect(offMetadata.jitKnowledgeToolsEnabled).toBeUndefined();
+    store.close();
+  });
 });

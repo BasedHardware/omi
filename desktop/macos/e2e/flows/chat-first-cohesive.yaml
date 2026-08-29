@@ -17,6 +17,7 @@ covers:
   - desktop/macos/agent/src/runtime/kernel-core.ts
   - desktop/macos/agent/src/index.ts
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+JITKnowledgeToolsGate.swift
   # S1a's authorized executor result is projected through this store before
   # the fixture card becomes visible at S1b.
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeStatusStore.swift
