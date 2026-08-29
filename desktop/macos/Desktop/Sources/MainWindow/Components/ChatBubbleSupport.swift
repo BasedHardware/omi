@@ -223,9 +223,7 @@ struct ChatProactivePushRow: View {
           .scaledFont(size: OmiType.micro, weight: .semibold)
           .foregroundColor(Ink.secondary)
         if !displayText.isEmpty {
-          if !displayText.isEmpty {
-            OmiMarkdown(text: displayText, sender: .ai)
-          }
+          OmiMarkdown(text: displayText, sender: .ai)
         }
       }
       Spacer(minLength: 0)
