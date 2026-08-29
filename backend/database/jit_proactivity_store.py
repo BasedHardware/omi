@@ -8,7 +8,7 @@ import json
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from database._client import db as default_db_client
+from database._client import data_plane_db as default_db_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.memory_apply_store import transactional
 from database.memory_collections import MemoryCollections

@@ -320,6 +320,7 @@ jobs:
             USE_VERTEX_AI=true
             GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
             GCP_LOCATION=us-central1
+            OMI_FIRESTORE_DATA_PLANE_PROJECT=${{ vars.GCP_PROJECT_ID }}
             GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json
             BASE_API_URL=${{ env.PRODUCTION_DESKTOP_BACKEND_URL }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.admitted-source.outputs.source_sha }}
