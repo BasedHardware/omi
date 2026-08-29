@@ -6826,6 +6826,18 @@
             "title": "Overdue Days",
             "type": "integer"
           },
+          "scan_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Resume token from a prior cleanup preview to scan the next oldest open tasks",
+            "title": "Scan Cursor"
+          },
           "similarity_threshold": {
             "default": 0.92,
             "description": "Similarity threshold for semantic_dedup",
@@ -6874,6 +6886,18 @@
             "title": "Expires In Seconds",
             "type": "integer"
           },
+          "next_scan_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass on the next preview to continue scanning from the oldest remaining open tasks",
+            "title": "Next Scan Cursor"
+          },
           "sample": {
             "items": {
               "$ref": "#/components/schemas/CleanupSampleItem"
@@ -6887,7 +6911,7 @@
             "type": "integer"
           },
           "scan_truncated": {
-            "description": "True if total_open_action_items exceeds scan_cap, so strategies may not have considered every open task as a candidate",
+            "description": "True when more open tasks remain beyond this preview's oldest-first scan window",
             "title": "Scan Truncated",
             "type": "boolean"
           },
@@ -30455,7 +30479,7 @@
     },
     "/v1/action-items/cleanup/execute": {
       "post": {
-        "description": "Delete the candidates staged by a prior preview call.\nFalls back to recomputing if the session has expired.",
+        "description": "Delete the candidates staged by a prior preview call.",
         "operationId": "cleanup_execute_v1_action_items_cleanup_execute_post",
         "parameters": [
           {
