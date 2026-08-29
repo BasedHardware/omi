@@ -63,7 +63,11 @@ enum VoicePlaybackEchoPolicy {
     guard !tokens.isEmpty, !spokenWords.isEmpty else { return .keep }
     let incoming = tokens.map(\.word)
 
-    let leading = matchedPrefixLength(incoming, against: spokenWords)
+    // Only the forward walk commits a final lone match. The reversed walk measures the
+    // playback that *follows* a barge-in, and there the "final" token is the first word the
+    // user said — committing it on one match would eat the start of the interruption.
+    let leading = matchedPrefixLength(
+      incoming, against: spokenWords, commitsFinalSingleMatch: true)
     guard leading >= minimumWordCount else { return .keep }
     guard tokens.count - leading >= minimumWordCount else {
       // Discarding the whole segment needs the match to actually account for the whole
@@ -156,9 +160,12 @@ enum VoicePlaybackEchoPolicy {
   /// Called with both sequences reversed to measure a trailing run instead.
   private static func matchedPrefixLength<S: Sequence<String>>(
     _ incoming: S,
-    against spoken: S
+    against spoken: S,
+    commitsFinalSingleMatch: Bool = false
   ) -> Int {
-    matchedPrefixLength(Array(incoming), against: Array(spoken))
+    matchedPrefixLength(
+      Array(incoming), against: Array(spoken),
+      commitsFinalSingleMatch: commitsFinalSingleMatch)
   }
 
   /// Anchors tried before giving up on finding where in the history this utterance begins.
@@ -169,14 +176,25 @@ enum VoicePlaybackEchoPolicy {
   /// started at the end of the history rather than at the sentence.
   static let maximumAnchorsTried = 24
 
-  private static func matchedPrefixLength(_ incoming: [String], against spoken: [String]) -> Int {
+  private static func matchedPrefixLength(
+    _ incoming: [String],
+    against spoken: [String],
+    commitsFinalSingleMatch: Bool
+  ) -> Int {
     guard let first = incoming.first else { return 0 }
     var anchors = spoken.indices.filter { spoken[$0] == first }.prefix(maximumAnchorsTried).map { $0 }
     if anchors.isEmpty { anchors = [0] }
-    return anchors.map { walk(incoming, against: spoken, from: $0) }.max() ?? 0
+    return anchors.map {
+      walk(incoming, against: spoken, from: $0, commitsFinalSingleMatch: commitsFinalSingleMatch)
+    }.max() ?? 0
   }
 
-  private static func walk(_ incoming: [String], against spoken: [String], from anchor: Int) -> Int {
+  private static func walk(
+    _ incoming: [String],
+    against spoken: [String],
+    from anchor: Int,
+    commitsFinalSingleMatch: Bool
+  ) -> Int {
     var spokenIndex = anchor
     var mismatches = 0
     var run = 0
@@ -191,6 +209,21 @@ enum VoicePlaybackEchoPolicy {
         // "the" and "and" occur in every answer. Committing on one match let the backward
         // walk eat "the time" off the end of a user's command. Two in a row is a run.
         if run >= 2 { lastMatched = offset + 1 }
+        // The exception is the utterance's own last word, once a run has already proved
+        // this is an echo. It can never reach two-in-a-row when the word before it was
+        // garbled, so the closing word of a short answer was permanently uncountable —
+        // measured live: Omi said "I don't know the details of Wake Word yet.", the
+        // microphone returned "WakeMore" for the product name, and the trailing "yet"
+        // could not commit. Coverage came out 6 of 8 = 0.75, under the 0.80 floor, so
+        // Omi's own sentence was written into the transcript as a second speaker.
+        //
+        // Only the final token, and only after `minimumWordCount` words already matched
+        // in a run, so a lone coincidental word still cannot start or extend an echo.
+        if run == 1, commitsFinalSingleMatch, offset == incoming.count - 1,
+          lastMatched >= minimumWordCount
+        {
+          lastMatched = offset + 1
+        }
         continue
       }
       run = 0

@@ -232,4 +232,36 @@ final class VoicePlaybackEchoPolicyTests: XCTestCase {
           + "2. Delhi, the national capital. 3. Bengaluru, a major technology and startup hub."),
       .keepResidue("Omi, stop and tell me the time"))
   }
+  /// Live defect: Omi's own answer was written into the transcript as a second speaker,
+  /// and the user heard the reply twice in two voices.
+  ///
+  /// Omi said "Wake Word"; the microphone returned "WakeMore". In an eight-token sentence
+  /// that single garbled product name was enough: the closing "yet" followed a mismatch,
+  /// so it could never reach two-in-a-row and never committed. Coverage came out 6 of 8 =
+  /// 0.75, under the 0.80 floor, and the segment was kept.
+  func testGarbledWordBeforeTheLastOneStillCountsAsAnEcho() {
+    let incoming = "I don't know the details of WakeMore yet."
+    for spoken in [
+      "I don't know the details of Wake Word yet. Feature you designed?",
+      "I don't know the details of WakeWord yet. Feature you designed?",
+      "I don't know the details of Wake Word yet.",
+    ] {
+      XCTAssertEqual(
+        VoicePlaybackEchoPolicy.classify(
+          transcript: incoming, spokenWords: VoicePlaybackEchoPolicy.words(spoken)),
+        .drop,
+        "kept Omi's own answer against: \(spoken)")
+    }
+  }
+
+  /// The exception is narrow: a lone match still cannot carry an utterance that never
+  /// established a run, so a short sentence sharing one closing word with playback stays.
+  func testLoneFinalMatchWithoutAnEstablishedRunStillKeeps() {
+    XCTAssertEqual(
+      VoicePlaybackEchoPolicy.classify(
+        transcript: "Marco called about the invoice yet",
+        spokenWords: VoicePlaybackEchoPolicy.words(
+          "I don't know the details of Wake Word yet. Feature you designed?")),
+      .keep)
+  }
 }
