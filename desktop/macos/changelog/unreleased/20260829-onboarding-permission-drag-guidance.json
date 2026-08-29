@@ -1,3 +1,0 @@
-{
-  "change": "Fixed onboarding permission guidance so working access is never requested twice, Omi returns to the foreground after a successful drag, and the draggable app icon and arrow are easier to spot"
-}
