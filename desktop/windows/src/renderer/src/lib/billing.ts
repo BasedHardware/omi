@@ -353,6 +353,10 @@ export function orderedCatalog(
     .map(({ p }) => p)
 }
 
+// Single edit point for the Operator price quoted in the deprecation-banner
+// fallback (used only when the API omits `deprecation_message`).
+export const OPERATOR_DEPRECATION_FALLBACK_PRICE = '$49/mo'
+
 // Per-plan-id fallbacks (BillingHelpers planEyebrow/planSubtitle/planDescription/
 // fallback features), used only when the catalog omits the field.
 const PLAN_FALLBACKS: Record<
@@ -362,7 +366,7 @@ const PLAN_FALLBACKS: Record<
   unlimited: {
     eyebrow: 'Starter',
     subtitle: '200 questions per month',
-    description: '100 chat questions per month. Shared with mobile and web.',
+    description: '200 chat questions per month. Shared with mobile and web.',
     features: [
       '200 chat questions per month',
       'Unlimited listening and transcription',
