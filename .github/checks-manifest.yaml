@@ -299,6 +299,18 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "iOS BLE diagnostics must not poll RSSI while closed, and frequent battery notifications must not rewrite the complete history on every packet"
+  - id: ios-ble-connection-policy
+    command: ["ruby", "app/ios/test/omi_ble_connection_policy_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/test/omi_ble_connection_policy_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "pairing recovery must fire only for ATT authentication/encryption failures so ordinary Omi notification noise never tears down a healthy GATT link"
+  - id: ios-dev-build-configuration
+    command: ["ruby", "app/ios/test/omi_dev_build_configuration_test.rb"]
+    triggers: ["app/ios/Flutter/devProfile.xcconfig", "app/ios/Flutter/devRelease.xcconfig", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/omi_dev_build_configuration_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Debug-dev must keep watch signing disabled for account-free simulator builds while Profile-dev/Release-dev stay signed with the dev identity and per-flavor CocoaPods configuration"
   - id: deferred-work-markers
     command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
     triggers: ["all"]
