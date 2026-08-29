@@ -34,11 +34,15 @@ function kernelWithArtifact(): AgentRuntimeKernel {
   } as unknown as AgentRuntimeKernel;
 }
 
-function finalize(result: string, outcome?: "succeeded" | "failed") {
+function finalize(
+  result: string,
+  outcome?: "succeeded" | "failed",
+  resultIdentity: RelayToolResultIdentity = identity,
+) {
   const artifactRoot = mkdtempSync(join(tmpdir(), "omi-relay-tool-result-"));
   roots.push(artifactRoot);
   return finalizeRelayToolResult({
-    identity,
+    identity: resultIdentity,
     result,
     outcome,
     kernel: kernelWithArtifact(),
@@ -113,5 +117,34 @@ describe("normal pending stdio tool-result boundary", () => {
     assertToolResultEnvelope(payload.toolResultEnvelope);
     expect(payload.toolResultEnvelope).toMatchObject({ status: "succeeded", truncated: false });
     expect(finalizedToolResultOutcome(result)).toBe("succeeded");
+  });
+
+  it("keeps a worst-case bounded realtime conversation projection model-visible", () => {
+    const items = Array.from({ length: 8 }, (_, index) => ({
+      title: `Conversation ${index} ${"t".repeat(140)}`,
+      summary: `Summary ${index} ${"s".repeat(400)}`,
+      created_at: `2026-08-28T23:${String(index).padStart(2, "0")}:00Z`,
+    }));
+    const conversationIdentity = { ...identity, toolName: "get_conversations" };
+    const result = finalize(
+      JSON.stringify({ ok: true, tool: "get_conversations", order: "newest_first", items }),
+      "succeeded",
+      conversationIdentity,
+    );
+    const payload = JSON.parse(result) as {
+      ok: boolean;
+      items: unknown[];
+      toolResultEnvelope: { status: string; truncated: boolean; fullOutputRef: unknown };
+    };
+
+    expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(MAX_RELAY_TOOL_RESULT_BYTES);
+    expect(payload.ok).toBe(true);
+    expect(payload.items).toHaveLength(8);
+    expect(payload.toolResultEnvelope).toMatchObject({
+      status: "succeeded",
+      truncated: false,
+      fullOutputRef: null,
+      provenance: { toolName: "get_conversations" },
+    });
   });
 });

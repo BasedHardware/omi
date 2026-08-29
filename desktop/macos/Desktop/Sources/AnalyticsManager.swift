@@ -735,8 +735,8 @@ class AnalyticsManager {
     }
   }
 
-  func desktopRatingSubmitted(rating: Int) {
-    PostHogManager.shared.desktopRatingSubmitted(rating: rating)
+  func desktopRatingSubmitted(rating: Int, revision: Int? = nil) {
+    PostHogManager.shared.desktopRatingSubmitted(rating: rating, revision: revision)
   }
 
   func desktopPromptShown(promptId: String, promptType: String) {

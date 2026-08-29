@@ -77,6 +77,12 @@ bool _requireBool(Map<String, dynamic> json, String key) {
   throw AccountCutoverControlParseException('expected boolean for $key, got ${value.runtimeType}');
 }
 
+String _requireString(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is String) return value;
+  throw AccountCutoverControlParseException('expected string for $key, got ${value.runtimeType}');
+}
+
 int _requireNonNegativeInt(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is num && value == value.roundToDouble() && value >= 0) {
@@ -154,12 +160,12 @@ class AccountCutoverControl {
     }
 
     return AccountCutoverControl(
-      state: parseAccountCutoverState(json['state'] as String?),
+      state: parseAccountCutoverState(_requireString(json, 'state')),
       accountGeneration: _requireNonNegativeInt(json, 'account_generation'),
       uiGeneration: json.containsKey('ui_generation') ? _requireNonNegativeInt(json, 'ui_generation') : 0,
       apiGeneration: json.containsKey('api_generation') ? _requireNonNegativeInt(json, 'api_generation') : 0,
-      clientAction: parseAccountCutoverClientAction(json['client_action'] as String?),
-      offlineQueueInstruction: parseOfflineQueueInstruction(json['offline_queue_instruction'] as String?),
+      clientAction: parseAccountCutoverClientAction(_requireString(json, 'client_action')),
+      offlineQueueInstruction: parseOfflineQueueInstruction(_requireString(json, 'offline_queue_instruction')),
       strandedNewData: json.containsKey('stranded_new_data') ? _requireBool(json, 'stranded_new_data') : false,
       legacyWritesAllowed: _requireBool(json, 'legacy_writes_allowed'),
       productTrafficAllowed: _requireBool(json, 'product_traffic_allowed'),

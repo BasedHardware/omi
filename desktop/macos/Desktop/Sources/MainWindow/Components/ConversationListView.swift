@@ -192,8 +192,9 @@ struct ConversationListView: View {
         }
       }
     }
-    .padding(.horizontal, OmiSpacing.xxl)
-    .padding(.vertical, OmiSpacing.xl)
+    .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+    .padding(.top, PagePanelVerticalRhythm.contentGap)
+    .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
   }
 
   private var conversationList: some View {

@@ -768,6 +768,12 @@ struct DesktopHomeView: View {
     }
     highlightedSettingId = settingId
 
+    if target.lowercased().replacingOccurrences(of: "-", with: "_") == "rewind" {
+      navigateToLegacyDestination(.rewind)
+      reportAutomationState()
+      return
+    }
+
     if usesChatFirstShell, let route = ChatFirstRoute.automationVisibilityDestination(named: target) {
       switch route {
       case .more(let page):
@@ -1125,6 +1131,15 @@ struct DesktopHomeView: View {
   /// names. This is the sole root adapter between those callers and typed
   /// Chat-first navigation.
   private func navigateToLegacyDestination(_ item: SidebarNavItem) {
+    if item == .rewind, OMIApp.launchMode != .rewind {
+      memoryDestinationRawValue = MemoryHubDestination.rewind.rawValue
+      if usesChatFirstShell {
+        chatFirstNavigation.selectPrimary(.memories)
+      } else {
+        selectedIndex = SidebarNavItem.conversations.rawValue
+      }
+      return
+    }
     if usesChatFirstShell {
       chatFirstNavigation.selectLegacyDestination(item)
     } else {
@@ -1385,12 +1400,7 @@ struct DesktopHomeView: View {
           appState: appState,
           memoriesViewModel: viewModelContainer.memoriesViewModel,
           tasksStore: viewModelContainer.tasksStore,
-          sinceDate: topBarSinceDate,
-          onRewind: {
-            OmiMotion.withGated(Self.pageNavigationAnimation) {
-              selectedIndex = SidebarNavItem.rewind.rawValue
-            }
-          }
+          sinceDate: topBarSinceDate
         )
         .zIndex(1)
       }
@@ -1545,8 +1555,7 @@ private struct PageContentView: View {
         ConversationsDestinationView(
           appState: appState,
           viewModelContainer: viewModelContainer,
-          memoryDestinationRawValue: $memoryDestinationRawValue,
-          onOpenRewind: { selectedTabIndex = SidebarNavItem.rewind.rawValue }
+          memoryDestinationRawValue: $memoryDestinationRawValue
         )
       case 3:
         // Same rule as the hub's Memories destination: the readable-width
@@ -1606,6 +1615,8 @@ private struct PageContentView: View {
 /// so tapping a row navigates to the detail view.
 struct ConversationsPageHost: View {
   let appState: AppState
+  var brainDestination: MemoryHubDestination? = nil
+  var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
   /// Optional exact record supplied by a Chat-first conversation deep-link.
   /// The normal Conversations page still owns list loading and row selection;
   /// this value only seeds selection when a link fetched a record that is not
@@ -1623,26 +1634,32 @@ struct ConversationsPageHost: View {
   }
 
   var body: some View {
-    ConversationsPage(appState: appState, selectedConversation: $selectedConversation)
-      .frame(
-        maxWidth: usesAvailableWidth ? .infinity : MemoryHubLayoutPolicy.readableContentWidth,
-        maxHeight: .infinity
-      )
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .animation(.easeInOut(duration: 0.22), value: usesAvailableWidth)
-      // Owner fencing: an open detail view must not keep showing the previous
-      // account's conversation after an in-place account switch.
-      .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
-        selectedConversation = nil
-      }
-      .onAppear {
-        if let initialConversation {
-          selectedConversation = initialConversation
-        }
-      }
-      .onChange(of: initialConversation?.id) { _, _ in
+    ConversationsPage(
+      appState: appState,
+      selectedConversation: $selectedConversation,
+      brainDestination: brainDestination,
+      onSelectBrainDestination: onSelectBrainDestination
+    )
+    .frame(
+      maxWidth: brainDestination != nil || usesAvailableWidth
+        ? .infinity : MemoryHubLayoutPolicy.readableContentWidth,
+      maxHeight: .infinity
+    )
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .animation(.easeInOut(duration: 0.22), value: usesAvailableWidth)
+    // Owner fencing: an open detail view must not keep showing the previous
+    // account's conversation after an in-place account switch.
+    .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+      selectedConversation = nil
+    }
+    .onAppear {
+      if let initialConversation {
         selectedConversation = initialConversation
       }
+    }
+    .onChange(of: initialConversation?.id) { _, _ in
+      selectedConversation = initialConversation
+    }
   }
 }
 

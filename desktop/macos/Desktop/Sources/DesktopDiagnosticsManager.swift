@@ -49,19 +49,6 @@ enum RealtimeProviderCloseTurnOutcome: String {
   case pendingReplacement = "pending_replacement"
 }
 
-enum RealtimeProviderCloseRecoveryAction: String {
-  case none
-  case sessionRewarm = "session_rewarm"
-  case providerFailover = "provider_failover"
-  case cascade
-}
-
-enum RealtimeProviderCloseRecoveryResult: String {
-  case notNeeded = "not_needed"
-  case started
-  case exhausted
-}
-
 struct DesktopHealthSnapshot: @unchecked Sendable {
   let timestamp: Date
   let event: DesktopHealthEventName
