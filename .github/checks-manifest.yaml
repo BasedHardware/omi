@@ -4,6 +4,16 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: cursor-mcp-config
+    command: ["python3", ".github/scripts/check_cursor_mcp_config.py"]
+    triggers: [".cursor/mcp.json", ".github/scripts/check_cursor_mcp_config.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12376: project MCP entries must use maintained provider endpoints or exact package identities without committing or forwarding credentials to an untrusted browser process"
+  - id: cursor-mcp-config-tests
+    command: ["python3", ".github/scripts/test_check_cursor_mcp_config.py"]
+    triggers: [".cursor/mcp.json", ".github/scripts/check_cursor_mcp_config.py", ".github/scripts/test_check_cursor_mcp_config.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12376: mutation fixtures keep the three nonexistent package names, deprecated GitHub package, floating npm resolution, insecure transport, and plaintext credential shapes rejected"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]

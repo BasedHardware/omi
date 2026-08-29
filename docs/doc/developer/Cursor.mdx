@@ -67,6 +67,8 @@ Optional hook scripts/config to observe and extend the agent loop. Useful for en
 
 Configuration for MCP servers that provide external tools (e.g. browser testing, GitHub automation, Notion/Figma integration if enabled).
 
+The checked-in project config uses maintained provider endpoints for GitHub, Notion, and Figma. Export `GITHUB_TOKEN` before starting Cursor to enable GitHub; Cursor completes the provider OAuth flow for Notion and Figma when first used. Browser automation runs Microsoft's Playwright MCP package at the exact version recorded in the config. Do not replace these entries with guessed `@modelcontextprotocol/server-*` names or floating npm versions.
+
 ---
 
 ## Common contributor workflows
@@ -97,4 +99,3 @@ If your change affects user-facing behavior or developer APIs:
 - **Don’t put secrets** (tokens, keys, credentials) in `.cursor/` files.
 - Keep rules **layer-aware** (e.g. don’t encourage importing from `routers/` inside `utils/`).
 - Prefer linking to **public docs in `docs/`** when something is user-facing, and keep `.cursor/docs/` for internal agent context.
-
