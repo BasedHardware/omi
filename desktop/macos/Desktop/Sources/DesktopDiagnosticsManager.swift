@@ -1409,6 +1409,11 @@ final class DesktopDiagnosticsManager {
     // out of `other` lets a release-health query separate a benign screen-capture
     // flap from a genuinely degraded path.
     "screen_capture",
+    // The panels the user asks for and the offers that fill them: a lookup that
+    // widened past its keyword sweep, a form with nothing behind it, and a model
+    // step that came back off-schema all cost the user a wait, so they belong in
+    // release health rather than in a log nobody queries.
+    "panel_lookup",
     "memory_scope",
     "desktop_update",
     "tts_fallback",
@@ -1450,6 +1455,10 @@ final class DesktopDiagnosticsManager {
     "db_backoff",
     "state_divergence",
     "status_inferred",
+    "schema_violation",
+    "sweep_empty",
+    "no_evidence",
+    "no_form",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {
