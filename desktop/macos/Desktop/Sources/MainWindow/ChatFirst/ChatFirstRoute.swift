@@ -63,7 +63,7 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     let normalized = target.lowercased().replacingOccurrences(of: "-", with: "_")
     switch normalized {
     case "chat": return .chat
-    case "conversations": return .conversations
+    case "conversations": return .memories
     case "tasks": return .tasks
     case "goals": return .goals
     case "memories": return .memories
@@ -131,7 +131,7 @@ enum ChatFirstPendingFocus: Equatable, Sendable {
     switch self {
     case .task: return .tasks
     case .goal: return .goals
-    case .capture: return .conversations
+    case .capture: return .memories
     case .memory: return .memories
     }
   }
@@ -329,12 +329,10 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// the fetched record on the navigation owner lets the Conversations page
   /// present it even when the paginated list does not currently contain it.
   ///
-  /// The default remains the dedicated Chat-first Conversations route for rich
-  /// Chat links. Hub-owned callers can pass `.memories` so the exact same
-  /// ConversationsPageHost used by the Conversations chip remains mounted;
-  /// this avoids Activity opening a second presentation of conversation detail.
+  /// Every caller defaults to the Memory hub, which owns the only
+  /// ConversationsPageHost and navigation chrome.
   func open(conversation: ServerConversation) {
-    open(conversation: conversation, destination: .conversations)
+    open(conversation: conversation, destination: .memories)
   }
 
   func open(conversation: ServerConversation, destination: ChatFirstRoute) {
@@ -461,7 +459,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   func selectLegacyDestination(_ item: SidebarNavItem) {
     switch item {
     case .dashboard: selectPrimary(.chat)
-    case .conversations: selectPrimary(.conversations)
+    case .conversations: selectPrimary(.memories)
     case .memories: selectPrimary(.memories)
     case .tasks: selectPrimary(.tasks)
     case .rewind: selectMore(.rewind)

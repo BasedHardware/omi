@@ -19,6 +19,7 @@ struct ChatConversationReferencePill: View {
         .buttonStyle(.plain)
         .help("Open \(reference.displayTitle)")
         .accessibilityLabel("Open attached conversation: \(reference.displayTitle)")
+        .accessibilityIdentifier("chat-conversation-reference-\(reference.sourceID)-open")
       } else {
         pillContent(showsOpenIndicator: false)
       }

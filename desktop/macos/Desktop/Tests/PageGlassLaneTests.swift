@@ -39,7 +39,9 @@ final class PageGlassLaneTests: XCTestCase {
           selectedIndex: SidebarNavItem.rewind.rawValue,
           homeOwnsItsPanels: homeOwnsItsPanels))
 
-      let selfContained: Set<SidebarNavItem> = [.dashboard, .rewind, .tasks, .apps]
+      let selfContained: Set<SidebarNavItem> = [
+        .dashboard, .conversations, .memories, .rewind, .tasks, .apps,
+      ]
       for item in SidebarNavItem.allCases where !selfContained.contains(item) {
         XCTAssertFalse(
           PageGlassLanePolicy.ownsItsPanels(
@@ -50,49 +52,15 @@ final class PageGlassLaneTests: XCTestCase {
     }
   }
 
-  /// **The Conversations rail index has two presentations, and the mounted one is authoritative.**
-  ///
-  /// Activity is Home's column — a search bar and a results panel, each already an `inkGlassPanel`.
-  /// Wrapping the hub wholesale nested both inside a third panel, which does not stack two materials
-  /// but takes a second copy of the desktop and doubles the scrim, so Activity read visibly muddier
-  /// than Chat and its two panels lost their separation.
-  func testConversationsOwnershipFollowsTheMountedPresentationNotPersistedState() {
-    let hubIndex = SidebarNavItem.conversations.rawValue
-    XCTAssertTrue(
-      PageGlassLanePolicy.ownsItsPanels(
-        selectedIndex: hubIndex,
-        conversationsPresentation: .memoryHub,
-        homeOwnsItsPanels: true),
-      "the Memory hub builds Brain search and content panels and must not be wrapped")
-    XCTAssertFalse(
-      PageGlassLanePolicy.ownsItsPanels(
-        selectedIndex: hubIndex,
-        conversationsPresentation: .standaloneConversations,
-        homeOwnsItsPanels: true),
-      "standalone Conversations paints no ground and must receive the shared lane")
-
-    XCTAssertFalse(
-      PageGlassLanePolicy.ownsItsPanels(
-        selectedIndex: SidebarNavItem.memories.rawValue,
-        conversationsPresentation: .memoryHub,
-        homeOwnsItsPanels: true),
-      "the Conversations presentation must not change the standalone Memories page")
-  }
-
-  func testLegacyConversationPresentationAndGlassOwnershipCannotDriftApart() {
-    for useLegacyHomeDesign in [false, true] {
-      let presentation = MemoryHubDestination.presentation(
-        for: .conversations,
-        useLegacyHomeDesign: useLegacyHomeDesign)
-      let ownsPanels = PageGlassLanePolicy.ownsItsPanels(
-        selectedIndex: SidebarNavItem.conversations.rawValue,
-        conversationsPresentation: presentation,
-        homeOwnsItsPanels: !useLegacyHomeDesign)
-
-      XCTAssertEqual(
-        ownsPanels,
-        presentation == .memoryHub,
-        "standalone Conversations needs the lane; the Memory hub must not be double-wrapped")
+  /// Conversations, Memories, and Rewind are compatibility aliases for the
+  /// same MemoryHubPage, whose child destinations own their panels.
+  func testEveryMemoryAliasUsesTheHubOwnedGlass() {
+    for item: SidebarNavItem in [.conversations, .memories, .rewind] {
+      XCTAssertTrue(
+        PageGlassLanePolicy.ownsItsPanels(
+          selectedIndex: item.rawValue,
+          homeOwnsItsPanels: true),
+        "\(item.title) must mount the hub without a second lane")
     }
   }
 

@@ -47,6 +47,11 @@ struct MemoryHubPage: View {
   /// Conversations destination, so Activity does not open a second detail
   /// presentation on the dedicated Chat-first route.
   var initialConversation: ServerConversation? = nil
+  /// Optional timestamp carried by a conversation deep link. The hub remains
+  /// the sole presentation owner; this only seeds the transcript/playback
+  /// focus inside its canonical Conversations destination.
+  var initialCaptureMomentTimestamp: TimeInterval? = nil
+  var onCaptureFocusResolved: ((Bool) -> Void)? = nil
   /// Canonical detail capabilities supplied by the owning shell. Activity and
   /// the Conversations destination forward the same callbacks so opening the
   /// same record never changes which actions are available.
@@ -124,7 +129,8 @@ struct MemoryHubPage: View {
       MemoriesPage(
         viewModel: viewModelContainer.memoriesViewModel,
         brainDestination: destination,
-        onSelectBrainDestination: select
+        onSelectBrainDestination: select,
+        onOpenConversation: openConversation
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .conversations:
@@ -133,6 +139,8 @@ struct MemoryHubPage: View {
         brainDestination: destination,
         onSelectBrainDestination: select,
         initialConversation: initialConversation,
+        initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
+        onCaptureFocusResolved: onCaptureFocusResolved,
         onDiscussInChat: onDiscussInChat,
         onOpenLinkedTask: onOpenLinkedTask,
         onSelectionChanged: onConversationSelectionChanged
@@ -164,6 +172,24 @@ struct MemoryHubPage: View {
       // Brain Map destination would resolve the compatibility graph before
       // the server capability was known purely because Memories was never visited.
       .task { await memoriesViewModel.loadMemoriesIfNeeded() }
+    }
+  }
+
+  private func openConversation(_ conversationID: String) {
+    guard !conversationID.isEmpty else { return }
+    if let onOpenConversationRecord {
+      Task { @MainActor in
+        guard let conversation = try? await APIClient.shared.getConversation(id: conversationID) else {
+          return
+        }
+        onOpenConversationRecord(conversation)
+      }
+    } else {
+      ConversationDetailAutomationState.shared.requestOpen(
+        conversationId: conversationID,
+        showTranscript: false
+      )
+      select(.conversations)
     }
   }
 

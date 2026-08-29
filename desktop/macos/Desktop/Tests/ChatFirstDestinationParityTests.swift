@@ -42,8 +42,8 @@ final class ChatFirstDestinationParityTests: XCTestCase {
   }
 
   /// Selecting a hub view in the chat-first shell has to move its typed route as well as the
-  /// persisted destination. Every peer enters through the Memory route, which owns Brain's
-  /// persistent section navigation. A typed conversation deep link may still use its own route.
+  /// persisted destination. Every peer and deep link enters through the Memory route, which owns
+  /// Brain's persistent section navigation.
   ///
   /// Without this, picking Brain Map from the Conversations route left the shell on a host that has
   /// no Brain Map in it — the state that made the map unreachable once the menu was gone.
@@ -53,6 +53,11 @@ final class ChatFirstDestinationParityTests: XCTestCase {
     XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .brainMap), .memories)
     XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .activity), .memories)
     XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .rewind), .memories)
+  }
+
+  func testEveryConversationEntryNormalizesToTheCanonicalMemoryRoute() {
+    XCTAssertEqual(ChatFirstPendingFocus.capture(id: "conversation-1", momentTs: 12).route, .memories)
+    XCTAssertEqual(ChatFirstRoute.primaryAutomationDestination(named: "conversations"), .memories)
   }
 
   /// **The chip row is the door, so its contents are a contract.**

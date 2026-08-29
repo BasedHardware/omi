@@ -27,8 +27,9 @@ covers:
   - desktop/macos/Desktop/Sources/Services/KnowledgeGraphToolSupport.swift
   - desktop/macos/Desktop/Sources/Providers/ChatFirstBlockToolExecutor.swift
   - desktop/macos/Desktop/Sources/Chat/ChatFirstBlockValidation.swift
-  # S14-S20 prove a capture is staged as a typed, removable composer reference,
-  # then persists on the accepted user turn after the composer clears.
+  # S14-S22 prove a capture is staged as a typed, removable composer reference,
+  # persists on the accepted user turn after the composer clears, and reopens
+  # the same canonical hub-owned detail as every other conversation entry.
   - desktop/macos/Desktop/Sources/Chat/ChatComposerReference.swift
   - desktop/macos/Desktop/Sources/Chat/ChatResource.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
@@ -45,7 +46,7 @@ covers:
   # fail-closed branch is part of the mounted path rather than a paper cover.
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstCaptureLinkPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstGoalsPage.swift
-  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore+CanonicalTask.swift
   # S3-S6 load canonical goals, acknowledge focus, and mutate focused-goal state.
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CanonicalGoalsStore.swift
@@ -55,6 +56,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CapturePlayback.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CapturePlaybackAPI.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstShell.swift
+  - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
 preconditions:
   - automation_bridge_ready
   - named_non_production_bundle_ui_lane
@@ -173,7 +175,7 @@ steps:
     timeout_seconds: 10
     wait:
       state.shellVariant: chat_first
-      state.visibleChatFirstRoute: conversations
+      state.visibleChatFirstRoute: memories
       state.isFocusedEntityAcknowledged: true
 
   - id: S13
@@ -181,7 +183,7 @@ steps:
     bridge.action:
       name: chat_first_runtime_snapshot
     expect:
-      result.detail.route: conversations
+      result.detail.route: memories
       result.detail.route_visible: "true"
       result.detail.capture_detail_visible: "true"
 
@@ -250,6 +252,24 @@ steps:
       result.detail.completed_visible_task_count: "1"
 
   - id: S21
+    name: Reopen the persisted conversation attachment through the real Chat pill
+    ax.activate:
+      identifier: chat-conversation-reference-chat-first-e2e-capture-v1-open
+    timeout_seconds: 10
+    wait:
+      state.shellVariant: chat_first
+      state.visibleChatFirstRoute: memories
+
+  - id: S22
+    name: Confirm the Chat attachment reused the canonical hub-owned conversation detail
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: memories
+      result.detail.route_visible: "true"
+      result.detail.capture_detail_visible: "true"
+
+  - id: S23
     name: Confirm the bridge recorded no route failure
     log.expect:
       absent:

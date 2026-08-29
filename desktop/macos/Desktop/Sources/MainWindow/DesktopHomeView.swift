@@ -98,6 +98,7 @@ struct DesktopHomeView: View {
   /// Whether we're currently viewing the settings page
   private var isInSettings: Bool {
     selectedIndex == SidebarNavItem.settings.rawValue
+      || selectedIndex == SidebarNavItem.permissions.rawValue
   }
 
   private var homeOwnsItsPanels: Bool { !useLegacyHomeDesign }
@@ -654,8 +655,7 @@ struct DesktopHomeView: View {
   /// chrome and stays bar-less — the Memory atlas is the same: it has its
   /// own back affordance and header, so the redundant top bar hides while it's open.
   private var showsTopBar: Bool {
-    guard !useLegacyHomeDesign, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
-    return item != .permissions
+    !useLegacyHomeDesign && SidebarNavItem(rawValue: selectedIndex) != nil
   }
 
   /// Reference instant for the top bar's "new since you were last here" counts.
@@ -1147,14 +1147,17 @@ struct DesktopHomeView: View {
   /// names. This is the sole root adapter between those callers and typed
   /// Chat-first navigation.
   private func navigateToLegacyDestination(_ item: SidebarNavItem) {
-    if item == .rewind, OMIApp.launchMode != .rewind {
-      memoryDestinationRawValue = MemoryHubDestination.rewind.rawValue
+    if item == .permissions {
+      selectedSettingsSection = .permissions
       if usesChatFirstShell {
-        chatFirstNavigation.selectPrimary(.memories)
+        chatFirstNavigation.selectMore(.settings)
       } else {
-        selectedIndex = SidebarNavItem.conversations.rawValue
+        selectedIndex = SidebarNavItem.settings.rawValue
       }
       return
+    }
+    if let destination = MemoryHubDestination.destination(for: item) {
+      memoryDestinationRawValue = destination.rawValue
     }
     if usesChatFirstShell {
       chatFirstNavigation.selectLegacyDestination(item)
@@ -1425,7 +1428,6 @@ struct DesktopHomeView: View {
       // so the page is one object rather than a panel with its nav stranded on the wallpaper.
       PageGlassLane(
         selectedIndex: selectedIndex,
-        conversationsPresentation: conversationsPresentation,
         homeOwnsItsPanels: homeOwnsItsPanels
       ) {
         HStack(spacing: 0) {
@@ -1434,7 +1436,6 @@ struct DesktopHomeView: View {
             selectedIndex: selectedIndex,
             appState: appState,
             viewModelContainer: viewModelContainer,
-            conversationsPresentation: conversationsPresentation,
             memoryDestinationRawValue: $memoryDestinationRawValue,
             selectedSettingsSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
@@ -1446,14 +1447,6 @@ struct DesktopHomeView: View {
     .onEscapeKey(priority: .navigation) { navigateHomeOnEscapeIfNeeded() }
     // The top bar occupies the hidden title-bar band; the window's top edge is the glass.
     .padding(.top, GlassShell.titlebarClearance)
-  }
-
-  /// The Conversations rail item has two presentations. Resolve it once and hand the same value to
-  /// both the surface owner and the mounted destination so they cannot disagree about its ground.
-  private var conversationsPresentation: MemoryHubDestination.Presentation {
-    MemoryHubDestination.presentation(
-      for: .conversations,
-      useLegacyHomeDesign: useLegacyHomeDesign)
   }
 
   private func navigateHomeOnEscapeIfNeeded() -> Bool {
@@ -1544,7 +1537,6 @@ private struct PageContentView: View {
   let selectedIndex: Int
   let appState: AppState
   let viewModelContainer: ViewModelContainer
-  let conversationsPresentation: MemoryHubDestination.Presentation
   @Binding var memoryDestinationRawValue: Int
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
@@ -1579,24 +1571,15 @@ private struct PageContentView: View {
           memoriesViewModel: viewModelContainer.memoriesViewModel,
           taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
-      case 1:
-        ConversationsDestinationView(
+      case SidebarNavItem.conversations.rawValue,
+        SidebarNavItem.memories.rawValue,
+        SidebarNavItem.rewind.rawValue:
+        MemoryHubPage(
           appState: appState,
           viewModelContainer: viewModelContainer,
-          presentation: conversationsPresentation,
-          memoryDestinationRawValue: $memoryDestinationRawValue
+          memoriesViewModel: viewModelContainer.memoriesViewModel,
+          destinationRawValue: $memoryDestinationRawValue
         )
-      case 3:
-        // Same rule as the hub's Memories destination: the readable-width
-        // cap yields while the detail panel is open so the panel takes new
-        // space instead of eating the list's column.
-        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
-          .frame(
-            maxWidth: viewModelContainer.memoriesViewModel.selectedMemory == nil
-              ? MemoryHubLayoutPolicy.readableContentWidth : .infinity,
-            maxHeight: .infinity
-          )
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
       case 4:
         constrainedListPage(
           TasksPage(
@@ -1605,10 +1588,9 @@ private struct PageContentView: View {
             chatProvider: viewModelContainer.chatProvider,
             onOpenRewindEvidence: { screenshotID in
               RewindCitationFocusState.shared.request(screenshotID)
+              memoryDestinationRawValue = MemoryHubDestination.rewind.rawValue
               selectedTabIndex = SidebarNavItem.rewind.rawValue
             }))
-      case 7:
-        RewindPage(appState: appState)
       case 8:
         constrainedListPage(
           AppsPage(
@@ -1616,15 +1598,13 @@ private struct PageContentView: View {
             appState: appState,
             connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
             handlesAutomationPresentations: viewModelContainer.isInitialLoadComplete))
-      case 9:
+      case SidebarNavItem.settings.rawValue, SidebarNavItem.permissions.rawValue:
         SettingsPage(
           appState: appState,
           selectedSection: $selectedSettingsSection,
           highlightedSettingId: $highlightedSettingId,
           chatProvider: viewModelContainer.chatProvider
         )
-      case 10:
-        PermissionsPage(appState: appState)
       default:
         QueryShellHome(
           viewModel: viewModelContainer.dashboardViewModel,

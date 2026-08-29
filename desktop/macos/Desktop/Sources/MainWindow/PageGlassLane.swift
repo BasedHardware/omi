@@ -55,22 +55,17 @@ enum PageGlassLanePolicy {
   /// the already-resolved Home surface decision instead of making this lane read a settings key.
   static func ownsItsPanels(
     selectedIndex: Int,
-    conversationsPresentation: MemoryHubDestination.Presentation = .standaloneConversations,
     homeOwnsItsPanels: Bool
   ) -> Bool {
     switch SidebarNavItem(rawValue: selectedIndex) ?? .dashboard {
     case .dashboard:
       return homeOwnsItsPanels
-    case .rewind:
+    case .conversations, .memories, .rewind:
+      // These legacy indices are compatibility aliases for MemoryHubPage.
+      // The hub's children own their search and content panels.
       return true
     case .tasks, .apps:
       return true
-    case .conversations:
-      // This index is overloaded: the modern presentation mounts the Memory hub, whose children own
-      // their panels, while the legacy presentation mounts standalone Conversations, which does not.
-      // Persisted Memory-hub state cannot answer which view was actually mounted; the router supplies
-      // that fact explicitly.
-      return conversationsPresentation == .memoryHub
     default:
       return false
     }
@@ -114,9 +109,6 @@ enum PageGlassLaneLayout {
 struct PageGlassLane<Content: View>: View {
   /// The route being rendered, used only to ask `PageGlassLanePolicy` whether it already has glass.
   let selectedIndex: Int
-  /// The Conversations rail index is overloaded by two presentations. The router supplies whether
-  /// the view it actually mounted is the self-grounded Memory hub or standalone Conversations.
-  var conversationsPresentation: MemoryHubDestination.Presentation = .standaloneConversations
   /// Whether the Home surface selected by the router owns its own glass.
   let homeOwnsItsPanels: Bool
   @ViewBuilder var content: () -> Content
@@ -124,7 +116,6 @@ struct PageGlassLane<Content: View>: View {
   var body: some View {
     if PageGlassLanePolicy.ownsItsPanels(
       selectedIndex: selectedIndex,
-      conversationsPresentation: conversationsPresentation,
       homeOwnsItsPanels: homeOwnsItsPanels)
     {
       // Handed the whole content area, so a modal dim mounted inside it has to take the lane rather

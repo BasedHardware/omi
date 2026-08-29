@@ -125,7 +125,7 @@ final class ChatFirstShellTests: XCTestCase {
     let focus = ChatFirstPendingFocus.capture(id: "capture-1", momentTs: 42)
     navigation.open(focus: focus)
     navigation.toggleSidebar()
-    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.route, .memories)
     XCTAssertEqual(navigation.pendingFocus, focus)
     XCTAssertEqual(navigation.focusedEntityID, "capture-1")
     XCTAssertFalse(navigation.isFocusedEntityAcknowledged)
@@ -138,7 +138,7 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertTrue(navigation.isFocusedEntityAcknowledged)
 
     let restored = ChatFirstShellNavigation(defaults: defaults)
-    XCTAssertEqual(restored.route, .conversations)
+    XCTAssertEqual(restored.route, .memories)
     XCTAssertTrue(restored.isSidebarCollapsed)
     XCTAssertNil(restored.pendingFocus)
     XCTAssertNil(restored.focusedEntityID)
@@ -154,7 +154,7 @@ final class ChatFirstShellTests: XCTestCase {
     let fetched = conversation(id: "older-meeting-42")
     navigation.open(conversation: fetched)
 
-    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.route, .memories)
     XCTAssertEqual(navigation.pendingConversation, fetched)
     XCTAssertNil(navigation.pendingFocus)
   }
@@ -240,19 +240,11 @@ final class ChatFirstShellTests: XCTestCase {
       .appendingPathComponent("Sources/MainWindow/ChatFirst/ChatFirstShell.swift")
     // omi-test-quality: source-inspection -- static contract: SwiftUI settings composition wiring
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
-    let moreDestination = try XCTUnwrap(
-      source.components(separatedBy: "private func moreDestination").last
-    )
-    let settingsTail = try XCTUnwrap(
-      moreDestination.components(separatedBy: "case .settings:").dropFirst().first
-    )
-    let settingsDestination = try XCTUnwrap(
-      settingsTail.components(separatedBy: "/// Existing Dashboard").first
-    )
-
-    XCTAssertTrue(settingsDestination.contains("SettingsSidebar("))
-    XCTAssertTrue(settingsDestination.contains("SettingsPage("))
-    XCTAssertTrue(settingsDestination.contains("navigation.handleEscapeNavigation()"))
+    XCTAssertTrue(source.contains("private var settingsDestination: some View"))
+    XCTAssertTrue(source.contains("SettingsSidebar("))
+    XCTAssertTrue(source.contains("SettingsPage("))
+    XCTAssertTrue(source.contains("case .permissions, .settings:"))
+    XCTAssertTrue(source.contains("navigation.handleEscapeNavigation()"))
   }
 
   func testMemoryFocusRequiresTheRequestedMemoryToBeVisibleBeforeAcknowledgement() {
@@ -438,7 +430,7 @@ final class ChatFirstShellTests: XCTestCase {
       navigation.completeConversationLinkResolution(
         conversation: conversation(id: "meeting-new"),
         generation: currentResolution))
-    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.route, .memories)
     XCTAssertEqual(navigation.pendingConversation?.id, "meeting-new")
   }
 
@@ -490,6 +482,7 @@ final class ChatFirstShellTests: XCTestCase {
   }
 
   func testPrimaryAutomationRouteIncludesGoalsWithoutRepurposingLegacyPages() {
+    XCTAssertEqual(ChatFirstRoute.primaryAutomationDestination(named: "conversations"), .memories)
     XCTAssertEqual(ChatFirstRoute.primaryAutomationDestination(named: "goals"), .goals)
     XCTAssertEqual(ChatFirstRoute.primaryAutomationDestination(named: "GOALS"), .goals)
     XCTAssertNil(ChatFirstRoute.primaryAutomationDestination(named: "dashboard"))
@@ -641,11 +634,12 @@ final class ChatFirstShellTests: XCTestCase {
 
   func testChatFirstGlassBoundaryWrapsOnlyRoutesWithoutTheirOwnPanels() {
     let wrapped: [ChatFirstRoute] = [
-      .conversations, .goals,
+      .goals,
       .more(.permissions), .more(.settings),
     ]
     let selfContained: [ChatFirstRoute] = [
-      .chat, .tasks, .memories, .more(.dashboard), .more(.rewind), .more(.apps),
+      .chat, .conversations, .tasks, .memories, .more(.dashboard), .more(.rewind),
+      .more(.apps),
     ]
 
     for route in wrapped {
@@ -663,12 +657,9 @@ final class ChatFirstShellTests: XCTestCase {
     }
   }
 
-  /// Conversations exposed the wallpaper because Chat-first first answered "wrap", then translated
-  /// the route to the legacy Conversations/Memory-hub index and let `PageGlassLane` answer again. A
-  /// valid persisted hub destination made the second answer "already owns panels" and cancelled the
-  /// first. Hold the mounted modern boundary: persisted hub state is no longer an input to
-  /// Conversations' shared-lane decision, while the actual Memory-hub route remains self-owned.
-  func testChatFirstConversationsCannotLoseItsGroundToPersistedHubState() throws {
+  /// Conversation links and the Memories tab mount the same hub-owned surface,
+  /// so both aliases pass through the shell without a second glass lane.
+  func testChatFirstConversationAliasesUseTheMemoryHubSurface() throws {
     let size = CGSize(width: 1_400, height: 800)
 
     let recorder = ChatFirstGlassFrameRecorder()
@@ -682,12 +673,8 @@ final class ChatFirstShellTests: XCTestCase {
     host.layoutSubtreeIfNeeded()
 
     let placed = try XCTUnwrap(recorder.frame)
-    XCTAssertEqual(placed.width, PageGlassLaneLayout.laneWidth(for: size.width), accuracy: 0.5)
-    XCTAssertEqual(
-      placed.height,
-      size.height - PageGlassLaneLayout.topGap - PageGlassLaneLayout.bottomGap,
-      accuracy: 0.5,
-      "persisted Memory-hub state is not an input that can cancel Conversations' panel")
+    XCTAssertEqual(placed.width, size.width, accuracy: 0.5)
+    XCTAssertEqual(placed.height, size.height, accuracy: 0.5)
   }
 
   func testChatFirstMemoryHubKeepsItsOwnPanels() throws {
@@ -711,7 +698,7 @@ final class ChatFirstShellTests: XCTestCase {
     let size = CGSize(width: 1_400, height: 800)
     let cases: [(ChatFirstRoute, Bool)] = [
       (.chat, false),
-      (.conversations, true),
+      (.conversations, false),
       (.tasks, false),
       (.goals, true),
       (.memories, false),
