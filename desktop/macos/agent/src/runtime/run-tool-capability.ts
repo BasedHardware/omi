@@ -279,6 +279,7 @@ export class RunToolCapabilityBroker {
     const projectionContext = {
       executionRole: persisted.profile.executionRole,
       screenContext: persisted.screenContext,
+      jitKnowledgeToolsEnabled: persisted.jitKnowledgeToolsEnabled,
       surfaceKind: persisted.surfaceKind,
       chatFirstUi: persisted.chatFirstUi,
       controlGeneration: persisted.chatFirstControlGeneration,
@@ -725,6 +726,7 @@ export class RunToolCapabilityBroker {
     runMode: RunMode;
     chatMode: string | null;
     screenContext: boolean;
+    jitKnowledgeToolsEnabled: boolean;
     chatFirstUi: boolean;
     chatFirstControlGeneration: number | null;
     /** Spawn-time child tool restriction; null = no policy, [] = no tools (fail closed). */
@@ -788,6 +790,7 @@ export class RunToolCapabilityBroker {
       runMode: text(row.mode) === "act" ? "act" : "ask",
       chatMode: typeof metadata.chatMode === "string" ? metadata.chatMode : null,
       screenContext: admittedScreenContext(runInput),
+      jitKnowledgeToolsEnabled: metadata.jitKnowledgeToolsEnabled === true,
       chatFirstUi,
       chatFirstControlGeneration: chatFirstUi && Number.isSafeInteger(controlGeneration) && controlGeneration >= 0
         ? controlGeneration
