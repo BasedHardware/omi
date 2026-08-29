@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-plane-seam-adopted-by-reader-not-writer",
+  "violated_contract": "When a data-plane seam is introduced, every call site on the same logical surface must resolve the same plane. A reader that adopts the seam while its sibling writer keeps a compute-plane default splits one feature's authority across two projects.",
+  "canonical_prevention": "Adopt a new plane seam by enumerating the surface's call sites rather than the files the seam touches, and pin the plane at each one with a test that asserts the resolved client is threaded through -- not merely that the handler was called. A split is invisible in every environment where the two projects coincide, so it cannot be caught by deploying and watching for errors.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_jit_rollout.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/_client.py",
+    "backend/routers/jit_rollout.py",
+    "backend/utils/memory/canonical_memory_adapter.py",
+    "backend/utils/memory/jit_trigger_snapshot.py"
+  ],
+  "status": "open"
+}
