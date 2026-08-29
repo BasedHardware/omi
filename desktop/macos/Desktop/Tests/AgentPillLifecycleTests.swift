@@ -1080,8 +1080,14 @@ import XCTest
     XCTAssertTrue(viewSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
     XCTAssertFalse(inputSource.contains("state.showingAIResponse = true"))
     XCTAssertFalse(viewSource.contains("state.conversationSurface == .mainResponse || state.showingAIResponse"))
+    // Pinned in two parts because the declaration wraps: swift-format splits the parameter
+    // list onto its own line once `presentsSurface` is added, so a single-line pin cannot
+    // match. `presentsSurface: Bool = true` is pinned with the rest — it defaulting to true
+    // is what keeps a typed send presenting the panel.
+    XCTAssertTrue(windowSource.contains("func beginVisibleMainQuery("))
     XCTAssertTrue(
-      windowSource.contains("func beginVisibleMainQuery(_ message: String, fromVoice: Bool, animated: Bool = true)"))
+      windowSource.contains(
+        "_ message: String, fromVoice: Bool, animated: Bool = true, presentsSurface: Bool = true"))
     XCTAssertTrue(windowSource.contains("state.resetMeasuredContentHeight(for: .mainResponse)"))
     XCTAssertTrue(windowSource.contains("state.present(.mainResponse)"))
     XCTAssertTrue(windowSource.contains("beginMainResponseHeight(animated: animated)"))
