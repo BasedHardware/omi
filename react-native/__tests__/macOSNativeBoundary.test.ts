@@ -344,6 +344,9 @@ test('clears the leftover loopback tab and returns the user to the app', () => {
   expect(auth).toContain("location.replace('about:blank')");
   expect(auth).toContain('window.close()');
   expect(auth).toContain('Content-Length');
+  expect(auth).toContain('prefersEphemeralWebBrowserSession = YES');
+  expect(auth).not.toContain('prefersEphemeralWebBrowserSession = NO');
+  expect(auth).not.toContain('openURL:authorize.URL');
   expect(auth).not.toContain('hsl(');
   expect(auth).toContain('bringOmiToFront');
   expect(auth).toContain('[NSApp activate];');
