@@ -1076,7 +1076,7 @@ def test_memories_route_scan_budget_fallback_shares_the_request_budget():
     """Scan-budget 503 still falls back to the offset read — on the same budget."""
     service = MagicMock()
     service.read_page.side_effect = mem_mod.MemoryBackingStoreUnavailable(
-        mem_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL, stream='historical'
+        'Memory scan budget exceeded', stream='historical'
     )
     service.read.return_value = []
     scope_request = SimpleNamespace(device_scope='all', client_device_id=None)

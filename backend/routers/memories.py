@@ -15,7 +15,6 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
 from utils.memory.memory_service import (
-    MEMORY_LIST_SCAN_BUDGET_DETAIL,
     MemoryBackingStoreUnavailable,
     MemoryPayload,
     MemoryService,

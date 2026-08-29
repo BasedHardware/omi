@@ -262,9 +262,7 @@ def test_first_page_falls_back_to_offset_read_when_scan_row_budget_is_exhausted(
     walk suppressed rows, so the first page must fall back to it.
     """
     service = MagicMock()
-    service.read_page.side_effect = MemoryBackingStoreUnavailable(
-        mem_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL, stream="historical"
-    )
+    service.read_page.side_effect = MemoryBackingStoreUnavailable("Memory scan budget exceeded", stream="historical")
     service.read.return_value = ['memory-from-offset-read']
 
     result = _get_first_page(service)
