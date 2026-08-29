@@ -68,14 +68,18 @@ FULL_RUN_GLOBS = (
     'backend/utils/encryption.py',
 )
 
-# These paths participate in the location-context contract below. They are
-# intentionally narrow exceptions to the generic model/database full-suite
-# fallback so local pre-push feedback remains focused; CI still owns --all.
-NARROW_LOCATION_CONTEXT_PATHS = frozenset(
+# Intentionally narrow exceptions to the generic model/database full-suite
+# fallback so local pre-push feedback stays focused; CI still owns --all.
+# Every entry must be mapped to a narrow area in AREA_TESTS below, so the
+# exception still selects that area's contracts instead of nothing.
+NARROW_FULL_RUN_EXCEPTIONS = frozenset(
     {
+        # location-context consent area
         'backend/database/users.py',
         'backend/models/geolocation.py',
         'backend/models/users.py',
+        # in-app CSAT surface
+        'backend/database/csat.py',
     }
 )
 
@@ -148,6 +152,14 @@ AREA_TESTS = (
         ),
         (),
         ('tests/unit/test_location_context_consent.py', 'tests/unit/test_chat_async_offload.py'),
+    ),
+    (
+        (
+            'backend/database/csat.py',
+            'backend/routers/csat.py',
+        ),
+        (),
+        ('tests/unit/test_csat.py', 'tests/unit/test_desktop_rest_inventory.py'),
     ),
     (
         ('backend/llm_gateway/',),
@@ -326,7 +338,7 @@ def normalize_changed_path(path: str) -> str:
 
 
 def is_full_run_path(path: str) -> bool:
-    if path in NARROW_LOCATION_CONTEXT_PATHS:
+    if path in NARROW_FULL_RUN_EXCEPTIONS:
         return False
     if path in FULL_RUN_PATHS:
         return True
