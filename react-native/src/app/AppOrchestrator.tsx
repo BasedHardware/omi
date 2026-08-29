@@ -691,9 +691,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         macDesktop && styles.macShell,
       ]}>
       {macDesktop
-        ? onboardingRequired
-          ? null
-          : macDesktopNav
+        ? onboardingRequired === false
+          ? macDesktopNav
+          : null
         : !compact
         ? nav
         : null}
@@ -746,6 +746,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 ]}>
                 {onboardingRequired === true ? (
                   firstRunOnboarding
+                ) : onboardingRequired !== false ? (
+                  <View
+                    accessibilityLabel="Session check"
+                    style={styles.stage}
+                  />
                 ) : route === 'Home' && !homeChatOpen ? (
                   desktopWorkspace ? (
                     homeDesktop
@@ -1071,7 +1076,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   );
 
   const macDestinationMenu =
-    macMenuOpen && !onboardingRequired ? (
+    macMenuOpen && onboardingRequired === false ? (
       <Sheet
         onDismiss={() => setMacMenuOpen(false)}
         onSelect={destination => {

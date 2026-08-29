@@ -6,7 +6,9 @@ export function useOnboarding(
   refreshReads: (initial: boolean) => Promise<void>,
 ) {
   const [signingIn, setSigningIn] = useState(false);
-  const [onboardingRequired, setOnboardingRequired] = useState(false);
+  const [onboardingRequired, setOnboardingRequired] = useState<boolean | null>(
+    macDesktop ? null : false,
+  );
 
   useEffect(() => {
     let active = true;

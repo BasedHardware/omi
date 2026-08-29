@@ -67,7 +67,7 @@ test('gates the macOS search toolbar off first-run onboarding', () => {
 
   expect(orchestrator).toContain('onboardingRequired');
   expect(orchestrator).toMatch(
-    /macDesktop\s*\?\s*onboardingRequired\s*\?\s*null\s*:\s*macDesktopNav|macDesktop\s*&&\s*!onboardingRequired\s*\?\s*macDesktopNav/,
+    /onboardingRequired === false\s*\?\s*macDesktopNav\s*:\s*null/,
   );
 });
 
