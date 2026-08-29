@@ -81,6 +81,10 @@ struct ChatInputView: View {
   var onAttachmentsAdded: (([URL]) -> Void)? = nil
   /// Called when the user removes a staged attachment chip.
   var onAttachmentRemoved: ((String) -> Void)? = nil
+  /// Sources staged by a page action. They are shown above the editor and are
+  /// intentionally independent from file uploads.
+  var references: [ChatComposerReference] = []
+  var onReferenceRemoved: ((String) -> Void)? = nil
   /// Shows the push-to-talk mic button. Clicking it drives the same
   /// `PushToTalkManager` turn the keyboard shortcut does.
   var showsPushToTalk: Bool = true
@@ -104,6 +108,14 @@ struct ChatInputView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      if !references.isEmpty {
+        ChatComposerReferenceRow(
+          references: references,
+          onRemove: { id in onReferenceRemoved?(id) }
+        )
+        .accessibilityIdentifier("chat-composer-references")
+      }
+
       if attachmentsEnabled && !currentAttachments.isEmpty {
         AttachmentPreviewRow(
           attachments: currentAttachments,
@@ -358,6 +370,30 @@ struct AttachmentPreviewRow: View {
       .padding(.vertical, OmiSpacing.hairline)
     }
     .frame(maxHeight: 80)
+  }
+}
+
+/// Removable source chips staged by a page action. This intentionally shares
+/// the attachment row's placement above the text editor, but keeps references
+/// separate from file uploads so a source selection never enters the upload
+/// pipeline or submits an empty message.
+struct ChatComposerReferenceRow: View {
+  let references: [ChatComposerReference]
+  let onRemove: (String) -> Void
+
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: OmiSpacing.sm) {
+        ForEach(references) { reference in
+          ChatConversationReferencePill(
+            reference: reference,
+            onRemove: { onRemove(reference.id) })
+        }
+      }
+      .padding(.horizontal, OmiSpacing.hairline)
+      .padding(.vertical, OmiSpacing.hairline)
+    }
+    .frame(maxHeight: 42)
   }
 }
 
