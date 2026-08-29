@@ -278,8 +278,8 @@ final class VoiceTurnCoordinator {
     return true
   }
 
-  /// Refresh the native-output inactivity watchdog after a successfully
-  /// scheduled PCM chunk. A matching lease is required so delayed audio from a
+  /// Refresh the native-output inactivity watchdog after a PCM buffer is
+  /// physically played. A matching lease is required so delayed audio from a
   /// replaced turn cannot prolong the current response.
   @discardableResult
   func noteOutputProgress(_ lease: VoiceOutputLease) -> Bool {

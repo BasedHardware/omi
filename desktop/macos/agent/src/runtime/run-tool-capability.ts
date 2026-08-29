@@ -285,7 +285,7 @@ export class RunToolCapabilityBroker {
     };
     const snapshot = buildToolAvailabilitySnapshot(adapterProjection, projectionContext);
     // Realtime-voice runs invoke Swift-executed voice tools that no chat
-    // adapter advertises (ask_higher_model, point_click, …). Authorize the
+    // adapter advertises (think_deeper, point_click, …). Authorize the
     // run's surface projection alongside the adapter projection so the
     // allowlist matches the tools the surface actually offers the provider.
     const surfaceTools = REALTIME_VOICE_SURFACE_KINDS.has(persisted.surfaceKind)

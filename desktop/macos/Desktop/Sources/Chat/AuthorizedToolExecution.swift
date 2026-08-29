@@ -214,7 +214,10 @@ struct AuthorizedToolExecution: @unchecked Sendable {
     }
     let canonical = try JSONSerialization.data(
       withJSONObject: input,
-      options: [.sortedKeys])
+      // Node's JSON.stringify leaves forward slashes unescaped. Match that
+      // byte-for-byte so natural tool arguments containing paths, URLs, or
+      // phrases such as "memories/conversations" keep their kernel hash.
+      options: [.sortedKeys, .withoutEscapingSlashes])
     let digest = SHA256.hash(data: canonical)
       .map { String(format: "%02x", $0) }
       .joined()

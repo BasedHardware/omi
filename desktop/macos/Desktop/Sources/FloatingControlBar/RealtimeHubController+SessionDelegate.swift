@@ -510,6 +510,18 @@ extension RealtimeHubController {
     guard let tool = HubTool(rawValue: command.canonicalToolName) else {
       return .failed(Self.authorizedRealtimeToolError(code: "unsupported_realtime_tool"))
     }
+    // The runtime has now authorized this exact invocation. Acknowledge only
+    // here—not when the provider merely proposes the function call—so rejected
+    // tools never claim that work has started.
+    if let acknowledgement = RealtimeSlowToolAcknowledgementKind(
+      toolName: command.canonicalToolName),
+      let acknowledgementProvider = sessionProvider
+    {
+      prepareVoiceOutputForDeterministicSlowToolAcknowledgement()
+      FloatingBarVoicePlaybackService.shared.speakRealtimeSlowToolAcknowledgement(
+        acknowledgement,
+        provider: acknowledgementProvider)
+    }
     switch tool {
     case .getTasks:
       await TasksStore.shared.loadDashboardTasks(expectedOwnerID: command.ownerID)
@@ -526,21 +538,22 @@ extension RealtimeHubController {
       if !today.isEmpty { output += "Due today (\(today.count)):\n\(list(today))\n" }
       return .succeeded(output.isEmpty ? "No tasks overdue or due today." : output)
 
-    case .askHigherModel:
+    case .thinkDeeper:
       let query = (command.input["query"] as? String) ?? turnTranscript
       let toolContext = (command.input["context"] as? String) ?? ""
-      let kernelContext = voiceSessionContext(for: currentOwnerScope)
-      guard kernelContext.isResolved else {
-        return .failed(Self.authorizedRealtimeToolError(code: "kernel_context_unavailable"))
-      }
       return await escalateToHigherModel(
         query,
-        kernelSemanticGuidance: kernelContext.semanticGuidance,
-        kernelContext: kernelContext.rendered,
-        stableCacheIdentity: kernelContext.stableCacheIdentity,
-        dynamicContextIdentity: kernelContext.dynamicContextIdentity,
-        contextPlanID: kernelContext.planID,
         toolContext: toolContext,
+        invocationID: command.invocationID,
+        ownerID: command.ownerID)
+
+    case .webSearch:
+      let query = (command.input["query"] as? String) ?? turnTranscript
+      let toolContext = (command.input["context"] as? String) ?? ""
+      return await searchPublicWeb(
+        query,
+        toolContext: toolContext,
+        invocationID: command.invocationID,
         ownerID: command.ownerID)
 
     case .screenshot:
@@ -760,11 +773,9 @@ extension RealtimeHubController {
     }
     audioReceivedThisTurn = true
     realtimePlaybackEpoch = pcmPlayer.playbackEpoch
-    // The reducer's drain deadline is an inactivity watchdog. Refresh it only
-    // after this exact PCM chunk reached the player, so long healthy native
-    // replies are not cut off at a fixed duration while a stalled stream still
-    // fails closed.
-    _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
+    // Network arrival is not physical playback progress: Gemini can deliver a
+    // long tail faster than AVAudioPlayerNode renders it. StreamingPCMPlayer's
+    // fenced `.dataPlayedBack` callback refreshes the inactivity watchdog.
     responseGlowGate.markPlaybackActive(lease: lease)
   }
 
@@ -848,6 +859,14 @@ extension RealtimeHubController {
         turnID: turnID,
         identity: toolIdentity,
         callID: VoiceToolCallID(callId)))
+    if name == HubTool.thinkDeeper.rawValue || name == HubTool.webSearch.rawValue {
+      VoiceTurnCoordinator.shared.publish(
+        .toolDeadlineClassSelectedScoped(
+          turnID: turnID,
+          identity: toolIdentity,
+          callID: VoiceToolCallID(callId),
+          deadlineClass: .chatLane))
+    }
     guard
       VoiceTurnCoordinator.shared.isToolEffectActive(
         turnID: turnID,
@@ -1182,6 +1201,7 @@ extension RealtimeHubController {
 
   func clearRealtimeToolTracking() {
     realtimeToolTurnEpoch += 1
+    FloatingControlBarManager.shared.cancelActiveRealtimeChatLaneInvocation()
     toolEffectIdentityByTransportKey.removeAll()
     DesktopDiagnosticsManager.shared.clearVoiceToolStarts()
     authorizedRealtimeInvocations.removeAll()
