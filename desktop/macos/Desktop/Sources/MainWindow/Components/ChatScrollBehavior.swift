@@ -126,6 +126,7 @@ private final class ScrollDetectorHostView: NSView {
 /// keyboard scroll-navigation on the enclosing NSScrollView.
 struct UserScrollDetector: NSViewRepresentable {
   let onUserScroll: () -> Void
+  var onUserScrollEnded: () -> Void = {}
   var onScrollSettledAtBottom: () -> Void = {}
 
   func makeNSView(context: Context) -> NSView {
@@ -149,11 +150,16 @@ struct UserScrollDetector: NSViewRepresentable {
   }
 
   func makeCoordinator() -> Coordinator {
-    Coordinator(onUserScroll: onUserScroll, onScrollSettledAtBottom: onScrollSettledAtBottom)
+    Coordinator(
+      onUserScroll: onUserScroll,
+      onUserScrollEnded: onUserScrollEnded,
+      onScrollSettledAtBottom: onScrollSettledAtBottom
+    )
   }
 
   final class Coordinator: NSObject, @unchecked Sendable {
     let onUserScroll: () -> Void
+    let onUserScrollEnded: () -> Void
     let onScrollSettledAtBottom: () -> Void
     private var monitor: Any?
     private weak var installedScrollView: NSScrollView?
@@ -169,6 +175,7 @@ struct UserScrollDetector: NSViewRepresentable {
     /// delta, so a long lazy transcript is not invalidated while AppKit is
     /// still delivering momentum to its current scroll view.
     private var wheelGestureOwnsViewport = false
+    private var nativeLiveScrollIsActive = false
     private var willStartLiveScrollObservation: NSObjectProtocol?
     private var didEndLiveScrollObservation: NSObjectProtocol?
     private var verticalWheelPassthroughObservation: NSObjectProtocol?
@@ -184,8 +191,13 @@ struct UserScrollDetector: NSViewRepresentable {
       119,  // End
     ]
 
-    init(onUserScroll: @escaping () -> Void, onScrollSettledAtBottom: @escaping () -> Void) {
+    init(
+      onUserScroll: @escaping () -> Void,
+      onUserScrollEnded: @escaping () -> Void = {},
+      onScrollSettledAtBottom: @escaping () -> Void
+    ) {
       self.onUserScroll = onUserScroll
+      self.onUserScrollEnded = onUserScrollEnded
       self.onScrollSettledAtBottom = onScrollSettledAtBottom
     }
 
@@ -220,7 +232,7 @@ struct UserScrollDetector: NSViewRepresentable {
           object: targetScrollView,
           queue: .main
         ) { [weak self] _ in
-          self?.beginUserScroll()
+          self?.beginNativeLiveScroll()
         }
         didEndLiveScrollObservation = NotificationCenter.default.addObserver(
           forName: NSScrollView.didEndLiveScrollNotification,
@@ -228,7 +240,7 @@ struct UserScrollDetector: NSViewRepresentable {
           queue: .main
         ) { [weak self, weak targetScrollView] _ in
           guard let self, let targetScrollView else { return }
-          self.finishUserScroll(on: targetScrollView)
+          self.finishNativeLiveScroll(on: targetScrollView)
         }
         verticalWheelPassthroughObservation = NotificationCenter.default.addObserver(
           forName: .chatVerticalWheelPassthrough,
@@ -238,7 +250,8 @@ struct UserScrollDetector: NSViewRepresentable {
           guard let self, let targetScrollView else { return }
           self.beginUserScroll()
           if let event = notification.userInfo?["event"] as? NSEvent,
-            event.phase.isEmpty, event.momentumPhase.isEmpty
+            event.phase.isEmpty, event.momentumPhase.isEmpty,
+            !self.nativeLiveScrollIsActive
           {
             self.scheduleUnphasedWheelEnd(for: targetScrollView)
           }
@@ -260,7 +273,9 @@ struct UserScrollDetector: NSViewRepresentable {
               guard targetScrollView.bounds.contains(wheelLocation) else { break }
               if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
                 self.beginUserScroll()
-                if event.phase.isEmpty, event.momentumPhase.isEmpty {
+                if event.phase.isEmpty, event.momentumPhase.isEmpty,
+                  !self.nativeLiveScrollIsActive
+                {
                   self.scheduleUnphasedWheelEnd(for: targetScrollView)
                 }
               }
@@ -303,6 +318,7 @@ struct UserScrollDetector: NSViewRepresentable {
         pressOriginScrollTop = nil
         pressCandidateOwnsViewport = false
         wheelGestureOwnsViewport = false
+        nativeLiveScrollIsActive = false
         if let willStartLiveScrollObservation {
           NotificationCenter.default.removeObserver(willStartLiveScrollObservation)
         }
@@ -389,6 +405,16 @@ struct UserScrollDetector: NSViewRepresentable {
       onUserScroll()
     }
 
+    private func beginNativeLiveScroll() {
+      nativeLiveScrollIsActive = true
+      beginUserScroll()
+    }
+
+    private func finishNativeLiveScroll(on scrollView: NSScrollView) {
+      nativeLiveScrollIsActive = false
+      finishUserScroll(on: scrollView)
+    }
+
     private func finishUserScroll(on scrollView: NSScrollView) {
       settleWorkItem?.cancel()
       settleWorkItem = nil
@@ -397,9 +423,11 @@ struct UserScrollDetector: NSViewRepresentable {
       // transaction. Read the final clip bounds on the next main turn, after
       // the scroll view has committed its terminal position.
       let workItem = DispatchWorkItem { [weak self, weak scrollView] in
-        guard let self, let scrollView, Self.isAtBottom(scrollView) else { return }
-        self.onScrollSettledAtBottom()
+        guard let self else { return }
+        self.onUserScrollEnded()
         self.settleWorkItem = nil
+        guard let scrollView, Self.isAtBottom(scrollView) else { return }
+        self.onScrollSettledAtBottom()
       }
       settleWorkItem = workItem
       DispatchQueue.main.async(execute: workItem)
@@ -414,6 +442,7 @@ struct UserScrollDetector: NSViewRepresentable {
       let workItem = DispatchWorkItem { [weak self, weak scrollView] in
         guard let self else { return }
         self.wheelGestureOwnsViewport = false
+        self.onUserScrollEnded()
         guard let scrollView, Self.isAtBottom(scrollView) else {
           self.settleWorkItem = nil
           return
@@ -435,9 +464,11 @@ struct UserScrollDetector: NSViewRepresentable {
       // never use this timer because momentum can outlive it.
       settleWorkItem?.cancel()
       let workItem = DispatchWorkItem { [weak self, weak scrollView] in
-        guard let self, let scrollView, Self.isAtBottom(scrollView) else { return }
-        self.onScrollSettledAtBottom()
+        guard let self else { return }
+        self.onUserScrollEnded()
         self.settleWorkItem = nil
+        guard let scrollView, Self.isAtBottom(scrollView) else { return }
+        self.onScrollSettledAtBottom()
       }
       settleWorkItem = workItem
       DispatchQueue.main.asyncAfter(
@@ -583,7 +614,6 @@ struct ChatScrollContainer<Content: View>: View {
   @State private var userIsScrolling = false
   @State private var hasActivityBelow = false
   @State private var scrollThrottleWorkItem: DispatchWorkItem?
-  @State private var userScrollEndWorkItem: DispatchWorkItem?
   @State private var settleWorkItems: [DispatchWorkItem] = []
   @State private var lastViewportSize: CGSize = .zero
   @State private var lastFollowScrollTime: TimeInterval?
@@ -634,18 +664,9 @@ struct ChatScrollContainer<Content: View>: View {
       userIsScrolling = true
       hasActivityBelow = false
       cancelAllPendingScrolls()
-      let endWork = DispatchWorkItem {
-        userIsScrolling = false
-      }
-      userScrollEndWorkItem = endWork
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
-    } onScrollSettledAtBottom: {
-      // Same contract as ChatMessagesView: the detector only reports a settle
-      // once the input finished, so release the wall-clock latch here rather
-      // than consulting it — it is still true on this very run-loop turn.
-      userScrollEndWorkItem?.cancel()
-      userScrollEndWorkItem = nil
+    } onUserScrollEnded: {
       userIsScrolling = false
+    } onScrollSettledAtBottom: {
       guard
         ChatScrollLiveEdge.canResumeFollowing(
           source: .settledUserScroll,
@@ -777,8 +798,6 @@ struct ChatScrollContainer<Content: View>: View {
     scrollThrottleWorkItem?.cancel()
     scrollThrottleWorkItem = nil
     if hasQueuedFollowScroll { hasQueuedFollowScroll = false }
-    userScrollEndWorkItem?.cancel()
-    userScrollEndWorkItem = nil
     for item in settleWorkItems {
       item.cancel()
     }

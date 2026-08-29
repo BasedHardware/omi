@@ -156,6 +156,13 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     harness.performUpwardGesture(events: 30, endGesture: false)
     let readerPosition = harness.scrollTop
 
+    // Keep the native live-scroll transaction open beyond the old 300 ms
+    // ownership timer. A slow SwiftUI update or a brief pause during a real
+    // trackpad gesture must not make the viewport available to send-start.
+    harness.pump(0.4)
+    XCTAssertEqual(
+      harness.scrollTop, readerPosition, accuracy: 4,
+      "an open live-scroll transaction must retain the reader's viewport")
     harness.model.isSending = true
     harness.pump(0.7)
 
@@ -765,6 +772,13 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
           wheel1: deltaY, wheel2: 0, wheel3: 0)
       else { return nil }
       cgEvent.setIntegerValueField(isContinuousField, value: 1)
+      // These events sit inside the explicit AppKit live-scroll transaction
+      // posted by the gesture helpers. Mark them as phased trackpad updates so
+      // the detector does not also arm its classic-wheel timeout fallback.
+      cgEvent.setIntegerValueField(
+        .scrollWheelEventScrollPhase,
+        value: Int64(NSEvent.Phase.changed.rawValue)
+      )
       guard let event = NSEvent(cgEvent: cgEvent) else { return nil }
       // A CGEvent-derived NSEvent carries no window, so production's
       // `event.window == scrollView.window` guard would drop it. Give it the
