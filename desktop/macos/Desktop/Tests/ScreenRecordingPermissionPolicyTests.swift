@@ -149,13 +149,32 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
   }
 
   @MainActor
+  func testAccessibilityDragHelperOnlySkipsAWorkingGrant() {
+    XCTAssertTrue(
+      PermissionDragGuidance.accessibilityGrantIsUsable(
+        AccessibilityProbeSignals(tccTrusted: true, axProbe: .working)))
+    XCTAssertTrue(
+      PermissionDragGuidance.accessibilityGrantIsUsable(
+        AccessibilityProbeSignals(tccTrusted: false, axProbe: .working)),
+      "A functional AX call overrides a stale false TCC read")
+    XCTAssertFalse(
+      PermissionDragGuidance.accessibilityGrantIsUsable(
+        AccessibilityProbeSignals(tccTrusted: false, axProbe: .indeterminate)),
+      "An off toggle with no working AX evidence still needs guidance")
+    XCTAssertFalse(
+      PermissionDragGuidance.accessibilityGrantIsUsable(
+        AccessibilityProbeSignals(tccTrusted: true, axProbe: .failing)),
+      "A stale or broken TCC grant still needs repair guidance")
+  }
+
+  @MainActor
   func testDragHelperDirectsUsersToTheAppListWithoutClaimingExactBounds() {
     XCTAssertEqual(
       CloudConnectorGuidanceOverlay.dragInstructionText(appName: "Omi"),
       "Drag Omi into the app list")
     XCTAssertEqual(
       CloudConnectorGuidanceOverlay.dragInstructionAccessibilityText(appName: "Omi"),
-      "Press and drag Omi into the Screen & System Audio Recording app list, then release")
+      "Press and drag Omi into the privacy permission app list, then release")
   }
 
   /// Regression for the reported detached icon: the draggable source must begin

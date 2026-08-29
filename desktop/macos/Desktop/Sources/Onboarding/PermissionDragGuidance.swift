@@ -3,22 +3,25 @@ import AppKit
 @MainActor
 enum PermissionDragGuidance {
   enum Permission: Sendable {
+    case accessibility
     case screenRecording
     case fullDiskAccess
   }
 
   private static var lastPresentedAt: Date?
 
-  /// Open the Accessibility privacy pane. Accessibility already registers Omi's
-  /// row when the app asks for access, so this flow only needs the user to turn
-  /// that row on. The draggable app card is reserved for permissions where
-  /// dropping the bundle into the list is itself a valid grant path.
+  /// Open the Accessibility privacy pane and offer the draggable app card when
+  /// the grant is genuinely absent. A named or re-signed bundle can need to be
+  /// added again, while an already-working grant should never be requested twice.
   @discardableResult
   static func openAccessibilitySettings(
     isAuthorized: () -> Bool = { true },
     open: (URL) -> Bool = { NSWorkspace.shared.open($0) },
     suspendForPermissionPrompt: () -> Void = {
       ShellSummon.suspendForPermissionPrompt()
+    },
+    presentDragGuidance: () -> Void = {
+      Task { await PermissionDragGuidance.presentDragToGrantHelper(for: .accessibility) }
     }
   ) -> Bool {
     guard
@@ -29,6 +32,7 @@ enum PermissionDragGuidance {
     guard isAuthorized() else { return false }
     suspendForPermissionPrompt()
     guard open(url) else { return false }
+    presentDragGuidance()
     return true
   }
 
@@ -93,8 +97,19 @@ enum PermissionDragGuidance {
     !permissionGranted
   }
 
+  static func accessibilityGrantIsUsable(_ signals: AccessibilityProbeSignals) -> Bool {
+    let projection = AppState.accessibilityProjection(signals)
+    return projection.hasPermission && !projection.isBroken
+  }
+
   private static func isGranted(_ permission: Permission) async -> Bool {
     switch permission {
+    case .accessibility:
+      let targets = AppState.accessibilityProbeTargets()
+      let signals = await Task.detached(priority: .userInitiated) {
+        AppState.probeAccessibilitySignals(targets: targets)
+      }.value
+      return accessibilityGrantIsUsable(signals)
     case .screenRecording:
       return ScreenCaptureService.checkPermission()
     case .fullDiskAccess:

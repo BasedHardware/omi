@@ -411,7 +411,7 @@ final class CloudConnectorGuidanceOverlay {
   }
 
   static func dragInstructionAccessibilityText(appName: String) -> String {
-    "Press and drag \(appName) into the Screen & System Audio Recording app list, then release"
+    "Press and drag \(appName) into the privacy permission app list, then release"
   }
 
   static func dragToGrantAutomationState(
@@ -988,8 +988,15 @@ private struct ScreenRecordingDragCardView: View {
 
       VStack(spacing: 7) {
         Image(systemName: direction.systemImage)
-          .scaledFont(size: 14, weight: .bold)
-          .foregroundColor(Ink.secondary.opacity(hintUp ? 1 : 0.6))
+          .scaledFont(size: 15, weight: .black)
+          .foregroundStyle(Color.white)
+          .padding(7)
+          .background(Circle().fill(Color.black.opacity(hintUp ? 0.9 : 0.78)))
+          .overlay(
+            Circle()
+              .stroke(Color.white.opacity(hintUp ? 0.95 : 0.78), lineWidth: 1.5)
+          )
+          .shadow(color: Color.black.opacity(0.65), radius: 4, y: 2)
           .offset(hintOffset)
 
         ZStack {
