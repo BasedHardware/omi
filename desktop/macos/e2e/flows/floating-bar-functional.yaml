@@ -22,6 +22,15 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectAttention.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectCopyBudget.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectDisplayDuration.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectDisplayTimer.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectFeature.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectGraceWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyHint.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectSuggestionFeedbackStore.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectVoiceFeedbackRouting.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
