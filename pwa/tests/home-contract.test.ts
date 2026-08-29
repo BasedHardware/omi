@@ -55,7 +55,28 @@ test("browser root gives the canonical RN surface the full viewport", async () =
   expect(styles).toContain("height: 100%");
   expect(styles).toContain("min-height: 100dvh");
   expect(styles).toContain("#app > div");
-  expect(styles).toContain("background: #141414");
+  expect(styles).toContain("--omi-web-canvas: #0b0f17");
+  expect(styles).toContain("--omi-web-surface: #1a1f2e");
+  expect(styles).toContain("--omi-web-accent: #6c8eef");
+  expect(styles).toContain("overflow: auto");
+  expect(styles).not.toContain("background: #141414");
+});
+
+test("install metadata presents Omi as a finished product", async () => {
+  const html = await readFile(resolve(root, "index.html"), "utf8");
+  const manifest = JSON.parse(
+    await readFile(resolve(root, "public/manifest.webmanifest"), "utf8")
+  );
+
+  expect(html).toContain("<title>Omi</title>");
+  expect(html).not.toContain("Omi v5");
+  expect(manifest).toMatchObject({
+    background_color: "#0b0f17",
+    name: "Omi",
+    short_name: "Omi",
+    theme_color: "#0b0f17",
+  });
+  expect(manifest.description).not.toBe("Omi v5");
 });
 
 test("service worker installs the built application shell for an offline first restart", async () => {

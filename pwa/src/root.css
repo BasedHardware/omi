@@ -1,21 +1,118 @@
+:root {
+  --omi-web-canvas: #0b0f17;
+  --omi-web-canvas-raised: #0f1420;
+  --omi-web-surface: #1a1f2e;
+  --omi-web-surface-hover: #242938;
+  --omi-web-accent: #6c8eef;
+  --omi-web-text: #f7f8fb;
+  --omi-web-text-muted: #aeb6c5;
+  --omi-web-line: rgba(255, 255, 255, 0.08);
+  color-scheme: dark;
+  font-family: Avenir Next, Avenir, ui-rounded, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 html,
 body,
 #app {
-  height: 100%;
+  min-height: 100%;
   margin: 0;
 }
 
+html {
+  background: var(--omi-web-canvas);
+}
+
 body {
-  background: #141414;
-  color-scheme: dark;
-  overflow: hidden;
+  min-width: 320px;
+  background: radial-gradient(
+      circle at 50% -16rem,
+      rgba(108, 142, 239, 0.18),
+      transparent 42rem
+    ),
+    linear-gradient(
+      180deg,
+      var(--omi-web-canvas-raised),
+      var(--omi-web-canvas) 28rem
+    );
+  color: var(--omi-web-text);
+  overflow: auto;
+  overscroll-behavior: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--omi-web-accent);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: rgba(108, 142, 239, 0.34);
+  color: var(--omi-web-text);
 }
 
 #app {
   min-height: 100dvh;
+  isolation: isolate;
 }
 
 #app > div {
-  height: 100%;
   min-height: 100dvh;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--omi-web-canvas);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3b4252;
+  border: 3px solid var(--omi-web-canvas);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #515b70;
+}
+
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
