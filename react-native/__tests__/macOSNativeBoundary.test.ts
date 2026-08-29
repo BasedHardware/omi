@@ -353,7 +353,6 @@ test('clears the leftover loopback tab and returns the user to the app', () => {
   );
 });
 
-
 test('fences overlapping native macOS sign-in attempts', () => {
   const auth = readNativeSource('OmiAuthModule.mm');
 
