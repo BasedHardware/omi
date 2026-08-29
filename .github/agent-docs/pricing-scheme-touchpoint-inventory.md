@@ -24,13 +24,13 @@ This repo already has an in-flight catalog migration — `docs/agents/plan-sourc
 |---|---|---|
 | `desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift` (line 198-206) | hardcoded_amount | Likely dead, but Yes if reachable — stale "$199/month Omi Pro" alert, plan name doesn't match any current tier |
 | `desktop/macos/Desktop/Sources/Providers/ChatProvider.swift` (line 2959,4341,5340) | hardcoded_amount | Yes — literal $50 free-tier spend cap duplicated at 3 call sites |
-| `...Settings/Components/SettingsContentView+BillingHelpers.swift:30` (comment) | hardcoded_amount | Yes (comment) — "Neo ($20) \| Operator ($49) \| Architect ($200)" |
-| `...BillingHelpers.swift:137-148` `planSubtitle` | feature_limit_number | Yes — fallback subtitle question counts, only shown when catalog omits `subtitle` |
-| `...BillingHelpers.swift:191-202` `planDescription` | feature_limit_number | Yes — fallback descriptions; also fix internal inconsistency (100 vs 200 for "unlimited") while updating |
-| `...BillingHelpers.swift:239-265` `fallbackFeatures` | feature_limit_number | Yes — includes literal "~$400 of monthly AI compute" and question counts |
-| `...Sections/SettingsContentView+AccountBilling.swift:342-345` | hardcoded_amount | Yes — fallback deprecation banner hardcodes "$49/mo" Operator price |
-| `...BillingHelpers.swift:178-189` `planEyebrow` | plan_name_or_tier_copy | Yes — fallback marketing eyebrow text per plan id |
-| `...BillingHelpers.swift:284-320` `planCatalog(from:)` + `normalizedPlanId` (267-282) | plan_name_or_tier_copy | Yes — fallback title mapping/keyword matching for plan display names |
+| `...Settings/Components/SettingsContentView+BillingHelpers.swift:34` (comment) | hardcoded_amount | Yes (comment) — "Neo ($20) \| Operator ($49) \| Architect ($200)" |
+| `...BillingHelpers.swift:141-152` `planSubtitle` | feature_limit_number | Yes — fallback subtitle question counts, only shown when catalog omits `subtitle`. Now `static` for testability |
+| `...BillingHelpers.swift:195-206` `planDescription` | feature_limit_number | Yes — fallback descriptions; internal inconsistency (100 vs 200 for "unlimited") fixed in this PR. Now `static` for testability |
+| `...BillingHelpers.swift:243-269` `fallbackFeatures` | feature_limit_number | Yes — includes literal "~$400 of monthly AI compute" and question counts. Now `static` for testability |
+| `...Sections/SettingsContentView+AccountBilling.swift:342-345` | hardcoded_amount | Fixed in this PR — was a bare "$49/mo" literal, now reads `operatorDeprecationFallbackPrice`, a single named constant |
+| `...BillingHelpers.swift:182-193` `planEyebrow` | plan_name_or_tier_copy | Yes — fallback marketing eyebrow text per plan id. Now `static` for testability |
+| `...BillingHelpers.swift:288-324` `planCatalog(from:)` + `normalizedPlanId` (271-286) | plan_name_or_tier_copy | Yes — fallback title mapping/keyword matching for plan display names |
 | `...Sections/SettingsContentView+AccountBilling.swift:102-128` | other | Only if resurrected — dead/commented "Upgrade to Pro" card with stale marketing URL |
 | `desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift` (line 370) (comment) | hardcoded_amount | Yes (comment only) — "$400/mo" example for Architect |
 | `desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarUsageLimiter.swift` (line 15-27) `proactiveBudgetMultiplier` | config_value | Yes, if tiers/entitlements restructured — plan-tier-keyed multiplier constants |
@@ -53,9 +53,9 @@ This repo already has an in-flight catalog migration — `docs/agents/plan-sourc
 
 | Location | Kind | Needs update when prices/tiers change? |
 |---|---|---|
-| `desktop/windows/src/renderer/src/lib/billing.ts` (line 358-395) `PLAN_FALLBACKS` | feature_limit_number | Yes — fallback eyebrow/subtitle/description/features (fix the 100-vs-200 "unlimited" inconsistency while updating) |
-| `.../components/settings/tabs/PlanUsageTab.tsx:227-229` | hardcoded_amount | Yes — fallback deprecation banner hardcodes "$49/mo" |
-| `desktop/windows/src/renderer/src/lib/billing.test.ts` (line 54-68,167-176,252,358-375,537-538,559) | test_fixture | Yes — full mock catalog with plan titles/prices baked into assertions |
+| `desktop/windows/src/renderer/src/lib/billing.ts` (line 362-399) `PLAN_FALLBACKS` | feature_limit_number | Yes — fallback eyebrow/subtitle/description/features; 100-vs-200 "unlimited" inconsistency fixed in this PR |
+| `.../components/settings/tabs/PlanUsageTab.tsx:228-230` | hardcoded_amount | Fixed in this PR — was a bare "$49/mo" literal, now reads `OPERATOR_DEPRECATION_FALLBACK_PRICE`, a single named constant |
+| `desktop/windows/src/renderer/src/lib/billing.test.ts` (line 54-68,167-176,252,358-372,546-547,568) | test_fixture | Yes — full mock catalog with plan titles/prices baked into assertions |
 | `desktop/windows/src/renderer/src/lib/chatQuotaGate.test.ts` (line 16,46,59,187) | test_fixture | Yes, if display names/quota model change |
 | `desktop/windows/src/renderer/src/lib/billingPlans.ts` (line 94-101) `PLAN_DISPLAY_NAMES` | plan_name_or_tier_copy | Yes — client-side authority for plan display names |
 | `desktop/windows/src/renderer/src/lib/billingPlans.ts` (line 20,80-86) alias/paid-ID sets | config_value | Yes, if plan IDs/aliases change |
@@ -68,11 +68,10 @@ This repo already has an in-flight catalog migration — `docs/agents/plan-sourc
 
 | Location | Kind | Needs update when prices/tiers change? |
 |---|---|---|
-| `web/app/src/components/settings/SettingsPage.tsx` (line 968-974,1192) `limits` object | feature_limit_number | Yes — hardcoded Basic free-tier caps instead of reading from `UserSubscriptionResponse` |
-| `SettingsPage.tsx:1178,1183-1184,1210` | feature_limit_number | Yes — literal "1,200 min" duplicated 3x for free-tier listening limit |
-| `SettingsPage.tsx:1140-1142,1150,1219-1241` | plan_name_or_tier_copy | Yes — Basic-plan "what's included" marketing copy is a silent duplicate of catalog entitlements |
-| `SettingsPage.tsx:1002-1008` `defaultFeatures` | plan_name_or_tier_copy | Yes — generic feature list shown for every paid plan, not per-plan sourced |
-| `web/app/src/components/settings/PlansSheet.tsx` (line 221-226) `defaultFeatures` | plan_name_or_tier_copy | Yes — second independent copy of the same generic feature list |
+| `web/app/src/components/settings/SettingsPage.tsx` (line 969-975,1185) `limits` object | feature_limit_number | Yes — hardcoded Basic free-tier caps instead of reading from `UserSubscriptionResponse` |
+| `SettingsPage.tsx:1171,1176-1177,1203` | feature_limit_number | Yes — literal "1,200 min" duplicated 3x for free-tier listening limit |
+| `SettingsPage.tsx:1133-1135,1143,1212-1234` | plan_name_or_tier_copy | Yes — Basic-plan "what's included" marketing copy is a silent duplicate of catalog entitlements |
+| `web/app/src/lib/planFeatures.ts` `DEFAULT_PLAN_FEATURES` | plan_name_or_tier_copy | Fixed in this PR — was two independent hardcoded copies (`SettingsPage.tsx` and `PlansSheet.tsx`), now one shared constant here |
 | `web/app/src/types/user.ts` (line 134-147) `planDisplayName` | plan_name_or_tier_copy | Yes — must stay in sync with plan_catalog.json naming |
 | `web/app/src/lib/api.ts` (line 2014-2017) `SegmentEditPlanRequiredError` | plan_name_or_tier_copy | Yes — hardcodes "Unlimited plan" as the gating tier |
 | `web/app/src/app/login/LoginClient.tsx` (line 234) | plan_name_or_tier_copy | Yes — referral headline hardcodes "Operator", independent of backend grant logic |
@@ -162,9 +161,7 @@ This repo already has an in-flight catalog migration — `docs/agents/plan-sourc
 
 ## Suggested next steps
 
-- Fix the two internal inconsistencies already found in *shipped* fallback copy now, independent of the new pricing decision: `SettingsContentView+BillingHelpers.swift` (100 vs 200 questions/month for "unlimited") and its Windows twin `PLAN_FALLBACKS` in `billing.ts` — these are bugs today, not migration work.
-- Wire a single source read for the three duplicated hardcoded "$49/mo Operator" deprecation-banner strings (mobile ARB, macOS `AccountBilling.swift:342-345`, Windows `PlanUsageTab.tsx:227-229`) into one shared constant or backend-supplied fallback, so a future price change is a one-line edit instead of a three-repo grep — do this behind the fallback path itself (it only fires when the API omits `deprecation_message`), no final numbers required yet.
-- Consolidate the two independent copies of the generic `defaultFeatures` list in `web/app/` (`SettingsPage.tsx` and `PlansSheet.tsx`) into one shared constant now — pure refactor, no pricing decision needed.
+- **Done in this PR:** the two internal inconsistencies in *shipped* fallback copy (`SettingsContentView+BillingHelpers.swift` and its Windows twin `PLAN_FALLBACKS` in `billing.ts` both said 100 in one place and 200 in another for "unlimited"/Neo's monthly question count — 200 is correct per `plan_catalog.json`); the hardcoded "$49/mo" in macOS `AccountBilling.swift` and Windows `PlanUsageTab.tsx` deprecation-banner fallbacks, now each a single named constant; and the two independent copies of `web/app`'s generic `defaultFeatures` list, now `web/app/src/lib/planFeatures.ts`. The mobile ARB `planDeprecationMessage` string was deliberately left as-is — no confirmed Dart call site, and rewriting it would touch ~49 untranslated locale files.
 - Do not touch actual dollar literals yet (Stripe price IDs, `usd_cent` allocations in `plan_catalog.json`, chart/env price IDs) until final tier numbers are decided — those are single-edit-point changes by design and premature edits risk drifting from the still-open Architect dev-ledger gap tracked in `plan-source-of-truth.md`.
 - Resolve the open Architect dev Stripe price-ID ledger gap (`test_available_plans_resilience.py` vs `plan_catalog.json`) before shipping any new pricing that touches dev testing — verify against the dev Stripe dashboard first, per the doc's own caveat.
 - Flag the stale "Unlimited→Pro" example in the `backend/routers/payment.py` docstring as a quick fix independent of the pricing rollout — it's leaking a non-existent plan name into public OpenAPI docs today.
