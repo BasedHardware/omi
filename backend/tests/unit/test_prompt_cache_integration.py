@@ -439,10 +439,19 @@ def _get_agentic_module():
         "search_knowledge",
         "read_playbook",
         "search_historical_facts",
+        "save_playbook",
+        "create_standing_trigger",
+        "close_fact_tool",
     ]
+    # ``close_fact_tool`` is the module attribute (matching the import
+    # statement in agentic.py), but the real LangChain tool overrides its
+    # runtime name to "close_fact" (see @tool("close_fact") in
+    # knowledge_ledger_write_tools.py). Mock the divergence explicitly so the
+    # stubbed CORE_TOOLS carries the same name the real JIT gating keys off.
+    tool_name_overrides = {"close_fact_tool": "close_fact"}
     for name in tool_names:
         mock_tool = MagicMock()
-        mock_tool.name = name
+        mock_tool.name = tool_name_overrides.get(name, name)
         # Add args_schema for _convert_tools to work
         mock_schema = MagicMock()
         mock_schema.schema.return_value = {"properties": {"query": {"type": "string"}}, "required": ["query"]}
@@ -673,10 +682,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_31_tools():
-    """CORE_TOOLS includes the explicit historical-facts tool; web search remains server-built-in."""
+def test_core_tools_has_34_tools():
+    """CORE_TOOLS includes the three JIT-gated ledger write verbs; web search remains server-built-in."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 31, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 31"
+    assert len(agentic_mod.CORE_TOOLS) == 34, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 34"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -699,9 +708,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 32
-    assert len(tools_b) == 31
-    assert len(agentic_mod.CORE_TOOLS) == 31, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 35
+    assert len(tools_b) == 34
+    assert len(agentic_mod.CORE_TOOLS) == 34, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -743,6 +752,9 @@ def test_core_tools_order_matches_exports():
         "search_knowledge",
         "read_playbook",
         "search_historical_facts",
+        "save_playbook",
+        "create_standing_trigger",
+        "close_fact",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
@@ -828,6 +840,29 @@ def test_historical_fact_tool_is_registered_after_policy_ratification():
     tool = next(tool for tool in agentic_mod.CORE_TOOLS if tool.name == "search_historical_facts")
     assert "search_historical_facts" in agentic_mod.STANDARD_TOOL_NAMES
     assert agentic_mod.get_tool_display_name(tool.name) == "Searching historical facts"
+
+
+def test_ledger_write_verbs_are_registered_as_jit_only_with_display_names():
+    """The three dormant ledger write verbs are wired as JIT-gated chat tools.
+
+    ``close_fact_tool`` is the Python identifier this stub mocks under; the
+    real tool's runtime name is ``close_fact`` (see JIT_ONLY_TOOL_NAMES in
+    ``utils/retrieval/agentic.py``), matching how ``look_at_frame_tool`` is
+    mocked here under its identifier while its real name is ``look_at_frame``.
+    """
+    agentic_mod = _get_agentic_module()
+
+    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+    schema_names = {schema.get("name") for schema in tool_schemas}
+    for name, display in (
+        ("save_playbook", "Saving playbook"),
+        ("create_standing_trigger", "Creating standing trigger"),
+        ("close_fact", "Closing fact"),
+    ):
+        assert name in schema_names
+        assert name in tool_registry
+        assert name in agentic_mod.JIT_ONLY_TOOL_NAMES
+        assert agentic_mod.get_tool_display_name(name) == display
 
 
 def test_convert_tools_defers_app_tools():
