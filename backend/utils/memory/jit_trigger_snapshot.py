@@ -12,7 +12,7 @@ from typing import Any
 
 from google.cloud.firestore_v1 import FieldFilter
 
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client
 from database.memory_collections import MemoryCollections
 from models.jit_proactivity import is_jit_trigger_paid_authority
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryKind
@@ -172,7 +172,7 @@ def read_authoritative_trigger_snapshot(
     snapshot incomplete so ambient work cannot outrank an unseen planned action.
     """
 
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     head = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)
     try:
         account_generation = head.require_account_generation()
