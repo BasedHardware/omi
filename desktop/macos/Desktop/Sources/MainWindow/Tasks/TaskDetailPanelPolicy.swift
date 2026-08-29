@@ -79,13 +79,14 @@ struct TaskDetailPanelState: Equatable {
 enum TaskDetailPanelPresentationPolicy {
   static func showsHoverActions(
     isRowHovering: Bool,
+    isKeyboardSelected: Bool = false,
     isMultiSelectMode: Bool,
     isDeletedTask: Bool,
     isTextFieldFocused: Bool,
     isDetailPanelPresented: Bool
   ) -> Bool {
     guard !isDetailPanelPresented else { return false }
-    return isRowHovering
+    return (isRowHovering || isKeyboardSelected)
       && !isMultiSelectMode
       && !isDeletedTask
       && !isTextFieldFocused

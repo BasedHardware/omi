@@ -507,6 +507,18 @@ enum AgentClient {
       await bridge.interrupt()
     }
 
+    func bindRealtimeChatLaneInterrupt(_ identity: String) async {
+      await bridge.bindRealtimeChatLaneInterrupt(identity)
+    }
+
+    func unbindRealtimeChatLaneInterrupt(_ identity: String) async {
+      await bridge.unbindRealtimeChatLaneInterrupt(identity)
+    }
+
+    func interruptRealtimeChatLane(identity: String) async {
+      await bridge.interruptRealtimeChatLane(identity: identity)
+    }
+
     func query(
       prompt: String,
       surface: AgentSurfaceReference,

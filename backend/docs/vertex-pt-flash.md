@@ -38,6 +38,25 @@ same commit is the regression.
 BYOK Gemini stays on the user's key / AI Studio, and is never remapped: the
 user pays for the model they asked for.
 
+
+## Where the policy runs since the gateway move (2026-08)
+
+Company-paid desktop `generateContent` / `streamGenerateContent` /
+`embedContent` now hop the LLM gateway (`OMI_LLM_GATEWAY_FEATURE_MODE=gateway`):
+`routers/desktop_proxy.py` stays the BFF (auth, trial paywall, redis metering,
+body limits, model allowlist) and translates Gemini JSON ↔ the gateway's
+OpenAI surface (`utils/llm/desktop_gemini_gateway.py`). The PT policy itself —
+pin, promotion latch, overflow ladder, reachability table, the capacity
+header, and the regional vs multi-region host split — lives in the gateway's
+`VertexGeminiProvider` (`backend/llm_gateway/gateway/providers.py`), driven by
+the same `backend/utils/llm/vertex_pt_routing.py` this document describes:
+there is no second policy. The desktop proxy keeps its in-process copy only
+for the `FEATURE_MODE=off` kill-switch path. The gateway deployment must
+therefore keep `GOOGLE_CLOUD_PROJECT` and `GCP_LOCATION` set on the
+`llm_gateway` service too, and the operator env pins
+(`OMI_VERTEX_PT_MODEL`, `OMI_GEMINI_OVERFLOW_MODEL`,
+`OMI_GEMINI_OVERFLOW_ENABLED`, `OMI_VERTEX_GLOBAL_LOCATION`) apply to the
+**gateway** process once feature mode is on.
 ## Model prices (Vertex list, captured 2026-08-18)
 
 | Model | Input $/1M | Output $/1M |

@@ -234,6 +234,17 @@ final class TaskDetailPanelTests: XCTestCase {
         isDetailPanelPresented: false
       )
     )
+    XCTAssertTrue(
+      TaskDetailPanelPresentationPolicy.showsHoverActions(
+        isRowHovering: false,
+        isKeyboardSelected: true,
+        isMultiSelectMode: false,
+        isDeletedTask: false,
+        isTextFieldFocused: false,
+        isDetailPanelPresented: false
+      ),
+      "keyboard-selected rows need the same accessible action menu as hovered rows"
+    )
     XCTAssertFalse(
       TaskDetailPanelPresentationPolicy.showsHoverActions(
         isRowHovering: true,

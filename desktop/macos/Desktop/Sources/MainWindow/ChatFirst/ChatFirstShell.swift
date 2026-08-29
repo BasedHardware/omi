@@ -52,10 +52,7 @@ struct ChatFirstShell: View {
         appState: appState,
         memoriesViewModel: viewModelContainer.memoriesViewModel,
         tasksStore: viewModelContainer.tasksStore,
-        sinceDate: topBarSinceDate,
-        onRewind: {
-          navigation.selectMore(.rewind)
-        }
+        sinceDate: topBarSinceDate
       )
       // Route-specific identity guarantees every semantic navigation change
       // mounts a fresh destination root and runs its visibility acknowledgement.
@@ -210,9 +207,6 @@ struct ChatFirstShell: View {
         memoriesViewModel: viewModelContainer.memoriesViewModel,
         destinationRawValue: $memoryDestinationRawValue,
         onSelectDestination: selectHubDestination,
-        // The Activity spine's screenshot rows leave for Rewind through the
-        // shell that owns the route — without this the rows are inert here.
-        onOpenRewind: { navigation.selectMore(.rewind) },
         // The typed deep link, so a conversation opened from Activity arrives at the Conversations
         // host as a record rather than as an id the host has to find again. `selectPrimary` — what
         // the spine used to call — is the tab-selection primitive and drops pending records by
@@ -295,6 +289,10 @@ struct ChatFirstShell: View {
   }
 
   private func syncMemoryDestination(for route: ChatFirstRoute) {
+    if route == .more(.rewind) {
+      selectHubDestination(.rewind)
+      return
+    }
     if route == .memories, case .memory = navigation.pendingFocus {
       memoryDestinationRawValue = MemoryHubDestination.memories.rawValue
       return
@@ -391,19 +389,22 @@ struct ChatFirstShell: View {
   }
 }
 
-/// Chat-first keeps Home and Rewind as self-contained surfaces. All other mounted destinations
-/// receive the existing shared lane exactly once at the shell boundary.
+/// Chat-first passes through every destination that owns search/content panels. Older single-panel
+/// destinations receive the shared lane exactly once at the shell boundary.
 enum ChatFirstPageGlassLanePolicy {
   static func shouldWrap(_ route: ChatFirstRoute, memoryDestinationRawValue: Int? = nil) -> Bool {
     switch route {
     case .chat, .more(.dashboard), .more(.rewind):
       return false
     case .memories:
-      // The memory route mounts the hub, and Activity is the one hub page that builds Home's own
-      // two panels. Wrapping it puts glass inside glass and doubles the scrim.
-      return MemoryHubDestination(rawValue: memoryDestinationRawValue ?? -1) != .activity
-    case .conversations, .tasks, .goals,
-      .more(.apps), .more(.permissions), .more(.settings):
+      // Every Brain destination builds the shared search panel and navigation-first content panel.
+      guard let destination = MemoryHubDestination(rawValue: memoryDestinationRawValue ?? -1) else {
+        return true
+      }
+      return !MemoryHubDestination.allCases.contains(destination)
+    case .tasks, .more(.apps):
+      return false
+    case .conversations, .goals, .more(.permissions), .more(.settings):
       return true
     }
   }
@@ -416,7 +417,7 @@ enum ChatFirstPageGlassLanePolicy {
     case .conversations: return SidebarNavItem.conversations.rawValue
     case .tasks, .goals: return SidebarNavItem.tasks.rawValue
     case .memories: return SidebarNavItem.memories.rawValue
-    case .more(.rewind): return SidebarNavItem.rewind.rawValue
+    case .more(.rewind): return SidebarNavItem.conversations.rawValue
     case .more(.apps): return SidebarNavItem.apps.rawValue
     case .more(.permissions): return SidebarNavItem.permissions.rawValue
     case .more(.settings): return SidebarNavItem.settings.rawValue
@@ -682,7 +683,7 @@ enum ChatFirstModernNavigationPolicy {
       switch page {
       case .apps: return SidebarNavItem.apps.rawValue
       case .settings: return SidebarNavItem.settings.rawValue
-      case .rewind: return SidebarNavItem.rewind.rawValue
+      case .rewind: return SidebarNavItem.conversations.rawValue
       default: return SidebarNavItem.dashboard.rawValue
       }
     }
@@ -695,7 +696,7 @@ enum ChatFirstModernNavigationPolicy {
     case .tasks: return .tasks
     case .apps: return .more(.apps)
     case .settings: return .more(.settings)
-    case .rewind: return .more(.rewind)
+    case .rewind: return .memories
     default: return nil
     }
   }

@@ -32,18 +32,16 @@ enum RewindSearchLayout {
 
   /// **The gap.** The single most important number in this file.
   ///
-  /// Two panels 12 pt apart read as two objects; the same two at 0 read as one slab with a rule
-  /// through it. It is a hair under the 14 pt rung of `InkLayout.rhythm` on purpose: the panels have
-  /// their own shadows, and a shadow already reads as a few points of separation, so a rhythm gap on
-  /// top of one measures as too much air.
-  static let panelGap: CGFloat = 12
+  /// Eight points keeps the objects distinct without turning the shared search
+  /// shell into a large empty band above every destination.
+  static let panelGap: CGFloat = 8
 
   /// The corner is the shared one. Not restated as a number: a search panel and a settings card cut
   /// to two different radii read as two products, which is exactly why `InkGlass` owns it.
   static var panelCornerRadius: CGFloat { InkGlass.cornerRadius }
 
-  /// The query bar's height. Roomy — this is a place to type, not a control strip.
-  static let barHeight: CGFloat = 60
+  /// Matches the product-wide query bar so search does not change size by page.
+  static let barHeight: CGFloat = 48
 
   /// The results panel is **as tall as what is in it**, between these two bounds.
   ///
@@ -105,10 +103,10 @@ enum RewindSearchLayout {
   }
 
   /// The results panel's own header — the `Filter` row and the rule under it.
-  static let panelHeaderHeight: CGFloat = 44
+  static let panelHeaderHeight: CGFloat = 36
 
-  static let panelPaddingHorizontal: CGFloat = 20
-  static let panelPaddingVertical: CGFloat = 16
+  static let panelPaddingHorizontal: CGFloat = 14
+  static let panelPaddingVertical: CGFloat = 10
 
   /// Clear margin kept around the panels so the ambient shadow has room to fall off instead of being
   /// clipped at the surface's edge. Taken from the shadow itself, never guessed — a margin that stops
@@ -167,7 +165,7 @@ enum RewindSearchLayout {
   // The bar's own furniture.
 
   /// The glyph at the leading edge.
-  static let glyphSize: CGFloat = 22
+  static let glyphSize: CGFloat = 18
 
   /// Room the query chip may grow into before it stops. The bar's content width, less the glyph and
   /// the space the keyboard hint needs on the other side.
@@ -188,10 +186,9 @@ enum RewindSearchMetrics {
 
   /// The size the query is set at.
   ///
-  /// 19 is visibly larger than every other run of type on the surface (the next is `rowCopy` at 15),
-  /// which is the hierarchy the bar needs, and it stays under `Font.inkDisplayThreshold` (22) so it
-  /// resolves to SF Pro rather than the display face — a search field is reading type.
-  static let queryFontSize: CGFloat = 19
+  /// The shared search face: prominent enough to find immediately, compact
+  /// enough to remain utility chrome rather than a page title.
+  static let queryFontSize: CGFloat = 17
 
   /// The face the query is set in, resolved to the AppKit font the field is actually made of. Both
   /// the chip's width and the field's own text use this exact value; two different faces here is a

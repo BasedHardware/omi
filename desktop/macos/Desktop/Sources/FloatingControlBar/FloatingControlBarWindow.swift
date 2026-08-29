@@ -4421,6 +4421,22 @@ class FloatingControlBarManager {
     return try await provider.prepareRealtimeVoiceContextSnapshot()
   }
 
+  func askChatLaneForSpokenAnswer(
+    prompt: String,
+    invocationID: String,
+    expectedOwnerID: String
+  ) async throws -> String {
+    guard let provider = historyChatProvider else { throw RealtimeChatLaneError.unavailable }
+    return try await provider.askChatLaneForSpokenAnswer(
+      prompt: prompt,
+      invocationID: invocationID,
+      expectedOwnerID: expectedOwnerID)
+  }
+
+  func cancelActiveRealtimeChatLaneInvocation() {
+    historyChatProvider?.cancelActiveRealtimeChatLaneInvocation()
+  }
+
   func recordExchange(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,

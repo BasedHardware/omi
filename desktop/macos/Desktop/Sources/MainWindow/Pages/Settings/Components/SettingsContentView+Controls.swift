@@ -871,7 +871,7 @@ extension SettingsContentView {
   ) -> some View {
     let card = content()
       .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(OmiSpacing.lg)
+      .padding(OmiSpacing.md)
       .settingsGlassCard()
     return Group {
       if let settingId = settingId {
