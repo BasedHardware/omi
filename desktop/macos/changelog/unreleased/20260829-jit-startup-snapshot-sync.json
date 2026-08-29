@@ -1,0 +1,3 @@
+{
+  "change": "Fixed just-in-time proactive triggers never syncing on launch because the trigger snapshot download waited for a screen-capture context visit; signed-in startups now reconcile the snapshot directly"
+}
