@@ -20,6 +20,7 @@ import type {
 } from '@/types/user';
 import { decodePlan, planGrantsPaidCapability } from '@/types/user';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
 
 interface PlansSheetProps {
   open: boolean;
@@ -217,14 +218,6 @@ export function PlansSheet({
   // Get the selected option
   const selectedOption = pricingOptions.find((p) => p.id === selectedPriceId);
 
-  // Default features for unlimited plan
-  const defaultFeatures = [
-    'Unlimited conversations',
-    'Unlimited memories',
-    'Priority processing',
-    'Advanced insights',
-  ];
-
   return (
     <>
       <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -373,7 +366,7 @@ export function PlansSheet({
                             Features:
                           </h4>
                           <ul className="space-y-2">
-                            {defaultFeatures.map((feature, idx) => (
+                            {DEFAULT_PLAN_FEATURES.map((feature, idx) => (
                               <li key={idx} className="flex items-start gap-2">
                                 <Check className="w-4 h-4 text-text-primary flex-shrink-0 mt-0.5" />
                                 <span className="text-sm text-text-tertiary">
