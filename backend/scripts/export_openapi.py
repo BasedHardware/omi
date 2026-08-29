@@ -65,6 +65,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/chat',
     '/v1/connectors',
     '/v1/conversations',
+    '/v1/csat',
     '/v1/dev',
     '/v1/fair-use',
     '/v1/frame-requests',

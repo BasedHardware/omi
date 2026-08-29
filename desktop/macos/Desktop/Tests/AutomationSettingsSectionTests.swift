@@ -56,7 +56,8 @@ final class AutomationSettingsSectionTests: XCTestCase {
     XCTAssertEqual(Section.planUsage.rawValue, "Plan and Usage")
     XCTAssertEqual(Section.privacy.rawValue, "Privacy")
     XCTAssertEqual(Section.account.displayTitle, "Account & Plan")
-    XCTAssertEqual(Section.notifications.displayTitle, "Notifications & Privacy")
+    XCTAssertEqual(Section.notifications.displayTitle, "Alerts & Privacy")
+    XCTAssertEqual(Section.advanced.displayTitle, "AI & Automation")
   }
 
   func testUnknownAndEmptyReturnNil() {

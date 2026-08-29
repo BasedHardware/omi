@@ -584,10 +584,12 @@ final class ChatFirstShellTests: XCTestCase {
 
   func testChatFirstGlassBoundaryWrapsOnlyRoutesWithoutTheirOwnPanels() {
     let wrapped: [ChatFirstRoute] = [
-      .conversations, .tasks, .goals, .memories,
-      .more(.apps), .more(.permissions), .more(.settings),
+      .conversations, .goals, .memories,
+      .more(.permissions), .more(.settings),
     ]
-    let selfContained: [ChatFirstRoute] = [.chat, .more(.dashboard), .more(.rewind)]
+    let selfContained: [ChatFirstRoute] = [
+      .chat, .tasks, .more(.dashboard), .more(.rewind), .more(.apps),
+    ]
 
     for route in wrapped {
       XCTAssertTrue(ChatFirstPageGlassLanePolicy.shouldWrap(route), route.stableName)
@@ -604,13 +606,9 @@ final class ChatFirstShellTests: XCTestCase {
       XCTAssertFalse(ChatFirstPageGlassLanePolicy.shouldWrap(route), route.stableName)
     }
 
-    // The memory route mounts the hub, whose Activity page carries Home's own two panels. Wrapping
-    // that one puts glass inside glass and doubles the scrim.
-    XCTAssertFalse(
-      ChatFirstPageGlassLanePolicy.shouldWrap(
-        .memories, memoryDestinationRawValue: MemoryHubDestination.activity.rawValue))
-    for destination in MemoryHubDestination.allCases where destination != .activity {
-      XCTAssertTrue(
+    // Every hub page carries the shared search panel and a navigation-first content panel.
+    for destination in MemoryHubDestination.allCases {
+      XCTAssertFalse(
         ChatFirstPageGlassLanePolicy.shouldWrap(
           .memories, memoryDestinationRawValue: destination.rawValue),
         destination.title)

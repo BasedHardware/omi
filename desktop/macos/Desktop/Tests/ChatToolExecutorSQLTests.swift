@@ -277,6 +277,45 @@ final class ChatToolExecutorSQLTests: XCTestCase {
     XCTAssertTrue(result.contains("call get_work_context"))
   }
 
+  func testExecuteSQLRendersDatetimeColumnsInLocalTimeWithZoneLabel() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("execute-sql-datetime-localization-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+    // 2026-08-27T19:59:51Z — the exact UTC instant from #12321's repro.
+    let utcInstant = Date(timeIntervalSince1970: 1_787_082_791)
+    try await pool.write { db in
+      try db.execute(sql: "CREATE TABLE screenshots (appName TEXT, timestamp DATETIME NOT NULL)")
+      try db.execute(
+        sql: "INSERT INTO screenshots (appName, timestamp) VALUES (?, ?)",
+        arguments: ["Claude", utcInstant]
+      )
+    }
+
+    let result = await ChatToolExecutor.executeSQL(
+      ["query": "SELECT appName, timestamp FROM screenshots"],
+      dbQueue: pool,
+      expectedOwnerID: nil
+    )
+
+    let expectedLocalFormatter = DateFormatter()
+    expectedLocalFormatter.locale = Locale(identifier: "en_US_POSIX")
+    expectedLocalFormatter.timeZone = .current
+    expectedLocalFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss zzz"
+    let expectedLocal = expectedLocalFormatter.string(from: utcInstant)
+
+    XCTAssertTrue(
+      result.contains(expectedLocal),
+      "expected local+zone rendering '\(expectedLocal)' in result:\n\(result)"
+    )
+    // Only meaningful off UTC, but guards against silently falling back to the raw UTC cell.
+    if TimeZone.current.secondsFromGMT(for: utcInstant) != 0 {
+      XCTAssertFalse(result.contains("2026-08-27 19:59:51.000"))
+    }
+  }
+
   func testSQLAuthorizationIsOutsideSwiftPhysicalPreconditions() {
     XCTAssertEqual(
       ChatToolExecutor.physicalExecutionPrecondition(toolName: "execute_sql"),

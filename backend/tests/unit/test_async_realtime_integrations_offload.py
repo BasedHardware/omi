@@ -59,6 +59,7 @@ _utils_stubs = [
     "utils.llm",
     "utils.llm.clients",
     "utils.llm.proactive_notification",
+    "utils.llm.temporal",
     "utils.llm.usage_tracker",
     "utils.llms",
     "utils.llms.memory",
@@ -196,6 +197,9 @@ for name in _utils_stubs:
     _install_module(name, module)
 
 sys.modules["utils.conversations"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "conversations")]
+# The real utils.llm package is imported as a package (utils.llm.temporal).
+# A ModuleType stub without __path__ makes that import fail collection.
+sys.modules["utils.llm"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "llm")]
 
 sys.modules["utils.apps"].get_available_apps = MagicMock(return_value=[])
 sys.modules["utils.notifications"].send_notification = MagicMock()
@@ -220,6 +224,11 @@ _proactive_mod.generate_notification = MagicMock(return_value="")
 _proactive_mod.validate_notification = MagicMock(return_value=False)
 _proactive_mod.FREQUENCY_TO_BASE_THRESHOLD = {1: 0.5, 2: 0.4, 3: 0.3}
 _proactive_mod.MAX_DAILY_NOTIFICATIONS = 10
+
+# Stub the current-date helper imported by utils.app_integrations. Keeping it
+# inside this harness avoids pulling the real timezone/database path into this
+# otherwise hermetic unit test.
+sys.modules["utils.llm.temporal"].current_date_for_uid = MagicMock(return_value="2026-01-01")
 
 # Stub usage tracker
 _usage_mod = sys.modules["utils.llm.usage_tracker"]

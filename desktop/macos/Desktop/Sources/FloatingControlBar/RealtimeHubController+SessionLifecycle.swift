@@ -10,7 +10,10 @@ extension RealtimeHubController {
   /// Open the WS now if it isn't already (no-op if already warm). BYOK → connect
   /// client-direct with the user's key. Otherwise, if signed in → mint a server-side
   /// ephemeral token and connect with it.
-  func ensureWarm() {
+  /// `userInitiated: true` = direct user intent (PTT, launch, input-return);
+  /// see `admitWarmRequest` — passive callers cannot clear an away deferral.
+  func ensureWarm(userInitiated: Bool = false) {
+    guard admitWarmRequest(userInitiated: userInitiated) else { return }
     #if DEBUG
       // The local-profile action owns an already-installed hermetic transport.
       // Re-entering normal warm-up here would replace it and mint a real provider
@@ -451,8 +454,7 @@ extension RealtimeHubController {
     /// Availability contract, mirroring `KernelVoiceContextSnapshot.isResolved`:
     /// a kernel session bound to this owner scope plus a deterministic freshness
     /// identity. Rendered context, plan identities, and semantic guidance are
-    /// context *material* — a valid new conversation renders none of it, and
-    /// `RealtimeHubTools.escalationBody` omits each empty section on its own.
+    /// context *material* — a valid new conversation renders none of it.
     /// Requiring them here would fail-closed on the first turn of every session.
     var isResolved: Bool {
       !sessionID.isEmpty && !snapshotFreshnessIdentity.isEmpty

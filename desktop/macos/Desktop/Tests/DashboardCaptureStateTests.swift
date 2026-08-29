@@ -347,37 +347,37 @@ final class DashboardCaptureStateTests: XCTestCase {
   }
 
   func testAppsPageSupportsPopupDismissalAndFocusedSections() throws {
-    let source = try appsSource()
+    let appsPageSource = try appsSource()
 
-    XCTAssertTrue(source.contains("enum AppsCatalogInitialSection"))
-    XCTAssertTrue(source.contains("var initialSection: AppsCatalogInitialSection = .imports"))
-    XCTAssertTrue(source.contains("var onDismiss: (() -> Void)? = nil"))
-    XCTAssertTrue(source.contains("var onSelectApp: ((OmiApp) -> Void)? = nil"))
-    XCTAssertTrue(source.contains("var onSelectConnector: ((ImportConnector) -> Void)? = nil"))
-    XCTAssertTrue(source.contains("var onSelectDestination: ((MemoryExportDestination) -> Void)? = nil"))
-    XCTAssertTrue(source.contains("private var dismissControl: some View"))
-    XCTAssertTrue(source.contains("DismissButton(action: onDismiss)"))
-    XCTAssertTrue(
-      source.contains(
-        "case .imports:\n                ImportsSection(statusStore: connectorStatusStore)"))
-    XCTAssertTrue(
-      source.contains("case .exports:\n                ExportsSection(statuses: exportStatuses)"))
-    XCTAssertTrue(source.contains("private func selectApp(_ app: OmiApp)"))
-    XCTAssertTrue(source.contains("private func selectConnector(_ connector: ImportConnector)"))
-    XCTAssertTrue(source.contains("private func selectDestination(_ destination: MemoryExportDestination)"))
-    XCTAssertTrue(source.contains("onSelectApp(app)"))
-    XCTAssertTrue(source.contains("selectedApp = app"))
-    XCTAssertTrue(source.contains("onSelectConnector(connector)"))
-    XCTAssertTrue(source.contains("selectedConnector = connector"))
-    XCTAssertTrue(source.contains("onSelectDestination(destination)"))
-    XCTAssertTrue(source.contains("selectedExportDestination = destination"))
-    XCTAssertTrue(source.contains("if appProvider.apps.isEmpty && !appProvider.isLoading"))
+    XCTAssertTrue(appsPageSource.contains("enum AppsCatalogInitialSection"))
+    XCTAssertTrue(appsPageSource.contains("var initialSection: AppsCatalogInitialSection = .imports"))
+    XCTAssertTrue(appsPageSource.contains("var onDismiss: (() -> Void)? = nil"))
+    XCTAssertTrue(appsPageSource.contains("var onSelectApp: ((OmiApp) -> Void)? = nil"))
+    XCTAssertTrue(appsPageSource.contains("var onSelectConnector: ((ImportConnector) -> Void)? = nil"))
+    XCTAssertTrue(appsPageSource.contains("var onSelectDestination: ((MemoryExportDestination) -> Void)? = nil"))
+    XCTAssertTrue(appsPageSource.contains("private var dismissControl: some View"))
+    XCTAssertTrue(appsPageSource.contains("DismissButton(action: onDismiss)"))
+    XCTAssertTrue(appsPageSource.contains("case .imports:"))
+    XCTAssertTrue(appsPageSource.contains("case .exports:"))
+    XCTAssertTrue(appsPageSource.contains("ImportsSection("))
+    XCTAssertTrue(appsPageSource.contains("ExportsSection("))
+    XCTAssertTrue(appsPageSource.contains("private func selectApp(_ app: OmiApp)"))
+    XCTAssertTrue(appsPageSource.contains("private func selectConnector(_ connector: ImportConnector)"))
+    XCTAssertTrue(appsPageSource.contains("private func selectDestination(_ destination: MemoryExportDestination)"))
+    XCTAssertTrue(appsPageSource.contains("onSelectApp(app)"))
+    XCTAssertTrue(appsPageSource.contains("selectedApp = app"))
+    XCTAssertTrue(appsPageSource.contains("onSelectConnector(connector)"))
+    XCTAssertTrue(appsPageSource.contains("selectedConnector = connector"))
+    XCTAssertTrue(appsPageSource.contains("onSelectDestination(destination)"))
+    XCTAssertTrue(appsPageSource.contains("selectedExportDestination = destination"))
+    XCTAssertTrue(appsPageSource.contains("if appProvider.apps.isEmpty && !appProvider.isLoading"))
     // Responsive layout was extracted into AppsHeaderRow (AppsPageHeaderControls.swift);
     // AppsPage now delegates to it instead of inlining ViewThatFits.
-    XCTAssertTrue(source.contains("AppsHeaderRow("))
-    XCTAssertTrue(source.contains("private var searchField: some View"))
-    XCTAssertTrue(source.contains("private var filterControls: some View"))
-    XCTAssertFalse(source.contains("struct AppsCatalogContent: View"))
+    let headerSource = try source(named: "AppsPageHeaderControls.swift")
+    XCTAssertTrue(headerSource.contains("struct AppsHeaderRow"))
+    XCTAssertTrue(headerSource.contains("let search: Search"))
+    XCTAssertTrue(headerSource.contains("let filters: Filters"))
+    XCTAssertFalse(appsPageSource.contains("struct AppsCatalogContent: View"))
   }
 
   func testConnectorSetupSurfacesDoNotUsePurpleAccents() throws {

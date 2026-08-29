@@ -65,6 +65,9 @@ enum DefaultsKey: String {
   /// One-shot marker: the question counter was seeded from server chat
   /// history so long-time users see the rating ask without three NEW questions.
   case ratingPromptHistorySeeded = "ratingPromptHistorySeeded"
+  /// Last-good server CSAT config (JSON), so a cold start renders the right
+  /// copy before the first config poll lands. Product-wide, not owner-scoped.
+  case csatConfigLastGood = "csatConfigLastGood"
   case screenAnalysisAutoStartFixedV2 = "screenAnalysisAutoStartFixed_v2"
   case screenAnalysisAutoStartFixedV3 = "screenAnalysisAutoStartFixed_v3"
   case homeOmiDeviceAccountHistory = "home-omi-device-account-history"

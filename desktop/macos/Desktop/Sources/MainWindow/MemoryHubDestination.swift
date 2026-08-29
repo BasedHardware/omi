@@ -6,7 +6,7 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
 
   /// `allCases` is storage identity, not reading order: the raw values are persisted, so this list
   /// starts at `memories` — where the stored default lands — rather than where the user's row
-  /// starts. The order the four pages are *presented* in belongs to the control that presents them,
+  /// starts. The order the five pages are *presented* in belongs to the control that presents them,
   /// `ActivityDestinationChip`.
   case memories
   case conversations
@@ -14,6 +14,8 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
   /// The chronological spine that used to be Home's landing surface — everything captured, in the
   /// order it happened. Home now lands in the chat; the timeline lives here.
   case activity
+  /// The visual screen-history player. Appended to preserve every persisted raw value above.
+  case rewind
 
   enum Presentation: Equatable {
     case standaloneConversations
@@ -27,7 +29,8 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .memories: return "Memories"
     case .conversations: return "Conversations"
     case .brainMap: return "Brain Map"
-    case .activity: return "Brain"
+    case .activity: return "Activity"
+    case .rewind: return "Rewind"
     }
   }
 
@@ -37,6 +40,7 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .conversations: return "text.bubble"
     case .brainMap: return "point.3.connected.trianglepath.dotted"
     case .activity: return "clock.arrow.circlepath"
+    case .rewind: return "clock.arrow.circlepath"
     }
   }
 
@@ -108,9 +112,9 @@ enum MemoryHubLayoutPolicy {
 enum MemoryHubSelectionPolicy {
   /// The chat-first route that must be selected for a hub destination.
   ///
-  /// `Conversations` has its own route (it carries capture-archive focus); the other two are the
-  /// Memory route, which is where `MemoryHubPage` lives.
+  /// Direct capture deep links still use the dedicated Conversations route, but selecting any
+  /// Brain section uses the Memory route so the persistent section navigation remains mounted.
   static func chatFirstRoute(for destination: MemoryHubDestination) -> ChatFirstRoute {
-    destination == .conversations ? .conversations : .memories
+    .memories
   }
 }

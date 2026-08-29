@@ -620,13 +620,29 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
-      toolName: "ask_higher_model",
-      title: "Ask Higher Model",
-      latency: .fastNetwork,
+      toolName: "think_deeper",
+      title: "Think Deeper",
+      latency: .asyncBackground,
       surfaces: Set([.realtimeHub]),
-      summary: "Get a second opinion from the larger model when the user pushes back or current facts are needed.",
+      summary: "Take more time and use Omi's full answer capabilities whenever a quick realtime answer would be shallow.",
       bullets: [
-      "Use sparingly; answer simple or creative requests yourself."
+      "Always call before answering explicit think-hard requests, including 'think carefully', 'go deep', 'don't just guess', and 'what should I do', plus advice, tradeoffs, multi-step plans, or pushback on a weak prior answer.",
+      "A short, vague, or first-turn request still counts: call with the question as given instead of answering or asking a clarifying question first.",
+      "Also call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. When unsure, escalate.",
+      "Skip only chit-chat, short confirmations, obvious stable facts, or a single fast realtime tool that fully answers the request.",
+      "When current public facts and deeper judgment are both needed, call web_search first and pass its result as context to think_deeper."
+    ]
+    ),
+    Capability(
+      toolName: "web_search",
+      title: "Web Search",
+      latency: .asyncBackground,
+      surfaces: Set([.realtimeHub]),
+      summary: "Search the live public web through Omi's typed-chat retrieval lane, then speak a grounded answer.",
+      bullets: [
+      "You MUST use this for current public information such as weather, news, prices, scores, schedules, releases, and officeholders.",
+      "You MUST also use it when the user explicitly asks you to search, browse, look something up online, verify a public fact, or cite sources.",
+      "Never claim that web search, internet access, or real-time data is unavailable. If this tool fails, say that the lookup failed."
     ]
     ),
     Capability(
@@ -702,6 +718,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["ask_higher_model","cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
+    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
   }
 }

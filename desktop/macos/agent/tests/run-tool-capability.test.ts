@@ -486,7 +486,7 @@ describe("RunToolCapabilityBroker", () => {
   it("authorizes surface-scoped voice tools for swift_realtime runs without leaking them elsewhere", () => {
     // Regression: realtime-voice runs relay Swift-executed voice tools that no
     // chat adapter advertises. An adapter-only allowlist rejected every such
-    // tool (ask_higher_model, point_click) with tool_not_allowed in production.
+    // tool (think_deeper, web_search, point_click) with tool_not_allowed in production.
     const root = mkdtempSync(join(tmpdir(), "omi-capability-"));
     roots.push(root);
     const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
@@ -521,7 +521,8 @@ describe("RunToolCapabilityBroker", () => {
       attemptId: attempt.attemptId,
     });
     expect(capability.surfaceKind).toBe("realtime_voice");
-    expect(capability.allowedToolNames).toContain("ask_higher_model");
+    expect(capability.allowedToolNames).toContain("think_deeper");
+    expect(capability.allowedToolNames).toContain("web_search");
     expect(capability.allowedToolNames).toContain("point_click");
     const authorized = broker.authorize({
       capabilityRef: capability.capabilityRef,
@@ -529,10 +530,10 @@ describe("RunToolCapabilityBroker", () => {
       runId: run.runId,
       attemptId: attempt.attemptId,
       activeOwnerId: session.ownerId,
-      toolName: "ask_higher_model",
+      toolName: "web_search",
       toolInput: { query: "what's the weather in nyc right now?" },
     });
-    expect(authorized.canonicalToolName).toBe("ask_higher_model");
+    expect(authorized.canonicalToolName).toBe("web_search");
     store.close();
 
     // A plain chat run must not inherit voice-only tools.
@@ -543,7 +544,8 @@ describe("RunToolCapabilityBroker", () => {
       runId: chat.run.runId,
       attemptId: chat.attempt.attemptId,
     });
-    expect(chatCapability.allowedToolNames).not.toContain("ask_higher_model");
+    expect(chatCapability.allowedToolNames).not.toContain("think_deeper");
+    expect(chatCapability.allowedToolNames).not.toContain("web_search");
     expect(chatCapability.allowedToolNames).not.toContain("point_click");
     chat.store.close();
   });

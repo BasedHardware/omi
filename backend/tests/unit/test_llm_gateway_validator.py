@@ -273,14 +273,19 @@ def test_rejects_unsupported_message_content_parts():
         ]
     )
 
-    with pytest.raises(GatewayCapabilityMismatchError, match='text or image_url message content'):
+    with pytest.raises(GatewayCapabilityMismatchError, match='text, image_url, or file message content'):
         validate_chat_completion_request(request, lane)
 
 
-def test_rejects_structured_output_modes_other_than_json_schema():
+def test_json_object_is_accepted_and_unknown_modes_rejected():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
-    request = valid_request(response_format={'type': 'json_object'})
 
+    # json_object maps Gemini's responseMimeType=application/json without a
+    # schema (desktop BFF translation) and is valid on structured lanes.
+    validated = validate_chat_completion_request(valid_request(response_format={'type': 'json_object'}), lane)
+    assert validated.response_format == {'type': 'json_object'}
+
+    request = valid_request(response_format={'type': 'text'})
     with pytest.raises(GatewayCapabilityMismatchError, match='json_schema'):
         validate_chat_completion_request(request, lane)
 

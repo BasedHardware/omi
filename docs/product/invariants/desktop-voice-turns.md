@@ -108,6 +108,14 @@ verify that every required fact is published.
   It derives `phase` from the coordinator and forwards snapshots to observers.
 - Realtime delegation does not run a second Swift text classifier. Explicit model
   tool intent reaches the kernel's atomic route-and-control path.
+- `ask_higher_model` is the one same-turn deep-answer route. Once its realtime-only
+  tool proposal is kernel-authorized, it executes a non-journaled companion query on
+  the canonical main-chat session, inheriting typed Chat's selected model, context,
+  reasoning lane, and complete tool surface. That query authors a short speakable
+  final answer; realtime voices it faithfully rather than substituting a second
+  answer. Its reducer-owned pending-tool fence keeps the voice projection glowing
+  for a bounded three-minute tool-using turn, and interrupt revokes the exact bridge
+  invocation before a later callback can affect a replacement turn.
 - A realtime provider turn that requests tools first opens a dedicated
   `realtime_voice` kernel run/attempt. Every provider call ID is an invocation
   identity under that run; Node authorizes it through the same durable ledger as
