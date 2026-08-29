@@ -27,6 +27,9 @@ covers:
   - desktop/macos/Desktop/Sources/Services/KnowledgeGraphToolSupport.swift
   - desktop/macos/Desktop/Sources/Providers/ChatFirstBlockToolExecutor.swift
   - desktop/macos/Desktop/Sources/Chat/ChatFirstBlockValidation.swift
+  # S14-S18 prove a capture is staged as a typed, removable composer reference
+  # without submitting a synthetic raw-ID chat turn or replacing the draft.
+  - desktop/macos/Desktop/Sources/Chat/ChatComposerReference.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
   # S8 drives the Tasks-page closure, including its bounded attempt/terminal telemetry.
   - desktop/macos/Desktop/Sources/Chat/ChatFirstAnalytics.swift
@@ -44,8 +47,7 @@ covers:
   # S3-S6 load canonical goals, acknowledge focus, and mutate focused-goal state.
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CanonicalGoalsStore.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+TaskCatalog.swift
-  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureArchivePage.swift
-  # S12/S13 load the Omi-only archive, select detail, and prepare its playback through typed audio APIs.
+  # S12/S13 load the canonical conversation detail and prepare its playback through typed audio APIs.
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureArchiveRepository.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CapturePlayback.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CapturePlaybackAPI.swift
@@ -181,31 +183,50 @@ steps:
       result.detail.capture_detail_visible: "true"
 
   - id: S14
-    name: Discuss the selected capture through the normal main-Chat owner
+    name: Seed a draft before discussing the selected capture
+    bridge.action:
+      name: set_chat_drafts
+      params:
+        main: "Keep this draft while attaching the conversation"
+    expect:
+      result.detail.main: "Keep this draft while attaching the conversation"
+
+  - id: S15
+    name: Stage the selected capture through the normal main-Chat composer owner
     bridge.action:
       name: chat_first_discuss_capture
     expect:
-      result.detail.capture_discussion_started: "true"
-
-  - id: S15
-    name: Wait for the resulting ordinary main-Chat response to terminalize
-    bridge.action:
-      name: wait_main_chat_idle
-      params:
-        timeoutMs: "120000"
-    expect:
-      result.detail.idle: "true"
+      result.detail.capture_reference_staged: "true"
+      result.detail.composer_reference_count: "1"
 
   - id: S16
-    name: Confirm the response returned to visibly mounted Chat without exposing transcript content
+    name: Confirm staging preserved the user's draft
+    bridge.action:
+      name: chat_drafts_snapshot
+    expect:
+      result.detail.main: "Keep this draft while attaching the conversation"
+
+  - id: S17
+    name: Confirm no synthetic chat turn was started and the reference remains visible
+    bridge.action:
+      name: main_chat_snapshot
+      params:
+        limit: "1"
+    expect:
+      result.detail.is_sending: "false"
+      result.detail.is_streaming: "false"
+
+  - id: S18
+    name: Confirm the typed reference landed in visibly mounted Chat without exposing transcript content
     bridge.action:
       name: chat_first_runtime_snapshot
     expect:
       result.detail.route: chat
       result.detail.route_visible: "true"
+      result.detail.composer_reference_count: "1"
       result.detail.completed_visible_task_count: "1"
 
-  - id: S17
+  - id: S19
     name: Confirm the bridge recorded no route failure
     log.expect:
       absent:
