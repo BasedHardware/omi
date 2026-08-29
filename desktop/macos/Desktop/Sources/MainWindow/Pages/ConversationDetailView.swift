@@ -229,8 +229,11 @@ struct ConversationDetailView: View {
   /// The canonical detail only renders capture playback for first-party Omi
   /// captures. Other conversation sources retain the same summary/transcript
   /// editor without advertising unavailable audio controls.
-  static func showsCapturePlayback(for source: ConversationSource?) -> Bool {
-    source == .omi
+  static func showsCapturePlayback(
+    for source: ConversationSource?,
+    in pane: ConversationDetailPane
+  ) -> Bool {
+    source == .omi && pane == .transcript
   }
 
   private var capturePlaybackTaskID: String {
@@ -603,10 +606,13 @@ struct ConversationDetailView: View {
               .scaledFont(size: OmiType.caption)
             Text("Discuss in Chat")
               .scaledFont(size: OmiType.caption, weight: .medium)
+              .lineLimit(1)
+              .fixedSize(horizontal: true, vertical: false)
           }
           .foregroundColor(Ink.secondary)
           .padding(.horizontal, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.xs)
+          .frame(minWidth: 126)
           .background(Capsule().fill(Ink.rowFillHover))
         }
         .buttonStyle(.plain)
@@ -792,13 +798,6 @@ struct ConversationDetailView: View {
   private var summaryBeforeScreenshots: some View {
     let selection = ConversationSummarySelection.primarySummary(for: displayConversation)
 
-    // Omi captures use the same detail shell as every other conversation. The
-    // only source-specific addition is this compact playback panel; the
-    // capture browser no longer owns a competing summary/transcript layout.
-    if Self.showsCapturePlayback(for: displayConversation.source) {
-      capturePlaybackSection
-    }
-
     // Overview section (selected app result, or the structured fallback)
     if !selection.content.isEmpty {
       overviewSection
@@ -850,10 +849,7 @@ struct ConversationDetailView: View {
       capture: displayConversation,
       playback: capturePlayback,
       onPrepare: { startCapturePlaybackPreparation() },
-      onRefresh: { startCapturePlaybackPreparation(forceRefresh: true) },
-      onSeek: { segment in
-        Task { _ = await capturePlayback.seekToMoment(wallOffset: segment.start) }
-      }
+      onRefresh: { startCapturePlaybackPreparation(forceRefresh: true) }
     )
   }
 
@@ -866,7 +862,7 @@ struct ConversationDetailView: View {
     requestGeneration: Int
   ) async {
     guard isCurrentCaptureFocusRequest(requestGeneration) else { return }
-    guard Self.showsCapturePlayback(for: displayConversation.source) else {
+    guard Self.showsCapturePlayback(for: displayConversation.source, in: .transcript) else {
       if initialCaptureMomentTimestamp == nil {
         reportInitialCaptureFocus(resolved: true)
       } else {
@@ -1001,6 +997,12 @@ struct ConversationDetailView: View {
       .padding(.vertical, OmiSpacing.md)
       .background(Ink.rowFillHover.opacity(0.5))
 
+      if Self.showsCapturePlayback(for: displayConversation.source, in: .transcript) {
+        capturePlaybackSection
+          .padding(.horizontal, OmiSpacing.xl)
+          .padding(.vertical, OmiSpacing.md)
+      }
+
       // Drawer content
       if displayConversation.transcriptPresenceState == .lockedOrRedacted && !isLoadingConversation {
         VStack(spacing: OmiSpacing.md) {
@@ -1054,6 +1056,9 @@ struct ConversationDetailView: View {
           .onChange(of: displayConversation.transcriptSegments.count) { _, _ in
             focusTranscript(using: proxy)
           }
+          .onChange(of: activeCaptureTranscriptSegmentID) { _, segmentID in
+            followCapturePlayback(using: proxy, segmentID: segmentID)
+          }
         }
       }
     }
@@ -1067,6 +1072,8 @@ struct ConversationDetailView: View {
   private var transcriptBubblesContent: some View {
     let peopleDict = Dictionary(lastWriteWins: people.map { ($0.id, $0) })
     ForEach(displayConversation.transcriptSegments) { segment in
+      let segmentID = segment.backendId ?? segment.id
+      let isPlaybackActive = activeCaptureTranscriptSegmentID == segmentID
       SpeakerBubbleView(
         segment: segment,
         isUser: segment.isUser,
@@ -1075,7 +1082,13 @@ struct ConversationDetailView: View {
           ? nil
           : {
             selectedSegmentForNaming = segment
+          },
+        onTimestampTapped: Self.showsCapturePlayback(for: displayConversation.source, in: .transcript)
+          ? {
+            Task { _ = await capturePlayback.seekToMoment(wallOffset: segment.start) }
           }
+          : nil,
+        isTimestampPlayable: canSeekCaptureMoment(segment)
       )
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.xs)
@@ -1083,10 +1096,39 @@ struct ConversationDetailView: View {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
           .fill(
             automation.focusedTranscriptSegmentIds.contains(segment.backendId ?? segment.id)
-              ? Ink.rowFillHover : Color.clear
+              ? Ink.rowFillHover
+              : isPlaybackActive ? Ink.accent.opacity(0.12) : Color.clear
           )
       )
-      .id(segment.backendId ?? segment.id)
+      .overlay(
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+          .stroke(isPlaybackActive ? Ink.accent.opacity(0.45) : Color.clear, lineWidth: 1)
+      )
+      .accessibilityValue(isPlaybackActive ? "Currently playing" : "")
+      .id(segmentID)
+    }
+  }
+
+  private func canSeekCaptureMoment(_ segment: TranscriptSegment) -> Bool {
+    guard Self.showsCapturePlayback(for: displayConversation.source, in: .transcript),
+      case .readyAggregate(let artifact) = capturePlayback.resolution
+    else { return false }
+    return artifact.artifactOffset(forWallOffset: segment.start) != nil
+  }
+
+  private var activeCaptureTranscriptSegmentID: String? {
+    guard capturePlayback.isPlaybackRequested, let resolution = capturePlayback.resolution else { return nil }
+    return CaptureTranscriptFollowPolicy.activeSegmentID(
+      atPlaybackOffset: capturePlayback.currentTime,
+      resolution: resolution,
+      segments: displayConversation.transcriptSegments
+    )
+  }
+
+  private func followCapturePlayback(using proxy: ScrollViewProxy, segmentID: String?) {
+    guard showTranscriptDrawer, capturePlayback.isPlaybackRequested, let segmentID else { return }
+    OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+      proxy.scrollTo(segmentID, anchor: .center)
     }
   }
 
@@ -1554,16 +1596,14 @@ struct ConversationDetailView: View {
   }
 #endif
 
-/// Source-specific controls embedded in the canonical conversation detail.
-/// This is deliberately a section, rather than another page-level detail
-/// view: summary, transcript, title editing, sharing, and deletion remain
-/// owned by `ConversationDetailView` for every conversation source.
+/// Source-specific transport embedded in the canonical transcript. Transcript
+/// bubbles own precise moment seeking, so playback no longer creates a second
+/// transcript-like list ahead of the conversation summary.
 private struct ConversationCapturePlaybackSection: View {
   let capture: ServerConversation
   @ObservedObject var playback: CapturePlaybackController
   let onPrepare: () -> Void
   let onRefresh: () -> Void
-  let onSeek: (TranscriptSegment) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -1571,18 +1611,13 @@ private struct ConversationCapturePlaybackSection: View {
         Image(systemName: "waveform")
           .scaledFont(size: OmiType.body)
           .foregroundStyle(Ink.secondary)
-        Text("Playback")
+        Text("Audio")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundStyle(Ink.secondary)
         Spacer()
       }
 
       playbackControls
-
-      if !capture.transcriptSegments.isEmpty {
-        Divider().overlay(Ink.separator.opacity(0.45))
-        moments
-      }
     }
     .padding(OmiSpacing.lg)
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1604,28 +1639,64 @@ private struct ConversationCapturePlaybackSection: View {
       }
       .accessibilityLabel("Preparing capture audio")
     } else if let resolution = playback.resolution {
-      HStack(spacing: OmiSpacing.md) {
-        switch resolution {
-        case .readyAggregate, .fileFallback:
-          Button {
-            playback.playOrPause()
-          } label: {
-            Label("Play audio", systemImage: "play.fill")
-          }
-          .buttonStyle(.bordered)
-          .accessibilityLabel("Play capture audio")
-          .accessibilityIdentifier("chat-first-capture-play")
-        case .pending, .locked, .unavailable, .noAudio:
-          Button("Check audio", action: onRefresh)
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+        HStack(spacing: OmiSpacing.md) {
+          switch resolution {
+          case .readyAggregate, .fileFallback:
+            Button {
+              playback.playOrPause()
+            } label: {
+              Label(
+                playback.isPlaybackRequested ? "Pause" : "Play audio",
+                systemImage: playback.isPlaybackRequested ? "pause.fill" : "play.fill"
+              )
+            }
             .buttonStyle(.bordered)
-            .disabled(capture.isLocked)
-            .accessibilityLabel("Check capture audio")
-            .accessibilityIdentifier("chat-first-capture-check-audio-\(capture.id)")
+            .accessibilityLabel(playback.isPlaybackRequested ? "Pause capture audio" : "Play capture audio")
+            .accessibilityIdentifier("chat-first-capture-play")
+          case .pending, .locked, .unavailable, .noAudio:
+            Button("Check audio", action: onRefresh)
+              .buttonStyle(.bordered)
+              .disabled(capture.isLocked)
+              .accessibilityLabel("Check capture audio")
+              .accessibilityIdentifier("chat-first-capture-check-audio-\(capture.id)")
+          }
+
+          Text(resolution.userFacingMessage)
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.secondary)
         }
 
-        Text(resolution.userFacingMessage)
-          .scaledFont(size: OmiType.caption)
-          .foregroundStyle(Ink.secondary)
+        if playback.duration > 0 {
+          HStack(spacing: OmiSpacing.sm) {
+            ProgressView(value: min(playback.currentTime, playback.duration), total: playback.duration)
+              .accessibilityLabel("Capture playback progress")
+            Text("\(Self.playbackTimestamp(playback.currentTime)) / \(Self.playbackTimestamp(playback.duration))")
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundStyle(Ink.secondary)
+              .monospacedDigit()
+          }
+        }
+
+        if playback.isBuffering {
+          Label("Buffering audio…", systemImage: "circle.dotted")
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.secondary)
+        } else if playback.isPlaying {
+          Label("Playing", systemImage: "speaker.wave.2.fill")
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.secondary)
+        }
+
+        if let playbackError = playback.playbackError {
+          HStack(spacing: OmiSpacing.sm) {
+            Label(playbackError, systemImage: "exclamationmark.triangle")
+              .scaledFont(size: OmiType.caption)
+              .foregroundStyle(Ink.errorRed)
+            Button("Refresh", action: onRefresh)
+              .buttonStyle(.link)
+          }
+        }
       }
     } else {
       Button("Prepare audio", action: onPrepare)
@@ -1635,47 +1706,7 @@ private struct ConversationCapturePlaybackSection: View {
     }
   }
 
-  private var moments: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-      Text("Timestamped moments")
-        .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundStyle(Ink.secondary)
-
-      ForEach(Array(capture.transcriptSegments.prefix(12))) { segment in
-        Button {
-          onSeek(segment)
-        } label: {
-          HStack(alignment: .top, spacing: OmiSpacing.md) {
-            Text(Self.shortTimestamp(for: segment.start))
-              .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundStyle(Ink.secondary)
-              .frame(width: 60, alignment: .leading)
-            Text(segment.text)
-              .scaledFont(size: OmiType.body)
-              .foregroundStyle(Ink.primary)
-              .lineLimit(2)
-            Spacer(minLength: 0)
-            Image(systemName: "play.circle")
-              .foregroundStyle(Ink.secondary)
-          }
-          .padding(.vertical, OmiSpacing.xs)
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!canSeekMoment(segment))
-        .accessibilityLabel("Seek to \(Self.shortTimestamp(for: segment.start)): \(segment.text)")
-        .accessibilityHint(canSeekMoment(segment) ? "Seeks the capture audio" : "Audio is still preparing")
-        .accessibilityIdentifier("chat-first-capture-moment-\(segment.id)")
-      }
-    }
-  }
-
-  private func canSeekMoment(_ segment: TranscriptSegment) -> Bool {
-    guard case .readyAggregate(let artifact) = playback.resolution else { return false }
-    return artifact.artifactOffset(forWallOffset: segment.start) != nil
-  }
-
-  private static func shortTimestamp(for offset: TimeInterval) -> String {
+  private static func playbackTimestamp(_ offset: TimeInterval) -> String {
     let totalSeconds = max(0, Int(offset))
     return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
   }

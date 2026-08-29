@@ -42,6 +42,17 @@ struct MemoryHubPage: View {
   /// singleton below — correct for the modern shell, where this page mounts `ConversationsPageHost`
   /// itself and that host is guaranteed to be the one that consumes the request.
   var onOpenConversationRecord: ((ServerConversation) -> Void)? = nil
+  /// Optional exact record supplied by a Chat-first Activity deep-link. It is
+  /// passed to the same hub-owned ConversationsPageHost used by the
+  /// Conversations destination, so Activity does not open a second detail
+  /// presentation on the dedicated Chat-first route.
+  var initialConversation: ServerConversation? = nil
+  /// Canonical detail capabilities supplied by the owning shell. Activity and
+  /// the Conversations destination forward the same callbacks so opening the
+  /// same record never changes which actions are available.
+  var onDiscussInChat: ((ServerConversation) -> Void)? = nil
+  var onOpenLinkedTask: ((String) -> Void)? = nil
+  var onConversationSelectionChanged: ((ServerConversation?) -> Void)? = nil
 
   private var destination: MemoryHubDestination {
     MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
@@ -120,7 +131,11 @@ struct MemoryHubPage: View {
       ConversationsPageHost(
         appState: appState,
         brainDestination: destination,
-        onSelectBrainDestination: select
+        onSelectBrainDestination: select,
+        initialConversation: initialConversation,
+        onDiscussInChat: onDiscussInChat,
+        onOpenLinkedTask: onOpenLinkedTask,
+        onSelectionChanged: onConversationSelectionChanged
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .rewind:

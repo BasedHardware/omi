@@ -128,6 +128,31 @@ final class ChatCitationTests: XCTestCase {
     XCTAssertTrue(ledger.responseInstruction?.contains("Never write [memory]") == true)
   }
 
+  func testExplicitComposerSourceKeepsACitationSlotAheadOfBoundedAmbientContext() {
+    let explicit = ChatPromptCitationSource(
+      kind: .conversation,
+      sourceID: "selected-conversation",
+      title: "Selected conversation",
+      preview: "The source the user explicitly attached",
+      createdAt: nil
+    )
+    let ambient = (0..<ChatPromptCitationLedger.maximumReferences).map { index in
+      ChatPromptCitationSource(
+        kind: .memory,
+        sourceID: "memory-\(index)",
+        title: "Memory \(index)",
+        preview: "Ambient context",
+        createdAt: nil
+      )
+    }
+
+    let ledger = ChatPromptCitationLedger(sources: [explicit] + ambient)
+
+    XCTAssertEqual(ledger.references.count, ChatPromptCitationLedger.maximumReferences)
+    XCTAssertEqual(ledger.marker(kind: .conversation, sourceID: explicit.sourceID), "[5001]")
+    XCTAssertNil(ledger.marker(kind: .memory, sourceID: "memory-127"))
+  }
+
   func testPromptAndToolReferencesCanCoexistInOneAnswer() {
     let promptReference = ChatCitationReference(
       ordinal: 5001,

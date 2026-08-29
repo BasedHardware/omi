@@ -33,10 +33,11 @@ final class ConversationDetailAutomationStateTests: XCTestCase {
     XCTAssertEqual(ConversationDetailView.visiblePane(transcriptOpen: true), .transcript)
   }
 
-  func testCanonicalDetailScopesCapturePlaybackToOmiSource() {
-    XCTAssertTrue(ConversationDetailView.showsCapturePlayback(for: .omi))
-    XCTAssertFalse(ConversationDetailView.showsCapturePlayback(for: .desktop))
-    XCTAssertFalse(ConversationDetailView.showsCapturePlayback(for: nil))
+  func testCanonicalDetailScopesCapturePlaybackToOmiTranscriptOnly() {
+    XCTAssertFalse(ConversationDetailView.showsCapturePlayback(for: .omi, in: .summary))
+    XCTAssertTrue(ConversationDetailView.showsCapturePlayback(for: .omi, in: .transcript))
+    XCTAssertFalse(ConversationDetailView.showsCapturePlayback(for: .desktop, in: .transcript))
+    XCTAssertFalse(ConversationDetailView.showsCapturePlayback(for: nil, in: .transcript))
   }
 
   func testDetailRequestGateRejectsCancelledAndSupersededWork() {

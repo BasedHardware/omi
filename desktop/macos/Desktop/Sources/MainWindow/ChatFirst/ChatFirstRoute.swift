@@ -163,7 +163,6 @@ enum ChatFirstDiscussionContext: Equatable, Sendable {
   case tasks
   case goals
   case goal(id: String)
-  case capture(id: String, momentTimestamp: TimeInterval?)
 
   var userMessage: String {
     switch self {
@@ -173,11 +172,6 @@ enum ChatFirstDiscussionContext: Equatable, Sendable {
       return "Help me create a goal."
     case .goal(let id):
       return "Help me continue working on goal \(id)."
-    case .capture(let id, let momentTimestamp):
-      if let momentTimestamp {
-        return "Discuss Omi capture \(id) at \(Int(momentTimestamp)) seconds."
-      }
-      return "Discuss Omi capture \(id)."
     }
   }
 }
@@ -334,10 +328,20 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// Opens a conversation whose detail was already validated by ID. Keeping
   /// the fetched record on the navigation owner lets the Conversations page
   /// present it even when the paginated list does not currently contain it.
+  ///
+  /// The default remains the dedicated Chat-first Conversations route for rich
+  /// Chat links. Hub-owned callers can pass `.memories` so the exact same
+  /// ConversationsPageHost used by the Conversations chip remains mounted;
+  /// this avoids Activity opening a second presentation of conversation detail.
   func open(conversation: ServerConversation) {
+    open(conversation: conversation, destination: .conversations)
+  }
+
+  func open(conversation: ServerConversation, destination: ChatFirstRoute) {
+    guard destination.isPrimaryDestination else { return }
     guard !conversation.id.isEmpty else { return }
     invalidateLinkResolutions()
-    route = .conversations
+    route = destination
     visibleRoute = nil
     pendingFocus = nil
     pendingFocusDestination = nil
@@ -345,7 +349,7 @@ final class ChatFirstShellNavigation: ObservableObject {
     isFocusedEntityAcknowledged = false
     pendingConversation = conversation
     persistNavigation()
-    analytics(.routeEntered(route: .conversations, origin: .chatDeeplink))
+    analytics(.routeEntered(route: destination.analyticsRoute, origin: .chatDeeplink))
   }
 
   /// A Goal link validates asynchronously before it opens a typed focus. The
@@ -397,6 +401,29 @@ final class ChatFirstShellNavigation: ObservableObject {
     Task {
       _ = await chatProvider.sendMessage(context.userMessage)
     }
+  }
+
+  /// Opens the canonical main chat with a conversation source staged in its
+  /// composer. The existing draft is intentionally untouched and no turn is
+  /// submitted until the user types and presses Send.
+  func stageCaptureReference(
+    _ conversation: ServerConversation,
+    using chatProvider: ChatProvider,
+    momentTimestamp: TimeInterval? = nil
+  ) {
+    let preview =
+      conversation.structured.overview.isEmpty
+      ? (conversation.transcriptSegments.first?.text ?? "")
+      : conversation.structured.overview
+    chatProvider.stageComposerReference(
+      ChatComposerReference(
+        kind: .conversation,
+        sourceID: conversation.id,
+        title: conversation.displayTitle,
+        preview: preview,
+        momentTimestampMs: momentTimestamp.map { Int($0 * 1_000) }
+      ))
+    selectPrimary(.chat, origin: .chatDeeplink)
   }
 
   @discardableResult

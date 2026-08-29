@@ -685,6 +685,10 @@ struct DashboardPage: View {
           },
           onAttachmentRemoved: { id in
             chatProvider.removePendingAttachment(id: id)
+          },
+          references: chatProvider.pendingComposerReferences,
+          onReferenceRemoved: { id in
+            chatProvider.removeComposerReference(id: id)
           }
         )
         .padding(.horizontal, OmiSpacing.section)

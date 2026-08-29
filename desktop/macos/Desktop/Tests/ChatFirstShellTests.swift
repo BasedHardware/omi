@@ -159,6 +159,38 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertNil(navigation.pendingFocus)
   }
 
+  func testActivityConversationDeepLinkStaysOnTheHubOwnedConversationsDestination() throws {
+    let suiteName = "ChatFirstShellTests.activity-conversation-route.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    let fetched = conversation(id: "activity-meeting-42")
+    navigation.open(conversation: fetched, destination: .memories)
+
+    XCTAssertEqual(navigation.route, .memories)
+    XCTAssertEqual(navigation.pendingConversation, fetched)
+    XCTAssertNil(navigation.pendingFocus)
+  }
+
+  func testStagingConversationReferencePreservesDraftAndDoesNotSubmitATurn() throws {
+    let suiteName = "ChatFirstShellTests.capture-reference.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    let provider = ChatProvider()
+    provider.draftText = "Keep this draft"
+    let messageCount = provider.messages.count
+
+    navigation.stageCaptureReference(conversation(id: "capture-42"), using: provider)
+
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertEqual(provider.draftText, "Keep this draft")
+    XCTAssertEqual(provider.messages.count, messageCount)
+    XCTAssertEqual(provider.pendingComposerReferences.map(\.sourceID), ["capture-42"])
+  }
+
   func testRuntimeOwnerChangeClearsTransientConversationAndFocusRouting() throws {
     let suiteName = "ChatFirstShellTests.owner-change.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

@@ -193,11 +193,19 @@ struct ChatFirstShell: View {
         memoriesViewModel: viewModelContainer.memoriesViewModel,
         destinationRawValue: $memoryDestinationRawValue,
         onSelectDestination: selectHubDestination,
-        // The typed deep link, so a conversation opened from Activity arrives at the Conversations
-        // host as a record rather than as an id the host has to find again. `selectPrimary` — what
-        // the spine used to call — is the tab-selection primitive and drops pending records by
-        // design, which is why the click landed on the list.
-        onOpenConversationRecord: { navigation.open(conversation: $0) }
+        // Activity and the Conversations chip must share the hub-owned
+        // ConversationsPageHost. Keep the exact record on navigation while
+        // selecting the hub's Conversations destination; opening the dedicated
+        // Chat-first route here creates a visually different second detail UI.
+        onOpenConversationRecord: {
+          memoryDestinationRawValue = MemoryHubDestination.conversations.rawValue
+          navigation.open(conversation: $0, destination: .memories)
+        },
+        initialConversation: navigation.pendingConversation,
+        onDiscussInChat: {
+          navigation.stageCaptureReference($0, using: viewModelContainer.chatProvider)
+        },
+        onOpenLinkedTask: { navigation.open(focus: .task(id: $0)) }
       )
       .accessibilityIdentifier("chat-first-route-memories")
       .onAppear { navigation.markRouteVisible(.memories) }
@@ -508,7 +516,7 @@ private struct ChatFirstConversationsHost: View {
       initialCaptureMomentTimestamp: captureMoment,
       onCaptureFocusResolved: acknowledgeCaptureFocus,
       onDiscussInChat: { conversation in
-        navigation.discuss(.capture(id: conversation.id, momentTimestamp: nil), using: chatProvider)
+        navigation.stageCaptureReference(conversation, using: chatProvider)
       },
       onOpenLinkedTask: { taskID in
         navigation.open(focus: .task(id: taskID))
@@ -560,7 +568,7 @@ private struct ChatFirstConversationsHost: View {
       },
       discussCapture: {
         guard let conversation = visibleConversation, conversation.source == .omi else { return false }
-        navigation.discuss(.capture(id: conversation.id, momentTimestamp: nil), using: chatProvider)
+        navigation.stageCaptureReference(conversation, using: chatProvider)
         return true
       },
       detailIsVisible: {
