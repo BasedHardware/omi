@@ -194,6 +194,25 @@ def _build_data_plane_firestore_client() -> Any:
     if not data_plane_project:
         return get_firestore_client()
 
+    # Bare ADC pinned to another project is not enough: the dev compute
+    # service account has no data-plane Firestore IAM (writes came back 403
+    # the first time this seam served traffic). The data-plane SA is already
+    # mounted for exactly this split — SERVICE_ACCOUNT_JSON env on listen /
+    # Python / jobs, FIREBASE_AUTH_CREDENTIALS_PATH file on desktop-backend —
+    # so the seam pins those credentials, the same way entitlement reads do.
+    pinned = customer_entitlement_service_account()
+    if pinned is not None:
+        credentials, sa_project = pinned
+        if sa_project != data_plane_project:
+            # Writing user data to whatever project the mounted SA happens to
+            # serve would be silent cross-plane corruption; refuse instead.
+            raise RuntimeError(
+                "OMI_FIRESTORE_DATA_PLANE_PROJECT="
+                f"{data_plane_project} does not match the mounted service account's "
+                f"project {sa_project}"
+            )
+        return firestore.Client(credentials=credentials, project=data_plane_project)
+
     prepare_google_credentials()
     return firestore.Client(project=data_plane_project)
 
