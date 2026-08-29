@@ -210,63 +210,55 @@ struct ConversationRowView: View {
     isUpdatingTitle = false
   }
 
-  // MARK: - Inline Action Buttons
+  // MARK: - Row Actions
 
-  private var inlineActionButtons: some View {
-    HStack(spacing: OmiSpacing.xxs) {
-      // Reprocess (only when the LLM never produced a title for a non-empty
-      // transcript). Surface inline so the user can fix the bad row in one tap
-      // instead of digging into the context menu.
+  private var inlineActionMenu: some View {
+    Menu {
       if conversation.canReprocess {
-        Button(action: { Task { await reprocessConversation() } }) {
-          Image(systemName: isReprocessing ? "arrow.triangle.2.circlepath" : "wand.and.stars")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.accent)
-            .frame(width: 22, height: 22)
-            .background(Circle().fill(Ink.rowFill))
+        Button {
+          Task { await reprocessConversation() }
+        } label: {
+          Label(
+            isReprocessing ? "Reprocessing…" : "Reprocess title & summary",
+            systemImage: isReprocessing ? "arrow.triangle.2.circlepath" : "wand.and.stars")
         }
-        .buttonStyle(.plain)
         .disabled(isReprocessing)
-        .help(isReprocessing ? "Reprocessing…" : "Reprocess title & summary")
       }
 
-      // Edit title
-      Button(action: {
+      Button {
         editedTitle = conversation.title
         showEditDialog = true
-      }) {
-        Image(systemName: "pencil")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 22, height: 22)
-          .background(Circle().fill(Ink.rowFill))
+      } label: {
+        Label("Edit title…", systemImage: "pencil")
       }
-      .buttonStyle(.plain)
-      .help("Edit title")
 
-      // Copy link
-      Button(action: { Task { await copyLink() } }) {
-        Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 22, height: 22)
-          .background(Circle().fill(Ink.rowFill))
+      Button(action: copyTranscript) {
+        Label("Copy transcript", systemImage: "doc.on.doc")
       }
-      .buttonStyle(.plain)
+
+      Button {
+        Task { await copyLink() }
+      } label: {
+        Label(
+          isCopyingLink ? "Generating link…" : "Copy share link",
+          systemImage: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
+      }
       .disabled(isCopyingLink)
-      .help("Copy share link — anyone with the link can view")
 
-      // Move to folder (if folders exist)
       if !folders.isEmpty {
         Menu {
           if conversation.folderId != nil {
-            Button(action: { Task { await onMoveToFolder(conversation.id, nil) } }) {
+            Button {
+              Task { await onMoveToFolder(conversation.id, nil) }
+            } label: {
               Label("Remove from Folder", systemImage: "folder.badge.minus")
             }
             Divider()
           }
           ForEach(folders) { folder in
-            Button(action: { Task { await onMoveToFolder(conversation.id, folder.id) } }) {
+            Button {
+              Task { await onMoveToFolder(conversation.id, folder.id) }
+            } label: {
               HStack {
                 Text(folder.name)
                 if conversation.folderId == folder.id {
@@ -277,29 +269,46 @@ struct ConversationRowView: View {
             .disabled(conversation.folderId == folder.id)
           }
         } label: {
-          Image(systemName: conversation.folderId != nil ? "folder.fill" : "folder")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(conversation.folderId != nil ? Ink.primary : Ink.secondary)
-            .frame(width: 22, height: 22)
-            .background(Circle().fill(Ink.rowFill))
+          Label("Move to folder", systemImage: "folder")
         }
-        .tint(Ink.primary)
-        .menuStyle(.borderlessButton)
-        .frame(width: 22)
-        .help("Move to folder")
       }
 
-      // Delete
-      Button(action: { showDeleteConfirmation = true }) {
-        Image(systemName: "trash")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.errorRed)
-          .frame(width: 22, height: 22)
-          .background(Circle().fill(Ink.rowFill))
+      Divider()
+
+      Button(role: .destructive) {
+        showDeleteConfirmation = true
+      } label: {
+        Label("Delete conversation…", systemImage: "trash")
       }
-      .buttonStyle(.plain)
-      .help("Delete")
+    } label: {
+      Image(systemName: "ellipsis")
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundColor(Ink.secondary)
+        .frame(width: 26, height: 26)
+        .background(Circle().fill(Ink.rowFill))
     }
+    .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
+    .fixedSize()
+    .help("Conversation actions")
+    .accessibilityLabel("Actions for \(conversation.displayTitle)")
+    .accessibilityIdentifier("conversation-row-actions-\(conversation.id)")
+  }
+
+  private var starButton: some View {
+    Button {
+      Task { await toggleStar() }
+    } label: {
+      Image(systemName: conversation.starred ? "star.fill" : "star")
+        .scaledFont(size: isCompactView ? OmiType.caption : OmiType.body)
+        .foregroundColor(conversation.starred ? PageGlass.starred : Ink.secondary)
+        .opacity(isStarring ? 0.5 : 1.0)
+        .frame(width: 26, height: 26)
+    }
+    .buttonStyle(.plain)
+    .disabled(isStarring)
+    .help(conversation.starred ? "Remove from Starred" : "Add to Starred")
+    .accessibilityLabel(conversation.starred ? "Remove from Starred" : "Add to Starred")
   }
 
   // MARK: - Compact Row (single line)
@@ -335,11 +344,6 @@ struct ConversationRowView: View {
             NewBadge()
           }
 
-          // Inline action buttons (show on hover)
-          if isHovering && !isMultiSelectMode {
-            inlineActionButtons
-              .transition(.opacity)
-          }
         }
 
         HStack(spacing: OmiSpacing.xs) {
@@ -358,17 +362,7 @@ struct ConversationRowView: View {
       }
 
       Spacer()
-
-      // Star button
-      Button(action: {
-        Task { await toggleStar() }
-      }) {
-        Image(systemName: conversation.starred ? "star.fill" : "star")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(conversation.starred ? PageGlass.starred : Ink.secondary)
-          .opacity(isStarring ? 0.5 : 1.0)
-      }
-      .buttonStyle(.plain)
+      Color.clear.frame(width: 58, height: 26)
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.md)
@@ -412,11 +406,6 @@ struct ConversationRowView: View {
             NewBadge()
           }
 
-          // Inline action buttons (show on hover)
-          if isHovering && !isMultiSelectMode {
-            inlineActionButtons
-              .transition(.opacity)
-          }
         }
 
         HStack(spacing: OmiSpacing.xs) {
@@ -435,17 +424,7 @@ struct ConversationRowView: View {
       }
 
       Spacer()
-
-      // Star button
-      Button(action: {
-        Task { await toggleStar() }
-      }) {
-        Image(systemName: conversation.starred ? "star.fill" : "star")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(conversation.starred ? PageGlass.starred : Ink.secondary)
-          .opacity(isStarring ? 0.5 : 1.0)
-      }
-      .buttonStyle(.plain)
+      Color.clear.frame(width: 58, height: 26)
     }
     .padding(OmiSpacing.lg)
     // The shared row states: nothing at rest, a wash under the pointer, the heavier
@@ -457,26 +436,39 @@ struct ConversationRowView: View {
   }
 
   var body: some View {
-    Button(action: {
-      if isMultiSelectMode {
-        onToggleSelection?()
-      } else {
-        onTap()
-      }
-    }) {
-      Group {
-        if isCompactView {
-          // Compact mode: single line with all info
-          compactRowContent
+    ZStack(alignment: .trailing) {
+      Button(action: {
+        if isMultiSelectMode {
+          onToggleSelection?()
         } else {
-          // Expanded mode: title + overview with metadata below
-          expandedRowContent
+          onTap()
         }
+      }) {
+        Group {
+          if isCompactView {
+            // Compact mode: single line with all info
+            compactRowContent
+          } else {
+            // Expanded mode: title + overview with metadata below
+            expandedRowContent
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .contentShape(Rectangle())
+      .buttonStyle(.plain)
+
+      if !isMultiSelectMode {
+        HStack(spacing: OmiSpacing.xxs) {
+          if isHovering {
+            inlineActionMenu
+              .transition(.opacity)
+          }
+          starButton
+        }
+        .padding(.trailing, isCompactView ? OmiSpacing.md : OmiSpacing.lg)
+      }
     }
-    .buttonStyle(.plain)
     .onHover { hovering in
       isHovering = hovering
       if hovering {

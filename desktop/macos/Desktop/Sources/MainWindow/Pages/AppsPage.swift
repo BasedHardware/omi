@@ -114,6 +114,27 @@ enum AppsCatalogInitialSection {
   case exports
 }
 
+/// The Apps surface contains three different catalog kinds. Keeping the kind
+/// explicit prevents marketplace filters from looking like they also refine
+/// local imports and memory exports.
+enum AppsCatalogKind: String, CaseIterable, Identifiable {
+  case all = "All"
+  case apps = "Apps"
+  case imports = "Imports"
+  case exports = "Exports"
+
+  var id: String { rawValue }
+
+  var icon: String {
+    switch self {
+    case .all: return "square.grid.2x2"
+    case .apps: return "app.badge"
+    case .imports: return "arrow.down.circle"
+    case .exports: return "arrow.up.circle"
+    }
+  }
+}
+
 enum AppsPageCategoryFilter {
   static let allCategoriesOptionId = ""
   static let allCategoriesTitle = "All Categories"
@@ -158,6 +179,31 @@ enum AppsFilteredResultsPresentation: Equatable {
   }
 }
 
+enum AppsAllSearchPresentation: Equatable {
+  case loading
+  case empty
+  case results(total: Int)
+  case failure
+
+  static func resolve(
+    importsCount: Int,
+    exportsCount: Int,
+    appsCount: Int,
+    marketplace: AppsFilteredResultsPresentation
+  ) -> AppsAllSearchPresentation {
+    let localCount = importsCount + exportsCount
+    let visibleAppsCount = marketplace == .results ? appsCount : 0
+    let total = localCount + visibleAppsCount
+
+    if total > 0 { return .results(total: total) }
+    switch marketplace {
+    case .loading: return .loading
+    case .failure: return .failure
+    case .empty, .results: return .empty
+    }
+  }
+}
+
 struct AppsPage: View {
   @ObservedObject var appProvider: AppProvider
   var appState: AppState? = nil
@@ -178,104 +224,57 @@ struct AppsPage: View {
   @State private var visibleAutomationPresentationTarget: DesktopAutomationPresentationTarget?
   @State private var exportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
   @State private var viewAllSection: String? = nil  // "featured", "integrations", "notifications"
+  @State private var selectedKind: AppsCatalogKind = .all
 
   var body: some View {
-    VStack(spacing: 0) {
-      // Search bar
-      searchBar
-        .padding()
+    GeometryReader { proxy in
+      let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
 
-      Ink.separator
-        .frame(height: 1)
+      VStack(spacing: QueryShellLayout.panelGap) {
+        QuerySearchBar(
+          text: $searchText,
+          accessibilityID: "apps-search-field",
+          placeholder: searchPlaceholder
+        )
 
-      // Content
-      if appProvider.isLoading {
-        loadingShimmerView
-      } else {
-        // Always render the page (Imports/Exports are local connectors
-        // and must show even when the marketplace API returned no apps).
-        // The marketplace sections inside the else branch are each
-        // self-gated and skip when empty.
-        ScrollView {
-          LazyVStack(alignment: .leading, spacing: OmiSpacing.xxl) {
-            if hasActiveFilters {
-              filteredAppsContent
-            } else {
-              switch initialSection {
-              case .imports:
-                ImportsSection(statusStore: connectorStatusStore) { connector in
-                  selectConnector(connector)
-                }
+        VStack(spacing: 0) {
+          appsControlsBar
+            .pagePanelFirstRowInsets()
 
-                ExportsSection(statuses: exportStatuses) { destination in
-                  selectDestination(destination)
-                }
-              case .exports:
-                ExportsSection(statuses: exportStatuses) { destination in
-                  selectDestination(destination)
-                }
-
-                ImportsSection(statusStore: connectorStatusStore) { connector in
-                  selectConnector(connector)
-                }
+          // Content is scoped by Kind. Marketplace-only filters never replace
+          // the local Imports/Exports catalog with an empty app result.
+          if appProvider.isLoading {
+            loadingShimmerView
+          } else {
+            ScrollView {
+              LazyVStack(alignment: .leading, spacing: PagePanelVerticalRhythm.sectionGap) {
+                catalogContent
               }
-
-              // Featured section (apps marked as is_popular in backend)
-              if !appProvider.popularApps.isEmpty {
-                AppGridSection(
-                  title: "Other",
-                  apps: Array(appProvider.popularApps.prefix(6)),
-                  appProvider: appProvider,
-                  onSelectApp: selectApp,
-                  showSeeMore: appProvider.popularApps.count > 6,
-                  onSeeMore: { viewAllSection = "featured" }
-                )
-              }
-
-              // Integrations section (external_integration capability)
-              if !appProvider.integrationApps.isEmpty {
-                AppGridSection(
-                  title: "Integrations",
-                  apps: Array(appProvider.integrationApps.prefix(6)),
-                  appProvider: appProvider,
-                  onSelectApp: selectApp,
-                  showSeeMore: appProvider.integrationApps.count > 6,
-                  onSeeMore: { viewAllSection = "integrations" }
-                )
-              }
-
-              // Realtime Notifications section (proactive_notification capability)
-              if !appProvider.notificationApps.isEmpty {
-                AppGridSection(
-                  title: "Realtime Notifications",
-                  apps: Array(appProvider.notificationApps.prefix(6)),
-                  appProvider: appProvider,
-                  onSelectApp: selectApp,
-                  showSeeMore: appProvider.notificationApps.count > 6,
-                  onSeeMore: { viewAllSection = "notifications" }
-                )
-              }
+              .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+              .padding(.top, PagePanelVerticalRhythm.contentGap)
+              .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
             }
           }
-          .padding()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .inkGlassPanel(cornerRadius: QueryShellLayout.panelCornerRadius, shadow: .ambient)
       }
+      .frame(width: lane)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+      .padding(.top, QueryShellLayout.surfaceTopInset)
     }
     .background(Color.clear)
     .onChange(of: searchText) { _, newValue in
+      // Search never changes scope on the user's behalf. In All, the same
+      // query is applied to apps, imports, and exports; a narrower Kind keeps
+      // the query local to that catalog.
+      guard selectedKind == .apps || selectedKind == .all else { return }
       appProvider.searchQuery = newValue
-      // Clear filters when searching
       if !newValue.isEmpty {
         viewAllSection = nil
         appProvider.clearCategoryFilter()
       }
-      Task {
-        // Debounce search
-        try? await Task.sleep(for: .milliseconds(300))
-        if appProvider.searchQuery == newValue {
-          await appProvider.searchApps()
-        }
-      }
+      scheduleAppSearch(for: newValue)
     }
     .dismissableSheet(item: $selectedApp) { app in
       AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedApp = nil })
@@ -447,99 +446,201 @@ struct AppsPage: View {
     activeAutomationCommand = nil
   }
 
-  private var searchBar: some View {
-    AppsHeaderRow(
-      search: { searchField },
-      filters: { filterControls },
-      create: { createAppButton },
-      dismiss: { dismissControl }
-    )
-  }
-
-  private var searchField: some View {
-    HStack(spacing: OmiSpacing.sm) {
-      Image(systemName: "magnifyingglass")
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .frame(width: AppsHeaderMetrics.controlIconSize, height: AppsHeaderMetrics.controlIconSize)
-        .foregroundColor(Ink.secondary)
-
-      TextField("Search apps...", text: $searchText)
-        .textFieldStyle(.plain)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.primary)
-        .accessibilityLabel("Search apps")
-
-      if !searchText.isEmpty {
-        Button(action: { searchText = "" }) {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
+  private var appsControlsBar: some View {
+    PageQueryToolbar(
+      refinement: {
+        kindMenu
+        if selectedKind == .apps {
+          appsFiltersMenu
         }
-        .buttonStyle(.plain)
-        .help("Clear search")
-        .accessibilityLabel("Clear search")
+      },
+      activeFilters: {
+        ActivePageFilterStrip(filters: activeAppFilters, onClearAll: clearAppFilters)
+      },
+      actions: {
+        appsMoreMenu
+        dismissControl
       }
-    }
-    .padding(.horizontal, OmiSpacing.md)
-    .frame(height: AppsHeaderMetrics.controlHeight)
-    .background(
-      Capsule(style: .continuous)
-        .fill(Ink.rowFill)
-        .overlay(
-          Capsule(style: .continuous)
-            .stroke(Ink.separator, lineWidth: 1)
-        )
     )
   }
 
-  private var filterControls: some View {
-    HStack(spacing: OmiSpacing.sm) {
-      FilterToggle(
-        icon: "arrow.down.circle",
-        label: "Installed",
-        isActive: appProvider.showInstalledOnly
-      ) {
-        viewAllSection = nil
-        appProvider.showInstalledOnly.toggle()
-        Task { await appProvider.searchApps() }
-      }
-
-      categoryMenu
+  private var searchPlaceholder: String {
+    switch selectedKind {
+    case .all: return "Search apps, imports, and exports…"
+    case .apps: return "Search apps…"
+    case .imports: return "Search imports…"
+    case .exports: return "Search exports…"
     }
   }
 
-  private var categoryMenu: some View {
-    SearchableDropdown(
-      title: "Category",
-      label: "Category",
-      options: AppsPageCategoryFilter.categoryDropdownOptions(categories: appProvider.categories),
-      selectedId: AppsPageCategoryFilter.selectedCategoryDropdownId(appProvider.selectedCategory),
-      minWidth: 180,
-      controlHeight: AppsHeaderMetrics.controlHeight,
-      usesHeaderChrome: true
-    ) { option in
-      viewAllSection = nil
-      switch AppsPageCategoryFilter.categorySelection(forOptionId: option.id) {
-      case .allCategories:
-        appProvider.clearCategoryFilter()
-      case .category(let categoryId):
-        appProvider.selectedCategory = categoryId
-      }
-      Task { await appProvider.searchApps() }
+  private var activeAppFilters: [PageActiveFilter] {
+    guard selectedKind == .apps else { return [] }
+    var filters: [PageActiveFilter] = []
+
+    if appProvider.showInstalledOnly {
+      filters.append(
+        PageActiveFilter(id: "installed", title: "Installed") {
+          setConnectionFilter(installedOnly: false)
+        })
     }
+
+    if appProvider.selectedCategory != nil {
+      filters.append(
+        PageActiveFilter(id: "category", title: selectedCategoryTitle) {
+          appProvider.clearCategoryFilter()
+          scheduleAppSearch(for: searchText)
+        })
+    }
+
+    return filters
+  }
+
+  private var kindMenu: some View {
+    Menu {
+      ForEach(AppsCatalogKind.allCases) { kind in
+        Button {
+          selectKind(kind)
+        } label: {
+          Label(kind.rawValue, systemImage: kind.icon)
+        }
+      }
+    } label: {
+      PageQueryControlLabel(
+        icon: selectedKind.icon,
+        dimension: "Kind",
+        value: selectedKind.rawValue,
+        isActive: selectedKind != .all
+      )
+    }
+    .menuStyle(.button)
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("apps-kind-filter")
+    .help("Choose which app catalog to show")
+  }
+
+  private var appsFiltersMenu: some View {
+    Menu {
+      Section("Connection") {
+        Button {
+          setConnectionFilter(installedOnly: false)
+        } label: {
+          Label("All apps", systemImage: "square.grid.2x2")
+        }
+        Button {
+          setConnectionFilter(installedOnly: true)
+        } label: {
+          Label("Installed", systemImage: "checkmark.circle")
+        }
+      }
+
+      Section("Category") {
+        ForEach(AppsPageCategoryFilter.categoryDropdownOptions(categories: appProvider.categories)) { option in
+          Button(option.title) {
+            viewAllSection = nil
+            switch AppsPageCategoryFilter.categorySelection(forOptionId: option.id) {
+            case .allCategories:
+              appProvider.clearCategoryFilter()
+            case .category(let categoryId):
+              appProvider.selectedCategory = categoryId
+            }
+            scheduleAppSearch(for: searchText)
+          }
+        }
+      }
+
+      if !activeAppFilters.isEmpty {
+        Divider()
+        Button("Clear all filters", action: clearAppFilters)
+      }
+    } label: {
+      PageQueryControlLabel(
+        icon: "line.3.horizontal.decrease",
+        dimension: activeAppFilters.isEmpty ? nil : "Filter",
+        value: activeAppFilters.isEmpty ? "Filter" : "\(activeAppFilters.count)",
+        isActive: !activeAppFilters.isEmpty,
+        dimensionSeparator: " ·"
+      )
+    }
+    .menuStyle(.button)
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("apps-filter-menu")
+    .help("Filter apps by connection or category")
+  }
+
+  private var selectedCategoryTitle: String {
+    guard let selectedCategory = appProvider.selectedCategory,
+      let category = appProvider.categories.first(where: { $0.id == selectedCategory })
+    else {
+      return "All"
+    }
+    return category.title
+  }
+
+  private func selectKind(_ kind: AppsCatalogKind) {
+    guard selectedKind != kind else { return }
+    viewAllSection = nil
+    selectedKind = kind
+
+    // Connection and Category are marketplace dimensions. Search is a page-
+    // wide intent, so changing scope never discards what the user typed.
+    if kind != .apps {
+      clearMarketplaceFiltersPreservingSearch()
+    }
+
+    if kind == .apps || kind == .all {
+      appProvider.searchQuery = searchText
+      scheduleAppSearch(for: searchText)
+    }
+  }
+
+  private func setConnectionFilter(installedOnly: Bool) {
+    guard selectedKind == .apps else { return }
+    viewAllSection = nil
+    appProvider.showInstalledOnly = installedOnly
+    scheduleAppSearch(for: searchText)
+  }
+
+  private func clearAppFilters() {
+    viewAllSection = nil
+    clearMarketplaceFiltersPreservingSearch()
+    scheduleAppSearch(for: searchText)
+  }
+
+  private func clearMarketplaceFiltersPreservingSearch() {
+    let query = searchText
+    appProvider.clearFilters()
+    appProvider.searchQuery = query
+  }
+
+  private func scheduleAppSearch(for query: String) {
+    Task {
+      // Debounce search and keep the provider's current query authoritative.
+      try? await Task.sleep(for: .milliseconds(300))
+      guard selectedKind == .apps || selectedKind == .all,
+        appProvider.searchQuery == query
+      else { return }
+      await appProvider.searchApps()
+    }
+  }
+
+  private var appsMoreMenu: some View {
+    Menu {
+      Button {
+        if let url = URL(string: "https://docs.omi.me/docs/developer/apps/Introduction") {
+          NSWorkspace.shared.open(url)
+        }
+      } label: {
+        Label("Build an app…", systemImage: "app.badge.fill")
+      }
+    } label: {
+      PageQueryActionLabel(icon: "ellipsis", title: "More")
+    }
+    .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
     .fixedSize()
-  }
-
-  private var createAppButton: some View {
-    SmallHeaderButton(
-      icon: "app.badge.fill",
-      label: "Create App",
-      color: Ink.secondary
-    ) {
-      if let url = URL(string: "https://docs.omi.me/docs/developer/apps/Introduction") {
-        NSWorkspace.shared.open(url)
-      }
-    }
+    .help("More app actions")
+    .accessibilityLabel("More app actions")
+    .accessibilityIdentifier("apps-more-actions")
   }
 
   @ViewBuilder
@@ -549,8 +650,264 @@ struct AppsPage: View {
     }
   }
 
-  private var hasActiveFilters: Bool {
+  @ViewBuilder
+  private var catalogContent: some View {
+    switch selectedKind {
+    case .imports:
+      ImportsSection(
+        statusStore: connectorStatusStore,
+        onSelectConnector: { connector in
+          selectConnector(connector)
+        },
+        connectors: visibleImportConnectors,
+        searchText: searchText,
+        onClearSearch: { searchText = "" }
+      )
+    case .exports:
+      ExportsSection(statuses: exportStatuses, searchText: searchText) { destination in
+        selectDestination(destination)
+      }
+    case .apps:
+      marketplaceContent
+    case .all:
+      if hasSearchQuery {
+        allCatalogSearchContent
+      } else {
+        localAndMarketplaceContent
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var allCatalogSearchContent: some View {
+    switch allSearchPresentation {
+    case .loading:
+      searchLoadingState
+    case .failure:
+      searchFailureState
+    case .empty:
+      globalSearchEmptyState
+    case .results(let total):
+      Text("Search Results (\(total))")
+        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .foregroundStyle(Ink.primary)
+
+      if !visibleImportConnectors.isEmpty {
+        ImportsSection(
+          statusStore: connectorStatusStore,
+          onSelectConnector: { connector in selectConnector(connector) },
+          connectors: visibleImportConnectors,
+          title: "Imports (\(visibleImportConnectors.count))"
+        )
+      }
+
+      if !visibleExportEntries.isEmpty {
+        ExportsSection(
+          statuses: exportStatuses,
+          title: "Exports (\(visibleExportEntries.count))",
+          entriesOverride: visibleExportEntries
+        ) { destination in
+          selectDestination(destination)
+        }
+      }
+
+      if !visibleMarketplaceSearchApps.isEmpty {
+        AppGridSection(
+          title: "Apps (\(visibleMarketplaceSearchApps.count))",
+          apps: visibleMarketplaceSearchApps,
+          appProvider: appProvider,
+          onSelectApp: selectApp,
+          titleSize: OmiType.subheading
+        )
+      }
+
+      if filteredAppsPresentation == .loading {
+        marketplaceSearchProgress
+      } else if filteredAppsPresentation == .failure {
+        marketplaceSearchFailure
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var localAndMarketplaceContent: some View {
+    switch initialSection {
+    case .imports:
+      ImportsSection(statusStore: connectorStatusStore) { connector in
+        selectConnector(connector)
+      }
+      ExportsSection(statuses: exportStatuses) { destination in
+        selectDestination(destination)
+      }
+    case .exports:
+      ExportsSection(statuses: exportStatuses) { destination in
+        selectDestination(destination)
+      }
+      ImportsSection(statusStore: connectorStatusStore) { connector in
+        selectConnector(connector)
+      }
+    }
+
+    marketplaceSections
+  }
+
+  @ViewBuilder
+  private var marketplaceContent: some View {
+    if hasMarketplaceQuery {
+      filteredAppsContent
+    } else {
+      marketplaceSections
+    }
+  }
+
+  @ViewBuilder
+  private var marketplaceSections: some View {
+    if !appProvider.popularApps.isEmpty {
+      AppGridSection(
+        title: "Other",
+        apps: Array(appProvider.popularApps.prefix(6)),
+        appProvider: appProvider,
+        onSelectApp: selectApp,
+        showSeeMore: appProvider.popularApps.count > 6,
+        onSeeMore: {
+          selectedKind = .apps
+          viewAllSection = "featured"
+        }
+      )
+    }
+
+    if !appProvider.integrationApps.isEmpty {
+      AppGridSection(
+        title: "Integrations",
+        apps: Array(appProvider.integrationApps.prefix(6)),
+        appProvider: appProvider,
+        onSelectApp: selectApp,
+        showSeeMore: appProvider.integrationApps.count > 6,
+        onSeeMore: {
+          selectedKind = .apps
+          viewAllSection = "integrations"
+        }
+      )
+    }
+
+    if !appProvider.notificationApps.isEmpty {
+      AppGridSection(
+        title: "Realtime Notifications",
+        apps: Array(appProvider.notificationApps.prefix(6)),
+        appProvider: appProvider,
+        onSelectApp: selectApp,
+        showSeeMore: appProvider.notificationApps.count > 6,
+        onSeeMore: {
+          selectedKind = .apps
+          viewAllSection = "notifications"
+        }
+      )
+    }
+  }
+
+  private var hasMarketplaceQuery: Bool {
     appProvider.hasActiveFilters || viewAllSection != nil
+  }
+
+  private var hasSearchQuery: Bool {
+    !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  private var visibleImportConnectors: [ImportConnector] {
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return ImportConnector.all }
+    return ImportConnector.all
+      .filter { connector in
+        [connector.title, connector.subtitle, connector.description]
+          .contains { $0.localizedCaseInsensitiveContains(query) }
+      }
+      .sorted { catalogMatchRank($0.title, query: query) < catalogMatchRank($1.title, query: query) }
+  }
+
+  private var visibleExportEntries: [MemoryExportCatalogEntry] {
+    MemoryExportCatalog.matching(searchText)
+  }
+
+  private var visibleMarketplaceSearchApps: [OmiApp] {
+    guard filteredAppsPresentation == .results else { return [] }
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    return filteredApps.sorted {
+      catalogMatchRank($0.name, query: query) < catalogMatchRank($1.name, query: query)
+    }
+  }
+
+  private var allSearchPresentation: AppsAllSearchPresentation {
+    AppsAllSearchPresentation.resolve(
+      importsCount: visibleImportConnectors.count,
+      exportsCount: visibleExportEntries.count,
+      appsCount: filteredApps.count,
+      marketplace: filteredAppsPresentation
+    )
+  }
+
+  private func catalogMatchRank(_ title: String, query: String) -> Int {
+    if title.localizedCaseInsensitiveCompare(query) == .orderedSame { return 0 }
+    if title.range(of: query, options: [.anchored, .caseInsensitive, .diacriticInsensitive]) != nil {
+      return 1
+    }
+    return 2
+  }
+
+  private var searchLoadingState: some View {
+    VStack(spacing: OmiSpacing.md) {
+      ProgressView()
+      Text("Searching apps, imports, and exports…")
+        .scaledFont(size: OmiType.body)
+        .foregroundStyle(Ink.secondary)
+    }
+    .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
+  }
+
+  private var searchFailureState: some View {
+    VStack(spacing: OmiSpacing.md) {
+      Image(systemName: "exclamationmark.circle")
+        .scaledFont(size: 28)
+        .foregroundStyle(Ink.secondary)
+      Text("Couldn't finish searching apps")
+        .scaledFont(size: OmiType.subheading, weight: .medium)
+      Button("Try Again") { Task { await appProvider.searchApps() } }
+        .buttonStyle(.bordered)
+    }
+    .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
+  }
+
+  private var globalSearchEmptyState: some View {
+    VStack(spacing: OmiSpacing.md) {
+      Image(systemName: "magnifyingglass")
+        .scaledFont(size: 28)
+        .foregroundStyle(Ink.secondary)
+      Text("No results for “\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))”")
+        .scaledFont(size: OmiType.subheading, weight: .medium)
+        .foregroundStyle(Ink.primary)
+      Button("Clear Search") { searchText = "" }
+        .buttonStyle(.bordered)
+    }
+    .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
+  }
+
+  private var marketplaceSearchProgress: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      ProgressView().controlSize(.small)
+      Text("Searching marketplace apps…")
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(Ink.secondary)
+    }
+  }
+
+  private var marketplaceSearchFailure: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Text("Marketplace apps couldn't be loaded.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(Ink.secondary)
+      Button("Try Again") { Task { await appProvider.searchApps() } }
+        .buttonStyle(.plain)
+        .foregroundStyle(Ink.primary)
+    }
   }
 
   /// Apps for the selected filter/search result set or "See more" section.
@@ -613,7 +970,7 @@ struct AppsPage: View {
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
       }
-      .frame(maxWidth: .infinity, minHeight: 200)
+      .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
     case .empty:
       VStack(spacing: OmiSpacing.md) {
         Image(systemName: "magnifyingglass")
@@ -623,7 +980,7 @@ struct AppsPage: View {
           .scaledFont(size: OmiType.subheading, weight: .medium)
           .foregroundColor(Ink.secondary)
       }
-      .frame(maxWidth: .infinity, minHeight: 200)
+      .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
     case .failure:
       VStack(spacing: OmiSpacing.md) {
         Image(systemName: "exclamationmark.circle")
@@ -637,7 +994,7 @@ struct AppsPage: View {
         }
         .buttonStyle(.bordered)
       }
-      .frame(maxWidth: .infinity, minHeight: 200)
+      .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
     case .results:
       filteredAppsGrid
     }
@@ -693,7 +1050,7 @@ struct AppsPage: View {
 
   private var loadingShimmerView: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
+      VStack(alignment: .leading, spacing: PagePanelVerticalRhythm.sectionGap) {
         // Shimmer sections
         ForEach(0..<3, id: \.self) { _ in
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -711,7 +1068,9 @@ struct AppsPage: View {
           }
         }
       }
-      .padding()
+      .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+      .padding(.top, PagePanelVerticalRhythm.contentGap)
+      .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
     }
   }
 
@@ -1274,27 +1633,54 @@ final class ImportConnectorStatusStore: ObservableObject {
 }
 
 struct ImportsSection: View {
-  private let connectors = ImportConnector.all
   @ObservedObject var statusStore: ImportConnectorStatusStore
   let onSelectConnector: (ImportConnector) -> Void
+  var connectors: [ImportConnector] = ImportConnector.all
+  var searchText: String = ""
+  var onClearSearch: (() -> Void)? = nil
+  var title = "Imports"
+
+  private var normalizedSearchText: String {
+    searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      Text("Imports")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      Text(title)
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
         .foregroundColor(Ink.primary)
 
-      LazyVGrid(
-        columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
-        alignment: .leading,
-        spacing: OmiSpacing.md
-      ) {
-        ForEach(connectors) { connector in
-          ImportConnectorCard(
-            connector: connector,
-            snapshot: statusStore.snapshot(for: connector)
-          ) {
-            onSelectConnector(connector)
+      if connectors.isEmpty && !normalizedSearchText.isEmpty {
+        VStack(spacing: OmiSpacing.md) {
+          Image(systemName: "magnifyingglass")
+            .scaledFont(size: 32)
+            .foregroundColor(Ink.secondary)
+
+          Text("No imports match “\(normalizedSearchText)”")
+            .scaledFont(size: OmiType.subheading, weight: .medium)
+            .foregroundColor(Ink.primary)
+            .multilineTextAlignment(.center)
+
+          if let onClearSearch {
+            Button("Clear Search", action: onClearSearch)
+              .buttonStyle(.bordered)
+              .tint(Ink.secondary)
+          }
+        }
+        .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight)
+      } else {
+        LazyVGrid(
+          columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
+          alignment: .leading,
+          spacing: OmiSpacing.md
+        ) {
+          ForEach(connectors) { connector in
+            ImportConnectorCard(
+              connector: connector,
+              snapshot: statusStore.snapshot(for: connector)
+            ) {
+              onSelectConnector(connector)
+            }
           }
         }
       }
@@ -1350,9 +1736,9 @@ struct ImportConnectorCard: View {
 
   var body: some View {
     Button(action: action) {
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         HStack(spacing: OmiSpacing.md) {
-          ConnectorBrandIcon(brand: connector.brand, size: 50, cornerRadius: OmiChrome.smallControlRadius)
+          ConnectorBrandIcon(brand: connector.brand, size: 38, cornerRadius: OmiChrome.smallControlRadius)
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text(connector.title)
@@ -1372,7 +1758,7 @@ struct ImportConnectorCard: View {
         Text(connector.description)
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
-          .lineLimit(2)
+          .lineLimit(1)
           .multilineTextAlignment(.leading)
 
         HStack {
@@ -1394,7 +1780,7 @@ struct ImportConnectorCard: View {
           ImportConnectorActionButton(title: snapshot.actionTitle, isConnected: snapshot.isConnected)
         }
       }
-      .padding(OmiSpacing.md)
+      .padding(OmiSpacing.sm)
       .background(isHovering ? Ink.rowFillHover : Ink.rowFill)
       .cornerRadius(OmiChrome.smallControlRadius)
       .overlay(
@@ -1417,7 +1803,7 @@ struct ImportConnectorActionButton: View {
     Text(title)
       .scaledFont(size: OmiType.caption, weight: .medium)
       .foregroundColor(isConnected ? Ink.primary : Ink.surface)
-      .frame(width: isConnected ? 84 : 72, height: 28)
+      .frame(width: isConnected ? 78 : 68, height: 26)
       .background(isConnected ? Ink.wash : Ink.primary)
       .cornerRadius(OmiChrome.chipRadius)
       .overlay(
@@ -1973,6 +2359,7 @@ struct AppGridSection: View {
   let apps: [OmiApp]
   let appProvider: AppProvider
   let onSelectApp: (OmiApp) -> Void
+  var titleSize = OmiType.heading
   var showSeeMore: Bool = false
   var onSeeMore: (() -> Void)? = nil
 
@@ -1980,7 +2367,7 @@ struct AppGridSection: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       HStack {
         Text(title)
-          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .scaledFont(size: titleSize, weight: .semibold)
           .foregroundColor(Ink.primary)
 
         Spacer()
@@ -2140,7 +2527,7 @@ struct AppCard: View {
 
   var body: some View {
     Button(action: onSelect) {
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         HStack(spacing: OmiSpacing.md) {
           // App icon
           AsyncImage(url: URL(string: app.image)) { phase in
@@ -2153,7 +2540,7 @@ struct AppCard: View {
               appIconPlaceholder
             }
           }
-          .frame(width: 50, height: 50)
+          .frame(width: 38, height: 38)
           .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
@@ -2174,7 +2561,7 @@ struct AppCard: View {
         Text(app.description)
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
-          .lineLimit(2)
+          .lineLimit(1)
           .multilineTextAlignment(.leading)
 
         HStack {
@@ -2208,7 +2595,7 @@ struct AppCard: View {
           AppActionButton(app: app, appProvider: appProvider, onOpen: onSelect)
         }
       }
-      .padding(OmiSpacing.md)
+      .padding(OmiSpacing.sm)
       .background(isHovering ? Ink.rowFill : Ink.wash)
       .cornerRadius(OmiChrome.smallControlRadius)
     }

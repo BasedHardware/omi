@@ -74,10 +74,33 @@ class CandidateProbeTests(unittest.TestCase):
                 PROBE._gemini_request("https://candidate.example", token="token")
 
     def test_gemini_probe_rejects_stub_or_unknown_provider_routes(self) -> None:
-        for provider in ("offline_stub", "unknown", ""):
+        for provider in ("offline_stub", "desktop_llm_stub", "unknown", ""):
             with self.assertRaisesRegex(PROBE.ProbeError, "admitted provider"):
                 PROBE._require_real_gemini_provider(provider)
-        self.assertEqual(PROBE._require_real_gemini_provider("vertex_ai"), "vertex_ai")
+        for admitted in ("vertex_ai", "ai_studio", "ai_studio_byok"):
+            self.assertEqual(PROBE._require_real_gemini_provider(admitted), admitted)
+
+    def test_gemini_probe_admits_post_gateway_llm_gateway_route(self) -> None:
+        # Since #12337 the desktop proxy serves company-paid Gemini traffic via
+        # the LLM gateway's Vertex-backed desktop-vertex lanes and stamps
+        # `llm_gateway` on X-Omi-Provider; the probe must admit that real route.
+        self.assertEqual(PROBE._require_real_gemini_provider("llm_gateway"), "llm_gateway")
+
+        class GatewayResponse:
+            headers = {"x-omi-provider": "llm_gateway", "x-omi-request-id": "server-request-id"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self) -> bytes:
+                return b'{"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}'
+
+        with mock.patch.object(PROBE.urllib.request, "urlopen", return_value=GatewayResponse()):
+            summary = PROBE._gemini_request("https://candidate.example", token="token")
+        self.assertEqual(summary["provider_route"], "llm_gateway")
 
     def test_gemini_request_cannot_pass_against_offline_stub(self) -> None:
         class StubResponse:

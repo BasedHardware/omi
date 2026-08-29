@@ -830,6 +830,7 @@ class TestRequestHasLLMByokKey:
     def test_accepts_openrouter_and_gemini(self, monkeypatch):
         from utils import subscription
 
+        keys = {'openrouter': 'or-key'}
         monkeypatch.setattr(subscription, 'has_validated_byok_keys', lambda: True)
         monkeypatch.setattr(subscription, 'get_byok_uid', lambda: 'uid-1')
 

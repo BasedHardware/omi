@@ -403,6 +403,13 @@ class TestByokRequestEscapeHatch:
         # Paywall is OFF by default (freemium); force it on for these BYOK-bypass tests.
         sub.TRIAL_PAYWALL_ENABLED = True
 
+        # Never hit Firestore from the live byok state cache in this isolated file.
+        # The except-path in request_has_llm_byok_key then reads the request keys.
+        def _isolated_byok_state(_uid):
+            raise RuntimeError('isolated paywall test')
+
+        sub.get_cached_byok_state = _isolated_byok_state
+
         self._sub = sub
         self._byok = byok
         # The middleware validates request keys against enrollment and warms
@@ -427,6 +434,7 @@ class TestByokRequestEscapeHatch:
         # Reset BYOK contextvars between tests so leftover keys/uid don't bleed.
         sub.get_cached_byok_state = original_cached_byok_state
         byok._byok_ctx.set(None)
+        byok._byok_validated_ctx.set(False)
         byok.set_byok_uid(None)
         for name in stubs:
             if saved[name] is None:
@@ -443,6 +451,7 @@ class TestByokRequestEscapeHatch:
                 'deepgram': 'stub-deepgram',
             }
         )
+        self._byok.set_byok_uid('uid-stale-firestore')
         self._byok._byok_validated_ctx.set(True)
         # The enrollment-verifying escape hatch needs the request uid on the
         # context (middleware sets it in production).
@@ -451,6 +460,7 @@ class TestByokRequestEscapeHatch:
 
     def test_validated_llm_byok_header_bypasses_paywall(self):
         self._byok.set_byok_keys({'openrouter': 'sk-stub'})
+        self._byok.set_byok_uid('uid-stale-firestore')
         self._byok._byok_validated_ctx.set(True)
         self._byok.set_byok_uid('uid-stale-firestore')
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False

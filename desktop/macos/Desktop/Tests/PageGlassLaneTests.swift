@@ -23,11 +23,11 @@ final class PageGlassLaneTests: XCTestCase {
 
   // MARK: - Which destinations already have glass
 
-  /// QueryShell Home and Rewind build their own panels when the router says they do. Wrapping them
+  /// Search-first pages and Rewind build their own panels. Wrapping them
   /// again does not stack two materials — a
   /// nested `.behindWindow` surface takes a *second* copy of the desktop and doubles the scrim — so a
   /// double-wrapped page reads visibly muddier than the pages around it.
-  func testHomeAndRewindKeepTheirOwnPanelsAndEveryOtherDestinationIsGivenOne() {
+  func testSearchFirstPagesAndRewindKeepTheirOwnPanelsAndOtherDestinationsAreGivenOne() {
     for homeOwnsItsPanels in [false, true] {
       XCTAssertEqual(
         PageGlassLanePolicy.ownsItsPanels(
@@ -39,39 +39,32 @@ final class PageGlassLaneTests: XCTestCase {
           selectedIndex: SidebarNavItem.rewind.rawValue,
           homeOwnsItsPanels: homeOwnsItsPanels))
 
-      for item in SidebarNavItem.allCases where item != .dashboard && item != .rewind {
+      let selfContained: Set<SidebarNavItem> = [.dashboard, .rewind, .tasks, .apps]
+      for item in SidebarNavItem.allCases where !selfContained.contains(item) {
         XCTAssertFalse(
           PageGlassLanePolicy.ownsItsPanels(
             selectedIndex: item.rawValue,
             homeOwnsItsPanels: homeOwnsItsPanels),
-          "\(item.title) has no glass of its own and must be given the lane's")
+          "\(item.title) has no page panels of its own and must be given the lane's")
       }
     }
   }
 
-  /// **The hub is one rail index wearing four pages, and only one of them brings its own glass.**
+  /// **The hub is one rail index wearing five pages; every page brings the same two-panel shape.**
   ///
   /// Activity is Home's column — a search bar and a results panel, each already an `inkGlassPanel`.
   /// Wrapping the hub wholesale nested both inside a third panel, which does not stack two materials
   /// but takes a second copy of the desktop and doubles the scrim, so Activity read visibly muddier
-  /// than Chat and its two panels lost their separation. The hub's list pages paint no ground of
-  /// their own and must keep the lane.
-  func testOnlyTheActivityHubPageBringsItsOwnPanels() {
+  /// than Chat and its two panels lost their separation.
+  func testEveryBrainHubPageBringsItsOwnPanels() {
     let hubIndex = SidebarNavItem.conversations.rawValue
-    XCTAssertTrue(
-      PageGlassLanePolicy.ownsItsPanels(
-        selectedIndex: hubIndex,
-        memoryDestinationRawValue: MemoryHubDestination.activity.rawValue,
-        homeOwnsItsPanels: true),
-      "Activity builds Home's own two panels and must not be wrapped in a third")
-
-    for destination in MemoryHubDestination.allCases where destination != .activity {
-      XCTAssertFalse(
+    for destination in MemoryHubDestination.allCases {
+      XCTAssertTrue(
         PageGlassLanePolicy.ownsItsPanels(
           selectedIndex: hubIndex,
           memoryDestinationRawValue: destination.rawValue,
           homeOwnsItsPanels: true),
-        "\(destination.title) paints no ground of its own and must be given the lane's")
+        "\(destination.title) builds Brain search and content panels and must not be wrapped")
     }
 
     for destination in MemoryHubDestination.allCases {
@@ -144,7 +137,7 @@ final class PageGlassLaneTests: XCTestCase {
   func testAWrappedDestinationIsPlacedInTheLaneWithTheGapAboveAndBelowIt() throws {
     let size = CGSize(width: 1_400, height: 800)
     for (index, homeOwnsItsPanels) in [
-      (SidebarNavItem.tasks.rawValue, true),
+      (SidebarNavItem.permissions.rawValue, true),
       (SidebarNavItem.dashboard.rawValue, false),
     ] {
       let recorder = PageGlassLaneFrameRecorder()
@@ -185,7 +178,7 @@ final class PageGlassLaneTests: XCTestCase {
       let recorder = PageGlassLaneFrameRecorder()
       let host = NSHostingView(
         rootView: PageGlassLane(
-          selectedIndex: SidebarNavItem.tasks.rawValue,
+          selectedIndex: SidebarNavItem.permissions.rawValue,
           homeOwnsItsPanels: true
         ) {
           PageGlassLaneProbe(recorder: recorder) { Color.clear }

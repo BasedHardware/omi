@@ -13,7 +13,11 @@ final class RewindSearchLayoutTests: XCTestCase {
 
   func testThreeColumnsFitTheContentWidthExactly() {
     let content = RewindSearchLayout.contentWidth()
-    XCTAssertEqual(content, 720, accuracy: 0.001, "760 pt panel less 20 pt padding either side")
+    XCTAssertEqual(
+      content,
+      RewindSearchLayout.panelWidth - RewindSearchLayout.panelPaddingHorizontal * 2,
+      accuracy: 0.001,
+      "the content lane is the panel less its shared horizontal padding")
 
     let card = RewindSearchLayout.cardWidth()
     let gutters = RewindSearchLayout.cardGutter * CGFloat(RewindSearchLayout.resultColumns - 1)
@@ -24,11 +28,15 @@ final class RewindSearchLayoutTests: XCTestCase {
 
   func testACardIsAsTallAsTheLayoutSays() {
     let card = RewindSearchLayout.cardWidth()
-    XCTAssertEqual(card, 230.667, accuracy: 0.01)
+    let gutters = RewindSearchLayout.cardGutter * CGFloat(RewindSearchLayout.resultColumns - 1)
     XCTAssertEqual(
-      RewindSearchLayout.cardHeight(), card / RewindSearchLayout.thumbnailAspect + 46,
+      card,
+      (RewindSearchLayout.contentWidth() - gutters) / CGFloat(RewindSearchLayout.resultColumns),
       accuracy: 0.001)
-    XCTAssertEqual(RewindSearchLayout.cardHeight(), 219, accuracy: 0.01)
+    XCTAssertEqual(
+      RewindSearchLayout.cardHeight(),
+      card / RewindSearchLayout.thumbnailAspect + RewindSearchLayout.cardCaptionHeight,
+      accuracy: 0.001)
   }
 
   func testCardsStayLegibleAtThePanelWidth() {

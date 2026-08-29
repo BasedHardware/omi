@@ -469,6 +469,7 @@ class ChatToolExecutor {
         toolCall,
         runID: originatingRunId,
         attemptID: originatingAttemptId,
+        surfaceKind: originatingSurfaceRef?.surfaceKind,
         expectedOwnerID: expectedOwnerID,
         api: backendAPIClient)
 
@@ -3126,6 +3127,7 @@ class ChatToolExecutor {
     _ toolCall: ToolCall,
     runID: String?,
     attemptID: String?,
+    surfaceKind: String?,
     expectedOwnerID: String?,
     api: APIClient
   ) async -> String {
@@ -3165,30 +3167,46 @@ class ChatToolExecutor {
 
       switch toolCall.name {
       case "get_conversations":
+        let isRealtimeVoice = RealtimeConversationToolProjection.applies(to: surfaceKind)
+        let limit =
+          isRealtimeVoice
+          ? RealtimeConversationToolProjection.requestLimit(args["limit"])
+          : args["limit"] as? Int ?? 20
         let resp = try await api.toolGetConversations(
           startDate: validatedStartDate,
           endDate: validatedEndDate,
-          limit: args["limit"] as? Int ?? 20,
+          limit: limit,
           offset: args["offset"] as? Int ?? 0,
-          includeTranscript: args["include_transcript"] as? Bool ?? true,
+          includeTranscript: isRealtimeVoice ? false : args["include_transcript"] as? Bool ?? true,
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
+        if isRealtimeVoice {
+          return RealtimeConversationToolProjection.makeResult(resp, limit: limit)
+        }
         return await annotated(resp)
 
       case "search_conversations":
         guard let query = args["query"] as? String, !query.isEmpty else {
           return "Error: query is required"
         }
+        let isRealtimeVoice = RealtimeConversationToolProjection.applies(to: surfaceKind)
+        let limit =
+          isRealtimeVoice
+          ? RealtimeConversationToolProjection.requestLimit(args["limit"])
+          : args["limit"] as? Int ?? 5
         let resp = try await api.toolSearchConversations(
           query: query,
           startDate: validatedStartDate,
           endDate: validatedEndDate,
-          limit: args["limit"] as? Int ?? 5,
-          includeTranscript: args["include_transcript"] as? Bool ?? true,
+          limit: limit,
+          includeTranscript: isRealtimeVoice ? false : args["include_transcript"] as? Bool ?? true,
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
+        if isRealtimeVoice {
+          return RealtimeConversationToolProjection.makeResult(resp, limit: limit)
+        }
         return await annotated(resp)
 
       case "get_memories":

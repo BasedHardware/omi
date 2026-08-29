@@ -197,6 +197,9 @@ for name in _utils_stubs:
     _install_module(name, module)
 
 sys.modules["utils.conversations"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "conversations")]
+# The real utils.llm package is imported as a package (utils.llm.temporal).
+# A ModuleType stub without __path__ makes that import fail collection.
+sys.modules["utils.llm"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "llm")]
 
 sys.modules["utils.apps"].get_available_apps = MagicMock(return_value=[])
 sys.modules["utils.notifications"].send_notification = MagicMock()

@@ -1,3 +1,4 @@
+import OmiTheme
 import XCTest
 
 @testable import Omi_Computer
@@ -28,5 +29,36 @@ final class RatingPromptPolicyTests: XCTestCase {
     XCTAssertFalse(
       RatingPromptPolicy.shouldShow(
         questionCount: 3, submittedRating: 0, dismissed: false, remotelyDisabled: true))
+  }
+
+  func testReferralButtonUsesReadableSharedPrimaryStyle() {
+    XCTAssertEqual(RatingPromptButtonStyle.referralKind, .primary)
+    XCTAssertEqual(RatingPromptButtonStyle.referralSize, .compact)
+    XCTAssertEqual(OmiButtonStyle.fill(.primary, pressed: false), Ink.primary)
+    XCTAssertEqual(OmiButtonStyle.label(.primary), Ink.surface)
+  }
+
+  func testRemoteQuestionThresholdDefersUntilTheConfiguredQuestion() {
+    // Threshold 5: three questions are not due anymore…
+    XCTAssertFalse(
+      RatingPromptPolicy.shouldShow(
+        questionCount: 3, submittedRating: 0, dismissed: false, questionThreshold: 5))
+    // …and the fifth is.
+    XCTAssertTrue(
+      RatingPromptPolicy.shouldShow(
+        questionCount: 5, submittedRating: 0, dismissed: false, questionThreshold: 5))
+  }
+
+  func testRemoteDisableConfigHidesADuePrompt() {
+    XCTAssertFalse(
+      RatingPromptPolicy.shouldShow(
+        questionCount: 3, submittedRating: 0, dismissed: false, enabled: false))
+  }
+
+  func testCommentGateIsThePureLowScoreRule() {
+    XCTAssertTrue(RatingPromptPolicy.shouldAskForComment(score: 1, commentMaxScore: 3))
+    XCTAssertTrue(RatingPromptPolicy.shouldAskForComment(score: 3, commentMaxScore: 3))
+    XCTAssertFalse(RatingPromptPolicy.shouldAskForComment(score: 4, commentMaxScore: 3))
+    XCTAssertFalse(RatingPromptPolicy.shouldAskForComment(score: 5, commentMaxScore: 3))
   }
 }

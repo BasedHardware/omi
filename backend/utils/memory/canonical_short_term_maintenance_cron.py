@@ -36,7 +36,7 @@ from utils.memory.memory_system import (
     CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION,
     CANONICAL_MEMORY_MAINTENANCE_REGISTRY_SCHEMA_VERSION,
 )
-from utils.jit_rollout import JITDecisionStage, resolve_jit_ledger_migration_rollout
+from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout
 from utils.memory.knowledge_ledger_migration import (
     publish_ledger_migration_cutover,
     run_ledger_migration_sweep,
@@ -930,7 +930,7 @@ async def run_canonical_short_term_maintenance_cron(
     def fresh_rollout_authorizer(uid: str) -> Callable[..., bool]:
         def authorize(*_context: str) -> bool:
             future = asyncio.run_coroutine_threadsafe(
-                resolve_jit_ledger_migration_rollout(
+                resolve_jit_rollout(
                     uid,
                     stage=JITDecisionStage.INGRESS,
                     force_refresh=True,
@@ -954,7 +954,7 @@ async def run_canonical_short_term_maintenance_cron(
     # Resolving the whole page up front leaves later accounts holding stale
     # permission while earlier accounts scan and mutate.
     for uid in candidate_uids:
-        decision = await resolve_jit_ledger_migration_rollout(
+        decision = await resolve_jit_rollout(
             uid,
             stage=JITDecisionStage.INGRESS,
             force_refresh=True,
