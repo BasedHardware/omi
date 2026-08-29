@@ -690,13 +690,19 @@ extension PostHogManager {
       ])
   }
 
-  func desktopRatingSubmitted(rating: Int) {
+  func desktopRatingSubmitted(rating: Int, revision: Int? = nil) {
+    var properties: [String: Any] = [
+      "rating": rating,
+      "trigger": "third_question",
+    ]
+    // The prompt revision the client saw, so copy experiments are separable.
+    // The comment NEVER travels to PostHog — Firestore only, admin-only read.
+    if let revision {
+      properties["revision"] = revision
+    }
     track(
       "Desktop Rating Submitted",
-      properties: [
-        "rating": rating,
-        "trigger": "third_question",
-      ])
+      properties: properties)
   }
 
   // MARK: - Rewind Events (Desktop-specific)
