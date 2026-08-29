@@ -238,8 +238,6 @@ actor MessageDraftAssistant: ProactiveAssistant {
 
     log("MessageDraft: on-demand panel pending for \(snapshot.surface.displayName)")
 
-    log("MessageDraft: on-demand panel pending for \(snapshot.surface.displayName)")
-
     do {
       let result = try await work.run {
         await self.generate(context: context, refining: nil, snapshot: snapshot)
