@@ -168,6 +168,50 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
   }
 
   @MainActor
+  func testGrantedDragDismissesGuidanceBeforeRefocusingOmi() {
+    var events: [String] = []
+
+    PermissionDragGuidance.completeGrantedDrag(
+      dismissGuidance: { events.append("dismiss") },
+      refocusOmi: { events.append("refocus") })
+
+    XCTAssertEqual(events, ["dismiss", "refocus"])
+  }
+
+  @MainActor
+  func testDragGrantWatcherWaitsForARealPermissionGrant() async {
+    var checks = 0
+    let granted = await PermissionDragGuidance.waitForGrantedDrag(
+      permission: .accessibility,
+      overlayIsVisible: { true },
+      permissionIsGranted: { _ in
+        checks += 1
+        return checks == 3
+      },
+      waitForNextPoll: {})
+
+    XCTAssertTrue(granted)
+    XCTAssertEqual(checks, 3)
+  }
+
+  @MainActor
+  func testDragGrantWatcherStopsWithoutRefocusWhenGuidanceCloses() async {
+    var visible = true
+    var checks = 0
+    let granted = await PermissionDragGuidance.waitForGrantedDrag(
+      permission: .accessibility,
+      overlayIsVisible: { visible },
+      permissionIsGranted: { _ in
+        checks += 1
+        return false
+      },
+      waitForNextPoll: { visible = false })
+
+    XCTAssertFalse(granted)
+    XCTAssertEqual(checks, 1)
+  }
+
+  @MainActor
   func testDragHelperDirectsUsersToTheAppListWithoutClaimingExactBounds() {
     XCTAssertEqual(
       CloudConnectorGuidanceOverlay.dragInstructionText(appName: "Omi"),

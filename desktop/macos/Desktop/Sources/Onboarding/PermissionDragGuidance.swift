@@ -9,6 +9,7 @@ enum PermissionDragGuidance {
   }
 
   private static var lastPresentedAt: Date?
+  private static var grantWatchTask: Task<Void, Never>?
 
   /// Open the Accessibility privacy pane and offer the draggable app card when
   /// the grant is genuinely absent. A named or re-signed bundle can need to be
@@ -39,8 +40,43 @@ enum PermissionDragGuidance {
   /// Remove the drag card immediately — the permission was granted or the user
   /// skipped, so the floating icon should not linger.
   static func dismiss() {
+    grantWatchTask?.cancel()
+    grantWatchTask = nil
     lastPresentedAt = nil
     CloudConnectorGuidanceOverlay.shared.dismiss()
+  }
+
+  /// Return from System Settings only after the dragged bundle has actually
+  /// acquired the permission. A drag can be cancelled or miss the app list, so
+  /// the drag-session callback itself is not evidence that the flow succeeded.
+  static func completeGrantedDrag(
+    dismissGuidance: () -> Void = {
+      CloudConnectorGuidanceOverlay.shared.dismiss()
+    },
+    refocusOmi: () -> Void = {
+      returnToOmi()
+    }
+  ) {
+    grantWatchTask = nil
+    lastPresentedAt = nil
+    dismissGuidance()
+    refocusOmi()
+  }
+
+  /// Uses the same foregrounding path as the menu-bar and global-shortcut
+  /// entry points. On recent macOS versions, `NSApp.activate()` by itself is
+  /// not reliable when another app (including System Settings) is frontmost.
+  static func returnToOmi() {
+    if let appDelegate = AppDelegate.summonWindowTarget() {
+      appDelegate.openMainAppWindow()
+      return
+    }
+
+    // Startup/test fallback for the brief interval before AppDelegate.shared
+    // is installed. Keep the currently visible Omi window as the focus target.
+    NSApp.activate(ignoringOtherApps: true)
+    NSApp.windows.first(where: { $0.isVisible && $0.title.lowercased().hasPrefix("omi") })?
+      .makeKeyAndOrderFront(nil)
   }
 
   static func presentDragToGrantHelper(
@@ -91,6 +127,7 @@ enum PermissionDragGuidance {
     // the window as it moves and dismisses the card when the user closes it.
     CloudConnectorGuidanceOverlay.shared.presentDragToGrantCard(
       appIcon: icon, appName: appName, appURL: appURL, near: anchor)
+    startGrantWatch(for: permission)
   }
 
   static func shouldPresentDragGuidance(permissionGranted: Bool) -> Bool {
@@ -100,6 +137,33 @@ enum PermissionDragGuidance {
   static func accessibilityGrantIsUsable(_ signals: AccessibilityProbeSignals) -> Bool {
     let projection = AppState.accessibilityProjection(signals)
     return projection.hasPermission && !projection.isBroken
+  }
+
+  static func waitForGrantedDrag(
+    permission: Permission,
+    overlayIsVisible: () -> Bool = {
+      CloudConnectorGuidanceOverlay.shared.isDragToGrantCardVisible
+    },
+    permissionIsGranted: (Permission) async -> Bool = { permission in
+      await isGranted(permission)
+    },
+    waitForNextPoll: () async -> Void = {
+      try? await Task.sleep(nanoseconds: 300_000_000)
+    }
+  ) async -> Bool {
+    while !Task.isCancelled, overlayIsVisible() {
+      if await permissionIsGranted(permission), overlayIsVisible() { return true }
+      await waitForNextPoll()
+    }
+    return false
+  }
+
+  private static func startGrantWatch(for permission: Permission) {
+    grantWatchTask?.cancel()
+    grantWatchTask = Task {
+      guard await waitForGrantedDrag(permission: permission) else { return }
+      completeGrantedDrag()
+    }
   }
 
   private static func isGranted(_ permission: Permission) async -> Bool {

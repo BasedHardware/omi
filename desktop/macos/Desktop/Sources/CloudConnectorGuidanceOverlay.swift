@@ -609,6 +609,10 @@ final class CloudConnectorGuidanceOverlay {
     window
   }
 
+  var isDragToGrantCardVisible: Bool {
+    window?.isVisible == true && lastAutomationState?["kind"] == "dragToGrant"
+  }
+
   func automationState() -> [String: String] {
     var state = lastAutomationState ?? [:]
     state["visible"] = window?.isVisible == true ? "true" : "false"
