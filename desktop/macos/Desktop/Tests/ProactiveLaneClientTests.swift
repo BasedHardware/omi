@@ -3,6 +3,29 @@ import XCTest
 @testable import Omi_Computer
 
 final class ProactiveLaneClientTests: XCTestCase {
+  private var priorAuthUserID: String?
+
+  override func setUp() {
+    super.setUp()
+    priorAuthUserID = UserDefaults.standard.string(forKey: .authUserId)
+  }
+
+  override func tearDown() {
+    // The JIT authority routes re-validate the runtime owner against the
+    // shared authorization authority; restore the durable auth user and the
+    // authority owner the rest of the suite expects.
+    let authority = RuntimeOwnerAuthorizationAuthority.shared
+    authority.beginTransition()
+    if let priorAuthUserID {
+      UserDefaults.standard.set(priorAuthUserID, forKey: .authUserId)
+      authority.endTransition(ownerID: priorAuthUserID)
+    } else {
+      UserDefaults.standard.removeObject(forKey: .authUserId)
+      authority.endTransition(ownerID: nil)
+    }
+    super.tearDown()
+  }
+
   func testEnvelopeParsingPreservesGatewayAccounting() throws {
     let data = try JSONSerialization.data(withJSONObject: [
       "operation": "proactive_reasoning",
@@ -353,6 +376,222 @@ final class ProactiveLaneClientTests: XCTestCase {
     XCTAssertEqual(ProactiveLaneURLStub.requestCount, 3)
   }
 
+  // MARK: - JIT authority wire contract
+
+  func testRolloutDecisionEffectiveEnabledAdmitsEvenWhenRawFlagsAreNotAKnownGoodPair() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try rolloutDecisionBody(rollout: "unknown", killSwitch: "disabled", effective: "enabled"))
+    let client = makeJITAuthorityClient()
+
+    let flags = await client.jitProactivityFlags(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertEqual(flags.effective, .enabled)
+    XCTAssertTrue(flags.permitsNewLane)
+  }
+
+  func testRolloutDecisionToleratesMissingKillSwitchWhenEffectiveEnabled() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try rolloutDecisionBody(rollout: "enabled", killSwitch: nil, effective: "enabled"))
+    let client = makeJITAuthorityClient()
+
+    let flags = await client.jitProactivityFlags(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertFalse(flags.killSwitchPresent)
+    XCTAssertEqual(flags.killSwitch, .unknown)
+    XCTAssertTrue(flags.permitsNewLane)
+  }
+
+  func testRolloutDecisionUnknownStatesStillFailClosed() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try rolloutDecisionBody(rollout: "unknown", killSwitch: "unknown", effective: "unknown"))
+    let client = makeJITAuthorityClient()
+
+    let flags = await client.jitProactivityFlags(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertFalse(flags.permitsNewLane)
+  }
+
+  func testRolloutDecisionPresentUnknownKillSwitchWithoutEffectiveFailsClosed() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try rolloutDecisionBody(rollout: "enabled", killSwitch: "unknown", effective: nil))
+    let client = makeJITAuthorityClient()
+
+    let flags = await client.jitProactivityFlags(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertTrue(flags.killSwitchPresent)
+    XCTAssertFalse(flags.permitsNewLane)
+  }
+
+  /// The live gap: a complete, empty, snake_case watchlist had to decode, and a
+  /// failing ledger-mirror sync had to stop blocking the trigger snapshot the
+  /// client already holds.
+  func testTriggerSnapshotDecodesEmptyWatchlistAndReturnsDespiteMirrorSyncFailure() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(statusCode: 200, body: try triggerSnapshotBody(ownerID: "owner"))
+    let mirror = MirrorSyncProbe()
+    let client = makeJITAuthorityClient(
+      mirrorSync: { _, _ in
+        await mirror.record()
+        throw URLError(.notConnectedToInternet)
+      })
+
+    let snapshot = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertTrue(snapshot.complete)
+    XCTAssertEqual(snapshot.rows, [])
+    XCTAssertNil(snapshot.failureReason)
+    XCTAssertEqual(snapshot.ownerID, "owner")
+    let attempts = await mirror.attempts
+    XCTAssertEqual(attempts, 1, "the ledger mirror must still be attempted exactly once")
+  }
+
+  func testDisabledTriggerSnapshotReturnsContentFreeReceiptWithoutTouchingTheMirror() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try triggerSnapshotBody(ownerID: "owner", complete: false, failureReason: "rollout_not_enabled"))
+    let mirror = MirrorSyncProbe()
+    let client = makeJITAuthorityClient(
+      mirrorSync: { _, _ in
+        await mirror.record()
+      })
+
+    let snapshot = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertFalse(snapshot.complete)
+    XCTAssertEqual(snapshot.failureReason, "rollout_not_enabled")
+    let attempts = await mirror.attempts
+    XCTAssertEqual(attempts, 0, "a stub snapshot must not attempt the ledger mirror")
+  }
+
+  func testTriggerSnapshotForAnotherOwnerFailsClosed() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(statusCode: 200, body: try triggerSnapshotBody(ownerID: "other-owner"))
+    let client = makeJITAuthorityClient()
+
+    do {
+      _ = try await client.fetchJITTriggerSnapshot(
+        authorizationSnapshot: try jitAuthorizationSnapshot())
+      XCTFail("a snapshot for another owner must fail closed")
+    } catch let error as ProactiveLaneClientError {
+      guard case .invalidResponse = error else {
+        return XCTFail("expected invalidResponse, got \(error)")
+      }
+    } catch {
+      XCTFail("expected ProactiveLaneClientError, got \(error)")
+    }
+  }
+
+  func testGarbageTriggerSnapshotThrowsInvalidResponse() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200, body: try JSONSerialization.data(withJSONObject: ["unexpected": true]))
+    let client = makeJITAuthorityClient()
+
+    do {
+      _ = try await client.fetchJITTriggerSnapshot(
+        authorizationSnapshot: try jitAuthorizationSnapshot())
+      XCTFail("an undecodable snapshot body must fail closed")
+    } catch let error as ProactiveLaneClientError {
+      guard case .invalidResponse = error else {
+        return XCTFail("expected invalidResponse, got \(error)")
+      }
+    } catch {
+      XCTFail("expected ProactiveLaneClientError, got \(error)")
+    }
+  }
+
+  /// The JIT authority routes re-validate the runtime owner against
+  /// `RuntimeOwnerAuthorizationAuthority.shared` and the durable auth user, so
+  /// the shared authority has to hold this test owner at a known generation.
+  private func jitAuthorizationSnapshot(ownerID: String = "owner") throws
+    -> RuntimeOwnerAuthorizationSnapshot
+  {
+    UserDefaults.standard.set(ownerID, forKey: .authUserId)
+    let authority = RuntimeOwnerAuthorizationAuthority.shared
+    authority.beginTransition()
+    authority.endTransition(ownerID: ownerID)
+    return try XCTUnwrap(authority.capture(ownerID: ownerID, expectedOwnerID: ownerID))
+  }
+
+  private func makeJITAuthorityClient(
+    mirrorSync:
+      @escaping @Sendable (
+        RuntimeOwnerAuthorizationSnapshot, JITTriggerSnapshot
+      ) async throws -> Void = { _, _ in }
+  ) -> ProactiveLaneClient {
+    ProactiveLaneClient(
+      session: makeStubSession(),
+      baseURL: { "https://jit-authority.test" },
+      jitAuthorization: { ownerID in "Bearer test-\(ownerID)" },
+      ledgerMirrorSync: mirrorSync)
+  }
+
+  private func rolloutDecisionBody(
+    rollout: String?, killSwitch: String?, effective: String?
+  ) throws -> Data {
+    var object: [String: Any] = [
+      "reason": "rollout_enabled",
+      "error_class": "none",
+      "cache_hit": false,
+      "cache_ttl_seconds": 30,
+    ]
+    object["rollout"] = rollout
+    object["kill_switch"] = killSwitch
+    object["effective"] = effective
+    return try JSONSerialization.data(withJSONObject: object)
+  }
+
+  private func triggerSnapshotBody(
+    ownerID: String, complete: Bool = true, failureReason: String? = nil
+  ) throws -> Data {
+    try JSONSerialization.data(withJSONObject: [
+      "owner_id": ownerID,
+      "snapshot_revision": "revision-4",
+      "account_generation": 3,
+      "head_commit_id": "head-4",
+      "commit_sequence": 4,
+      "complete": complete,
+      "rows": [] as [[String: Any]],
+      "policy": ratifiedPolicyWireJSON(),
+      "failure_reason": (failureReason as Any?) ?? NSNull(),
+    ])
+  }
+  private func ratifiedPolicyWireJSON() -> [String: Any] {
+    [
+      "schema_version": "jit_trigger_policy.v1",
+      "planned_notifications_per_trigger_per_day": 1,
+      "total_proactive_notifications_per_day": 3,
+      "ambiguous_nano_triages_per_day": 8,
+      "full_agent_turns_per_candidate": 1,
+      "max_calendar_events": 32,
+      "valid_for_seconds": 30,
+      "paid_boundary_refresh_required": true,
+      "embedding": [
+        "enabled": false,
+        "match_similarity": 0.82,
+        "triage_similarity": 0.74,
+        "model_id": NSNull(),
+        "model_version": NSNull(),
+        "language": NSNull(),
+      ] as [String: Any],
+    ]
+  }
+
   private func completeExtraction(on client: ProactiveLaneClient) async throws -> ProactiveLaneResult {
     try await complete(operation: ModelQoS.Proactivity.extractionOperation, prompt: "extract", on: client)
   }
@@ -467,6 +706,13 @@ final class ProactiveLaneClientTests: XCTestCase {
   }
 }
 
+private actor MirrorSyncProbe {
+  private(set) var attempts = 0
+
+  func record() {
+    attempts += 1
+  }
+}
 private final class ManualDateClock: @unchecked Sendable {
   private let lock = NSLock()
   private var date: Date

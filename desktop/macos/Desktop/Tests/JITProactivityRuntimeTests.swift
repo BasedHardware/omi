@@ -109,6 +109,41 @@ final class JITProactivityRuntimeTests: XCTestCase {
       .suppressed(reason: "authoritative_snapshot_unavailable"))
   }
 
+  /// The live gap: the server's `effective` verdict said enabled, but the client
+  /// re-derived admission from the raw flags and never read the snapshot. An
+  /// `effective`-enabled authority must reach the snapshot read even when the
+  /// raw pair is unknown, and a complete empty watchlist must still persist the
+  /// local trigger-snapshot receipt.
+  func testEffectiveEnabledAuthorityReadsSnapshotAndPersistsEmptyWatchlistReceipt() async throws {
+    let queue = try migratedQueue()
+    let emptyWatchlist = serverSnapshot(sequence: 4, revision: "revision-4", rows: [])
+    let sequence = SnapshotSequence([emptyWatchlist])
+    let runtime = JITProactivityRuntime(
+      flags: { _ in
+        JITProactivityFlags(rollout: .unknown, killSwitch: .unknown, effective: .enabled)
+      },
+      snapshots: { _ in try await sequence.next() },
+      reconcileSnapshot: { snapshot, _ in
+        try queue.write { db in try JITTriggerMirror.reconcile(snapshot, in: db, now: Date()) }
+      },
+      compileSnapshot: { _, _ in [] },
+      readWakeupCounts: { _, _, _ in [:] },
+      authorizationCurrent: { _ in true })
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(), observation: KnowledgeLedgerTriggerObservation())
+
+    XCTAssertEqual(decision, .suppressed(reason: "ambient_local_gate"))
+
+    let remaining = await sequence.remaining
+    XCTAssertEqual(remaining, 0, "effective-enabled authority must read the trigger snapshot")
+    let receipts = try await queue.read { db in
+      try String.fetchAll(
+        db, sql: "SELECT ownerID FROM jit_trigger_snapshot_receipts")
+    }
+    XCTAssertEqual(receipts, ["owner"])
+  }
+
   func testAuthorityMismatchAndStaleLeaseSuppressWithoutAmbientFallback() async throws {
     let trigger = try compiledTrigger(id: "planned", condition: ["keywords": ["release"]])
     for (receiptOwner, receiptRevision, authorizationCurrent) in [
@@ -585,6 +620,10 @@ private actor SnapshotSequence {
   func next() throws -> JITTriggerSnapshot {
     guard !snapshots.isEmpty else { throw ProactiveLaneClientError.invalidResponse }
     return snapshots.removeFirst()
+  }
+
+  var remaining: Int {
+    snapshots.count
   }
 }
 
