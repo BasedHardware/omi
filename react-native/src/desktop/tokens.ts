@@ -1,0 +1,26 @@
+export const desktopTokens = {
+  color: {
+    ink: '#17232b',
+    inkMuted: '#40515c',
+    inkFaint: '#6d7d86',
+    glass: 'rgba(224, 244, 255, 0.72)',
+    glassStrong: 'rgba(235, 248, 255, 0.88)',
+    glassQuiet: 'rgba(204, 228, 239, 0.46)',
+    glassSelected: 'rgba(170, 207, 226, 0.58)',
+    line: 'rgba(64, 86, 99, 0.22)',
+    lineStrong: 'rgba(45, 66, 78, 0.36)',
+    dark: '#172027',
+    white: '#ffffff',
+    blue: '#168bf2',
+    red: '#ff4148',
+  },
+  radius: {window: 24, panel: 22, control: 18, pill: 999},
+  space: {xs: 6, sm: 10, md: 16, lg: 24, xl: 32},
+  type: {
+    hero: 28,
+    title: 26,
+    heading: 20,
+    body: 15,
+    meta: 13,
+  },
+} as const;
