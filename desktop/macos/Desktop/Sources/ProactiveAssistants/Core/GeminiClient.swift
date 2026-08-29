@@ -1111,6 +1111,16 @@ extension GeminiClient {
             }
           }
 
+          if toolCalls.isEmpty && textResponse.isEmpty {
+            // Shape only, never content: which part kinds came back and why generation
+            // stopped, for diagnosing a silently empty tool-loop response.
+            let shapes = parts.map {
+              "text:\($0.text != nil) fc:\($0.functionCall != nil) sig:\($0.thoughtSignature != nil)"
+            }
+            log(
+              "GeminiClient: empty tool-loop response model=\(activeModel)"
+                + " finishReason=\(candidate.finishReason ?? "nil") parts=[\(shapes.joined(separator: "; "))]")
+          }
           return ToolChatResult(
             text: textResponse,
             toolCalls: toolCalls,
