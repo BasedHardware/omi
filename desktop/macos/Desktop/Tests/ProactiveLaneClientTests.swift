@@ -1,3 +1,4 @@
+@preconcurrency import GRDB
 import XCTest
 
 @testable import Omi_Computer
@@ -515,6 +516,67 @@ final class ProactiveLaneClientTests: XCTestCase {
     }
   }
 
+  // MARK: - Signed-in startup snapshot sync (wire)
+
+  /// Signed-in startup must fetch the trigger snapshot without any context
+  /// visit: the runtime's startup sync drives the real client routes in
+  /// order — rollout-decision, then trigger-snapshot — and a complete empty
+  /// watchlist still persists the local receipt.
+  func testStartupSnapshotSyncIssuesRolloutThenSnapshotGETAndWritesReceipt() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try rolloutDecisionBody(rollout: "unknown", killSwitch: "disabled", effective: "enabled"))
+    ProactiveLaneURLStub.enqueue(statusCode: 200, body: try triggerSnapshotBody(ownerID: "owner"))
+    let client = makeJITAuthorityClient()
+    let queue = try migratedMirrorQueue()
+    let runtime = JITProactivityRuntime(
+      flags: { await client.jitProactivityFlags(authorizationSnapshot: $0) },
+      snapshots: { try await client.fetchJITTriggerSnapshot(authorizationSnapshot: $0) },
+      reconcileSnapshot: { snapshot, _ in
+        try queue.write { db in try JITTriggerMirror.reconcile(snapshot, in: db, now: Date()) }
+      })
+
+    await runtime.syncTriggerSnapshot(authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertEqual(
+      ProactiveLaneURLStub.requestedPaths, ["/v1/jit/rollout-decision", "/v1/jit/trigger-snapshot"])
+    let receipts = try await queue.read { db in
+      try Row.fetchAll(db, sql: "SELECT ownerID, rowCount FROM jit_trigger_snapshot_receipts")
+    }
+    XCTAssertEqual(receipts.count, 1)
+    let receipt = try XCTUnwrap(receipts.first)
+    let ownerID: String = receipt["ownerID"]
+    let rowCount: Int = receipt["rowCount"]
+    XCTAssertEqual(ownerID, "owner")
+    XCTAssertEqual(rowCount, 0, "an empty watchlist still persists its receipt")
+  }
+
+  /// Fail-closed startup: an `effective=disabled` authority reads only the
+  /// rollout decision and never issues the trigger-snapshot GET.
+  func testStartupSnapshotSyncWithEffectiveDisabledNeverIssuesSnapshotGET() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try rolloutDecisionBody(rollout: "unknown", killSwitch: "unknown", effective: "disabled"))
+    let client = makeJITAuthorityClient()
+    let queue = try migratedMirrorQueue()
+    let runtime = JITProactivityRuntime(
+      flags: { await client.jitProactivityFlags(authorizationSnapshot: $0) },
+      snapshots: { try await client.fetchJITTriggerSnapshot(authorizationSnapshot: $0) },
+      reconcileSnapshot: { snapshot, _ in
+        try queue.write { db in try JITTriggerMirror.reconcile(snapshot, in: db, now: Date()) }
+      })
+
+    await runtime.syncTriggerSnapshot(authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertEqual(ProactiveLaneURLStub.requestedPaths, ["/v1/jit/rollout-decision"])
+    let receipts = try await queue.read { db in
+      try String.fetchAll(db, sql: "SELECT ownerID FROM jit_trigger_snapshot_receipts")
+    }
+    XCTAssertTrue(receipts.isEmpty)
+  }
+
   /// The JIT authority routes re-validate the runtime owner against
   /// `RuntimeOwnerAuthorizationAuthority.shared` and the durable auth user, so
   /// the shared authority has to hold this test owner at a known generation.
@@ -539,6 +601,14 @@ final class ProactiveLaneClientTests: XCTestCase {
       baseURL: { "https://jit-authority.test" },
       jitAuthorization: { ownerID in "Bearer test-\(ownerID)" },
       ledgerMirrorSync: mirrorSync)
+  }
+
+  private func migratedMirrorQueue() throws -> DatabaseQueue {
+    let queue = try DatabaseQueue()
+    var migrator = DatabaseMigrator()
+    JITTriggerMirrorSchema.registerMigration(on: &migrator)
+    try migrator.migrate(queue)
+    return queue
   }
 
   private func rolloutDecisionBody(
@@ -745,6 +815,7 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
   private nonisolated(unsafe) static var responses: [StubResponse] = []
   private nonisolated(unsafe) static var served = 0
   private nonisolated(unsafe) static var operations: [String] = []
+  private nonisolated(unsafe) static var paths: [String] = []
   /// How many requests must be in flight before any of them is answered, if the caller asked for
   /// that. Nil is the ordinary case: answer each request as it arrives.
   private nonisolated(unsafe) static var holdThreshold: Int?
@@ -763,11 +834,20 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
     return operations
   }
 
+  /// Request URL paths in issue order, for asserting which authority routes a
+  /// caller actually reached.
+  static var requestedPaths: [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    return paths
+  }
+
   static func reset() {
     lock.lock()
     responses = []
     served = 0
     operations = []
+    paths = []
     holdThreshold = nil
     holdReached = nil
     held = []
@@ -813,6 +893,7 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
     let operation = Self.operation(from: request)
     Self.lock.lock()
     Self.operations.append(operation)
+    Self.paths.append(url.path)
     let stub = Self.responses.isEmpty ? nil : Self.responses.removeFirst()
     Self.served += 1
     let deliver = { self.deliver(stub, for: url) }
