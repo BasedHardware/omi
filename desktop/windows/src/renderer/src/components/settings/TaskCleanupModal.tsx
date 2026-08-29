@@ -79,6 +79,7 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
   const [phase, setPhase] = useState<Phase>('config')
   const [selected, setSelected] = useState<Set<CleanupStrategy>>(new Set(DEFAULT_STRATEGIES))
   const [preview, setPreview] = useState<CleanupPreviewResult | null>(null)
+  const [nextScanCursor, setNextScanCursor] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Candidate IDs the user has unchecked in the review list — kept out of deletion.
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set())
@@ -111,9 +112,11 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
       const result = await taskCleanupPreview({
         strategies: [...selected],
         age_days: 90,
-        overdue_days: 30
+        overdue_days: 30,
+        scan_cursor: nextScanCursor
       })
       setPreview(result)
+      setNextScanCursor(result.next_scan_cursor ?? null)
       setExcludedIds(new Set())
       setPhase('preview')
     } catch (e) {
@@ -151,6 +154,7 @@ export function TaskCleanupModal({ open, onOpenChange }: Props): React.JSX.Eleme
     setTimeout(() => {
       setPhase('config')
       setPreview(null)
+      setNextScanCursor(null)
       setError(null)
       setExcludedIds(new Set())
     }, 300)

@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
+import base64
+import json
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
 
@@ -16,6 +18,7 @@ from database.firestore_transaction_retry import run_with_transaction_contention
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from database.firestore_index_registry import (
     ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
+    ACTION_ITEMS_CLEANUP_OPEN_CREATED_SCAN_QUERY,
     ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
@@ -1023,6 +1026,67 @@ def get_open_action_items_count(uid: str) -> int:
     total = max(0, total - deleted_total)
     completed = max(0, min(completed - deleted_completed, total))
     return max(0, total - completed)
+
+
+def _parse_cleanup_scan_created_at(value: Any) -> datetime:
+    if value is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        return datetime.fromisoformat(value.rstrip('Z')).replace(tzinfo=timezone.utc)
+    if hasattr(value, 'timestamp'):
+        return datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def encode_cleanup_scan_cursor(created_at: datetime, doc_id: str) -> str:
+    """Encode the last scanned open task for deterministic cleanup pagination."""
+    normalized = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+    payload = {'created_at': normalized.astimezone(timezone.utc).isoformat(), 'id': doc_id}
+    return base64.urlsafe_b64encode(json.dumps(payload, separators=(',', ':')).encode()).decode()
+
+
+def decode_cleanup_scan_cursor(cursor: str) -> tuple[datetime, str]:
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+        return _parse_cleanup_scan_created_at(payload['created_at']), str(payload['id'])
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError('Invalid cleanup scan cursor') from exc
+
+
+def list_open_action_items_for_cleanup(
+    uid: str,
+    *,
+    limit: Optional[int] = None,
+    cursor: Optional[str] = None,
+) -> tuple[List[Dict[str, Any]], Optional[str], int]:
+    """Return one oldest-first page of open action items for cleanup strategies.
+
+    Uses a deterministic ``created_at`` + document-id ordering so repeated preview
+    runs can advance through large accounts via ``cursor`` instead of rescanning
+    the same arbitrary Firestore prefix.
+    """
+    row_cap = min(limit or _ACTION_ITEMS_LIST_HARD_MAX, _ACTION_ITEMS_LIST_HARD_MAX)
+    coll = db.collection('users').document(uid).collection(action_items_collection)
+    query = ACTION_ITEMS_CLEANUP_OPEN_CREATED_SCAN_QUERY.build(
+        coll.select(list(_ACTION_ITEMS_LIST_SELECT_FIELDS)),
+        {'completed': False},
+        field_filter_factory=FieldFilter,
+    ).order_by('created_at', direction=firestore.Query.ASCENDING)
+
+    if cursor:
+        created_at, doc_id = decode_cleanup_scan_cursor(cursor)
+        query = query.start_after({'created_at': created_at, '__name__': coll.document(doc_id)})
+
+    items, docs_read = _stream_action_items_bounded(query, max_docs=_list_scan_budget(row_cap))
+    items.sort(key=lambda item: (_parse_cleanup_scan_created_at(item.get('created_at')), item['id']))
+    page_items = items[:row_cap]
+    next_cursor = None
+    if page_items and (len(items) > row_cap or docs_read >= _list_scan_budget(row_cap)):
+        last = page_items[-1]
+        next_cursor = encode_cleanup_scan_cursor(_parse_cleanup_scan_created_at(last.get('created_at')), last['id'])
+    return page_items, next_cursor, len(page_items)
 
 
 def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[str, Any]]:

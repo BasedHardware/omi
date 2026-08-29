@@ -48,6 +48,7 @@ def cleanup():
         "database.action_items": AutoMockModule("database.action_items"),
         "database.conversations": AutoMockModule("database.conversations"),
         "database.vector_db": AutoMockModule("database.vector_db"),
+        "utils.executors": AutoMockModule("utils.executors"),
         "utils.llm.clients": AutoMockModule("utils.llm.clients"),
     }
     with stub_modules(fakes):
@@ -104,38 +105,41 @@ class TestIsVague:
         assert cleanup._is_vague(description) is False
 
 
-# ---------------------------------------------------------------------------
-# candidates_stale_age
-# ---------------------------------------------------------------------------
+def _mock_cleanup_page(cleanup, monkeypatch, items, next_cursor=None):
+    monkeypatch.setattr(
+        cleanup.action_items_db,
+        "list_open_action_items_for_cleanup",
+        lambda uid, cursor=None, limit=None: (items, next_cursor, len(items)),
+    )
 
 
 class TestCandidatesStaleAge:
     def test_old_task_without_due_date_is_candidate(self, cleanup, monkeypatch):
         items = [_item("old-1", created_at=_dt(100))]
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: items)
+        _mock_cleanup_page(cleanup, monkeypatch, items)
         monkeypatch.setattr(cleanup.conversations_db, "get_conversation", lambda *a, **kw: None)
 
-        result = cleanup.candidates_stale_age("uid", age_days=90)
+        result, _ = cleanup.candidates_stale_age("uid", age_days=90)
 
         assert [c["id"] for c in result] == ["old-1"]
         assert result[0]["strategy"] == "stale_age"
 
     def test_young_task_not_a_candidate(self, cleanup, monkeypatch):
         items = [_item("young-1", created_at=_dt(10))]
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: items)
+        _mock_cleanup_page(cleanup, monkeypatch, items)
         monkeypatch.setattr(cleanup.conversations_db, "get_conversation", lambda *a, **kw: None)
 
-        result = cleanup.candidates_stale_age("uid", age_days=90)
+        result, _ = cleanup.candidates_stale_age("uid", age_days=90)
 
         assert result == []
 
     def test_old_task_with_due_date_skipped(self, cleanup, monkeypatch):
         # Tasks with a due date are actively scheduled — never stale-age candidates.
         items = [_item("old-due", created_at=_dt(100), due_at=_dt(-5))]
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: items)
+        _mock_cleanup_page(cleanup, monkeypatch, items)
         monkeypatch.setattr(cleanup.conversations_db, "get_conversation", lambda *a, **kw: None)
 
-        result = cleanup.candidates_stale_age("uid", age_days=90)
+        result, _ = cleanup.candidates_stale_age("uid", age_days=90)
 
         assert result == []
 
@@ -143,14 +147,14 @@ class TestCandidatesStaleAge:
         # Task itself is recent but linked to an old conversation → candidate
         items = [_item("linked-1", created_at=_dt(5), conversation_id="conv-old")]
         conv = {"started_at": _dt(120)}
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: items)
+        _mock_cleanup_page(cleanup, monkeypatch, items)
         monkeypatch.setattr(
             cleanup.conversations_db,
             "get_conversation",
             lambda uid, cid: conv if cid == "conv-old" else None,
         )
 
-        result = cleanup.candidates_stale_age("uid", age_days=90)
+        result, _ = cleanup.candidates_stale_age("uid", age_days=90)
 
         assert [c["id"] for c in result] == ["linked-1"]
 
@@ -158,24 +162,24 @@ class TestCandidatesStaleAge:
         # Task itself is old but its conversation is recent → not a candidate
         items = [_item("linked-2", created_at=_dt(150), conversation_id="conv-new")]
         conv = {"started_at": _dt(5)}
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: items)
+        _mock_cleanup_page(cleanup, monkeypatch, items)
         monkeypatch.setattr(
             cleanup.conversations_db,
             "get_conversation",
             lambda uid, cid: conv if cid == "conv-new" else None,
         )
 
-        result = cleanup.candidates_stale_age("uid", age_days=90)
+        result, _ = cleanup.candidates_stale_age("uid", age_days=90)
 
         assert result == []
 
     def test_task_with_none_created_at_skipped(self, cleanup, monkeypatch):
         item = _item("no-date")
         item["created_at"] = None
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: [item])
+        _mock_cleanup_page(cleanup, monkeypatch, [item])
         monkeypatch.setattr(cleanup.conversations_db, "get_conversation", lambda *a, **kw: None)
 
-        result = cleanup.candidates_stale_age("uid", age_days=90)
+        result, _ = cleanup.candidates_stale_age("uid", age_days=90)
 
         assert result == []
 
@@ -186,48 +190,44 @@ class TestCandidatesStaleAge:
 
 
 class TestCandidatesOverdue:
-    def test_db_returned_task_with_due_at_is_candidate(self, cleanup, monkeypatch):
-        # The DB enforces the date cut-off via due_end_date; this confirms the
-        # function wraps whatever the DB returns into a candidate dict.
+    def test_overdue_task_is_candidate(self, cleanup, monkeypatch):
         items = [_item("overdue-1", due_at=_dt(45))]
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: items)
+        _mock_cleanup_page(cleanup, monkeypatch, items)
 
-        result = cleanup.candidates_overdue("uid", overdue_days=30)
+        result, _ = cleanup.candidates_overdue("uid", overdue_days=30)
 
         assert [c["id"] for c in result] == ["overdue-1"]
         assert result[0]["strategy"] == "overdue"
 
-    def test_passes_due_end_date_cutoff_to_db(self, cleanup, monkeypatch):
-        # The date filter lives in the DB query, not in Python logic.
-        # Verify the cutoff kwarg is forwarded so the DB can do its job.
-        captured = {}
+    def test_recent_due_date_not_candidate(self, cleanup, monkeypatch):
+        items = [_item("recent-1", due_at=_dt(5))]
+        _mock_cleanup_page(cleanup, monkeypatch, items)
 
-        def fake_get(uid, **kw):
-            captured.update(kw)
-            return []
+        result, _ = cleanup.candidates_overdue("uid", overdue_days=30)
 
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", fake_get)
-
-        cleanup.candidates_overdue("uid", overdue_days=30)
-
-        assert "due_end_date" in captured, "due_end_date must be forwarded to the DB"
-        from datetime import timezone
-
-        assert captured["due_end_date"].tzinfo is not None, "cutoff must be timezone-aware"
+        assert result == []
 
     def test_task_without_due_at_skipped(self, cleanup, monkeypatch):
-        # Explicit guard: even if DB leaks a no-due task, the guard filters it
         items = [_item("no-due", due_at=None)]
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: items)
+        _mock_cleanup_page(cleanup, monkeypatch, items)
 
-        result = cleanup.candidates_overdue("uid", overdue_days=30)
+        result, _ = cleanup.candidates_overdue("uid", overdue_days=30)
 
         assert result == []
 
     def test_empty_list_returns_empty(self, cleanup, monkeypatch):
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: [])
+        _mock_cleanup_page(cleanup, monkeypatch, [])
 
-        result = cleanup.candidates_overdue("uid", overdue_days=30)
+        result, _ = cleanup.candidates_overdue("uid", overdue_days=30)
+
+        assert result == []
+
+    def test_locked_task_skipped(self, cleanup, monkeypatch):
+        locked = _item("locked-1", due_at=_dt(45))
+        locked["is_locked"] = True
+        _mock_cleanup_page(cleanup, monkeypatch, [locked])
+
+        result, _ = cleanup.candidates_overdue("uid", overdue_days=30)
 
         assert result == []
 
@@ -240,25 +240,25 @@ class TestCandidatesOverdue:
 class TestCandidatesVague:
     def test_vague_task_is_candidate(self, cleanup, monkeypatch):
         items = [_item("vague-1", description="put it away")]
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: items)
+        _mock_cleanup_page(cleanup, monkeypatch, items)
 
-        result = cleanup.candidates_vague("uid")
+        result, _ = cleanup.candidates_vague("uid")
 
         assert [c["id"] for c in result] == ["vague-1"]
         assert result[0]["strategy"] == "vague"
 
     def test_clear_task_not_candidate(self, cleanup, monkeypatch):
         items = [_item("clear-1", description="Call the dentist to reschedule")]
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: items)
+        _mock_cleanup_page(cleanup, monkeypatch, items)
 
-        result = cleanup.candidates_vague("uid")
+        result, _ = cleanup.candidates_vague("uid")
 
         assert result == []
 
     def test_empty_task_list(self, cleanup, monkeypatch):
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: [])
+        _mock_cleanup_page(cleanup, monkeypatch, [])
 
-        result = cleanup.candidates_vague("uid")
+        result, _ = cleanup.candidates_vague("uid")
 
         assert result == []
 
@@ -268,9 +268,9 @@ class TestCandidatesVague:
             _item("c1", description="Schedule dentist for Monday"),
             _item("v2", description="Send it"),
         ]
-        monkeypatch.setattr(cleanup.action_items_db, "get_action_items", lambda *a, **kw: items)
+        _mock_cleanup_page(cleanup, monkeypatch, items)
 
-        result = cleanup.candidates_vague("uid")
+        result, _ = cleanup.candidates_vague("uid")
 
         assert {c["id"] for c in result} == {"v1", "v2"}
 

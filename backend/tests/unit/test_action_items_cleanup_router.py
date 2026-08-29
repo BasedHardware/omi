@@ -11,8 +11,7 @@ handlers are called directly (bypassing FastAPI DI) so auth is passed as a kwarg
 import os
 import re
 from pathlib import Path
-from types import ModuleType
-from unittest.mock import MagicMock
+from concurrent.futures import Future
 
 import pytest
 from fastapi import HTTPException
@@ -44,16 +43,35 @@ def router():
     # to monkeypatch these two calls just to avoid comparing MagicMocks.
     action_items_db_mock.get_open_action_items_count = lambda uid: 0
     action_items_db_mock.get_action_items_list_scan_cap = lambda: 2000
+    action_items_db_mock.get_action_items_by_ids = lambda uid, ids: [{'id': item_id} for item_id in ids]
+
+    executors_mock = AutoMockModule("utils.executors")
+
+    def _submit(fn):
+        future = Future()
+        try:
+            future.set_result(fn())
+        except Exception as exc:
+            future.set_exception(exc)
+        return future
+
+    executors_mock.postprocess_executor.submit = _submit
+
+    redis_db_mock = AutoMockModule("database.redis_db")
+    redis_db_mock.get_generic_cache = lambda path: None
+    redis_db_mock.pop_generic_cache = lambda path: None
+    redis_db_mock.set_generic_cache = lambda *a, **kw: None
 
     fakes = {
         "langchain_core": langchain_pkg,
         "langchain_core.prompts": AutoMockModule("langchain_core.prompts"),
         "utils.action_item_cleanup": AutoMockModule("utils.action_item_cleanup"),
+        "utils.executors": executors_mock,
         "utils.notifications": AutoMockModule("utils.notifications"),
         "utils.other": utils_other_pkg,
         "utils.other.endpoints": AutoMockModule("utils.other.endpoints"),
         "database.action_items": action_items_db_mock,
-        "database.redis_db": AutoMockModule("database.redis_db"),
+        "database.redis_db": redis_db_mock,
         "database.vector_db": AutoMockModule("database.vector_db"),
     }
     with stub_modules(fakes):
@@ -66,6 +84,10 @@ def router():
 
 def _three_candidates(strategy: str = "stale_age"):
     return [{"id": f"t{i}", "description": f"task {i}", "strategy": strategy} for i in range(3)]
+
+
+def _strategy_page(candidates):
+    return candidates, None
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +129,7 @@ class TestCleanupRateLimitWiring:
 
 class TestCleanupPreview:
     def test_returns_session_id_breakdown_and_total(self, router, monkeypatch):
-        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _three_candidates())
+        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _strategy_page(_three_candidates()))
         monkeypatch.setattr(router, "merge_candidates", lambda lists: lists[0] if lists else [])
 
         store = {}
@@ -123,7 +145,7 @@ class TestCleanupPreview:
         assert result.expires_in_seconds == router._SESSION_TTL
 
     def test_session_stores_candidate_ids(self, router, monkeypatch):
-        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _three_candidates())
+        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _strategy_page(_three_candidates()))
         monkeypatch.setattr(router, "merge_candidates", lambda lists: lists[0] if lists else [])
 
         store = {}
@@ -138,7 +160,7 @@ class TestCleanupPreview:
     def test_sample_capped_per_strategy(self, router, monkeypatch):
         # 10 candidates for one strategy → sample must be ≤ _SAMPLE_PER_STRATEGY
         many = [{"id": f"t{i}", "description": f"task {i}", "strategy": "stale_age"} for i in range(10)]
-        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: many)
+        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _strategy_page(many))
         monkeypatch.setattr(router, "merge_candidates", lambda lists: lists[0] if lists else [])
         monkeypatch.setattr(router, "_save_session", lambda *a, **kw: None)
 
@@ -148,7 +170,7 @@ class TestCleanupPreview:
         assert len(result.sample) <= router._SAMPLE_PER_STRATEGY
 
     def test_breakdown_only_shows_requested_strategies(self, router, monkeypatch):
-        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _three_candidates())
+        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _strategy_page(_three_candidates()))
         monkeypatch.setattr(router, "merge_candidates", lambda lists: lists[0] if lists else [])
         monkeypatch.setattr(router, "_save_session", lambda *a, **kw: None)
 
@@ -172,8 +194,10 @@ class TestCleanupPreview:
         assert result.breakdown == {"stale_age": 0}
 
     def test_two_strategies_each_appear_in_breakdown(self, router, monkeypatch):
-        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _three_candidates("stale_age"))
-        monkeypatch.setattr(router, "candidates_vague", lambda *a, **kw: _three_candidates("vague"))
+        monkeypatch.setattr(
+            router, "candidates_stale_age", lambda *a, **kw: _strategy_page(_three_candidates("stale_age"))
+        )
+        monkeypatch.setattr(router, "candidates_vague", lambda *a, **kw: _strategy_page(_three_candidates("vague")))
         monkeypatch.setattr(router, "merge_candidates", lambda lists: lists[0] + lists[1] if lists else [])
         monkeypatch.setattr(router, "_save_session", lambda *a, **kw: None)
 
@@ -188,7 +212,7 @@ class TestCleanupPreview:
         # candidate_meta backs per-item review/exclusion in the UI, so it must carry
         # the full description for every candidate, not just the capped sample.
         many = [{"id": f"t{i}", "description": f"task {i}", "strategy": "stale_age"} for i in range(10)]
-        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: many)
+        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _strategy_page(many))
         monkeypatch.setattr(router, "merge_candidates", lambda lists: lists[0] if lists else [])
         monkeypatch.setattr(router, "_save_session", lambda *a, **kw: None)
 
@@ -207,12 +231,11 @@ class TestCleanupPreview:
 
 
 class TestCleanupPreviewScanTruncation:
-    def test_not_truncated_when_open_count_within_cap(self, router, monkeypatch):
-        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _three_candidates())
+    def test_not_truncated_when_scan_window_is_complete(self, router, monkeypatch):
+        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _strategy_page(_three_candidates()))
         monkeypatch.setattr(router, "merge_candidates", lambda lists: lists[0] if lists else [])
         monkeypatch.setattr(router, "_save_session", lambda *a, **kw: None)
         monkeypatch.setattr(router.action_items_db, "get_open_action_items_count", lambda uid: 1500)
-        monkeypatch.setattr(router.action_items_db, "get_action_items_list_scan_cap", lambda: 2000)
 
         req = router.CleanupPreviewRequest(strategies=["stale_age"])
         result = router.cleanup_preview(req, uid="uid-1")
@@ -220,13 +243,17 @@ class TestCleanupPreviewScanTruncation:
         assert result.total_open_action_items == 1500
         assert result.scan_cap == 2000
         assert result.scan_truncated is False
+        assert result.next_scan_cursor is None
 
-    def test_truncated_when_open_count_exceeds_cap(self, router, monkeypatch):
-        monkeypatch.setattr(router, "candidates_stale_age", lambda *a, **kw: _three_candidates())
+    def test_truncated_when_next_scan_cursor_present(self, router, monkeypatch):
+        monkeypatch.setattr(
+            router,
+            "candidates_stale_age",
+            lambda *a, **kw: (_three_candidates(), "cursor-page-2"),
+        )
         monkeypatch.setattr(router, "merge_candidates", lambda lists: lists[0] if lists else [])
         monkeypatch.setattr(router, "_save_session", lambda *a, **kw: None)
         monkeypatch.setattr(router.action_items_db, "get_open_action_items_count", lambda uid: 45000)
-        monkeypatch.setattr(router.action_items_db, "get_action_items_list_scan_cap", lambda: 2000)
 
         req = router.CleanupPreviewRequest(strategies=["stale_age"])
         result = router.cleanup_preview(req, uid="uid-1")
@@ -234,6 +261,7 @@ class TestCleanupPreviewScanTruncation:
         assert result.total_open_action_items == 45000
         assert result.scan_cap == 2000
         assert result.scan_truncated is True
+        assert result.next_scan_cursor == "cursor-page-2"
 
     def test_truncation_fields_present_on_empty_strategies_short_circuit(self, router, monkeypatch):
         monkeypatch.setattr(router.action_items_db, "get_open_action_items_count", lambda uid: 5000)
@@ -256,10 +284,9 @@ class TestCleanupExecute:
         ids = ["t1", "t2", "t3"]
         monkeypatch.setattr(
             router,
-            "_load_session",
+            "_claim_session",
             lambda uid, sid: {"ids": ids, "strategies": ["stale_age"], "age_days": 90},
         )
-        monkeypatch.setattr(router, "_delete_session", lambda *a, **kw: None)
         monkeypatch.setattr(
             router.action_items_db,
             "delete_action_items_batch",
@@ -274,7 +301,8 @@ class TestCleanupExecute:
         assert result.deleted_count == 3
 
     def test_raises_410_when_session_expired(self, router, monkeypatch):
-        monkeypatch.setattr(router, "_load_session", lambda *a, **kw: None)
+        monkeypatch.setattr(router, "_claim_session", lambda *a, **kw: None)
+        monkeypatch.setattr(router, "_load_terminal_result", lambda *a, **kw: None)
 
         req = router.CleanupExecuteRequest(session_id="expired-sess")
         with pytest.raises(HTTPException) as exc_info:
@@ -285,10 +313,10 @@ class TestCleanupExecute:
     def test_empty_candidate_list_returns_zero_without_calling_delete(self, router, monkeypatch):
         monkeypatch.setattr(
             router,
-            "_load_session",
+            "_claim_session",
             lambda uid, sid: {"ids": [], "strategies": ["stale_age"], "age_days": 90},
         )
-        monkeypatch.setattr(router, "_delete_session", lambda *a, **kw: None)
+        monkeypatch.setattr(router, "_save_terminal_result", lambda *a, **kw: None)
         delete_called = []
         monkeypatch.setattr(
             router.action_items_db,
@@ -306,10 +334,9 @@ class TestCleanupExecute:
         ids = ["t1"]
         monkeypatch.setattr(
             router,
-            "_load_session",
+            "_claim_session",
             lambda uid, sid: {"ids": ids, "strategies": ["stale_age"], "age_days": 90},
         )
-        monkeypatch.setattr(router, "_delete_session", lambda *a, **kw: None)
         monkeypatch.setattr(
             router.action_items_db,
             "delete_action_items_batch",
@@ -338,10 +365,9 @@ class TestCleanupExecute:
         ids = ["t1", "t2", "t3"]
         monkeypatch.setattr(
             router,
-            "_load_session",
+            "_claim_session",
             lambda uid, sid: {"ids": ids, "strategies": ["stale_age"], "age_days": 90},
         )
-        monkeypatch.setattr(router, "_delete_session", lambda *a, **kw: None)
         deleted_arg = []
         monkeypatch.setattr(
             router.action_items_db,
@@ -361,10 +387,9 @@ class TestCleanupExecute:
         ids = ["t1", "t2"]
         monkeypatch.setattr(
             router,
-            "_load_session",
+            "_claim_session",
             lambda uid, sid: {"ids": ids, "strategies": ["stale_age"], "age_days": 90},
         )
-        monkeypatch.setattr(router, "_delete_session", lambda *a, **kw: None)
         delete_called = []
         monkeypatch.setattr(
             router.action_items_db,
@@ -377,3 +402,50 @@ class TestCleanupExecute:
 
         assert result.deleted_count == 0
         assert delete_called == [], "delete must not be called when every candidate is excluded"
+
+
+class TestCleanupPreviewValidation:
+    def test_unknown_strategy_returns_422(self, router):
+        req = router.CleanupPreviewRequest(strategies=["stale_age", "not_a_strategy"])
+        with pytest.raises(HTTPException) as exc_info:
+            router.cleanup_preview(req, uid="uid-1")
+
+        assert exc_info.value.status_code == 422
+
+
+class TestCleanupExecuteBoundaries:
+    def test_rejects_locked_items_before_delete(self, router, monkeypatch):
+        monkeypatch.setattr(
+            router,
+            "_claim_session",
+            lambda uid, sid: {"ids": ["locked-1"], "strategies": ["stale_age"], "age_days": 90},
+        )
+        monkeypatch.setattr(
+            router.action_items_db,
+            "get_action_items_by_ids",
+            lambda uid, ids: [{"id": ids[0], "is_locked": True}],
+        )
+        delete_called = []
+        monkeypatch.setattr(
+            router.action_items_db,
+            "delete_action_items_batch",
+            lambda *a, **kw: delete_called.append(True) or [],
+        )
+
+        req = router.CleanupExecuteRequest(session_id="sess-locked")
+        with pytest.raises(HTTPException) as exc_info:
+            router.cleanup_execute(req, uid="uid-1")
+
+        assert exc_info.value.status_code == 402
+        assert delete_called == []
+
+    def test_returns_terminal_result_without_reclaiming_session(self, router, monkeypatch):
+        monkeypatch.setattr(router, "_load_terminal_result", lambda *a, **kw: {"deleted_count": 7})
+        claim_called = []
+        monkeypatch.setattr(router, "_claim_session", lambda *a, **kw: claim_called.append(True))
+
+        req = router.CleanupExecuteRequest(session_id="sess-done")
+        result = router.cleanup_execute(req, uid="uid-1")
+
+        assert result.deleted_count == 7
+        assert claim_called == []

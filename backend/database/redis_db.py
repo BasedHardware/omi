@@ -105,6 +105,15 @@ def delete_generic_cache(path: str) -> None:
     r.delete(f'cache:{key}')
 
 
+@try_catch_decorator
+def pop_generic_cache(path: str) -> Any:
+    """Atomically read and remove a generic cache entry (Redis GETDEL)."""
+    key = base64.b64encode(f'{path}'.encode('utf-8'))
+    key = key.decode('utf-8')
+    data = r.getdel(f'cache:{key}')
+    return json.loads(data) if data else None
+
+
 # ******************************************************
 # ********************* APP BY ID **********************
 # ******************************************************

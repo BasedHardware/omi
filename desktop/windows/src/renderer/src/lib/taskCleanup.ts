@@ -14,6 +14,7 @@ export interface CleanupPreviewParams {
   overdue_days?: number
   similarity_threshold?: number
   llm_confidence_threshold?: number
+  scan_cursor?: string | null
 }
 
 export interface CleanupSampleItem {
@@ -38,6 +39,7 @@ export interface CleanupPreviewResult {
   total_open_action_items: number
   scan_cap: number
   scan_truncated: boolean
+  next_scan_cursor?: string | null
 }
 
 export interface CleanupExecuteResult {

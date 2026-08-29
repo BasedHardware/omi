@@ -1003,7 +1003,7 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> No
 
 def fetch_action_item_vectors(uid: str, action_item_ids: List[str]) -> dict[str, List[float]]:
     """
-    Bulk-fetch action item vectors from Pinecone in batches of 1000.
+    Bulk-fetch action item vectors from Pinecone in batches of 100.
     Returns a map of action_item_id → embedding values.
     Missing vectors (not yet indexed) are silently omitted.
     """
