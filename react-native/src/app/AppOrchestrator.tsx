@@ -63,6 +63,11 @@ import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
 import {AppNav} from '../ui/AppNav';
 import {Composer} from '../ui/Composer';
 import {DesktopApp} from '../desktop/DesktopApp';
+import {
+  MobileAppSurface,
+  type MobileProjectionStatus,
+  type MobileRoute,
+} from '../mobile/MobileAppSurface';
 
 export {omiDotColor};
 
@@ -692,6 +697,82 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           readsPhase={readsPhase}
         />
       </PageShell>
+    );
+  }
+
+  if (!macDesktop && compact && onboardingRequired === false) {
+    const taskItems =
+      readOutcomes?.tasks.status === 'success'
+        ? readOutcomes.tasks.value.items.map(task => ({
+            completed: task.completed,
+            id: task.id,
+            title: task.title,
+          }))
+        : [];
+    const recapItems =
+      readOutcomes?.conversations.status === 'success'
+        ? readOutcomes.conversations.value.items.slice(0, 8).map(item => ({
+            dateLabel: new Date(
+              item.startedAt ?? item.createdAt,
+            ).toLocaleDateString(undefined, {weekday: 'long'}),
+            id: item.id,
+            title: item.title,
+          }))
+        : [];
+    const projectionStatus: MobileProjectionStatus =
+      readsPhase === 'initial-loading' || readsPhase === 'refreshing'
+        ? 'loading'
+        : readsPhase === 'unavailable' ||
+          readsPhase === 'saved-but-refresh-failed'
+        ? 'offline'
+        : 'ready';
+    const activeMobileRoute: MobileRoute =
+      route === 'Tasks'
+        ? 'tasks'
+        : route === 'Connectors'
+        ? 'apps'
+        : homeChatOpen || route === 'Conversations'
+        ? 'chat'
+        : 'home';
+    return (
+      <MobileAppSurface
+        activeRoute={activeMobileRoute}
+        askValue={draft}
+        capture={{active: false, transcript: ''}}
+        device={{connected: connectedDevice !== null, label: homeStatus}}
+        mindMapStatus={projectionStatus}
+        onAskChange={setDraft}
+        onAskSubmit={() => {
+          setRoute('Home');
+          setHomeChatOpen(true);
+          send().catch(() => undefined);
+        }}
+        onExpandMindMap={() => setRoute('Memories')}
+        onOpenCalls={() => setRoute('Conversations')}
+        onOpenDevice={() => {
+          scanForOmi().catch(() => undefined);
+        }}
+        onOpenSettings={() => setRoute('Settings')}
+        onRouteChange={destination => {
+          setHomeChatOpen(destination === 'chat');
+          setRoute(
+            destination === 'tasks'
+              ? 'Tasks'
+              : destination === 'apps'
+              ? 'Connectors'
+              : destination === 'chat'
+              ? 'Conversations'
+              : 'Home',
+          );
+        }}
+        onTaskToggle={() => undefined}
+        onViewRecaps={() => setRoute('Conversations')}
+        onViewTasks={() => setRoute('Tasks')}
+        recapStatus={projectionStatus}
+        recaps={recapItems}
+        tasks={taskItems}
+        taskStatus={projectionStatus}
+      />
     );
   }
 
