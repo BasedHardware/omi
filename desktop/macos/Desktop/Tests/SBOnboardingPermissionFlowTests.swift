@@ -353,35 +353,32 @@ final class SBOnboardingPermissionFlowTests: XCTestCase {
 /// The permission probes `AppState` owns, exercised through their injected seams.
 @MainActor
 final class AppStatePermissionProbeTests: XCTestCase {
-  func testAccessibilitySettingsOpenPresentsDragGuidance() {
+  func testAccessibilitySettingsOpenDoesNotPresentDragGuidance() {
     var openedURL: URL?
-    var presentedDragGuidance = false
+    PermissionDragGuidance.dismiss()
 
     let opened = PermissionDragGuidance.openAccessibilitySettings(
       open: {
         openedURL = $0
         return true
       },
-      suspendForPermissionPrompt: {},
-      presentDragGuidance: { presentedDragGuidance = true })
+      suspendForPermissionPrompt: {})
 
     XCTAssertTrue(opened)
     XCTAssertEqual(
       openedURL?.absoluteString,
       "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-    XCTAssertTrue(presentedDragGuidance)
+    XCTAssertNotEqual(
+      CloudConnectorGuidanceOverlay.shared.automationState()["visible"], "true",
+      "Accessibility only needs its registered row toggled; a drag card asks the user to grant twice")
   }
 
-  func testAccessibilityDragGuidanceIsNotPresentedWhenSettingsFailsToOpen() {
-    var presentedDragGuidance = false
-
+  func testAccessibilitySettingsFailureReturnsFalse() {
     let opened = PermissionDragGuidance.openAccessibilitySettings(
       open: { _ in false },
-      suspendForPermissionPrompt: {},
-      presentDragGuidance: { presentedDragGuidance = true })
+      suspendForPermissionPrompt: {})
 
     XCTAssertFalse(opened)
-    XCTAssertFalse(presentedDragGuidance)
   }
 
   // MARK: - Defect 5: automation status is readable by the caller that acts on it

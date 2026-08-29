@@ -558,7 +558,7 @@ struct OnboardingChatView: View {
     guard let urlString, let url = URL(string: urlString) else { return }
     NSWorkspace.shared.open(url)
     if type == "full_disk_access" {
-      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+      Task { await PermissionDragGuidance.presentDragToGrantHelper(for: .fullDiskAccess) }
     }
   }
 

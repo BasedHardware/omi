@@ -2082,7 +2082,7 @@ class ChatToolExecutor {
         // Same drag-to-grant mechanic as Full Disk Access. macOS pre-registers
         // the row here, but the card still walks the user to the right toggle —
         // and re-adds the app if the row was removed via tccutil or a reset.
-        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+        Task { await PermissionDragGuidance.presentDragToGrantHelper(for: .screenRecording) }
         try? await Task.sleep(nanoseconds: 2_000_000_000)
         guard
           isPermissionAuthorizationCurrent(
@@ -2214,7 +2214,7 @@ class ChatToolExecutor {
           authorizationSnapshot: authorizationSnapshot)
         // Same drag-to-grant mechanic as Screen Recording: drop the app into the
         // Full Disk Access list to add and enable it in one gesture.
-        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+        Task { await PermissionDragGuidance.presentDragToGrantHelper(for: .fullDiskAccess) }
         try? await Task.sleep(nanoseconds: 3_000_000_000)
         guard
           isPermissionAuthorizationCurrent(

@@ -2,22 +2,23 @@ import AppKit
 
 @MainActor
 enum PermissionDragGuidance {
+  enum Permission: Sendable {
+    case screenRecording
+    case fullDiskAccess
+  }
+
   private static var lastPresentedAt: Date?
 
-  /// Open the Accessibility privacy pane and show the same draggable app card
-  /// used by Screen Recording and Full Disk Access. On current macOS releases,
-  /// asking AX to prompt can register the request without showing usable UI, so
-  /// opening Settings alone leaves a fresh named bundle with no obvious row to
-  /// enable.
+  /// Open the Accessibility privacy pane. Accessibility already registers Omi's
+  /// row when the app asks for access, so this flow only needs the user to turn
+  /// that row on. The draggable app card is reserved for permissions where
+  /// dropping the bundle into the list is itself a valid grant path.
   @discardableResult
   static func openAccessibilitySettings(
     isAuthorized: () -> Bool = { true },
     open: (URL) -> Bool = { NSWorkspace.shared.open($0) },
     suspendForPermissionPrompt: () -> Void = {
       ShellSummon.suspendForPermissionPrompt()
-    },
-    presentDragGuidance: () -> Void = {
-      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
     }
   ) -> Bool {
     guard
@@ -28,7 +29,6 @@ enum PermissionDragGuidance {
     guard isAuthorized() else { return false }
     suspendForPermissionPrompt()
     guard open(url) else { return false }
-    presentDragGuidance()
     return true
   }
 
@@ -39,7 +39,14 @@ enum PermissionDragGuidance {
     CloudConnectorGuidanceOverlay.shared.dismiss()
   }
 
-  static func presentDragToGrantHelper(settingsPID: pid_t? = nil) async {
+  static func presentDragToGrantHelper(
+    for permission: Permission,
+    settingsPID: pid_t? = nil
+  ) async {
+    guard shouldPresentDragGuidance(permissionGranted: await isGranted(permission)) else {
+      dismiss()
+      return
+    }
     if let lastPresentedAt, Date().timeIntervalSince(lastPresentedAt) < 2 { return }
     lastPresentedAt = Date()
 
@@ -68,9 +75,32 @@ enum PermissionDragGuidance {
       return
     }
 
+    // A fast toggle can land while System Settings is still opening. Re-check
+    // at the final presentation boundary so a now-granted permission never
+    // leaves the user with a stale instruction to drag the app again.
+    guard shouldPresentDragGuidance(permissionGranted: await isGranted(permission)) else {
+      dismiss()
+      return
+    }
+
     // The overlay owns the System Settings lifecycle from here: it re-anchors over
     // the window as it moves and dismisses the card when the user closes it.
     CloudConnectorGuidanceOverlay.shared.presentDragToGrantCard(
       appIcon: icon, appName: appName, appURL: appURL, near: anchor)
+  }
+
+  static func shouldPresentDragGuidance(permissionGranted: Bool) -> Bool {
+    !permissionGranted
+  }
+
+  private static func isGranted(_ permission: Permission) async -> Bool {
+    switch permission {
+    case .screenRecording:
+      return ScreenCaptureService.checkPermission()
+    case .fullDiskAccess:
+      return await Task.detached(priority: .userInitiated) {
+        AppState.probeFullDiskAccessGranted()
+      }.value
+    }
   }
 }

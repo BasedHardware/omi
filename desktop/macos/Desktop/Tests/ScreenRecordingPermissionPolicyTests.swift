@@ -143,6 +143,12 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
   }
 
   @MainActor
+  func testDragHelperIsSkippedWheneverPermissionIsAlreadyGranted() {
+    XCTAssertFalse(PermissionDragGuidance.shouldPresentDragGuidance(permissionGranted: true))
+    XCTAssertTrue(PermissionDragGuidance.shouldPresentDragGuidance(permissionGranted: false))
+  }
+
+  @MainActor
   func testDragHelperDirectsUsersToTheAppListWithoutClaimingExactBounds() {
     XCTAssertEqual(
       CloudConnectorGuidanceOverlay.dragInstructionText(appName: "Omi"),

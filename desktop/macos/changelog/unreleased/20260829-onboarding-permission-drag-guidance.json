@@ -1,0 +1,3 @@
+{
+  "change": "Fixed onboarding permission guidance so granted access is never requested twice and the draggable app icon is easier to spot"
+}
