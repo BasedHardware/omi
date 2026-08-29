@@ -15,8 +15,8 @@ import {
 } from "./http-core";
 import { type GatewaySecretEnv } from "./openrouter";
 import {
-  requestCompletedEvent,
-  requestFailedEvent,
+  logRequestCompleted,
+  logRequestFailed,
   type ObservabilityEnv,
 } from "./observability";
 import { backendError } from "./wire";
@@ -44,28 +44,19 @@ const app = new Hono<{ Bindings: WorkerEnv; Variables: Variables }>({
   strict: true,
 });
 
-// Emit one small, schema-stable JSON event for every request. Cloudflare
-// Workers Observability can retain it natively and Better Stack can ingest the
-// same line without a Worker-specific SDK. The event intentionally carries no
-// URL, query, authorization header, account identifier, request body, prompt,
-// or completion content.
 app.use("*", async (context, next) => {
   const requestId = crypto.randomUUID();
   const startedAt = Date.now();
   context.set("requestId", requestId);
   await next();
   context.header("x-omi-request-id", requestId);
-  console.log(
-    JSON.stringify(
-      requestCompletedEvent({
-        requestId,
-        method: context.req.method,
-        route: safeRoute(context.req.routePath),
-        status: context.res.status,
-        durationMs: Math.max(0, Date.now() - startedAt),
-      })
-    )
-  );
+  logRequestCompleted({
+    requestId,
+    method: context.req.method,
+    route: safeRoute(context.req.routePath),
+    status: context.res.status,
+    durationMs: Math.max(0, Date.now() - startedAt),
+  });
 });
 
 for (const route of publicRoutes) {
@@ -88,15 +79,11 @@ for (const route of v1Routes) {
 
 app.notFound(() => backendError("not_found", "edit_request", 404));
 app.onError((error, context) => {
-  console.error(
-    JSON.stringify(
-      requestFailedEvent({
-        requestId: context.get("requestId") ?? "unavailable",
-        name: error.name,
-        route: safeRoute(context.req.routePath),
-      })
-    )
-  );
+  logRequestFailed({
+    requestId: context.get("requestId") ?? "unavailable",
+    name: error.name,
+    route: safeRoute(context.req.routePath),
+  });
   return backendError("internal_server_error", "retry", 500, true);
 });
 

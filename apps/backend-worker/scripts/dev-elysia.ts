@@ -2,16 +2,28 @@ import { createElysiaApp } from "../src/elysia";
 import type { CoreEnv } from "../src/http-core";
 import { createD1Mock } from "../test/d1-mock";
 
+const requiredEnv = (name: string): string => {
+  const value = process.env[name];
+  if (value === undefined || value.length === 0)
+    throw new Error(`missing ${name}`);
+  return value;
+};
+
+const chatLimit = Number(requiredEnv("STAGING_CHAT_LIMIT"));
+if (!Number.isSafeInteger(chatLimit) || chatLimit < 0) {
+  throw new Error("invalid STAGING_CHAT_LIMIT");
+}
+
 const objects = new Map<string, Uint8Array>();
 const env = {
-  ENVIRONMENT: "local",
-  API_TOKEN: process.env["API_TOKEN"] || "local-token",
-  STAGING_ACCOUNT_ID: "local-account",
-  STAGING_DISPLAY_NAME: "Omi Local",
-  STAGING_EMAIL: "local@omi.invalid",
-  STAGING_PLAN_LABEL: "Local",
-  STAGING_CHAT_LIMIT: 1000,
-  AI_MODEL: "local-model",
+  ENVIRONMENT: requiredEnv("ENVIRONMENT"),
+  API_TOKEN: requiredEnv("API_TOKEN"),
+  STAGING_ACCOUNT_ID: requiredEnv("STAGING_ACCOUNT_ID"),
+  STAGING_DISPLAY_NAME: requiredEnv("STAGING_DISPLAY_NAME"),
+  STAGING_EMAIL: requiredEnv("STAGING_EMAIL"),
+  STAGING_PLAN_LABEL: requiredEnv("STAGING_PLAN_LABEL"),
+  STAGING_CHAT_LIMIT: chatLimit,
+  AI_MODEL: requiredEnv("AI_MODEL"),
   OBSERVABILITY_SINK_MODE: "cloudflare_only",
   OPENROUTER_GATEWAY_ENABLED: "false",
   OPENROUTER_MODEL: "",
