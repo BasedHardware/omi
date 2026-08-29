@@ -273,6 +273,10 @@ test('refreshes expiring macOS cloud sessions without using stale tokens', () =>
 
 test('validates loopback callbacks before success and keeps listening past probes', () => {
   const auth = readNativeSource('OmiAuthModule.mm');
+  const validated = auth.slice(
+    auth.indexOf('static NSURL *OmiAuthValidatedCallbackURL'),
+    auth.indexOf('static NSURL *OmiAuthAcceptCallback'),
+  );
 
   expect(auth).toContain('struct sockaddr_storage');
   expect(auth).toContain('getpeername');
@@ -292,6 +296,40 @@ test('validates loopback callbacks before success and keeps listening past probe
     /callback\.scheme[^]*callback\.host[^]*callback\.port[^]*callback\.path/,
   );
   expect(auth).toMatch(/values\[@"state"\][^]*values\[@"code"\]/);
+  expect(validated).toMatch(/uint16_t port/);
+  expect(validated).not.toContain(
+    '@"http://127.0.0.1" stringByAppendingString:target',
+  );
+  expect(validated).toMatch(/http:\/\/127\.0\.0\.1:%u%@/);
+  expect(auth).toMatch(
+    /static NSURL \*OmiAuthAcceptCallback\(int listener,\s*uint16_t port,/,
+  );
+  expect(auth).toContain(
+    'OmiAuthValidatedCallbackURL(request ?: @"", expectedState, port)',
+  );
+  expect(auth).toContain('OmiAuthAcceptCallback(listener, port, 180, state)');
+});
+
+test('does not reject sign-in when ASWebAuth cancels while loopback waits', () => {
+  const auth = readNativeSource('OmiAuthModule.mm');
+  const sessionStart = auth.indexOf(
+    'initWithURL:authorize.URL callbackURLScheme:@"http"',
+  );
+  expect(sessionStart).toBeGreaterThan(-1);
+  const handler = auth.slice(
+    sessionStart,
+    auth.indexOf(
+      'self.authenticationSession.presentationContextProvider',
+      sessionStart,
+    ),
+  );
+
+  expect(handler).toContain('completeSignInWithCallback:callbackURL');
+  expect(handler).not.toContain('completeSignInWithCallback:nil');
+  expect(handler).toMatch(/if \(callbackURL == nil\) \{\s*return;/);
+  expect(auth).toContain(
+    '[self completeSignInWithCallback:callbackURL\n                                   state:state',
+  );
 });
 
 test('serves a branded auto-closing success page and returns the user to the app', () => {
