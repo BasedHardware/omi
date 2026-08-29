@@ -85,6 +85,9 @@ extension AppState {
         isUser: segment.is_user,
         speaker: speakerId,
         text: segment.text,
+        previouslyHeard: segment.id.flatMap { id in
+          speakerSegments.first(where: { $0.segmentId == id })?.text
+        },
         isSpeaking: FloatingBarVoicePlaybackService.shared.isSpeaking
       ) {
         log("Transcription [BARGE-IN]: User spoke mid-playback; interrupting voice output")
