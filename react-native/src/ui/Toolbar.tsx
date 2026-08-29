@@ -106,6 +106,8 @@ const styles = StyleSheet.create({
   frame: {
     alignSelf: 'stretch',
     backgroundColor: tokens.color.chrome,
+    borderBottomColor: tokens.color.line,
+    borderBottomWidth: tokens.border.width,
     borderRadius: tokens.radius.none,
     height: tokens.size.toolbar,
     marginHorizontal: tokens.space.none,
@@ -135,8 +137,8 @@ const styles = StyleSheet.create({
   },
   home: {
     alignItems: 'center',
-    backgroundColor: tokens.color.input,
-    borderRadius: tokens.radius.lg,
+    backgroundColor: tokens.color.transparent,
+    borderRadius: tokens.radius.sm,
     flexDirection: 'row',
     gap: tokens.space.sm,
     height: tokens.size.controlCompact,

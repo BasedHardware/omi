@@ -1,6 +1,6 @@
 export const color = {
   canvas: '#141414',
-  chrome: 'rgba(18, 20, 19, 0.78)',
+  chrome: '#121413',
   chromeText: '#c8cbc6',
   danger: '#d9826f',
   focus: '#78bda5',

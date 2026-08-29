@@ -106,9 +106,9 @@ const styles = StyleSheet.create({
   },
   menu: {
     backgroundColor: tokens.color.menu,
-    borderColor: tokens.color.transparent,
-    borderRadius: tokens.radius.lg,
-    borderWidth: tokens.space.none,
+    borderColor: tokens.color.line,
+    borderRadius: tokens.radius.md,
+    borderWidth: tokens.border.width,
     gap: tokens.space.xxs,
     padding: 7,
     pointerEvents: 'auto',

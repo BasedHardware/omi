@@ -248,6 +248,10 @@ describe('Onboarding chrome', () => {
 
     expect(output).toContain('Welcome to Omi');
     expect(output).toContain('Sign in');
+    expect(output).toContain(
+      'Sign in to access your conversations and memories.',
+    );
+    expect(output).not.toContain('calm workspace');
     expect(output).not.toContain('Search Omi');
     expect(output).not.toContain('Home search dock');
     expect(output).not.toContain('Home navigation');

@@ -420,6 +420,11 @@ test('keeps the shared HUD material translucent with a semantic opaque fallback'
   expect(source).toContain('self.layer.borderWidth = 0;');
   expect(source).not.toContain('NSAppearanceNameAqua');
   expect(source).not.toContain('self.sheen');
+  expect(source).not.toContain('shadowColor');
+  expect(source).not.toContain('shadowRadius');
+  expect(source).not.toContain('shadowOpacity');
+  expect(source).not.toContain('shadowOffset');
+  expect(source).not.toContain('shadowPath');
   expect(source).not.toContain('NSMaxY(self.bounds) - 1.0');
   expect(source).not.toContain(
     '[NSColor.whiteColor colorWithAlphaComponent:0.5]',

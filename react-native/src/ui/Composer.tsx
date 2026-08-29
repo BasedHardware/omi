@@ -1,8 +1,6 @@
 import React from 'react';
 import {TextInput, View} from 'react-native';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
-import Mic from 'lucide-react-native/icons/mic';
-import Paperclip from 'lucide-react-native/icons/paperclip';
 import Square from 'lucide-react-native/icons/square';
 import {omiBackend} from '../omiNative';
 import {FocusPressable} from './Pressable';
@@ -54,26 +52,6 @@ export function Composer({
           value={draft}
         />
         <View style={styles.composerActions}>
-          <FocusPressable
-            accessibilityLabel="Attach file unavailable"
-            accessibilityRole="button"
-            disabled
-            style={({pressed}) => [
-              styles.iconButton,
-              pressed && styles.pressed,
-            ]}>
-            <Paperclip color="#666666" size={18} strokeWidth={2} />
-          </FocusPressable>
-          <FocusPressable
-            accessibilityLabel="Dictation unavailable"
-            accessibilityRole="button"
-            disabled
-            style={({pressed}) => [
-              styles.iconButton,
-              pressed && styles.pressed,
-            ]}>
-            <Mic color="#666666" size={18} strokeWidth={2} />
-          </FocusPressable>
           <View style={styles.actionSpacer} />
           <FocusPressable
             accessibilityLabel={
