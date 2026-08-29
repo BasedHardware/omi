@@ -23,6 +23,7 @@ actor DataAnswerAssistant {
   struct Step: Decodable, Sendable {
     let action: String
     let query: String?
+    let refs: [String]?
     let title: String?
     let items: [Item]?
     let missing: [String]?
@@ -60,6 +61,9 @@ actor DataAnswerAssistant {
     let now = Date()
     runsToday = runsToday.filter { Calendar.current.isDate($0, inSameDayAs: now) }
     guard runsToday.count < dailyBudget else {
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "panel_lookup", from: "lookup", to: "none",
+        reason: "quota", outcome: .exhausted)
       return "Looking things up has spent its budget for today."
     }
     runsToday.append(now)
@@ -127,7 +131,22 @@ actor DataAnswerAssistant {
   // MARK: - Exploration loop
 
   private func explore(question: String) async throws -> Outcome {
+    // Attached, not offered. Asking the model whether it wants a lookup was measured as
+    // a coin flip in this codebase (`ContextDirectorRetrievalHop`), and a loop that has
+    // to guess which store to try first is exactly how an answer ends up biased toward
+    // whichever tool got called once.
+    await MainActor.run { PanelSession.update(subtitle: "Searching everything you have\u{2026}") }
+    let sweep = await OmiSweep.run(query: question)
+    if sweep.hits.isEmpty {
+      // The keywords missed, so the loop pays for semantic searches it would not
+      // otherwise have needed. Worth counting: a sweep that keeps coming back empty is
+      // a tokenizer or an index problem, not a user with no data.
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "panel_lookup", from: "keyword_sweep", to: "semantic_search",
+        reason: "sweep_empty", outcome: .degraded)
+    }
     var transcript = await Self.openingPrompt(question: question)
+    transcript += "\n\n" + OmiSweep.promptSection(sweep)
 
     for _ in 0..<Self.maxToolTurns {
       try Task.checkCancellation()
@@ -138,6 +157,9 @@ actor DataAnswerAssistant {
         thinkingBudget: 1024
       )
       guard let step = Self.decodeStep(raw) else {
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "panel_lookup", from: "model_step", to: "retry",
+          reason: "schema_violation", outcome: .degraded)
         log("DataAnswer: undecodable step (\(raw.count) chars) — asking again")
         transcript += "\n\nThat response was not valid JSON for the schema. Answer again."
         continue
@@ -145,17 +167,28 @@ actor DataAnswerAssistant {
       if let outcome = Self.outcome(of: step) { return outcome }
 
       guard let progress = Self.progressSubtitle(forTool: step.action) else {
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "panel_lookup", from: "model_step", to: "retry",
+          reason: "schema_violation", outcome: .degraded,
+          extra: ["step": "unknown_action"])
         transcript += "\n\n\"\(step.action)\" is not one of the offered actions. Choose again."
         continue
       }
       await MainActor.run { PanelSession.update(subtitle: progress) }
       let query = step.query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       log("DataAnswer: exploring via \(step.action)")
-      let result = await ChatToolExecutor.execute(
-        ToolCall(
-          name: step.action,
-          arguments: query.isEmpty ? [:] : ["query": query],
-          thoughtSignature: nil))
+      let result: String
+      if step.action == "open_refs" {
+        result = await OmiSweep.open(refs: step.refs ?? [])
+      } else if step.action == "list_memories" {
+        result = await OmiSweep.remainingMemories()
+      } else {
+        result = await ChatToolExecutor.execute(
+          ToolCall(
+            name: step.action,
+            arguments: query.isEmpty ? [:] : ["query": query],
+            thoughtSignature: nil))
+      }
       transcript += """
 
 
@@ -209,14 +242,20 @@ actor DataAnswerAssistant {
     return .answer(title: title.isEmpty ? "Found for you" : title, items: items, missing: missing)
   }
 
-  /// The subtitle while a data tool runs — and the allowlist: an action without one is
-  /// not part of this loop and never reaches ChatToolExecutor.
+  /// The subtitle while a step runs — and the allowlist: an action without one is not
+  /// part of this loop and never reaches a tool.
   nonisolated static func progressSubtitle(forTool name: String) -> String? {
     switch name {
+    case "open_refs": return "Reading what it found\u{2026}"
+    case "list_memories": return "Reading the rest of your memories\u{2026}"
     case "search_memories", "get_memories": return "Reading your memories\u{2026}"
     case "get_work_context": return "Reading your recent work\u{2026}"
-    case "search_screen_history": return "Searching your screen history\u{2026}"
-    case "search_conversations": return "Searching your conversations\u{2026}"
+    case "search_screen_history", "semantic_search": return "Searching your screen history\u{2026}"
+    case "search_conversations", "get_conversations": return "Searching your conversations\u{2026}"
+    case "get_tasks", "search_tasks", "get_action_items": return "Checking your tasks\u{2026}"
+    case "get_canonical_goals": return "Checking your goals\u{2026}"
+    case "get_daily_recap": return "Reading your recap\u{2026}"
+    case "get_email_insights": return "Reading your email insights\u{2026}"
     default: return nil
     }
   }
@@ -263,25 +302,42 @@ actor DataAnswerAssistant {
     response is one JSON step: a search to run next, or the finished answer.
 
     The user block and profile are already-found data: an email, name, or fact stated
-    there needs no search and belongs straight in the answer. Search for the rest.
-    Choose the action the question points at: stored facts about the user live in
-    search_memories and get_memories, what they were working on lives in
-    get_work_context and search_screen_history, what was said lives in
-    search_conversations. Set query for every search. Prefer a few targeted searches
-    over many broad ones, and stop the moment you have the answer.
+    there needs no search and belongs straight in the answer.
+
+    The keyword sweep below it has already looked in every local store the user has —
+    memories, screen history, tasks, suggested tasks, task chats, insights, and what
+    they said out loud. Each of its lines is an address and a fragment, not the whole
+    thing. Read it FIRST: it tells you where the answer already is. Open the lines that
+    look right with action=open_refs and refs set to their [bracketed] ids — that reads
+    the full text and is the cheapest move you have. A fragment is never enough to
+    answer from; open it.
+
+    A memory line marked ·also stored· did not match the question; it is simply what
+    that source holds. When the sweep says it is showing only some of the memories, and
+    the answer is a fact about the user, call list_memories: it returns the rest from
+    the same local store in one call, and is the only complete view of them.
+
+    The sweep matched literal words only. When it missed, or when the question is about
+    meaning rather than wording, search: search_memories and get_memories for stored
+    facts, semantic_search for screen content by meaning, get_work_context for what they
+    were recently working on and where a document or link lives, search_conversations
+    and get_conversations for what was said, get_tasks and search_tasks for their to-do
+    list, get_canonical_goals for what they are working toward, get_daily_recap for a
+    day's activity, get_email_insights for mail. Set query for every search. Prefer a
+    few targeted searches over many broad ones, and stop the moment you have the answer.
 
     The search ends with one action=present_answer step: everything you hold — from
-    the blocks above or from a search result — goes in items, and the asked-for things
-    that never turned up go in missing, by name. A short title, then one labeled item
-    per value when there are several, or one unlabeled item for a single passage of
-    text. Give values exactly as the user would paste them — a bare URL, a bare
-    address, a bare number, with no commentary around it. Never leave a value you hold
-    out of items because something else was missing; items is empty only when nothing
-    at all was found.
+    the blocks above, an opened ref, or a search result — goes in items, and the
+    asked-for things that never turned up go in missing, by name. A short title, then
+    one labeled item per value when there are several, or one unlabeled item for a
+    single passage of text. Give values exactly as the user would paste them — a bare
+    URL, a bare address, a bare number, with no commentary around it. Never leave a
+    value you hold out of items because something else was missing; items is empty only
+    when nothing at all was found.
 
     NEVER invent a value. Every item must be traceable to the user block, the profile,
-    or a search result; the user will paste these somewhere real, so a wrong value
-    costs far more than a missing one.
+    an opened ref, or a search result; the user will paste these somewhere real, so a
+    wrong value costs far more than a missing one.
     """
 
   private static let stepSchema = GeminiRequest.GenerationConfig.ResponseSchema(
@@ -290,13 +346,22 @@ actor DataAnswerAssistant {
       "action": .init(
         type: "string",
         enum: [
-          "search_memories", "get_memories", "get_work_context", "search_screen_history",
-          "search_conversations", "present_answer",
+          "open_refs", "list_memories", "search_memories", "get_memories", "get_work_context",
+          "semantic_search", "search_screen_history", "search_conversations",
+          "get_conversations", "get_tasks", "search_tasks", "get_canonical_goals",
+          "get_daily_recap", "get_email_insights", "present_answer",
         ],
-        description: "The next move: one search to run, or present_answer to finish."),
+        description:
+          "The next move: open_refs to read sweep hits, list_memories for the memories the sweep could not fit, one search to run, or present_answer to finish."
+      ),
       "query": .init(
         type: "string",
-        description: "For a search: what to look for. Empty for present_answer."),
+        description: "For a search: what to look for. Empty for open_refs and present_answer."),
+      "refs": .init(
+        type: "array",
+        description:
+          "open_refs only: the bracketed ids from the sweep to read in full, like memory:12. Empty otherwise.",
+        items: .init(type: "string", properties: nil, required: nil)),
       "title": .init(
         type: "string",
         description: "present_answer only: short title naming what was found. Empty otherwise."),
@@ -319,6 +384,6 @@ actor DataAnswerAssistant {
           "present_answer only: names of the asked-for things no search turned up. Empty otherwise.",
         items: .init(type: "string", properties: nil, required: nil)),
     ],
-    required: ["action", "query", "title", "items", "missing"]
+    required: ["action", "query", "refs", "title", "items", "missing"]
   )
 }

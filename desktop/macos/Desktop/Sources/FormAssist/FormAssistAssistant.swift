@@ -464,6 +464,9 @@ actor FormAssistAssistant: ProactiveAssistant {
       case .cancelled:
         return abandon("Cancelled.")
       case .noEvidence:
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "panel_lookup", from: "form_assist", to: "none",
+          reason: "no_evidence", outcome: .exhausted)
         _ = await MainActor.run { PanelSession.dismiss() }
         return abandon("Omi has nothing stored that could answer this form.")
       case .rows(let rows):
@@ -512,9 +515,13 @@ actor FormAssistAssistant: ProactiveAssistant {
   ) async throws -> FillOutcome {
     let fingerprint = snapshot.fingerprint
     // Memories are one source, not the only one: recent work is where the links and
-    // documents a form asks about actually live.
+    // documents a form asks about actually live, and the sweep reaches the four stores
+    // neither of those touches. Same seam the spoken lookup uses, so a question answers
+    // the same way whether or not a form happens to be focused.
     var collected = await recallMemories(for: snapshot)
     if let recent = await recentWorkEvidence() { collected.append(recent) }
+    let sweep = await OmiSweep.run(query: Self.sweepQuery(roster: roster, context: context))
+    if !sweep.hits.isEmpty { collected.append(OmiSweep.promptSection(sweep)) }
     let evidence = collected
     guard await !work.isCancelled else { return .cancelled }
     guard !evidence.isEmpty else { return .noEvidence }
@@ -546,6 +553,12 @@ actor FormAssistAssistant: ProactiveAssistant {
   enum OnDemandOutcome: Sendable {
     case handled(String)
     case noForm
+  }
+
+  /// What to sweep the user's stores for: the field labels are the question the form is
+  /// asking, and anything the user said when they asked narrows it.
+  nonisolated static func sweepQuery(roster: [FormField], context: String) -> String {
+    (roster.map(\.label) + [context]).joined(separator: " ")
   }
 
   /// The user's recent work as one evidence line for the model call. Local and fast;

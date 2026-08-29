@@ -276,6 +276,12 @@ public class ProactiveAssistantsPlugin: NSObject {
     case .handled(let result):
       return result
     case .noForm:
+      // The user asked and there is no form to answer, so the request widens to their
+      // data rather than dead-ending. A branch that changes which assistant answers is
+      // exactly what fallback telemetry is for.
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "panel_lookup", from: "form_assist", to: "data_lookup",
+        reason: "no_form", outcome: .recovered)
       let question =
         context.isEmpty
         ? "The details this user most likely needs to fill in or copy right now: name, email, phone, links, employer, location."
