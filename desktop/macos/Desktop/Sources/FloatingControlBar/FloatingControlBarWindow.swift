@@ -4363,7 +4363,8 @@ class FloatingControlBarManager {
     // presentation surface while this async write is pending.
     let messageText = Self.notificationJournalText(
       title: notification.title,
-      body: notification.message)
+      body: notification.message,
+      kind: notification.kind)
     let continuityKey = ChatContinuityInvariants.proactiveNotificationContinuityKey(
       id: notification.id,
       kind: notification.kind)

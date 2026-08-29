@@ -202,6 +202,11 @@ struct ChatProactivePushRow: View {
     ProactiveNotificationBadge(kind: kind)
   }
 
+  /// Category chrome already lives on the badge; do not also draw it as the body.
+  private var displayText: String {
+    FloatingControlBarManager.chatDisplayText(text, kind: kind)
+  }
+
   var body: some View {
     HStack(alignment: .top, spacing: OmiSpacing.sm) {
       Image(systemName: badge.systemImage)
@@ -217,7 +222,11 @@ struct ChatProactivePushRow: View {
         Text(badge.label)
           .scaledFont(size: OmiType.micro, weight: .semibold)
           .foregroundColor(Ink.secondary)
-        OmiMarkdown(text: text, sender: .ai)
+        if !displayText.isEmpty {
+          if !displayText.isEmpty {
+            OmiMarkdown(text: displayText, sender: .ai)
+          }
+        }
       }
       Spacer(minLength: 0)
     }
@@ -231,7 +240,8 @@ struct ChatProactivePushRow: View {
         .stroke(Ink.glassEdge, lineWidth: 1)
     )
     .accessibilityElement(children: .combine)
-    .accessibilityLabel("\(badge.label): \(text)")
+    .accessibilityLabel(
+      displayText.isEmpty ? badge.label : "\(badge.label): \(displayText)")
   }
 }
 

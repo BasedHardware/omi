@@ -1264,7 +1264,12 @@ struct FloatingControlBarView: View {
     // nothing. Wrapping the whole card in a single Button with
     // contentShape(Rectangle()) makes every pixel clickable. The dismiss
     // (X) button sits in an overlay on top so it keeps its own hit region.
-    Button {
+    let copy = FloatingControlBarManager.notificationCardCopy(
+      title: notification.title,
+      message: notification.message,
+      kind: notification.kind
+    )
+    return Button {
       FloatingControlBarManager.shared.openNotificationAsChat(notification)
     } label: {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
@@ -1283,23 +1288,32 @@ struct FloatingControlBarView: View {
             )
             .frame(width: 44, height: 44)
 
-          Image(systemName: "bell.badge.fill")
+          Image(systemName: copy.systemImage)
             .font(.system(size: 18, weight: .semibold))
             .foregroundColor(.white)
         }
 
         VStack(alignment: .leading, spacing: 3) {
-          Text(notification.title)
+          if let caption = copy.caption {
+            Text(caption)
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundColor(.white.opacity(0.5))
+              .lineLimit(1)
+          }
+          Text(copy.heading)
             .scaledFont(size: OmiType.subheading, weight: .semibold)
             .foregroundColor(.white)
-            .lineLimit(1)
-
-          Text(notification.message)
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(.white.opacity(0.78))
-            .lineLimit(3)
-            .lineSpacing(1.5)
+            .lineLimit(copy.detail == nil ? 3 : 1)
+            .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
+          if let detail = copy.detail, !detail.isEmpty {
+            Text(detail)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(.white.opacity(0.78))
+              .lineLimit(3)
+              .lineSpacing(1.5)
+              .fixedSize(horizontal: false, vertical: true)
+          }
         }
 
         Spacer(minLength: 0)
