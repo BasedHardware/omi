@@ -32,6 +32,19 @@ enum PanelSession {
 
   private static let watcherID = "panel-session"
 
+  /// Finished content of panels the user asked for out loud, waiting for the voice
+  /// turn's chat write to carry it. A panel leaves with its context; the chat
+  /// transcript is where what it held survives.
+  private struct ChatRecord {
+    var title: String
+    var fields: [CloudConnectorCopyField]
+  }
+  private static var chatRecords: [ChatRecord] = []
+  /// Index of the record the live panel keeps updated, so content that streams in
+  /// after presentation still reaches the transcript.
+  private static var liveChatRecordIndex: Int?
+  private static let maxChatRecords = 3
+
   private static var remembered: Panel?
   private static var owner: PanelContext?
   private static var showing = false
@@ -77,6 +90,13 @@ enum PanelSession {
     remembered = Panel(
       title: title, subtitle: subtitle, fields: fields, grain: grain,
       formFingerprint: formFingerprint, origin: origin, autoDismissAfter: autoDismissAfter)
+    if origin == .requested {
+      if chatRecords.count >= maxChatRecords { chatRecords.removeFirst() }
+      chatRecords.append(ChatRecord(title: title, fields: fields))
+      liveChatRecordIndex = chatRecords.indices.last
+    } else {
+      liveChatRecordIndex = nil
+    }
     owner = currentContext()
     cancelWork = onCancel
     startWatching()
@@ -94,6 +114,10 @@ enum PanelSession {
     if let subtitle { panel.subtitle = subtitle }
     if let fields { panel.fields = fields }
     remembered = panel
+    if let index = liveChatRecordIndex, chatRecords.indices.contains(index) {
+      if let title { chatRecords[index].title = title }
+      if let fields { chatRecords[index].fields = fields }
+    }
     guard isPresenting else { return }
     CloudConnectorGuidanceOverlay.shared.updateFieldCopyCard(
       title: panel.title, subtitle: panel.subtitle, fields: panel.fields)
@@ -124,6 +148,56 @@ enum PanelSession {
   static func dismissForm(_ fingerprint: String) {
     guard remembered?.formFingerprint == fingerprint else { return }
     dismiss()
+  }
+
+  // MARK: - Chat hand-off
+
+  /// A finished panel as the chat will keep it: a collapsible card with the values in
+  /// the fold, so the transcript stays readable and the content stays reachable.
+  struct PanelChatCard: Sendable, Equatable {
+    let title: String
+    let summary: String
+    let text: String
+  }
+
+  /// The finished content of every panel the user asked for since the last call.
+  /// Cleared on read, so a panel lands in exactly one voice turn. A panel still
+  /// mid-flight — pending rows, no values — yields nothing: it was cancelled or
+  /// empty, and an empty card is not worth a transcript.
+  static func takeChatCards() -> [PanelChatCard] {
+    defer {
+      chatRecords.removeAll()
+      liveChatRecordIndex = nil
+    }
+    return chatRecords.compactMap { chatCard(title: $0.title, fields: $0.fields) }
+  }
+
+  /// One panel as a card: title on the header, the value names as the always-visible
+  /// summary, one line per copyable value in the fold. Pending rows, masked values,
+  /// and empty fields never reach the transcript.
+  nonisolated static func chatCard(
+    title: String, fields: [CloudConnectorCopyField]
+  ) -> PanelChatCard? {
+    let kept =
+      fields
+      .filter { !$0.isPending && !$0.masksValue }
+      .compactMap { field -> (label: String, value: String)? in
+        let value = field.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        return (label: field.label.trimmingCharacters(in: .whitespacesAndNewlines), value: value)
+      }
+    guard !kept.isEmpty else { return nil }
+    let labels = kept.map(\.label).filter { !$0.isEmpty }
+    let summary =
+      labels.isEmpty
+      ? String(kept[0].value.prefix(while: { !$0.isNewline }))
+      : labels.joined(separator: ", ")
+    let heading = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    return PanelChatCard(
+      title: heading.isEmpty ? "Saved from your panel" : heading,
+      summary: summary,
+      text: kept.map { $0.label.isEmpty ? $0.value : "\($0.label): \($0.value)" }
+        .joined(separator: "\n"))
   }
 
   // MARK: - Context binding

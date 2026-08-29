@@ -17,10 +17,10 @@ struct VoicePanelItem: Sendable, Equatable {
 enum VoicePanel {
   /// Enough rows to answer with, few enough to read. Past this the model is writing a
   /// document, not putting something on screen to copy.
-  static let maxItems = 12
-  static let maxTextLength = 4_000
+  nonisolated static let maxItems = 12
+  nonisolated static let maxTextLength = 4_000
   /// Beyond one line at the card's width, a value reads as a passage and is wrapped.
-  private static let wrapThreshold = 56
+  private nonisolated static let wrapThreshold = 56
 
   /// A panel of plain values, from `show_panel`. About the user, not the screen: it
   /// survives tab changes and leaves with the app.
@@ -40,7 +40,7 @@ enum VoicePanel {
   @discardableResult
   static func dismiss() -> Bool { PanelSession.dismiss() }
 
-  static func copyFields(from items: [VoicePanelItem]) -> [CloudConnectorCopyField] {
+  nonisolated static func copyFields(from items: [VoicePanelItem]) -> [CloudConnectorCopyField] {
     items
       .map {
         (

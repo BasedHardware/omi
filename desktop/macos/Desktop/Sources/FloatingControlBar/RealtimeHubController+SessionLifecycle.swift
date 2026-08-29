@@ -822,6 +822,19 @@ extension RealtimeHubController {
       log("RealtimeHub: refusing voice journal write after authenticated owner changed")
       return false
     }
+    // A panel the user asked for out loud leaves with its window; the chat transcript
+    // is where its content survives, as a collapsible card under the spoken reply.
+    // Consumed here — the one write path every voice turn goes through — so each
+    // panel lands in exactly one turn.
+    let panelBlocks = await MainActor.run { PanelSession.takeChatCards() }
+      .enumerated().map { index, card in
+        ChatContentBlock.discoveryCard(
+          id: "voice-panel-\(idempotencyKey)-\(index)",
+          title: card.title, summary: card.summary, fullText: card.text)
+      }
+    if !panelBlocks.isEmpty {
+      log("RealtimeHub: voice turn carries \(panelBlocks.count) panel card(s) into chat")
+    }
     let surface = FloatingControlBarManager.shared.mainChatSurfaceReference()
     let kernelOwnsExchange = RealtimeHubContinuityRestore.kernelOwnsExchange(
       continuityKey: idempotencyKey,
@@ -845,7 +858,8 @@ extension RealtimeHubController {
       ownerID: ownerID,
       userText: userText,
       assistantText: assistantText,
-      continuityKey: idempotencyKey
+      continuityKey: idempotencyKey,
+      assistantContentBlocks: panelBlocks
     ) {
     case .completed(let accepted):
       return accepted
@@ -872,7 +886,8 @@ extension RealtimeHubController {
             userText: userText,
             assistantText: assistantText,
             origin: "realtime_voice",
-            continuityKey: idempotencyKey)
+            continuityKey: idempotencyKey,
+            assistantContentBlocks: panelBlocks)
           guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
           if accepted { return true }
           if attempt == 0 { try? await Task.sleep(nanoseconds: 250_000_000) }

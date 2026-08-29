@@ -72,13 +72,16 @@ struct RealtimeStreamingJournalProjection: Equatable {
     )
   }
 
-  func assistantMessage(text: String, isStreaming: Bool) -> ChatMessage {
+  func assistantMessage(
+    text: String, isStreaming: Bool, contentBlocks: [ChatContentBlock] = []
+  ) -> ChatMessage {
     ChatMessage(
       id: assistantTurnID,
       clientTurnId: continuityKey,
       text: text,
       sender: .ai,
-      isStreaming: isStreaming
+      isStreaming: isStreaming,
+      contentBlocks: contentBlocks
     )
   }
 }

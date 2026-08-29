@@ -71,13 +71,15 @@ extension RealtimeHubController {
     ownerID: String,
     userText: String,
     assistantText: String,
-    continuityKey: String
+    continuityKey: String,
+    assistantContentBlocks: [ChatContentBlock] = []
   ) async -> RealtimeStreamingJournalWriteLedger.FinalizationResult {
     streamingJournalFlushTasks.removeValue(forKey: continuityKey)?.cancel()
     return await streamingJournalWriteLedger.finalize(continuityKey: continuityKey) { projection in
       guard projection.ownerID == ownerID else { return false }
       return await FloatingControlBarManager.shared.completeStreamingRealtimeExchange(
-        projection: projection, userText: userText, assistantText: assistantText)
+        projection: projection, userText: userText, assistantText: assistantText,
+        assistantContentBlocks: assistantContentBlocks)
     }
   }
 

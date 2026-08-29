@@ -36,7 +36,8 @@ extension FloatingControlBarManager {
   func completeStreamingRealtimeExchange(
     projection: RealtimeStreamingJournalProjection,
     userText: String,
-    assistantText: String
+    assistantText: String,
+    assistantContentBlocks: [ChatContentBlock] = []
   ) async -> Bool {
     guard RuntimeOwnerIdentity.currentOwnerId() == projection.ownerID,
       let provider = sharedFloatingProvider
@@ -52,7 +53,8 @@ extension FloatingControlBarManager {
     for _ in 0..<3 {
       if await provider.kernelTurnProjection.updateTurn(
         surface: surface,
-        message: projection.assistantMessage(text: assistantText, isStreaming: false),
+        message: projection.assistantMessage(
+          text: assistantText, isStreaming: false, contentBlocks: assistantContentBlocks),
         status: .completed, ownerID: projection.ownerID) != nil
       {
         return true
