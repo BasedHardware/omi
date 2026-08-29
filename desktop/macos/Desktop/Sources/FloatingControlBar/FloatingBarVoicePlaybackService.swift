@@ -1113,7 +1113,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       }.joined(separator: "\n\n")
     }
 
-    let collapsedWhitespace = baseText.replacingOccurrences(
+    let spoken = InterjectVoiceFeedbackRouting.spokenText(from: baseText)
+    let collapsedWhitespace = spoken.replacingOccurrences(
       of: "\\s+", with: " ", options: .regularExpression)
     return collapsedWhitespace.trimmingCharacters(in: .whitespacesAndNewlines)
   }

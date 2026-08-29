@@ -619,6 +619,12 @@ struct FloatingControlBarView: View {
               .foregroundColor(.white.opacity(0.78))
               .lineLimit(3)
               .multilineTextAlignment(.leading)
+            if InterjectFeature.isEnabled {
+              Text(InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens))
+                .scaledFont(size: OmiType.micro, weight: .medium)
+                .foregroundColor(.white.opacity(0.45))
+                .lineLimit(1)
+            }
           }
           Spacer(minLength: 0)
         }
@@ -743,6 +749,13 @@ struct FloatingControlBarView: View {
             .multilineTextAlignment(.leading)
             .lineSpacing(1.5)
             .fixedSize(horizontal: false, vertical: true)
+
+          if InterjectFeature.isEnabled {
+            Text(InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens))
+              .scaledFont(size: OmiType.micro, weight: .medium)
+              .foregroundColor(.white.opacity(0.45))
+              .lineLimit(1)
+          }
         }
 
         Spacer(minLength: OmiSpacing.xs)
@@ -1180,6 +1193,7 @@ struct FloatingControlBarView: View {
   }
 
   private func handleBarHover(_ hovering: Bool) {
+    FloatingControlBarManager.shared.interjectBarHoverChanged(hovering)
     if state.usesNotchIsland {
       (window as? FloatingControlBarWindow)?.updateNotchPointerFromGlobalMouse()
       let showsHoverChrome = hovering && !state.isVoicePresentationActive
@@ -1297,9 +1311,16 @@ struct FloatingControlBarView: View {
           Text(notification.message)
             .scaledFont(size: OmiType.body)
             .foregroundColor(.white.opacity(0.78))
-            .lineLimit(3)
+            .lineLimit(interjectInsightTeaserLimit(notification))
             .lineSpacing(1.5)
             .fixedSize(horizontal: false, vertical: true)
+
+          if InterjectFeature.isEnabled {
+            Text(InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens))
+              .scaledFont(size: OmiType.micro, weight: .medium)
+              .foregroundColor(.white.opacity(0.45))
+              .lineLimit(1)
+          }
         }
 
         Spacer(minLength: 0)
@@ -1607,6 +1628,13 @@ struct FloatingControlBarView: View {
         .scaledFont(size: 12, weight: .semibold)
         .foregroundColor(.white)
 
+      if let title = state.interjectReplyingToTitle, InterjectFeature.isEnabled {
+        Text(InterjectReplyHint.listeningChip(title: title))
+          .scaledFont(size: OmiType.micro, weight: .medium)
+          .foregroundColor(.white.opacity(0.72))
+          .lineLimit(1)
+      }
+
       if state.isVoiceLocked && state.pttHintText.isEmpty {
         Image(systemName: "lock.fill")
           .scaledFont(size: OmiType.micro, weight: .bold)
@@ -1616,6 +1644,11 @@ struct FloatingControlBarView: View {
           .cornerRadius(4)
       }
     }
+  }
+
+  private func interjectInsightTeaserLimit(_ notification: FloatingBarNotification) -> Int {
+    guard InterjectFeature.isEnabled, notification.kind == .insight else { return 3 }
+    return (isHovering || state.isHoveringBar) ? 6 : 1
   }
 
   private var aiInputView: some View {

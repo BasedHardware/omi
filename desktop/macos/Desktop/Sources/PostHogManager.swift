@@ -1055,7 +1055,8 @@ extension PostHogManager {
     assistantId: String,
     surface: String,
     dismissalKind: NotificationDismissalKind,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    attention: InterjectAttention? = nil
   ) {
     var properties = notificationProperties(
       notificationId: notificationId,
@@ -1064,10 +1065,26 @@ extension PostHogManager {
       surface: surface
     )
     properties["dismissal_kind"] = dismissalKind.rawValue
+    if let attention {
+      properties["attention"] = attention.rawValue
+    }
     appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Dismissed",
       properties: properties)
+  }
+
+  func notificationHovered(
+    notificationId: String,
+    assistantId: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    var properties: [String: Any] = [
+      "notification_id": notificationId,
+      "assistant_id": assistantId,
+    ]
+    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
+    track("Notification Hovered", properties: properties)
   }
 
   private func notificationProperties(
