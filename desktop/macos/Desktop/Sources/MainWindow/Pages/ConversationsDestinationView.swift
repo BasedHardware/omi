@@ -3,14 +3,11 @@ import SwiftUI
 struct ConversationsDestinationView: View {
   let appState: AppState
   let viewModelContainer: ViewModelContainer
+  let presentation: MemoryHubDestination.Presentation
   @Binding var memoryDestinationRawValue: Int
-  @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
 
   var body: some View {
-    switch MemoryHubDestination.presentation(
-      for: .conversations,
-      useLegacyHomeDesign: useLegacyHomeDesign
-    ) {
+    switch presentation {
     case .standaloneConversations:
       ConversationsPageHost(appState: appState)
     case .memoryHub:

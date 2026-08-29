@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import XCTest
 
 @testable import Omi_Computer
@@ -607,23 +609,15 @@ final class ChatFirstShellTests: XCTestCase {
 
   func testChatFirstGlassBoundaryWrapsOnlyRoutesWithoutTheirOwnPanels() {
     let wrapped: [ChatFirstRoute] = [
-      .conversations, .goals, .memories,
+      .conversations, .goals,
       .more(.permissions), .more(.settings),
     ]
     let selfContained: [ChatFirstRoute] = [
-      .chat, .tasks, .more(.dashboard), .more(.rewind), .more(.apps),
+      .chat, .tasks, .memories, .more(.dashboard), .more(.rewind), .more(.apps),
     ]
 
     for route in wrapped {
       XCTAssertTrue(ChatFirstPageGlassLanePolicy.shouldWrap(route), route.stableName)
-      XCTAssertNotEqual(
-        ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: route),
-        SidebarNavItem.dashboard.rawValue,
-        route.stableName)
-      XCTAssertNotEqual(
-        ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: route),
-        SidebarNavItem.rewind.rawValue,
-        route.stableName)
     }
     for route in selfContained {
       XCTAssertFalse(ChatFirstPageGlassLanePolicy.shouldWrap(route), route.stableName)
@@ -632,9 +626,91 @@ final class ChatFirstShellTests: XCTestCase {
     // Every hub page carries the shared search panel and a navigation-first content panel.
     for destination in MemoryHubDestination.allCases {
       XCTAssertFalse(
-        ChatFirstPageGlassLanePolicy.shouldWrap(
-          .memories, memoryDestinationRawValue: destination.rawValue),
+        ChatFirstPageGlassLanePolicy.shouldWrap(.memories),
         destination.title)
+    }
+  }
+
+  /// Conversations exposed the wallpaper because Chat-first first answered "wrap", then translated
+  /// the route to the legacy Conversations/Memory-hub index and let `PageGlassLane` answer again. A
+  /// valid persisted hub destination made the second answer "already owns panels" and cancelled the
+  /// first. Hold the mounted modern boundary: persisted hub state is no longer an input to
+  /// Conversations' shared-lane decision, while the actual Memory-hub route remains self-owned.
+  func testChatFirstConversationsCannotLoseItsGroundToPersistedHubState() throws {
+    let size = CGSize(width: 1_400, height: 800)
+
+    let recorder = ChatFirstGlassFrameRecorder()
+    let host = NSHostingView(
+      rootView: ChatFirstPageGlassLane(route: .conversations) {
+        ChatFirstGlassFrameProbe(recorder: recorder)
+      }
+      .frame(width: size.width, height: size.height)
+    )
+    host.frame = NSRect(origin: .zero, size: size)
+    host.layoutSubtreeIfNeeded()
+
+    let placed = try XCTUnwrap(recorder.frame)
+    XCTAssertEqual(placed.width, PageGlassLaneLayout.laneWidth(for: size.width), accuracy: 0.5)
+    XCTAssertEqual(
+      placed.height,
+      size.height - PageGlassLaneLayout.topGap - PageGlassLaneLayout.bottomGap,
+      accuracy: 0.5,
+      "persisted Memory-hub state is not an input that can cancel Conversations' panel")
+  }
+
+  func testChatFirstMemoryHubKeepsItsOwnPanels() throws {
+    let size = CGSize(width: 1_400, height: 800)
+    let recorder = ChatFirstGlassFrameRecorder()
+    let host = NSHostingView(
+      rootView: ChatFirstPageGlassLane(route: .memories) {
+        ChatFirstGlassFrameProbe(recorder: recorder)
+      }
+      .frame(width: size.width, height: size.height)
+    )
+    host.frame = NSRect(origin: .zero, size: size)
+    host.layoutSubtreeIfNeeded()
+
+    let placed = try XCTUnwrap(recorder.frame)
+    XCTAssertEqual(placed.width, size.width, accuracy: 0.5)
+    XCTAssertEqual(placed.height, size.height, accuracy: 0.5)
+  }
+
+  func testEveryChatFirstRouteMountsTheGroundItsPolicyDeclares() throws {
+    let size = CGSize(width: 1_400, height: 800)
+    let cases: [(ChatFirstRoute, Bool)] = [
+      (.chat, false),
+      (.conversations, true),
+      (.tasks, false),
+      (.goals, true),
+      (.memories, false),
+      (.more(.dashboard), false),
+      (.more(.rewind), false),
+      (.more(.apps), false),
+      (.more(.permissions), true),
+      (.more(.settings), true),
+    ]
+
+    for (route, expectsSharedLane) in cases {
+      let recorder = ChatFirstGlassFrameRecorder()
+      let host = NSHostingView(
+        rootView: ChatFirstPageGlassLane(route: route) {
+          ChatFirstGlassFrameProbe(recorder: recorder)
+        }
+        .frame(width: size.width, height: size.height)
+      )
+      host.frame = NSRect(origin: .zero, size: size)
+      host.layoutSubtreeIfNeeded()
+
+      let placed = try XCTUnwrap(recorder.frame, route.stableName)
+      let expectedHeight =
+        expectsSharedLane
+        ? size.height - PageGlassLaneLayout.topGap - PageGlassLaneLayout.bottomGap
+        : size.height
+      XCTAssertEqual(placed.height, expectedHeight, accuracy: 0.5, route.stableName)
+      XCTAssertEqual(
+        ChatFirstPageGlassLanePolicy.shouldWrap(route),
+        expectsSharedLane,
+        route.stableName)
     }
   }
 
@@ -658,6 +734,44 @@ final class ChatFirstShellTests: XCTestCase {
           chatFirstRoute: route,
           lastPublishedMode: "connect"),
         "\(route.stableName) must not keep reporting the mode the stage had before we left it")
+    }
+  }
+}
+
+private final class ChatFirstGlassFrameRecorder: @unchecked Sendable {
+  private(set) var frame: CGRect?
+
+  func record(_ frame: CGRect) {
+    self.frame = frame
+  }
+}
+
+private struct ChatFirstGlassFrameProbe: View {
+  let recorder: ChatFirstGlassFrameRecorder
+
+  var body: some View {
+    ChatFirstGlassFrameProbeLayout(recorder: recorder) {
+      Color.clear
+    }
+  }
+}
+
+private struct ChatFirstGlassFrameProbeLayout: Layout {
+  let recorder: ChatFirstGlassFrameRecorder
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    CGSize(width: proposal.width ?? 0, height: proposal.height ?? 0)
+  }
+
+  func placeSubviews(
+    in bounds: CGRect,
+    proposal: ProposedViewSize,
+    subviews: Subviews,
+    cache: inout ()
+  ) {
+    recorder.record(bounds)
+    for subview in subviews {
+      subview.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
   }
 }

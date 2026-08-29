@@ -113,19 +113,7 @@ struct ChatFirstShell: View {
 
   @ViewBuilder
   private var destination: some View {
-    if ChatFirstPageGlassLanePolicy.shouldWrap(
-      navigation.route, memoryDestinationRawValue: memoryDestinationRawValue)
-    {
-      PageGlassLane(
-        selectedIndex: ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: navigation.route),
-        memoryDestinationRawValue: memoryDestinationRawValue,
-        homeOwnsItsPanels: HomeDesignPresentation.queryShellOwnsItsPanels(
-          useLegacyHomeDesign: true,
-          forceModernPresentation: true)
-      ) {
-        routeDestination
-      }
-    } else {
+    ChatFirstPageGlassLane(route: navigation.route) {
       routeDestination
     }
   }
@@ -387,16 +375,15 @@ struct ChatFirstShell: View {
 /// Chat-first passes through every destination that owns search/content panels. Older single-panel
 /// destinations receive the shared lane exactly once at the shell boundary.
 enum ChatFirstPageGlassLanePolicy {
-  static func shouldWrap(_ route: ChatFirstRoute, memoryDestinationRawValue: Int? = nil) -> Bool {
+  static func shouldWrap(_ route: ChatFirstRoute) -> Bool {
     switch route {
     case .chat, .more(.dashboard), .more(.rewind):
       return false
     case .memories:
-      // Every Brain destination builds the shared search panel and navigation-first content panel.
-      guard let destination = MemoryHubDestination(rawValue: memoryDestinationRawValue ?? -1) else {
-        return true
-      }
-      return !MemoryHubDestination.allCases.contains(destination)
+      // `MemoryHubPage` normalizes invalid persisted values before mounting a destination, and every
+      // normalized destination owns its search/content panels. Wrapping only the invalid input would
+      // stack a shared lane around the normalized page.
+      return false
     case .tasks, .more(.apps):
       return false
     case .conversations, .goals, .more(.permissions), .more(.settings):
@@ -404,18 +391,23 @@ enum ChatFirstPageGlassLanePolicy {
     }
   }
 
-  /// `PageGlassLane` uses this legacy index only to select its shared-panel branch. Goals has no
-  /// legacy sidebar item, so its closest existing non-owning list-page index is used.
-  static func pageGlassLaneIndex(for route: ChatFirstRoute) -> Int {
-    switch route {
-    case .chat, .more(.dashboard): return SidebarNavItem.dashboard.rawValue
-    case .conversations: return SidebarNavItem.conversations.rawValue
-    case .tasks, .goals: return SidebarNavItem.tasks.rawValue
-    case .memories: return SidebarNavItem.memories.rawValue
-    case .more(.rewind): return SidebarNavItem.conversations.rawValue
-    case .more(.apps): return SidebarNavItem.apps.rawValue
-    case .more(.permissions): return SidebarNavItem.permissions.rawValue
-    case .more(.settings): return SidebarNavItem.settings.rawValue
+}
+
+/// Applies Chat-first's glass decision without translating it through the legacy sidebar policy.
+///
+/// The legacy Conversations index is also the Memory-hub index. Translating `.conversations` to that
+/// index and asking `PageGlassLane` to decide again let a persisted hub destination turn a required
+/// panel into pass-through. This component makes the modern route policy the single authority and
+/// hands its "shared" answer to the unconditional panel.
+struct ChatFirstPageGlassLane<Content: View>: View {
+  let route: ChatFirstRoute
+  @ViewBuilder var content: () -> Content
+
+  var body: some View {
+    if ChatFirstPageGlassLanePolicy.shouldWrap(route) {
+      PageGlassLanePanel(content: content)
+    } else {
+      content()
     }
   }
 }
@@ -440,13 +432,14 @@ private struct ChatFirstAppsHost: View {
           handlesAutomationPresentations: handlesAutomationPresentations
         )
       } else {
-        VStack(spacing: OmiSpacing.md) {
-          ProgressView().controlSize(.small)
-          Text("Loading apps…")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundStyle(Ink.secondary)
+        TransparentWindowStatusPanel {
+          VStack(spacing: OmiSpacing.md) {
+            ProgressView().controlSize(.small)
+            Text("Loading apps…")
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundStyle(Ink.secondary)
+          }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
     }
     .task {

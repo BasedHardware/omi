@@ -50,36 +50,50 @@ final class PageGlassLaneTests: XCTestCase {
     }
   }
 
-  /// **The hub is one rail index wearing five pages; every page brings the same two-panel shape.**
+  /// **The Conversations rail index has two presentations, and the mounted one is authoritative.**
   ///
   /// Activity is Home's column — a search bar and a results panel, each already an `inkGlassPanel`.
   /// Wrapping the hub wholesale nested both inside a third panel, which does not stack two materials
   /// but takes a second copy of the desktop and doubles the scrim, so Activity read visibly muddier
   /// than Chat and its two panels lost their separation.
-  func testEveryBrainHubPageBringsItsOwnPanels() {
+  func testConversationsOwnershipFollowsTheMountedPresentationNotPersistedState() {
     let hubIndex = SidebarNavItem.conversations.rawValue
-    for destination in MemoryHubDestination.allCases {
-      XCTAssertTrue(
-        PageGlassLanePolicy.ownsItsPanels(
-          selectedIndex: hubIndex,
-          memoryDestinationRawValue: destination.rawValue,
-          homeOwnsItsPanels: true),
-        "\(destination.title) builds Brain search and content panels and must not be wrapped")
-    }
-
-    for destination in MemoryHubDestination.allCases {
-      XCTAssertFalse(
-        PageGlassLanePolicy.ownsItsPanels(
-          selectedIndex: SidebarNavItem.memories.rawValue,
-          memoryDestinationRawValue: destination.rawValue,
-          homeOwnsItsPanels: true),
-        "the standalone Memories page must keep the lane whatever the hub last showed")
-    }
+    XCTAssertTrue(
+      PageGlassLanePolicy.ownsItsPanels(
+        selectedIndex: hubIndex,
+        conversationsPresentation: .memoryHub,
+        homeOwnsItsPanels: true),
+      "the Memory hub builds Brain search and content panels and must not be wrapped")
+    XCTAssertFalse(
+      PageGlassLanePolicy.ownsItsPanels(
+        selectedIndex: hubIndex,
+        conversationsPresentation: .standaloneConversations,
+        homeOwnsItsPanels: true),
+      "standalone Conversations paints no ground and must receive the shared lane")
 
     XCTAssertFalse(
       PageGlassLanePolicy.ownsItsPanels(
+        selectedIndex: SidebarNavItem.memories.rawValue,
+        conversationsPresentation: .memoryHub,
+        homeOwnsItsPanels: true),
+      "the Conversations presentation must not change the standalone Memories page")
+  }
+
+  func testLegacyConversationPresentationAndGlassOwnershipCannotDriftApart() {
+    for useLegacyHomeDesign in [false, true] {
+      let presentation = MemoryHubDestination.presentation(
+        for: .conversations,
+        useLegacyHomeDesign: useLegacyHomeDesign)
+      let ownsPanels = PageGlassLanePolicy.ownsItsPanels(
         selectedIndex: SidebarNavItem.conversations.rawValue,
-        homeOwnsItsPanels: true))
+        conversationsPresentation: presentation,
+        homeOwnsItsPanels: !useLegacyHomeDesign)
+
+      XCTAssertEqual(
+        ownsPanels,
+        presentation == .memoryHub,
+        "standalone Conversations needs the lane; the Memory hub must not be double-wrapped")
+    }
   }
 
   /// The router sends every unrecognised index to Home through its `default:` branch. An index the
@@ -227,6 +241,31 @@ final class PageGlassLaneTests: XCTestCase {
     }
     XCTAssertEqual(placed.width, size.width, accuracy: 0.5)
     XCTAssertEqual(placed.height, size.height, accuracy: 0.5)
+  }
+
+  func testTransientStatusPanelPaintsAnOpaqueFallbackGround() throws {
+    let size = CGSize(width: 900, height: 600)
+    let view = ZStack {
+      Color(red: 1, green: 0, blue: 1)
+      TransparentWindowStatusPanel(reduceTransparency: true) {
+        Color.clear
+      }
+    }
+
+    let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+    host.frame = NSRect(origin: .zero, size: size)
+    host.layoutSubtreeIfNeeded()
+    let representation = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    host.cacheDisplay(in: host.bounds, to: representation)
+
+    let center = try XCTUnwrap(
+      representation.colorAt(
+        x: representation.pixelsWide / 2,
+        y: representation.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
+    XCTAssertGreaterThan(
+      center.greenComponent,
+      0.4,
+      "the status panel must replace a vivid wallpaper with its neutral fallback ground")
   }
 }
 

@@ -110,12 +110,18 @@ struct DesktopHomeView: View {
   @ViewBuilder
   private var authEntryShell: some View {
     if authState.isRestoringAuth {
-      Color.clear
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // No ground of its own: the shell's glass is already under this.
-        .onAppear {
-          log("DesktopHomeView: Showing auth loading splash")
+      TransparentWindowStatusPanel {
+        VStack(spacing: OmiSpacing.md) {
+          ProgressView()
+            .controlSize(.small)
+            .tint(Ink.secondary)
+          Text("Restoring your session…")
+            .inkStyle(.prose, color: Ink.secondary)
         }
+      }
+      .onAppear {
+        log("DesktopHomeView: Showing auth loading splash")
+      }
     } else if authState.sessionPhase == .recoveryRequired {
       SessionRecoveryView()
         .onAppear {
@@ -127,7 +133,16 @@ struct DesktopHomeView: View {
           log("DesktopHomeView: Showing SignInView (not signed in)")
         }
     } else if shouldSkipOnboarding() {
-      Color.clear.onAppear {
+      TransparentWindowStatusPanel {
+        VStack(spacing: OmiSpacing.md) {
+          ProgressView()
+            .controlSize(.small)
+            .tint(Ink.secondary)
+          Text("Finishing setup…")
+            .inkStyle(.prose, color: Ink.secondary)
+        }
+      }
+      .onAppear {
         log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
         appState.hasCompletedOnboarding = true
       }
@@ -332,29 +347,30 @@ struct DesktopHomeView: View {
           mainContentWithLifecycle
 
           if !viewModelContainer.isInitialLoadComplete {
-            VStack(spacing: OmiSpacing.xxl) {
-              if let nsImage = Self.heroLogoImage {
-                Image(nsImage: nsImage)
-                  .resizable()
-                  .scaledToFit()
-                  .frame(width: 72, height: 72)
-                  .scaleEffect(logoPulse ? 1.08 : 1.0)
-                  .opacity(logoPulse ? 1.0 : 0.7)
-                  .omiAnimation(
-                    .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
-                    value: logoPulse
-                  )
-                  .onAppear { logoPulse = true }
+            TransparentWindowStatusPanel {
+              VStack(spacing: OmiSpacing.xxl) {
+                if let nsImage = Self.heroLogoImage {
+                  Image(nsImage: nsImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 72, height: 72)
+                    .scaleEffect(logoPulse ? 1.08 : 1.0)
+                    .opacity(logoPulse ? 1.0 : 0.7)
+                    .omiAnimation(
+                      .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+                      value: logoPulse
+                    )
+                    .onAppear { logoPulse = true }
+                }
+
+                Text(viewModelContainer.initStatusMessage)
+                  .inkStyle(.prose, color: Ink.secondary)
+
+                ProgressView()
+                  .scaleEffect(0.8)
+                  .tint(Ink.secondary)
               }
-
-              Text(viewModelContainer.initStatusMessage)
-                .inkStyle(.prose, color: Ink.secondary)
-
-              ProgressView()
-                .scaleEffect(0.8)
-                .tint(Ink.secondary)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .transition(.opacity.animation(OmiMotion.gated(.easeOut(duration: 0.3))))
           }
 
@@ -1409,7 +1425,7 @@ struct DesktopHomeView: View {
       // so the page is one object rather than a panel with its nav stranded on the wallpaper.
       PageGlassLane(
         selectedIndex: selectedIndex,
-        memoryDestinationRawValue: memoryDestinationRawValue,
+        conversationsPresentation: conversationsPresentation,
         homeOwnsItsPanels: homeOwnsItsPanels
       ) {
         HStack(spacing: 0) {
@@ -1418,6 +1434,7 @@ struct DesktopHomeView: View {
             selectedIndex: selectedIndex,
             appState: appState,
             viewModelContainer: viewModelContainer,
+            conversationsPresentation: conversationsPresentation,
             memoryDestinationRawValue: $memoryDestinationRawValue,
             selectedSettingsSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
@@ -1429,6 +1446,14 @@ struct DesktopHomeView: View {
     .onEscapeKey(priority: .navigation) { navigateHomeOnEscapeIfNeeded() }
     // The top bar occupies the hidden title-bar band; the window's top edge is the glass.
     .padding(.top, GlassShell.titlebarClearance)
+  }
+
+  /// The Conversations rail item has two presentations. Resolve it once and hand the same value to
+  /// both the surface owner and the mounted destination so they cannot disagree about its ground.
+  private var conversationsPresentation: MemoryHubDestination.Presentation {
+    MemoryHubDestination.presentation(
+      for: .conversations,
+      useLegacyHomeDesign: useLegacyHomeDesign)
   }
 
   private func navigateHomeOnEscapeIfNeeded() -> Bool {
@@ -1454,15 +1479,17 @@ struct DesktopHomeView: View {
 
 private struct ChatFirstCapabilityLoadingView: View {
   var body: some View {
-    VStack(spacing: OmiSpacing.md) {
-      ProgressView()
-        .controlSize(.small)
-        .tint(Ink.secondary)
-      Text("Preparing Omi…")
-        .inkStyle(.prose, color: Ink.secondary)
+    TransparentWindowStatusPanel {
+      VStack(spacing: OmiSpacing.md) {
+        ProgressView()
+          .controlSize(.small)
+          .tint(Ink.secondary)
+        Text("Preparing Omi…")
+          .inkStyle(.prose, color: Ink.secondary)
+      }
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    // No ground: this renders inside the shell's glass while the cohort settles.
+    // The main window is transparent and the destination shell has not mounted yet. This loading
+    // card therefore owns its ground rather than assuming a window-scale surface underneath it.
     .accessibilityElement(children: .combine)
     .accessibilityLabel("Preparing Omi")
   }
@@ -1517,6 +1544,7 @@ private struct PageContentView: View {
   let selectedIndex: Int
   let appState: AppState
   let viewModelContainer: ViewModelContainer
+  let conversationsPresentation: MemoryHubDestination.Presentation
   @Binding var memoryDestinationRawValue: Int
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
@@ -1555,6 +1583,7 @@ private struct PageContentView: View {
         ConversationsDestinationView(
           appState: appState,
           viewModelContainer: viewModelContainer,
+          presentation: conversationsPresentation,
           memoryDestinationRawValue: $memoryDestinationRawValue
         )
       case 3:
