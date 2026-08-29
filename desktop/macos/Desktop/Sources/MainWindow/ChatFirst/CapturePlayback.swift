@@ -365,7 +365,7 @@ final class CapturePlaybackController: ObservableObject {
         guard let self else { return }
         let seconds = time.seconds
         if seconds.isFinite {
-          currentTime = max(0, seconds)
+          self.currentTime = max(0, seconds)
         }
       }
     }
