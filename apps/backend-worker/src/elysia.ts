@@ -22,19 +22,26 @@ export function createElysiaApp(env: CoreEnv): Elysia {
     mount(app, env, route, true);
   }
   app.onError(({ error, request, code }) => {
-    if (code === "NOT_FOUND") {
-      return backendError("not_found", "edit_request", 404);
-    }
-    console.error(
-      JSON.stringify(
-        requestFailedEvent({
-          requestId: request.headers.get("x-omi-request-id") ?? "unavailable",
-          name: error instanceof Error ? error.name : "Error",
-          route: safeRoute(new URL(request.url).pathname),
-        })
-      )
+    const requestId = crypto.randomUUID();
+    const context = coreContext({
+      env,
+      request,
+      routePath: new URL(request.url).pathname,
+      params: {},
+      values: { requestId },
+    });
+    if (code === "NOT_FOUND")
+      return observed(
+        context,
+        backendError("not_found", "edit_request", 404),
+        Date.now()
+      );
+    logFailure(context, error);
+    return observed(
+      context,
+      backendError("internal_server_error", "retry", 500, true),
+      Date.now()
     );
-    return backendError("internal_server_error", "retry", 500, true);
   });
   return app;
 }
@@ -61,15 +68,36 @@ function mount(
       params,
       values: { requestId },
     });
-    if (authed) {
-      const refusal = authorizeV1(context);
-      if (refusal !== null) return observed(context, refusal, startedAt);
+    try {
+      if (authed) {
+        const refusal = authorizeV1(context);
+        if (refusal !== null) return observed(context, refusal, startedAt);
+      }
+      return observed(context, await route.handle(context), startedAt);
+    } catch (error) {
+      logFailure(context, error);
+      return observed(
+        context,
+        backendError("internal_server_error", "retry", 500, true),
+        startedAt
+      );
     }
-    return observed(context, await route.handle(context), startedAt);
   };
   if (route.method === "GET") app.get(route.path, handler);
   else if (route.method === "POST") app.post(route.path, handler);
   else app.delete(route.path, handler);
+}
+
+function logFailure(context: CoreContext, error: unknown): void {
+  console.error(
+    JSON.stringify(
+      requestFailedEvent({
+        requestId: context.get("requestId") || "unavailable",
+        name: error instanceof Error ? error.name : "Error",
+        route: safeRoute(context.req.routePath),
+      })
+    )
+  );
 }
 
 function observed(

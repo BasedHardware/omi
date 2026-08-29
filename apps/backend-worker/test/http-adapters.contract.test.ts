@@ -172,5 +172,36 @@ for (const adapter of adapters) {
       expect(body.session.state).toBe("open");
       expect(body.session).not.toHaveProperty("transcript");
     });
+
+    test("unknown routes return the shared error envelope and request id", async () => {
+      const response = await adapter.fetch("/missing");
+      expect(response.status).toBe(404);
+      expect(response.headers.get("x-omi-request-id")).not.toBeNull();
+      expect((await response.json()) as unknown).toEqual({
+        error: {
+          action: "edit_request",
+          code: "not_found",
+          retryable: false,
+        },
+      });
+    });
+
+    test("handler failures return a correlated shared error", async () => {
+      d1Mock.prepare = () => {
+        throw new Error("test database failure");
+      };
+      const response = await adapter.fetch("/v1/settings", {
+        headers: authenticatedHeaders,
+      });
+      expect(response.status).toBe(500);
+      expect(response.headers.get("x-omi-request-id")).not.toBeNull();
+      expect((await response.json()) as unknown).toEqual({
+        error: {
+          action: "retry",
+          code: "internal_server_error",
+          retryable: true,
+        },
+      });
+    });
   });
 }
