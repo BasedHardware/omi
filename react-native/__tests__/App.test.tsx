@@ -931,7 +931,7 @@ test('shows a visible focus ring for keyboard-focused controls and search', asyn
 test('navigates to rewritten-backend read projections and replays the stage transition', async () => {
   const renderer = await renderApp();
   const destinations = [
-    ['Conversations', 'Recaps unavailable'],
+    ['Conversations', 'Select a conversation'],
     ['Memories', 'No memories yet.'],
     ['Tasks', 'No tasks yet.'],
     ['Connectors', 'Omi cloud needs a signed-in session.'],
@@ -1743,7 +1743,7 @@ test('opens a read-only selected-record pane from a loaded conversation row', as
   });
 
   const output = JSON.stringify(renderer.toJSON());
-  expect(output).toContain('LOADED LIST METADATA');
+  expect(output).not.toContain('LOADED LIST METADATA');
   expect(
     renderer.root.find(
       node =>
@@ -1755,9 +1755,7 @@ test('opens a read-only selected-record pane from a loaded conversation row', as
   ).toBeDefined();
   expect(output).toContain('Unlocked record');
   expect(output).toContain('Active record');
-  expect(output).toContain(
-    'No fetched conversation detail, transcript, playback, folders, or actions are shown here.',
-  );
+  expect(output).not.toContain('No fetched conversation detail');
   expect(mockBackend.request).not.toHaveBeenCalledWith(
     expect.objectContaining({path: '/v1/conversations/conversation-1'}),
   );
@@ -2672,7 +2670,8 @@ test('opens secondary desktop destinations from the Home switcher', async () => 
   expect(menu.props.pointerEvents).toBe('auto');
   expect(menu.props.style).toEqual(
     expect.objectContaining({
-      borderWidth: 0,
+      borderColor: '#303030',
+      borderWidth: 1,
       width: 224,
       zIndex: 41,
       right: 16,
@@ -3055,11 +3054,11 @@ test('fills, focuses, and preserves the ask pill draft from a quick prompt', asy
   const prompt = promptText.parent?.parent!;
 
   expect(
-    renderer.root.find(node => String(node.type) === 'Paperclip').props.size,
-  ).toBe(18);
+    renderer.root.findAll(node => String(node.type) === 'Paperclip'),
+  ).toHaveLength(0);
   expect(
-    renderer.root.find(node => String(node.type) === 'Mic').props.size,
-  ).toBe(18);
+    renderer.root.findAll(node => String(node.type) === 'Mic'),
+  ).toHaveLength(0);
   expect(
     renderer.root.find(node => String(node.type) === 'ArrowUp').props,
   ).toEqual(expect.objectContaining({size: 18, strokeWidth: 2.5}));

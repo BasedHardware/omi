@@ -215,10 +215,6 @@ export function SettingsPage({
             title="Sign out"
           />
         )}
-        <Text style={styles.projectionEmptyCopy}>
-          Notification and usage controls that need other account APIs are not
-          shown.
-        </Text>
       </>
     );
 
@@ -317,10 +313,6 @@ export function SettingsPage({
             title="Private cloud sync"
           />
         )}
-        <Text style={styles.projectionEmptyCopy}>
-          Export and account deletion are not offered here. Those actions need
-          file download or irreversible deletion flows this page does not run.
-        </Text>
       </>
     );
 
@@ -351,9 +343,6 @@ export function SettingsPage({
             title={webhook.type}
           />
         ))}
-        <Text style={styles.projectionEmptyCopy}>
-          API keys and webhook URL edits are not offered here.
-        </Text>
       </>
     );
 

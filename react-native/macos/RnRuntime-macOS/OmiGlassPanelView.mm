@@ -34,10 +34,6 @@ static const CGFloat OmiGlassScrimAlpha = 0.14;
   // pin Aqua over a transparent titlebar.
   self.appearance = nil;
   self.layer.borderWidth = 0;
-  self.layer.shadowColor = NSColor.blackColor.CGColor;
-  self.layer.shadowRadius = 34.0;
-  self.layer.shadowOpacity = 0.24;
-  self.layer.shadowOffset = CGSizeMake(0.0, -10.0);
 
   self.material = [[NSVisualEffectView alloc] initWithFrame:self.bounds];
   self.material.material = NSVisualEffectMaterialHUDWindow;
@@ -87,10 +83,6 @@ static const CGFloat OmiGlassScrimAlpha = 0.14;
   self.fallback.layer.cornerCurve = kCACornerCurveContinuous;
   self.scrim.cornerRadius = _glassCornerRadius;
   self.scrim.cornerCurve = kCACornerCurveContinuous;
-  self.layer.shadowPath = [NSBezierPath bezierPathWithRoundedRect:self.bounds
-                                                          xRadius:_glassCornerRadius
-                                                          yRadius:_glassCornerRadius]
-                              .CGPath;
 }
 
 - (BOOL)acceptsFirstMouse:(NSEvent *)event
@@ -109,10 +101,6 @@ static const CGFloat OmiGlassScrimAlpha = 0.14;
   self.material.frame = self.bounds;
   self.fallback.frame = self.bounds;
   self.scrim.frame = self.bounds;
-  self.layer.shadowPath = [NSBezierPath bezierPathWithRoundedRect:self.bounds
-                                                          xRadius:_glassCornerRadius
-                                                          yRadius:_glassCornerRadius]
-                              .CGPath;
 }
 
 - (void)applyAccessibilityAppearance

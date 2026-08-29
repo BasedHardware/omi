@@ -65,8 +65,7 @@ export function Onboarding({
           Welcome to Omi
         </Text>
         <Text style={styles.copy}>
-          Sign in to bring your saved conversations and memories into one calm
-          workspace.
+          Sign in to access your conversations and memories.
         </Text>
         <Button
           accessibilityLabel="Sign in"

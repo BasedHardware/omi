@@ -166,13 +166,6 @@ export function ConversationsPage({
         ]}>
         Conversations
       </Text>
-      <View style={styles.recapStatus}>
-        <Text style={styles.destinationSectionTitle}>Daily recaps</Text>
-        <Text style={styles.projectionEmptyCopy}>
-          Recaps unavailable. The v5 backend does not expose a daily recap
-          projection, so no recap cards or actions are shown.
-        </Text>
-      </View>
       <View style={styles.conversationDiscovery}>
         <View style={styles.conversationSearchBox}>
           <Search accessible={false} color="#777777" size={17} />
@@ -266,14 +259,11 @@ export function ConversationsPage({
                 Select a conversation
               </Text>
               <Text style={styles.projectionEmptyCopy}>
-                Choose a loaded row to review its saved metadata.
+                Choose a conversation to view its summary and details.
               </Text>
             </View>
           ) : (
             <>
-              <Text style={styles.conversationDetailEyebrow}>
-                LOADED LIST METADATA
-              </Text>
               <Text style={styles.conversationDetailTitle}>
                 {selected.title}
               </Text>
@@ -304,10 +294,6 @@ export function ConversationsPage({
                   {selected.discarded ? 'Discarded record' : 'Active record'}
                 </Text>
               </View>
-              <Text style={styles.conversationDetailNotice}>
-                No fetched conversation detail, transcript, playback, folders,
-                or actions are shown here.
-              </Text>
             </>
           )}
         </View>
