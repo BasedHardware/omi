@@ -1159,33 +1159,41 @@ describe('useChat — default thread backend hydration (B5 cross-device read par
 
   it('R4 — mount loader (infinite) populates history from the backend (cross-device turns visible)', async () => {
     prefs.chatHistoryMode = 'infinite'
+    // Wire order: backend returns newest-first; the loader must reverse to chronological.
+    const evidenceEnvelope = { sources: [{ id: 'src-1', title: 'Test', url: 'https://t.co', score: 0.9 }] }
     sessionMocks.getMessages.mockResolvedValueOnce([
-      { id: 'be-1', text: 'hello from mobile', sender: 'human', createdAt: '2026-01-01T00:00:00Z' },
-      { id: 'be-2', text: 'hi there', sender: 'ai', createdAt: '2026-01-01T00:00:01Z' }
+      { id: 'be-2', text: 'hi there', sender: 'ai', createdAt: '2026-01-01T00:00:01Z', evidence: evidenceEnvelope },
+      { id: 'be-1', text: 'hello from mobile', sender: 'human', createdAt: '2026-01-01T00:00:00Z' }
     ])
     const { result } = renderHook(() => useChat())
     await act(async () => {
       await settleHistory(result)
     })
     expect(result.current.history).toHaveLength(2)
+    // Oldest message first — confirmed chronological despite newest-first wire order.
     expect(result.current.history[0]).toMatchObject({ id: 'be-1', role: 'user', content: 'hello from mobile' })
-    expect(result.current.history[1]).toMatchObject({ id: 'be-2', role: 'assistant', content: 'hi there' })
+    expect(result.current.history[1]).toMatchObject({ id: 'be-2', role: 'assistant', content: 'hi there', evidence: evidenceEnvelope })
   })
 
   it('R5 — mount loader (infinite) falls back to local SQLite when the backend call fails', async () => {
     prefs.chatHistoryMode = 'infinite'
     sessionMocks.getMessages.mockRejectedValueOnce(new Error('network'))
+    const evidenceEnvelope = { sources: [{ id: 'src-2', title: 'Local', url: 'https://l.co', score: 0.8 }] }
     ;(window as unknown as { omi: { getLocalConversation: unknown } }).omi.getLocalConversation =
       async () => ({
         startedAt: 1,
-        messages: [{ id: 'loc-1', role: 'user' as const, content: 'offline message' }]
+        messages: [
+          { id: 'loc-1', role: 'user' as const, content: 'offline message' },
+          { id: 'loc-2', role: 'assistant' as const, content: 'cached reply', evidence: evidenceEnvelope }
+        ]
       })
     const { result } = renderHook(() => useChat())
     await act(async () => {
       await settleHistory(result)
     })
-    expect(result.current.history).toHaveLength(1)
+    expect(result.current.history).toHaveLength(2)
     expect(result.current.history[0]).toMatchObject({ id: 'loc-1', role: 'user', content: 'offline message' })
+    expect(result.current.history[1]).toMatchObject({ id: 'loc-2', role: 'assistant', content: 'cached reply', evidence: evidenceEnvelope })
   })
 })
 

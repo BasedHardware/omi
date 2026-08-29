@@ -357,11 +357,14 @@ export function useChat(): UseChat {
           const msgs = await getSessionMessages({ limit: BACKEND_HISTORY_LIMIT })
           if (!isCurrent()) return
           if (msgs.length) {
+            // Backend returns messages newest-first; reverse to chronological order
+            // for display (same as mobile: messages.sort ascending by createdAt).
             setHistory(
-              msgs.map((m) => ({
+              [...msgs].reverse().map((m) => ({
                 id: m.id,
                 role: m.sender === 'ai' ? ('assistant' as const) : ('user' as const),
                 content: m.text,
+                ...(m.evidence ? { evidence: m.evidence } : {}),
                 ...(m.attachments?.length ? { attachments: m.attachments } : {})
               }))
             )
@@ -380,6 +383,7 @@ export function useChat(): UseChat {
           id: m.id ?? crypto.randomUUID(),
           role: m.role,
           content: m.content,
+          ...(m.evidence ? { evidence: m.evidence } : {}),
           ...(m.attachments?.length ? { attachments: m.attachments } : {})
         }))
       )
