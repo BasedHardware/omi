@@ -1,7 +1,7 @@
 import logging
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Optional, cast
+from typing import Callable, Optional, TypeVar, cast
 
 import numpy as np
 from concurrent.futures import as_completed
@@ -253,8 +253,10 @@ Rules:
 
 _BATCH_SIZE = 50
 
+TBatch = TypeVar('TBatch')
 
-def _run_llm_batches(uid: str, batches: list[list[dict]], score_fn) -> list[dict]:
+
+def _run_llm_batches(uid: str, batches: list[TBatch], score_fn: Callable[[TBatch], list[dict]]) -> list[dict]:
     if not batches:
         return []
     futures = [llm_executor.submit(score_fn, batch) for batch in batches]
