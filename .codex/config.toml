@@ -1,0 +1,6 @@
+[mcp_servers.browser]
+command = "npx"
+args = [
+    "-y",
+    "@playwright/mcp@latest",
+]

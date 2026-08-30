@@ -23,6 +23,7 @@ import {
   type ProductionAdapterId,
   type RuntimeAdapter
 } from './interface'
+import { EXTERNAL_AGENT_GUIDES } from '../../shared/agentGuides'
 
 export const ADAPTER_ACTIVATION_ENV = {
   acp: undefined, // Claude Code — bundled bridge, no install or env var needed
@@ -147,9 +148,28 @@ export function adapterProfile(adapterId: ProductionAdapterId): AdapterProfile {
 
 /** User-facing hint shown when a named agent isn't connected yet. Rendered as
  *  markdown in chat, so the env var is backtick-escaped (bare underscores
- *  would be eaten as italics). */
+ *  would be eaten as italics).
+ *
+ *  Used to just point at Settings ("install it, then come back"), which meant
+ *  someone who asked the bar for Codex mid-task got sent on a fetch quest for
+ *  a command Settings → Agents already has memorized. `activationEnv` being
+ *  set is exactly the openclaw/hermes/codex case, so the guide lookup below
+ *  always finds an entry — the type only widens to include acp/pi-mono
+ *  because it's `ProductionAdapterId`, not because they can reach here. */
 export function adapterActivationError(adapterId: ProductionAdapterId): string | undefined {
   const profile = ADAPTER_PROFILES[adapterId]
   if (!profile.activationEnv) return undefined
-  return `Install ${profile.displayName} first, then add its launch command in Settings → Agents (or set \`${profile.activationEnv}\`).`
+  const install = installInstruction(adapterId, profile.displayName)
+  return `${install}, then add its launch command in Settings → Agents (or set \`${profile.activationEnv}\`).`
+}
+
+function installInstruction(adapterId: ProductionAdapterId, displayName: string): string {
+  const guide =
+    adapterId === 'openclaw' || adapterId === 'hermes' || adapterId === 'codex'
+      ? EXTERNAL_AGENT_GUIDES[adapterId]
+      : undefined
+  const command = guide?.installCommands[0]
+  if (command) return `Install ${displayName} first: run \`${command}\` in a terminal`
+  if (guide?.installNote) return `Install ${displayName} first — ${guide.installNote}`
+  return `Install ${displayName} first`
 }

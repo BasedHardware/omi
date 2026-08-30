@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { candidateAgents, cancelTask, runCodingAgentTask } from './taskRunner'
 import { AcpError } from './acp'
 import { ADAPTER_PROFILES, adapterConfiguredCommand, adapterIsActivated } from './adapterRegistry'
+import { readOutcomeLedger, recordAgentOutcome } from './agentOutcomeLedger'
 import type {
   AdapterAttemptContext,
   AdapterEventSink,
@@ -26,6 +27,14 @@ vi.mock('./adapterRegistry', async () => {
     adapterConfiguredCommand: vi.fn(() => undefined)
   }
 })
+
+// Real ranking math runs (agentConcierge.ts is NOT mocked) — only its disk
+// dependency is, so these tests never touch a real userData file and never
+// carry outcomes over from a previous test.
+vi.mock('./agentOutcomeLedger', () => ({
+  readOutcomeLedger: vi.fn(() => []),
+  recordAgentOutcome: vi.fn()
+}))
 
 type FakeScript = {
   /** Throw from openBinding (simulates a dead/unconfigured adapter). */
@@ -105,6 +114,7 @@ describe('candidateAgents', () => {
   beforeEach(() => {
     vi.mocked(adapterIsActivated).mockReset()
     vi.mocked(adapterConfiguredCommand).mockReturnValue(undefined)
+    vi.mocked(readOutcomeLedger).mockReturnValue([])
   })
 
   it('orders unnamed tasks Claude Code first, connected agents only', () => {
@@ -116,12 +126,47 @@ describe('candidateAgents', () => {
     activate('acp', 'openclaw', 'hermes')
     expect(candidateAgents('hermes', {})).toEqual(['hermes', 'acp', 'openclaw'])
   })
+
+  it('ranks the unnamed fallback order by fit instead of just the declared list', () => {
+    // Declared order (interface.ts's PRODUCTION_ADAPTER_IDS) is
+    // acp, openclaw, hermes, codex. OpenClaw's real, matrix-documented gap —
+    // it can't call tools at all (toolSupport: unsupported) — is a genuine
+    // handicap for a coding task, so it drops to last instead of staying
+    // second just because it was declared second.
+    activate('acp', 'openclaw', 'hermes', 'codex')
+    expect(candidateAgents(undefined, {})).toEqual(['acp', 'hermes', 'codex', 'openclaw'])
+  })
+
+  it('lets a task-shaped prompt move a better-suited agent ahead', () => {
+    // Hermes documents real session/set_model support; Codex's is an
+    // unverified known_limitation. That's a sourced reason to prefer Hermes
+    // for a wide refactor specifically, not just a coin flip.
+    activate('hermes', 'codex')
+    expect(
+      candidateAgents(undefined, {}, process.env, 'refactor this across the codebase')
+    ).toEqual(['hermes', 'codex'])
+  })
+
+  it('lets recorded history move the unnamed fallback order', () => {
+    activate('hermes', 'codex')
+    vi.mocked(readOutcomeLedger).mockReturnValue([
+      { adapterId: 'codex', tag: 'general', outcome: 'success', ts: 1 },
+      { adapterId: 'codex', tag: 'general', outcome: 'success', ts: 2 },
+      { adapterId: 'codex', tag: 'general', outcome: 'success', ts: 3 }
+    ])
+    expect(candidateAgents(undefined, {}, process.env, 'just chatting')).toEqual([
+      'codex',
+      'hermes'
+    ])
+  })
 })
 
 describe('runCodingAgentTask', () => {
   beforeEach(() => {
     vi.mocked(adapterIsActivated).mockReset()
     vi.mocked(adapterConfiguredCommand).mockReturnValue(undefined)
+    vi.mocked(readOutcomeLedger).mockReturnValue([])
+    vi.mocked(recordAgentOutcome).mockClear()
   })
 
   it('runs the named agent and streams its output', async () => {
@@ -238,5 +283,94 @@ describe('runCodingAgentTask', () => {
     expect(result.ok).toBe(false)
     expect(result.error).toBe('Cancelled.')
     expect(cancelTask('t6')).toBe(false) // already finished/cleaned up
+  })
+
+  it('records a successful attempt so future ranking can learn from it', async () => {
+    activate('acp')
+    script({ acp: { stream: ['ok'] } })
+
+    await runCodingAgentTask({ taskId: 't7', prompt: 'fix it' }, () => {})
+
+    expect(recordAgentOutcome).toHaveBeenCalledWith({
+      adapterId: 'acp',
+      tag: 'general',
+      outcome: 'success'
+    })
+  })
+
+  it('records a failed attempt on the agent that actually ran, for every agent tried', async () => {
+    activate('acp', 'openclaw')
+    script({ openclaw: { failOpen: true }, acp: { stream: ['fallback answer'] } })
+
+    await runCodingAgentTask({ taskId: 't8', prompt: 'fix it', agentId: 'openclaw' }, () => {})
+
+    expect(recordAgentOutcome).toHaveBeenCalledWith({
+      adapterId: 'openclaw',
+      tag: 'general',
+      outcome: 'failure'
+    })
+    expect(recordAgentOutcome).toHaveBeenCalledWith({
+      adapterId: 'acp',
+      tag: 'general',
+      outcome: 'success'
+    })
+  })
+
+  it('does not record an outcome for an auth prompt (not a capability signal)', async () => {
+    activate('acp')
+    script({ acp: { failWithError: new AcpError('Authentication required', -32000) } })
+
+    await runCodingAgentTask({ taskId: 't9', prompt: 'fix it', agentId: 'acp' }, () => {})
+
+    expect(recordAgentOutcome).not.toHaveBeenCalled()
+  })
+
+  it('does not record an outcome for a cancelled attempt', async () => {
+    activate('acp')
+    script({ acp: { hangUntilAborted: true } })
+
+    const running = runCodingAgentTask({ taskId: 't10', prompt: 'never finishes' }, () => {})
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    cancelTask('t10')
+    await running
+
+    expect(recordAgentOutcome).not.toHaveBeenCalled()
+  })
+
+  it('skips spawning a named-but-unconnected agent and hands over the real install command', async () => {
+    // Nothing about Codex is configured — asking for it should never reach
+    // profile.createAdapter (which would just throw a raw "requires
+    // OMI_CODEX_ADAPTER_COMMAND" internal error instead of this).
+    activate('acp')
+    script({ acp: { stream: ['fallback answer'] } })
+    const events: CodingAgentEvent[] = []
+
+    const result = await runCodingAgentTask(
+      { taskId: 't11', prompt: 'fix it', agentId: 'codex' },
+      (e) => events.push(e)
+    )
+
+    expect(result).toMatchObject({ ok: true, adapterId: 'acp', text: 'fallback answer' })
+    const statusMessages = events
+      .filter((e): e is Extract<CodingAgentEvent, { type: 'status' }> => e.type === 'status')
+      .map((e) => e.message)
+    expect(statusMessages.some((m) => m.includes('npm install -g @openai/codex'))).toBe(true)
+    // Codex was never actually spawned — only the fallback shows up as selected.
+    const selected = events.filter(
+      (e): e is Extract<CodingAgentEvent, { type: 'agent_selected' }> => e.type === 'agent_selected'
+    )
+    expect(selected.map((e) => e.adapterId)).toEqual(['acp'])
+  })
+
+  it('surfaces the install command as the final error when the named agent is the only candidate', async () => {
+    activate()
+
+    const result = await runCodingAgentTask(
+      { taskId: 't12', prompt: 'fix it', agentId: 'codex' },
+      () => {}
+    )
+
+    expect(result).toMatchObject({ ok: false, adapterId: null })
+    expect(result.error).toContain('npm install -g @openai/codex')
   })
 })
