@@ -787,8 +787,19 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         )
         return
       }
-      guard authorizationStatus == .authorized else {
+      guard NotificationPermissionPolicy.isGranted(authorizationStatus) else {
         log("Notification skipped (auth=\(authorizationStatus.rawValue)): \(title)")
+
+        // This is the *only* place an unauthorized proactive notification is
+        // dropped — `deliverNotification` below is never reached — so the
+        // observability for it has to live here. The insight-delivery ledger
+        // underneath covers just the subset carrying an `insightDeliveryID`
+        // (and only when the floating bar did not already take the message),
+        // which is why authorization needs its own unconditional event.
+        AnalyticsManager.shared.notificationDeliverySkipped(
+          authStatus: NotificationDeliveryTelemetry.AuthStatus(authorizationStatus),
+          surface: ProactiveNotificationKind.from(assistantId: assistantId)
+        )
 
         if !floatingBarDelivered && !floatingBarHasQueued {
           self?.recordInsightDeliveryOutcome(
@@ -943,6 +954,18 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     UserNotificationCallbackBridge.notificationSettings { [weak self] settings in
+      // Split out of the compound guard below so an unauthorized drop is
+      // reported as such. Folded in, it would be indistinguishable from a
+      // stale owner, an exhausted budget, or an alert style of `.none` — all
+      // of which are ordinary policy, not a permission the user never granted.
+      guard NotificationPermissionPolicy.isGranted(settings.authorizationStatus) else {
+        AnalyticsManager.shared.notificationDeliverySkipped(
+          authStatus: NotificationDeliveryTelemetry.AuthStatus(settings.authorizationStatus),
+          surface: ProactiveNotificationKind.from(decisionType: decisionType)
+        )
+        onDropped?()
+        return
+      }
       guard let self,
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
         self.contextDirectorMayPresent(authorizationSnapshot: authorizationSnapshot, now: Date()),
@@ -1161,21 +1184,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     )
 
     print("[\(assistantId)] Sending notification: \(title) - \(message)")
-    // Observability only: `add(request:)` silently no-ops when authorization is
-    // `.notDetermined` or `.denied` — no error, no callback difference — so an
-    // unauthorized user's every proactive notification used to fail invisibly.
-    // This check never blocks or changes delivery below, and it must never
-    // request permission itself: that is a background delivery path, and
-    // turning it into a consent prompt is exactly what `startMonitoring`
-    // deliberately avoids (see `ProactiveAssistantsPlugin`).
-    UserNotificationCallbackBridge.authorizationStatus { authorizationStatus in
-      guard !NotificationPermissionPolicy.isGranted(authorizationStatus) else { return }
-      log("Notification dropped: not authorized (status=\(authorizationStatus.rawValue), assistantId=\(assistantId))")
-      AnalyticsManager.shared.notificationDeliverySkipped(
-        authStatus: NotificationDeliveryTelemetry.AuthStatus(authorizationStatus),
-        surface: ProactiveNotificationKind.from(assistantId: assistantId)
-      )
-    }
     UserNotificationCallbackBridge.add(request) { [weak self] result in
       if let errorDescription = result.errorDescription {
         print("Notification error: \(errorDescription)")

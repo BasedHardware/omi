@@ -431,10 +431,24 @@ final class SBOnboardingModel: ObservableObject {
     let storedSchema = UserDefaults.standard.integer(forKey: Self.resumeStepSchemaKey)
     let savedRaw = Self.migratedResumeStepRaw(savedRaw: persistedRaw, storedSchema: storedSchema)
     if storedSchema < Self.resumeStepSchemaVersion {
+      // Stamp the schema BEFORE rewriting the value. Two `UserDefaults` writes
+      // are not one atomic transaction, and the two orderings fail differently
+      // if the process dies between them:
+      //
+      //   value first — the stamp is lost, the next launch shifts the *already*
+      //     shifted value again, and a resume at `.referral` (17 -> 18 -> 19)
+      //     lands outside `Step`, so `begin()` silently restarts onboarding
+      //     from `.promise` and the user loses their answers.
+      //   stamp first — the shift is lost, so the value keeps its version-1
+      //     meaning under version-2 numbering: at worst one step off (old
+      //     `.shortcutOpen` reads as `.notifications`), always in range, never
+      //     a restart.
+      //
+      // Neither is atomic; only one of them can throw away progress.
+      UserDefaults.standard.set(Self.resumeStepSchemaVersion, forKey: Self.resumeStepSchemaKey)
       if savedRaw != persistedRaw {
         UserDefaults.standard.set(savedRaw, forKey: Self.resumeStepKey)
       }
-      UserDefaults.standard.set(Self.resumeStepSchemaVersion, forKey: Self.resumeStepSchemaKey)
     }
     recordSetupStateDisagreementAtRead(savedRaw: savedRaw)
     if savedRaw > Step.promise.rawValue, let resumed = Step(rawValue: savedRaw) {

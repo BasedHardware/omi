@@ -13,6 +13,7 @@ import XCTest
 final class SBOnboardingNotificationsStepTests: XCTestCase {
   private let resumeStepKey = "sbOnboardingResumeStep"
   private let resumeSchemaKey = "sbOnboardingResumeStepSchema"
+  private let shortcutsCompletedKey = "sbOnboardingShortcutsCompleted"
 
   override func setUp() {
     super.setUp()
@@ -23,6 +24,7 @@ final class SBOnboardingNotificationsStepTests: XCTestCase {
   override func tearDown() {
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
     UserDefaults.standard.removeObject(forKey: resumeSchemaKey)
+    UserDefaults.standard.removeObject(forKey: shortcutsCompletedKey)
     super.tearDown()
   }
 
@@ -175,5 +177,83 @@ final class SBOnboardingNotificationsStepTests: XCTestCase {
     let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
 
     XCTAssertEqual(model.firstUnaskedStep(from: .notifications), .shortcutOpen)
+  }
+
+  // MARK: the migration as `begin()` actually runs it
+  //
+  // The pure-function tests above pin the arithmetic. These pin the part that
+  // touches disk: that `begin()` reads the legacy value, lands on the right
+  // step, and stamps the schema so the shift can never be applied twice.
+
+  /// Hold `AppState` for the life of the call — `SBOnboardingModel` keeps it
+  /// `unowned`, so a temporary is deallocated before `begin()` reads it.
+  private func resumedStep(fromPersistedRaw raw: Int, schema: Int?, appState: AppState)
+    -> SBOnboardingModel.Step
+  {
+    UserDefaults.standard.set(raw, forKey: resumeStepKey)
+    if let schema {
+      UserDefaults.standard.set(schema, forKey: resumeSchemaKey)
+    } else {
+      UserDefaults.standard.removeObject(forKey: resumeSchemaKey)
+    }
+    // Shortcuts already done, so the mandatory-shortcuts clamp does not mask
+    // where the migration actually landed.
+    UserDefaults.standard.set(true, forKey: shortcutsCompletedKey)
+    let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    model.begin()
+    return model.step
+  }
+
+  func testBeginRenumbersALegacyResumeStateAndStampsTheSchema() {
+    let appState = AppState()
+    // 13 was `screenDemo` under the version-1 layout; it is 14 under version 2.
+    let step = resumedStep(fromPersistedRaw: 13, schema: nil, appState: appState)
+
+    XCTAssertEqual(step, .screenDemo, "a legacy screenDemo must resume at screenDemo")
+    XCTAssertEqual(
+      UserDefaults.standard.integer(forKey: resumeStepKey), SBOnboardingModel.Step.screenDemo.rawValue)
+    XCTAssertEqual(
+      UserDefaults.standard.integer(forKey: resumeSchemaKey),
+      SBOnboardingModel.resumeStepSchemaVersion,
+      "the stamp is what stops a second launch shifting the value again")
+  }
+
+  /// The regression the stamp exists for: run `begin()` twice over the same
+  /// defaults. Without the stamp the second pass shifts an already-shifted
+  /// value, and a legacy `.referral` (17 -> 18 -> 19) leaves `Step`'s range
+  /// entirely, restarting onboarding from `.promise`.
+  func testASecondBeginDoesNotShiftAnAlreadyMigratedResumeState() {
+    let appState = AppState()
+    XCTAssertEqual(resumedStep(fromPersistedRaw: 17, schema: nil, appState: appState), .referral)
+
+    let secondLaunch = SBOnboardingModel(
+      appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    secondLaunch.begin()
+
+    XCTAssertEqual(secondLaunch.step, .referral)
+  }
+
+  /// The step that sat exactly at the insertion point is the one an off-by-one
+  /// gets wrong, and it is the boundary the arithmetic is built around.
+  func testBeginMovesTheStepThatSatExactlyAtTheInsertionPoint() {
+    let appState = AppState()
+    XCTAssertEqual(resumedStep(fromPersistedRaw: 11, schema: nil, appState: appState), .shortcutOpen)
+  }
+
+  func testBeginLeavesAStepBeforeTheInsertionPointAlone() {
+    let appState = AppState()
+    XCTAssertEqual(resumedStep(fromPersistedRaw: 10, schema: nil, appState: appState), .automation)
+  }
+
+  /// A current-schema install must be read verbatim — the migration is for
+  /// version-1 state only, and applying it to current state would corrupt it.
+  func testBeginDoesNotRenumberACurrentSchemaResumeState() {
+    let appState = AppState()
+    let step = resumedStep(
+      fromPersistedRaw: SBOnboardingModel.Step.notifications.rawValue,
+      schema: SBOnboardingModel.resumeStepSchemaVersion,
+      appState: appState)
+
+    XCTAssertEqual(step, .notifications)
   }
 }
