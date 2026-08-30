@@ -292,6 +292,16 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
   QA bundle. This is the compact Swift/Node/Python contract gate; reserve full
   component suites and the live continuity gauntlet for PR readiness.
 
+### Proactive surfaces must be driven live
+Panels, form assist, message draft and the realtime voice tools fail in ways unit tests cannot see: turn shape, what a later turn does to state an earlier one consumed, and countdowns. A green suite over `PanelSession` said nothing about a `spawn_agent` turn dropping its chat card, an edit whose correction never reached the transcript, or an offer that came back forever. Before landing a change to these, drive real turns:
+```bash
+./run.sh --yolo                              # bridge port is in run.sh's banner
+python3 -c "open('/tmp/q.pcm','wb').write(b'\x00\x00'*16000)"
+./scripts/omi-ctl action ptt_test_turn pcm=/tmp/q.pcm text_only=1 \
+  force_transcript="Put three stations on my screen: Aldgate, Barbican, Camden."
+```
+`force_transcript` + `text_only=1` drives the real provider and real tool calls with deterministic user text. Exercise the **second** turn too — most of these bugs only exist across a turn boundary — and cite the log lines (`panel card(s) into chat`, `panel state sent`, `FormAssist: offering`) in the PR.
+
 ### Run Variants & Parallel Worktrees
 - `./run.sh --yolo` — quick start against the dev backend, no local services. `OMI_SKIP_BACKEND=1` — app only, remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
 - **Parallel worktrees auto-isolate.** `scripts/dev-instance.sh` derives a unique instance from each linked git worktree, so `run.sh` (and `backend/scripts/dev-serve.sh`) pick per-worktree ports (desktop 10201+, Python 8080+, automation 47777+) and bundle name (`omi-<worktree>`). Kills are pidfile-scoped, and a taken port fails loud instead of clobbering. The primary checkout is unchanged (`Omi Dev`, 10201/8080/47777). Override any of `OMI_INSTANCE` / `PORT` / `PYTHON_PORT` / `OMI_AUTOMATION_PORT` / `OMI_APP_NAME` to opt out.
