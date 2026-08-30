@@ -420,14 +420,10 @@ class AnalyticsManager {
   /// stamp at all; the last heartbeat is the only evidence). Call once at
   /// launch, adjacent to `detectAndReportCrash()`.
   ///
-  /// Only the full app may do this. `SingleInstanceGuard` deliberately permits
-  /// a rewind-only process (`--mode=rewind`) alongside the full app, and both
-  /// share one UserDefaults domain — so a rewind window opening beside a live
-  /// monitoring session would load that still-running record, emit a truncated
-  /// `session_lost`, and clear the store out from under the process that is
-  /// still heartbeating into it.
-  func recoverMonitoringSessionIfNeeded(launchMode: LaunchMode) {
-    guard launchMode == .full else { return }
+  /// Ownership is enforced in the store, not here: a rewind-only process reads
+  /// nil and writes nothing, so this is a no-op there without needing its own
+  /// launch-mode check. See `MonitoringSessionDefaultsStore.shared`.
+  func recoverMonitoringSessionIfNeeded() {
     guard let record = MonitoringSessionDefaultsStore.shared.load() else { return }
     let outcome = MonitoringSessionRecovery.recover(record, now: Date())
     monitoringSessionRecovered(outcome)

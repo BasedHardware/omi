@@ -415,7 +415,11 @@ public class ProactiveAssistantsPlugin: NSObject {
     setScreenCaptureHealth(.active)
 
     let monitoringSessionID = UUID().uuidString
-    monitoringSessionTracker.start(at: Date(), sessionID: monitoringSessionID)
+    monitoringSessionTracker.start(
+      at: Date(),
+      sessionID: monitoringSessionID,
+      heldBy: isScreenLocked ? [.screenLock] : []
+    )
     persistMonitoringSessionIfActive()
     startMonitoringHeartbeatTimer()
 
@@ -522,6 +526,12 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// its `Monitoring Stopped` event (recovered at the next launch) instead of
   /// silently losing the session.
   func stampMonitoringSessionAppQuit(at date: Date = Date()) {
+    // Stop the heartbeat first. The stamp is a snapshot, not a `finish()`, so
+    // the tracker stays live — and a heartbeat landing on the terminate run
+    // loop would overwrite the stamped record with a live one (`endedAt` nil),
+    // turning a clean quit into a recovered `session_lost` at the next launch.
+    monitoringHeartbeatTimer?.invalidate()
+    monitoringHeartbeatTimer = nil
     // Nil for a session that already emitted its live `Monitoring Stopped`,
     // so quitting later cannot rewrite a finished session into a clean quit
     // and have the next launch recover it as a second event.
@@ -648,8 +658,14 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     sendEvent(type: "monitoringStopped", data: [:])
     let monitoringSummary = monitoringSessionTracker.finish(at: Date(), reason: reason)
-    AnalyticsManager.shared.monitoringStopped(summary: monitoringSummary)
+    // Clear before emitting, not after. The stored record is still the last
+    // heartbeat snapshot with `endedAt == nil`, so a crash in this window with
+    // the old ordering left it on disk and the next launch recovered the same
+    // `session_id` as a *second* stop. Clearing first makes that window lose
+    // an event instead of duplicating one, and a lost stop is visibly missing
+    // where a duplicate silently inflates the numbers.
     monitoringSessionStore.clear()
+    AnalyticsManager.shared.monitoringStopped(summary: monitoringSummary)
     log("Proactive assistants stopped")
   }
 
@@ -1633,6 +1649,23 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
     systemEventObservers.append(wakeObserver)
 
+    // The duration clock's own wake signal, taken from the same notification
+    // center as its pause. `.systemDidWake` above is an `AppState` rebroadcast
+    // of this notification; pausing on the workspace center and resuming on a
+    // rebroadcast means one dropped hop leaves the session paused forever.
+    // Resume is idempotent per source, so both firing is harmless.
+    let durationWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didWakeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.monitoringSessionTracker.resume(at: Date(), source: .systemSleep)
+        self?.persistMonitoringSessionIfActive()
+      }
+    }
+    systemEventObservers.append(durationWakeObserver)
+
     // Screen locked
     let lockObserver = NotificationCenter.default.addObserver(
       forName: .screenDidLock,
@@ -1731,6 +1764,14 @@ public class ProactiveAssistantsPlugin: NSObject {
     // source set closes the single paused interval when the *last* hold
     // clears, which on that path is this one, not the wake above.
     monitoringSessionTracker.resume(at: Date(), source: .screenLock)
+    // A machine cannot be unlocked while asleep, so reaching here proves the
+    // sleep hold is stale. Releasing it is the backstop for a wake that never
+    // arrived: the pause comes straight off `NSWorkspace.willSleepNotification`
+    // while the resume rides an `AppState` rebroadcast, and the old boolean
+    // guard survived a dropped wake only because *any* resume cleared it.
+    // Without this, one missed wake would report the rest of the session as
+    // paused — the exact inverse of the bug the source set fixes.
+    monitoringSessionTracker.resume(at: Date(), source: .systemSleep)
     persistMonitoringSessionIfActive()
     // Reset failure counter
     screenCaptureFailureTracker.reset()

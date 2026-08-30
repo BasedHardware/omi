@@ -479,7 +479,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Initialize analytics (PostHog)
     AnalyticsManager.shared.initialize()
     AnalyticsManager.shared.detectAndReportCrash()
-    AnalyticsManager.shared.recoverMonitoringSessionIfNeeded(launchMode: OMIApp.launchMode)
+    AnalyticsManager.shared.recoverMonitoringSessionIfNeeded()
     if let attempt = pendingUpdateRelaunch?.attempt {
       let installedVersion =
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")

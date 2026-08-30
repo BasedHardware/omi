@@ -70,6 +70,51 @@ final class MonitoringSessionStoreTests: XCTestCase {
     XCTAssertEqual(loaded?.pausedSeconds, 5)
   }
 
+  // MARK: - Session ownership
+
+  /// `SingleInstanceGuard` deliberately allows a rewind-only process
+  /// (`--mode=rewind`) beside the full app. Both share one `UserDefaults`
+  /// domain and one key, and the rewind window runs `DesktopHomeView`, which
+  /// restores capture intent and calls `startMonitoring` — so without an
+  /// ownership gate it is a second writer to a single slot, overwriting a live
+  /// session with its own and stamping it on quit.
+  ///
+  /// The gate lives on the store rather than on each call site because start,
+  /// heartbeat, pause, resume, recovery, and the quit stamp are all writers.
+  func testANonOwningProcessNeitherReadsNorWritesTheSharedRecord() throws {
+    let defaults = try makeDefaults()
+    let owner = MonitoringSessionDefaultsStore(defaults: defaults)
+    let record = MonitoringSessionRecord(
+      sessionID: "owned-session",
+      startedAt: Date(timeIntervalSinceReferenceDate: 0),
+      lastHeartbeatAt: Date(timeIntervalSinceReferenceDate: 600),
+      pausedSeconds: 0,
+      pauseStartedAt: nil,
+      endedAt: nil,
+      endReason: nil
+    )
+    owner.save(record)
+
+    let guest = MonitoringSessionDefaultsStore(defaults: defaults, ownsSession: false)
+
+    XCTAssertNil(guest.load(), "a non-owning process must not recover another process's live session")
+
+    guest.save(
+      MonitoringSessionRecord(
+        sessionID: "guest-session",
+        startedAt: Date(timeIntervalSinceReferenceDate: 100),
+        lastHeartbeatAt: Date(timeIntervalSinceReferenceDate: 100),
+        pausedSeconds: 0,
+        pauseStartedAt: nil,
+        endedAt: nil,
+        endReason: nil
+      ))
+    XCTAssertEqual(owner.load(), record, "a non-owning process must not overwrite the live session")
+
+    guest.clear()
+    XCTAssertEqual(owner.load(), record, "a non-owning process must not clear the live session")
+  }
+
   func testClearRemovesTheRecord() throws {
     let store = MonitoringSessionDefaultsStore(defaults: try makeDefaults())
     store.save(

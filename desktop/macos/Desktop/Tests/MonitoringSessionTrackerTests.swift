@@ -221,6 +221,56 @@ final class MonitoringSessionTrackerTests: XCTestCase {
     XCTAssertEqual(tracker.record.pauseStartedAt, date(100))
   }
 
+  // MARK: - Holds outstanding at start
+
+  /// Monitoring can begin while the screen is already locked — capture intent
+  /// restored at launch, a settings sync, a permission retry. A session that
+  /// starts unpaused there bills lock-screen time as active, and the matching
+  /// unlock arrives with no hold to release.
+  func testASessionStartedWhileLockedBeginsPaused() {
+    var tracker = MonitoringSessionTracker()
+    tracker.start(at: date(0), sessionID: "session-20", heldBy: [.screenLock])
+    XCTAssertTrue(tracker.isPaused)
+
+    tracker.resume(at: date(300), source: .screenLock)
+    let summary = tracker.finish(at: date(400), reason: .userToggle)
+
+    XCTAssertEqual(summary.pausedSeconds, 300)
+    XCTAssertEqual(summary.activeSeconds, 100)
+  }
+
+  func testStartingAgainClearsHoldsFromThePreviousSession() {
+    var tracker = MonitoringSessionTracker()
+    tracker.start(at: date(0), sessionID: "session-21", heldBy: [.screenLock, .systemSleep])
+    tracker.finish(at: date(50), reason: .userToggle)
+
+    tracker.start(at: date(100), sessionID: "session-22")
+
+    XCTAssertFalse(tracker.isPaused)
+    XCTAssertNil(tracker.record.pauseStartedAt)
+  }
+
+  /// The backstop for a wake notification that never arrives. The pause comes
+  /// straight off `NSWorkspace.willSleepNotification` while the resume rides an
+  /// `AppState` rebroadcast, so a dropped hop must not strand the clock — a
+  /// machine cannot be unlocked while asleep, which is what makes releasing the
+  /// stale sleep hold on unlock sound.
+  func testUnlockCanReleaseAStaleSleepHold() {
+    var tracker = MonitoringSessionTracker()
+    tracker.start(at: date(0), sessionID: "session-23")
+
+    tracker.pause(at: date(100), source: .screenLock)
+    tracker.pause(at: date(110), source: .systemSleep)
+    // No wake arrives. Unlock releases both, as `handleScreenUnlock` does.
+    tracker.resume(at: date(500), source: .screenLock)
+    tracker.resume(at: date(500), source: .systemSleep)
+
+    XCTAssertFalse(tracker.isPaused, "a missed wake must not strand the session paused")
+    let summary = tracker.finish(at: date(600), reason: .userToggle)
+    XCTAssertEqual(summary.pausedSeconds, 400)
+    XCTAssertEqual(summary.activeSeconds, 200)
+  }
+
   // MARK: - Recovery
 
   func testRecoveryWithEndedAtIsRecoveredClean() {

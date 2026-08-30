@@ -144,17 +144,23 @@ struct MonitoringSessionTracker: Equatable {
   /// Whether a paused interval is currently open.
   var isPaused: Bool { !pauseSources.isEmpty }
 
-  mutating func start(at date: Date, sessionID: String) {
+  /// `heldBy` seeds the interruptions already in force when the session
+  /// starts. Monitoring can begin while the screen is locked — a settings
+  /// sync, a permission retry, or capture intent restored at launch — and a
+  /// session that starts unpaused there counts lock-screen time as active
+  /// until something happens to pause it. The matching unlock would otherwise
+  /// arrive with no hold to release and do nothing.
+  mutating func start(at date: Date, sessionID: String, heldBy: Set<MonitoringPauseSource> = []) {
     record = MonitoringSessionRecord(
       sessionID: sessionID,
       startedAt: date,
       lastHeartbeatAt: date,
       pausedSeconds: 0,
-      pauseStartedAt: nil,
+      pauseStartedAt: heldBy.isEmpty ? nil : date,
       endedAt: nil,
       endReason: nil
     )
-    pauseSources = []
+    pauseSources = heldBy
   }
 
   /// Opens a paused interval, or joins the open one. Idempotent per source.
