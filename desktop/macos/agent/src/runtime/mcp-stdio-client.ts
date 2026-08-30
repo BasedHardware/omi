@@ -1,7 +1,9 @@
 import { spawn, type ChildProcess } from "child_process";
 import { createInterface, type Interface as ReadlineInterface } from "readline";
 
-import type { McpRemoteTool } from "./mcp-http-client.js";
+import { McpClient, MCP_CLIENT_INFO, MCP_PROTOCOL_VERSION } from "./mcp-client.js";
+
+export type { McpRemoteTool } from "./mcp-client.js";
 
 /**
  * Minimal MCP client over stdio for user-configured local servers
@@ -9,7 +11,7 @@ import type { McpRemoteTool } from "./mcp-http-client.js";
  * subset as McpHttpClient: initialize, tools/list, tools/call. The child dies
  * with this process; any failure surfaces as an error, never a crash.
  */
-export class McpStdioClient {
+export class McpStdioClient extends McpClient {
   private child: ChildProcess | null = null;
   private readline: ReadlineInterface | null = null;
   private readonly pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
@@ -20,7 +22,9 @@ export class McpStdioClient {
     private readonly command: string,
     private readonly args: string[],
     private readonly env?: Array<{ name: string; value: string }>,
-  ) {}
+  ) {
+    super();
+  }
 
   private start(): void {
     if (this.child) return;
@@ -83,7 +87,7 @@ export class McpStdioClient {
     this.initialized = null;
   }
 
-  dispose(): void {
+  override dispose(): void {
     this.readline?.close();
     this.child?.kill("SIGTERM");
     this.failAll(new Error("MCP client disposed"));
@@ -93,7 +97,7 @@ export class McpStdioClient {
     this.child?.stdin?.write(`${JSON.stringify(payload)}\n`);
   }
 
-  private rpc(method: string, params: Record<string, unknown>): Promise<unknown> {
+  protected rpc(method: string, params: Record<string, unknown>): Promise<unknown> {
     this.start();
     if (!this.child) return Promise.reject(new Error("MCP server not running"));
     const id = ++this.requestId;
@@ -107,51 +111,15 @@ export class McpStdioClient {
     });
   }
 
-  private ensureInitialized(): Promise<void> {
+  protected ensureInitialized(): Promise<void> {
     this.initialized ??= (async () => {
       await this.rpc("initialize", {
-        protocolVersion: "2025-06-18",
+        protocolVersion: MCP_PROTOCOL_VERSION,
         capabilities: {},
-        clientInfo: { name: "omi-desktop", version: "1.0.0" },
+        clientInfo: MCP_CLIENT_INFO,
       });
       this.send({ jsonrpc: "2.0", method: "notifications/initialized", params: {} });
     })();
     return this.initialized;
-  }
-
-  async listTools(): Promise<McpRemoteTool[]> {
-    await this.ensureInitialized();
-    const result = (await this.rpc("tools/list", {})) as { tools?: unknown };
-    if (!Array.isArray(result?.tools)) return [];
-    return result.tools.flatMap((tool) => {
-      const { name, description, inputSchema } = (tool ?? {}) as Record<string, unknown>;
-      if (typeof name !== "string" || !name) return [];
-      return [
-        {
-          name,
-          description: typeof description === "string" ? description : "",
-          inputSchema:
-            inputSchema && typeof inputSchema === "object"
-              ? (inputSchema as Record<string, unknown>)
-              : { type: "object", properties: {} },
-        },
-      ];
-    });
-  }
-
-  async callTool(name: string, args: Record<string, unknown>): Promise<string> {
-    await this.ensureInitialized();
-    const result = (await this.rpc("tools/call", { name, arguments: args })) as {
-      content?: Array<{ type?: string; text?: string }>;
-      isError?: boolean;
-    };
-    const text = (result?.content ?? [])
-      .filter((block) => block?.type === "text" && typeof block.text === "string")
-      .map((block) => block.text)
-      .join("\n");
-    if (result?.isError) {
-      throw new Error(text || `MCP tool ${name} reported an error`);
-    }
-    return text || JSON.stringify(result ?? {});
   }
 }

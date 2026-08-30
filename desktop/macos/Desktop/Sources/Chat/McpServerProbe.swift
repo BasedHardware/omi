@@ -54,6 +54,8 @@ enum McpServerProbe {
   enum Target: Sendable, Equatable {
     case stdio(command: String, args: [String], env: [String: String])
     case http(url: URL, headers: [String: String])
+    /// The older HTTP+SSE transport: the URL is an event stream, not a POST target.
+    case sse(url: URL, headers: [String: String])
     case unconfigured
 
     init(entry: [String: Any]) {
@@ -65,7 +67,10 @@ enum McpServerProbe {
           args: (entry["args"] as? [Any])?.compactMap { $0 as? String } ?? [],
           env: (entry["env"] as? [String: Any])?.compactMapValues { $0 as? String } ?? [:])
       } else if let raw = entry["url"] as? String, let url = URL(string: raw) {
-        self = .http(url: url, headers: McpServerProbe.headers(from: entry))
+        let headers = McpServerProbe.headers(from: entry)
+        self =
+          (entry["transport"] as? String) == "sse"
+          ? .sse(url: url, headers: headers) : .http(url: url, headers: headers)
       } else {
         self = .unconfigured
       }
@@ -78,6 +83,8 @@ enum McpServerProbe {
       return await probeStdio(command: command, args: args, env: env)
     case .http(let url, let headers):
       return await probeHTTP(url: url, headers: headers)
+    case .sse(let url, let headers):
+      return await probeSSE(url: url, headers: headers)
     case .unconfigured:
       return .unreachable("No command or URL configured")
     }
@@ -125,6 +132,35 @@ enum McpServerProbe {
         return .running(toolCount: -1)
       }
       return .running(toolCount: tools.count)
+    } catch {
+      return .unreachable("Could not reach the server")
+    }
+  }
+
+  /// An HTTP+SSE server is checked by opening its stream, not by POSTing to it: the stream URL
+  /// rejects a POST, so the Streamable HTTP probe reports every such server as not responding.
+  ///
+  /// Reaching the stream and being named a message endpoint is where the check stops. Completing a
+  /// handshake would mean holding the stream open for the reply, and a status badge must not keep
+  /// a connection per server on every refresh.
+  static func probeSSE(url: URL, headers: [String: String]) async -> Status {
+    var request = URLRequest(url: url, timeoutInterval: timeout)
+    request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+    for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
+
+    do {
+      let (bytes, response) = try await URLSession.shared.bytes(for: request)
+      guard let http = response as? HTTPURLResponse else { return .unreachable("No response") }
+      if http.statusCode == 401 || http.statusCode == 403 { return .needsAuth }
+      guard (200..<300).contains(http.statusCode) else {
+        return .unreachable("Server returned HTTP \(http.statusCode)")
+      }
+      for try await line in bytes.lines where line.hasPrefix("event:") {
+        guard line.dropFirst("event:".count).trimmingCharacters(in: .whitespaces) == "endpoint"
+        else { continue }
+        return .running(toolCount: -1)
+      }
+      return .unreachable("Server never opened an event stream")
     } catch {
       return .unreachable("Could not reach the server")
     }

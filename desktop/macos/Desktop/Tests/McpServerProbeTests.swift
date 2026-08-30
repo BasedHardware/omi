@@ -95,6 +95,21 @@ final class McpServerProbeTests: XCTestCase {
     XCTAssertEqual(McpServerProbe.resolveCommand("sh").label, "Ready")
   }
 
+  /// An `sse` server's URL is an event stream, not a POST target: probing it the Streamable HTTP
+  /// way reports every such server as not responding, and the runtime install is equally dead.
+  func testSseTransportRoutesToItsOwnTarget() throws {
+    let url = try XCTUnwrap(URL(string: "https://mcp.wix.com/sse"))
+    XCTAssertEqual(
+      McpServerProbe.Target(entry: ["url": url.absoluteString, "transport": "sse"]),
+      .sse(url: url, headers: [:]))
+    XCTAssertEqual(
+      McpServerProbe.Target(entry: ["url": url.absoluteString, "transport": "http"]),
+      .http(url: url, headers: [:]))
+    // A server written by hand without a transport is Streamable HTTP, today's default.
+    XCTAssertEqual(
+      McpServerProbe.Target(entry: ["url": url.absoluteString]), .http(url: url, headers: [:]))
+  }
+
   /// The failure that actually happens: a command that was never installed, or was removed after
   /// the server was configured. It used to read "Active in chat".
   func testReportsACommandThatIsNotInstalled() throws {

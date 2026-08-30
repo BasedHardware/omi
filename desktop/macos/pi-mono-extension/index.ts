@@ -37,7 +37,9 @@ import {
   isStdioServer,
   loadLocalMcpConfig,
 } from "../agent/dist/runtime/user-extensions.js";
+import type { McpClient } from "../agent/dist/runtime/mcp-client.js";
 import { McpHttpClient } from "../agent/dist/runtime/mcp-http-client.js";
+import { McpSseClient } from "../agent/dist/runtime/mcp-sse-client.js";
 import { McpStdioClient } from "../agent/dist/runtime/mcp-stdio-client.js";
 import {
   buildToolAvailabilitySnapshot,
@@ -855,7 +857,7 @@ async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
   const logErr = (msg: string) => process.stderr.write(`[user-mcp] ${msg}\n`);
   const servers = loadLocalMcpConfig(process.env.OMI_LOCAL_MCP_FILE, new Set(), logErr);
   await Promise.all(servers.map(async (server) => {
-    let client: McpHttpClient | McpStdioClient;
+    let client: McpClient;
     let discoveryTimeoutMs: number;
     if (isStdioServer(server)) {
       client = new McpStdioClient(server.command, server.args, server.env);
@@ -863,8 +865,14 @@ async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
       discoveryTimeoutMs = 30_000;
     } else {
       const bearer = server.headers?.find((header) => header.name === "Authorization")?.value;
-      client = new McpHttpClient(server.url, bearer?.replace(/^Bearer\s+/i, ""));
-      discoveryTimeoutMs = 5000;
+      const token = bearer?.replace(/^Bearer\s+/i, "");
+      // An `sse` server publishes a long-lived event stream, not a POST target;
+      // driving it as Streamable HTTP is a 404 on every message.
+      client =
+        server.type === "sse"
+          ? new McpSseClient(server.url, token)
+          : new McpHttpClient(server.url, token);
+      discoveryTimeoutMs = 10_000;
     }
     let tools;
     try {
@@ -873,7 +881,7 @@ async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
       process.stderr.write(
         `[user-mcp] ${server.name}: tool discovery failed, server skipped: ${err instanceof Error ? err.message : err}\n`,
       );
-      if (client instanceof McpStdioClient) client.dispose();
+      client.dispose();
       return;
     }
     for (const tool of tools) {
