@@ -25,6 +25,9 @@ export interface McpPrompt {
   arguments: Array<{ name: string; description: string; required: boolean }>;
 }
 
+/** Page budget for a cursor-paginated list; far past any real server's tool count. */
+const MAX_LIST_PAGES = 50;
+
 export abstract class McpClient {
   /** What `initialize` said the server offers. Empty until the handshake runs. */
   private capabilities: Record<string, unknown> = {};
@@ -54,9 +57,8 @@ export abstract class McpClient {
 
   async listTools(): Promise<McpRemoteTool[]> {
     await this.ensureInitialized();
-    const result = (await this.rpc("tools/list", {})) as { tools?: unknown };
-    if (!Array.isArray(result?.tools)) return [];
-    return result.tools.flatMap((tool) => {
+    const pages = await this.pages("tools/list", "tools");
+    return pages.flatMap((tool) => {
       const { name, description, inputSchema } = (tool ?? {}) as Record<string, unknown>;
       if (typeof name !== "string" || !name) return [];
       return [
@@ -72,13 +74,37 @@ export abstract class McpClient {
     });
   }
 
+  /**
+   * Every page of a cursor-paginated list method. A server with more entries
+   * than its page size returns a `nextCursor`; ignoring it silently truncated
+   * the list, and the missing tools simply did not exist as far as chat knew.
+   *
+   * Bounded twice over, because the cursor is the server's to choose: a page
+   * budget, and a repeated cursor treated as the end rather than looped on.
+   */
+  private async pages(method: string, key: string): Promise<unknown[]> {
+    const collected: unknown[] = [];
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+      const result = (await this.rpc(method, cursor ? { cursor } : {})) as Record<string, unknown>;
+      const entries = result?.[key];
+      if (!Array.isArray(entries)) break;
+      collected.push(...entries);
+      const next = result.nextCursor;
+      if (typeof next !== "string" || !next || seen.has(next)) break;
+      seen.add(next);
+      cursor = next;
+    }
+    return collected;
+  }
+
   /** The server's published prompts, or none when it publishes no such capability. */
   async listPrompts(): Promise<McpPrompt[]> {
     await this.ensureInitialized();
     if (!this.supports("prompts")) return [];
-    const result = (await this.rpc("prompts/list", {})) as { prompts?: unknown };
-    if (!Array.isArray(result?.prompts)) return [];
-    return result.prompts.flatMap((prompt) => {
+    const pages = await this.pages("prompts/list", "prompts");
+    return pages.flatMap((prompt) => {
       const { name, description, arguments: args } = (prompt ?? {}) as Record<string, unknown>;
       if (typeof name !== "string" || !name) return [];
       const parsed = (Array.isArray(args) ? args : []).flatMap((argument) => {

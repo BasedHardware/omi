@@ -2166,6 +2166,64 @@ test("registerUserMcpTools: prompts are not requested from a server that has non
   }
 });
 
+// A server with more tools than its page size returns a nextCursor. Ignoring it
+// truncated the list, and the tools past the first page did not exist as far as
+// chat was concerned.
+test("registerUserMcpTools: every page of a paginated tool list is registered", async () => {
+  const { createServer: createHttpServer } = await import("node:http");
+  const cursors: Array<string | undefined> = [];
+  const httpServer = createHttpServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => {
+      const message = JSON.parse(body) as { id?: number; method: string; params?: { cursor?: string } };
+      if (message.id === undefined) { res.writeHead(202).end(); return; }
+      const respond = (result: unknown) => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+      };
+      if (message.method === "initialize") {
+        respond({ protocolVersion: "2025-06-18", capabilities: { tools: {} } });
+      } else if (message.method === "tools/list") {
+        cursors.push(message.params?.cursor);
+        if (!message.params?.cursor) {
+          respond({ tools: [{ name: "one", inputSchema: { type: "object" } }], nextCursor: "p2" });
+        } else if (message.params.cursor === "p2") {
+          respond({ tools: [{ name: "two", inputSchema: { type: "object" } }], nextCursor: "p3" });
+        } else {
+          // Repeating the cursor must end the walk, not loop on it forever.
+          respond({ tools: [{ name: "three", inputSchema: { type: "object" } }], nextCursor: "p3" });
+        }
+      } else {
+        respond({});
+      }
+    });
+  });
+  await new Promise<void>((r) => httpServer.listen(0, "127.0.0.1", r));
+  const address = httpServer.address() as { port: number };
+
+  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-pages-"));
+  const configPath = pathJoin(dir, "mcp-servers.json");
+  await writeFile(configPath, JSON.stringify({ mcpServers: {
+    big: { url: `http://127.0.0.1:${address.port}/mcp` },
+  } }));
+  const previous = process.env.OMI_LOCAL_MCP_FILE;
+  process.env.OMI_LOCAL_MCP_FILE = configPath;
+
+  try {
+    const registered: Array<{ name: string }> = [];
+    const fakePi = { registerTool: (tool: never) => { registered.push(tool); } } as unknown as Parameters<typeof __registerUserMcpToolsForTest>[0];
+    await __registerUserMcpToolsForTest(fakePi);
+
+    assert.deepEqual(registered.map((t) => t.name), ["mcp_big_one", "mcp_big_two", "mcp_big_three"]);
+    assert.deepEqual(cursors, [undefined, "p2", "p3"]);
+  } finally {
+    if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
+    httpServer.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("registerUserMcpTools: unreachable server is skipped, never fatal", async () => {
   const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-bad-"));
   const configPath = pathJoin(dir, "mcp-servers.json");
