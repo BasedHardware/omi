@@ -87,9 +87,6 @@ enum ExtensionCatalog {
       case mcpRegistry(baseURL: URL)
       /// A GitHub repository laid out like `anthropics/skills`: one `skills/<slug>/SKILL.md` each.
       case githubSkillsRepo(repo: String, ref: String)
-      /// Smithery's registry, which unlike the official one publishes a verification flag, a usage
-      /// count, and an icon per server — the ranking signals that decide what is worth showing.
-      case smithery(baseURL: URL)
     }
 
     let kind: Kind
@@ -97,7 +94,6 @@ enum ExtensionCatalog {
   }
 
   static let defaultSources: [Source] = [
-    Source(kind: .mcp, feed: .smithery(baseURL: URL(string: "https://registry.smithery.ai")!)),
     Source(
       kind: .mcp,
       feed: .mcpRegistry(baseURL: URL(string: "https://registry.modelcontextprotocol.io")!)),
@@ -128,9 +124,6 @@ enum ExtensionCatalog {
     case "mcp-registry":
       guard let url = (raw["url"] as? String).flatMap(URL.init(string:)) else { return nil }
       return Source(kind: kind, feed: .mcpRegistry(baseURL: url))
-    case "smithery":
-      guard let url = (raw["url"] as? String).flatMap(URL.init(string:)) else { return nil }
-      return Source(kind: kind, feed: .smithery(baseURL: url))
     case "github-skills":
       guard let repo = raw["repo"] as? String, !repo.isEmpty else { return nil }
       return Source(kind: kind, feed: .githubSkillsRepo(repo: repo, ref: raw["ref"] as? String ?? "main"))
@@ -140,6 +133,24 @@ enum ExtensionCatalog {
   }
 
   // MARK: - MCP registry decoding
+
+  /// Namespaces this app will not list. `ai.smithery` republishes other people's servers behind a
+  /// Smithery-hosted endpoint and a Smithery consent screen — a second account and a second OAuth
+  /// hop between the user and a server they can install directly from its publisher.
+  static let excludedNamespaces: Set<String> = ["ai.smithery"]
+
+  /// A registry namespace is DNS-verified, but `io.github.<user>` only proves someone holds a
+  /// GitHub account. Search hits under a brand's own domain therefore rank above them; within each
+  /// group the registry's own order is preserved.
+  static func ranked(_ entries: [Entry]) -> [Entry] {
+    entries.enumerated()
+      .sorted { lhs, rhs in
+        let left = lhs.element.publisher.hasPrefix("io.github.") ? 1 : 0
+        let right = rhs.element.publisher.hasPrefix("io.github.") ? 1 : 0
+        return left == right ? lhs.offset < rhs.offset : left < right
+      }
+      .map(\.element)
+  }
 
   /// Newest-version-wins by server name. The registry returns one record per published version, so
   /// listing it raw shows the same server three times.
@@ -153,11 +164,12 @@ enum ExtensionCatalog {
     for record in servers {
       guard let server = record["server"] as? [String: Any],
         let name = server["name"] as? String, !name.isEmpty,
+        !excludedNamespaces.contains(String(name.split(separator: "/").first ?? "")),
         let entry = mcpEntry(from: server, qualifiedName: name)
       else { continue }
       if byName.updateValue(entry, forKey: name) == nil { order.append(name) }
     }
-    return order.compactMap { byName[$0] }
+    return ranked(order.compactMap { byName[$0] })
   }
 
   private static func mcpEntry(
@@ -284,74 +296,6 @@ enum ExtensionCatalog {
       else { return nil }
       return value
     }
-  }
-
-  // MARK: - Smithery decoding
-
-  /// Smithery lists a server before saying how to reach it, so a listing row is only a candidate:
-  /// `deploymentUrl` arrives with the per-server detail the service fetches next.
-  struct SmitheryCandidate: Equatable {
-    let qualifiedName: String
-    let displayName: String
-    let description: String
-    let iconURL: String
-    let homepage: String?
-    let useCount: Int
-  }
-
-  /// Unverified entries are dropped. Anyone can publish, and an unvetted server is a command or a
-  /// credentialed endpoint the user would be trusting on our recommendation.
-  static func smitheryCandidates(fromListing data: Data) -> [SmitheryCandidate] {
-    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let servers = root["servers"] as? [[String: Any]]
-    else { return [] }
-    return servers.compactMap { server in
-      guard let name = server["qualifiedName"] as? String, !name.isEmpty,
-        server["verified"] as? Bool == true,
-        server["inactive"] as? Bool != true,
-        server["unlisted"] as? Bool != true,
-        // Only deployed remotes are installable here; a Smithery-hosted local package is not
-        // something this app can run.
-        server["remote"] as? Bool == true, server["isDeployed"] as? Bool == true
-      else { return nil }
-      let icon = (server["iconUrl"] as? String).flatMap { $0.hasPrefix("https://") ? $0 : nil } ?? ""
-      return SmitheryCandidate(
-        qualifiedName: name,
-        displayName: (server["displayName"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? name,
-        description: (server["description"] as? String) ?? "",
-        iconURL: icon,
-        homepage: (server["homepage"] as? String).flatMap { $0.isEmpty ? nil : $0 },
-        useCount: server["useCount"] as? Int ?? 0)
-    }
-  }
-
-  /// The candidate plus its endpoint. Config the server declares required becomes the sheet's
-  /// fields; Smithery servers are OAuth-protected resources, so most declare none and authorize on
-  /// first connect.
-  static func smitheryEntry(fromDetail data: Data, candidate: SmitheryCandidate) -> Entry? {
-    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-      return nil
-    }
-    let connections = (root["connections"] as? [[String: Any]]) ?? []
-    let httpConnection = connections.first { ($0["type"] as? String) == "http" } ?? connections.first
-    guard
-      let deployment = (httpConnection?["deploymentUrl"] as? String)
-        ?? (root["deploymentUrl"] as? String), !deployment.isEmpty
-    else { return nil }
-
-    return Entry(
-      id: "smithery/\(candidate.qualifiedName)",
-      name: candidate.displayName,
-      subtitle: "Remote",
-      detail: candidate.description,
-      iconURL: candidate.iconURL,
-      websiteURL: candidate.homepage,
-      publisher: "smithery.ai",
-      // No key is asked for even when the server declares required config: Smithery servers are
-      // OAuth-protected resources, and that config is collected by Smithery's own consent screen,
-      // not sent by us as a header. Asking for it here would prompt for a value the user does not
-      // have and store it somewhere it does nothing.
-      install: .mcpRemote(url: deployment, transport: "http", secretHeader: nil))
   }
 
   // MARK: - GitHub skills repo decoding

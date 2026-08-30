@@ -27,67 +27,7 @@ enum ExtensionCatalogService {
   /// alphabetical listing; typing searches the whole registry.
   static func mcpEntries(search: String) async -> [ExtensionCatalog.Entry] {
     let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-    // Curated first-party servers lead, then Smithery's verified and ranked list. Both registries
-    // contribute in both modes: the curated names are the ones a user recognises, and Smithery is
-    // the only source with a verification flag and a usage signal to rank the rest by.
-    async let leadingTask = query.isEmpty ? featuredMcpEntries() : searchMcpEntries(search: query)
-    async let smitheryTask = smitheryEntries(search: query)
-    var entries = await leadingTask
-    var seen = Set(entries.map { $0.name.lowercased() })
-    for entry in await smitheryTask where seen.insert(entry.name.lowercased()).inserted {
-      entries.append(entry)
-    }
-    return entries
-  }
-
-  /// Verified, deployed Smithery servers. The listing carries no endpoint, so each candidate's
-  /// detail is fetched concurrently; a candidate whose detail fails is dropped rather than shown as
-  /// a tile that cannot install.
-  static func smitheryEntries(search: String, limit: Int = 24) async -> [ExtensionCatalog.Entry] {
-    guard
-      let baseURL = ExtensionCatalog.sources(kind: .mcp).compactMap({ source -> URL? in
-        if case .smithery(let url) = source.feed { return url }
-        return nil
-      }).first
-    else { return [] }
-    guard let listing = smitheryListingURL(base: baseURL, search: search, limit: limit),
-      let data = await get(listing, area: "extension_catalog_smithery")
-    else { return [] }
-
-    let candidates = ExtensionCatalog.smitheryCandidates(fromListing: data)
-    let resolved = await withTaskGroup(of: (Int, ExtensionCatalog.Entry?).self) { group in
-      for (index, candidate) in candidates.enumerated() {
-        group.addTask {
-          guard let url = smitheryDetailURL(base: baseURL, qualifiedName: candidate.qualifiedName),
-            let detail = await get(url, area: "extension_catalog_smithery_detail")
-          else { return (index, nil) }
-          return (index, ExtensionCatalog.smitheryEntry(fromDetail: detail, candidate: candidate))
-        }
-      }
-      var byIndex: [Int: ExtensionCatalog.Entry] = [:]
-      for await (index, entry) in group { byIndex[index] = entry }
-      return byIndex
-    }
-    // Registry ranking, not completion order.
-    return candidates.indices.compactMap { resolved[$0] }
-  }
-
-  static func smitheryListingURL(base: URL, search: String, limit: Int) -> URL? {
-    var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
-    components?.path = "/servers"
-    var items = [URLQueryItem(name: "pageSize", value: String(limit))]
-    let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !query.isEmpty { items.append(URLQueryItem(name: "q", value: query)) }
-    components?.queryItems = items
-    return components?.url
-  }
-
-  static func smitheryDetailURL(base: URL, qualifiedName: String) -> URL? {
-    let escaped =
-      qualifiedName.addingPercentEncoding(
-        withAllowedCharacters: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~/")))
-      ?? qualifiedName
-    return URL(string: "/servers/\(escaped)", relativeTo: base)?.absoluteURL
+    return query.isEmpty ? await featuredMcpEntries() : await searchMcpEntries(search: query)
   }
 
   /// Each featured server is fetched by exact name and independently: one unpublished or renamed

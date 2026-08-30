@@ -30,25 +30,37 @@ omitting `resource` — fails every hosted provider.
 ## Marketplace
 
 `ExtensionCatalog` / `ExtensionCatalogService` read browsable catalogs. Sources
-live in ~/.omi/catalogs.json and default to two per kind:
+live in ~/.omi/catalogs.json and default to:
 
 ```json
 { "catalogs": [
-  { "kind": "mcp",   "type": "smithery",     "url": "https://registry.smithery.ai" },
   { "kind": "mcp",   "type": "mcp-registry", "url": "https://registry.modelcontextprotocol.io" },
   { "kind": "skill", "type": "github-skills", "repo": "anthropics/skills", "ref": "main" }
 ] }
 ```
 
 A file that configures one kind leaves the other on its defaults. Feeds are
-resolved by type, never by position.
+resolved by type, never by position, and an unrecognised `type` is dropped
+rather than failing the file back to the defaults.
 
-The official registry publishes no popularity, rating, or curation signal — its
-only query params are cursor/limit/search/version — and a vendor namespace only
-proves the publisher owns *some* domain. So with no query the MCP section shows
-`featuredMcpServers`, a curated list of names confirmed present under their
-brand's DNS-verified namespace, followed by Smithery's verified and ranked
-entries; typing searches both. Install data always comes from the registry.
+**MCP servers come only from the official registry.** It is the one index whose
+namespaces are DNS-verified against the publisher's own domain, so an install
+points at the vendor's own endpoint with the vendor's own OAuth. A broker
+registry adds a second account and a second consent screen in front of a server
+the user can reach directly — `excludedNamespaces` drops `ai.smithery/*` for the
+same reason even though it is published to the official registry.
+
+The registry publishes no popularity, rating, or curation signal — its only
+query params are cursor/limit/search/version. So with no query the MCP section
+shows `featuredMcpServers`, a curated list of names confirmed present under
+their brand's DNS-verified namespace. Typing searches the whole registry, with
+`io.github.<user>` namespaces ranked below branded ones (a GitHub namespace
+proves only that someone holds a GitHub account). Install data always comes from
+the registry, never from the curated list.
+
+A package's declared arguments are replayed as published, named flags included
+(`-t stdio`); an argument whose value is a `{placeholder}` is skipped, because
+nothing here can fill it.
 
 Logos come only from publisher-controlled URLs — the registry's declared
 `icons` (HTTPS only), else the GitHub owner avatar, else the site's favicon,
