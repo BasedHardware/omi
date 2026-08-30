@@ -238,8 +238,30 @@ actor DataAnswerAssistant {
           ? "the answer came back empty"
           : "not found: \(missing.joined(separator: ", "))")
     }
+    // A single item that is an apology is the model reporting failure through the one
+    // field meant for values. Measured: asking for a Python syllabus put "The
+    // information ... was not found in your recent activity, screen history, or stored
+    // memories" on the panel as the thing to copy. Nobody copies that.
+    if items.count == 1, isAbsenceStatement(items[0].text) {
+      return .nothing(reason: items[0].text)
+    }
     let title = (step.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     return .answer(title: title.isEmpty ? "Found for you" : title, items: items, missing: missing)
+  }
+
+  /// Whether a would-be value is really a report that there is no value.
+  ///
+  /// Narrow on purpose: it only disqualifies an item when that item is the whole answer,
+  /// and it looks for a stated absence rather than any negative word, so a memory that
+  /// happens to say "no dairy" is still a value the user can copy.
+  nonisolated static func isAbsenceStatement(_ text: String) -> Bool {
+    let lowered = text.lowercased()
+    let markers = [
+      "not found", "no information", "couldn't find", "could not find", "wasn't found",
+      "was not found", "nothing found", "no results", "not available in", "does not appear in",
+      "doesn't appear in", "no record of", "unable to find", "i don't have",
+    ]
+    return markers.contains { lowered.contains($0) }
   }
 
   /// The subtitle while a step runs — and the allowlist: an action without one is not
@@ -334,6 +356,11 @@ actor DataAnswerAssistant {
     URL, a bare address, a bare number, with no commentary around it. Never leave a
     value you hold out of items because something else was missing; items is empty only
     when nothing at all was found.
+
+    items holds values, never explanations. A sentence saying something was not found,
+    an apology, or a note about what you searched is NOT an item — it goes in missing,
+    by name, and if that leaves items empty then items is empty. A panel exists to be
+    copied from, and nobody copies "this was not found in your memories".
 
     NEVER invent a value. Every item must be traceable to the user block, the profile,
     an opened ref, or a search result; the user will paste these somewhere real, so a

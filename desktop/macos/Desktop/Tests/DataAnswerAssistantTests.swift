@@ -90,3 +90,57 @@ final class DataAnswerAssistantTests: XCTestCase {
     }
   }
 }
+
+/// The panel is for values. Measured live: asking for a beginner Python syllabus routed
+/// to find_and_show, found nothing in the user's data, and put "The information about an
+/// 18-chapter beginner Python course syllabus was not found in your recent activity,
+/// screen history, or stored memories" on screen as the thing to copy.
+final class DataAnswerAbsenceGuardTests: XCTestCase {
+  private func step(items: [(String, String)], missing: [String] = []) -> DataAnswerAssistant.Step {
+    let json: [String: Any] = [
+      "action": "present_answer", "query": "", "title": "Result",
+      "items": items.map { ["label": $0.0, "text": $0.1] }, "missing": missing,
+    ]
+    let data = try! JSONSerialization.data(withJSONObject: json)
+    return DataAnswerAssistant.decodeStep(String(data: data, encoding: .utf8)!)!
+  }
+
+  func testALoneApologyIsNotAnAnswer() {
+    let outcome = DataAnswerAssistant.outcome(
+      of: step(items: [("", "That was not found in your stored memories.")]))
+    guard case .nothing = outcome else {
+      return XCTFail("an apology must take the panel down, not fill it")
+    }
+  }
+
+  func testRealValuesStillPresent() {
+    let outcome = DataAnswerAssistant.outcome(
+      of: step(items: [("Email", "a@b.c"), ("Site", "example.dev")]))
+    guard case .answer(_, let items, _) = outcome else { return XCTFail("expected an answer") }
+    XCTAssertEqual(items.count, 2)
+  }
+
+  /// Narrow on purpose: a value that merely contains a negative word is still a value.
+  func testAValueThatHappensToSoundNegativeIsKept() {
+    let outcome = DataAnswerAssistant.outcome(
+      of: step(items: [("Diet", "No dairy, no shellfish")]))
+    guard case .answer(_, let items, _) = outcome else { return XCTFail("expected an answer") }
+    XCTAssertEqual(items.first?.text, "No dairy, no shellfish")
+  }
+
+  /// The guard only fires when the apology is the whole answer — a real value beside it
+  /// means the panel is still worth showing.
+  func testAnApologyBesideARealValueDoesNotDropThePanel() {
+    let outcome = DataAnswerAssistant.outcome(
+      of: step(items: [("Email", "a@b.c"), ("", "The phone number was not found.")]))
+    guard case .answer(_, let items, _) = outcome else { return XCTFail("expected an answer") }
+    XCTAssertEqual(items.count, 2)
+  }
+
+  func testTheSpokenReasonCarriesWhatTheModelSaid() {
+    let outcome = DataAnswerAssistant.outcome(
+      of: step(items: [("", "I don't have that in your memories.")]))
+    guard case .nothing(let reason) = outcome else { return XCTFail("expected nothing") }
+    XCTAssertTrue(reason.contains("I don't have that"))
+  }
+}

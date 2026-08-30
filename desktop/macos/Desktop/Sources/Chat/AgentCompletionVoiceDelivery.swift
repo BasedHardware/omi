@@ -25,6 +25,21 @@ final class AgentCompletionVoiceDelivery {
   /// not trigger kernel delta reads.
   static let triggerSurfaceKinds: Set<String> = ["floating_bar", "service", "workstream"]
 
+  /// Appended to every completion handed to the voice session.
+  ///
+  /// Measured: a spawned run finished and the model said "that description is ready,
+  /// I'm putting it on your screen now" — and called nothing, so nothing went up. A
+  /// completion arrives as text to mention, and mentioning it is all the model does
+  /// unless something says otherwise. Naming the tool at the moment the finished text
+  /// is in hand is what turns the narration into a panel.
+  static let screenReminder = """
+
+
+    If the user asked for this to be on their screen — to copy, paste, or keep — then \
+    saying it is ready is not enough and neither is speaking it: call show_panel with \
+    the finished text in this same turn. Say one short line about what went up.
+    """
+
   struct Delta {
     let ids: [String]
     let prompt: String
@@ -157,7 +172,7 @@ final class AgentCompletionVoiceDelivery {
     }
     guard isVoiceSessionLive() else { return }
     guard let delta = await peekDelta() else { return }
-    guard await injectContext(delta.prompt) else {
+    guard await injectContext(delta.prompt + Self.screenReminder) else {
       log("AgentCompletionVoiceDelivery: completion context not delivered; checkpoint unadvanced")
       return
     }
