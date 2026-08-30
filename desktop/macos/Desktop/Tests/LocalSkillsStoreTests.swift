@@ -86,6 +86,38 @@ final class LocalSkillsStoreTests: XCTestCase {
     XCTAssertEqual(left, [slug])
   }
 
+  /// A half-finished install must not be offered as a skill, however it got there — a crash, or a
+  /// folder a user dropped in by hand.
+  func testHiddenDirectoriesAreNotSkills() throws {
+    let slug = try LocalSkillsStore.saveSkillBundle(
+      title: "Real", markdown: "---\nname: x\ndescription: d\n---\nBody.", files: [:])
+    let phantom = LocalSkillsStore.skillsDirURL.appendingPathComponent(".half.incoming")
+    try FileManager.default.createDirectory(at: phantom, withIntermediateDirectories: true)
+    try Data("---\nname: y\ndescription: d\n---\nBody.".utf8)
+      .write(to: phantom.appendingPathComponent("SKILL.md"))
+
+    XCTAssertEqual(LocalSkillsStore.listSkills().map(\.slug), [slug])
+  }
+
+  /// A reinstall that fails partway must leave the working skill installed. Deleting the
+  /// destination before the move meant a throw on the move lost both versions.
+  func testAFailedBundleWriteLeavesThePreviousVersionInstalled() throws {
+    let slug = try LocalSkillsStore.saveSkillBundle(
+      title: "Keeper", markdown: "---\nname: x\ndescription: first\n---\nOriginal body.",
+      files: ["notes.md": Data("keep".utf8)])
+
+    // A path whose parent is a file cannot be created, so the staged write throws mid-bundle.
+    XCTAssertThrowsError(
+      try LocalSkillsStore.saveSkillBundle(
+        title: "Keeper", markdown: "---\nname: x\ndescription: second\n---\nNew body.",
+        files: ["notes.md": Data("x".utf8), "notes.md/child.md": Data("y".utf8)]))
+
+    let dir = LocalSkillsStore.skillsDirURL.appendingPathComponent(slug)
+    XCTAssertEqual(
+      try String(contentsOf: dir.appendingPathComponent("notes.md"), encoding: .utf8), "keep")
+    XCTAssertTrue(try XCTUnwrap(LocalSkillsStore.loadMarkdown(slug: slug)).contains("Original body."))
+  }
+
   func testBundleSkipsPathsThatEscapeTheFolder() throws {
     let slug = try LocalSkillsStore.saveSkillBundle(
       title: "Safe", markdown: "---\nname: x\ndescription: d\n---\nBody.",

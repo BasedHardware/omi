@@ -53,7 +53,9 @@ enum LocalSkillsStore {
   static func listSkills() -> [Skill] {
     let fm = FileManager.default
     guard let dirs = try? fm.contentsOfDirectory(atPath: skillsDirURL.path) else { return [] }
-    return dirs.sorted().compactMap { slug in
+    // A dot-prefixed entry is never a skill: it is a half-finished install, and listing one would
+    // offer the user a skill that is about to be replaced or removed.
+    return dirs.filter { !$0.hasPrefix(".") }.sorted().compactMap { slug in
       let path = skillsDirURL.appendingPathComponent(slug).appendingPathComponent("SKILL.md").path
       guard fm.fileExists(atPath: path),
         let content = try? String(contentsOfFile: path, encoding: .utf8)
@@ -112,22 +114,31 @@ enum LocalSkillsStore {
     }
     let fm = FileManager.default
     let destination = skillsDirURL.appendingPathComponent(slug, isDirectory: true)
-    let staging = skillsDirURL.appendingPathComponent(".\(slug).incoming", isDirectory: true)
-    try? fm.removeItem(at: staging)
+    try fm.createDirectory(at: skillsDirURL, withIntermediateDirectories: true)
+
+    // Staged outside the skills folder so a crash mid-install cannot leave a directory the
+    // catalog would read, and swapped in with `replaceItemAt` so the old version survives a
+    // failure: deleting the destination first means a move that throws — a full disk, a denied
+    // write — takes the working skill with it and leaves nothing.
+    let staging = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+      .appendingPathComponent("omi-skill-\(slug)-\(UUID().uuidString)", isDirectory: true)
     try fm.createDirectory(at: staging, withIntermediateDirectories: true)
     defer { try? fm.removeItem(at: staging) }
 
     try Data(normalize(markdown: markdown, slug: slug).utf8)
       .write(to: staging.appendingPathComponent("SKILL.md"), options: .atomic)
-    for (path, data) in files where path != "SKILL.md" {
+    for (path, data) in files where path.caseInsensitiveCompare("SKILL.md") != .orderedSame {
       guard ExtensionCatalog.SkillSource.isSafe(path: path) else { continue }
       let file = staging.appendingPathComponent(path)
       try fm.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
       try data.write(to: file, options: .atomic)
     }
 
-    try? fm.removeItem(at: destination)
-    try fm.moveItem(at: staging, to: destination)
+    if fm.fileExists(atPath: destination.path) {
+      _ = try fm.replaceItemAt(destination, withItemAt: staging)
+    } else {
+      try fm.moveItem(at: staging, to: destination)
+    }
     ensurePluginManifest()
     notifyChanged()
     return slug
