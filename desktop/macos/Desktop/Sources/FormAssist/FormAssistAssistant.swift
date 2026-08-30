@@ -142,6 +142,23 @@ actor FormAssistAssistant: ProactiveAssistant {
   /// the spam the ✓ exists to prevent, so no is remembered for as long as the app runs.
   private var declined: Set<String> = []
 
+  /// When each form's offer ran out with neither the ✓ nor the ✗, and how long that
+  /// keeps it quiet.
+  ///
+  /// Not a decline. The ✗ is the user saying no and is remembered for the whole run; a
+  /// countdown running out is the much weaker claim that they did not act on a card for
+  /// four minutes, which is equally what stepping away looks like. Long enough that
+  /// ignoring it once is not answered with another card; short enough that coming back
+  /// to the form an hour later still gets help.
+  private var expiredOffers: [String: Date] = [:]
+  static let expiredOfferBackoff: TimeInterval = 30 * 60
+
+  /// Whether a form whose offer ran out may be offered again yet.
+  nonisolated static func offerIsQuiet(expiredAt: Date?, now: Date) -> Bool {
+    guard let expiredAt else { return false }
+    return now.timeIntervalSince(expiredAt) < expiredOfferBackoff
+  }
+
   /// A page load fires several triggers at once, and the model call outlives all of
   /// them. Without this the same form is answered two or three times in parallel.
   private var isEvaluating = false
@@ -246,6 +263,9 @@ actor FormAssistAssistant: ProactiveAssistant {
       return
     }
     guard !declined.contains(snapshot.fingerprint) else { return }
+    guard !Self.offerIsQuiet(expiredAt: expiredOffers[snapshot.fingerprint], now: Date())
+    else { return }
+    expiredOffers[snapshot.fingerprint] = nil
 
     if let previous = offers.last(where: { $0.fingerprint == snapshot.fingerprint }) {
       // Already answered. Re-show what it produced, or stay quiet if it produced nothing
@@ -341,8 +361,10 @@ actor FormAssistAssistant: ProactiveAssistant {
   }
 
   private func retireOffer(_ fingerprint: String) {
-    declined.insert(fingerprint)
-    log("FormAssist: offer expired unanswered, this form will not be offered again")
+    expiredOffers[fingerprint] = Date()
+    log(
+      "FormAssist: offer expired unanswered, this form is quiet for "
+        + "\(Int(Self.expiredOfferBackoff / 60))m")
   }
 
   /// The user said yes. From here it is the same work the asked-for path does, and the

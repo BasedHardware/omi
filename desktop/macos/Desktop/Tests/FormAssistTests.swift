@@ -471,6 +471,26 @@ final class FormAssistOfferTests: XCTestCase {
   }
 
   /// A form of plain details promises no writing, and one field is not "1 fields".
+  /// An offer that ran out is not an offer that was refused. The ✗ is the user saying no
+  /// and is remembered for the whole run; a countdown running out is the weaker claim
+  /// that they did not act on a card for four minutes, which is equally what stepping
+  /// away from the desk looks like. So it goes quiet, then it is allowed back.
+  func testAnExpiredOfferGoesQuietRatherThanBeingRefusedForever() {
+    let expiredAt = Date()
+    XCTAssertTrue(
+      FormAssistAssistant.offerIsQuiet(
+        expiredAt: expiredAt, now: expiredAt.addingTimeInterval(60)))
+    XCTAssertFalse(
+      FormAssistAssistant.offerIsQuiet(
+        expiredAt: expiredAt,
+        now: expiredAt.addingTimeInterval(FormAssistAssistant.expiredOfferBackoff + 1)))
+  }
+
+  /// A form nobody has ignored is never quiet.
+  func testAFormWithNoExpiredOfferIsNeverQuiet() {
+    XCTAssertFalse(FormAssistAssistant.offerIsQuiet(expiredAt: nil, now: Date()))
+  }
+
   func testAFormWithNothingToWriteSaysSo() {
     XCTAssertEqual(
       FormAssistAssistant.offerSubtitle(answerable: [field("Full name"), field("Email")]),
