@@ -78,7 +78,7 @@ from utils.retrieval.safety import (
 from utils.retrieval.web_search_gate import SERVER_WEB_SEARCH_NAME, WEB_SEARCH_TOOL, request_tools_after_private_taint
 from utils.observability.fallback import record_fallback
 from utils.llm.byok_errors import handle_llm_error_async
-from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
+from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, get_model, num_tokens_from_string
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.byok import get_byok_key
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
@@ -111,6 +111,25 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+CHAT_PROVIDER_ENV_VAR = 'CHAT_PROVIDER'
+SUPPORTED_CHAT_PROVIDERS = frozenset({'anthropic', 'openai'})
+
+
+def _configured_chat_provider() -> str:
+    """Resolve the self-hosted chat provider at the request boundary."""
+    provider = os.getenv(CHAT_PROVIDER_ENV_VAR, 'anthropic').strip().lower()
+    if provider not in SUPPORTED_CHAT_PROVIDERS:
+        record_fallback(
+            component='other',
+            from_mode=provider,
+            to_mode='anthropic',
+            reason='config_incomplete',
+            outcome='recovered',
+            log=logger,
+        )
+        return 'anthropic'
+    return provider
 
 
 async def _resolve_jit_conversation_retrieval(uid: str) -> bool:
@@ -1064,13 +1083,15 @@ async def _run_openai_agent_stream(
     full_response: list,
     safety_guard: AgentSafetyGuard,
     configurable: dict,
+    *,
+    model_feature: str = 'chat_agent',
 ) -> Optional[str]:
-    """Run the managed agent loop through the OpenAI chat-completions contract."""
+    """Run the agent loop through an OpenAI-compatible chat-completions contract."""
     try:
-        chat_model = get_llm('chat_agent', streaming=True)
+        chat_model = get_llm(model_feature, streaming=True)
         chat_model = chat_model.bind(tools=tool_schemas, tool_choice='auto', max_completion_tokens=8192)
     except Exception as error:
-        await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
+        await handle_llm_error_async(error, 'openai', feature=model_feature)
         # ``put_data`` alone reaches the live stream but not the persisted answer, so the
         # router would overwrite this apology with its own canned error.
         await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
@@ -1096,7 +1117,7 @@ async def _run_openai_agent_stream(
                 usage_token = None
                 user_id = configurable.get('user_id') if isinstance(configurable, dict) else None
                 if isinstance(user_id, str) and user_id:
-                    usage_token = set_usage_context(user_id, 'chat_agent')
+                    usage_token = set_usage_context(user_id, model_feature)
                 try:
                     async for chunk in chat_model.astream([{'role': 'system', 'content': system_prompt}, *messages]):
                         chunks.append(chunk)
@@ -1140,7 +1161,7 @@ async def _run_openai_agent_stream(
                     await asyncio.sleep(AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS)
                     continue
 
-                await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
+                await handle_llm_error_async(error, 'openai', feature=model_feature, model=get_model(model_feature))
                 await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
                 await callback.end()
                 return f'provider_{type(error).__name__}'
@@ -1320,6 +1341,7 @@ async def execute_agentic_chat_stream(
     # Setup and post-setup TTFT use separate clocks so multi-second prompt/tool
     # loading cannot silently consume the first-stream-event window.
     gateway_feature_mode = False
+    direct_openai_mode = False
     try:
         # Resolve the user's timezone once and reuse it for both the system prompt and the
         # injected datetime block, avoiding a duplicate notification_db lookup per request.
@@ -1331,6 +1353,7 @@ async def execute_agentic_chat_stream(
         if setup_remaining <= 0:
             raise asyncio.TimeoutError()
         async with asyncio.timeout(setup_remaining):
+            direct_openai_mode = _configured_chat_provider() == 'openai'
             # BYOK Anthropic and CHAT_AGENT_ROUTE=direct stay off the managed OpenAI lane.
             gateway_feature_mode = should_route_chat_agent_through_gateway() and not bool(get_byok_key('anthropic'))
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
@@ -1402,6 +1425,8 @@ async def execute_agentic_chat_stream(
         yield None
         return
 
+    openai_compatible_mode = direct_openai_mode or gateway_feature_mode
+
     # Emit a client-visible progress event immediately after setup so the SSE
     # body is never silent while waiting for the first model token. This also
     # starts the post-setup first-event clock with a fresh budget.
@@ -1409,7 +1434,7 @@ async def execute_agentic_chat_stream(
     yield f'think: {AGENT_STREAM_SETUP_PROGRESS}'
 
     # Append app tool awareness to the system prompt. Anthropic discovers deferred app tools
-    # through its server-side search tool; the OpenAI-compatible gateway receives those tools
+    # through its server-side search tool; OpenAI-compatible providers receive those tools
     # directly and must be told to call them by name.
     if app_tools:
         app_names = set()
@@ -1417,7 +1442,7 @@ async def execute_agentic_chat_stream(
             # Tool names are prefixed with app_id; extract the human-readable app name from description
             app_names.add(t.name)
         app_tool_names = ", ".join(sorted(app_names))
-        if gateway_feature_mode:
+        if openai_compatible_mode:
             system_prompt += f"""
 
 <available_app_tools>
@@ -1446,14 +1471,14 @@ IMPORTANT: Always search for and use these tools when relevant. Never tell the u
 You have fetch_url_tool available. When the user shares any URL (starting with http:// or https://), you MUST call fetch_url_tool to read its content before responding. Never say you cannot browse, visit, or read a URL. Always attempt to fetch it first.
 </url_fetching_instructions>"""
 
-    # Build the canonical tool schemas once. Direct mode keeps Anthropic's shape;
-    # managed mode converts function tools to the OpenAI-compatible shape below.
+    # Build the canonical tool schemas once. Direct Anthropic mode keeps its native
+    # shape; OpenAI-compatible providers use function-tool schemas.
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
-    if gateway_feature_mode:
+    if openai_compatible_mode:
         # Anthropic's native web_search server tool is not understood by the
-        # OpenAI-compatible gateway. Expose the existing Perplexity-backed
-        # function tool in the managed lane and register the same object for
-        # execution; direct Anthropic mode keeps the native server tool above.
+        # OpenAI-compatible providers. Expose the existing Perplexity-backed
+        # function tool and register the same object for execution; direct
+        # Anthropic mode keeps the native server tool above.
         tool_registry = dict(tool_registry)
         tool_registry[perplexity_web_search_tool.name] = perplexity_web_search_tool
         tool_schemas = [
@@ -1515,22 +1540,49 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
                 'references': evidence_references[:24],
             }
 
-    # Start the provider-specific agent task. Direct mode retains the native Anthropic
-    # Messages contract for BYOK/specialist callers; managed feature mode uses the gateway's
-    # OpenAI-compatible chat-completions contract.
-    agent_runner = _run_openai_agent_stream if gateway_feature_mode else _run_anthropic_agent_stream
-    task = asyncio.create_task(
-        agent_runner(
-            system_prompt,
-            anthropic_messages,
-            tool_schemas,
-            tool_registry,
-            callback,
-            full_response,
-            safety_guard,
-            configurable,
+    # Start the provider-specific agent task. Direct Anthropic mode retains the
+    # native Messages contract. Managed and self-hosted OpenAI modes share the
+    # supervised OpenAI-compatible runner but resolve different model features.
+    if direct_openai_mode:
+        task = asyncio.create_task(
+            _run_openai_agent_stream(
+                system_prompt,
+                anthropic_messages,
+                tool_schemas,
+                tool_registry,
+                callback,
+                full_response,
+                safety_guard,
+                configurable,
+                model_feature='chat_graph',
+            )
         )
-    )
+    elif gateway_feature_mode:
+        task = asyncio.create_task(
+            _run_openai_agent_stream(
+                system_prompt,
+                anthropic_messages,
+                tool_schemas,
+                tool_registry,
+                callback,
+                full_response,
+                safety_guard,
+                configurable,
+            )
+        )
+    else:
+        task = asyncio.create_task(
+            _run_anthropic_agent_stream(
+                system_prompt,
+                anthropic_messages,
+                tool_schemas,
+                tool_registry,
+                callback,
+                full_response,
+                safety_guard,
+                configurable,
+            )
+        )
 
     def keep_streamed_answer() -> bool:
         """Preserve what already reached the user when the stream stops early.
