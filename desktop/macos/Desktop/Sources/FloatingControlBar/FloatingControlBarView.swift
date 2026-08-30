@@ -1278,51 +1278,22 @@ struct FloatingControlBarView: View {
     // nothing. Wrapping the whole card in a single Button with
     // contentShape(Rectangle()) makes every pixel clickable. The dismiss
     // (X) button sits in an overlay on top so it keeps its own hit region.
-    Button {
+    let copy = FloatingControlBarManager.notificationCardCopy(
+      title: notification.title,
+      message: notification.message,
+      kind: notification.kind
+    )
+    return Button {
       FloatingControlBarManager.shared.openNotificationAsChat(notification)
     } label: {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
-        ZStack {
-          RoundedRectangle(cornerRadius: 13, style: .continuous)
-            .fill(
-              LinearGradient(
-                colors: [Color.white.opacity(0.18), Color.white.opacity(0.08)],
-                startPoint: .top,
-                endPoint: .bottom
-              )
-            )
-            .overlay(
-              RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-            )
-            .frame(width: 44, height: 44)
-
-          Image(systemName: "bell.badge.fill")
-            .font(.system(size: 18, weight: .semibold))
-            .foregroundColor(.white)
-        }
-
-        VStack(alignment: .leading, spacing: 3) {
-          Text(notification.title)
-            .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundColor(.white)
-            .lineLimit(1)
-
-          Text(notification.message)
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(.white.opacity(0.78))
-            .lineLimit(interjectInsightTeaserLimit(notification))
-            .lineSpacing(1.5)
-            .fixedSize(horizontal: false, vertical: true)
-
-          if InterjectFeature.isEnabled {
-            Text(InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens))
-              .scaledFont(size: OmiType.micro, weight: .medium)
-              .foregroundColor(.white.opacity(0.45))
-              .lineLimit(1)
-          }
-        }
-
+        FloatingBarNotificationCardLead(
+          copy: copy,
+          messageLineLimit: interjectInsightTeaserLimit(notification),
+          footer: InterjectFeature.isEnabled
+            ? InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens)
+            : nil
+        )
         Spacer(minLength: 0)
 
         // Reserve space so text never runs under the overlaid action buttons.

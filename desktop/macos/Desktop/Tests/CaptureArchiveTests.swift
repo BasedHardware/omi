@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 @testable import Omi_Computer
@@ -62,6 +63,20 @@ final class CaptureArchiveTests: XCTestCase {
     XCTAssertNotNil(repository.errorMessage)
   }
 
+  func testOfflineDetailKeepsAValidatedCachedCaptureSelected() async {
+    let cached = archiveCapture(id: "cached-omi")
+    let repository = CaptureArchiveRepository(
+      remote: CaptureArchiveRemoteFake(error: ArchiveTestError.offline),
+      local: CaptureArchiveLocalFake(rows: [cached], count: 1)
+    )
+
+    let detail = await repository.loadDetail(id: cached.id)
+
+    XCTAssertNil(detail)
+    XCTAssertEqual(repository.selectedCapture?.id, cached.id)
+    XCTAssertNotNil(repository.errorMessage)
+  }
+
   func testArchivePaginationCarriesOmiQueryAndAdvancesByVisibleRows() async {
     let first = archiveCapture(id: "omi-1")
     let second = archiveCapture(id: "omi-2")
@@ -75,6 +90,40 @@ final class CaptureArchiveTests: XCTestCase {
     XCTAssertEqual(repository.captures.map(\.id), ["omi-1", "omi-2"])
     XCTAssertEqual(remote.listQueries.map(\.offset), [0, 1])
     XCTAssertTrue(remote.listQueries.allSatisfy { $0.source == .omi && !$0.includeDiscarded })
+  }
+
+  func testCaptureFocusRoutingOnlyAcknowledgesTheMatchingCanonicalConversationAfterResolution() {
+    let focus = ChatFirstPendingFocus.capture(id: "omi-1", momentTs: 18)
+    XCTAssertEqual(
+      CaptureConversationFocusRoutingPolicy.initialMoment(for: focus, conversationID: "omi-1"),
+      18
+    )
+    XCTAssertNil(CaptureConversationFocusRoutingPolicy.initialMoment(for: focus, conversationID: "omi-2"))
+    XCTAssertNil(
+      CaptureConversationFocusRoutingPolicy.resolvedFocus(
+        for: focus,
+        conversationID: "omi-1",
+        didResolve: false
+      )
+    )
+    XCTAssertEqual(
+      CaptureConversationFocusRoutingPolicy.resolvedFocus(
+        for: focus,
+        conversationID: "omi-1",
+        didResolve: true
+      ),
+      focus
+    )
+
+    let noMoment = ChatFirstPendingFocus.capture(id: "omi-1", momentTs: nil)
+    XCTAssertEqual(
+      CaptureConversationFocusRoutingPolicy.resolvedFocus(
+        for: noMoment,
+        conversationID: "omi-1",
+        didResolve: true
+      ),
+      noMoment
+    )
   }
 
   func testRefreshReplacesSelectedCaptureWithTheRefreshedFirstPageRow() async {
@@ -105,6 +154,44 @@ final class CaptureArchiveTests: XCTestCase {
 
     XCTAssertTrue(repository.captures.isEmpty)
     XCTAssertNil(repository.selectedCapture)
+  }
+
+  func testClearingSelectionDismissesTheCanonicalDetail() {
+    let selected = archiveCapture(id: "omi-1")
+    let repository = CaptureArchiveRepository(
+      remote: CaptureArchiveRemoteFake(rows: [selected], count: 1),
+      local: CaptureArchiveLocalFake()
+    )
+
+    repository.select(selected)
+    repository.clearSelection()
+
+    XCTAssertNil(repository.selectedCapture)
+  }
+
+  func testRuntimeOwnerChangeClearsThePreviousOwnersArchiveProjection() async {
+    let capture = archiveCapture(id: "omi-1")
+    let remote = CaptureArchiveRemoteFake(rows: [capture], count: 1)
+    let repository = CaptureArchiveRepository(
+      remote: remote,
+      local: CaptureArchiveLocalFake()
+    )
+    await repository.loadInitial()
+    repository.select(capture)
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertTrue(repository.captures.isEmpty)
+    XCTAssertNil(repository.selectedCapture)
+    XCTAssertNil(repository.count)
+    XCTAssertFalse(repository.isLoading)
+    XCTAssertNil(repository.errorMessage)
+
+    remote.rows = [archiveCapture(id: "new-owner-omi")]
+    await repository.loadInitial()
+
+    XCTAssertEqual(repository.captures.map(\.id), ["new-owner-omi"])
+    XCTAssertEqual(remote.listQueries.count, 2)
   }
 
   func testConversationEndpointIncludesSourceInSharedListAndCountFilters() {
@@ -151,6 +238,43 @@ final class CaptureArchiveTests: XCTestCase {
     }
     XCTAssertEqual(try XCTUnwrap(artifact.artifactOffset(forWallOffset: 17.5)), 8.5, accuracy: 0.001)
     XCTAssertNil(artifact.artifactOffset(forWallOffset: 22))
+    XCTAssertEqual(try XCTUnwrap(artifact.wallOffset(forArtifactOffset: 8.5)), 17.5, accuracy: 0.001)
+    XCTAssertNil(artifact.wallOffset(forArtifactOffset: 13))
+  }
+
+  func testTranscriptFollowMapsPlaybackAcrossAggregateSpansAndFileFallback() {
+    let segments = [
+      TranscriptSegment(
+        id: "first", text: "First", speaker: "SPEAKER_1", isUser: false, personId: nil, start: 12,
+        end: 14, translations: []),
+      TranscriptSegment(
+        id: "second", backendId: "server-second", text: "Second", speaker: "SPEAKER_1", isUser: false,
+        personId: nil, start: 17, end: 19, translations: []),
+    ]
+    let aggregate = CapturePlaybackResolution.readyAggregate(
+      CapturePlaybackArtifact(
+        signedURL: URL(string: "https://example.test/capture.mp3")!, duration: 40,
+        spans: [CaptureAudioURLSpan(fileID: "part-a", wallOffset: 12, artifactOffset: 3, length: 10)]
+      ))
+    let fallback = CapturePlaybackResolution.fileFallback(
+      CapturePlaybackFile(
+        id: "part-a", signedURL: URL(string: "https://example.test/part-a.mp3")!, duration: 40
+      ))
+
+    XCTAssertEqual(
+      CaptureTranscriptFollowPolicy.activeSegmentID(
+        atPlaybackOffset: 8.5, resolution: aggregate, segments: segments),
+      "server-second"
+    )
+    XCTAssertNil(
+      CaptureTranscriptFollowPolicy.activeSegmentID(
+        atPlaybackOffset: 30, resolution: aggregate, segments: segments)
+    )
+    XCTAssertEqual(
+      CaptureTranscriptFollowPolicy.activeSegmentID(
+        atPlaybackOffset: 17.5, resolution: fallback, segments: segments),
+      "server-second"
+    )
   }
 
   func testPlaybackKeepsPendingLockedUnavailableAndFileFallbackHonest() {
@@ -204,6 +328,58 @@ final class CaptureArchiveTests: XCTestCase {
     XCTAssertEqual(provider.resolveCount, 2)
   }
 
+  func testPlaybackTogglePublishesImmediateFeedbackInsteadOfSilentlyDoingNothing() async throws {
+    let ready = CapturePlaybackResolution.fileFallback(
+      CapturePlaybackFile(
+        id: "part-a", signedURL: try XCTUnwrap(URL(string: "https://example.test/part-a.mp3")), duration: 12
+      ))
+    let controller = CapturePlaybackController(provider: CapturePlaybackProviderFake(resolutions: [ready]))
+    let capture = archiveCapture(id: "omi-1")
+
+    _ = await controller.prepare(for: capture)
+
+    XCTAssertTrue(controller.playOrPause())
+    XCTAssertTrue(controller.isPlaybackRequested)
+    XCTAssertNil(controller.playbackError)
+
+    XCTAssertTrue(controller.playOrPause())
+    XCTAssertFalse(controller.isPlaybackRequested)
+
+    controller.clear()
+    XCTAssertFalse(controller.playOrPause())
+    XCTAssertEqual(controller.playbackError, "Audio is not ready. Check audio and try again.")
+  }
+
+  func testPlaybackAdvancesAPlayableAsset() async throws {
+    let audioURL = FileManager.default.temporaryDirectory
+      .appendingPathComponent("capture-playback-\(UUID().uuidString)")
+      .appendingPathExtension("wav")
+    defer { try? FileManager.default.removeItem(at: audioURL) }
+
+    try silentWaveData(durationSeconds: 1).write(to: audioURL)
+
+    let ready = CapturePlaybackResolution.fileFallback(
+      CapturePlaybackFile(id: "local", signedURL: audioURL, duration: 1)
+    )
+    let controller = CapturePlaybackController(provider: CapturePlaybackProviderFake(resolutions: [ready]))
+    _ = await controller.prepare(for: archiveCapture(id: "omi-local"))
+
+    let playbackAdvanced = expectation(description: "AVPlayer publishes advancing playback time")
+    let playbackObservation = controller.$currentTime
+      .filter { $0 > 0.1 }
+      .prefix(1)
+      .sink { _ in playbackAdvanced.fulfill() }
+
+    XCTAssertTrue(controller.playOrPause())
+    await fulfillment(of: [playbackAdvanced], timeout: 3)
+
+    XCTAssertNil(controller.playbackError)
+    XCTAssertGreaterThan(controller.currentTime, 0.1)
+    XCTAssertTrue(controller.isPlaybackRequested)
+    withExtendedLifetime(playbackObservation) {}
+    controller.clear()
+  }
+
   func testPlaybackClearDiscardsALateResolutionFromThePreviouslySelectedCapture() async throws {
     let provider = DeferredCapturePlaybackProvider()
     let controller = CapturePlaybackController(provider: provider)
@@ -250,6 +426,36 @@ final class CaptureArchiveTests: XCTestCase {
       ))
   }
 
+}
+
+private func silentWaveData(durationSeconds: Int) -> Data {
+  let sampleRate: UInt32 = 44_100
+  let channelCount: UInt16 = 1
+  let bitsPerSample: UInt16 = 16
+  let frameCount = UInt32(durationSeconds) * sampleRate
+  let dataSize = frameCount * UInt32(channelCount) * UInt32(bitsPerSample / 8)
+
+  var data = Data()
+  func appendASCII(_ value: String) { data.append(contentsOf: value.utf8) }
+  func appendLittleEndian<T: FixedWidthInteger>(_ value: T) {
+    var littleEndian = value.littleEndian
+    withUnsafeBytes(of: &littleEndian) { data.append(contentsOf: $0) }
+  }
+
+  appendASCII("RIFF")
+  appendLittleEndian(UInt32(36) + dataSize)
+  appendASCII("WAVEfmt ")
+  appendLittleEndian(UInt32(16))
+  appendLittleEndian(UInt16(1))
+  appendLittleEndian(channelCount)
+  appendLittleEndian(sampleRate)
+  appendLittleEndian(sampleRate * UInt32(channelCount) * UInt32(bitsPerSample / 8))
+  appendLittleEndian(channelCount * (bitsPerSample / 8))
+  appendLittleEndian(bitsPerSample)
+  appendASCII("data")
+  appendLittleEndian(dataSize)
+  data.append(Data(count: Int(dataSize)))
+  return data
 }
 
 final class CaptureArchiveCacheTests: XCTestCase {

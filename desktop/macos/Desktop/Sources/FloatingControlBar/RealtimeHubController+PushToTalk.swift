@@ -62,7 +62,7 @@ extension RealtimeHubController {
             ownerID: interruptedTurn.ownerID,
             userText: interruptedTurn.userText,
             assistantText: interruptedTurn.assistantText,
-            interrupted: true,
+            terminal: .interruptedByBargeIn,
             idempotencyKey: interruptedTurn.idempotencyKey,
             acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID) ?? false
         }

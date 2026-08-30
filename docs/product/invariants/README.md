@@ -64,7 +64,7 @@ to handle a rule in flux — not delaying the lock.
 | INV-DATA-1 | Production-family customer data-plane continuity | locked | [data-plane-continuity.md](./data-plane-continuity.md) |
 | INV-NAV-1 | Feature parity across desktop shells | locked | [desktop-shell-feature-parity.md](./desktop-shell-feature-parity.md) |
 | INV-TASK-1 | Complete dated task buckets with bounded No Deadline paging | locked | [task-dated-bucket-completeness.md](./task-dated-bucket-completeness.md) |
-| INV-TASK-2 | Automatic task capture proposes, it never writes | locked | [task-capture-suggestion-only.md](./task-capture-suggestion-only.md) |
+| INV-TASK-2 | Capture proposes only where a Suggested surface exists | locked | [task-capture-suggestion-only.md](./task-capture-suggestion-only.md) |
 | INV-VOICE-1 | One desktop voice-turn lifecycle owner | locked | [desktop-voice-turns.md](./desktop-voice-turns.md) |
 | INV-CUTOVER-1 | Whole-account cohort cutover authority | locked | [account-cohort-cutover.md](./account-cohort-cutover.md) |
 

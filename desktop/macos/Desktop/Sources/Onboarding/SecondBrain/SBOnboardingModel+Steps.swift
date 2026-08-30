@@ -86,7 +86,7 @@ extension SBOnboardingModel {
       // matching Screen Recording's flow. Full Disk Access has no in-place toggle,
       // so the drag card is the fastest grant path (#9742). Both FDA entry points
       // (the permission step and the Files connector) route through here.
-      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+      Task { await PermissionDragGuidance.presentDragToGrantHelper(for: .fullDiskAccess) }
     }
     pollPermission("full_disk_access")
   }

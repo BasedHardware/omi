@@ -14,7 +14,10 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/PageGlassLane.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityDestinationChip.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/PageQueryToolbar.swift
+  # This alternate owner is intentionally deleted by the canonical hub route;
+  # the flow below exercises its replacement rather than preserving a second UI.
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsDestinationView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ActivityBackButton.swift

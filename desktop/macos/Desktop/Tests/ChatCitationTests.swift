@@ -128,6 +128,31 @@ final class ChatCitationTests: XCTestCase {
     XCTAssertTrue(ledger.responseInstruction?.contains("Never write [memory]") == true)
   }
 
+  func testExplicitComposerSourceKeepsACitationSlotAheadOfBoundedAmbientContext() {
+    let explicit = ChatPromptCitationSource(
+      kind: .conversation,
+      sourceID: "selected-conversation",
+      title: "Selected conversation",
+      preview: "The source the user explicitly attached",
+      createdAt: nil
+    )
+    let ambient = (0..<ChatPromptCitationLedger.maximumReferences).map { index in
+      ChatPromptCitationSource(
+        kind: .memory,
+        sourceID: "memory-\(index)",
+        title: "Memory \(index)",
+        preview: "Ambient context",
+        createdAt: nil
+      )
+    }
+
+    let ledger = ChatPromptCitationLedger(sources: [explicit] + ambient)
+
+    XCTAssertEqual(ledger.references.count, ChatPromptCitationLedger.maximumReferences)
+    XCTAssertEqual(ledger.marker(kind: .conversation, sourceID: explicit.sourceID), "[5001]")
+    XCTAssertNil(ledger.marker(kind: .memory, sourceID: "memory-127"))
+  }
+
   func testPromptAndToolReferencesCanCoexistInOneAnswer() {
     let promptReference = ChatCitationReference(
       ordinal: 5001,
@@ -620,6 +645,91 @@ final class ChatCitationTests: XCTestCase {
       retrievedReferences: [source])
     XCTAssertEqual(message.visibleAnswerText, "You filmed the launch.\n\nSources: [12]")
     XCTAssertTrue(message.text.contains("Sources: [12]"))
+  }
+
+  func testTerminalAnswerReplacesShorterPostToolStreamBeforePersistence() {
+    let partial = "The most recent discussion was about launching the Omi"
+    let complete =
+      "The most recent discussion was about launching the Omi Desktop App Beta, including backend fixes and QA work."
+    var message = ChatMessage(
+      id: "ai-terminal",
+      text: "Looking that up.\n\n" + partial,
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [
+        .text(id: "commentary", text: "Looking that up."),
+        .toolCall(id: "tool", name: "search_conversations", status: .completed),
+        .text(id: "answer", text: partial),
+      ])
+
+    message.applyAuthoritativeTerminalAnswer(complete)
+
+    XCTAssertEqual(message.text, complete)
+    XCTAssertEqual(message.visibleAnswerText, complete)
+    XCTAssertEqual(message.contentBlocks.count, 3)
+    guard case .text(let id, let text) = message.contentBlocks[2] else {
+      return XCTFail("The post-tool answer must remain a text block")
+    }
+    XCTAssertEqual(id, "answer")
+    XCTAssertEqual(text, complete)
+  }
+
+  func testTerminalAnswerReplacesShorterStreamWithoutTools() {
+    let partial = "I should have either inspected the saved result or clearly said the"
+    let complete = partial + " search was incomplete."
+    var message = ChatMessage(
+      id: "ai-terminal",
+      text: partial,
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [
+        .text(id: "answer-1", text: "I should have either inspected the saved result "),
+        .thinking(id: "thinking", text: "Conclude the explanation"),
+        .text(id: "answer-2", text: "or clearly said the"),
+      ])
+
+    message.applyAuthoritativeTerminalAnswer(complete)
+
+    XCTAssertEqual(message.text, complete)
+    XCTAssertEqual(message.visibleAnswerText, complete)
+    XCTAssertEqual(
+      message.contentBlocks.compactMap { block -> String? in
+        guard case .text(_, let text) = block else { return nil }
+        return text
+      },
+      [complete])
+    XCTAssertTrue(
+      message.contentBlocks.contains { block in
+        if case .thinking = block { return true }
+        return false
+      })
+  }
+
+  @MainActor
+  func testFinalizationPersistsCompleteTerminalAnswerWhenStreamEndsOnPrefix() async {
+    let partial = "The last recorded conversation was about launching the Omi"
+    let complete = partial + " Desktop App Beta, including backend fixes and QA work."
+    let provider = ChatProvider()
+    provider.messages = [
+      ChatMessage(
+        id: "ai-terminal",
+        text: partial,
+        sender: .ai,
+        isStreaming: true,
+        contentBlocks: [.text(id: "answer", text: partial)])
+    ]
+
+    let accepted = await provider.finalizeAssistantMessageCitations(
+      messageId: "ai-terminal",
+      queryText: complete,
+      selectedReferences: [],
+      requestedSources: false,
+      terminalCitationReferences: [])
+
+    XCTAssertEqual(accepted, complete)
+    XCTAssertEqual(provider.messages.first?.text, complete)
+    XCTAssertEqual(provider.messages.first?.visibleAnswerText, complete)
+    XCTAssertFalse(provider.messages.first?.isStreaming ?? true)
   }
 
   func testRequestedSourcesRailUsesTurnLedgerNotLookupCorpus() {

@@ -1,29 +1,22 @@
 {
   "mcpServers": {
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GITHUB_TOKEN}"
-      }
-    },
     "notion": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-notion"],
+      "args": ["-y", "@notionhq/notion-mcp-server"],
       "env": {
-        "NOTION_API_KEY": "${env:NOTION_API_KEY}"
+        "NOTION_TOKEN": "${env:NOTION_TOKEN}"
       }
     },
     "figma": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-figma"],
+      "args": ["-y", "figma-developer-mcp", "--stdio"],
       "env": {
-        "FIGMA_ACCESS_TOKEN": "${env:FIGMA_ACCESS_TOKEN}"
+        "FIGMA_API_KEY": "${env:FIGMA_ACCESS_TOKEN}"
       }
     },
     "browser": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-browser"]
+      "args": ["-y", "@playwright/mcp@latest"]
     }
   }
 }
