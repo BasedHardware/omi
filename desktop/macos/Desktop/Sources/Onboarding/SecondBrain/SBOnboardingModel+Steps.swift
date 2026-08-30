@@ -74,8 +74,21 @@ extension SBOnboardingModel {
       } onCancel: {
         request.cancel()
       }
+    case "notifications":
+      requestNotifications()
     default: break
     }
+  }
+
+  /// Ask macOS for notification authorization through the same policy-driven
+  /// path Settings uses (`AppState.requestNotificationPermission()`), never
+  /// `UNUserNotificationCenter` directly. `notDetermined` raises the system
+  /// prompt; `denied` opens System Settings instead of re-asking a spent
+  /// prompt macOS will never show again.
+  func requestNotifications() {
+    notifState = .waiting
+    appState.requestNotificationPermission()
+    pollPermission("notifications")
   }
 
   func requestFullDiskAccess() {
@@ -189,6 +202,7 @@ extension SBOnboardingModel {
     case "full_disk_access": appState.checkFullDiskAccess()
     case "accessibility": appState.checkAccessibilityPermission()
     case "automation": appState.checkAutomationPermission()
+    case "notifications": appState.checkNotificationPermission()
     default: appState.checkAllPermissions()
     }
   }
@@ -251,6 +265,7 @@ extension SBOnboardingModel {
     case "full_disk_access": return appState.hasFullDiskAccess
     case "accessibility": return appState.hasAccessibilityPermission && !appState.isAccessibilityBroken
     case "automation": return appState.hasAutomationPermission
+    case "notifications": return appState.hasNotificationPermission
     default: return false
     }
   }
@@ -276,6 +291,7 @@ extension SBOnboardingModel {
     // explicit Connect action owns the data read.
     case "accessibility": accState = .on
     case "automation": autoState = .on
+    case "notifications": notifState = .on
     default: break
     }
   }
@@ -290,6 +306,7 @@ extension SBOnboardingModel {
     case "full_disk_access": fdaState = .ask
     case "accessibility": accState = .ask
     case "automation": autoState = .ask
+    case "notifications": notifState = .ask
     default: break
     }
   }
@@ -302,6 +319,7 @@ extension SBOnboardingModel {
     case "full_disk_access": return fdaState
     case "accessibility": return accState
     case "automation": return autoState
+    case "notifications": return notifState
     default: return .ask
     }
   }
@@ -361,7 +379,8 @@ extension SBOnboardingModel {
     advance(userAnswer: nil, to: .accessibility)
   }
   func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
-  func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
+  func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .notifications) }
+  func answerNotifications() { advance(userAnswer: notifState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
 
   /// Advance past a permission step automatically once its grant lands — but only
   /// when the user is still ON that step, so a late poll never skips a step they've
@@ -385,6 +404,7 @@ extension SBOnboardingModel {
     case .files: answerFiles()
     case .accessibility: answerAccessibility()
     case .automation: answerAutomation()
+    case .notifications: answerNotifications()
     default: break
     }
   }
@@ -398,6 +418,7 @@ extension SBOnboardingModel {
     case .files: return "full_disk_access"
     case .accessibility: return "accessibility"
     case .automation: return "automation"
+    case .notifications: return "notifications"
     default: return nil
     }
   }
