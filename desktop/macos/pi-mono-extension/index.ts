@@ -37,7 +37,7 @@ import {
   isStdioServer,
   loadLocalMcpConfig,
 } from "../agent/dist/runtime/user-extensions.js";
-import type { McpClient } from "../agent/dist/runtime/mcp-client.js";
+import type { McpClient, McpToolBlock } from "../agent/dist/runtime/mcp-client.js";
 import { McpHttpClient } from "../agent/dist/runtime/mcp-http-client.js";
 import { McpSseClient } from "../agent/dist/runtime/mcp-sse-client.js";
 import { McpStdioClient } from "../agent/dist/runtime/mcp-stdio-client.js";
@@ -938,16 +938,23 @@ async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
         description: `${tool.description || tool.name} (from the ${server.name} MCP server)`,
         parameters: Type.Object(properties, { additionalProperties: schema.additionalProperties === true }),
         async execute(_toolCallId, params) {
-          let text: string;
+          // Blocks pass straight through: a capture server's image is the answer,
+          // and pi's tool result carries images alongside text.
+          let content: McpToolBlock[];
           try {
-            text = await withTimeout(
+            content = await withTimeout(
               client.callTool(tool.name, (params ?? {}) as Record<string, unknown>),
               CALL_TIMEOUT_MS,
             );
           } catch (err) {
-            text = `Error calling ${tool.name}: ${err instanceof Error ? err.message : err}`;
+            content = [
+              {
+                type: "text",
+                text: `Error calling ${tool.name}: ${err instanceof Error ? err.message : err}`,
+              },
+            ];
           }
-          return { content: [{ type: "text" as const, text }], details: undefined };
+          return { content, details: undefined };
         },
       }));
     }

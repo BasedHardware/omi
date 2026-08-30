@@ -146,21 +146,27 @@ export abstract class McpClient {
     return result?.description || `Prompt ${name} returned no content.`;
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<string> {
+  /**
+   * A tool's result as the blocks a model turn carries. Text is joined the way
+   * it always was; an image survives as an image when it is one the model can
+   * actually read, so a screen-capture server answers with the picture instead
+   * of a note that a picture happened.
+   */
+  async callTool(name: string, args: Record<string, unknown>): Promise<McpToolBlock[]> {
     await this.ensureInitialized();
     const result = (await this.rpc("tools/call", { name, arguments: args })) as McpToolResult;
-    const text = describeContent(result?.content ?? []);
+    const blocks = renderContent(result?.content ?? [], { images: true });
     if (result?.isError) {
-      throw new Error(text || `MCP tool ${name} reported an error`);
+      throw new Error(textOf(blocks) || `MCP tool ${name} reported an error`);
     }
-    if (text) return text;
+    if (blocks.length > 0) return blocks;
     // Structured output (spec 2025-06-18) is a tool's answer when it has no
     // prose to go with it; a server that returns only this used to fall through
     // to the raw envelope.
     if (result?.structuredContent !== undefined) {
-      return JSON.stringify(result.structuredContent);
+      return [{ type: "text", text: JSON.stringify(result.structuredContent) }];
     }
-    return `Tool ${name} returned no readable content.`;
+    return [{ type: "text", text: `Tool ${name} returned no readable content.` }];
   }
 }
 
@@ -170,44 +176,105 @@ interface McpToolResult {
   isError?: boolean;
 }
 
+/** A block of a tool result, in the shape a model turn carries it. */
+export type McpToolBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string };
+
+/** The image types a model turn can carry; anything else is named, not sent. */
+const MODEL_READABLE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+
 /**
- * A tool result rendered as text.
+ * Base64 budget for one passed-through image. The Claude API takes 10 MB of
+ * base64 per image directly and 5 MB through Bedrock and Vertex, so 5 MB is the
+ * figure that holds everywhere. A full Retina screen capture lands under it as
+ * PNG; anything larger is a server sending something other than a screenshot.
+ */
+const MAX_IMAGE_BASE64_CHARS = 5_000_000;
+
+/** Images per result. A capture server answering with a frame per display is fine; a film is not. */
+const MAX_IMAGES_PER_RESULT = 4;
+
+/**
+ * Tool result content as blocks.
  *
  * Only `text` blocks used to survive, and a result made only of images fell
  * through to `JSON.stringify(result)` — which put the entire base64 payload into
- * the conversation. Non-text blocks are named instead: the model learns what
- * came back and can ask for it another way, and the context stays readable.
+ * the conversation. Images now pass through within a size and count budget;
+ * everything else that is not text is *named*, so the model learns what came
+ * back and can ask for it another way, and the context stays readable.
+ *
+ * `images: false` names images too. Prompt expansion reads that way: it returns
+ * one string, and its images are illustrations of a template rather than the
+ * answer a capture tool was called for.
  */
-function describeContent(blocks: unknown[]): string {
-  return blocks
-    .map((raw) => {
-      const block = (raw ?? {}) as Record<string, unknown>;
-      switch (block.type) {
-        case "text":
-          return typeof block.text === "string" ? block.text : "";
-        case "image":
-        case "audio": {
-          const mime = typeof block.mimeType === "string" ? block.mimeType : "unknown type";
-          return `[${block.type}: ${mime}, not shown]`;
+function renderContent(blocks: unknown[], options: { images: boolean }): McpToolBlock[] {
+  const rendered: McpToolBlock[] = [];
+  let imagesKept = 0;
+  const push = (text: string) => {
+    if (text) rendered.push({ type: "text", text });
+  };
+  for (const raw of blocks) {
+    const block = (raw ?? {}) as Record<string, unknown>;
+    const mime = typeof block.mimeType === "string" ? block.mimeType : "";
+    switch (block.type) {
+      case "text":
+        push(typeof block.text === "string" ? block.text : "");
+        break;
+      case "image": {
+        const data = typeof block.data === "string" ? block.data : "";
+        const sendable =
+          options.images &&
+          data.length > 0 &&
+          data.length <= MAX_IMAGE_BASE64_CHARS &&
+          MODEL_READABLE_IMAGE_TYPES.has(mime) &&
+          imagesKept < MAX_IMAGES_PER_RESULT;
+        if (sendable) {
+          rendered.push({ type: "image", data, mimeType: mime });
+          imagesKept += 1;
+        } else {
+          push(`[image: ${mime || "unknown type"}, not shown]`);
         }
-        case "resource_link": {
-          const uri = typeof block.uri === "string" ? block.uri : "";
-          const label = typeof block.name === "string" && block.name ? block.name : uri;
-          return uri ? `[resource: ${label} — ${uri}]` : "";
-        }
-        case "resource": {
-          // An embedded resource carries the text inline when it has any.
-          const resource = (block.resource ?? {}) as Record<string, unknown>;
-          if (typeof resource.text === "string") return resource.text;
-          const uri = typeof resource.uri === "string" ? resource.uri : "";
-          return uri ? `[resource: ${uri}, not shown]` : "";
-        }
-        default:
-          return "";
+        break;
       }
-    })
+      case "audio":
+        push(`[audio: ${mime || "unknown type"}, not shown]`);
+        break;
+      case "resource_link": {
+        const uri = typeof block.uri === "string" ? block.uri : "";
+        const label = typeof block.name === "string" && block.name ? block.name : uri;
+        push(uri ? `[resource: ${label} — ${uri}]` : "");
+        break;
+      }
+      case "resource": {
+        // An embedded resource carries the text inline when it has any.
+        const resource = (block.resource ?? {}) as Record<string, unknown>;
+        if (typeof resource.text === "string") {
+          push(resource.text);
+          break;
+        }
+        const uri = typeof resource.uri === "string" ? resource.uri : "";
+        push(uri ? `[resource: ${uri}, not shown]` : "");
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return rendered;
+}
+
+/** The readable text of a rendered result, images named by their absence. */
+export function textOf(blocks: McpToolBlock[]): string {
+  return blocks
+    .flatMap((block) => (block.type === "text" ? [block.text] : []))
     .filter(Boolean)
     .join("\n");
+}
+
+/** A block list rendered as one string, for surfaces that carry no images. */
+function describeContent(blocks: unknown[]): string {
+  return textOf(renderContent(blocks, { images: false }));
 }
 
 /**

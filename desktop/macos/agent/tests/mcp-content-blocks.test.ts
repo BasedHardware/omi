@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { McpHttpClient } from "../src/runtime/mcp-http-client.js";
+import { textOf } from "../src/runtime/mcp-client.js";
 
 /** A Streamable HTTP server that answers tools/call with a fixed result. */
 function clientReturning(result: unknown): McpHttpClient {
@@ -45,18 +46,51 @@ describe("MCP request headers", () => {
 });
 
 describe("MCP tool result content", () => {
-  // A screenshot tool returned no text blocks, so the old code fell through to
-  // JSON.stringify(result) and put the whole base64 payload into the context.
-  it("names an image instead of dumping its payload", async () => {
+  // A capture server's answer *is* the picture. Naming it left the model blind
+  // to the one thing the call was for; dumping it raw put base64 in the context.
+  it("carries a readable image through as an image", async () => {
+    const data = "iVBORw0KGgoAAAA".repeat(500);
     const client = clientReturning({
       content: [
         { type: "text", text: "Captured the page." },
-        { type: "image", mimeType: "image/png", data: "iVBORw0KGgoAAAA".repeat(500) },
+        { type: "image", mimeType: "image/png", data },
       ],
     });
-    const text = await client.callTool("screenshot", {});
-    expect(text).toBe("Captured the page.\n[image: image/png, not shown]");
-    expect(text).not.toContain("iVBORw0KGgo");
+    expect(await client.callTool("screenshot", {})).toEqual([
+      { type: "text", text: "Captured the page." },
+      { type: "image", mimeType: "image/png", data },
+    ]);
+  });
+
+  // The payload only belongs in the turn when the model can read it. A type it
+  // cannot decode, or one too large for the API to accept, is named instead —
+  // which is what every non-text block did before images had a lane at all.
+  it("names an image the model cannot read instead of sending it", async () => {
+    const client = clientReturning({
+      content: [{ type: "image", mimeType: "image/tiff", data: "SUkqAA==" }],
+    });
+    expect(await client.callTool("scan", {})).toEqual([
+      { type: "text", text: "[image: image/tiff, not shown]" },
+    ]);
+  });
+
+  it("names an image past the per-image size budget", async () => {
+    const client = clientReturning({
+      content: [{ type: "image", mimeType: "image/png", data: "A".repeat(5_000_001) }],
+    });
+    const blocks = await client.callTool("screenshot", {});
+    expect(blocks).toEqual([{ type: "text", text: "[image: image/png, not shown]" }]);
+    expect(JSON.stringify(blocks)).not.toContain("AAAAAAAAAA");
+  });
+
+  // A capture server answering per display is normal; a server answering with a
+  // film would spend the whole context on one call.
+  it("keeps the first four images and names the rest", async () => {
+    const frame = (n: number) => ({ type: "image", mimeType: "image/png", data: `frame${n}` });
+    const client = clientReturning({ content: [1, 2, 3, 4, 5, 6].map(frame) });
+    const blocks = await client.callTool("record", {});
+    expect(blocks.filter((block) => block.type === "image")).toHaveLength(4);
+    expect(textOf(blocks)).toBe("[image: image/png, not shown]\n[image: image/png, not shown]");
   });
 
   it("keeps a resource link addressable and inlines an embedded resource's text", async () => {
@@ -67,7 +101,7 @@ describe("MCP tool result content", () => {
         { type: "audio", mimeType: "audio/wav", data: "UklGRg==" },
       ],
     });
-    expect(await client.callTool("fetch", {})).toBe(
+    expect(textOf(await client.callTool("fetch", {}))).toBe(
       "[resource: report.csv — file:///tmp/report.csv]\n# Notes\n[audio: audio/wav, not shown]",
     );
   });
@@ -75,12 +109,14 @@ describe("MCP tool result content", () => {
   // Structured output is the whole answer for a tool with no prose to go with it.
   it("returns structured output when there is no content to read", async () => {
     const client = clientReturning({ content: [], structuredContent: { total: 42 } });
-    expect(await client.callTool("count", {})).toBe('{"total":42}');
+    expect(textOf(await client.callTool("count", {}))).toBe('{"total":42}');
   });
 
   it("says so rather than dumping the envelope when nothing is readable", async () => {
     const client = clientReturning({ content: [{ type: "video", data: "x" }] });
-    expect(await client.callTool("render", {})).toBe("Tool render returned no readable content.");
+    expect(textOf(await client.callTool("render", {}))).toBe(
+      "Tool render returned no readable content.",
+    );
   });
 
   // A prompt's messages carry the same block types a tool result does. They used
@@ -99,6 +135,15 @@ describe("MCP tool result content", () => {
   });
 
   // Older servers send a message's content as a bare string rather than a block.
+  // A prompt is a template, not an answer: its images illustrate, and prompt
+  // expansion returns one string with no lane to carry them.
+  it("names an image a prompt carries", async () => {
+    const client = clientReturning({
+      messages: [{ role: "user", content: { type: "image", mimeType: "image/png", data: "iVBOR" } }],
+    });
+    expect(await client.getPrompt("shot", {})).toBe("user: [image: image/png, not shown]");
+  });
+
   it("reads a prompt message whose content is a plain string", async () => {
     const client = clientReturning({ messages: [{ role: "user", content: "just text" }] });
     expect(await client.getPrompt("simple", {})).toBe("user: just text");
