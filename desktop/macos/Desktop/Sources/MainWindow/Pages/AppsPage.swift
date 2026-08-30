@@ -286,7 +286,7 @@ struct AppsPage: View {
       LocalMcpDetailSheet(
         server: server, appProvider: appProvider, onDismiss: { selectedLocalMcpServer = nil }
       )
-      .frame(width: 420, height: 260)
+      .frame(width: 460, height: 420)
     }
     .dismissableSheet(isPresented: $showAddSkillSheet) {
       SkillEditorSheet(appProvider: appProvider, editingSkill: nil, onDismiss: { showAddSkillSheet = false })

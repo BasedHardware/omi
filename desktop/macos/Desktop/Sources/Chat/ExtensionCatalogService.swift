@@ -232,7 +232,7 @@ enum ExtensionCatalogService {
     case .mcpRemote(let url, let transport, let secretHeader):
       var raw: [String: Any] = ["url": url, "transport": transport]
       if let secretHeader, let token = nonEmpty(secrets[secretHeader]) {
-        raw["headers"] = [secretHeader: token]
+        raw["headers"] = [secretHeader: authorizationValue(header: secretHeader, secret: token)]
       }
       try LocalMcpStore.upsertServer(availableServerName(for: entry.name), entry: raw)
 
@@ -253,6 +253,15 @@ enum ExtensionCatalogService {
       }
       _ = try LocalSkillsStore.saveSkill(title: entry.name, markdown: markdown)
     }
+  }
+
+  /// An `Authorization` header carries a scheme; a user pasting a key types only the key. Storing
+  /// it bare sends a malformed header that the server rejects as unauthenticated.
+  static func authorizationValue(header: String, secret: String) -> String {
+    guard header.caseInsensitiveCompare("Authorization") == .orderedSame else { return secret }
+    let known = ["bearer ", "basic ", "token "]
+    let lowered = secret.lowercased()
+    return known.contains(where: lowered.hasPrefix) ? secret : "Bearer \(secret)"
   }
 
   private static func nonEmpty(_ value: String?) -> String? {

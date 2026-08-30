@@ -142,17 +142,6 @@ final class ExtensionCatalogTests: XCTestCase {
     XCTAssertFalse(entry.install.needsInput, "an OAuth server must not demand a key up front")
   }
 
-  /// A server that declares required config asks for it before writing anything to disk.
-  func testSmitheryRequiredConfigSurfacesAsAnInputField() throws {
-    let payload = """
-      {"connections": [{"type": "http", "deploymentUrl": "https://x.run.tools",
-                        "configSchema": {"required": ["braveApiKey"]}}]}
-      """
-    let entry = try XCTUnwrap(
-      ExtensionCatalog.smitheryEntry(fromDetail: Data(payload.utf8), candidate: smitheryCandidate))
-    XCTAssertTrue(entry.install.needsInput)
-  }
-
   /// A listing row with no reachable endpoint must not become a tile that cannot install.
   func testSmitheryDetailWithoutAnEndpointYieldsNothing() throws {
     XCTAssertNil(
@@ -160,6 +149,34 @@ final class ExtensionCatalogTests: XCTestCase {
         fromDetail: Data(#"{"connections": []}"#.utf8), candidate: smitheryCandidate))
     XCTAssertNil(
       ExtensionCatalog.smitheryEntry(fromDetail: Data("not json".utf8), candidate: smitheryCandidate))
+  }
+
+  /// Smithery servers are OAuth-protected resources; the config they declare required is collected
+  /// by Smithery's own consent screen, not sent by us as a header. Prompting for it would ask the
+  /// user for a value they do not have and store it somewhere it does nothing.
+  func testSmitheryNeverDemandsAKeyUpFront() throws {
+    let payload = """
+      {"connections": [{"type": "http", "deploymentUrl": "https://x.run.tools",
+                        "configSchema": {"required": ["braveApiKey"]}}]}
+      """
+    let entry = try XCTUnwrap(
+      ExtensionCatalog.smitheryEntry(fromDetail: Data(payload.utf8), candidate: smitheryCandidate))
+    XCTAssertFalse(entry.install.needsInput)
+    XCTAssertEqual(
+      entry.install, .mcpRemote(url: "https://x.run.tools", transport: "http", secretHeader: nil))
+  }
+
+  /// A pasted key is just the key; an Authorization header needs its scheme, or the server sees a
+  /// malformed header and reports the request as unauthenticated.
+  func testAuthorizationHeaderGainsItsSchemeButOthersAreLeftAlone() throws {
+    XCTAssertEqual(
+      ExtensionCatalogService.authorizationValue(header: "Authorization", secret: "abc123"),
+      "Bearer abc123")
+    XCTAssertEqual(
+      ExtensionCatalogService.authorizationValue(header: "authorization", secret: "Bearer abc123"),
+      "Bearer abc123", "a key that already carries a scheme must not be double-prefixed")
+    XCTAssertEqual(
+      ExtensionCatalogService.authorizationValue(header: "X-Api-Key", secret: "abc123"), "abc123")
   }
 
   // MARK: - Skills index

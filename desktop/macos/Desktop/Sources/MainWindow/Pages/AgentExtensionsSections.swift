@@ -55,7 +55,9 @@ struct McpServersSection: View {
               subtitle: server.isCommand ? "Local command" : "Remote",
               detail: status.detail ?? server.summary,
               statusText: status.label,
-              statusActive: status.isHealthy
+              statusActive: status.isHealthy,
+              actionTitle: status == .needsAuth ? "Sign In" : "Manage",
+              actionIsSecondary: status != .needsAuth
             ) {
               onSelectLocal(server)
             }
@@ -1002,6 +1004,14 @@ struct LocalMcpDetailSheet: View {
   let onDismiss: () -> Void
 
   @State private var confirmingDelete = false
+  @State private var isSigningIn = false
+  @State private var apiKey = ""
+  @State private var errorText: String?
+  @State private var notice: String?
+
+  private var status: McpServerProbe.Status {
+    appProvider.mcpStatuses[server.name] ?? .checking
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.lg) {
@@ -1010,7 +1020,9 @@ struct LocalMcpDetailSheet: View {
           Text(server.name)
             .scaledFont(size: OmiType.title, weight: .semibold)
             .foregroundColor(Ink.primary)
-          Text(server.isCommand ? "Local command server" : "Local server")
+          // "Local" here used to mean "configured locally", which read as a claim about where a
+          // remote server runs.
+          Text(server.isCommand ? "Local command" : "Remote server")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
         }
@@ -1025,6 +1037,49 @@ struct LocalMcpDetailSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Ink.rowFill)
         .cornerRadius(OmiChrome.smallControlRadius)
+
+      // A remote server can refuse us for two different reasons, and the fix differs: OAuth needs a
+      // browser round trip, an API key needs the key. Both live here because a card that reports
+      // "Needs sign-in" with nothing to press is a dead end.
+      if !server.isCommand {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          HStack(spacing: OmiSpacing.sm) {
+            Text(status.label)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(status.isHealthy ? Ink.primary : Ink.secondary)
+            Spacer()
+            Button(action: signIn) {
+              ConnectionModalActionButton(title: isSigningIn ? "Signing in…" : "Sign In")
+            }
+            .buttonStyle(.plain)
+            .disabled(isSigningIn)
+            .accessibilityIdentifier("apps-mcp-sign-in")
+          }
+
+          HStack(spacing: OmiSpacing.sm) {
+            SecureField("Or paste an API key", text: $apiKey)
+              .textFieldStyle(.roundedBorder)
+            Button("Save Key", action: saveAPIKey)
+              .buttonStyle(.plain)
+              .foregroundColor(Ink.secondary)
+              .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
+          }
+        }
+      }
+
+      if let notice {
+        Text(notice)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      if let errorText {
+        Text(errorText)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.errorRed)
+          .fixedSize(horizontal: false, vertical: true)
+      }
 
       Text("Configured in ~/.omi/mcp.json. Tools are discovered when the assistant starts its next chat session.")
         .scaledFont(size: OmiType.caption)
@@ -1059,5 +1114,38 @@ struct LocalMcpDetailSheet: View {
     }
     .padding(OmiSpacing.lg)
     .background(Ink.surface)
+  }
+
+  private func signIn() {
+    isSigningIn = true
+    errorText = nil
+    notice = nil
+    Task {
+      do {
+        try await LocalMcpStore.signIn(name: server.name)
+        await appProvider.fetchUserExtensions()
+        await appProvider.refreshMcpStatuses()
+        notice = "Signed in. Tools arrive with the assistant's next chat session."
+      } catch {
+        errorText = error.localizedDescription
+      }
+      isSigningIn = false
+    }
+  }
+
+  private func saveAPIKey() {
+    errorText = nil
+    notice = nil
+    do {
+      try LocalMcpStore.setAPIKey(name: server.name, apiKey: apiKey)
+      apiKey = ""
+      Task {
+        await appProvider.fetchUserExtensions()
+        await appProvider.refreshMcpStatuses()
+        notice = "Key saved."
+      }
+    } catch {
+      errorText = error.localizedDescription
+    }
   }
 }

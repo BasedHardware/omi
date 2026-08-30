@@ -339,8 +339,6 @@ enum ExtensionCatalog {
         ?? (root["deploymentUrl"] as? String), !deployment.isEmpty
     else { return nil }
 
-    let required =
-      ((httpConnection?["configSchema"] as? [String: Any])?["required"] as? [String]) ?? []
     return Entry(
       id: "smithery/\(candidate.qualifiedName)",
       name: candidate.displayName,
@@ -349,9 +347,11 @@ enum ExtensionCatalog {
       iconURL: candidate.iconURL,
       websiteURL: candidate.homepage,
       publisher: "smithery.ai",
-      install: .mcpRemote(
-        url: deployment, transport: "http",
-        secretHeader: required.isEmpty ? nil : "Authorization"))
+      // No key is asked for even when the server declares required config: Smithery servers are
+      // OAuth-protected resources, and that config is collected by Smithery's own consent screen,
+      // not sent by us as a header. Asking for it here would prompt for a value the user does not
+      // have and store it somewhere it does nothing.
+      install: .mcpRemote(url: deployment, transport: "http", secretHeader: nil))
   }
 
   // MARK: - GitHub skills repo decoding

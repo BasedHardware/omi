@@ -42,6 +42,46 @@ extension LocalMcpStore {
     return .oauthCompleted
   }
 
+  /// Authorize a server that is already configured.
+  ///
+  /// `addRemoteServer` only runs the flow while adding, so a server that arrived any other way —
+  /// installed from the marketplace, hand-written into mcp.json, or one whose refresh token has
+  /// since been revoked — could report "Needs sign-in" with nothing anywhere to act on it.
+  static func signIn(name: String) async throws {
+    guard var entry = readAllServers()[name] as? [String: Any] else {
+      throw storeError("That server is no longer configured")
+    }
+    guard let url = entry["url"] as? String, let serverURL = URL(string: url) else {
+      throw storeError("Only remote servers sign in; a local command runs as you")
+    }
+    guard let meta = await discoverOAuthMetadata(serverURL: serverURL) else {
+      throw storeError("This server does not advertise OAuth. If it needs an API key, set one here instead.")
+    }
+    entry["auth"] = try await runOAuthFlow(meta: meta)
+    // A key and a token are alternative credentials; leaving a stale key behind would keep being
+    // sent as the Authorization header and mask the token we just obtained.
+    entry.removeValue(forKey: "token")
+    try upsertServer(name, entry: entry)
+  }
+
+  /// Replace the API key on a configured server, for a key that was mistyped or has been rotated.
+  static func setAPIKey(name: String, apiKey: String) throws {
+    guard var entry = readAllServers()[name] as? [String: Any] else {
+      throw storeError("That server is no longer configured")
+    }
+    guard entry["url"] is String else {
+      throw storeError("Only remote servers take an API key")
+    }
+    let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty {
+      entry.removeValue(forKey: "token")
+    } else {
+      entry["token"] = trimmed
+      entry.removeValue(forKey: "auth")
+    }
+    try upsertServer(name, entry: entry)
+  }
+
   /// Refresh OAuth tokens that are expired or expire within 5 minutes.
   /// Call at agent-runtime start and periodically while the app runs.
   static func refreshExpiredTokens() async {
@@ -176,7 +216,7 @@ extension LocalMcpStore {
       throw storeError("This server requires OAuth but does not support automatic client registration")
     }
 
-    let listener = try LoopbackCallbackListener()
+    let listener = try await LoopbackCallbackListener.start()
     let redirectURI = "http://127.0.0.1:\(listener.port)/callback"
     defer { listener.stop() }
 
@@ -297,58 +337,158 @@ extension Data {
 }
 
 /// One-shot loopback HTTP listener for the OAuth redirect (RFC 8252 native-app flow).
+/// One-shot loopback HTTP listener for the OAuth redirect.
+///
+/// A plain BSD socket rather than `NWListener`: every `NWListener` configuration — `.tcp` on
+/// `.any`, bare `NWParameters.tcp`, and an explicit loopback `requiredLocalEndpoint` — fails with
+/// EINVAL here, which surfaced as sign-in being impossible. A socket bound to 127.0.0.1:0 is also
+/// the tighter grant: the redirect only ever arrives from this machine.
 final class LoopbackCallbackListener: @unchecked Sendable {
   struct Callback {
     let code: String
     let state: String
   }
 
-  private let listener: NWListener
   let port: UInt16
-  private var continuation: CheckedContinuation<Callback, Error>?
+  private let descriptor: Int32
   private let lock = NSLock()
+  private var continuation: CheckedContinuation<Callback, Error>?
+  private var stopped = false
 
   init() throws {
-    listener = try NWListener(using: .tcp, on: .any)
-    listener.start(queue: .global())
-    // Wait briefly for the ephemeral port to materialize.
-    var resolved: UInt16 = 0
-    for _ in 0..<100 {
-      if let p = listener.port?.rawValue, p != 0 {
-        resolved = p
-        break
+    // Bound through a local before any member is assigned: the closures below would otherwise
+    // capture a partially initialized self.
+    let fd = socket(AF_INET, SOCK_STREAM, 0)
+    guard fd >= 0 else {
+      throw LocalMcpStore.storeError("Could not open a local socket for the OAuth redirect")
+    }
+    var reuse: Int32 = 1
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+
+    var address = sockaddr_in()
+    address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    address.sin_family = sa_family_t(AF_INET)
+    address.sin_port = 0  // the kernel picks a free ephemeral port
+    address.sin_addr.s_addr = inet_addr("127.0.0.1")
+
+    let bound = withUnsafePointer(to: &address) {
+      $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+        bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
       }
-      usleep(20_000)
     }
-    guard resolved != 0 else {
-      listener.cancel()
-      throw NSError(
-        domain: "LoopbackCallbackListener", code: 1,
-        userInfo: [NSLocalizedDescriptionKey: "Could not open a local port for the OAuth redirect"])
+    guard bound == 0, listen(fd, 1) == 0 else {
+      close(fd)
+      throw LocalMcpStore.storeError("Could not open a local port for the OAuth redirect")
     }
-    port = resolved
-    listener.newConnectionHandler = { [weak self] connection in
-      self?.handle(connection)
+
+    var assigned = sockaddr_in()
+    var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+    withUnsafeMutablePointer(to: &assigned) {
+      _ = $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &length) }
     }
+    let assignedPort = UInt16(bigEndian: assigned.sin_port)
+    guard assignedPort != 0 else {
+      close(fd)
+      throw LocalMcpStore.storeError("Could not open a local port for the OAuth redirect")
+    }
+
+    descriptor = fd
+    port = assignedPort
+  }
+
+  /// Kept async for call-site symmetry with the previous listener, and so a future implementation
+  /// can bind off the calling thread without changing callers.
+  static func start() async throws -> LoopbackCallbackListener {
+    try LoopbackCallbackListener()
   }
 
   func waitForCode(timeoutSeconds: Int) async throws -> Callback {
-    try await withCheckedThrowingContinuation { continuation in
+    DispatchQueue.global(qos: .userInitiated).async { [weak self] in self?.acceptOnce() }
+    let timeoutTask = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds) * 1_000_000_000)
+      guard !Task.isCancelled else { return }
+      self?.finish(.failure(LocalMcpStore.storeError("Timed out waiting for the browser to return")))
+    }
+    defer { timeoutTask.cancel() }
+    return try await withCheckedThrowingContinuation { continuation in
       lock.lock()
+      if stopped {
+        lock.unlock()
+        continuation.resume(throwing: CancellationError())
+        return
+      }
       self.continuation = continuation
       lock.unlock()
-      DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(timeoutSeconds)) { [weak self] in
-        self?.finish(
-          .failure(
-            NSError(
-              domain: "LoopbackCallbackListener", code: 2,
-              userInfo: [NSLocalizedDescriptionKey: "Timed out waiting for the browser authorization"])))
-      }
     }
   }
 
   func stop() {
-    listener.cancel()
+    lock.lock()
+    let alreadyStopped = stopped
+    stopped = true
+    lock.unlock()
+    guard !alreadyStopped else { return }
+    close(descriptor)
+  }
+
+  private func acceptOnce() {
+    var remote = sockaddr()
+    var length = socklen_t(MemoryLayout<sockaddr>.size)
+    let connection = accept(descriptor, &remote, &length)
+    guard connection >= 0 else {
+      // A closed descriptor is `stop()` doing its job, not a failure to report.
+      lock.lock()
+      let wasStopped = stopped
+      lock.unlock()
+      if !wasStopped {
+        finish(.failure(LocalMcpStore.storeError("The OAuth redirect connection failed")))
+      }
+      return
+    }
+    defer { close(connection) }
+
+    var request = Data()
+    var buffer = [UInt8](repeating: 0, count: 2048)
+    // The request line is all we need, and it arrives in the first segment.
+    while request.count < 8192 {
+      let read = recv(connection, &buffer, buffer.count, 0)
+      guard read > 0 else { break }
+      request.append(contentsOf: buffer[0..<read])
+      if request.range(of: Data("\r\n\r\n".utf8)) != nil { break }
+      if request.range(of: Data("\n".utf8)) != nil, request.count > 16 { break }
+    }
+
+    let body =
+      "You can close this window and return to Omi."
+    let response = """
+      HTTP/1.1 200 OK\r
+      Content-Type: text/plain; charset=utf-8\r
+      Content-Length: \(body.utf8.count)\r
+      Connection: close\r
+      \r
+      \(body)
+      """
+    _ = response.withCString { send(connection, $0, strlen($0), 0) }
+
+    guard let text = String(data: request, encoding: .utf8),
+      let target = text.split(separator: " ").dropFirst().first,
+      let components = URLComponents(string: "http://127.0.0.1\(target)")
+    else {
+      finish(.failure(LocalMcpStore.storeError("The OAuth redirect was malformed")))
+      return
+    }
+    let items = components.queryItems ?? []
+    if let error = items.first(where: { $0.name == "error" })?.value {
+      finish(.failure(LocalMcpStore.storeError("The server refused authorization: \(error)")))
+      return
+    }
+    guard let code = items.first(where: { $0.name == "code" })?.value,
+      let state = items.first(where: { $0.name == "state" })?.value
+    else {
+      finish(.failure(LocalMcpStore.storeError("The OAuth redirect carried no authorization code")))
+      return
+    }
+    finish(.success(Callback(code: code, state: state)))
   }
 
   private func finish(_ result: Result<Callback, Error>) {
@@ -359,43 +499,6 @@ final class LoopbackCallbackListener: @unchecked Sendable {
     switch result {
     case .success(let value): continuation?.resume(returning: value)
     case .failure(let error): continuation?.resume(throwing: error)
-    }
-  }
-
-  private func handle(_ connection: NWConnection) {
-    connection.start(queue: .global())
-    connection.receive(minimumIncompleteLength: 1, maximumLength: 16384) { [weak self] data, _, _, _ in
-      guard let self, let data, let request = String(data: data, encoding: .utf8),
-        let firstLine = request.split(separator: "\r\n").first,
-        let path = firstLine.split(separator: " ").dropFirst().first,
-        let components = URLComponents(string: String(path))
-      else {
-        connection.cancel()
-        return
-      }
-      let items = components.queryItems ?? []
-      let code = items.first(where: { $0.name == "code" })?.value
-      let state = items.first(where: { $0.name == "state" })?.value
-      let body =
-        code != nil
-        ? "<html><body style='font-family:system-ui;background:#111;color:#fff;text-align:center;padding-top:20vh'><h2>Connected</h2><p>You can close this window and return to Omi.</p></body></html>"
-        : "<html><body style='font-family:system-ui;background:#111;color:#fff;text-align:center;padding-top:20vh'><h2>Authorization failed</h2><p>Return to Omi and try again.</p></body></html>"
-      let response =
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
-      connection.send(
-        content: Data(response.utf8),
-        completion: .contentProcessed { _ in
-          connection.cancel()
-        })
-      if let code, let state {
-        self.finish(.success(Callback(code: code, state: state)))
-      } else if components.path == "/callback" {
-        self.finish(
-          .failure(
-            NSError(
-              domain: "LoopbackCallbackListener", code: 3,
-              userInfo: [NSLocalizedDescriptionKey: "The authorization was denied or returned no code"])))
-      }
     }
   }
 }
