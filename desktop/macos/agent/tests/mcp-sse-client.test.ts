@@ -4,6 +4,7 @@ import { AddressInfo } from "net";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { McpSseClient } from "../src/runtime/mcp-sse-client.js";
+import { textOf } from "../src/runtime/mcp-client.js";
 
 /**
  * A minimal HTTP+SSE MCP server: GET /sse holds the stream open and names the
@@ -69,7 +70,7 @@ describe("McpSseClient", () => {
 
     const tools = await client.listTools();
     expect(tools).toEqual([{ name: "add", description: "adds", inputSchema: { type: "object" } }]);
-    expect(await client.callTool("add", { a: 3, b: 4 })).toBe("7");
+    expect(textOf(await client.callTool("add", { a: 3, b: 4 }))).toBe("7");
 
     // Every message went to /messages, never to the stream URL.
     expect(posts).toHaveLength(4);
@@ -86,7 +87,7 @@ describe("McpSseClient", () => {
     running = server;
     const client = new McpSseClient(url);
     expect((await client.listTools()).map((t) => t.name)).toEqual(["add"]);
-    expect(await client.callTool("add", { a: 3, b: 4 })).toBe("7");
+    expect(textOf(await client.callTool("add", { a: 3, b: 4 }))).toBe("7");
     client.dispose();
   });
 
