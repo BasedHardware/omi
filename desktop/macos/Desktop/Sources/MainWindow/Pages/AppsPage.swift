@@ -674,13 +674,16 @@ struct AppsPage: View {
     case .apps:
       appsCatalogContent
     case .mcp:
-      McpServersSection(
-        appProvider: appProvider,
-        searchText: searchText,
-        onAdd: { showAddMcpServerSheet = true },
-        onSelectLocal: { selectedLocalMcpServer = $0 },
-        onSelectCatalogEntry: { selectedCatalogEntry = $0 }
-      )
+      VStack(alignment: .leading, spacing: OmiSpacing.xl) {
+        ComputerControlSection()
+        McpServersSection(
+          appProvider: appProvider,
+          searchText: searchText,
+          onAdd: { showAddMcpServerSheet = true },
+          onSelectLocal: { selectedLocalMcpServer = $0 },
+          onSelectCatalogEntry: { selectedCatalogEntry = $0 }
+        )
+      }
     case .skills:
       SkillsSection(
         appProvider: appProvider,

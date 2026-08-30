@@ -299,6 +299,13 @@ final class LocalAgentAPIServer: @unchecked Sendable {
       ])
     }
 
+    if request.method == "POST", request.path == "/mcp" {
+      guard authenticate(request.headers["authorization"]) else {
+        return errorResponse("invalid_or_missing_local_token", statusCode: 401)
+      }
+      return await mcpResponse(body: request.body)
+    }
+
     guard request.method == "POST", request.path == "/v1/local/tool" else {
       return errorResponse("unsupported_route", statusCode: 404)
     }
@@ -332,6 +339,46 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     let result = await ChatToolExecutor.execute(
       ToolCall(name: executorToolName, arguments: arguments, thoughtSignature: nil))
     return toolResponse(name: toolName, result: result)
+  }
+
+  /// The computer-use MCP endpoint.
+  ///
+  /// It shares this server's token — a client the user has already trusted with
+  /// the local API is the same client — but not its switch: driving the mouse
+  /// needs its own consent, and `CuaControlGate` holds it. The gate is checked
+  /// again inside every tool, so a grant revoked mid-session stops the next
+  /// action rather than the next connection.
+  private func mcpResponse(body: Data) async -> LocalHTTPResponse {
+    guard await CuaControlGate.shared.isEnabled else {
+      return errorResponse("computer_use_disabled", statusCode: 403)
+    }
+    guard let message = try? JSONSerialization.jsonObject(with: body) else {
+      return errorResponse("invalid_json_body", statusCode: 400)
+    }
+
+    // A batch is a JSON-RPC array. Legacy revisions allow one; modern ones do
+    // not send one, and answering both costs a `map`.
+    if let batch = message as? [[String: Any]] {
+      var responses: [[String: Any]] = []
+      for entry in batch {
+        if let response = await CuaMcpEndpoint.handle(entry) { responses.append(response) }
+      }
+      return responses.isEmpty ? acceptedResponse() : jsonResponse(responses)
+    }
+    guard let single = message as? [String: Any] else {
+      return errorResponse("invalid_json_body", statusCode: 400)
+    }
+    guard let response = await CuaMcpEndpoint.handle(single) else {
+      return acceptedResponse()
+    }
+    return jsonResponse(response)
+  }
+
+  /// A notification has no reply. 202 with an empty body is what the Streamable
+  /// HTTP transport asks for.
+  private func acceptedResponse() -> LocalHTTPResponse {
+    LocalHTTPResponse(
+      statusCode: 202, headers: ["Content-Type": "application/json"], body: Data())
   }
 
   private func acceptsLoopbackHostAndOrigin(_ headers: [String: String]) -> Bool {
