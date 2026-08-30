@@ -1000,9 +1000,49 @@ def test_trigger_feedback_is_owner_authenticated_and_remains_available_while_rol
     assert response.status_code == 200
     assert response.json()['applied'] is True
     assert response.json()['trigger_revision'] == 5
-    assert observed['function'] is jit_rollout.apply_canonical_trigger_feedback
+    assert observed['function'] is jit_rollout._apply_trigger_feedback_on_data_plane
     assert observed['uid'] == 'owner'
     assert observed['kwargs']['event_id'] == 'e' * 64
+
+
+def test_trigger_feedback_writes_through_the_same_data_plane_the_snapshot_reads(monkeypatch):
+    """Feedback must resolve the trigger row where the snapshot published it.
+
+    This route is served by desktop-backend, whose compute project differs
+    from the customer data plane in development. Letting the canonical
+    adapter fall back to its compute-plane default would look for the trigger
+    in the wrong project, so every retraction would 409 while the trigger kept
+    firing -- with the rollout flag off, this is the user's only off switch.
+    """
+
+    observed = {}
+    data_plane = object()
+    compute_plane = object()
+
+    def record(uid, memory_id, **kwargs):
+        observed.update(uid=uid, memory_id=memory_id, kwargs=kwargs)
+        return 'applied'
+
+    monkeypatch.setattr(jit_rollout, 'apply_canonical_trigger_feedback', record)
+    monkeypatch.setattr(jit_rollout, 'get_data_plane_firestore_client', lambda: data_plane)
+
+    result = jit_rollout._apply_trigger_feedback_on_data_plane(
+        'owner',
+        'trigger-1',
+        event_id='e' * 64,
+        expected_account_generation=3,
+        expected_item_revision=4,
+        feedback=None,
+    )
+
+    assert result == 'applied'
+    assert observed['uid'] == 'owner'
+    assert observed['memory_id'] == 'trigger-1'
+    assert observed['kwargs']['event_id'] == 'e' * 64
+    # The point of the test: the plane is pinned, not left to the adapter's
+    # compute-plane default, which on desktop-backend is a different project.
+    assert observed['kwargs']['db_client'] is data_plane
+    assert observed['kwargs']['db_client'] is not compute_plane
 
 
 def test_trigger_feedback_rejects_stale_authority_without_leaking_details(monkeypatch):
