@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 import utils.email.day3_reengagement as day3_reengagement
+from models.conversation_enums import ConversationStatus
 import utils.email.lifecycle as lifecycle
 from tests.unit.fixtures.generic_firestore_fake import FakeFirestore
 from utils.experiments import TREATMENT, existing_assignment
@@ -282,10 +283,10 @@ def test_collect_day3_candidates_maps_signup_os_and_excludes_off_window_and_off_
 def _conversation(created_at, *, discarded=False, status='completed'):
     """A conversation document as the pipeline writes it.
 
-    `status` and `discarded` are explicit in every fixture because they are
-    part of what makes a document count: an `in_progress` stub (written on
-    every listen session start and reconnect) or a discarded empty session
-    must not read as user output.
+    `status` and `discarded` are explicit in every fixture because they decide
+    whether a document counts: an `in_progress` stub (written on every listen
+    session start and reconnect) and a discarded empty session must not read as
+    user output, while every other status must.
     """
     return {'created_at': created_at, 'discarded': discarded, 'status': status}
 
@@ -350,6 +351,42 @@ def test_in_progress_stubs_and_discards_do_not_count_as_coming_back(monkeypatch)
     assert facts.conversations_after_day_zero == 0
     assert facts.day_zero_conversation_count == 0
     assert day3_reengagement.evaluate_candidate(facts, now=NOW).eligible
+
+
+@pytest.mark.parametrize('status', ['processing', 'merging', 'completed', 'failed'])
+def test_every_ended_status_counts_as_real_output(monkeypatch, status):
+    """The mirror-image failure, and the more damaging one for this cohort.
+
+    Tightening to `status == 'completed'` looks obviously safer and silently
+    erases real conversations: `_store_deferred_conversation` persists a
+    desktop capture for a freemium/Neo user with `deferred = True` and
+    `status = processing`, and it stays that way until the user opens it. Those
+    users are exactly who this experiment targets, so treating `processing` as
+    "produced nothing, never came back" would mail the wrong branch to people
+    who did come back.
+    """
+    signup_at = NOW - timedelta(hours=80)
+    docs = {
+        f'users/uid-{status}': _user_doc('macos'),
+        f'users/uid-{status}/conversations/conv-day-zero': _conversation(signup_at + timedelta(hours=2), status=status),
+        f'users/uid-{status}/conversations/conv-later': _conversation(signup_at + timedelta(hours=30), status=status),
+    }
+    _fake_get_user_from_uid(monkeypatch, {f'uid-{status}': 'user@example.com'})
+
+    candidates = day3_reengagement.collect_day3_candidates(now=NOW, firestore_client=FakeFirestore(docs=docs))
+    facts = next(c for c in candidates if c.uid == f'uid-{status}')
+
+    assert facts.day_zero_conversation_count == 1, f'{status} is a real conversation, not a stub'
+    assert facts.conversations_after_day_zero == 1
+    assert day3_reengagement.evaluate_candidate(facts, now=NOW).reason == 'returned'
+
+
+def test_the_only_status_that_does_not_count_is_the_listen_stub():
+    """Pins the allow-list against the enum, so a new `ConversationStatus`
+    forces a decision here instead of being silently excluded."""
+    assert set(day3_reengagement.ENDED_CONVERSATION_STATUSES) == {status.value for status in ConversationStatus} - {
+        ConversationStatus.in_progress.value
+    }
 
 
 def test_collect_day3_candidates_reads_opt_out_already_sent_and_email(monkeypatch):
@@ -537,6 +574,84 @@ def test_rerunning_with_the_same_candidate_does_not_double_send(_resend):
     assert second.ineligible.get('already_enrolled') == 1
     assert second.ineligible.get('send_already_claimed') == 1, 'the ledger, not enrollment, is the lock'
     assert len(_resend.calls) == 1
+
+
+def test_a_failure_before_the_provider_releases_the_claim(_resend, monkeypatch):
+    """Nothing was sent, so holding the claim would be a permanent miss.
+
+    `display_name_for` reaches Firebase Auth after the claim is taken. If that
+    throws and the claim stands, the Cloud Run retry sees it, skips, and leaves
+    a treatment user enrolled and never mailed — converting a transient blip
+    into exactly the permanent non-delivery that removing the
+    "already enrolled" early return was meant to fix.
+    """
+    db = FakeFirestore(docs={'users/uid-auth-blip': {}})
+    facts = _eligible_facts('uid-auth-blip')
+
+    def exploding_display_name(uid):
+        raise RuntimeError('firebase auth unavailable')
+
+    first = day3_reengagement.run_day3_reengagement(
+        candidates=[facts],
+        now=NOW,
+        authority=day3_reengagement.Day3Authority(enabled=True),
+        display_name_for=exploding_display_name,
+        firestore_client=db,
+        treatment_share=1.0,
+    )
+    assert first.failed == 1
+    assert _resend.calls == []
+
+    second = day3_reengagement.run_day3_reengagement(
+        candidates=[facts],
+        now=NOW,
+        authority=day3_reengagement.Day3Authority(enabled=True),
+        display_name_for=lambda uid: None,
+        firestore_client=db,
+        treatment_share=1.0,
+    )
+
+    assert second.sent == 1, 'a pre-provider failure must not become a permanent skip'
+    assert len(_resend.calls) == 1
+
+
+def test_an_unknown_delivery_outcome_keeps_the_claim(_resend, monkeypatch):
+    """The opposite rule, and why the two cannot share one except clause.
+
+    A read timeout means the request reached Resend and the response was never
+    seen. The message may well have been delivered, so the claim must STAND: a
+    duplicate unsolicited email is unrecoverable, a miss is not.
+    """
+    db = FakeFirestore(docs={'users/uid-timeout': {}})
+    facts = _eligible_facts('uid-timeout')
+
+    def read_timeout(url, *, json, headers, timeout):
+        raise lifecycle.httpx.ReadTimeout('response never read')
+
+    monkeypatch.setattr(lifecycle.httpx, 'post', read_timeout)
+    first = day3_reengagement.run_day3_reengagement(
+        candidates=[facts],
+        now=NOW,
+        authority=day3_reengagement.Day3Authority(enabled=True),
+        display_name_for=lambda uid: None,
+        firestore_client=db,
+        treatment_share=1.0,
+    )
+    assert first.failed == 1
+
+    monkeypatch.setattr(lifecycle.httpx, 'post', _resend.post)
+    second = day3_reengagement.run_day3_reengagement(
+        candidates=[facts],
+        now=NOW,
+        authority=day3_reengagement.Day3Authority(enabled=True),
+        display_name_for=lambda uid: None,
+        firestore_client=db,
+        treatment_share=1.0,
+    )
+
+    assert second.sent == 0, 'an unknown outcome must not be retried into a possible duplicate'
+    assert second.ineligible.get('send_already_claimed') == 1
+    assert _resend.calls == []
 
 
 def test_a_treatment_user_whose_send_failed_is_retried_on_the_next_run(_resend, monkeypatch):

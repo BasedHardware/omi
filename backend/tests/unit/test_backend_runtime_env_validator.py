@@ -1208,6 +1208,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
         {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
       ]
     },
@@ -1443,6 +1444,10 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                 'secrets': {
                                     **STANDARD_CLOUD_RUN_SECRETS,
                                     'METRICS_SECRET': {'secret': 'METRICS_SECRET', 'version': 'latest'},
+                                    'LIFECYCLE_EMAIL_SIGNING_SECRET': {
+                                        'secret': 'LIFECYCLE_EMAIL_SIGNING_SECRET',
+                                        'version': 'latest',
+                                    },
                                 },
                             }
                         },
@@ -1479,6 +1484,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
         {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
       ]
     },
@@ -1543,6 +1549,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "1"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
         {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}},
       ]
     },

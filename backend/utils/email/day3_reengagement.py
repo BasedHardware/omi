@@ -41,6 +41,7 @@ from database.firestore_index_registry import (
 )
 from models.conversation_enums import ConversationStatus
 from utils.email.lifecycle import (
+    LifecycleEmailDeliveryUnknown,
     LifecycleEmailNotConfigured,
     LifecycleEmailSuppressed,
     claim_lifecycle_send,
@@ -79,6 +80,19 @@ MAX_USERS_PER_RUN = 500
 # Windows client sending the coarse string writes, so it cannot be attributed
 # to macOS. Those users are counted as `not_macos` rather than guessed at.
 MACOS_SIGNUP_OS_VALUES = frozenset({'macos', 'mac', 'mac os x'})
+
+# A conversation counts as user output once its session has ended, whatever the
+# enrichment did next. Everything except `in_progress`, which is the stub the
+# desktop listen socket writes on every session start and reconnect.
+#
+# Spelled as an explicit allow-list rather than `!= 'in_progress'` because
+# Firestore serves an `in` filter from the same composite index as the
+# surrounding equality and range, and `!=` does not. Derived from
+# `ConversationStatus` so a new status is a visible decision here, not a silent
+# omission.
+ENDED_CONVERSATION_STATUSES = tuple(
+    status.value for status in ConversationStatus if status is not ConversationStatus.in_progress
+)
 
 
 @dataclass(frozen=True)
@@ -246,19 +260,29 @@ def _conversation_signals(uid: str, signup_at: Optional[datetime], *, client: An
 
     ## What counts as a conversation here
 
-    Both probes require ``discarded == False`` and ``status == 'completed'``,
-    which is the same definition ``database.conversations.get_conversations``
-    uses by default. That is load-bearing, not tidiness: the desktop listen
-    socket writes an ``in_progress`` conversation document on every session
-    start and reconnect, so a Mac that is merely *running* — launch-at-login,
-    wake from sleep, socket reconnect — mints documents with fresh
-    ``created_at`` values and no content.
+    Both probes require ``discarded == False`` and a status in
+    ``ENDED_CONVERSATION_STATUSES`` — that is, anything except ``in_progress``.
+    Both halves are load-bearing, and both directions of getting it wrong hurt.
 
-    Counting those would make "has the user come back?" true for every install
-    still switched on, which is precisely the contamination that disqualified
-    ``last_active_at`` from being the eligibility signal in the first place.
-    Re-importing it here, through the value signal chosen to avoid it, would
-    strip the target cohort down to users whose machines are off.
+    **Too loose.** The desktop listen socket writes an ``in_progress``
+    conversation document on every session start and reconnect, so a Mac that
+    is merely *running* — launch-at-login, wake from sleep, socket reconnect —
+    mints documents with fresh ``created_at`` values and no content. Counting
+    those would make "has the user come back?" true for every install still
+    switched on, which is exactly the contamination that disqualified
+    ``last_active_at`` as the eligibility signal.
+
+    **Too strict.** ``status == 'completed'`` looks like the obvious tightening
+    and silently deletes real output: ``_store_deferred_conversation`` persists
+    a desktop conversation for a freemium/Neo user with ``deferred = True`` and
+    ``status = processing``, and it stays there until the user opens it. Those
+    are recorded conversations that are permanently not ``completed``, and they
+    belong to precisely the new-macOS-user cohort this experiment targets —
+    requiring ``completed`` would report those users as having produced nothing
+    and never returned.
+
+    Note this is deliberately *not* ``get_conversations``' default, which
+    filters ``discarded`` only and leaves ``in_progress`` stubs in.
 
     The "after day 0" check uses ``limit(1)``: it is a boolean, so streaming
     the whole set would be pure waste. The day-0 count is capped at 11 because
@@ -273,7 +297,7 @@ def _conversation_signals(uid: str, signup_at: Optional[datetime], *, client: An
 
     day_zero_end = signup_at + timedelta(hours=DAY_ZERO_HOURS)
     conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
-    real_conversation = {'discarded': False, 'status': ConversationStatus.completed.value}
+    real_conversation = {'discarded': False, 'statuses': list(ENDED_CONVERSATION_STATUSES)}
 
     # Built through the registered specs rather than chained by hand. Beyond
     # keeping the declared index and the served query in one place, the
@@ -479,12 +503,30 @@ def run_day3_reengagement(
             release_lifecycle_send(facts.uid, CAMPAIGN, firestore_client=firestore_client)
             logger.error('day3 re-engagement: email not configured; aborting run')
             raise
+        except LifecycleEmailDeliveryUnknown:
+            # The request reached the provider and the response was never read,
+            # so the claim must STAND: a duplicate is worse than a miss.
+            summary.failed += 1
+            record_delivery(
+                experiment_id=EXPERIMENT_ID, uid=facts.uid, outcome='unknown', firestore_client=firestore_client
+            )
+            logger.exception('day3 re-engagement: delivery status unknown')
         except Exception:
+            # Everything else here happened *before* the provider was reached —
+            # `display_name_for` hitting Firebase Auth, template building, a
+            # transport error raised as anything other than the unknown-status
+            # case above. Nothing was sent, so holding the claim would convert a
+            # transient blip into a permanent non-delivery: the retry would see
+            # the claim, skip, and leave a treatment user enrolled and unmailed
+            # forever. Releasing is what makes the Cloud Run retry able to
+            # recover, which is the whole reason the loop no longer stops at
+            # "already enrolled".
+            release_lifecycle_send(facts.uid, CAMPAIGN, firestore_client=firestore_client)
             summary.failed += 1
             record_delivery(
                 experiment_id=EXPERIMENT_ID, uid=facts.uid, outcome='failed', firestore_client=firestore_client
             )
-            logger.exception('day3 re-engagement: send failed')
+            logger.exception('day3 re-engagement: send failed before reaching the provider')
             continue
 
         record_delivery(

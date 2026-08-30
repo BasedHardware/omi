@@ -1179,7 +1179,7 @@ DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     query_scope='COLLECTION',
     filters=(
         FirestoreQueryFilter('discarded', '==', 'discarded'),
-        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('status', 'in', 'statuses'),
         FirestoreQueryFilter('created_at', '>=', 'start'),
         FirestoreQueryFilter('created_at', '<', 'end'),
     ),
@@ -1196,7 +1196,7 @@ DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     query_scope='COLLECTION',
     filters=(
         FirestoreQueryFilter('discarded', '==', 'discarded'),
-        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('status', 'in', 'statuses'),
         FirestoreQueryFilter('created_at', '>=', 'start'),
     ),
     index_fields=(_asc('discarded'), _asc('status'), _asc('created_at'), _asc('__name__')),

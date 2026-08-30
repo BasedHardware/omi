@@ -396,6 +396,9 @@ environments:
             METRICS_SECRET:
               secret: METRICS_SECRET
               version: latest
+            LIFECYCLE_EMAIL_SIGNING_SECRET:
+              secret: LIFECYCLE_EMAIL_SIGNING_SECRET
+              version: latest
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
               version: latest
@@ -1504,6 +1507,9 @@ environments:
               version: latest
             METRICS_SECRET:
               secret: METRICS_SECRET
+              version: latest
+            LIFECYCLE_EMAIL_SIGNING_SECRET:
+              secret: LIFECYCLE_EMAIL_SIGNING_SECRET
               version: latest
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET

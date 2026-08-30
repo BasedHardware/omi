@@ -58,6 +58,15 @@ class LifecycleEmailNotConfigured(RuntimeError):
     """Sending credentials or signing secret are absent."""
 
 
+class LifecycleEmailDeliveryUnknown(RuntimeError):
+    """The request reached the provider and the outcome was never read.
+
+    Distinct from a plain failure because the claim must be treated
+    differently: a caller may not release it, because the message may well have
+    been sent. A miss is recoverable; a duplicate is not.
+    """
+
+
 def _signing_secret() -> str:
     secret = os.getenv('LIFECYCLE_EMAIL_SIGNING_SECRET')
     if not secret:
@@ -242,8 +251,9 @@ def send_lifecycle_email(
     except httpx.HTTPError as exc:
         # Request left, response never read. Delivery is unknown, so the claim
         # must STAND — releasing it risks a duplicate, which is worse than a
-        # missed nudge.
-        raise RuntimeError('email delivery status unknown') from exc
+        # missed nudge. Typed so the caller cannot lump it in with the errors
+        # that happened before anything was sent and release the claim.
+        raise LifecycleEmailDeliveryUnknown('email delivery status unknown') from exc
     if response.status_code >= 400:
         logger.error('lifecycle email send failed uid=%s campaign=%s status=%s', uid, campaign, response.status_code)
         release_lifecycle_send(uid, campaign, firestore_client=firestore_client)

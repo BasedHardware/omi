@@ -49,9 +49,9 @@ All of:
    `desktop` is excluded because Windows writes it too.
 2. `signup_platform_at` between 72h and 96h before the run (one 24h cohort/day)
 3. **Zero real conversations created after the day-0 window** (day 0 = 24h
-   from `signup_platform_at`). "Real" means `discarded == False` and
-   `status == 'completed'` — see below; the qualifier is load-bearing, not
-   hygiene.
+   from `signup_platform_at`). "Real" means `discarded == False` and any
+   status other than `in_progress` — see below; the qualifier is load-bearing,
+   not hygiene, in both directions.
 4. A deliverable email address on the Firebase Auth record
 5. Not opted out of lifecycle email, and no prior EXP-001 send
 
@@ -76,10 +76,21 @@ install that is powered on, which is launch-at-login contamination wearing a
 different hat: it would strip the eligible set down to users whose machines are
 *off*, i.e. the opposite of the intended cohort.
 
-So rule 3 counts only `discarded == False, status == 'completed'` documents,
-which is also what `database.conversations.get_conversations` counts by
-default. Pinned by
-`test_in_progress_stubs_and_discards_do_not_count_as_coming_back`.
+The obvious tightening — `status == 'completed'` — is wrong in the opposite
+direction, and worse for this cohort. `_store_deferred_conversation` persists a
+desktop capture for a freemium/Neo user with `deferred = True` and
+`status = processing`, where it stays until the user opens it. Those are real
+recorded conversations that are permanently not `completed`, belonging to
+exactly the new-macOS-user population this experiment targets; requiring
+`completed` would report them as having produced nothing and never returned.
+
+So rule 3 counts `discarded == False` documents in any status except
+`in_progress` — "a session that ended", whatever enrichment did next. Note this
+is deliberately *not* `get_conversations`' default, which filters `discarded`
+only and leaves stubs in. Pinned by
+`test_in_progress_stubs_and_discards_do_not_count_as_coming_back`,
+`test_every_ended_status_counts_as_real_output`, and
+`test_the_only_status_that_does_not_count_is_the_listen_stub`.
 
 This is a coverage choice, not a validity threat — it changes who is eligible,
 equally in both arms.

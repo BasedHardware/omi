@@ -288,6 +288,15 @@ environment_shared:
           METRICS_SECRET:
             secret: METRICS_SECRET
             version: latest
+          # Same secret the day3-reengagement-email-job uses to MINT unsubscribe
+          # tokens; this service VERIFIES them at /email/unsubscribe. Bound on
+          # only one side, every unsubscribe link and every RFC 8058 one-click
+          # POST is a neutral 400 — the link is live, correctly addressed, and
+          # silently inert, which is the failure this whole path exists to
+          # prevent. It is here, not only on the job, for that reason.
+          LIFECYCLE_EMAIL_SIGNING_SECRET:
+            secret: LIFECYCLE_EMAIL_SIGNING_SECRET
+            version: latest
         env:
           PROMETHEUS_SIDECAR_PORT:
             value: '9090'
