@@ -32,8 +32,12 @@ class SharedPreferencesUtil {
   static const String _authTokenSecureKey = 'authToken';
   static const String _authTokenMigratedPrefsKey = 'authTokenSecureMigrated';
 
-  /// Plain prefs mirror for in-tree native readers (Android background socket).
+  /// Plain prefs mirror for the Android background socket, the one native
+  /// reader that cannot reach secure storage. Other platforms keep the token in
+  /// the keychain only, so the migration is not undone by the mirror.
   static const String _nativeAuthTokenPrefsKey = 'nativeAuthToken';
+
+  static bool _mirrorNativeAuthToken = false;
 
   /// `errSecDuplicateItem`. The keychain plugin writes with a check-then-add,
   /// so an entry its probe cannot see — stored under another accessibility, or
@@ -58,8 +62,11 @@ class SharedPreferencesUtil {
   String get deviceIdHash => _preferences?.getString('deviceIdHash') ?? '';
   set deviceIdHash(String value) => _preferences?.setString('deviceIdHash', value);
 
-  static Future<void> init({FlutterSecureStorage? secureStorage}) async {
+  /// [mirrorNativeAuthToken] exists because the host running `flutter test` is
+  /// never the Android device whose native reader the mirror serves.
+  static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
+    _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
     if (secureStorage != null) {
       _secureStorage = secureStorage;
       _testSecureFallback = null;
@@ -199,12 +206,14 @@ class SharedPreferencesUtil {
     await _syncNativeAuthToken('');
   }
 
-  /// Native Android still reads SharedPreferences. Mirror the live token there
-  /// under a dedicated key so background streaming survives the secure migration.
+  /// Android's background streaming service reads SharedPreferences natively,
+  /// so the live token is mirrored there for it. Where nothing reads the mirror
+  /// the token would sit in plaintext for no one, so the key is cleared instead
+  /// — including a copy an earlier build left behind.
   static Future<void> _syncNativeAuthToken(String value) async {
     final prefs = _preferences;
     if (prefs == null) return;
-    if (value.isEmpty) {
+    if (value.isEmpty || !_mirrorNativeAuthToken) {
       await prefs.remove(_nativeAuthTokenPrefsKey);
     } else {
       await prefs.setString(_nativeAuthTokenPrefsKey, value);

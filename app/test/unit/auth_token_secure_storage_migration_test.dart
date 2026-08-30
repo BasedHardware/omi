@@ -19,7 +19,7 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
 
     const secure = FlutterSecureStorage();
-    await SharedPreferencesUtil.init(secureStorage: secure);
+    await SharedPreferencesUtil.init(secureStorage: secure, mirrorNativeAuthToken: true);
 
     expect(SharedPreferencesUtil().authToken, 'legacy-session-token');
     expect(await secure.read(key: 'authToken'), 'legacy-session-token');
@@ -34,7 +34,7 @@ void main() {
 
     // Second init must not wipe the secure token or re-read a prefs copy.
     await prefs.setString('authToken', 'should-be-ignored');
-    await SharedPreferencesUtil.init(secureStorage: secure);
+    await SharedPreferencesUtil.init(secureStorage: secure, mirrorNativeAuthToken: true);
     expect(SharedPreferencesUtil().authToken, 'legacy-session-token');
     expect(await secure.read(key: 'authToken'), 'legacy-session-token');
     expect(prefs.containsKey('authToken'), isFalse);
@@ -59,7 +59,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
     const secure = FlutterSecureStorage();
-    await SharedPreferencesUtil.init(secureStorage: secure);
+    await SharedPreferencesUtil.init(secureStorage: secure, mirrorNativeAuthToken: true);
 
     SharedPreferencesUtil().authToken = 'fresh-token';
     // Allow the fire-and-forget write to complete.
@@ -83,6 +83,26 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.containsKey('authToken'), isFalse);
     expect(prefs.getBool('authTokenSecureMigrated'), isTrue);
+  });
+
+  test('the plaintext mirror is cleared where no native reader consumes it', () async {
+    SharedPreferences.setMockInitialValues({
+      'nativeAuthToken': 'copy-left-by-an-earlier-build',
+      'authTokenSecureMigrated': true,
+    });
+    FlutterSecureStorage.setMockInitialValues({'authToken': 'secure-token'});
+
+    const secure = FlutterSecureStorage();
+    await SharedPreferencesUtil.init(secureStorage: secure, mirrorNativeAuthToken: false);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.containsKey('nativeAuthToken'), isFalse);
+
+    SharedPreferencesUtil().authToken = 'rotated-token';
+    await pumpEventQueue();
+
+    expect(prefs.containsKey('nativeAuthToken'), isFalse);
+    expect(await secure.read(key: 'authToken'), 'rotated-token');
   });
 
   test('a duplicate-item keychain write deletes the stale entry and rewrites', () async {
