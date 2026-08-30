@@ -1,0 +1,3 @@
+{
+  "change": "MCP servers work on both transports, their published prompts are usable in chat, long tool lists are no longer truncated, and installing a skill brings its scripts and references instead of just the instructions"
+}

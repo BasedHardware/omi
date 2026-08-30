@@ -27,6 +27,34 @@ as the RFC 8707 `resource` parameter on both the authorization and token
 requests. Probing only the resource's own `oauth-authorization-server` — and
 omitting `resource` — fails every hosted provider.
 
+## MCP client
+
+`agent/src/runtime/mcp-client.ts` holds the wire subset every user server is
+driven through; each transport supplies `rpc` and the handshake:
+
+| Transport | File | When |
+|---|---|---|
+| Streamable HTTP | `mcp-http-client.ts` | default for a `url` server |
+| HTTP+SSE | `mcp-sse-client.ts` | `transport: "sse"` — the URL is an event stream, and POSTing to it is a 404 |
+| stdio | `mcp-stdio-client.ts` | a `command` server |
+
+`initialize` capabilities are recorded, so a server is never asked for prompts
+it does not publish. `tools/list` and `prompts/list` are walked to the last
+page, bounded by a page budget and by treating a repeated cursor as the end.
+Prompts register as tools (`mcp_<server>_prompt_<name>`) because this chat has
+no slash-command surface; a prompt's required arguments become the tool's.
+
+Tool results are rendered as text: non-text blocks are *named*, never inlined —
+an image block used to leave the join empty and fall through to
+`JSON.stringify(result)`, which put its whole base64 payload in the context.
+`structuredContent` answers when a tool returns data and no prose.
+
+**Not supported:** `notifications/tools/list_changed`. Acting on it means
+replacing a live tool set and pi's extension API has `registerTool` with no
+counterpart; config and tools are read per session, so changes land on the next
+one. Elicitation, sampling and roots are likewise unimplemented — the client
+declares no capabilities of its own.
+
 ## Marketplace
 
 `ExtensionCatalog` / `ExtensionCatalogService` read browsable catalogs. Sources
@@ -61,6 +89,15 @@ the registry, never from the curated list.
 A package's declared arguments are replayed as published, named flags included
 (`-t stdio`); an argument whose value is a `{placeholder}` is skipped, because
 nothing here can fill it.
+
+Skill catalogs are read as a **recursive git tree**, not a `skills/` folder
+listing: a skill is a directory whose SKILL.md references `scripts/`,
+`references/` and assets by relative path, and 22 of the 33 skills in the two
+default catalogs ship such files. Install fetches the folder into a staging
+directory and moves it into place once complete, so a failed download leaves no
+half-written skill and a reinstall leaves no stale files. Paths are rejected
+unless every component is a plain name, and the fetch is capped (200 files,
+4 MB each, 32 MB total).
 
 Logos come only from publisher-controlled URLs — the registry's declared
 `icons` (HTTPS only), else the GitHub owner avatar, else the site's favicon,
