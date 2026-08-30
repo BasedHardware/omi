@@ -53,10 +53,10 @@ enum CuaMcpEndpoint {
       let requested = meta["io.modelcontextprotocol/protocolVersion"] as? String,
       !supportedVersions.contains(requested)
     {
-      guard id != nil else { return nil }
+      guard let id else { return nil }
       return [
         "jsonrpc": "2.0",
-        "id": id!,
+        "id": id,
         "error": [
           "code": ErrorCode.unsupportedProtocolVersion,
           "message": "Unsupported protocol version",

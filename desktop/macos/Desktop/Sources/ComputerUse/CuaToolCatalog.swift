@@ -324,17 +324,18 @@ enum CuaToolCatalog {
     if let refusal = await CuaControlGate.shared.refusal() {
       return .error(refusal.message)
     }
-    let pid: pid_t?
-    if let app = args.string("app") {
-      pid = await MainActor.run { CuaAxReader.processID(forAppNamed: app) }
-      guard pid != nil else { return .error("No running app named \(app).") }
-    } else {
-      pid = await MainActor.run { CuaAxReader.frontmostProcessID() }
-      guard pid != nil else { return .error("Omi is frontmost; bring the app you mean forward first.") }
+    let named = args.string("app")
+    let resolved = await MainActor.run {
+      named.map { CuaAxReader.processID(forAppNamed: $0) } ?? CuaAxReader.frontmostProcessID()
+    }
+    guard let pid = resolved else {
+      return .error(
+        named.map { "No running app named \($0)." }
+          ?? "Omi is frontmost; bring the app you mean forward first.")
     }
     guard
       let snapshot = await CuaAxReader.snapshot(
-        pid: pid!,
+        pid: pid,
         maxDepth: args.int("max_depth") ?? 12,
         maxNodes: args.int("max_nodes") ?? 250)
     else { return .error("Could not read that app's accessibility tree.") }

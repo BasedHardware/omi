@@ -243,14 +243,14 @@ enum CuaAxReader {
     var rawPosition: CFTypeRef?
     var rawSize: CFTypeRef?
     if AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &rawPosition)
-      == .success, let value = rawPosition
+      == .success, let value = rawPosition, CFGetTypeID(value) == AXValueGetTypeID()
     {
-      AXValueGetValue(value as! AXValue, .cgPoint, &origin)
+      AXValueGetValue(unsafeDowncast(value as AnyObject, to: AXValue.self), .cgPoint, &origin)
     }
     if AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &rawSize) == .success,
-      let value = rawSize
+      let value = rawSize, CFGetTypeID(value) == AXValueGetTypeID()
     {
-      AXValueGetValue(value as! AXValue, .cgSize, &size)
+      AXValueGetValue(unsafeDowncast(value as AnyObject, to: AXValue.self), .cgSize, &size)
     }
     return CGRect(origin: origin, size: size)
   }
