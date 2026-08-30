@@ -55,9 +55,9 @@ final class PanelChatHandoffTests: XCTestCase {
 
   /// The card must survive the journal round trip: encoded as a discoveryCard block
   /// and decoded back with the fold intact.
-  func testCardSurvivesContentBlockRoundTrip() {
-    let card = PanelSession.chatCard(
-      title: "Your Information", fields: [field("Email", "a@b.c")])!
+  func testCardSurvivesContentBlockRoundTrip() throws {
+    let card = try XCTUnwrap(
+      PanelSession.chatCard(title: "Your Information", fields: [field("Email", "a@b.c")]))
     let block = ChatContentBlock.discoveryCard(
       id: "voice-panel-key-0", title: card.title, summary: card.summary, fullText: card.text)
     guard let json = ChatContentBlockCodec.encode([block]),

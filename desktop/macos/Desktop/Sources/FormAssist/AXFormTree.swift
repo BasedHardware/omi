@@ -78,7 +78,10 @@ enum AXFormTree {
     guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success else {
       return nil
     }
-    return ((raw as AnyObject) as! AXUIElement)
+    guard let raw, CFGetTypeID(raw) == AXUIElementGetTypeID() else { return nil }
+    // swiftlint:disable:next force_cast - the CFGetTypeID guard above is the real check;
+    // Swift rejects `as?` to a CoreFoundation type as always-succeeding.
+    return (raw as! AXUIElement)
   }
 
   static func elementArrayAttribute(_ element: AXUIElement, _ attribute: String) -> [AXUIElement] {
@@ -86,19 +89,23 @@ enum AXFormTree {
     guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success else {
       return []
     }
-    return (raw as? [AnyObject])?.map { $0 as! AXUIElement } ?? []
+    return (raw as? [AnyObject])?.compactMap { child -> AXUIElement? in
+      guard CFGetTypeID(child as CFTypeRef) == AXUIElementGetTypeID() else { return nil }
+      // swiftlint:disable:next force_cast - guarded by the type id immediately above.
+      return (child as! AXUIElement)
+    } ?? []
   }
 
   static func frameAttribute(_ element: AXUIElement) -> CGRect {
     var point = CGPoint.zero
     var size = CGSize.zero
-    if let pointValue = rawAttribute(element, "AXPosition") {
-      let pointValue = pointValue as! AXValue
-      AXValueGetValue(pointValue, .cgPoint, &point)
+    if let raw = rawAttribute(element, "AXPosition"), CFGetTypeID(raw) == AXValueGetTypeID() {
+      // swiftlint:disable:next force_cast - guarded by the type id in the condition above.
+      AXValueGetValue(raw as! AXValue, .cgPoint, &point)
     }
-    if let sizeValue = rawAttribute(element, "AXSize") {
-      let sizeValue = sizeValue as! AXValue
-      AXValueGetValue(sizeValue, .cgSize, &size)
+    if let raw = rawAttribute(element, "AXSize"), CFGetTypeID(raw) == AXValueGetTypeID() {
+      // swiftlint:disable:next force_cast - guarded by the type id in the condition above.
+      AXValueGetValue(raw as! AXValue, .cgSize, &size)
     }
     return CGRect(origin: point, size: size)
   }
