@@ -1,0 +1,447 @@
+import XCTest
+
+@testable import Omi_Computer
+
+/// The marketplace decodes third-party payloads it does not control, and the only thing standing
+/// between a malformed record and a dead server the user has to debug is what this file asserts.
+final class ExtensionCatalogTests: XCTestCase {
+  private var tempRoot = FileManager.default.temporaryDirectory
+
+  override func setUpWithError() throws {
+    tempRoot = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-catalog-test-\(UUID().uuidString)")
+    LocalSkillsStore.rootURLOverride = tempRoot
+  }
+
+  override func tearDownWithError() throws {
+    LocalSkillsStore.rootURLOverride = nil
+    try? FileManager.default.removeItem(at: tempRoot)
+  }
+
+  // MARK: - MCP registry
+
+  /// The registry publishes one record per version, so a raw listing repeats every server. The
+  /// user must see each server once, at its newest published version.
+  func testRegistryKeepsOneEntryPerServerName() throws {
+    let payload = """
+      {"servers": [
+        {"server": {"name": "io.example/thing", "title": "Thing", "description": "v1",
+                    "remotes": [{"type": "streamable-http", "url": "https://a.example/mcp"}]}},
+        {"server": {"name": "io.example/thing", "title": "Thing", "description": "v2",
+                    "remotes": [{"type": "streamable-http", "url": "https://b.example/mcp"}]}}
+      ]}
+      """
+    let entries = ExtensionCatalog.mcpEntries(fromRegistry: Data(payload.utf8))
+
+    XCTAssertEqual(entries.count, 1)
+    XCTAssertEqual(entries[0].detail, "v2")
+    XCTAssertEqual(
+      entries[0].install, .mcpRemote(url: "https://b.example/mcp", transport: "http", secretHeader: nil))
+  }
+
+  func testRegistryMapsNpmPackageToNpxCommand() throws {
+    let payload = """
+      {"servers": [{"server": {"name": "io.example/pkg", "description": "d", "packages": [
+        {"registryType": "npm", "identifier": "some-mcp", "version": "1.2.3", "runtimeHint": "npx",
+         "transport": {"type": "stdio"},
+         "runtimeArguments": [{"value": "-y", "type": "positional"}],
+         "environmentVariables": [{"name": "API_KEY", "isRequired": true},
+                                  {"name": "OPTIONAL", "isRequired": false}]}
+      ]}}]}
+      """
+    let entries = ExtensionCatalog.mcpEntries(fromRegistry: Data(payload.utf8))
+
+    XCTAssertEqual(
+      entries.first?.install,
+      .mcpStdio(command: "npx", args: ["-y", "some-mcp@1.2.3"], requiredEnv: ["API_KEY"]))
+    XCTAssertEqual(entries.first?.name, "pkg", "reverse-DNS names must show their last segment")
+    XCTAssertTrue(entries.first?.install.needsInput ?? false)
+  }
+
+  /// A runtime we cannot launch, or an argument carrying a `{placeholder}` we cannot fill, would
+  /// install a command that fails the first time it runs. Offering nothing is the better failure.
+  func testRegistrySkipsUnlaunchablePackagesAndPlaceholderArguments() throws {
+    let ociOnly = """
+      {"servers": [{"server": {"name": "io.example/img", "description": "d", "packages": [
+        {"registryType": "oci", "identifier": "example/img", "version": "1"}]}}]}
+      """
+    XCTAssertTrue(ExtensionCatalog.mcpEntries(fromRegistry: Data(ociOnly.utf8)).isEmpty)
+
+    let placeholder = """
+      {"servers": [{"server": {"name": "io.example/pkg", "description": "d", "packages": [
+        {"registryType": "npm", "identifier": "some-mcp", "runtimeHint": "npx",
+         "packageArguments": [{"value": "{path}", "type": "positional"},
+                              {"value": "--safe", "type": "positional"}]}]}}]}
+      """
+    XCTAssertEqual(
+      ExtensionCatalog.mcpEntries(fromRegistry: Data(placeholder.utf8)).first?.install,
+      .mcpStdio(command: "npx", args: ["some-mcp", "--safe"], requiredEnv: []))
+  }
+
+  func testMalformedRegistryPayloadYieldsNoEntries() throws {
+    XCTAssertTrue(ExtensionCatalog.mcpEntries(fromRegistry: Data("not json".utf8)).isEmpty)
+    XCTAssertTrue(ExtensionCatalog.mcpEntries(fromRegistry: Data(#"{"servers": 3}"#.utf8)).isEmpty)
+  }
+
+  // MARK: - Smithery
+
+  /// Anyone can publish to Smithery. An unverified, inactive, unlisted, or undeployed server is a
+  /// command or a credentialed endpoint the user would be trusting on this app's recommendation.
+  func testSmitheryListingKeepsOnlyVerifiedDeployedRemotes() throws {
+    let payload = """
+      {"servers": [
+        {"qualifiedName": "good", "displayName": "Good", "description": "d", "verified": true,
+         "remote": true, "isDeployed": true, "useCount": 10,
+         "iconUrl": "https://api.smithery.ai/servers/good/icon", "homepage": "https://good.example"},
+        {"qualifiedName": "unverified", "verified": false, "remote": true, "isDeployed": true},
+        {"qualifiedName": "inactive", "verified": true, "remote": true, "isDeployed": true,
+         "inactive": true},
+        {"qualifiedName": "unlisted", "verified": true, "remote": true, "isDeployed": true,
+         "unlisted": true},
+        {"qualifiedName": "local-only", "verified": true, "remote": false, "isDeployed": true},
+        {"qualifiedName": "undeployed", "verified": true, "remote": true, "isDeployed": false}
+      ]}
+      """
+    let candidates = ExtensionCatalog.smitheryCandidates(fromListing: Data(payload.utf8))
+
+    XCTAssertEqual(candidates.map(\.qualifiedName), ["good"])
+    XCTAssertEqual(candidates.first?.displayName, "Good")
+    XCTAssertEqual(candidates.first?.iconURL, "https://api.smithery.ai/servers/good/icon")
+  }
+
+  /// An icon served over http would be a mixed-content tile the user never asked for.
+  func testSmitheryInsecureIconIsDropped() throws {
+    let payload = """
+      {"servers": [{"qualifiedName": "x", "verified": true, "remote": true, "isDeployed": true,
+                    "iconUrl": "http://insecure.example/icon.png"}]}
+      """
+    XCTAssertEqual(
+      ExtensionCatalog.smitheryCandidates(fromListing: Data(payload.utf8)).first?.iconURL, "")
+  }
+
+  private var smitheryCandidate: ExtensionCatalog.SmitheryCandidate {
+    ExtensionCatalog.SmitheryCandidate(
+      qualifiedName: "brave", displayName: "Brave Search", description: "Search the web.",
+      iconURL: "https://api.smithery.ai/servers/brave/icon", homepage: "https://brave.com",
+      useCount: 100)
+  }
+
+  func testSmitheryDetailBecomesARemoteInstall() throws {
+    let payload = """
+      {"qualifiedName": "brave", "remote": true, "deploymentUrl": "https://brave.run.tools",
+       "connections": [{"type": "http", "deploymentUrl": "https://brave.run.tools",
+                        "configSchema": {"type": "object", "properties": {}}}]}
+      """
+    let entry = try XCTUnwrap(
+      ExtensionCatalog.smitheryEntry(fromDetail: Data(payload.utf8), candidate: smitheryCandidate))
+
+    XCTAssertEqual(entry.name, "Brave Search")
+    XCTAssertEqual(entry.publisher, "smithery.ai")
+    XCTAssertEqual(
+      entry.install, .mcpRemote(url: "https://brave.run.tools", transport: "http", secretHeader: nil))
+    XCTAssertFalse(entry.install.needsInput, "an OAuth server must not demand a key up front")
+  }
+
+  /// A server that declares required config asks for it before writing anything to disk.
+  func testSmitheryRequiredConfigSurfacesAsAnInputField() throws {
+    let payload = """
+      {"connections": [{"type": "http", "deploymentUrl": "https://x.run.tools",
+                        "configSchema": {"required": ["braveApiKey"]}}]}
+      """
+    let entry = try XCTUnwrap(
+      ExtensionCatalog.smitheryEntry(fromDetail: Data(payload.utf8), candidate: smitheryCandidate))
+    XCTAssertTrue(entry.install.needsInput)
+  }
+
+  /// A listing row with no reachable endpoint must not become a tile that cannot install.
+  func testSmitheryDetailWithoutAnEndpointYieldsNothing() throws {
+    XCTAssertNil(
+      ExtensionCatalog.smitheryEntry(
+        fromDetail: Data(#"{"connections": []}"#.utf8), candidate: smitheryCandidate))
+    XCTAssertNil(
+      ExtensionCatalog.smitheryEntry(fromDetail: Data("not json".utf8), candidate: smitheryCandidate))
+  }
+
+  // MARK: - Skills index
+
+  func testSkillsRepoContentsBecomeRawMarkdownInstalls() throws {
+    let payload = """
+      [{"type": "dir", "name": "web-research"},
+       {"type": "file", "name": "README.md"},
+       {"type": "dir", "name": "pdf"}]
+      """
+    let entries = ExtensionCatalog.skillEntries(
+      fromRepoContents: Data(payload.utf8), repo: "acme/skills", ref: "main")
+
+    XCTAssertEqual(entries.map(\.name), ["Web Research", "Pdf"])
+    let expected = try XCTUnwrap(
+      URL(string: "https://raw.githubusercontent.com/acme/skills/main/skills/web-research/SKILL.md"))
+    XCTAssertEqual(entries[0].install, .skill(markdownURL: expected))
+  }
+
+  /// Real SKILL.md files in the wild use YAML block scalars for long descriptions. Reading only the
+  /// value on the `description:` line showed the user a lone ">" on those cards.
+  func testSkillDescriptionReadsBlockScalarsAndPlainValues() throws {
+    let plain = "---\nname: x\ndescription: Use when asked to do the thing.\n---\n\nBody."
+    XCTAssertEqual(
+      ExtensionCatalog.skillDescription(fromMarkdown: plain), "Use when asked to do the thing.")
+
+    let quoted = "---\ndescription: \"Quoted value\"\n---\n\nBody."
+    XCTAssertEqual(ExtensionCatalog.skillDescription(fromMarkdown: quoted), "Quoted value")
+
+    let folded = """
+      ---
+      name: x
+      description: >
+        Creating algorithmic art using p5.js
+        with seeded randomness.
+      license: MIT
+      ---
+
+      Body.
+      """
+    XCTAssertEqual(
+      ExtensionCatalog.skillDescription(fromMarkdown: folded),
+      "Creating algorithmic art using p5.js with seeded randomness.")
+
+    let literal = "---\ndescription: |-\n  First line.\n  Second line.\n---\n\nBody."
+    XCTAssertEqual(
+      ExtensionCatalog.skillDescription(fromMarkdown: literal), "First line. Second line.")
+
+    XCTAssertNil(ExtensionCatalog.skillDescription(fromMarkdown: "# No frontmatter\n\nBody."))
+    XCTAssertNil(ExtensionCatalog.skillDescription(fromMarkdown: "---\nname: x\n---\n\nBody."))
+  }
+
+  // MARK: - Sources
+
+  private func defaults(for kind: ExtensionCatalog.Kind) -> [ExtensionCatalog.Source] {
+    ExtensionCatalog.defaultSources.filter { $0.kind == kind }
+  }
+
+  func testSourcesFallBackToDefaultsWhenConfigIsAbsentOrUnusable() throws {
+    let missing = tempRoot.appendingPathComponent("nope.json")
+    XCTAssertEqual(ExtensionCatalog.sources(kind: .mcp, configURL: missing), defaults(for: .mcp))
+
+    try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+    let broken = tempRoot.appendingPathComponent("catalogs.json")
+    try Data("{ not json".utf8).write(to: broken)
+    XCTAssertEqual(ExtensionCatalog.sources(kind: .skill, configURL: broken), defaults(for: .skill))
+  }
+
+  /// Both marketplaces must stay reachable by default: Smithery ranks and verifies, the official
+  /// registry is the only one that can be searched exhaustively.
+  func testMcpDefaultsCoverBothRegistries() throws {
+    let feeds = defaults(for: .mcp).map(\.feed)
+    XCTAssertTrue(feeds.contains { if case .smithery = $0 { return true } else { return false } })
+    XCTAssertTrue(feeds.contains { if case .mcpRegistry = $0 { return true } else { return false } })
+  }
+
+  /// A file that configures one kind must not silently delete the other kind's marketplace.
+  func testConfiguringOneKindLeavesTheOtherOnItsDefault() throws {
+    try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+    let config = tempRoot.appendingPathComponent("catalogs.json")
+    try Data(
+      #"{"catalogs": [{"kind": "skill", "type": "github-skills", "repo": "acme/s", "ref": "dev"}]}"#
+        .utf8
+    ).write(to: config)
+
+    XCTAssertEqual(
+      ExtensionCatalog.sources(kind: .skill, configURL: config),
+      [ExtensionCatalog.Source(kind: .skill, feed: .githubSkillsRepo(repo: "acme/s", ref: "dev"))])
+    XCTAssertEqual(ExtensionCatalog.sources(kind: .mcp, configURL: config), defaults(for: .mcp))
+  }
+
+  // MARK: - Logos
+
+  /// Every icon source must be one the publisher controls. A guessed or third-party URL either
+  /// renders a broken tile or tells someone else which servers this user is browsing.
+  func testIconPrefersDeclaredIconThenRepoOwnerThenFavicon() throws {
+    let declared: [String: Any] = [
+      "icons": [["src": "https://cdn.example.com/logo.png"]],
+      "repository": ["url": "https://github.com/acme/thing"],
+    ]
+    XCTAssertEqual(
+      ExtensionCatalog.iconURL(for: declared, websiteURL: "https://acme.com"),
+      "https://cdn.example.com/logo.png")
+
+    let repoOnly: [String: Any] = ["repository": ["url": "https://github.com/acme/thing"]]
+    XCTAssertEqual(
+      ExtensionCatalog.iconURL(for: repoOnly, websiteURL: "https://acme.com"),
+      "https://github.com/acme.png?size=128")
+
+    XCTAssertEqual(
+      ExtensionCatalog.iconURL(for: [:], websiteURL: "https://acme.com/docs/mcp"),
+      "https://acme.com/favicon.ico")
+
+    XCTAssertEqual(ExtensionCatalog.iconURL(for: [:], websiteURL: nil), "")
+  }
+
+  /// An http icon is not rendered: the spec requires HTTPS, and a mixed-content tile is a
+  /// downgrade the user never asked for.
+  func testInsecureDeclaredIconIsIgnored() throws {
+    let insecure: [String: Any] = ["icons": [["src": "http://cdn.example.com/logo.png"]]]
+    XCTAssertEqual(ExtensionCatalog.iconURL(for: insecure, websiteURL: nil), "")
+  }
+
+  func testGitHubOwnerIsOnlyTakenFromGitHubURLs() throws {
+    XCTAssertEqual(ExtensionCatalog.gitHubOwner(fromRepositoryURL: "https://github.com/acme/x"), "acme")
+    XCTAssertNil(ExtensionCatalog.gitHubOwner(fromRepositoryURL: "https://gitlab.com/acme/x"))
+    XCTAssertNil(ExtensionCatalog.gitHubOwner(fromRepositoryURL: "https://github.com"))
+  }
+
+  // MARK: - Featured servers
+
+  /// Featured entries are fetched one server at a time, and the curated title wins over whatever
+  /// the registry happens to carry — most first-party entries publish no title at all.
+  func testFeaturedEntryUsesLatestVersionAndCuratedTitle() throws {
+    let payload = """
+      {"servers": [
+        {"server": {"name": "com.acme/mcp", "description": "old",
+                    "remotes": [{"type": "streamable-http", "url": "https://a.acme.com/mcp"}]},
+         "_meta": {"io.modelcontextprotocol.registry/official": {"isLatest": false}}},
+        {"server": {"name": "com.acme/mcp", "description": "new", "websiteUrl": "https://acme.com",
+                    "remotes": [{"type": "streamable-http", "url": "https://b.acme.com/mcp"}]},
+         "_meta": {"io.modelcontextprotocol.registry/official": {"isLatest": true}}}
+      ]}
+      """
+    let entry = try XCTUnwrap(
+      ExtensionCatalog.mcpEntry(fromVersions: Data(payload.utf8), name: "com.acme/mcp", title: "Acme"))
+
+    XCTAssertEqual(entry.name, "Acme")
+    XCTAssertEqual(entry.detail, "new")
+    XCTAssertEqual(entry.publisher, "com.acme")
+    XCTAssertEqual(entry.iconURL, "https://acme.com/favicon.ico")
+    XCTAssertEqual(
+      entry.install, .mcpRemote(url: "https://b.acme.com/mcp", transport: "http", secretHeader: nil))
+  }
+
+  func testFeaturedListIsUniqueAndFullyQualified() throws {
+    let names = ExtensionCatalog.featuredMcpServers.map(\.name)
+    XCTAssertEqual(Set(names).count, names.count, "a duplicate would render the same tile twice")
+    for name in names {
+      XCTAssertTrue(name.contains("/"), "\(name) is not a registry-qualified server name")
+      XCTAssertFalse(
+        name.hasPrefix("io.github."),
+        "\(name) is a personal GitHub namespace, not a brand's verified domain")
+    }
+  }
+
+  func testVersionsURLEscapesTheSlashInAServerName() throws {
+    let base = try XCTUnwrap(URL(string: "https://registry.example.io"))
+    let url = try XCTUnwrap(
+      ExtensionCatalogService.versionsURL(base: base, serverName: "com.acme/mcp"))
+    XCTAssertEqual(url.absoluteString, "https://registry.example.io/v0/servers/com.acme%2Fmcp/versions")
+  }
+
+  // MARK: - OAuth discovery
+
+  /// RFC 8414 inserts the well-known segment *before* an issuer's path, not after it. Hosted
+  /// providers issue per-server paths (`https://auth.example/brave`), so appending would probe
+  /// `/brave/.well-known/...` — a 404 — and the server would look like it had no OAuth at all.
+  func testIssuerWellKnownInsertsTheSegmentBeforeAnIssuerPath() throws {
+    let scoped = try XCTUnwrap(URL(string: "https://auth.example.ai/brave"))
+    XCTAssertEqual(
+      LocalMcpStore.issuerWellKnown(issuer: scoped, suffix: "oauth-authorization-server")?
+        .absoluteString,
+      "https://auth.example.ai/.well-known/oauth-authorization-server/brave")
+
+    let bare = try XCTUnwrap(URL(string: "https://auth.example.ai"))
+    XCTAssertEqual(
+      LocalMcpStore.issuerWellKnown(issuer: bare, suffix: "openid-configuration")?.absoluteString,
+      "https://auth.example.ai/.well-known/openid-configuration")
+  }
+
+  /// Discovery starts from the resource's origin, so a server URL carrying a path or port must not
+  /// send the probe to the wrong place.
+  func testOriginDropsPathButKeepsPort() throws {
+    XCTAssertEqual(
+      LocalMcpStore.origin(of: try XCTUnwrap(URL(string: "https://x.example/mcp/v1")))?
+        .absoluteString, "https://x.example")
+    XCTAssertEqual(
+      LocalMcpStore.origin(of: try XCTUnwrap(URL(string: "http://127.0.0.1:8080/mcp")))?
+        .absoluteString, "http://127.0.0.1:8080")
+  }
+
+  // MARK: - Imported skill validation
+
+  /// A README dropped on the editor is not a skill. Without a description the model has nothing to
+  /// match a request against, so it would install as a skill that can never be selected.
+  func testImportedMarkdownMustCarrySkillFrontmatter() throws {
+    XCTAssertNotNil(
+      LocalSkillsStore.validationError(forImportedMarkdown: "# Just a readme\n\nSome notes."))
+    XCTAssertNotNil(
+      LocalSkillsStore.validationError(forImportedMarkdown: "---\nname: x\n---\n\nBody."))
+    XCTAssertNotNil(
+      LocalSkillsStore.validationError(
+        forImportedMarkdown: "---\nname: x\ndescription: use when asked\n---\n\n   "))
+    XCTAssertNil(
+      LocalSkillsStore.validationError(
+        forImportedMarkdown: "---\nname: x\ndescription: use when asked\n---\n\nDo the thing."))
+  }
+
+  /// Both feeds are resolved by type, never by position. Adding Smithery ahead of the official
+  /// registry in `defaultSources` silently emptied the featured list, which had assumed the
+  /// registry was first.
+  func testFeedLookupDoesNotDependOnSourceOrder() throws {
+    try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+    let config = tempRoot.appendingPathComponent("catalogs.json")
+    try Data(
+      #"""
+      {"catalogs": [
+        {"kind": "mcp", "type": "smithery", "url": "https://smithery.example"},
+        {"kind": "mcp", "type": "mcp-registry", "url": "https://registry.example"}
+      ]}
+      """#.utf8
+    ).write(to: config)
+
+    let feeds = ExtensionCatalog.sources(kind: .mcp, configURL: config).map(\.feed)
+    XCTAssertEqual(feeds.count, 2)
+    XCTAssertEqual(feeds.first, .smithery(baseURL: try XCTUnwrap(URL(string: "https://smithery.example"))))
+    XCTAssertEqual(
+      feeds.last, .mcpRegistry(baseURL: try XCTUnwrap(URL(string: "https://registry.example"))))
+  }
+
+  func testSmitheryURLsEscapeNamespacedNames() throws {
+    let base = try XCTUnwrap(URL(string: "https://registry.smithery.ai"))
+    let listing = try XCTUnwrap(
+      ExtensionCatalogService.smitheryListingURL(base: base, search: " github ", limit: 24))
+    let query = URLComponents(url: listing, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    XCTAssertEqual(query.first { $0.name == "q" }?.value, "github")
+    XCTAssertEqual(query.first { $0.name == "pageSize" }?.value, "24")
+
+    let blank = try XCTUnwrap(
+      ExtensionCatalogService.smitheryListingURL(base: base, search: "", limit: 5))
+    let blankQuery = URLComponents(url: blank, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    XCTAssertNil(blankQuery.first { $0.name == "q" })
+
+    let detail = try XCTUnwrap(
+      ExtensionCatalogService.smitheryDetailURL(base: base, qualifiedName: "vercel/grep"))
+    XCTAssertEqual(detail.absoluteString, "https://registry.smithery.ai/servers/vercel/grep")
+  }
+
+  // MARK: - Install naming
+
+  /// Installing must never overwrite a server the user configured by hand under the same name.
+  func testInstallNameAvoidsCollisionWithAnExistingServer() throws {
+    XCTAssertEqual(ExtensionCatalogService.availableServerName(for: "GitHub", taken: []), "github")
+    XCTAssertEqual(
+      ExtensionCatalogService.availableServerName(for: "GitHub", taken: ["github"]), "github-2")
+    XCTAssertEqual(
+      ExtensionCatalogService.availableServerName(for: "GitHub", taken: ["github", "github-2"]),
+      "github-3")
+    XCTAssertEqual(ExtensionCatalogService.availableServerName(for: "!!!", taken: []), "server")
+  }
+
+  func testRegistryURLCarriesLatestVersionAndSearch() throws {
+    let base = try XCTUnwrap(URL(string: "https://registry.example.io"))
+    let url = try XCTUnwrap(ExtensionCatalogService.registryURL(base: base, search: " playwright "))
+    XCTAssertEqual(url.path, "/v0/servers")
+    let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    XCTAssertEqual(query.first { $0.name == "version" }?.value, "latest")
+    XCTAssertEqual(query.first { $0.name == "search" }?.value, "playwright")
+
+    let blank = try XCTUnwrap(ExtensionCatalogService.registryURL(base: base, search: "   "))
+    let blankQuery = URLComponents(url: blank, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    XCTAssertNil(blankQuery.first { $0.name == "search" })
+  }
+}

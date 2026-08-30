@@ -9,8 +9,14 @@ import UniformTypeIdentifiers
 /// to Imports/Exports.
 struct McpServersSection: View {
   @ObservedObject var appProvider: AppProvider
+  var searchText: String = ""
   let onAdd: () -> Void
   let onSelectLocal: (LocalMcpStore.Entry) -> Void
+  let onSelectCatalogEntry: (ExtensionCatalog.Entry) -> Void
+
+  private var servers: [LocalMcpStore.Entry] {
+    appProvider.localMcpServers.filter { matchesSearch($0.name, $0.summary, query: searchText) }
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -30,7 +36,7 @@ struct McpServersSection: View {
         .buttonStyle(.plain)
       }
 
-      if appProvider.localMcpServers.isEmpty {
+      if servers.isEmpty {
         AgentExtensionEmptyCard(
           icon: "server.rack",
           text: "No servers yet. Add a remote URL, or a local command like npx @playwright/mcp@latest.")
@@ -40,24 +46,47 @@ struct McpServersSection: View {
           alignment: .leading,
           spacing: OmiSpacing.md
         ) {
-          ForEach(appProvider.localMcpServers) { server in
+          ForEach(servers) { server in
+            let status = appProvider.mcpStatuses[server.name] ?? .checking
             AgentExtensionCard(
               icon: server.isCommand ? "terminal" : "server.rack",
               imageUrl: "",
               title: server.name,
-              subtitle: server.isCommand ? "Local command" : "Local config",
-              detail: server.summary,
-              statusText: "Active in chat",
-              statusActive: true
+              subtitle: server.isCommand ? "Local command" : "Remote",
+              detail: status.detail ?? server.summary,
+              statusText: status.label,
+              statusActive: status.isHealthy
             ) {
               onSelectLocal(server)
             }
           }
         }
       }
+
+      ExtensionMarketplaceSection(
+        entries: marketplaceEntries,
+        isLoading: appProvider.isLoadingMcpCatalog,
+        loadingText: "Loading the MCP registry…",
+        icon: { $0.subtitle == "Remote" ? "server.rack" : "terminal" },
+        onSelect: onSelectCatalogEntry
+      )
+    }
+    .task(id: searchText) {
+      await ExtensionMarketplaceSection.debounce()
+      guard !Task.isCancelled else { return }
+      await appProvider.fetchMcpCatalog(search: searchText)
+    }
+    .task(id: appProvider.localMcpServers.map(\.name)) {
+      await appProvider.refreshMcpStatuses()
     }
   }
 
+  /// A catalog entry whose local name is already taken is not offered again: installing it would
+  /// write a suffixed duplicate, which reads as a second copy rather than an upgrade.
+  private var marketplaceEntries: [ExtensionCatalog.Entry] {
+    let taken = Set(appProvider.localMcpServers.map(\.name))
+    return appProvider.mcpCatalog.filter { !taken.contains(LocalSkillsStore.slugify($0.name)) }
+  }
 }
 
 // MARK: - Skills section
@@ -65,8 +94,14 @@ struct McpServersSection: View {
 /// User-authored skills (SKILL.md in ~/.omi/skills), listed on the Apps page.
 struct SkillsSection: View {
   @ObservedObject var appProvider: AppProvider
+  var searchText: String = ""
   let onAdd: () -> Void
   let onSelect: (LocalSkillsStore.Skill) -> Void
+  let onSelectCatalogEntry: (ExtensionCatalog.Entry) -> Void
+
+  private var skills: [LocalSkillsStore.Skill] {
+    appProvider.localSkills.filter { matchesSearch($0.name, $0.description, query: searchText) }
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -86,7 +121,7 @@ struct SkillsSection: View {
         .buttonStyle(.plain)
       }
 
-      if appProvider.localSkills.isEmpty {
+      if skills.isEmpty {
         AgentExtensionEmptyCard(
           icon: "graduationcap",
           text: "No skills yet. Paste or drop a SKILL.md, or write one from scratch.")
@@ -96,7 +131,7 @@ struct SkillsSection: View {
           alignment: .leading,
           spacing: OmiSpacing.md
         ) {
-          ForEach(appProvider.localSkills) { skill in
+          ForEach(skills) { skill in
             AgentExtensionCard(
               icon: "graduationcap",
               imageUrl: "",
@@ -111,7 +146,297 @@ struct SkillsSection: View {
           }
         }
       }
+
+      ExtensionMarketplaceSection(
+        entries: marketplaceEntries,
+        isLoading: appProvider.isLoadingSkillCatalog,
+        loadingText: "Loading skills…",
+        icon: { _ in "graduationcap" },
+        onSelect: onSelectCatalogEntry
+      )
     }
+    .task(id: searchText) {
+      await ExtensionMarketplaceSection.debounce()
+      guard !Task.isCancelled else { return }
+      await appProvider.fetchSkillCatalog(search: searchText)
+    }
+  }
+
+  private var marketplaceEntries: [ExtensionCatalog.Entry] {
+    let taken = Set(appProvider.localSkills.map(\.slug))
+    return appProvider.skillCatalog.filter { !taken.contains(LocalSkillsStore.slugify($0.name)) }
+  }
+}
+
+/// The page's one search field covers whichever section is showing, so both sections narrow on
+/// the same query rather than leaving it inert over their lists.
+private func matchesSearch(_ fields: String..., query: String) -> Bool {
+  let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+  guard !trimmed.isEmpty else { return true }
+  return fields.contains { $0.localizedCaseInsensitiveContains(trimmed) }
+}
+
+// MARK: - Marketplace
+
+/// The "Marketplace" block both extension sections end with: browsable entries from a catalog,
+/// in the same card grid as the installed ones above.
+///
+/// It renders nothing at all when the catalog is empty — an unreachable registry then costs the
+/// user a section they were not using rather than an error over the servers they installed.
+struct ExtensionMarketplaceSection: View {
+  let entries: [ExtensionCatalog.Entry]
+  let isLoading: Bool
+  let loadingText: String
+  let icon: (ExtensionCatalog.Entry) -> String
+  let onSelect: (ExtensionCatalog.Entry) -> Void
+
+  /// Typing must not fire one registry request per keystroke; a cancelled task skips the fetch.
+  static func debounce() async {
+    try? await Task.sleep(nanoseconds: 350_000_000)
+  }
+
+  var body: some View {
+    if isLoading && entries.isEmpty {
+      AgentExtensionEmptyCard(icon: "bag", text: loadingText)
+    } else if !entries.isEmpty {
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
+        Text("Marketplace")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(Ink.primary)
+
+        LazyVGrid(
+          columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
+          alignment: .leading,
+          spacing: OmiSpacing.md
+        ) {
+          ForEach(entries) { entry in
+            AgentExtensionCard(
+              icon: icon(entry),
+              imageUrl: entry.iconURL,
+              title: entry.name,
+              subtitle: entry.subtitle,
+              detail: entry.detail,
+              statusText: entry.install.needsInput ? "Needs a key" : entry.publisher,
+              statusActive: false,
+              actionTitle: "View",
+              actionIsSecondary: true
+            ) {
+              // A card press opens the detail sheet. Installing writes an executable command or a
+              // credentialed endpoint into ~/.omi, so it happens only from a screen that has shown
+              // the user exactly what will be written.
+              onSelect(entry)
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// What a marketplace entry is and exactly what installing it writes, so the decision to run a
+/// third party's command — or hand it a credential — is made against the facts, not a card.
+struct ExtensionDetailSheet: View {
+  let entry: ExtensionCatalog.Entry
+  @ObservedObject var appProvider: AppProvider
+  let onDismiss: () -> Void
+
+  @State private var values: [String: String] = [:]
+  @State private var errorText: String?
+  @State private var isInstalling = false
+
+  private var requiredFields: [String] {
+    switch entry.install {
+    case .mcpRemote(_, _, let header): return header.map { [$0] } ?? []
+    case .mcpStdio(_, _, let env): return env
+    case .skill: return []
+    }
+  }
+
+  /// The literal thing that lands in ~/.omi. Shown verbatim: a command a user cannot see is a
+  /// command they cannot refuse.
+  private var installSummary: String {
+    switch entry.install {
+    case .mcpRemote(let url, let transport, _): return "\(transport.uppercased())  \(url)"
+    case .mcpStdio(let command, let args, _): return ([command] + args).joined(separator: " ")
+    case .skill(let url): return url.absoluteString
+    }
+  }
+
+  private var installSummaryLabel: String {
+    if case .skill = entry.install { return "Source" }
+    if case .mcpStdio = entry.install { return "Runs on your Mac" }
+    return "Endpoint"
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      HStack(spacing: OmiSpacing.md) {
+        ExtensionLogo(imageUrl: entry.iconURL, fallbackSymbol: fallbackSymbol, size: 44)
+
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+          Text(entry.name)
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
+            .foregroundColor(Ink.primary)
+          Text(entry.publisher.isEmpty ? entry.subtitle : "\(entry.subtitle) · \(entry.publisher)")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .lineLimit(1)
+        }
+        Spacer()
+      }
+
+      ScrollView {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          if !entry.detail.isEmpty {
+            Text(entry.detail)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+
+          labelled(installSummaryLabel) {
+            Text(installSummary)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.primary)
+              .textSelection(.enabled)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+
+          ForEach(requiredFields, id: \.self) { field in
+            labelled(field) {
+              SecureField("Required", text: binding(for: field))
+                .textFieldStyle(.roundedBorder)
+            }
+          }
+
+          if let website = entry.websiteURL, let url = URL(string: website) {
+            Link("Open publisher page", destination: url)
+              .scaledFont(size: OmiType.caption)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+
+      if let errorText {
+        Text(errorText)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.errorRed)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      HStack {
+        Spacer()
+        Button("Cancel", action: onDismiss)
+          .buttonStyle(.plain)
+          .foregroundColor(Ink.secondary)
+        Button(action: install) {
+          ConnectionModalActionButton(title: isInstalling ? "Installing…" : "Install")
+        }
+        .buttonStyle(.plain)
+        .disabled(isInstalling)
+      }
+    }
+    .padding(OmiSpacing.lg)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+  }
+
+  private var fallbackSymbol: String {
+    switch entry.install {
+    case .skill: return "graduationcap"
+    case .mcpStdio: return "terminal"
+    case .mcpRemote: return "server.rack"
+    }
+  }
+
+  @ViewBuilder
+  private func labelled<Content: View>(_ label: String, @ViewBuilder content: () -> Content)
+    -> some View
+  {
+    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+      Text(label)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.secondary)
+      content()
+    }
+  }
+
+  private func binding(for field: String) -> Binding<String> {
+    Binding(get: { values[field] ?? "" }, set: { values[field] = $0 })
+  }
+
+  private func install() {
+    isInstalling = true
+    errorText = nil
+    Task {
+      do {
+        try await ExtensionCatalogService.install(entry, secrets: values)
+        await appProvider.fetchUserExtensions()
+        onDismiss()
+      } catch {
+        errorText = error.localizedDescription
+        isInstalling = false
+      }
+    }
+  }
+}
+
+/// A publisher logo that degrades to a symbol.
+///
+/// `AsyncImage` is not usable here: many publishers serve SVG, which SwiftUI's image decoder
+/// rejects while `NSImage` renders it, so half the marketplace showed a fallback symbol beside the
+/// half that did not. Remote art is decoration either way — a slow, missing, or undecodable image
+/// leaves the symbol rather than a hole where a card's identity should be.
+struct ExtensionLogo: View {
+  let imageUrl: String
+  let fallbackSymbol: String
+  var size: CGFloat = 40
+
+  @State private var image: NSImage?
+
+  var body: some View {
+    Group {
+      if let image {
+        Image(nsImage: image).resizable().aspectRatio(contentMode: .fit).padding(size * 0.12)
+      } else {
+        symbol
+      }
+    }
+    .frame(width: size, height: size)
+    .background(Ink.wash)
+    .cornerRadius(OmiChrome.smallControlRadius)
+    .task(id: imageUrl) { image = await ExtensionLogoLoader.shared.image(for: imageUrl) }
+  }
+
+  private var symbol: some View {
+    Image(systemName: fallbackSymbol)
+      .scaledFont(size: OmiType.subheading)
+      .foregroundColor(Ink.primary)
+  }
+}
+
+/// Session cache for catalog logos. The same publisher icon appears on a card and again in the
+/// detail sheet, and the grid re-renders on every keystroke of the search field.
+actor ExtensionLogoLoader {
+  static let shared = ExtensionLogoLoader()
+
+  private var cache: [String: NSImage?] = [:]
+
+  func image(for urlString: String) async -> NSImage? {
+    if let cached = cache[urlString] { return cached }
+    guard let url = URL(string: urlString), url.scheme == "https" else {
+      cache[urlString] = NSImage?.none
+      return nil
+    }
+    var request = URLRequest(url: url, timeoutInterval: 10)
+    request.setValue("image/*", forHTTPHeaderField: "Accept")
+    let loaded: NSImage? = await {
+      guard let (data, response) = try? await URLSession.shared.data(for: request),
+        (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true
+      else { return nil }
+      return NSImage(data: data)
+    }()
+    cache[urlString] = loaded
+    return loaded
   }
 }
 
@@ -151,6 +476,9 @@ struct AgentExtensionCard: View {
   let detail: String
   let statusText: String
   let statusActive: Bool
+  /// Trailing button label. Installed cards manage; marketplace cards install.
+  var actionTitle: String = "Manage"
+  var actionIsSecondary: Bool = true
   let action: () -> Void
 
   @State private var isHovering = false
@@ -192,7 +520,7 @@ struct AgentExtensionCard: View {
 
           Spacer()
 
-          ImportConnectorActionButton(title: "Manage", isConnected: true)
+          ImportConnectorActionButton(title: actionTitle, isConnected: actionIsSecondary)
         }
       }
       .padding(OmiSpacing.md)
@@ -208,26 +536,7 @@ struct AgentExtensionCard: View {
   }
 
   @ViewBuilder private var iconView: some View {
-    if let url = URL(string: imageUrl), !imageUrl.isEmpty {
-      AsyncImage(url: url) { image in
-        image.resizable().aspectRatio(contentMode: .fit)
-      } placeholder: {
-        fallbackIcon
-      }
-      .frame(width: 40, height: 40)
-      .cornerRadius(OmiChrome.smallControlRadius)
-    } else {
-      fallbackIcon
-    }
-  }
-
-  private var fallbackIcon: some View {
-    Image(systemName: icon)
-      .scaledFont(size: OmiType.subheading)
-      .foregroundColor(Ink.primary)
-      .frame(width: 40, height: 40)
-      .background(Ink.wash)
-      .cornerRadius(OmiChrome.smallControlRadius)
+    ExtensionLogo(imageUrl: imageUrl, fallbackSymbol: icon)
   }
 }
 
@@ -283,7 +592,7 @@ struct AddMcpServerSheet: View {
 
       Spacer(minLength: 0)
     }
-    .padding(OmiSpacing.xxl)
+    .padding(OmiSpacing.lg)
     .background(Ink.surface)
   }
 
@@ -519,24 +828,34 @@ struct SkillEditorSheet: View {
           .buttonStyle(.plain)
         }
 
-        OmiTextEditor(text: $markdown, focusOnAppear: false)
-          .frame(maxHeight: .infinity)
-          .padding(OmiSpacing.sm)
-          .background(isDropTargeted ? Ink.rowFillHover : Ink.rowFill)
-          .cornerRadius(OmiChrome.smallControlRadius)
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(isDropTargeted ? Ink.accent.opacity(0.6) : Ink.separator, lineWidth: isDropTargeted ? 1.5 : 1)
-          )
-          .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
-          .overlay(alignment: .center) {
-            if markdown.isEmpty {
-              Text("Paste your SKILL.md here, or drop a .md file")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-                .allowsHitTesting(false)
-            }
+        // `Ink.nsPrimary`, not the editor's chat-composer default of white: this well sits on a
+        // light surface, where white text is invisible.
+        OmiTextEditor(
+          text: $markdown,
+          textColor: Ink.nsPrimary,
+          focusOnAppear: false,
+          onFileDrop: { url in
+            Task { @MainActor in importSkillFile(url) }
+          },
+          onFileDragTargeted: { isDropTargeted = $0 }
+        )
+        .frame(maxHeight: .infinity)
+        .padding(OmiSpacing.sm)
+        .background(isDropTargeted ? Ink.rowFillHover : Ink.rowFill)
+        .cornerRadius(OmiChrome.smallControlRadius)
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+            .stroke(isDropTargeted ? Ink.accent.opacity(0.6) : Ink.separator, lineWidth: isDropTargeted ? 1.5 : 1)
+        )
+        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
+        .overlay(alignment: .center) {
+          if markdown.isEmpty {
+            Text("Paste your SKILL.md here, or drop a .md file")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+              .allowsHitTesting(false)
           }
+        }
       }
       .frame(maxHeight: .infinity)
 
@@ -590,7 +909,7 @@ struct SkillEditorSheet: View {
         .disabled(!canSave || isWorking)
       }
     }
-    .padding(OmiSpacing.xxl)
+    .padding(OmiSpacing.lg)
     .background(Ink.surface)
     .task { await loadExisting() }
   }
@@ -631,6 +950,10 @@ struct SkillEditorSheet: View {
       let text = String(data: data, encoding: .utf8)
     else {
       errorMessage = "Could not read that file as text (max 128KB)."
+      return
+    }
+    if let problem = LocalSkillsStore.validationError(forImportedMarkdown: text) {
+      errorMessage = problem
       return
     }
     errorMessage = nil
@@ -734,7 +1057,7 @@ struct LocalMcpDetailSheet: View {
 
       Spacer(minLength: 0)
     }
-    .padding(OmiSpacing.xxl)
+    .padding(OmiSpacing.lg)
     .background(Ink.surface)
   }
 }

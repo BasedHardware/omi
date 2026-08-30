@@ -1,10 +1,14 @@
 version: 2
 name: apps-user-extensions
 tier: manual
-description: User-managed MCP servers and skills on the Apps page — add a local server, add a skill, confirm both land under ~/.omi
+description: User-managed MCP servers and skills on the Apps page — switch to their sections, add a local server, add a skill, confirm both land under ~/.omi
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AgentExtensionsSections.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsSectionNavigation.swift
+  - desktop/macos/Desktop/Sources/Chat/ExtensionCatalog.swift
+  - desktop/macos/Desktop/Sources/Chat/McpServerProbe.swift
+  - desktop/macos/Desktop/Sources/Chat/ExtensionCatalogService.swift
   - desktop/macos/Desktop/Sources/Chat/LocalMcpStore.swift
   - desktop/macos/Desktop/Sources/Chat/LocalMcpStore+OAuth.swift
   - desktop/macos/Desktop/Sources/Chat/LocalSkillsStore.swift
@@ -13,12 +17,22 @@ preconditions:
 
 steps:
   - id: S1
-    name: Apps page shows the MCP Servers and Skills sections
-    do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8). Scroll until the 'MCP Servers' and 'Skills' sections are visible. Each has an add control."
+    name: The Apps toolbar carries Apps, MCP and Skills section chips
+    # The chips share the toolbar row with the Kind menu, which is a filter. Asserting that Kind
+    # disappears on MCP is what keeps that distinction honest: a filter for the app catalog must
+    # not sit inert over a catalog it cannot narrow.
+    do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8). The page toolbar row shows the Kind menu on the left and the section chips apps-section-apps, apps-section-mcp and apps-section-skills on the right. Click apps-section-mcp and confirm the MCP Servers section replaces the Imports/Exports catalog and the Kind menu is gone."
     expect:
-      interactive_count: { min: 10 }
+      interactive_count: { min: 6 }
       text_visible:
         - MCP Servers
+
+  - id: S1b
+    name: The Skills chip shows the skills catalog
+    do: "Click apps-section-skills and confirm the Skills section is shown with its add control, then click apps-section-apps and confirm Imports and Exports are back with the Kind menu."
+    expect:
+      interactive_count: { min: 6 }
+      text_visible:
         - Skills
 
   - id: S2
@@ -49,6 +63,34 @@ steps:
     do: "Confirm ~/.omi/skills/<slug>/SKILL.md exists for the skill saved in S4, with normalized frontmatter carrying its name and description."
     expect:
       interactive_count: { min: 1 }
+
+  - id: S5b
+    name: The marketplace lists installable servers and skills
+    # The catalog is the one part of this page that depends on a network the user does not
+    # control. Asserting that the installed rows survive a failed fetch is the fail-open contract:
+    # an unreachable registry may cost the Marketplace section, never the servers already added.
+    do: "On the MCP section confirm a 'Marketplace' heading appears below the installed servers, with cards carrying Install buttons. Click Install on an entry whose status reads 'Ready to install', then confirm it moves up into the installed list and appears in ~/.omi/mcp.json. Repeat on the Skills section for one marketplace skill and confirm ~/.omi/skills/<slug>/SKILL.md exists."
+    expect:
+      interactive_count: { min: 3 }
+      text_visible:
+        - Marketplace
+
+  - id: S5c
+    name: An unreachable catalog leaves the installed lists alone
+    do: "With networking to the catalog blocked (or offline), reopen the MCP and Skills sections. Confirm the Marketplace section is simply absent, no error dialog appears, and every installed server and skill still lists normally."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S5d
+    name: A server that cannot work says so
+    # "Active in chat" used to be unconditional, so a server whose command was never installed and
+    # one serving tools looked identical — the user found out mid-conversation, where the only
+    # symptom is the assistant quietly missing tools.
+    do: "Add an MCP server whose command does not exist (for example 'omi-not-installed'), and a remote one pointing at http://127.0.0.1:1/mcp. Confirm each card reads 'Not responding' with the reason in place of its summary, while a working server reads 'Ready' or a tool count."
+    expect:
+      interactive_count: { min: 3 }
+      text_visible:
+        - Not responding
 
   - id: S6
     name: A dead server never breaks the page
