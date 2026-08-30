@@ -2053,6 +2053,7 @@ struct DiscoveryCard: View {
   let fullText: String
 
   @State private var isExpanded = false
+  @State private var copied = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -2088,6 +2089,28 @@ struct DiscoveryCard: View {
         .padding(.vertical, OmiSpacing.sm)
       }
       .buttonStyle(.plain)
+      // The card exists because the panel it came from is gone; copying is the whole
+      // point of keeping it, and folding it open first to reach a selection is not that.
+      .overlay(alignment: .trailing) {
+        Button {
+          NSPasteboard.general.clearContents()
+          NSPasteboard.general.setString(fullText, forType: .string)
+          copied = true
+          Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            copied = false
+          }
+        } label: {
+          Image(systemName: copied ? "checkmark" : "doc.on.doc")
+            .scaledFont(size: OmiType.micro)
+            .foregroundColor(copied ? Ink.primary : Ink.secondary)
+            .padding(OmiSpacing.xs)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Copy")
+        .padding(.trailing, OmiSpacing.lg + OmiSpacing.sm)
+      }
 
       // Expanded content
       if isExpanded {

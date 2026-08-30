@@ -107,7 +107,17 @@ enum VoicePanel {
       }
   }
 
-  private static func subtitle(for fields: [CloudConnectorCopyField]) -> String {
-    fields.count == 1 ? "Copy it with the button." : "Copy each with its button."
+  /// What the card says under its heading.
+  ///
+  /// Not "copy it with the button" — the button is right there and says so itself. The
+  /// thing the user cannot see is that the panel is still live and speaking again will
+  /// change it, so the subtitle spends its one line naming the key that does that,
+  /// whichever key they have bound.
+  static func subtitle(for fields: [CloudConnectorCopyField]) -> String {
+    changeHint
+  }
+
+  static var changeHint: String {
+    "Hold \(ShortcutSettings.shared.pttShortcut.promptLabel) to change this"
   }
 }

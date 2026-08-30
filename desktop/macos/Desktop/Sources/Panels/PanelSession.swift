@@ -480,8 +480,7 @@ enum PanelSession {
     guard !fields.isEmpty else {
       return .refused("update_panel needs the panel's complete new items.")
     }
-    let subtitle =
-      fields.count == 1 ? "Copy it with the button." : "Copy each with its button."
+    let subtitle = VoicePanel.changeHint
     switch presence() {
     case .none:
       let heading = (title?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap {
