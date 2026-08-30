@@ -134,3 +134,18 @@ def test_mutation_boundary_classifies_existing_row_and_migration_capability(
             allow_ledger_migration=allow_migration,
             db_client=object(),
         )
+
+
+def test_external_create_is_admitted_as_user_writer_in_ledger_mode(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr(adapter, "_evidence_items_from_payload", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(adapter, "_reissued_external_evidence", lambda *_args, **_kwargs: [])
+
+    def capture_write(*_args, **kwargs):
+        captured.update(kwargs)
+        raise _ReachedCanonicalBuilder()
+
+    monkeypatch.setattr(adapter, "write_canonical_extraction_memory", capture_write)
+    with pytest.raises(_ReachedCanonicalBuilder):
+        adapter.write_canonical_external_memory("u1", {"content": "remember this"}, db_client=object())
+    assert captured["_direct_user_authority"] is adapter._DIRECT_USER_LEDGER_WRITE_AUTHORITY

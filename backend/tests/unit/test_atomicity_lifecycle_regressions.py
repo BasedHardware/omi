@@ -147,6 +147,30 @@ def test_preference_tool_writes_retry_stable_agent_conclusion_to_ledger(preferen
     )
 
 
+def test_preference_tool_persists_canonical_slot_and_drops_unknown_names(preference_tools_module, monkeypatch):
+    module = preference_tools_module
+    save_fact = MagicMock(return_value="mem_ledger")
+    firestore_client = object()
+    monkeypatch.setattr(module, "save_fact", save_fact)
+    monkeypatch.setattr(module, "capture_memory_write", MagicMock())
+    monkeypatch.setattr(module, "search_canonical_memories", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(module, "get_data_plane_firestore_client", MagicMock(return_value=firestore_client))
+    monkeypatch.setattr(
+        module,
+        "ensure_canonical_apply_control_state",
+        lambda *_args, **_kwargs: types.SimpleNamespace(writer_mode=WriterMode.ledger),
+    )
+    config = {"configurable": {"user_id": "user-1", "chat_session_id": "chat-1"}}
+
+    known = module.save_user_preference_tool("Lives in Brooklyn", slot=" Home-Location ", config=config)
+    unknown = module.save_user_preference_tool("Prefers dark mode", slot="invented_slot", config=config)
+
+    assert known == "Preference saved: Lives in Brooklyn"
+    assert unknown == "Preference saved: Prefers dark mode"
+    assert save_fact.call_args_list[0].kwargs["slot"] == "home_city"
+    assert save_fact.call_args_list[1].kwargs["slot"] is None
+
+
 def test_preference_tool_uses_strict_compatibility_writer_in_default_mode(preference_tools_module, monkeypatch):
     """The default writer mode retains the released MemoryService contract."""
     module = preference_tools_module
