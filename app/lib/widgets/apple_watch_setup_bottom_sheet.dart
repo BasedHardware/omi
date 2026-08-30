@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -236,7 +237,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
     } catch (e) {
       if (mounted) {
         AppSnackbar.showSnackbar(
-          context.l10n.errorCheckingConnection(e.toString()),
+          context.l10n.errorCheckingConnection(readableError(e)),
           duration: const Duration(seconds: 3),
         );
       }
