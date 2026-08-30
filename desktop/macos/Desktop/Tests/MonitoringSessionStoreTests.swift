@@ -42,6 +42,7 @@ final class MonitoringSessionStoreTests: XCTestCase {
       startedAt: Date(timeIntervalSinceReferenceDate: 0),
       lastHeartbeatAt: Date(timeIntervalSinceReferenceDate: 60),
       pausedSeconds: 5,
+      pauseStartedAt: Date(timeIntervalSinceReferenceDate: 45),
       endedAt: nil,
       endReason: nil
     )
@@ -49,6 +50,24 @@ final class MonitoringSessionStoreTests: XCTestCase {
     store.save(record)
 
     XCTAssertEqual(store.load(), record)
+  }
+
+  /// `pauseStartedAt` was added after the first version of this record shipped
+  /// to nightly builds. A stored record without the key must still decode —
+  /// otherwise the upgrade silently drops every in-flight session instead of
+  /// recovering it.
+  func testARecordStoredWithoutPauseStartedAtStillDecodes() throws {
+    let defaults = try makeDefaults()
+    let legacy = """
+      {"sessionID":"legacy-1","startedAt":0,"lastHeartbeatAt":60,"pausedSeconds":5}
+      """
+    defaults.set(Data(legacy.utf8), forKey: MonitoringSessionDefaultsStore.defaultsKey)
+
+    let loaded = MonitoringSessionDefaultsStore(defaults: defaults).load()
+
+    XCTAssertEqual(loaded?.sessionID, "legacy-1")
+    XCTAssertNil(loaded?.pauseStartedAt)
+    XCTAssertEqual(loaded?.pausedSeconds, 5)
   }
 
   func testClearRemovesTheRecord() throws {
@@ -59,6 +78,7 @@ final class MonitoringSessionStoreTests: XCTestCase {
         startedAt: Date(timeIntervalSinceReferenceDate: 0),
         lastHeartbeatAt: Date(timeIntervalSinceReferenceDate: 0),
         pausedSeconds: 0,
+        pauseStartedAt: nil,
         endedAt: nil,
         endReason: nil
       ))

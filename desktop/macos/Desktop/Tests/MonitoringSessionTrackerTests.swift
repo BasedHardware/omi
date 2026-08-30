@@ -30,8 +30,8 @@ final class MonitoringSessionTrackerTests: XCTestCase {
     var tracker = MonitoringSessionTracker()
     tracker.start(at: date(0), sessionID: "session-2")
 
-    tracker.pause(at: date(100))
-    tracker.resume(at: date(160))  // 60s paused
+    tracker.pause(at: date(100), source: .screenLock)
+    tracker.resume(at: date(160), source: .screenLock)  // 60s paused
 
     let summary = tracker.finish(at: date(300), reason: .userToggle)
 
@@ -40,45 +40,83 @@ final class MonitoringSessionTrackerTests: XCTestCase {
     XCTAssertEqual(summary.activeSeconds, 240)
   }
 
-  /// Screen lock and system sleep are independent interruption sources that
-  /// can overlap in real usage — lock, then sleep, then wake, then unlock —
-  /// and must still collapse into exactly one paused interval, not two. Since
-  /// `pause`/`resume` carry no source identity, the interval closes at the
-  /// first `resume` call (here, wake); the later, redundant `resume` (unlock)
-  /// is a no-op rather than opening/closing a second interval.
-  func testOverlappingPausesCountOnce() {
+  /// The standard password-after-sleep laptop path: lock, sleep, wake to a
+  /// still-locked screen, then unlock. `handleSystemWake` releases only the
+  /// sleep hold, and capture genuinely stays down until unlock — so the single
+  /// paused interval must run from lock all the way to unlock.
+  ///
+  /// A first-resume-wins model closes at wake instead and bills every second
+  /// of the lock screen after wake as *active* monitoring, which is the number
+  /// this whole contract exists to measure.
+  func testWakingToALockedScreenKeepsTheSessionPaused() {
     var tracker = MonitoringSessionTracker()
     tracker.start(at: date(0), sessionID: "session-3")
 
-    tracker.pause(at: date(50))  // screen lock begins
-    tracker.pause(at: date(55))  // system sleep begins — already paused, no-op
-    tracker.resume(at: date(80))  // system wakes — closes the interval: 50 -> 80 = 30s
-    tracker.resume(at: date(90))  // screen unlocks — already resumed, no-op
+    tracker.pause(at: date(100), source: .screenLock)  // user locks
+    tracker.pause(at: date(110), source: .systemSleep)  // machine sleeps
+    tracker.resume(at: date(200), source: .systemSleep)  // wakes, still locked
+    XCTAssertTrue(tracker.isPaused, "the screen-lock hold must survive the wake")
+    tracker.resume(at: date(500), source: .screenLock)  // user unlocks
 
-    let summary = tracker.finish(at: date(200), reason: .userToggle)
+    let summary = tracker.finish(at: date(600), reason: .userToggle)
 
-    XCTAssertEqual(summary.pausedSeconds, 30)
-    XCTAssertEqual(summary.activeSeconds, 170)
+    XCTAssertEqual(summary.pausedSeconds, 400)  // 100 -> 500, one interval
+    XCTAssertEqual(summary.activeSeconds, 200)  // 0 -> 100 and 500 -> 600
   }
 
-  func testPauseWhileAlreadyPausedIsANoOp() {
+  /// The reverse ordering (sleep first, unlock last) must produce exactly one
+  /// interval too — never two, and never a double-counted overlap.
+  func testOverlappingSourcesProduceExactlyOneInterval() {
     var tracker = MonitoringSessionTracker()
     tracker.start(at: date(0), sessionID: "session-4")
 
-    tracker.pause(at: date(10))
-    tracker.pause(at: date(20))  // no-op: must not reset the interval start
-    tracker.resume(at: date(30))
+    tracker.pause(at: date(50), source: .systemSleep)
+    tracker.pause(at: date(55), source: .screenLock)
+    tracker.resume(at: date(80), source: .screenLock)
+    XCTAssertTrue(tracker.isPaused, "the sleep hold is still outstanding")
+    tracker.resume(at: date(90), source: .systemSleep)
+
+    let summary = tracker.finish(at: date(200), reason: .userToggle)
+
+    XCTAssertEqual(summary.pausedSeconds, 40)  // 50 -> 90
+    XCTAssertEqual(summary.activeSeconds, 160)
+  }
+
+  func testDuplicatePauseFromTheSameSourceDoesNotMoveTheIntervalStart() {
+    var tracker = MonitoringSessionTracker()
+    tracker.start(at: date(0), sessionID: "session-5")
+
+    tracker.pause(at: date(10), source: .screenLock)
+    tracker.pause(at: date(20), source: .screenLock)  // redundant notification
+    tracker.resume(at: date(30), source: .screenLock)
 
     let summary = tracker.finish(at: date(100), reason: .userToggle)
 
     XCTAssertEqual(summary.pausedSeconds, 20)  // 10 -> 30, not 20 -> 30
   }
 
+  /// A spurious resume for a source that never paused must not close another
+  /// source's interval — otherwise one stray notification reintroduces exactly
+  /// the wake-while-locked bug.
+  func testResumeFromASourceThatNeverPausedIsANoOp() {
+    var tracker = MonitoringSessionTracker()
+    tracker.start(at: date(0), sessionID: "session-6")
+
+    tracker.pause(at: date(10), source: .screenLock)
+    tracker.resume(at: date(40), source: .systemSleep)  // never slept
+    XCTAssertTrue(tracker.isPaused)
+    tracker.resume(at: date(60), source: .screenLock)
+
+    let summary = tracker.finish(at: date(100), reason: .userToggle)
+
+    XCTAssertEqual(summary.pausedSeconds, 50)  // 10 -> 60
+  }
+
   func testResumeWhileNotPausedIsANoOp() {
     var tracker = MonitoringSessionTracker()
-    tracker.start(at: date(0), sessionID: "session-5")
+    tracker.start(at: date(0), sessionID: "session-7")
 
-    tracker.resume(at: date(10))  // no-op, never paused
+    tracker.resume(at: date(10), source: .screenLock)  // no-op, never paused
 
     let summary = tracker.finish(at: date(100), reason: .userToggle)
 
@@ -88,9 +126,9 @@ final class MonitoringSessionTrackerTests: XCTestCase {
 
   func testFinishWhilePausedClosesTheOpenInterval() {
     var tracker = MonitoringSessionTracker()
-    tracker.start(at: date(0), sessionID: "session-6")
+    tracker.start(at: date(0), sessionID: "session-8")
 
-    tracker.pause(at: date(80))
+    tracker.pause(at: date(80), source: .screenLock)
     let summary = tracker.finish(at: date(100), reason: .userToggle)  // never resumed
 
     XCTAssertEqual(summary.pausedSeconds, 20)
@@ -99,7 +137,7 @@ final class MonitoringSessionTrackerTests: XCTestCase {
 
   func testBackwardsClockClampsToZeroAndFlagsAnomaly() {
     var tracker = MonitoringSessionTracker()
-    tracker.start(at: date(1000), sessionID: "session-7")
+    tracker.start(at: date(1000), sessionID: "session-9")
 
     let summary = tracker.finish(at: date(500), reason: .userToggle)  // clock moved backwards
 
@@ -110,28 +148,95 @@ final class MonitoringSessionTrackerTests: XCTestCase {
 
   func testStopReasonIsCarriedThroughToTheSummary() {
     var tracker = MonitoringSessionTracker()
-    tracker.start(at: date(0), sessionID: "session-8")
+    tracker.start(at: date(0), sessionID: "session-10")
 
     let summary = tracker.finish(at: date(10), reason: .permissionRevoked)
 
     XCTAssertEqual(summary.stopReason, .permissionRevoked)
   }
 
+  // MARK: - Liveness after a live stop
+
+  /// The session must be dead the instant it emits its live `Monitoring
+  /// Stopped`. Every persist/stamp path in `ProactiveAssistantsPlugin` is
+  /// guarded on `hasActiveSession`, so if a finished session still looked
+  /// live, the next lock or sleep would re-persist it *after* the store was
+  /// cleared and the following launch would recover it as a second stop.
+  func testSessionIsNotActiveAfterFinishing() {
+    var tracker = MonitoringSessionTracker()
+    tracker.start(at: date(0), sessionID: "session-11")
+    XCTAssertTrue(tracker.hasActiveSession)
+
+    tracker.finish(at: date(100), reason: .userToggle)
+
+    XCTAssertFalse(tracker.hasActiveSession)
+  }
+
+  func testPauseHeartbeatAndResumeAreNoOpsAfterFinishing() {
+    var tracker = MonitoringSessionTracker()
+    tracker.start(at: date(0), sessionID: "session-12")
+    tracker.finish(at: date(100), reason: .userToggle)
+    let afterStop = tracker.record
+
+    tracker.pause(at: date(200), source: .screenLock)
+    tracker.heartbeat(at: date(260))
+    tracker.resume(at: date(300), source: .screenLock)
+
+    XCTAssertEqual(tracker.record, afterStop, "a finished session must be immutable")
+    XCTAssertFalse(tracker.isPaused)
+  }
+
+  /// Quitting hours after a live stop must not rewrite that session into a
+  /// clean quit for the next launch to recover.
+  func testQuitStampIsRefusedForAnAlreadyFinishedSession() {
+    var tracker = MonitoringSessionTracker()
+    tracker.start(at: date(0), sessionID: "session-13")
+    tracker.finish(at: date(100), reason: .userToggle)
+
+    XCTAssertNil(tracker.quitStampedRecord(at: date(30_000)))
+  }
+
+  func testQuitStampClosesAnOpenPausedInterval() {
+    var tracker = MonitoringSessionTracker()
+    tracker.start(at: date(0), sessionID: "session-14")
+    tracker.pause(at: date(100), source: .screenLock)
+
+    let stamped = tracker.quitStampedRecord(at: date(400))
+
+    XCTAssertEqual(stamped?.pausedSeconds, 300)
+    XCTAssertNil(stamped?.pauseStartedAt)
+    XCTAssertEqual(stamped?.endedAt, date(400))
+    XCTAssertEqual(stamped?.endReason, MonitoringStopReason.appQuit.rawValue)
+  }
+
+  func testQuitStampDoesNotMutateTheLiveSession() {
+    var tracker = MonitoringSessionTracker()
+    tracker.start(at: date(0), sessionID: "session-15")
+    tracker.pause(at: date(100), source: .screenLock)
+
+    _ = tracker.quitStampedRecord(at: date(400))
+
+    XCTAssertTrue(tracker.hasActiveSession, "stamping is a snapshot, not a finish")
+    XCTAssertEqual(tracker.record.pausedSeconds, 0)
+    XCTAssertEqual(tracker.record.pauseStartedAt, date(100))
+  }
+
   // MARK: - Recovery
 
   func testRecoveryWithEndedAtIsRecoveredClean() {
     let record = MonitoringSessionRecord(
-      sessionID: "session-9",
+      sessionID: "session-16",
       startedAt: date(0),
       lastHeartbeatAt: date(590),
       pausedSeconds: 30,
+      pauseStartedAt: nil,
       endedAt: date(600),
       endReason: MonitoringStopReason.appQuit.rawValue
     )
 
     let outcome = MonitoringSessionRecovery.recover(record, now: date(700))
 
-    XCTAssertEqual(outcome.sessionID, "session-9")
+    XCTAssertEqual(outcome.sessionID, "session-16")
     XCTAssertEqual(outcome.durationSeconds, 600)
     XCTAssertEqual(outcome.pausedSeconds, 30)
     XCTAssertEqual(outcome.activeSeconds, 570)
@@ -142,10 +247,11 @@ final class MonitoringSessionTrackerTests: XCTestCase {
 
   func testRecoveryWithoutEndedAtIsRecoveredHeartbeat() {
     let record = MonitoringSessionRecord(
-      sessionID: "session-10",
+      sessionID: "session-17",
       startedAt: date(0),
       lastHeartbeatAt: date(240),
       pausedSeconds: 0,
+      pauseStartedAt: nil,
       endedAt: nil,
       endReason: nil
     )
@@ -157,5 +263,45 @@ final class MonitoringSessionTrackerTests: XCTestCase {
     XCTAssertEqual(outcome.stopReason, .sessionLost)
     XCTAssertEqual(outcome.durationSource, .recoveredHeartbeat)
     XCTAssertEqual(outcome.recoveredAfterSeconds, 760)  // 1000 - 240
+  }
+
+  /// A crash while the screen was locked: the heartbeat kept running (the
+  /// machine was awake), so the record ends well after the pause opened. That
+  /// open interval has to be closed at the effective end, or every locked
+  /// minute before the crash is reported as active monitoring.
+  func testRecoveryClosesAPausedIntervalLeftOpenByACrash() {
+    let record = MonitoringSessionRecord(
+      sessionID: "session-18",
+      startedAt: date(0),
+      lastHeartbeatAt: date(900),
+      pausedSeconds: 0,
+      pauseStartedAt: date(300),
+      endedAt: nil,
+      endReason: nil
+    )
+
+    let outcome = MonitoringSessionRecovery.recover(record, now: date(1200))
+
+    XCTAssertEqual(outcome.durationSeconds, 900)
+    XCTAssertEqual(outcome.pausedSeconds, 600)  // 300 -> 900
+    XCTAssertEqual(outcome.activeSeconds, 300)
+  }
+
+  func testRecoveryClosesAnOpenPauseAtACleanQuitTime() {
+    let record = MonitoringSessionRecord(
+      sessionID: "session-19",
+      startedAt: date(0),
+      lastHeartbeatAt: date(400),
+      pausedSeconds: 10,
+      pauseStartedAt: date(200),
+      endedAt: date(500),
+      endReason: MonitoringStopReason.appQuit.rawValue
+    )
+
+    let outcome = MonitoringSessionRecovery.recover(record, now: date(600))
+
+    XCTAssertEqual(outcome.durationSeconds, 500)
+    XCTAssertEqual(outcome.pausedSeconds, 310)  // 10 closed + (200 -> 500)
+    XCTAssertEqual(outcome.activeSeconds, 190)
   }
 }

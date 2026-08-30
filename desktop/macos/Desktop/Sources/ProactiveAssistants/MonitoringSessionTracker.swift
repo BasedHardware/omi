@@ -11,12 +11,23 @@ struct MonitoringSessionRecord: Codable, Equatable {
   /// the process is alive. On a crash recovery this is the only evidence of
   /// how long the session ran.
   var lastHeartbeatAt: Date
-  /// Cumulative time spent paused (system sleep, screen lock), in seconds.
+  /// Cumulative time spent in *closed* paused intervals, in seconds. An
+  /// interval that is still open lives in `pauseStartedAt`, not here.
   var pausedSeconds: Double
+  /// Start of the currently-open paused interval, or nil when not paused.
+  ///
+  /// Persisted rather than kept in memory because the recovery path needs it:
+  /// a crash or quit while the screen is locked must still be able to close
+  /// that interval, or lock time is silently promoted to *active* monitoring
+  /// time — the exact number this telemetry exists to get right.
+  var pauseStartedAt: Date?
   /// Set only by a normal `stopMonitoring()` finish or by
   /// `applicationWillTerminate`'s synchronous quit stamp. Nil means the
   /// session either is still active or the process died before it could stamp
   /// anything.
+  ///
+  /// Also the liveness flag: `hasActiveSession` is false once this is set, so
+  /// a finished session can never be re-persisted or re-stamped.
   var endedAt: Date?
   /// Raw `MonitoringStopReason` value. String (not the enum) because this
   /// crosses a Codable/UserDefaults boundary that must tolerate an unknown
@@ -46,6 +57,25 @@ public enum MonitoringStopReason: String, CaseIterable, Sendable {
   case settingsSync = "settings_sync"
   case appQuit = "app_quit"
   case sessionLost = "session_lost"
+}
+
+/// What is currently holding monitoring paused.
+///
+/// Screen lock and system sleep are **independent, overlapping** interruption
+/// sources: the standard password-after-sleep laptop path is lock -> sleep ->
+/// wake -> unlock, and capture stays down across the whole of it. Tracking
+/// them as a set (rather than one boolean, or a depth counter) is what makes
+/// the paused interval close when the *last* source clears instead of the
+/// first: `handleSystemWake` resumes unconditionally while the screen is still
+/// locked, so a first-resume-wins model bills every second between wake and
+/// unlock as active monitoring.
+///
+/// A duplicate pause from the same source is idempotent, and a resume from a
+/// source that never paused is a no-op, so a spurious notification can neither
+/// double-count an interval nor strand the session paused forever.
+enum MonitoringPauseSource: String, CaseIterable, Sendable {
+  case screenLock
+  case systemSleep
 }
 
 /// Closed set describing how trustworthy an emitted duration is.
@@ -83,8 +113,7 @@ struct MonitoringSummary: Equatable {
 /// lifetime and calls `start` again for each new session.
 struct MonitoringSessionTracker: Equatable {
   private(set) var record: MonitoringSessionRecord
-  private var isPaused = false
-  private var currentPauseStartedAt: Date?
+  private(set) var pauseSources: Set<MonitoringPauseSource> = []
 
   /// Not-yet-started placeholder — `sessionID` is empty until `start` is
   /// called. `pause`/`resume`/`heartbeat` are no-ops against it, and `finish`
@@ -97,13 +126,23 @@ struct MonitoringSessionTracker: Equatable {
       startedAt: .distantPast,
       lastHeartbeatAt: .distantPast,
       pausedSeconds: 0,
+      pauseStartedAt: nil,
       endedAt: nil,
       endReason: nil
     )
   }
 
-  /// Whether `start` has produced a session that hasn't been `finish`ed yet.
-  var hasActiveSession: Bool { !record.sessionID.isEmpty }
+  /// Whether `start` has produced a session that hasn't been finished yet.
+  ///
+  /// Both halves matter. Without the `endedAt` check a session that already
+  /// emitted its live `Monitoring Stopped` still looks live, so the next lock,
+  /// sleep, heartbeat, or quit stamp re-persists it after `stopMonitoring`
+  /// cleared the store — and the next launch recovers it as a *second* stop
+  /// event, with a duration running to whenever the app happened to quit.
+  var hasActiveSession: Bool { !record.sessionID.isEmpty && record.endedAt == nil }
+
+  /// Whether a paused interval is currently open.
+  var isPaused: Bool { !pauseSources.isEmpty }
 
   mutating func start(at date: Date, sessionID: String) {
     record = MonitoringSessionRecord(
@@ -111,41 +150,28 @@ struct MonitoringSessionTracker: Equatable {
       startedAt: date,
       lastHeartbeatAt: date,
       pausedSeconds: 0,
+      pauseStartedAt: nil,
       endedAt: nil,
       endReason: nil
     )
-    isPaused = false
-    currentPauseStartedAt = nil
+    pauseSources = []
   }
 
-  /// Sleep and screen-lock are independent interruption sources that can
-  /// overlap (the machine can lock, then sleep, then wake, then unlock), and
-  /// this method takes no argument identifying which source is calling — so
-  /// there is no way to tell "a second, genuinely different source paused
-  /// too" apart from "the same source fired a redundant/duplicate
-  /// notification". An explicit is-paused guard (rather than a depth counter)
-  /// resolves that ambiguity in the safe direction: a `pause` while already
-  /// paused is unconditionally a no-op, so a spurious duplicate notification
-  /// can never leave the session stuck paused waiting for a `resume` that
-  /// will never come. The trade-off is that in the overlap case the interval
-  /// closes at the *first* `resume` (whichever source calls it first), not
-  /// necessarily when every overlapping interruption has cleared — still
-  /// exactly one closed interval, never two, which is the correctness
-  /// property that matters for duration accounting.
-  mutating func pause(at date: Date) {
-    guard hasActiveSession, !isPaused else { return }
-    isPaused = true
-    currentPauseStartedAt = date
-  }
-
-  /// A `resume` while not paused is a no-op.
-  mutating func resume(at date: Date) {
-    guard hasActiveSession, isPaused else { return }
-    isPaused = false
-    if let pauseStart = currentPauseStartedAt {
-      record.pausedSeconds += max(0, date.timeIntervalSince(pauseStart))
-      currentPauseStartedAt = nil
+  /// Opens a paused interval, or joins the open one. Idempotent per source.
+  mutating func pause(at date: Date, source: MonitoringPauseSource) {
+    guard hasActiveSession else { return }
+    let wasPaused = isPaused
+    pauseSources.insert(source)
+    if !wasPaused {
+      record.pauseStartedAt = date
     }
+  }
+
+  /// Releases one source. The open interval closes only when the last source
+  /// clears — waking to a still-locked screen must not resume the clock.
+  mutating func resume(at date: Date, source: MonitoringPauseSource) {
+    guard hasActiveSession, pauseSources.remove(source) != nil, !isPaused else { return }
+    closeOpenPause(at: date)
   }
 
   mutating func heartbeat(at date: Date) {
@@ -153,16 +179,12 @@ struct MonitoringSessionTracker: Equatable {
     record.lastHeartbeatAt = date
   }
 
-  /// Ends the session. If it finishes while still paused (no matching
-  /// `resume`), the open paused interval is closed at `date` first so it is
-  /// not lost.
+  /// Ends the session. If it finishes while still paused, the open interval is
+  /// closed at `date` first so it is not lost.
   @discardableResult
   mutating func finish(at date: Date, reason: MonitoringStopReason) -> MonitoringSummary {
-    if isPaused, let pauseStart = currentPauseStartedAt {
-      record.pausedSeconds += max(0, date.timeIntervalSince(pauseStart))
-    }
-    isPaused = false
-    currentPauseStartedAt = nil
+    closeOpenPause(at: date)
+    pauseSources = []
 
     record.endedAt = date
     record.endReason = reason.rawValue
@@ -187,6 +209,31 @@ struct MonitoringSessionTracker: Equatable {
       stopReason: reason,
       durationSource: durationSource
     )
+  }
+
+  /// The record `applicationWillTerminate` should persist: this session, ended
+  /// now, with any open paused interval closed. Returns nil when there is no
+  /// live session to stamp, including one that already emitted a live stop.
+  ///
+  /// Deliberately non-mutating and separate from `finish` — a quit stamp emits
+  /// no event (there is no synchronous PostHog flush at terminate time); the
+  /// event comes from `MonitoringSessionRecovery` at the next launch.
+  func quitStampedRecord(at date: Date) -> MonitoringSessionRecord? {
+    guard hasActiveSession else { return nil }
+    var stamped = record
+    if let pauseStart = stamped.pauseStartedAt {
+      stamped.pausedSeconds += max(0, date.timeIntervalSince(pauseStart))
+      stamped.pauseStartedAt = nil
+    }
+    stamped.endedAt = date
+    stamped.endReason = MonitoringStopReason.appQuit.rawValue
+    return stamped
+  }
+
+  private mutating func closeOpenPause(at date: Date) {
+    guard let pauseStart = record.pauseStartedAt else { return }
+    record.pausedSeconds += max(0, date.timeIntervalSince(pauseStart))
+    record.pauseStartedAt = nil
   }
 }
 
@@ -227,14 +274,21 @@ enum MonitoringSessionRecovery {
     }
 
     let durationSeconds = max(0, effectiveEndedAt.timeIntervalSince(record.startedAt))
-    let activeSeconds = max(0, durationSeconds - record.pausedSeconds)
+    // A session that died while paused (crash or quit with the screen locked)
+    // still has an open interval. Closing it at the effective end is what
+    // keeps lock time out of `activeSeconds`.
+    var pausedSeconds = record.pausedSeconds
+    if let pauseStart = record.pauseStartedAt {
+      pausedSeconds += max(0, effectiveEndedAt.timeIntervalSince(pauseStart))
+    }
+    let activeSeconds = max(0, durationSeconds - pausedSeconds)
     let recoveredAfterSeconds = max(0, now.timeIntervalSince(record.lastHeartbeatAt))
 
     return Outcome(
       sessionID: record.sessionID,
       durationSeconds: durationSeconds,
       activeSeconds: activeSeconds,
-      pausedSeconds: record.pausedSeconds,
+      pausedSeconds: pausedSeconds,
       stopReason: stopReason,
       durationSource: durationSource,
       recoveredAfterSeconds: recoveredAfterSeconds

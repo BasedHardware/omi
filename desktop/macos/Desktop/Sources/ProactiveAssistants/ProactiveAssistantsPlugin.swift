@@ -522,11 +522,11 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// its `Monitoring Stopped` event (recovered at the next launch) instead of
   /// silently losing the session.
   func stampMonitoringSessionAppQuit(at date: Date = Date()) {
-    guard monitoringSessionTracker.hasActiveSession else { return }
-    var record = monitoringSessionTracker.record
-    record.endedAt = date
-    record.endReason = MonitoringStopReason.appQuit.rawValue
-    monitoringSessionStore.save(record)
+    // Nil for a session that already emitted its live `Monitoring Stopped`,
+    // so quitting later cannot rewrite a finished session into a clean quit
+    // and have the next launch recover it as a second event.
+    guard let stamped = monitoringSessionTracker.quitStampedRecord(at: date) else { return }
+    monitoringSessionStore.save(stamped)
   }
 
   /// Suspend every timer that can capture or distribute context while the
@@ -1615,7 +1615,7 @@ public class ProactiveAssistantsPlugin: NSObject {
           "ProactiveAssistantsPlugin: System going to sleep, wasMonitoring=\(self?.wasMonitoringBeforeSleep ?? false)")
 
         self?.pauseCaptureForSystemInterruption()
-        self?.monitoringSessionTracker.pause(at: Date())
+        self?.monitoringSessionTracker.pause(at: Date(), source: .systemSleep)
         self?.persistMonitoringSessionIfActive()
         ContextVisitCoordinator.interruptForSleepIfEnabled()
       }
@@ -1663,12 +1663,11 @@ public class ProactiveAssistantsPlugin: NSObject {
   private func handleSystemWake() {
     log("ProactiveAssistantsPlugin: System woke from sleep")
 
-    // Closes the paused interval opened by the willSleepNotification handler
-    // (or, if screen-lock closed it first via handleScreenUnlock, this is a
-    // harmless no-op — see MonitoringSessionTracker.resume). Unconditional
-    // and separate from the capture-timer dance below, which re-pauses and
-    // resumes capture on its own delayed schedule.
-    monitoringSessionTracker.resume(at: Date())
+    // Releases only the sleep hold. On the standard password-after-sleep path
+    // the screen is still locked here — capture stays down until unlock (see
+    // the `!isScreenLocked` guard below), so the paused interval must stay
+    // open too. `handleScreenUnlock` releases the other half.
+    monitoringSessionTracker.resume(at: Date(), source: .systemSleep)
     persistMonitoringSessionIfActive()
 
     // Reset failure counter
@@ -1718,7 +1717,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     wasMonitoringBeforeLock = isMonitoring
 
     pauseCaptureForSystemInterruption()
-    monitoringSessionTracker.pause(at: Date())
+    monitoringSessionTracker.pause(at: Date(), source: .screenLock)
     persistMonitoringSessionIfActive()
   }
 
@@ -1727,13 +1726,11 @@ public class ProactiveAssistantsPlugin: NSObject {
     log("ProactiveAssistantsPlugin: Screen unlocked - resuming capture")
 
     isScreenLocked = false
-    // Closes the paused interval opened by handleScreenLock — or, if system
-    // wake already closed it first (lock, then sleep, then wake, then
-    // unlock), this is a harmless no-op. Screen-lock and system-sleep are
-    // separate interruption sources that can overlap; MonitoringSessionTracker's
-    // is-paused guard is what collapses that into exactly one paused
-    // interval instead of two.
-    monitoringSessionTracker.resume(at: Date())
+    // Releases the lock hold. Screen-lock and system-sleep overlap on the
+    // usual laptop path (lock -> sleep -> wake -> unlock); the tracker's
+    // source set closes the single paused interval when the *last* hold
+    // clears, which on that path is this one, not the wake above.
+    monitoringSessionTracker.resume(at: Date(), source: .screenLock)
     persistMonitoringSessionIfActive()
     // Reset failure counter
     screenCaptureFailureTracker.reset()
