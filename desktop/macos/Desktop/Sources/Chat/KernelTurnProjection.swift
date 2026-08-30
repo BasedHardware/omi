@@ -482,6 +482,7 @@ final class KernelTurnProjection {
     surface: AgentSurfaceReference,
     message: ChatMessage,
     status: KernelJournalTurnStatus? = nil,
+    terminalReason: String? = nil,
     ownerID: String? = nil
   ) async -> KernelJournalTurn? {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
@@ -490,7 +491,7 @@ final class KernelTurnProjection {
       let turn = try await client.updateJournalTurn(
         surface: surface,
         ownerID: lease.ownerID,
-        update: message.journalUpdate(status: status)
+        update: message.journalUpdate(status: status, terminalReason: terminalReason)
       )
       guard isCurrent(lease) else { return nil }
       _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
@@ -634,6 +635,8 @@ final class KernelTurnProjection {
     continuityKey: String,
     assistantContentBlocks: [ChatContentBlock] = [],
     resources: [ChatResource] = [],
+    assistantStatus: KernelJournalTurnStatus = .completed,
+    terminalReason: String? = nil,
     ownerID: String? = nil
   ) async -> Bool {
     let baseDate = Date()
@@ -669,9 +672,10 @@ final class KernelTurnProjection {
       writes.append(
         assistant.journalWrite(
           origin: origin,
-          status: .completed,
+          status: assistantStatus,
           continuityKey: continuityKey,
-          messageSource: origin
+          messageSource: origin,
+          terminalReason: terminalReason
         ))
     }
 

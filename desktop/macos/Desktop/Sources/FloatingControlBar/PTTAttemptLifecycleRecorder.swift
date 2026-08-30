@@ -87,6 +87,10 @@ final class PTTAttemptLifecycleRecorder {
     }
   }
 
+  /// Peak/RMS at or below this count as "no real signal". Mirrors
+  /// `PTTSilentMicRecoveryPolicy.deadMicPeakThreshold`, which gates dead-mic recovery.
+  static let nearZeroAmplitude = 5
+
   enum InputRouteClass: String {
     case builtIn = "built_in"
     case external
@@ -171,11 +175,17 @@ final class PTTAttemptLifecycleRecorder {
     var source: String
     var hubActive: Bool
     var micPermissionGranted: Bool
-    var turnAudioSeconds: Double
+    /// Audio measurements are optional because some terminal paths genuinely do
+    /// not hold the turn's PCM (e.g. `sendTranscript`, which runs after the buffer
+    /// was consumed). Those paths omit the properties rather than reporting a
+    /// literal `0`: a fake zero is indistinguishable from a real dead mic and
+    /// silently poisons every admitted-vs-rejected energy comparison built on
+    /// this event — which is exactly the comparison PTT speech-gate tuning needs.
+    var turnAudioSeconds: Double?
     var voicedAudioSeconds: Double?
-    var peak: Int
-    var rms: Int
-    var isNearZero: Bool
+    var peak: Int?
+    var rms: Int?
+    var isNearZero: Bool?
     var judgeable: Bool
     var telemetrySchemaVersion: Int
 
@@ -201,15 +211,23 @@ final class PTTAttemptLifecycleRecorder {
         "source": source,
         "hub_active": hubActive,
         "tcc_microphone_granted": micPermissionGranted,
-        "turn_audio_seconds": rounded(turnAudioSeconds),
-        "peak": peak,
-        "rms": rms,
-        "is_near_zero": isNearZero,
         "judgeable": judgeable,
         "telemetry_schema_version": telemetrySchemaVersion,
       ]
+      if let turnAudioSeconds {
+        dict["turn_audio_seconds"] = rounded(turnAudioSeconds)
+      }
       if let voicedAudioSeconds {
         dict["voiced_audio_seconds"] = rounded(voicedAudioSeconds)
+      }
+      if let peak {
+        dict["peak"] = peak
+      }
+      if let rms {
+        dict["rms"] = rms
+      }
+      if let isNearZero {
+        dict["is_near_zero"] = isNearZero
       }
       if let recoveryAttemptId {
         dict["recovery_attempt_id"] = recoveryAttemptId
@@ -357,17 +375,21 @@ final class PTTAttemptLifecycleRecorder {
   func terminate(
     disposition: TurnDisposition,
     source: String,
-    peak: Int,
-    rms: Int,
-    turnAudioSeconds: Double,
+    peak: Int?,
+    rms: Int?,
+    turnAudioSeconds: Double?,
     voicedAudioSeconds: Double?,
-    isNearZero: Bool,
     judgeable: Bool
   ) -> Snapshot {
+    // Derived here, never supplied: a caller that passes its own near-zero verdict
+    // can contradict the peak/rms it reported in the same call. Unknown energy
+    // yields an unknown verdict rather than a confident `false`.
+    let isNearZero: Bool? =
+      if let peak, let rms { peak <= Self.nearZeroAmplitude && rms <= Self.nearZeroAmplitude } else { nil }
     let msToFirstAudio = milliseconds(since: attemptStartedAt, to: firstAudioCallbackAt)
     let msToFirstUsable = milliseconds(since: attemptStartedAt, to: firstUsableFrameAt)
     let firstEnergy = finalizeFirstChunksEnergy(
-      hadCallbacks: firstAudioCallbackAt != nil, isNearZero: isNearZero, judgeable: judgeable)
+      hadCallbacks: firstAudioCallbackAt != nil, isNearZero: isNearZero ?? false, judgeable: judgeable)
 
     // Resolve a recovery requested on a *prior* attempt: this turn is the "next
     // judgeable turn" whose outcome proves whether the rebuild restored capture.
