@@ -316,7 +316,11 @@ actor FormAssistAssistant: ProactiveAssistant {
             Task { await self.fillOffer(snapshot: snapshot, context: context, work: work) }
           }),
         onCancel: { work.cancel() },
-        onUserDismiss: { Task { await self.declineOffer(fingerprint) } }
+        onUserDismiss: { Task { await self.declineOffer(fingerprint) } },
+        // Four minutes with neither the ✓ nor the ✗ is an answer too. Without this the
+        // next scan offers the same form again, and again, so ignoring it teaches Omi
+        // nothing — the user can still ask for it out loud, which skips every gate.
+        onExpire: { Task { await self.retireOffer(fingerprint) } }
       )
     }
   }
@@ -334,6 +338,11 @@ actor FormAssistAssistant: ProactiveAssistant {
   private func declineOffer(_ fingerprint: String) {
     declined.insert(fingerprint)
     log("FormAssist: offer declined, this form will not be offered again")
+  }
+
+  private func retireOffer(_ fingerprint: String) {
+    declined.insert(fingerprint)
+    log("FormAssist: offer expired unanswered, this form will not be offered again")
   }
 
   /// The user said yes. From here it is the same work the asked-for path does, and the

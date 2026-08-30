@@ -118,6 +118,10 @@ enum PanelSession {
   /// The user's ✗, and only theirs. `cancelWork` also runs when something else takes the
   /// panel down; a surface that must not offer this again needs the narrower signal.
   private static var userDismiss: (() -> Void)?
+  /// The countdown ran out with the user neither accepting nor closing it. Distinct from
+  /// `userDismiss`, because ignoring an offer is not the same as saying no to it — but a
+  /// surface that offered once and was ignored still needs to know.
+  private static var expired: (() -> Void)?
   /// The last app that was not Omi. A panel is presented from a voice turn, and Omi's own
   /// voice UI can hold focus at that moment — without this the panel would be born with
   /// no owner and never leave.
@@ -174,13 +178,14 @@ enum PanelSession {
     autoDismissAfter: TimeInterval? = nil,
     ask: CopyCardAsk? = nil,
     onCancel: (() -> Void)? = nil,
-    onUserDismiss: (() -> Void)? = nil
+    onUserDismiss: (() -> Void)? = nil,
+    onExpire: (() -> Void)? = nil
   ) -> Token {
     present(
       sections: [CloudConnectorCopySection(id: "fields", title: "", fields: fields)],
       title: title, subtitle: subtitle, grain: grain, origin: origin,
       formFingerprint: formFingerprint, autoDismissAfter: autoDismissAfter, ask: ask,
-      onCancel: onCancel, onUserDismiss: onUserDismiss)
+      onCancel: onCancel, onUserDismiss: onUserDismiss, onExpire: onExpire)
   }
 
   /// A copy card whose values are grouped — the cloud-connector setup card, whose
@@ -197,7 +202,8 @@ enum PanelSession {
     ask: CopyCardAsk? = nil,
     editable: Bool = true,
     onCancel: (() -> Void)? = nil,
-    onUserDismiss: (() -> Void)? = nil
+    onUserDismiss: (() -> Void)? = nil,
+    onExpire: (() -> Void)? = nil
   ) -> Token {
     present(
       content: .copy(
@@ -205,7 +211,7 @@ enum PanelSession {
           title: title, subtitle: subtitle, sections: sections,
           autoDismissAfter: autoDismissAfter, ask: ask)),
       grain: grain, origin: origin, formFingerprint: formFingerprint, editable: editable,
-      onCancel: onCancel, onUserDismiss: onUserDismiss)
+      onCancel: onCancel, onUserDismiss: onUserDismiss, onExpire: onExpire)
   }
 
   /// Put up the draft card. Same ownership rules as a copy card: it belongs to the
@@ -248,7 +254,8 @@ enum PanelSession {
     composeFingerprint: String? = nil,
     editable: Bool = true,
     onCancel: (() -> Void)? = nil,
-    onUserDismiss: (() -> Void)? = nil
+    onUserDismiss: (() -> Void)? = nil,
+    onExpire: (() -> Void)? = nil
   ) -> Token {
     cancelWork?()
     hideCurrent()
@@ -264,6 +271,7 @@ enum PanelSession {
     owner = currentContext()
     cancelWork = onCancel
     userDismiss = onUserDismiss
+    expired = onExpire
     startWatching()
     show()
     return token
@@ -282,6 +290,7 @@ enum PanelSession {
     copy.ask = nil
     copy.autoDismissAfter = nil
     panel.expiresAt = nil
+    expired = nil
     panel.content = .copy(copy)
     if panel.origin == .ambient {
       panel.origin = .requested
@@ -347,7 +356,9 @@ enum PanelSession {
   /// minutes would reappear forever.
   static func expire(_ expiring: Token) {
     guard expiring == token else { return }
+    let ignored = expired
     forget()
+    ignored?()
   }
 
   /// Take down a panel only if it is the one described. Used by a surface retiring its
@@ -489,6 +500,10 @@ enum PanelSession {
             + "reword. Leave it alone and tell them so.")
       }
       update(title: title, subtitle: subtitle, fields: fields)
+      // The turn that put this panel up already carried its card away. An edit in a later
+      // turn is a second thing to keep: without this the transcript holds the text the
+      // user asked to change, and the correction never appears anywhere.
+      if liveChatRecordIndex == nil { beginChatRecord() }
       return .revised(fields.count)
     case .offer(let heading):
       return .refused(
@@ -638,6 +653,12 @@ enum PanelSession {
 
   private static func show() {
     guard let panel = remembered else { return }
+    // The countdown keeps running while the card is hidden. Coming back to a context the
+    // panel already outlived must not flash it up for its last second.
+    if let expiresAt = panel.expiresAt, expiresAt <= Date() {
+      expire(token)
+      return
+    }
     showing = true
     switch panel.content {
     case .copy(let copy): showCopy(copy)
@@ -738,6 +759,7 @@ enum PanelSession {
     cancelWork?()
     cancelWork = nil
     userDismiss = nil
+    expired = nil
     remembered = nil
     composeFingerprint = nil
     owner = nil

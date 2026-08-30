@@ -90,6 +90,43 @@ final class PanelLifetimeTests: XCTestCase {
     XCTAssertEqual(PanelSession.modelVisibleContent(), "Email: c@d.e")
   }
 
+  /// Coming back to a context the panel already outlived must not flash the card up for
+  /// its last second: the deadline kept running while it was hidden.
+  func testAPanelWhoseDeadlinePassedWhileHiddenIsNotPutBackUp() {
+    PanelSession.present(
+      title: "Fill this form?", subtitle: "7 fields", fields: [field("Email", "a@b.c")],
+      grain: .context, origin: .ambient, autoDismissAfter: -1)
+    XCTAssertNil(PanelSession.reopen())
+    XCTAssertFalse(PanelSession.isPresenting)
+  }
+
+  /// Four minutes with neither the ✓ nor the ✗ is an answer, and the surface that offered
+  /// has to hear it — otherwise the next scan offers the same form again.
+  func testAnOfferThatRunsOutTellsTheSurfaceItWasIgnored() {
+    var ignored = false
+    var declined = false
+    let panel = PanelSession.present(
+      title: "Fill this form?", subtitle: "7 fields", fields: [field("Email", "a@b.c")],
+      grain: .context, origin: .ambient,
+      onUserDismiss: { declined = true }, onExpire: { ignored = true })
+    PanelSession.expire(panel)
+    XCTAssertTrue(ignored)
+    XCTAssertFalse(declined, "an ignored offer is not a declined one")
+  }
+
+  /// Accepting it stops the countdown, so the ✓ can never be followed by an ignore.
+  func testAcceptingAnOfferSilencesItsCountdown() {
+    var ignored = false
+    let panel = PanelSession.present(
+      title: "Fill this form?", subtitle: "7 fields", fields: [field("Email", "a@b.c")],
+      grain: .context, origin: .ambient,
+      ask: CopyCardAsk(placeholder: "…", confirmLabel: "Fill it", onConfirm: { _ in }),
+      onExpire: { ignored = true })
+    PanelSession.resolveAsk()
+    PanelSession.expire(panel)
+    XCTAssertFalse(ignored)
+  }
+
   // MARK: - The transcript queue
 
   /// A voice turn is the only thing that drains the queue, and a panel bought with the ✓
@@ -98,6 +135,26 @@ final class PanelLifetimeTests: XCTestCase {
   func testARecordNobodyClaimedAgesOutRatherThanLandingUnderALaterTurn() {
     present("Your Information", "a@b.c")
     XCTAssertTrue(PanelSession.takeChatCards(now: Date().addingTimeInterval(3_600)).isEmpty)
+  }
+
+  /// A panel put up in one turn and edited in a later one leaves two cards, not one: the
+  /// first turn's write already carried the original away, and dropping the correction
+  /// leaves the transcript holding exactly the text the user asked to change.
+  func testAnEditInALaterTurnStillReachesTheTranscript() {
+    present("Train Stations", "Barbican")
+    XCTAssertEqual(PanelSession.takeChatCards().map(\.text), ["Email: Barbican"])
+    guard case .revised = PanelSession.revise(title: nil, fields: [field("Email", "Euston")])
+    else { return XCTFail("the edit should have landed on the panel") }
+    XCTAssertEqual(PanelSession.takeChatCards().map(\.text), ["Email: Euston"])
+  }
+
+  /// Within one turn it is still one card: a panel filling in updates its record rather
+  /// than adding a second.
+  func testStreamingFillsStillLeaveOneCard() {
+    present("Finding that", "…")
+    PanelSession.update(fields: [field("Email", "a@b.c")])
+    PanelSession.update(fields: [field("Email", "final@b.c")])
+    XCTAssertEqual(PanelSession.takeChatCards().map(\.text), ["Email: final@b.c"])
   }
 
   /// Until it ages out it waits: a turn that cannot carry content blocks leaves the
