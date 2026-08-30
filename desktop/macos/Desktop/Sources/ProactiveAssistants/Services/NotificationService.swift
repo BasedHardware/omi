@@ -790,14 +790,16 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       guard NotificationPermissionPolicy.isGranted(authorizationStatus) else {
         log("Notification skipped (auth=\(authorizationStatus.rawValue)): \(title)")
 
-        // This is the *only* place an unauthorized proactive notification is
-        // dropped — `deliverNotification` below is never reached — so the
-        // observability for it has to live here. The insight-delivery ledger
-        // underneath covers just the subset carrying an `insightDeliveryID`
-        // (and only when the floating bar did not already take the message),
-        // which is why authorization needs its own unconditional event.
-        AnalyticsManager.shared.notificationDeliverySkipped(
-          authStatus: NotificationDeliveryTelemetry.AuthStatus(authorizationStatus),
+        // The drop happens *here*, not in `deliverNotification` below, which
+        // this guard never reaches. The other real drop site is
+        // `contextDirectorPresentationPreflight`, whose callers abort on a
+        // non-`.queued` preflight; both go through `reportUnauthorizedDrop`.
+        // The insight-delivery ledger underneath covers only the subset
+        // carrying an `insightDeliveryID`, and only when the floating bar did
+        // not already take the message, which is why authorization needs its
+        // own unconditional event.
+        Self.reportUnauthorizedDrop(
+          status: authorizationStatus,
           surface: ProactiveNotificationKind.from(assistantId: assistantId)
         )
 
@@ -867,12 +869,46 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         continuation.resume(returning: settings)
       }
     }
+    // Authorization is checked separately from alert style, and before it.
+    // Folded together they are one `.suppressed`, and the engines abort on
+    // that (`ContextProactivityEngine`, `JITProactivityDelivery` both bail
+    // unless preflight returns `.queued`) — so this is where a context-director
+    // notification is really dropped for want of permission, and reporting it
+    // anywhere downstream reports nothing. An alert style of `.none` is the
+    // user's own choice and is not a permission problem.
+    guard NotificationPermissionPolicy.isGranted(settings.authorizationStatus) else {
+      // The preflight does not carry the decision type — it runs before the
+      // message exists — so the surface is derived from the same assistant id
+      // `presentContextDirectorNotification` passes to `deliverNotification`.
+      Self.reportUnauthorizedDrop(
+        status: settings.authorizationStatus,
+        surface: ProactiveNotificationKind.from(assistantId: "context-director")
+      )
+      return .suppressed
+    }
     guard
       NotificationPermissionPolicy.hasVisibleAlertSurface(
         status: settings.authorizationStatus,
         alertStyle: settings.alertStyle)
     else { return .suppressed }
     return .queued
+  }
+
+  /// Single reporter for "this notification was dropped because the app is not
+  /// authorized to show it".
+  ///
+  /// Exists so the two real drop sites — `sendNotification`'s authorization
+  /// guard and `contextDirectorPresentationPreflight`'s — cannot drift, and so
+  /// `NotificationServiceSkipEventPlacementTests` can pin *where* it is called
+  /// from. Placement is the whole contract: an earlier version of this event
+  /// sat in `deliverNotification`, which an unauthorized notification never
+  /// reaches, so it compiled, passed its tests, and emitted nothing.
+  @MainActor
+  static func reportUnauthorizedDrop(status: UNAuthorizationStatus, surface: ProactiveNotificationKind) {
+    AnalyticsManager.shared.notificationDeliverySkipped(
+      authStatus: NotificationDeliveryTelemetry.AuthStatus(status),
+      surface: surface
+    )
   }
 
   @discardableResult
@@ -954,13 +990,15 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     UserNotificationCallbackBridge.notificationSettings { [weak self] settings in
-      // Split out of the compound guard below so an unauthorized drop is
-      // reported as such. Folded in, it would be indistinguishable from a
-      // stale owner, an exhausted budget, or an alert style of `.none` — all
-      // of which are ordinary policy, not a permission the user never granted.
+      // Reachable only when `present` is called without a preflight; the
+      // engines preflight first and never get here unauthorized. Kept so the
+      // direct-call path is covered too — `reportUnauthorizedDrop` is the same
+      // reporter the preflight uses, and the two cannot both fire for one
+      // notification because a preflight that reports also returns
+      // `.suppressed`, which stops the caller before `present`.
       guard NotificationPermissionPolicy.isGranted(settings.authorizationStatus) else {
-        AnalyticsManager.shared.notificationDeliverySkipped(
-          authStatus: NotificationDeliveryTelemetry.AuthStatus(settings.authorizationStatus),
+        Self.reportUnauthorizedDrop(
+          status: settings.authorizationStatus,
           surface: ProactiveNotificationKind.from(decisionType: decisionType)
         )
         onDropped?()
