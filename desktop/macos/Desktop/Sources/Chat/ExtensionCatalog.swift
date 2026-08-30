@@ -285,16 +285,18 @@ enum ExtensionCatalog {
     }
   }
 
-  /// Only positional arguments carrying a literal value are safe to replay unattended; named
-  /// arguments and user-supplied placeholders need input this list cannot supply.
+  /// Arguments that carry a literal value, replayed as the server declared them. A named argument
+  /// is a flag plus its value ("-t", "stdio"); dropping it would launch a differently-configured
+  /// server than the publisher documented. Anything whose value is a user-supplied placeholder is
+  /// skipped, because this list cannot supply it.
   private static func argumentValues(_ raw: Any?) -> [String] {
     guard let arguments = raw as? [[String: Any]] else { return [] }
-    return arguments.compactMap { argument in
-      guard (argument["type"] as? String) ?? "positional" == "positional",
-        let value = argument["value"] as? String, !value.isEmpty,
-        !value.contains("{")
-      else { return nil }
-      return value
+    return arguments.flatMap { argument -> [String] in
+      guard let value = argument["value"] as? String, !value.isEmpty, !value.contains("{")
+      else { return [] }
+      guard (argument["type"] as? String) == "named" else { return [value] }
+      guard let name = argument["name"] as? String, !name.isEmpty else { return [] }
+      return [name, value]
     }
   }
 

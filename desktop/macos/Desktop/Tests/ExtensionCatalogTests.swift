@@ -78,6 +78,24 @@ final class ExtensionCatalogTests: XCTestCase {
       .mcpStdio(command: "npx", args: ["some-mcp", "--safe"], requiredEnv: []))
   }
 
+  /// Registry `io.snyk/mcp` declares `-t stdio` as a named argument. Dropping the flag launched
+  /// `npx snyk mcp` with the server's default transport, which is not stdio — an installed tile
+  /// that could never connect.
+  func testRegistryReplaysNamedArgumentsThatCarryALiteralValue() throws {
+    let payload = """
+      {"servers": [{"server": {"name": "io.snyk/mcp", "description": "d", "packages": [
+        {"registryType": "npm", "identifier": "snyk", "version": "1.1299.1",
+         "transport": {"type": "stdio"},
+         "packageArguments": [{"value": "mcp", "type": "positional"},
+                              {"value": "stdio", "type": "named", "name": "-t"},
+                              {"type": "named", "name": "--project-ref"}]}]}}]}
+      """
+    XCTAssertEqual(
+      ExtensionCatalog.mcpEntries(fromRegistry: Data(payload.utf8)).first?.install,
+      .mcpStdio(command: "npx", args: ["snyk@1.1299.1", "mcp", "-t", "stdio"], requiredEnv: []),
+      "a named argument with no value needs input we cannot supply and stays out")
+  }
+
   /// `ai.smithery/*` republishes other people's servers behind a Smithery-hosted endpoint and a
   /// second consent screen. Listing them puts a broker between the user and a server they can
   /// install straight from its publisher.
