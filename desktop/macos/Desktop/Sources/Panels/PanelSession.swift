@@ -306,6 +306,142 @@ enum PanelSession {
     dismiss()
   }
 
+  // MARK: - What the model may see
+
+  /// Enough of a panel to revise it, few enough characters to carry every turn.
+  private static let maxModelVisibleLength = 4_000
+
+  /// What the panel is, apart from its text.
+  ///
+  /// A panel with nothing copyable on it yet is still a panel: an offer waiting on the
+  /// user's ✓, or a card whose rows are still spinners. Reporting "nothing is on screen"
+  /// for those is the same lie this whole seam exists to stop — the model would offer to
+  /// put up what the user is already looking at.
+  enum Presence: Equatable {
+    case none
+    /// Values the user can copy.
+    case copy(String)
+    /// An offer the user has not answered yet.
+    case offer(title: String)
+    /// A panel that is still filling in.
+    case working(title: String)
+    /// The message-draft card, which takes its own edits inline.
+    case draft(String?)
+  }
+
+  static func presence() -> Presence {
+    guard isPresenting, let panel = remembered else { return .none }
+    switch panel.content {
+    case .compose(let compose):
+      return .draft(compose.draft.map(\.body))
+    case .copy(let copy):
+      if copy.ask != nil { return .offer(title: copy.title) }
+      if let content = modelVisibleContent() { return .copy(content) }
+      return .working(title: copy.title)
+    }
+  }
+
+  /// The panel's current contents, for the tool result that lets the model change them.
+  ///
+  /// A model that cannot see the panel cannot edit it: `draft_message` returned "Draft
+  /// is on screen to copy", so "make that shorter" had nothing to shorten and the only
+  /// move left was writing a new draft from scratch. Returning the text is what makes
+  /// `update_panel` possible.
+  ///
+  /// Masked values never leave. They are the user's secrets — a connector's API key —
+  /// and the panel masks them on screen precisely so they are not read or repeated;
+  /// putting them in a tool result would send them to the speech provider instead.
+  /// Pending rows are spinners, not content.
+  static func modelVisibleContent() -> String? {
+    guard let panel = remembered else { return nil }
+    let fields: [CloudConnectorCopyField]
+    switch panel.content {
+    case .copy(let copy): fields = copy.fields
+    case .compose(let compose): fields = draftFields(compose.draft)
+    }
+    let lines =
+      fields
+      .filter { !$0.isPending && !$0.masksValue }
+      .compactMap { field -> String? in
+        let value = field.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        let label = field.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        return label.isEmpty ? value : "\(label): \(value)"
+      }
+    guard !lines.isEmpty else { return nil }
+    let joined = lines.joined(separator: "\n")
+    let body =
+      joined.count > maxModelVisibleLength
+      ? String(joined.prefix(maxModelVisibleLength)) + "\u{2026}"
+      : joined
+    let masked = fields.filter(\.masksValue).count
+    return body
+      + (masked == 0
+        ? ""
+        : "\n(\(masked) secret value\(masked == 1 ? "" : "s") on the panel, withheld here.)")
+  }
+
+  /// How a requested change to the panel ended.
+  enum ReviseOutcome: Equatable {
+    /// The panel on screen now holds the new content.
+    case revised(Int)
+    /// Nothing was on screen, so the content went up as a new panel.
+    case created(Int)
+    /// The panel on screen is not one to overwrite, and why.
+    case refused(String)
+  }
+
+  /// Replace what the panel is showing because the user asked for a change.
+  ///
+  /// Goes through `update` rather than `present`, so the window the user dragged stays
+  /// where they put it and the transcript keeps one card for one panel instead of
+  /// logging every revision as a new thing.
+  ///
+  /// With nothing on screen it puts the revision up as a new panel instead of refusing.
+  /// A panel leaves the moment its context does, so "make that shorter" routinely
+  /// arrives after the card is already gone — and refusing was measured to produce the
+  /// worst outcome available: the model said "I've put the shorter note on your screen
+  /// now" with nothing there. Whether this is an edit or a first draft is Omi's problem,
+  /// not the user's.
+  ///
+  /// Three panels are refused rather than overwritten, because writing over them would
+  /// destroy something only the user can replace: an offer they have not answered (the
+  /// ✓ is the permission to spend), a card still filling in (the answer is in flight),
+  /// and the draft card (it has its own edit box).
+  @discardableResult
+  static func revise(title: String?, fields: [CloudConnectorCopyField]) -> ReviseOutcome {
+    guard !fields.isEmpty else {
+      return .refused("update_panel needs the panel's complete new items.")
+    }
+    let subtitle =
+      fields.count == 1 ? "Copy it with the button." : "Copy each with its button."
+    switch presence() {
+    case .none:
+      let heading = (title?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap {
+        $0.isEmpty ? nil : $0
+      }
+      present(
+        title: heading ?? "For you", subtitle: subtitle, fields: fields, grain: .app,
+        origin: .requested)
+      return .created(fields.count)
+    case .copy:
+      update(title: title, subtitle: subtitle, fields: fields)
+      return .revised(fields.count)
+    case .offer(let heading):
+      return .refused(
+        "The panel on screen is the unanswered offer \"\(heading)\". Ask the user to tap "
+          + "the check on it rather than replacing it.")
+    case .working(let heading):
+      return .refused(
+        "The panel on screen (\"\(heading)\") is still filling in. Wait for it rather than "
+          + "replacing it.")
+    case .draft:
+      return .refused(
+        "The message-draft card is on screen and it takes edits in its own box. Tell the "
+          + "user to type the change there.")
+    }
+  }
+
   // MARK: - Chat hand-off
 
   /// A finished panel as the chat will keep it: a collapsible card with the values in

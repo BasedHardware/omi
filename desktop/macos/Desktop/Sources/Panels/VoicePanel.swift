@@ -40,6 +40,48 @@ enum VoicePanel {
   @discardableResult
   static func dismiss() -> Bool { PanelSession.dismiss() }
 
+  /// Whether a model-supplied string is fit to head a panel the user reads.
+  ///
+  /// Measured live: a `update_panel` call arrived with `"title": "floating_chat"` — an
+  /// internal surface token the model picked up from its own tool vocabulary — which
+  /// would have renamed the user's card to that. A heading someone reads is prose; an
+  /// identifier is not, and there is no title so urgent that it is worth showing one.
+  nonisolated static func isReadableTitle(_ title: String) -> Bool {
+    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    guard !trimmed.contains(" ") else { return true }
+    return !trimmed.contains("_")
+  }
+
+  /// What the panel could not take, said plainly, or nil when it took everything.
+  ///
+  /// The caps are silent: 20 items become 12 and a 9,000-character value becomes 4,000,
+  /// with nothing in the tool result saying so. The model then tells the user their list
+  /// is on screen while eight rows of it are not. Naming the loss is what lets it say
+  /// "the first twelve are up" instead.
+  nonisolated static func shortfall(from items: [VoicePanelItem]) -> String? {
+    let usable = items.filter {
+      !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    var notes: [String] = []
+    if usable.count > maxItems {
+      notes.append(
+        "Only the first \(maxItems) of \(usable.count) items fit; the rest are not on screen.")
+    }
+    let clipped = usable.prefix(maxItems).filter { $0.text.count > maxTextLength }.count
+    if clipped > 0 {
+      notes.append(
+        "\(clipped) value\(clipped == 1 ? " was" : "s were") too long and \(clipped == 1 ? "was" : "were") cut to \(maxTextLength) characters."
+      )
+    }
+    let dropped = items.count - usable.count
+    if dropped > 0 {
+      notes.append(
+        "\(dropped) item\(dropped == 1 ? "" : "s") had no text and \(dropped == 1 ? "was" : "were") dropped.")
+    }
+    return notes.isEmpty ? nil : notes.joined(separator: " ")
+  }
+
   nonisolated static func copyFields(from items: [VoicePanelItem]) -> [CloudConnectorCopyField] {
     items
       .map {

@@ -36,17 +36,17 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Identify the documents, URLs, and files the user was recently working in.",
       bullets: [
-      "Call this before semantic_search or execute_sql for \"where was that doc\", \"what was I doing in X\", and other recent-work questions.",
-      "Returns visits[].handles and briefs[].handles — the durable address of each source. Open or read that source; do not describe a screenshot of it.",
-      "Screenshot timeline and screenshot_id are fallback evidence: pass include_screen=true only when no handle answers the question.",
-      "For the live screen use capture_screen; this tool is history, not current visual evidence.",
-      "Call get_work_context first for recent work/activity history and document, URL, page, or file location; do not start with semantic_search or execute_sql. It is not for direct current-screen questions.",
-      "Read visits[].handles and briefs[].handles first: they name the actual document, URL, or file. Open or read that source rather than describing a screenshot of it.",
-      "Make one call with the defaults before any broader screen discovery. screen_now and timeline are empty by default and are fallback evidence only.",
-      "Pass include_screen=true solely when the handles cannot answer the question or the question is visual; it costs a video-frame decode.",
-      "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
-      "For current visual detail, use capture_screen when approval is available rather than answering from this tool."
-    ]
+        "Call this before semantic_search or execute_sql for \"where was that doc\", \"what was I doing in X\", and other recent-work questions.",
+        "Returns visits[].handles and briefs[].handles — the durable address of each source. Open or read that source; do not describe a screenshot of it.",
+        "Screenshot timeline and screenshot_id are fallback evidence: pass include_screen=true only when no handle answers the question.",
+        "For the live screen use capture_screen; this tool is history, not current visual evidence.",
+        "Call get_work_context first for recent work/activity history and document, URL, page, or file location; do not start with semantic_search or execute_sql. It is not for direct current-screen questions.",
+        "Read visits[].handles and briefs[].handles first: they name the actual document, URL, or file. Open or read that source rather than describing a screenshot of it.",
+        "Make one call with the defaults before any broader screen discovery. screen_now and timeline are empty by default and are fallback evidence only.",
+        "Pass include_screen=true solely when the handles cannot answer the question or the question is visual; it costs a video-frame decode.",
+        "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
+        "For current visual detail, use capture_screen when approval is available rather than answering from this tool.",
+      ]
     ),
     Capability(
       toolName: "execute_sql",
@@ -55,17 +55,17 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Run exact structured or quantitative queries on the local omi.db database.",
       bullets: [
-      "Supports SELECT, INSERT, UPDATE, DELETE.",
-      "Use for counts, date ranges, aggregates, and narrow structured inspection. get_work_context owns recent-work and document/page/file location questions.",
-      "The durable work index is context_visits(handlesJson) joined to context_buckets; use it instead of screenshots for work aggregates or diagnostics.",
-      "Raw screenshots.ocrText columns are refused. Use a bounded substr(ocrText, 1, 200) preview only for explicit low-level OCR inspection.",
-      "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
-      "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
-      "Prefer semantic_search for fuzzy screen-content questions after get_work_context cannot identify the source, and backend task tools for creating/updating tasks.",
-      "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
-      "For recent work/activity or document/page/file location, call get_work_context before execute_sql and do not select raw screenshots.ocrText.",
-      "Use context_visits(handlesJson) joined to context_buckets for work aggregates; use semantic_search only for fuzzy screen content after get_work_context cannot answer."
-    ]
+        "Supports SELECT, INSERT, UPDATE, DELETE.",
+        "Use for counts, date ranges, aggregates, and narrow structured inspection. get_work_context owns recent-work and document/page/file location questions.",
+        "The durable work index is context_visits(handlesJson) joined to context_buckets; use it instead of screenshots for work aggregates or diagnostics.",
+        "Raw screenshots.ocrText columns are refused. Use a bounded substr(ocrText, 1, 200) preview only for explicit low-level OCR inspection.",
+        "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
+        "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
+        "Prefer semantic_search for fuzzy screen-content questions after get_work_context cannot identify the source, and backend task tools for creating/updating tasks.",
+        "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
+        "For recent work/activity or document/page/file location, call get_work_context before execute_sql and do not select raw screenshots.ocrText.",
+        "Use context_visits(handlesJson) joined to context_buckets for work aggregates; use semantic_search only for fuzzy screen content after get_work_context cannot answer.",
+      ]
     ),
     Capability(
       toolName: "semantic_search",
@@ -74,12 +74,12 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Vector similarity search on the user's screen history.",
       bullets: [
-      "Use for fuzzy/conceptual questions about screen content after get_work_context cannot identify the document, URL, or file.",
-      "Examples: \"reading about machine learning\", \"working on design mockups\".",
-      "Parameters: query (required), days (default 7), app_filter (optional).",
-      "For recent work or document/page/file location, call get_work_context before semantic_search.",
-      "Use semantic_search instead of execute_sql only for fuzzy or conceptual screen-content questions that handles cannot answer."
-    ]
+        "Use for fuzzy/conceptual questions about screen content after get_work_context cannot identify the document, URL, or file.",
+        "Examples: \"reading about machine learning\", \"working on design mockups\".",
+        "Parameters: query (required), days (default 7), app_filter (optional).",
+        "For recent work or document/page/file location, call get_work_context before semantic_search.",
+        "Use semantic_search instead of execute_sql only for fuzzy or conceptual screen-content questions that handles cannot answer.",
+      ]
     ),
     Capability(
       toolName: "search_screen_history",
@@ -88,8 +88,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Search the user's on-screen history by meaning.",
       bullets: [
-      "Use for what the user saw, read, or worked on. Speak a short summary of the result."
-    ]
+        "Use for what the user saw, read, or worked on. Speak a short summary of the result."
+      ]
     ),
     Capability(
       toolName: "get_daily_recap",
@@ -98,21 +98,22 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Pre-formatted activity recap: apps, conversations, tasks, focus, memories, and observations.",
       bullets: [
-      "Use for what the user did today/yesterday/this week; it is faster than composing many SQL queries.",
-      "Parameters: days_ago (0=today, 1=yesterday, 7=past week; default 1)."
-    ]
+        "Use for what the user did today/yesterday/this week; it is faster than composing many SQL queries.",
+        "Parameters: days_ago (0=today, 1=yesterday, 7=past week; default 1).",
+      ]
     ),
     Capability(
       toolName: "fill_cloud_connector_form",
       title: "Fill Cloud Connector Form",
       latency: .fastLocal,
       surfaces: Set([.desktopChat]),
-      summary: "Fill the visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation.",
+      summary:
+        "Fill the visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation.",
       bullets: [
-      "Call this first for ChatGPT or Claude cloud MCP connector setup when the connector form is visible.",
-      "Do not install browser extensions before trying this tool.",
-      "If it reports missing Accessibility permission, missing form, or missing required fields, wait for the missing condition or use guarded screenshots before any keyboard automation."
-    ]
+        "Call this first for ChatGPT or Claude cloud MCP connector setup when the connector form is visible.",
+        "Do not install browser extensions before trying this tool.",
+        "If it reports missing Accessibility permission, missing form, or missing required fields, wait for the missing condition or use guarded screenshots before any keyboard automation.",
+      ]
     ),
     Capability(
       toolName: "list_agent_sessions",
@@ -121,10 +122,10 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "List Omi-managed agent sessions from the local runtime kernel.",
       bullets: [
-      "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
-      "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
-      "For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then call get_agent_run with the returned runId and answer from run.finalText without exposing the internal id."
-    ]
+        "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
+        "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
+        "For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then call get_agent_run with the returned runId and answer from run.finalText without exposing the internal id.",
+      ]
     ),
     Capability(
       toolName: "get_agent_run",
@@ -133,53 +134,57 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Inspect one canonical Omi agent run.",
       bullets: [
-      "Use a runId from list_agent_sessions or a correlated Omi result.",
-      "Returns the run, attempts, adapter bindings, events, and artifact metadata.",
-      "For a completed child, use run.finalText to answer the user and keep the internal runId out of the user-visible response."
-    ]
+        "Use a runId from list_agent_sessions or a correlated Omi result.",
+        "Returns the run, attempts, adapter bindings, events, and artifact metadata.",
+        "For a completed child, use run.finalText to answer the user and keep the internal runId out of the user-visible response.",
+      ]
     ),
     Capability(
       toolName: "build_desktop_awareness_snapshot",
       title: "Build Desktop Awareness Snapshot",
       latency: .fastLocal,
       surfaces: Set([.desktopChat, .realtimeHub]),
-      summary: "Build a local coordinator snapshot from kernel sessions, runs, dispatches, deliveries, candidates, and runtime health.",
+      summary:
+        "Build a local coordinator snapshot from kernel sessions, runs, dispatches, deliveries, candidates, and runtime health.",
       bullets: [
-      "Use before routing new local work or summarizing open agent loops.",
-      "Returns metadata and local state summaries, not raw transcripts or screenshot bytes."
-    ]
+        "Use before routing new local work or summarizing open agent loops.",
+        "Returns metadata and local state summaries, not raw transcripts or screenshot bytes.",
+      ]
     ),
     Capability(
       toolName: "list_desktop_action_queue",
       title: "List Desktop Action Queue",
       latency: .fastLocal,
       surfaces: Set([.desktopChat, .realtimeHub]),
-      summary: "Return the derived Desktop action queue from runs, dispatches, deliveries, candidates, legacy projections, and overrides.",
+      summary:
+        "Return the derived Desktop action queue from runs, dispatches, deliveries, candidates, legacy projections, and overrides.",
       bullets: [
-      "Use for approvals, failed runs, artifact review, stale work, and candidate review.",
-      "The queue is derived and not persisted as authority."
-    ]
+        "Use for approvals, failed runs, artifact review, stale work, and candidate review.",
+        "The queue is derived and not persisted as authority.",
+      ]
     ),
     Capability(
       toolName: "get_desktop_open_loops",
       title: "Get Desktop Open Loops",
       latency: .fastLocal,
       surfaces: Set([.desktopChat, .realtimeHub]),
-      summary: "Summarize unresolved local coordinator loops: blocking dispatches, failed/stale runs, undelivered artifacts, and candidate reviews.",
+      summary:
+        "Summarize unresolved local coordinator loops: blocking dispatches, failed/stale runs, undelivered artifacts, and candidate reviews.",
       bullets: [
-      "Use for quick status answers and voice status summaries."
-    ]
+        "Use for quick status answers and voice status summaries."
+      ]
     ),
     Capability(
       toolName: "build_desktop_context_packet",
       title: "Build Desktop Context Packet",
       latency: .fastLocal,
       surfaces: Set([.desktopChat]),
-      summary: "Persist a minimized DesktopContextPacket plus context-access audit rows from explicit selected snippets.",
+      summary:
+        "Persist a minimized DesktopContextPacket plus context-access audit rows from explicit selected snippets.",
       bullets: [
-      "Use selected snippets with provenance, not full transcripts or screenshot image bytes.",
-      "Requires a positive TTL and writes context-access audit rows."
-    ]
+        "Use selected snippets with provenance, not full transcripts or screenshot image bytes.",
+        "Requires a positive TTL and writes context-access audit rows.",
+      ]
     ),
     Capability(
       toolName: "route_desktop_intent",
@@ -188,8 +193,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Run deterministic local intent routing over action queue and reusable session candidates.",
       bullets: [
-      "Use before creating a new run when existing local context may be relevant."
-    ]
+        "Use before creating a new run when existing local context may be relevant."
+      ]
     ),
     Capability(
       toolName: "evaluate_desktop_tool_policy",
@@ -198,28 +203,30 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Evaluate local coordinator policy for a tool/capability request without executing the tool.",
       bullets: [
-      "Use to explain why a sensitive local action needs dispatch or approval."
-    ]
+        "Use to explain why a sensitive local action needs dispatch or approval."
+      ]
     ),
     Capability(
       toolName: "create_desktop_dispatch",
       title: "Create Desktop Dispatch",
       latency: .fastLocal,
       surfaces: Set([.desktopChat, .realtimeHub]),
-      summary: "Create a durable local DesktopCoordinatorDispatch for approvals, routing choices, artifact review, candidates, or sensitive context.",
+      summary:
+        "Create a durable local DesktopCoordinatorDispatch for approvals, routing choices, artifact review, candidates, or sensitive context.",
       bullets: [
-      "Use when user attention or approval is required before crossing a boundary."
-    ]
+        "Use when user attention or approval is required before crossing a boundary."
+      ]
     ),
     Capability(
       toolName: "resolve_desktop_dispatch",
       title: "Resolve Desktop Dispatch",
       latency: .fastLocal,
       surfaces: Set([.desktopChat, .realtimeHub]),
-      summary: "Resolve or cancel a pending local DesktopCoordinatorDispatch, optionally creating a scoped allow grant for an explicit approval.",
+      summary:
+        "Resolve or cancel a pending local DesktopCoordinatorDispatch, optionally creating a scoped allow grant for an explicit approval.",
       bullets: [
-      "Use only for explicit user approval/denial/cancel decisions."
-    ]
+        "Use only for explicit user approval/denial/cancel decisions."
+      ]
     ),
     Capability(
       toolName: "cancel_agent_run",
@@ -228,9 +235,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Request cancellation for one canonical Omi agent run through the runtime kernel.",
       bullets: [
-      "Use when the user asks to stop a running Omi agent/subagent.",
-      "Returns whether cancellation was accepted, dispatched, and acknowledged."
-    ]
+        "Use when the user asks to stop a running Omi agent/subagent.",
+        "Returns whether cancellation was accepted, dispatched, and acknowledged.",
+      ]
     ),
     Capability(
       toolName: "inspect_agent_artifacts",
@@ -239,9 +246,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Inspect canonical artifact metadata for an Omi agent artifact, session, run, or attempt.",
       bullets: [
-      "Returns artifact references and metadata only.",
-      "Use after get_agent_run when the user asks what files or outputs an agent produced."
-    ]
+        "Returns artifact references and metadata only.",
+        "Use after get_agent_run when the user asks what files or outputs an agent produced.",
+      ]
     ),
     Capability(
       toolName: "read_tool_output",
@@ -250,10 +257,10 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Read a bounded excerpt from a canonical Omi tool-output artifact.",
       bullets: [
-      "Requires a canonical artifact id and keeps provider payloads bounded.",
-      "Use an artifactId returned by a toolResultEnvelope fullOutputRef or inspect_agent_artifacts.",
-      "The response is bounded; use search_tool_output for targeted retrieval."
-    ]
+        "Requires a canonical artifact id and keeps provider payloads bounded.",
+        "Use an artifactId returned by a toolResultEnvelope fullOutputRef or inspect_agent_artifacts.",
+        "The response is bounded; use search_tool_output for targeted retrieval.",
+      ]
     ),
     Capability(
       toolName: "search_tool_output",
@@ -262,9 +269,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Search a canonical Omi tool-output artifact without returning the complete artifact.",
       bullets: [
-      "Requires a canonical artifact id and returns bounded matching lines.",
-      "Use after a truncated toolResultEnvelope to find the relevant local output."
-    ]
+        "Requires a canonical artifact id and returns bounded matching lines.",
+        "Use after a truncated toolResultEnvelope to find the relevant local output.",
+      ]
     ),
     Capability(
       toolName: "update_agent_artifact_lifecycle",
@@ -273,10 +280,10 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Update metadata-only lifecycle state for one canonical Omi agent artifact.",
       bullets: [
-      "Use to mark artifact metadata as retained, dismissed, or opened after a user-visible artifact decision.",
-      "Pass sessionId, runId, or attemptId when available as a scope guard.",
-      "This never reads artifact contents and has no OS side effects."
-    ]
+        "Use to mark artifact metadata as retained, dismissed, or opened after a user-visible artifact decision.",
+        "Pass sessionId, runId, or attemptId when available as a scope guard.",
+        "This never reads artifact contents and has no OS side effects.",
+      ]
     ),
     Capability(
       toolName: "send_agent_message",
@@ -285,9 +292,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Send a follow-up message to an existing canonical Omi agent session.",
       bullets: [
-      "Use when continuing a multi-turn conversation with an Omi-managed agent by sessionId.",
-      "Creates a new run in the existing session."
-    ]
+        "Use when continuing a multi-turn conversation with an Omi-managed agent by sessionId.",
+        "Creates a new run in the existing session.",
+      ]
     ),
     Capability(
       toolName: "spawn_background_agent",
@@ -296,9 +303,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([]),
       summary: "Internal Swift coordinator entrypoint for creating canonical floating-bar runs.",
       bullets: [
-      "Swift coordinator entrypoint only; not advertised to agent-facing surfaces.",
-      "Swift coordinator entrypoint only."
-    ]
+        "Swift coordinator entrypoint only; not advertised to agent-facing surfaces.",
+        "Swift coordinator entrypoint only.",
+      ]
     ),
     Capability(
       toolName: "spawn_agent",
@@ -307,14 +314,14 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Start canonical Omi background work and optionally project it into floating-bar pills.",
       bullets: [
-      "Creates a canonical kernel session/run; visible runs project into floating-bar pills.",
-      "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
-      "Use visible=false for parent-linked background work that should not appear as a pill.",
-      "The primary coordinator decides in its model loop whether to call spawn_agent. When the current user explicitly asks OpenClaw or Hermes to do work, call spawn_agent in that same turn with that provider; do not delegate that instruction to another agent, use a text-pattern handoff, or narrate that only another chat surface can do it.",
-      "Pass provider='openclaw' or provider='hermes' only when the current user explicitly names that provider; otherwise omit provider so Omi starts its regular managed agent.",
-      "Pass toolPolicy.allowedToolNames to restrict which Omi tools the child agent may call; it can only narrow, never widen, the child's tool set.",
-      "Inspect progress with list_agent_sessions or get_agent_run."
-    ]
+        "Creates a canonical kernel session/run; visible runs project into floating-bar pills.",
+        "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
+        "Use visible=false for parent-linked background work that should not appear as a pill.",
+        "The primary coordinator decides in its model loop whether to call spawn_agent. When the current user explicitly asks OpenClaw or Hermes to do work, call spawn_agent in that same turn with that provider; do not delegate that instruction to another agent, use a text-pattern handoff, or narrate that only another chat surface can do it.",
+        "Pass provider='openclaw' or provider='hermes' only when the current user explicitly names that provider; otherwise omit provider so Omi starts its regular managed agent.",
+        "Pass toolPolicy.allowedToolNames to restrict which Omi tools the child agent may call; it can only narrow, never widen, the child's tool set.",
+        "Inspect progress with list_agent_sessions or get_agent_run.",
+      ]
     ),
     Capability(
       toolName: "run_agent_and_wait",
@@ -323,8 +330,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Run a parent-linked child agent synchronously and return its structured result.",
       bullets: [
-      "Use for synchronous structured child results linked to a known parent run."
-    ]
+        "Use for synchronous structured child results linked to a known parent run."
+      ]
     ),
     Capability(
       toolName: "set_desktop_attention_override",
@@ -333,10 +340,10 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Dismiss or hide a kernel-derived attention subject such as a floating-bar run.",
       bullets: [
-      "Use dismissed=true to hide floating-bar pills without deleting canonical run state.",
-      "Use dismissed=true to hide a floating-bar pill without deleting its canonical run.",
-      "Use subjectKind=run and subjectId=<runId> for pill dismissal."
-    ]
+        "Use dismissed=true to hide floating-bar pills without deleting canonical run state.",
+        "Use dismissed=true to hide a floating-bar pill without deleting its canonical run.",
+        "Use subjectKind=run and subjectId=<runId> for pill dismissal.",
+      ]
     ),
     Capability(
       toolName: "search_tasks",
@@ -345,11 +352,11 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Vector similarity search on tasks (action_items + staged_tasks).",
       bullets: [
-      "Use for finding tasks by meaning, not exact keywords, e.g. \"find tasks about shopping\".",
-      "Examples: \"tasks about shopping\", \"anything related to the presentation\".",
-      "Parameters: query (required), include_completed (default false).",
-      "More reliable than hand-writing MATCH queries for task search."
-    ]
+        "Use for finding tasks by meaning, not exact keywords, e.g. \"find tasks about shopping\".",
+        "Examples: \"tasks about shopping\", \"anything related to the presentation\".",
+        "Parameters: query (required), include_completed (default false).",
+        "More reliable than hand-writing MATCH queries for task search.",
+      ]
     ),
     Capability(
       toolName: "complete_task",
@@ -358,8 +365,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Toggle a task's completion status by backendId.",
       bullets: [
-      "Use after finding the task with execute_sql or search_tasks."
-    ]
+        "Use after finding the task with execute_sql or search_tasks."
+      ]
     ),
     Capability(
       toolName: "delete_task",
@@ -368,8 +375,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Delete a task permanently by backendId.",
       bullets: [
-      "Use after finding the task with execute_sql or search_tasks."
-    ]
+        "Use after finding the task with execute_sql or search_tasks."
+      ]
     ),
     Capability(
       toolName: "load_skill",
@@ -378,8 +385,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Load the full instructions for a named skill listed in available_skills.",
       bullets: [
-      "Use the exact skill name from available_skills."
-    ]
+        "Use the exact skill name from available_skills."
+      ]
     ),
     Capability(
       toolName: "search_skills",
@@ -388,11 +395,11 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Search installed skill names and compact descriptions before loading a specialized workflow.",
       bullets: [
-      "Use only when the user's request may benefit from a specialized workflow.",
-      "Load a returned skill only when it is relevant to the user's request.",
-      "Use only when the current user request plausibly needs a specialized workflow.",
-      "Do not browse skills merely to explore options or because a related term appears in conversation context."
-    ]
+        "Use only when the user's request may benefit from a specialized workflow.",
+        "Load a returned skill only when it is relevant to the user's request.",
+        "Use only when the current user request plausibly needs a specialized workflow.",
+        "Do not browse skills merely to explore options or because a related term appears in conversation context.",
+      ]
     ),
     Capability(
       toolName: "save_knowledge_graph",
@@ -401,12 +408,12 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Save a knowledge graph of entities and relationships extracted from the user's data.",
       bullets: [
-      "Prefer discovery_text (raw notes/findings). Backend extract via knowledge_graph SSOT builds nodes/edges; nodes/edges remain accepted for compatibility.",
-      "node_type must be one of: person, organization, place, thing, concept.",
-      "Use when exploring the user's files during onboarding to build their knowledge graph.",
-      "Deduplication is handled automatically; provide all entities you find.",
-      "Use when exploring the user's files during onboarding or knowledge-graph building."
-    ]
+        "Prefer discovery_text (raw notes/findings). Backend extract via knowledge_graph SSOT builds nodes/edges; nodes/edges remain accepted for compatibility.",
+        "node_type must be one of: person, organization, place, thing, concept.",
+        "Use when exploring the user's files during onboarding to build their knowledge graph.",
+        "Deduplication is handled automatically; provide all entities you find.",
+        "Use when exploring the user's files during onboarding or knowledge-graph building.",
+      ]
     ),
     Capability(
       toolName: "get_conversations",
@@ -415,9 +422,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Retrieve conversations by recency or date range.",
       bullets: [
-      "Use for latest/recent conversations and time-based conversation retrieval.",
-      "For voice, this returns summaries only and should be spoken briefly."
-    ]
+        "Use for latest/recent conversations and time-based conversation retrieval.",
+        "For voice, this returns summaries only and should be spoken briefly.",
+      ]
     ),
     Capability(
       toolName: "search_conversations",
@@ -426,9 +433,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Search the user's past conversations by topic or exact canonical ID/share link.",
       bullets: [
-      "Use for specific topics, decisions, or events discussed in conversations.",
-      "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup."
-    ]
+        "Use for specific topics, decisions, or events discussed in conversations.",
+        "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup.",
+      ]
     ),
     Capability(
       toolName: "get_memories",
@@ -437,8 +444,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Retrieve stored facts, preferences, habits, people, and background about the user.",
       bullets: [
-      "Use for broad 'what do you know about me' questions or personal facts."
-    ]
+        "Use for broad 'what do you know about me' questions or personal facts."
+      ]
     ),
     Capability(
       toolName: "search_memories",
@@ -447,8 +454,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Semantic search across user memories.",
       bullets: [
-      "Use for a specific personal fact that is not already in the visible user context."
-    ]
+        "Use for a specific personal fact that is not already in the visible user context."
+      ]
     ),
     Capability(
       toolName: "create_memory",
@@ -457,18 +464,18 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Save one fact the user asked you to remember to short-term memory.",
       bullets: [
-      "Use whenever the user asks you to remember, save, or keep something, however they phrase it.",
-      "Pass a clean standalone fact: strip the command and lightly clean pronouns. Save only what the user supplied.",
-      "For more than one fact — a document, a profile, everything the user just shared — call create_memories once instead of calling this repeatedly.",
-      "Do not call for a passing statement of fact, a question about what you remember, or a request not to remember something.",
-      "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
-      "Call this whenever the user asks you to remember, save, or keep something — any phrasing counts, including a trailing 'and save this' or a request pointing at what they just sent.",
-      "Strip the command and save the fact itself. Light rewrite and pronoun cleanup are fine; save only what the user supplied, and never invent names, dates, or details they did not give you.",
-      "For more than one fact — a document, a profile, everything the user just shared — call create_memories once with the whole list instead of calling this repeatedly.",
-      "Confirm the save in one line. You decide whether the turn asked for a save; never ask the user to rephrase a save request, and never describe internal save rules.",
-      "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
-      "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory."
-    ]
+        "Use whenever the user asks you to remember, save, or keep something, however they phrase it.",
+        "Pass a clean standalone fact: strip the command and lightly clean pronouns. Save only what the user supplied.",
+        "For more than one fact — a document, a profile, everything the user just shared — call create_memories once instead of calling this repeatedly.",
+        "Do not call for a passing statement of fact, a question about what you remember, or a request not to remember something.",
+        "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
+        "Call this whenever the user asks you to remember, save, or keep something — any phrasing counts, including a trailing 'and save this' or a request pointing at what they just sent.",
+        "Strip the command and save the fact itself. Light rewrite and pronoun cleanup are fine; save only what the user supplied, and never invent names, dates, or details they did not give you.",
+        "For more than one fact — a document, a profile, everything the user just shared — call create_memories once with the whole list instead of calling this repeatedly.",
+        "Confirm the save in one line. You decide whether the turn asked for a save; never ask the user to rephrase a save request, and never describe internal save rules.",
+        "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
+        "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory.",
+      ]
     ),
     Capability(
       toolName: "create_memories",
@@ -477,18 +484,18 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Save several facts the user asked you to remember to short-term memory in one call.",
       bullets: [
-      "Use when the user asks you to remember a document, an attachment, a profile, or everything they just shared.",
-      "Split the source into one clean standalone fact per item; do not pack a whole document into one fact.",
-      "Every fact must come from what the user supplied in this turn or the material they pointed at; do not infer or embellish.",
-      "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
-      "Use this instead of many create_memory calls when the user asks to remember a document, an attachment, or everything they just shared, however they phrase the request.",
-      "Split the source into one clean standalone fact per item. Do not pack a whole document into one fact.",
-      "Every fact must come from what the user supplied or the material they pointed at; do not infer, embellish, or add facts they did not ask to persist.",
-      "Skip contact details, secrets, and anything the user asked you not to keep.",
-      "Confirm with the number saved in one line. You decide whether the turn asked for a save; never ask the user to rephrase a save request, and never describe internal save rules.",
-      "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
-      "The receipt reports how many the server saved; if it is fewer than you sent, say so. Do not claim a memory was promoted to long-term memory."
-    ]
+        "Use when the user asks you to remember a document, an attachment, a profile, or everything they just shared.",
+        "Split the source into one clean standalone fact per item; do not pack a whole document into one fact.",
+        "Every fact must come from what the user supplied in this turn or the material they pointed at; do not infer or embellish.",
+        "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
+        "Use this instead of many create_memory calls when the user asks to remember a document, an attachment, or everything they just shared, however they phrase the request.",
+        "Split the source into one clean standalone fact per item. Do not pack a whole document into one fact.",
+        "Every fact must come from what the user supplied or the material they pointed at; do not infer, embellish, or add facts they did not ask to persist.",
+        "Skip contact details, secrets, and anything the user asked you not to keep.",
+        "Confirm with the number saved in one line. You decide whether the turn asked for a save; never ask the user to rephrase a save request, and never describe internal save rules.",
+        "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
+        "The receipt reports how many the server saved; if it is fewer than you sent, say so. Do not claim a memory was promoted to long-term memory.",
+      ]
     ),
     Capability(
       toolName: "get_action_items",
@@ -497,9 +504,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Retrieve the user's tasks with optional completion and due-date filters.",
       bullets: [
-      "Use for completed tasks, date ranges, or the full task list.",
-      "For voice, prefer get_tasks for plain overdue/due-today questions."
-    ]
+        "Use for completed tasks, date ranges, or the full task list.",
+        "For voice, prefer get_tasks for plain overdue/due-today questions.",
+      ]
     ),
     Capability(
       toolName: "create_action_item",
@@ -508,9 +515,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Create a new task, to-do, or reminder.",
       bullets: [
-      "Use when the user explicitly asks to add something to their list.",
-      "Pass a concise description and due_at only when the user gave a time."
-    ]
+        "Use when the user explicitly asks to add something to their list.",
+        "Pass a concise description and due_at only when the user gave a time.",
+      ]
     ),
     Capability(
       toolName: "update_action_item",
@@ -519,8 +526,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Update an existing task's status, description, or due date.",
       bullets: [
-      "Find the task first, then update the matching id. Do not guess task ids."
-    ]
+        "Find the task first, then update the matching id. Do not guess task ids."
+      ]
     ),
     Capability(
       toolName: "capture_screen",
@@ -529,15 +536,15 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Capture a live current-screen image after the user asks about what is visible now.",
       bullets: [
-      "For a direct current-screen question, use this live capture instead of treating screen history as current evidence.",
-      "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
-      "The result lists the full-screen image path plus native-resolution detail tiles on large screens; use Read to view them.",
-      "For a direct current-screen question, capture a live image instead of using get_work_context as current visual evidence.",
-      "After capture_screen returns, use Read to view the full-screen image.",
-      "The full screenshot is downscaled before you see it — before quoting small on-screen text (titles, prices, sizes, labels) or choosing between similar-looking items, Read the detail tile covering that item and take the exact text from the tile.",
-      "Keep every detail you cite (title, price, badge, position) bound to one on-screen item; if text is not legible even in a tile, say so instead of inferring.",
-      "Do NOT use bash screencapture - always use this tool instead."
-    ]
+        "For a direct current-screen question, use this live capture instead of treating screen history as current evidence.",
+        "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
+        "The result lists the full-screen image path plus native-resolution detail tiles on large screens; use Read to view them.",
+        "For a direct current-screen question, capture a live image instead of using get_work_context as current visual evidence.",
+        "After capture_screen returns, use Read to view the full-screen image.",
+        "The full screenshot is downscaled before you see it — before quoting small on-screen text (titles, prices, sizes, labels) or choosing between similar-looking items, Read the detail tile covering that item and take the exact text from the tile.",
+        "Keep every detail you cite (title, price, badge, position) bound to one on-screen item; if text is not legible even in a tile, say so instead of inferring.",
+        "Do NOT use bash screencapture - always use this tool instead.",
+      ]
     ),
     Capability(
       toolName: "check_permission_status",
@@ -546,26 +553,27 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub, .onboarding]),
       summary: "Check whether a required macOS permission has been granted.",
       bullets: [
-      "Use before requesting a permission or after request_permission returns pending.",
-      "Omit type to check all supported permissions."
-    ]
+        "Use before requesting a permission or after request_permission returns pending.",
+        "Omit type to check all supported permissions.",
+      ]
     ),
     Capability(
       toolName: "request_permission",
       title: "Request Permission",
       latency: .fastLocal,
       surfaces: Set([.desktopChat, .realtimeHub, .onboarding]),
-      summary: "Open or guide the user through granting a required macOS permission. Screen sharing is the macOS Screen Recording permission.",
+      summary:
+        "Open or guide the user through granting a required macOS permission. Screen sharing is the macOS Screen Recording permission.",
       bullets: [
-      "Call only when the current user message names one permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
-      "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
-      "Ask the user to choose when their request is generic or names multiple permissions.",
-      "The user must still complete the native macOS prompt or Settings toggle.",
-      "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
-      "For generic or multi-permission requests, ask the user which permission they want to grant.",
-      "Use strict permission types only. Do not invent permission names.",
-      "After requesting, explain any returned requires_restart or pending status."
-    ]
+        "Call only when the current user message names one permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+        "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
+        "Ask the user to choose when their request is generic or names multiple permissions.",
+        "The user must still complete the native macOS prompt or Settings toggle.",
+        "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
+        "For generic or multi-permission requests, ask the user which permission they want to grant.",
+        "Use strict permission types only. Do not invent permission names.",
+        "After requesting, explain any returned requires_restart or pending status.",
+      ]
     ),
     Capability(
       toolName: "scan_files",
@@ -574,8 +582,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.onboarding]),
       summary: "Scan selected files/folders during onboarding to build local context.",
       bullets: [
-      "Onboarding-only."
-    ]
+        "Onboarding-only."
+      ]
     ),
     Capability(
       toolName: "set_user_preferences",
@@ -584,8 +592,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.onboarding]),
       summary: "Persist onboarding preferences such as name and language.",
       bullets: [
-      "Onboarding-only."
-    ]
+        "Onboarding-only."
+      ]
     ),
     Capability(
       toolName: "ask_followup",
@@ -594,8 +602,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.onboarding]),
       summary: "Ask the user a follow-up onboarding question with optional quick replies.",
       bullets: [
-      "Onboarding-only."
-    ]
+        "Onboarding-only."
+      ]
     ),
     Capability(
       toolName: "complete_onboarding",
@@ -604,8 +612,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.onboarding]),
       summary: "Complete onboarding after required goals and context are collected.",
       bullets: [
-      "Onboarding-only."
-    ]
+        "Onboarding-only."
+      ]
     ),
     Capability(
       toolName: "get_email_insights",
@@ -614,8 +622,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.onboarding]),
       summary: "Read precomputed email/calendar onboarding insights.",
       bullets: [
-      "Onboarding-only; requires background insights to be loaded."
-    ]
+        "Onboarding-only; requires background insights to be loaded."
+      ]
     ),
     Capability(
       toolName: "get_tasks",
@@ -624,9 +632,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Read the user's overdue and due-today tasks locally.",
       bullets: [
-      "Use for plain voice questions like what are my tasks, what's due today, or what's on my list.",
-      "Prefer get_action_items for completed tasks, date ranges, or the full list."
-    ]
+        "Use for plain voice questions like what are my tasks, what's due today, or what's on my list.",
+        "Prefer get_action_items for completed tasks, date ranges, or the full list.",
+      ]
     ),
     Capability(
       toolName: "create_calendar_event",
@@ -635,10 +643,10 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Create a new Google Calendar event.",
       bullets: [
-      "Use when the user asks to add, create, schedule, or put a specific event on their calendar.",
-      "Pass title, start_time, and end_time as ISO-8601 strings with timezone; include location, description, and attendees when provided.",
-      "This capability creates one specified event; it does not find availability, reschedule, delete, or coordinate with people."
-    ]
+        "Use when the user asks to add, create, schedule, or put a specific event on their calendar.",
+        "Pass title, start_time, and end_time as ISO-8601 strings with timezone; include location, description, and attendees when provided.",
+        "This capability creates one specified event; it does not find availability, reschedule, delete, or coordinate with people.",
+      ]
     ),
     Capability(
       toolName: "ask_higher_model",
@@ -647,8 +655,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Get a second opinion from the larger model when the user pushes back or current facts are needed.",
       bullets: [
-      "Use sparingly; answer simple or creative requests yourself."
-    ]
+        "Use sparingly; answer simple or creative requests yourself."
+      ]
     ),
     Capability(
       toolName: "screenshot",
@@ -657,8 +665,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Capture the user's current screen.",
       bullets: [
-      "Use when the user asks about what is on screen."
-    ]
+        "Use when the user asks about what is on screen."
+      ]
     ),
     Capability(
       toolName: "report_screen_observation",
@@ -667,9 +675,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Verify grounding from the current-screen image.",
       bullets: [
-      "Only call after screenshot returns the current image.",
-      "Submit a concise visual observation, then answer the user's original request naturally."
-    ]
+        "Only call after screenshot returns the current image.",
+        "Submit a concise visual observation, then answer the user's original request naturally.",
+      ]
     ),
     Capability(
       toolName: "point_click",
@@ -678,8 +686,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Click at on-screen pixel coordinates.",
       bullets: [
-      "Use only when the user clearly asks you to click something."
-    ]
+        "Use only when the user clearly asks you to click something."
+      ]
     ),
     Capability(
       toolName: "show_panel",
@@ -688,8 +696,18 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Put copyable text on the user's screen.",
       bullets: [
-      "Use when the answer is something the user will paste, keep, or read back."
-    ]
+        "Use when the answer is something the user will paste, keep, or read back."
+      ]
+    ),
+    Capability(
+      toolName: "update_panel",
+      title: "Update Panel",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Revise the panel already on the user's screen.",
+      bullets: [
+        "Use when the user asks to change what is on screen rather than for something new."
+      ]
     ),
     Capability(
       toolName: "close_panel",
@@ -698,8 +716,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Take down the panel currently on screen.",
       bullets: [
-      "Use when the user asks to close, hide, or dismiss it."
-    ]
+        "Use when the user asks to close, hide, or dismiss it."
+      ]
     ),
     Capability(
       toolName: "reopen_panel",
@@ -708,8 +726,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Put the last panel back on screen.",
       bullets: [
-      "Use when the user asks to see again what was on screen a moment ago."
-    ]
+        "Use when the user asks to see again what was on screen a moment ago."
+      ]
     ),
     Capability(
       toolName: "draft_message",
@@ -718,8 +736,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Write the message the user is about to send.",
       bullets: [
-      "Use when the user asks for a reply, a message, or an email to be written."
-    ]
+        "Use when the user asks for a reply, a message, or an email to be written."
+      ]
     ),
     Capability(
       toolName: "assist_form",
@@ -728,8 +746,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Answer the form in front of the user from their memories.",
       bullets: [
-      "Use when the user asks for help filling in what is on screen."
-    ]
+        "Use when the user asks for help filling in what is on screen."
+      ]
     ),
     Capability(
       toolName: "find_and_show",
@@ -738,8 +756,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Find an answer in the user's data and show it to copy.",
       bullets: [
-      "Use when the user asks for their own information that has to be looked up first."
-    ]
+        "Use when the user asks for their own information that has to be looked up first."
+      ]
     ),
     Capability(
       toolName: "get_local_status",
@@ -748,8 +766,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Report whether local Omi Desktop context is available.",
       bullets: [
-      "Local API only."
-    ]
+        "Local API only."
+      ]
     ),
     Capability(
       toolName: "get_screenshot",
@@ -758,8 +776,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Fetch a local Rewind screenshot image by screenshot_id.",
       bullets: [
-      "Local API only."
-    ]
+        "Local API only."
+      ]
     ),
     Capability(
       toolName: "look_at_frame",
@@ -768,10 +786,10 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Inspect one retrieved Rewind frame by screenshot_id for a just-in-time visual answer.",
       bullets: [
-      "Use only after search_screen_history returns the screenshot_id; never invent an id.",
-      "This is one-frame inspection, not a continuous vision lane. Local API only."
-    ]
-    )
+        "Use only after search_screen_history returns the screenshot_id; never invent an id.",
+        "This is one-frame inspection, not a continuous vision lane. Local API only.",
+      ]
+    ),
   ]
 
   static func capabilities(for surface: Surface) -> [Capability] {
@@ -783,6 +801,14 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["ask_higher_model","assist_form","cancel_agent_run","check_permission_status","close_panel","create_action_item","create_calendar_event","draft_message","find_and_show","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","reopen_panel","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","show_panel","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
+    [
+      "ask_higher_model", "assist_form", "cancel_agent_run", "check_permission_status", "close_panel",
+      "create_action_item", "create_calendar_event", "draft_message", "find_and_show", "get_action_items",
+      "get_agent_run", "get_conversations", "get_daily_recap", "get_memories", "get_tasks", "inspect_agent_artifacts",
+      "list_agent_sessions", "point_click", "reopen_panel", "report_screen_observation", "request_permission",
+      "screenshot", "search_conversations", "search_memories", "search_screen_history",
+      "set_desktop_attention_override", "show_panel", "spawn_agent", "update_action_item",
+      "update_agent_artifact_lifecycle", "update_panel",
+    ]
   }
 }

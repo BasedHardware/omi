@@ -77,6 +77,17 @@ final class PanelChatHandoffTests: XCTestCase {
 /// which is the only place the content lives once the panel leaves with its context.
 @MainActor
 final class PanelAskPromotionTests: XCTestCase {
+  /// PanelSession is process-wide state. Draining on the way IN as well as out makes
+  /// these order-independent: a suite that leaves a record behind must not be able to
+  /// fail a later one.
+  override func setUp() async throws {
+    try await super.setUp()
+    await MainActor.run {
+      _ = PanelSession.dismiss()
+      _ = PanelSession.takeChatCards()
+    }
+  }
+
   override func tearDown() async throws {
     await MainActor.run {
       PanelSession.dismiss()

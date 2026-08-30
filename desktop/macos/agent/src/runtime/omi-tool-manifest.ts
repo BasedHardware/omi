@@ -694,6 +694,40 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       ),
     },
   },
+  update_panel: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc("Update Panel", "Revise the panel already on the user's screen.", [
+      "Use when the user asks to change what is on screen rather than for something new.",
+    ]),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Rewrite what is already on the panel, in place. Use it whenever the user asks to change what they can see — shorter, warmer, fix a name, drop a line, add one — instead of building the panel again, which would throw away where they dragged it and log the same thing twice in their chat. Every panel tool hands you the panel's current text; send back the full corrected set of items, not only the part that changed. Speak one short line about what you changed and never read the text back.",
+      schemaOverride: schema(
+        {
+          title: {
+            type: "string",
+            description: "New title, or the existing one when only the items change.",
+          },
+          items: {
+            type: "array",
+            description:
+              "The panel's complete new contents, in order. Anything omitted is removed from the panel.",
+            items: {
+              type: "object",
+              properties: {
+                label: { type: "string", description: "Short name for this value." },
+                text: { type: "string", description: "The text to show and copy." },
+              },
+              required: ["text"],
+              additionalProperties: false,
+            },
+          },
+        },
+        ["items"],
+      ),
+    },
+  },
   show_panel: {
     surfaces: ["realtime_voice"],
     capabilityDoc: doc("Show Panel", "Put copyable text on the user's screen.", [
@@ -1653,6 +1687,38 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
     runtimePreconditions: ["Realtime voice only."],
+    adapters: {},
+  },
+  {
+    name: "update_panel",
+    label: "Update Panel",
+    description: "Rewrite the contents of the panel already on the user's screen, in place.",
+    promptSnippet: "update_panel - Revise the panel already on screen",
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        title: { type: "string", description: "New title, or the existing one when only items change." },
+        items: {
+          type: "array",
+          description: "The panel's complete new contents, in order. Anything omitted is removed.",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Short name for this value." },
+              text: { type: "string", description: "The text to show and copy." },
+            },
+            required: ["text"],
+            additionalProperties: false,
+          },
+        },
+      },
+      ["items"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only; a panel must already be on screen."],
     adapters: {},
   },
   {

@@ -35,6 +35,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
   case showPanel = "show_panel"
+  case updatePanel = "update_panel"
   case closePanel = "close_panel"
   case reopenPanel = "reopen_panel"
   case draftMessage = "draft_message"
@@ -53,13 +54,13 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:d0f804a278eac5a6d701bef311a2c82e233373335e6d05e0fcd62ab905587d88"
-  static let chatFirstManifestDigest = "sha256:8af0f2c05c3c46f4c8c81babba62453aa93cdfcb7af1a5cc908c0b9c84e094e3"
+  static let manifestDigest = "sha256:5bef3dbc118400622e40ac7a999d22b9e2cd0a3429eaac03e734cbe25c0da6b5"
+  static let chatFirstManifestDigest = "sha256:981297d05b8996e551a9657ae13fb89f709ebd8f418bf3c2c398d322508935d6"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
     "start_file_scan": .scanFiles,
-    "get_file_scan_results": .scanFiles
+    "get_file_scan_results": .scanFiles,
   ]
 
   static let executorByTool: [GeneratedSwiftTool: GeneratedSwiftToolExecutor] = [
@@ -96,6 +97,7 @@ enum GeneratedToolExecutors {
     .reportScreenObservation: .realtimeHub,
     .pointClick: .realtimeHub,
     .showPanel: .realtimeHub,
+    .updatePanel: .realtimeHub,
     .closePanel: .realtimeHub,
     .reopenPanel: .realtimeHub,
     .draftMessage: .realtimeHub,
@@ -104,7 +106,7 @@ enum GeneratedToolExecutors {
     .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,
     .renderChatBlocks: .chatToolExecutor,
-    .showRewindEvidence: .chatToolExecutor
+    .showRewindEvidence: .chatToolExecutor,
   ]
 
   static func resolve(_ name: String) -> GeneratedSwiftTool? {
@@ -124,9 +126,9 @@ enum GeneratedToolExecutors {
       executorByTool.compactMap { tool, executor in
         executor == .chatToolExecutor ? tool.rawValue : nil
       }
-      + aliasToCanonical.compactMap { alias, tool in
-        executorByTool[tool] == .chatToolExecutor ? alias : nil
-      }
+        + aliasToCanonical.compactMap { alias, tool in
+          executorByTool[tool] == .chatToolExecutor ? alias : nil
+        }
     )
   }
 

@@ -621,7 +621,48 @@ extension RealtimeHubController {
         return .failed(Self.authorizedRealtimeOwnerChangedError())
       }
       guard let shown else { return .succeeded("Could not show the panel: no item had any text.") }
-      return .succeeded("Panel is on screen with \(shown) item\(shown == 1 ? "" : "s") to copy.")
+      return .succeeded(
+        "Panel is on screen with \(shown) item\(shown == 1 ? "" : "s") to copy."
+          + (VoicePanel.shortfall(from: items).map { " \($0)" } ?? "")
+          + Self.panelContentSuffix())
+
+    case .updatePanel:
+      // An unreadable title keeps the one the panel already has: renaming the user's
+      // card to an internal token is worse than leaving the heading alone.
+      let title = (command.input["title"] as? String)
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .flatMap { VoicePanel.isReadableTitle($0) ? $0 : nil }
+      let items = Self.voicePanelItems(command.input["items"])
+      guard !items.isEmpty else {
+        return .succeeded(
+          "Could not change the panel: update_panel needs the panel's complete new items.")
+      }
+      guard
+        let outcome = Self.performOwnerBoundPhysicalEffect(
+          expectedOwnerID: command.ownerID,
+          effect: {
+            PanelSession.revise(
+              title: (title?.isEmpty ?? true) ? nil : title,
+              fields: VoicePanel.copyFields(from: items))
+          })
+      else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      let shortfall = VoicePanel.shortfall(from: items).map { " \($0)" } ?? ""
+      switch outcome {
+      case .revised(let count):
+        return .succeeded(
+          "Panel updated, now \(count) item\(count == 1 ? "" : "s")." + shortfall
+            + Self.panelContentSuffix())
+      case .created(let count):
+        return .succeeded(
+          "Nothing was on screen, so this went up as a new panel with \(count) "
+            + "item\(count == 1 ? "" : "s")." + shortfall + Self.panelContentSuffix())
+      case .refused(let reason):
+        // Spelled out because a vague refusal is what the model papers over by claiming
+        // it made the change anyway.
+        return .succeeded("The panel was not changed. \(reason)")
+      }
 
     case .reopenPanel:
       guard
@@ -632,7 +673,9 @@ extension RealtimeHubController {
         return .failed(Self.authorizedRealtimeOwnerChangedError())
       }
       guard let shown else { return .succeeded("There is no panel to show again.") }
-      return .succeeded("Panel is back on screen with \(shown) item\(shown == 1 ? "" : "s") to copy.")
+      return .succeeded(
+        "Panel is back on screen with \(shown) item\(shown == 1 ? "" : "s") to copy."
+          + Self.panelContentSuffix())
 
     case .closePanel:
       guard
@@ -681,6 +724,26 @@ extension RealtimeHubController {
 
   /// The provider hands back `items` as loosely-typed JSON. An entry without text is
   /// dropped rather than shown as an empty row: the panel exists to be copied from.
+  /// The panel's text, appended to every panel tool result.
+  ///
+  /// Without it the model is blind to what it just put up: "make that shorter" had
+  /// nothing to shorten, so the only move left was rebuilding the panel from scratch,
+  /// which loses the user's edits and where they dragged the window. Secrets and
+  /// spinners are filtered out upstream.
+  @MainActor
+  static func panelContentSuffix() -> String {
+    guard let content = PanelSession.modelVisibleContent() else { return "" }
+    return """
+
+
+      It now reads:
+      \(content)
+
+      That text is for changing it with update_panel, not for speaking: say one short \
+      line about the panel instead of reading it back.
+      """
+  }
+
   nonisolated static func voicePanelItems(_ raw: Any?) -> [VoicePanelItem] {
     guard let entries = raw as? [[String: Any]] else { return [] }
     return entries.compactMap { entry in

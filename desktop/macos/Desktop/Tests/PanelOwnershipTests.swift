@@ -8,6 +8,17 @@ import XCTest
 /// form offer would draw straight over a live draft. These pin the shared answer.
 @MainActor
 final class PanelOwnershipTests: XCTestCase {
+  /// PanelSession is process-wide state. Draining on the way IN as well as out makes
+  /// these order-independent: a suite that leaves a record behind must not be able to
+  /// fail a later one.
+  override func setUp() async throws {
+    try await super.setUp()
+    await MainActor.run {
+      _ = PanelSession.dismiss()
+      _ = PanelSession.takeChatCards()
+    }
+  }
+
   override func tearDown() async throws {
     await MainActor.run {
       PanelSession.dismiss()

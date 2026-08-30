@@ -159,6 +159,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .reportScreenObservation: stub = "Screen observation accepted."
     case .pointClick: stub = "Clicked."
     case .showPanel: stub = "Panel is on screen with 1 item to copy."
+    case .updatePanel: stub = "Panel updated, now 1 item."
     case .reopenPanel: stub = "Panel is back on screen with 1 item to copy."
     case .closePanel: stub = "Panel closed."
     case .draftMessage: stub = "Draft is on screen to copy."
