@@ -64,9 +64,9 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
         authorize('folder_assignment')
         folder_patch: Optional[Mapping[str, Any]] = None
         if not conversation.folder_id:
-            # First-open never initializes folder documents: that producer
-            # write is not part of this obligation's transactional fence.
             folders = processing.folders_db.get_folders(uid)
+            if not folders:
+                folders = processing.folders_db.initialize_system_folders(uid)
             if folders and conversation.structured:
                 category = conversation.structured.category.value if conversation.structured.category else 'other'
                 with processing.track_usage(uid, processing.Features.CONVERSATION_FOLDER):
@@ -92,7 +92,7 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
                 uid, conversation.id, token, conversation.folder_id
             ):
                 raise RuntimeError('first-open authority lost while refreshing folder count')
-        complete('folder_assignment')
+            complete('folder_assignment')
 
     if complete_state('app_fanout'):
         return
