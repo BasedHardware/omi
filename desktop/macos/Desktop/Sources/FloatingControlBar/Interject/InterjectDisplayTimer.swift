@@ -32,10 +32,9 @@ struct InterjectDisplayTimer: Equatable, Sendable {
   }
 
   mutating func pause(now: Date) {
-    guard let runningSince else { return }
+    guard runningSince != nil else { return }
     remainingWhenPaused = remaining(at: now)
-    self.runningSince = nil
-    _ = runningSince
+    runningSince = nil
   }
 
   mutating func resume(now: Date) {

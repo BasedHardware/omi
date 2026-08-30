@@ -566,7 +566,7 @@ class PushToTalkManager: ObservableObject {
       break
 
     case .pendingLockDecision:
-      stopListening()
+      stopListening(endInterjectHold: false)
       enterLockedListening()
 
     case .lockedRecording:
@@ -720,6 +720,7 @@ class PushToTalkManager: ObservableObject {
     }
 
     updateBarState()
+    FloatingControlBarManager.shared.interjectPushToTalkDidStart()
     log("PushToTalkManager: entered locked listening mode (mode=\(mode))")
   }
 
@@ -731,8 +732,10 @@ class PushToTalkManager: ObservableObject {
     updateBarState()
   }
 
-  private func stopListening() {
-    FloatingControlBarManager.shared.interjectPushToTalkDidEnd()
+  private func stopListening(endInterjectHold: Bool = true) {
+    if endInterjectHold {
+      FloatingControlBarManager.shared.interjectPushToTalkDidEnd()
+    }
     if let turnID = currentVoiceTurnID,
       voiceTurnCoordinator.activeTurnID == turnID
     {

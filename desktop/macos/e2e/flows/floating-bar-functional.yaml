@@ -23,6 +23,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarManager+RealtimeStreamingJournal.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectAttention.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectCopyBudget.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectDisplayDuration.swift
@@ -30,6 +31,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectFeature.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectGraceWindow.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyHint.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyWindow.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectSuggestionFeedbackStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectVoiceFeedbackRouting.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift

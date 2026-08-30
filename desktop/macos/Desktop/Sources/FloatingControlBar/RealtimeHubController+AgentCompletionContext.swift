@@ -14,4 +14,11 @@ extension RealtimeHubController {
     guard let session else { return false }
     return await session.sendBackgroundAgentContext(text)
   }
+
+  /// Trusted turn instruction — not quoted card body. Callers must not wrap
+  /// this in `NotchCardVoiceDelivery.contextBlock`.
+  func injectTrustedTurnInstruction(_ text: String) async -> Bool {
+    guard let session else { return false }
+    return await session.sendBackgroundAgentContext(text)
+  }
 }

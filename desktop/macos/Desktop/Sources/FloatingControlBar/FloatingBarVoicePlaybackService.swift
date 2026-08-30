@@ -423,7 +423,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   /// Synthesize and play a single short phrase via the selected voice. Used by
   /// agent pills to speak a short acknowledgement like "On it" before the agent kicks off.
   func speakOneShot(_ text: String, lease: VoiceOutputLease? = nil) {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmed = InterjectVoiceFeedbackRouting.spokenText(from: text)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
     if let lease {
       guard VoiceTurnCoordinator.shared.outputSnapshot.activeLease == lease else {

@@ -61,6 +61,7 @@ extension FloatingControlBarManager {
         message: projection.assistantMessage(text: assistantText, isStreaming: false),
         status: assistantStatus, terminalReason: terminalReason, ownerID: projection.ownerID) != nil
       {
+        await consumeInterjectHubTranscript(assistantText)
         return true
       }
     }

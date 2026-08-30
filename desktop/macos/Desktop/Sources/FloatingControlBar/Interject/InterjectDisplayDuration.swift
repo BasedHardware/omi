@@ -5,7 +5,7 @@ import Foundation
 /// Flag-off callers must use ``legacyTimeout`` so the 6s path stays literal.
 enum InterjectDisplayDuration {
   static let legacyTimeout: TimeInterval = 6
-  static let millisecondsPerWord: TimeInterval = 0.250
+  static let secondsPerWord: TimeInterval = 0.250
   static let minimumTimeout: TimeInterval = 4
   static let maximumTimeout: TimeInterval = 14
 
@@ -35,7 +35,7 @@ enum InterjectDisplayDuration {
     kind: ProactiveNotificationKind
   ) -> TimeInterval {
     let words = wordCount(in: title) + wordCount(in: message)
-    let raw = baseTimeout(for: kind) + (TimeInterval(words) * millisecondsPerWord)
+    let raw = baseTimeout(for: kind) + (TimeInterval(words) * secondsPerWord)
     return min(maximumTimeout, max(minimumTimeout, raw))
   }
 

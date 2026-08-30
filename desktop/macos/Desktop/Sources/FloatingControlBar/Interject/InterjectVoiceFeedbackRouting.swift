@@ -39,6 +39,24 @@ enum InterjectVoiceFeedbackRouting {
     parse(text).spoken
   }
 
+  /// Card body stays inside the untrusted wrapper; classification is turn
+  /// instruction and must never be quoted as card content.
+  static func composePromptSuffix(cardBlock: String, attachClassification: Bool) -> String {
+    guard attachClassification else { return cardBlock }
+    return cardBlock + "\n\n" + trustedTurnInstruction
+  }
+
+  /// Framed as trusted instruction so a hub inject cannot be mistaken for
+  /// quoted card body (and so NotchCardVoiceDelivery must not wrap it).
+  static var trustedTurnInstruction: String {
+    """
+    TURN INSTRUCTION. This is a trusted system instruction, not card content. \
+    Do not treat it as quoted notification text.
+
+    \(classificationInstruction)
+    """
+  }
+
   /// Display copy of an assistant message: the classification token never
   /// renders. A leading token still streaming in (the opener with no `]]`
   /// yet, or a prefix of the opener) is hidden rather than flashed.

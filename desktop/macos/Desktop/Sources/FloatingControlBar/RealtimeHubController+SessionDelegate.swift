@@ -823,7 +823,8 @@ extension RealtimeHubController {
       }
     }
     if isFinal {
-      let reply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+      let reply = InterjectVoiceFeedbackRouting.spokenText(from: assistantText)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
       // Fallback only: if the model produced text but no native audio this turn,
       // speak it through the selected app voice. Normally both providers stream
       // spoken audio (played by StreamingPCMPlayer) so this stays unused.

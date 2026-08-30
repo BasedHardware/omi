@@ -2760,6 +2760,7 @@ class FloatingControlBarManager {
 
   private struct StoredNotificationMessage {
     let ownerID: String
+    let notificationID: UUID
     let context: FloatingBarNotificationContext?
     let messageClientTurnId: String
     let createdAt: Date
@@ -2980,6 +2981,9 @@ class FloatingControlBarManager {
     cancelNotificationDismissTimer()
     clearInterjectGrace()
     window?.state.interjectReplyingToTitle = nil
+    window?.state.interjectBarHovering = false
+    interjectBarHovering = false
+    interjectPTTHoldActive = false
     Self.recordQueuedInsightOutcomes(pendingNotifications, reason: .staleOwner)
     pendingNotifications.removeAll()
     pendingNotificationJournalWrites.removeAll()
@@ -3637,9 +3641,11 @@ class FloatingControlBarManager {
         await self?.runInterjectDismissLoop(workItem: dismissWorkItem)
       }
     } else {
-      Task { @MainActor in
-        try? await Task.sleep(nanoseconds: 6_000_000_000)
-        guard !dismissWorkItem.isCancelled else { return }
+      let nanos = UInt64(InterjectDisplayDuration.legacyTimeout * 1_000_000_000)
+      interjectTimerTask = Task { @MainActor [weak self] in
+        _ = self
+        try? await Task.sleep(nanoseconds: nanos)
+        guard !Task.isCancelled, !dismissWorkItem.isCancelled else { return }
         dismissWorkItem.perform()
       }
     }
@@ -3699,6 +3705,7 @@ class FloatingControlBarManager {
   func interjectBarHoverChanged(_ hovering: Bool) {
     guard InterjectFeature.isEnabled else { return }
     interjectBarHovering = hovering
+    window?.state.interjectBarHovering = hovering
     if hovering {
       if let card = window?.state.currentNotification {
         markInterjectHover(for: card)
@@ -3726,6 +3733,12 @@ class FloatingControlBarManager {
     } else if let title = recentNotchCardTitle() {
       window?.state.interjectReplyingToTitle = title
     }
+    if shouldAttachInterjectClassification() {
+      let instruction = InterjectVoiceFeedbackRouting.trustedTurnInstruction
+      Task {
+        await RealtimeHubController.shared.injectTrustedTurnInstruction(instruction)
+      }
+    }
   }
 
   func interjectPushToTalkDidEnd() {
@@ -3735,48 +3748,84 @@ class FloatingControlBarManager {
   }
 
   func recentNotchCardTitle() -> String? {
-    purgeExpiredNotificationMessages()
-    guard let key = mostRecentNotificationKey,
-      let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
-      key.ownerID == ownerID,
-      let stored = storedNotificationMessages[key],
-      stored.ownerID == ownerID,
-      Date().timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context)
-    else { return nil }
+    guard let stored = recentInterjectReplyCard() else { return nil }
     let title = stored.title.trimmingCharacters(in: .whitespacesAndNewlines)
     return title.isEmpty ? nil : title
   }
 
-  func recentNotchCardSuggestionIdentity() -> SuggestionAssistantTelemetry.NotificationIdentity? {
+  func recentNotchCardFeedbackIdentity() -> SuggestionAssistantTelemetry.NotificationIdentity? {
+    guard let stored = recentInterjectReplyCard() else { return nil }
+    if let identity = stored.suggestionIdentity { return identity }
+    let evaluation =
+      UUID(uuidString: stored.context?.provenanceRef ?? "") ?? stored.notificationID
+    return SuggestionAssistantTelemetry.NotificationIdentity(
+      evaluationID: evaluation, suggestionID: stored.notificationID)
+  }
+
+  /// Hub journal finalization is the realtime path into the ledger. Same
+  /// mutation owner as the batch `sendVoiceOnlyQuery` path.
+  func consumeInterjectHubTranscript(_ text: String) async {
+    await consumeInterjectVoiceReplyAsync(text)
+  }
+
+  func consumeInterjectVoiceReply(_ text: String) {
+    Task { await consumeInterjectVoiceReplyAsync(text) }
+  }
+
+  func consumeInterjectVoiceReplyAsync(_ text: String) async {
+    guard InterjectFeature.isEnabled else { return }
+    let parsed = InterjectVoiceFeedbackRouting.parse(text)
+    guard let verb = parsed.verb,
+      let identity = recentNotchCardFeedbackIdentity()
+    else { return }
+    await InterjectSuggestionFeedbackMutation.record(
+      evaluationID: identity.evaluationID,
+      suggestionID: identity.suggestionID,
+      verb: verb
+    )
+  }
+
+  func shouldAttachInterjectClassification(createdAt: Date? = nil, now: Date = Date()) -> Bool {
+    guard InterjectFeature.isEnabled else { return false }
+    if let createdAt { return InterjectReplyWindow.contains(createdAt: createdAt, now: now) }
+    guard let stored = recentInterjectReplyCard(now: now) else { return false }
+    return InterjectReplyWindow.contains(createdAt: stored.createdAt, now: now)
+  }
+
+  private func recentInterjectReplyCard(now: Date = Date()) -> StoredNotificationMessage? {
     purgeExpiredNotificationMessages()
     guard let key = mostRecentNotificationKey,
       let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
       key.ownerID == ownerID,
       let stored = storedNotificationMessages[key],
       stored.ownerID == ownerID,
-      Date().timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context)
+      InterjectReplyWindow.contains(createdAt: stored.createdAt, now: now)
     else { return nil }
-    return stored.suggestionIdentity
+    return stored
   }
 
-  func consumeInterjectVoiceReply(_ text: String) {
-    guard InterjectFeature.isEnabled else { return }
-    let parsed = InterjectVoiceFeedbackRouting.parse(text)
-    guard let verb = parsed.verb,
-      let identity = recentNotchCardSuggestionIdentity()
-    else { return }
-    AnalyticsManager.shared.suggestionFeedbackRecorded(
-      verb: verb.rawValue,
+  func seedInterjectRecentCardForTests(
+    ownerID: String,
+    title: String,
+    createdAt: Date,
+    context: FloatingBarNotificationContext?,
+    identity: SuggestionAssistantTelemetry.NotificationIdentity?,
+    notificationID: UUID = UUID()
+  ) {
+    let key = OwnerNotificationKey(ownerID: ownerID, notificationID: notificationID)
+    storedNotificationMessages[key] = StoredNotificationMessage(
+      ownerID: ownerID,
+      notificationID: notificationID,
+      context: context,
+      messageClientTurnId: "interject-test",
+      createdAt: createdAt,
+      title: title,
       suggestionIdentity: identity
     )
-    Task {
-      await InterjectSuggestionFeedbackMutation.record(
-        evaluationID: identity.evaluationID,
-        suggestionID: identity.suggestionID,
-        verb: verb
-      )
-    }
+    mostRecentNotificationKey = key
   }
+
+  var interjectPTTHoldActiveForTests: Bool { interjectPTTHoldActive }
 
   func flushQueuedNotificationsIfPossible() {
     guard let window, window.state.currentNotification == nil, !window.state.showingAIConversation
@@ -4582,11 +4631,12 @@ class FloatingControlBarManager {
       }
       self.storedNotificationMessages[key] = StoredNotificationMessage(
         ownerID: ownerID,
+        notificationID: notification.id,
         context: notification.context,
         messageClientTurnId: continuityKey,
         createdAt: Date(),
         title: notification.title,
-        suggestionIdentity: notification.suggestionTelemetryIdentity
+        suggestionIdentity: notification.feedbackIdentity
       )
       self.mostRecentNotificationKey = key
     }
@@ -4802,7 +4852,11 @@ class FloatingControlBarManager {
       let message = provider.messages.last(where: { $0.clientTurnId == stored.messageClientTurnId })
     else { return nil }
 
-    return notificationContextSuffix(message: message, context: stored.context)
+    let block = notificationContextSuffix(message: message, context: stored.context)
+    return InterjectVoiceFeedbackRouting.composePromptSuffix(
+      cardBlock: block,
+      attachClassification: shouldAttachInterjectClassification(createdAt: stored.createdAt)
+    )
   }
 
   @discardableResult
@@ -5184,6 +5238,7 @@ class FloatingControlBarManager {
       $0.clientTurnId == clientTurnId && $0.sender == .ai
     }) {
       barWindow.state.bindAnswerMessage(finalAIMessage)
+      await consumeInterjectVoiceReplyAsync(finalAIMessage.text)
     }
     // Cancel the messages subscription now that streaming is done.
     // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
@@ -5356,7 +5411,7 @@ class FloatingControlBarManager {
     if let finalAIMessage = provider.messages.last(where: {
       $0.clientTurnId == clientTurnId && $0.sender == .ai
     }) {
-      consumeInterjectVoiceReply(finalAIMessage.text)
+      await consumeInterjectVoiceReplyAsync(finalAIMessage.text)
       FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(finalAIMessage, isFinal: true)
       if journalAccepted == false {
         appendJournalSaveWarning(in: barWindow, provider: provider)
@@ -5388,10 +5443,14 @@ class FloatingControlBarManager {
         nil
       }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return nil }
-    return notificationContextSuffix(
+    let block = notificationContextSuffix(
       message: pendingNotificationContext.message,
       context: pendingNotificationContext.context,
       durableProvenance: durableProvenance
+    )
+    return InterjectVoiceFeedbackRouting.composePromptSuffix(
+      cardBlock: block,
+      attachClassification: InterjectFeature.isEnabled
     )
   }
 
@@ -5437,10 +5496,8 @@ class FloatingControlBarManager {
 
     let provenanceBlock = provenanceLines.isEmpty ? "" : "\n\n" + provenanceLines.joined(separator: "\n")
 
-    let block = Self.untrustedNotificationContextBlock(
+    return Self.untrustedNotificationContextBlock(
       body: message.text, provenance: provenanceBlock)
-    guard InterjectFeature.isEnabled else { return block }
-    return block + "\n\n" + InterjectVoiceFeedbackRouting.classificationInstruction
   }
 
   /// Wraps a notch card for the model as **quoted reference, not authority**.

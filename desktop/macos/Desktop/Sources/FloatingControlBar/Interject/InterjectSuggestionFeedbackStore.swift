@@ -8,6 +8,10 @@ enum InterjectFeedbackVerb: String, Codable, CaseIterable, Sendable {
   case missed
   case correction
   case riff
+
+  /// Decision 24 teach-rate verbs plus correction. `riff` is ordinary
+  /// continuation — parse it so the token can be stripped, do not tally it.
+  var recordsAsTeachSignal: Bool { self != .riff }
 }
 
 /// One canonical suggestion-feedback row. Identity is the existing
@@ -45,16 +49,27 @@ actor InterjectSuggestionFeedbackStore {
   }
 }
 
-/// The only write entry point other surfaces may call. Voice routing and any
-/// later mouse fallback both go through here.
+/// The only write entry point other surfaces may call. Voice, typed follow-up,
+/// and JIT verdict buttons all go through here; analytics is a side effect of
+/// this write, not a second tally.
 enum InterjectSuggestionFeedbackMutation {
   static func record(
     evaluationID: UUID,
     suggestionID: UUID,
     verb: InterjectFeedbackVerb,
     recordedAt: Date = Date(),
-    store: InterjectSuggestionFeedbackStore = .shared
+    store: InterjectSuggestionFeedbackStore = .shared,
+    emitAnalytics: Bool = true
   ) async {
+    guard verb.recordsAsTeachSignal else { return }
+    let identity = SuggestionAssistantTelemetry.NotificationIdentity(
+      evaluationID: evaluationID, suggestionID: suggestionID)
+    if emitAnalytics {
+      await MainActor.run {
+        AnalyticsManager.shared.suggestionFeedbackRecorded(
+          verb: verb.rawValue, suggestionIdentity: identity)
+      }
+    }
     await store.record(
       InterjectFeedbackRecord(
         evaluationID: evaluationID,

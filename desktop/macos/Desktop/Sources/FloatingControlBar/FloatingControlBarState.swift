@@ -291,6 +291,19 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.isPersistent = isPersistent
   }
 
+  /// Identity every shown card can write. SuggestionAssistant supplies a real
+  /// pair; context-director and other cards synthesize from delivery id / card id
+  /// so the ledger is not gated on suggestion-only telemetry.
+  var feedbackIdentity: SuggestionAssistantTelemetry.NotificationIdentity {
+    if let suggestionTelemetryIdentity { return suggestionTelemetryIdentity }
+    let evaluationID =
+      insightDeliveryID
+      ?? UUID(uuidString: context?.provenanceRef ?? "")
+      ?? id
+    return SuggestionAssistantTelemetry.NotificationIdentity(
+      evaluationID: evaluationID, suggestionID: id)
+  }
+
   static func == (lhs: FloatingBarNotification, rhs: FloatingBarNotification) -> Bool {
     lhs.id == rhs.id
   }
@@ -310,6 +323,9 @@ class FloatingControlBarState: NSObject, ObservableObject {
   @Published var currentNotification: FloatingBarNotification? = nil
   /// Visible while PTT is live inside the 60s card-context window.
   @Published var interjectReplyingToTitle: String? = nil
+  /// Same hover signal the Interject dismiss timer pauses on. Notch hover
+  /// never sets `isHoveringBar`; insight teasers key off this instead.
+  @Published var interjectBarHovering: Bool = false
 
   /// Onboarding-only: pulse a glowing border on the bar so first-run users
   /// notice it. Cleared automatically once they start typing.
