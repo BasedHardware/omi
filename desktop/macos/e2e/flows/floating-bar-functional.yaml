@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentCompletionVoiceDelivery.swift
   - desktop/macos/Desktop/Sources/Chat/ChatDraftStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationCardLead.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationJournalCopy.swift
   - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AskAIInputView.swift
