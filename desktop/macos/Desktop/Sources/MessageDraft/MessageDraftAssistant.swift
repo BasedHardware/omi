@@ -138,7 +138,7 @@ actor MessageDraftAssistant: ProactiveAssistant {
         + "surface=\(snapshot.surface.displayName) reason=\(reason.rawValue)")
     let restored = drafts.last(where: { $0.fingerprint == snapshot.fingerprint })?.draft
     offeredFingerprint = snapshot.fingerprint
-    await MainActor.run {
+    _ = await MainActor.run {
       PanelSession.presentCompose(
         fingerprint: snapshot.fingerprint,
         appDisplayName: snapshot.surface.displayName,
@@ -192,7 +192,9 @@ actor MessageDraftAssistant: ProactiveAssistant {
 
     let title = scanned == nil ? "Draft" : "Draft for \(snapshot.surface.displayName)"
     let work = CancellableWork()
-    await MainActor.run {
+    // The panel this draft owns: writing takes seconds, and an answer that arrives after
+    // the user asked for something else must not land in the card that replaced it.
+    let panel = await MainActor.run {
       PanelSession.present(
         title: title,
         subtitle: "Writing your message\u{2026}",
@@ -219,7 +221,7 @@ actor MessageDraftAssistant: ProactiveAssistant {
       guard await !work.isCancelled else { return "Cancelled." }
       switch result {
       case .failure(let error):
-        _ = await MainActor.run { PanelSession.dismiss() }
+        _ = await MainActor.run { PanelSession.dismiss(token: panel) }
         if case MessageDraftError.budgetSpent = error {
           return "Message drafting has spent its budget for today."
         }
@@ -235,7 +237,8 @@ actor MessageDraftAssistant: ProactiveAssistant {
           CloudConnectorCopyField(
             id: "draft-body", label: "", value: draft.body, masksValue: false, wraps: true))
         await MainActor.run {
-          PanelSession.update(subtitle: "Copy it with the button.", fields: fields)
+          PanelSession.update(
+            subtitle: "Copy it with the button.", fields: fields, token: panel)
         }
         log("MessageDraft: on-demand draft on screen, \(draft.body.count) chars")
         return "Draft is on screen to copy."

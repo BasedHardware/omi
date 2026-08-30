@@ -298,7 +298,7 @@ actor FormAssistAssistant: ProactiveAssistant {
     // Created here rather than on the ✓ so the panel owns one cancel token for its whole
     // life: closing the card mid-answer has to reach work that started after the tick.
     let work = CancellableWork()
-    await MainActor.run {
+    _ = await MainActor.run {
       PanelSession.present(
         title: "Fill this form?",
         subtitle: Self.offerSubtitle(answerable: answerable),
@@ -438,7 +438,7 @@ actor FormAssistAssistant: ProactiveAssistant {
 
     let roster = snapshot.emptyFields
     let work = CancellableWork()
-    await MainActor.run {
+    let panel = await MainActor.run {
       PanelSession.present(
         title: "\(snapshot.appName) form",
         subtitle: "Reading your memories\u{2026}",
@@ -467,11 +467,11 @@ actor FormAssistAssistant: ProactiveAssistant {
         DesktopDiagnosticsManager.shared.recordFallback(
           area: "panel_lookup", from: "form_assist", to: "none",
           reason: "no_evidence", outcome: .exhausted)
-        _ = await MainActor.run { PanelSession.dismiss() }
+        _ = await MainActor.run { PanelSession.dismiss(token: panel) }
         return abandon("Omi has nothing stored that could answer this form.")
       case .rows(let rows):
         guard rows.contains(where: { $0.fill != nil }) else {
-          _ = await MainActor.run { PanelSession.dismiss() }
+          _ = await MainActor.run { PanelSession.dismiss(token: panel) }
           return .handled("Nothing Omi knows answers the \(roster.count) fields on this form.")
         }
         let filled = rows.filter { $0.fill != nil }.count
@@ -491,7 +491,7 @@ actor FormAssistAssistant: ProactiveAssistant {
       return abandon("Cancelled.")
     } catch {
       logError("FormAssist: on-demand fill resolution failed", error: error)
-      _ = await MainActor.run { PanelSession.dismiss() }
+      _ = await MainActor.run { PanelSession.dismiss(token: panel) }
       return .handled("Could not read the form.")
     }
   }
@@ -895,7 +895,7 @@ actor FormAssistAssistant: ProactiveAssistant {
     log("FormAssist: offering \(filled) of \(fields.count) fields in \(result.appName)")
     lastOfferedFingerprint = fingerprint
 
-    await MainActor.run {
+    _ = await MainActor.run {
       PanelSession.present(
         title: "Omi can fill this",
         subtitle: "\(filled) of \(fields.count) fields from your memories. "

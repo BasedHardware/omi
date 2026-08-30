@@ -69,7 +69,10 @@ actor DataAnswerAssistant {
     runsToday.append(now)
 
     let work = CancellableWork()
-    await MainActor.run {
+    // The panel this lookup owns. A search takes seconds and the user can ask for
+    // something else meanwhile; naming the panel means a late answer, or a late failure,
+    // reaches this card or nothing at all.
+    let panel = await MainActor.run {
       PanelSession.present(
         title: "Finding that",
         subtitle: "Searching your data\u{2026}",
@@ -88,12 +91,12 @@ actor DataAnswerAssistant {
     log("DataAnswer: on-demand lookup started, question=\(asked.count) chars")
 
     do {
-      let outcome = try await work.run { try await self.explore(question: asked) }
+      let outcome = try await work.run { try await self.explore(question: asked, panel: panel) }
       guard await !work.isCancelled else { return "Cancelled." }
       switch outcome {
       case .nothing(let reason):
         if !runsToday.isEmpty { runsToday.removeLast() }
-        _ = await MainActor.run { PanelSession.dismiss() }
+        _ = await MainActor.run { PanelSession.dismiss(token: panel) }
         log("DataAnswer: nothing found — \(reason)")
         // Spelled out because the voice model must not claim a panel it saw go up
         // during the search is still there.
@@ -101,14 +104,14 @@ actor DataAnswerAssistant {
       case .answer(let title, let items, let missing):
         let fields = VoicePanel.copyFields(from: items)
         guard !fields.isEmpty else {
-          _ = await MainActor.run { PanelSession.dismiss() }
+          _ = await MainActor.run { PanelSession.dismiss(token: panel) }
           return "Nothing in the user's data answers that, and no panel is on screen."
         }
         await MainActor.run {
           PanelSession.update(
             title: title,
             subtitle: fields.count == 1 ? "Copy it with the button." : "Copy each with its button.",
-            fields: fields)
+            fields: fields, token: panel)
         }
         // Labels only: the values are on screen, and reading them back aloud is what the
         // panel exists to avoid.
@@ -123,19 +126,21 @@ actor DataAnswerAssistant {
       return "Cancelled."
     } catch {
       logError("DataAnswer: lookup failed", error: error)
-      _ = await MainActor.run { PanelSession.dismiss() }
+      _ = await MainActor.run { PanelSession.dismiss(token: panel) }
       return "Could not search the user's data."
     }
   }
 
   // MARK: - Exploration loop
 
-  private func explore(question: String) async throws -> Outcome {
+  private func explore(question: String, panel: PanelSession.Token) async throws -> Outcome {
     // Attached, not offered. Asking the model whether it wants a lookup was measured as
     // a coin flip in this codebase (`ContextDirectorRetrievalHop`), and a loop that has
     // to guess which store to try first is exactly how an answer ends up biased toward
     // whichever tool got called once.
-    await MainActor.run { PanelSession.update(subtitle: "Searching everything you have\u{2026}") }
+    await MainActor.run {
+      PanelSession.update(subtitle: "Searching everything you have\u{2026}", token: panel)
+    }
     let sweep = await OmiSweep.run(query: question)
     if sweep.hits.isEmpty {
       // The keywords missed, so the loop pays for semantic searches it would not
@@ -174,7 +179,7 @@ actor DataAnswerAssistant {
         transcript += "\n\n\"\(step.action)\" is not one of the offered actions. Choose again."
         continue
       }
-      await MainActor.run { PanelSession.update(subtitle: progress) }
+      await MainActor.run { PanelSession.update(subtitle: progress, token: panel) }
       let query = step.query?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       log("DataAnswer: exploring via \(step.action)")
       let result: String

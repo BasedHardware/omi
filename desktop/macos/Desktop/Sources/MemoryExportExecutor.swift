@@ -356,7 +356,10 @@ enum MemoryExportExecutor {
       PanelSession.present(
         sections: sections, title: hint.title, subtitle: hint.subtitle,
         grain: .app, origin: .requested,
-        autoDismissAfter: CloudConnectorGuidanceOverlay.fieldCopyCardLifetime)
+        autoDismissAfter: CloudConnectorGuidanceOverlay.fieldCopyCardLifetime,
+        // Steps to follow, not something Omi wrote: the voice surface must not reword it,
+        // and connector configuration is not transcript material.
+        editable: false)
       return Outcome(
         taskTitle:
           "Opened \(destination.title) — copy each value from the on-screen card into the form.",

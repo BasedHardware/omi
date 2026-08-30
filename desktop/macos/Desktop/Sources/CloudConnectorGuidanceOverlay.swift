@@ -154,6 +154,10 @@ final class CloudConnectorGuidanceOverlay {
   private var fieldCopyMaxHeight: CGFloat?
   private var fieldCopyMoveObserver: (any NSObjectProtocol)?
   private var fieldCopyUserDismiss: (() -> Void)?
+  /// Told when the card's own countdown runs out. Without it the owner never learns the
+  /// card left, keeps it remembered, and puts an expired offer back up on the next
+  /// context return — with a fresh countdown.
+  private var fieldCopyDidExpire: (() -> Void)?
 
   private init() {}
 
@@ -531,7 +535,8 @@ final class CloudConnectorGuidanceOverlay {
     autoDismissAfter: TimeInterval? = CloudConnectorGuidanceOverlay.fieldCopyCardLifetime,
     remembersPosition: Bool = false,
     ask: CopyCardAsk? = nil,
-    onUserDismiss: (() -> Void)? = nil
+    onUserDismiss: (() -> Void)? = nil,
+    onExpire: (() -> Void)? = nil
   ) {
     presentFieldCopyCard(
       title: title,
@@ -543,7 +548,8 @@ final class CloudConnectorGuidanceOverlay {
       autoDismissAfter: autoDismissAfter,
       remembersPosition: remembersPosition,
       ask: ask,
-      onUserDismiss: onUserDismiss
+      onUserDismiss: onUserDismiss,
+      onExpire: onExpire
     )
   }
 
@@ -632,11 +638,13 @@ final class CloudConnectorGuidanceOverlay {
     autoDismissAfter: TimeInterval? = CloudConnectorGuidanceOverlay.fieldCopyCardLifetime,
     remembersPosition: Bool = false,
     ask: CopyCardAsk? = nil,
-    onUserDismiss: (() -> Void)? = nil
+    onUserDismiss: (() -> Void)? = nil,
+    onExpire: (() -> Void)? = nil
   ) {
     dismissTask?.cancel()
     closeCurrentOverlay()
     fieldCopyUserDismiss = onUserDismiss
+    fieldCopyDidExpire = onExpire
 
     CloudConnectorCopySection.assertUniqueIDs(sections)
     let fields = CloudConnectorCopySection.flattenedFields(sections)
@@ -711,7 +719,10 @@ final class CloudConnectorGuidanceOverlay {
       try? await Task.sleep(for: .seconds(autoDismissAfter))
       await MainActor.run {
         guard !Task.isCancelled else { return }
+        // Read before dismissing: closing the card clears its callbacks.
+        let expired = self?.fieldCopyDidExpire
         self?.dismiss()
+        expired?()
       }
     }
   }
@@ -835,6 +846,7 @@ final class CloudConnectorGuidanceOverlay {
     fieldCopyModel = nil
     fieldCopyMaxHeight = nil
     fieldCopyUserDismiss = nil
+    fieldCopyDidExpire = nil
     window?.close()
     window = nil
   }

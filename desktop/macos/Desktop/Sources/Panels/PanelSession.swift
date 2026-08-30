@@ -54,6 +54,16 @@ enum PanelSession {
     }
   }
 
+  /// Names one panel from the moment it goes up.
+  ///
+  /// Work that fills a panel takes seconds, and the user can ask for a different one
+  /// while it runs. The caller carries the token of the panel it started for, so a late
+  /// answer — or a late failure closing the card — reaches that panel or nothing, never
+  /// whatever replaced it.
+  struct Token: Equatable, Sendable {
+    fileprivate let value: Int
+  }
+
   private struct Panel {
     var content: Content
     let grain: PanelContext.Grain
@@ -62,6 +72,16 @@ enum PanelSession {
     /// compose gate, which refuses a box the user has already pasted into.
     let formFingerprint: String?
     var origin: Origin
+    /// When this panel's own countdown runs out. Held here rather than in the window so
+    /// hiding the card on a context change and bringing it back resumes the countdown
+    /// instead of restarting it — a card the user keeps tabbing past would otherwise
+    /// never expire.
+    var expiresAt: Date?
+    /// False for a card that is a procedure the user is working through rather than
+    /// content Omi wrote: the assisted connector setup. Overwriting it by voice would
+    /// destroy steps only the user can get back, and its values are configuration, not
+    /// something worth keeping in the chat transcript.
+    let editable: Bool
   }
 
   private static let watcherID = "panel-session"
@@ -72,14 +92,26 @@ enum PanelSession {
   private struct ChatRecord {
     var title: String
     var fields: [CloudConnectorCopyField]
+    /// Last time this record changed. A voice turn is the only thing that drains the
+    /// queue, and a panel bought with the ✓ on an ambient offer may never be followed by
+    /// one — so a record waits, but not indefinitely, or it lands under an unrelated
+    /// reply hours later.
+    var at: Date
   }
   private static var chatRecords: [ChatRecord] = []
   /// Index of the record the live panel keeps updated, so content that streams in
   /// after presentation still reaches the transcript.
   private static var liveChatRecordIndex: Int?
   private static let maxChatRecords = 3
+  /// Long enough to cover a panel that streams in and a reply that follows it; short
+  /// enough that it is still the same piece of work.
+  private static let chatRecordLifetime: TimeInterval = 600
 
   private static var remembered: Panel?
+  private static var nextTokenValue = 0
+  private static var token = Token(value: 0)
+  /// The panel on screen right now, for work that will need to name it later.
+  static var currentToken: Token { token }
   private static var owner: PanelContext?
   private static var showing = false
   private static var cancelWork: (() -> Void)?
@@ -131,6 +163,7 @@ enum PanelSession {
 
   // MARK: - Presenting
 
+  @discardableResult
   static func present(
     title: String,
     subtitle: String,
@@ -142,7 +175,7 @@ enum PanelSession {
     ask: CopyCardAsk? = nil,
     onCancel: (() -> Void)? = nil,
     onUserDismiss: (() -> Void)? = nil
-  ) {
+  ) -> Token {
     present(
       sections: [CloudConnectorCopySection(id: "fields", title: "", fields: fields)],
       title: title, subtitle: subtitle, grain: grain, origin: origin,
@@ -152,6 +185,7 @@ enum PanelSession {
 
   /// A copy card whose values are grouped — the cloud-connector setup card, whose
   /// provider form hides some fields behind a disclosure.
+  @discardableResult
   static func present(
     sections: [CloudConnectorCopySection],
     title: String,
@@ -161,20 +195,22 @@ enum PanelSession {
     formFingerprint: String? = nil,
     autoDismissAfter: TimeInterval? = nil,
     ask: CopyCardAsk? = nil,
+    editable: Bool = true,
     onCancel: (() -> Void)? = nil,
     onUserDismiss: (() -> Void)? = nil
-  ) {
+  ) -> Token {
     present(
       content: .copy(
         Content.Copy(
           title: title, subtitle: subtitle, sections: sections,
           autoDismissAfter: autoDismissAfter, ask: ask)),
-      grain: grain, origin: origin, formFingerprint: formFingerprint,
+      grain: grain, origin: origin, formFingerprint: formFingerprint, editable: editable,
       onCancel: onCancel, onUserDismiss: onUserDismiss)
   }
 
   /// Put up the draft card. Same ownership rules as a copy card: it belongs to the
   /// conversation it opened over, and this decides when it leaves.
+  @discardableResult
   static func presentCompose(
     fingerprint: String,
     appDisplayName: String,
@@ -183,7 +219,7 @@ enum PanelSession {
     origin: Origin,
     onGenerate: @escaping (String, MessageDraft?) async -> Result<MessageDraft, Error>,
     onDecline: @escaping () -> Void
-  ) {
+  ) -> Token {
     present(
       content: .compose(
         Content.Compose(
@@ -203,26 +239,34 @@ enum PanelSession {
     isPresenting && composeFingerprint == fingerprint
   }
 
+  @discardableResult
   private static func present(
     content: Content,
     grain: PanelContext.Grain,
     origin: Origin,
     formFingerprint: String?,
     composeFingerprint: String? = nil,
+    editable: Bool = true,
     onCancel: (() -> Void)? = nil,
     onUserDismiss: (() -> Void)? = nil
-  ) {
+  ) -> Token {
     cancelWork?()
     hideCurrent()
+    let lifetime: TimeInterval?
+    if case .copy(let copy) = content { lifetime = copy.autoDismissAfter } else { lifetime = nil }
     remembered = Panel(
-      content: content, grain: grain, formFingerprint: formFingerprint, origin: origin)
+      content: content, grain: grain, formFingerprint: formFingerprint, origin: origin,
+      expiresAt: lifetime.map { Date().addingTimeInterval($0) }, editable: editable)
+    nextTokenValue += 1
+    token = Token(value: nextTokenValue)
     self.composeFingerprint = composeFingerprint
-    if origin == .requested { beginChatRecord() } else { liveChatRecordIndex = nil }
+    if origin == .requested, editable { beginChatRecord() } else { liveChatRecordIndex = nil }
     owner = currentContext()
     cancelWork = onCancel
     userDismiss = onUserDismiss
     startWatching()
     show()
+    return token
   }
 
   /// The user took the offer. The ✓ row goes, and with it the countdown an unanswered
@@ -237,6 +281,7 @@ enum PanelSession {
     else { return }
     copy.ask = nil
     copy.autoDismissAfter = nil
+    panel.expiresAt = nil
     panel.content = .copy(copy)
     if panel.origin == .ambient {
       panel.origin = .requested
@@ -253,8 +298,9 @@ enum PanelSession {
   /// hidden mid-flight comes back finished rather than still spinning.
   static func update(
     title: String? = nil, subtitle: String? = nil, fields: [CloudConnectorCopyField]? = nil,
-    forForm fingerprint: String? = nil
+    forForm fingerprint: String? = nil, token: Token? = nil
   ) {
+    guard token == nil || token == self.token else { return }
     guard var panel = remembered, case .copy(var copy) = panel.content else { return }
     // A form's answers take seconds, and another form's offer can take the panel while
     // they are in flight. Naming the form means late work goes nowhere rather than into
@@ -287,11 +333,21 @@ enum PanelSession {
 
   /// Takes the panel down for good and stops whatever was filling it in.
   @discardableResult
-  static func dismiss() -> Bool {
+  static func dismiss(token: Token? = nil) -> Bool {
+    guard token == nil || token == self.token else { return false }
     let wasShowing = isPresenting
     hideCurrent()
     forget()
     return wasShowing
+  }
+
+  /// The panel's own countdown ran out — called by the card's own timer. Forgetting it
+  /// is the point: a card left remembered after its window closed comes back on the next
+  /// context return, with a fresh countdown, so an offer the user ignored for four
+  /// minutes would reappear forever.
+  static func expire(_ expiring: Token) {
+    guard expiring == token else { return }
+    forget()
   }
 
   /// Take down a panel only if it is the one described. Used by a surface retiring its
@@ -425,6 +481,13 @@ enum PanelSession {
         origin: .requested)
       return .created(fields.count)
     case .copy:
+      // A setup card is a procedure the user is partway through, and its grouping is
+      // part of the instructions. Replacing it with prose destroys both.
+      guard remembered?.editable ?? true else {
+        return .refused(
+          "The card on screen is a setup Omi is walking the user through, not text to "
+            + "reword. Leave it alone and tell them so.")
+      }
       update(title: title, subtitle: subtitle, fields: fields)
       return .revised(fields.count)
     case .offer(let heading):
@@ -456,12 +519,16 @@ enum PanelSession {
   /// Cleared on read, so a panel lands in exactly one turn. A panel still mid-flight —
   /// pending rows, no values — yields nothing: it was cancelled or empty, and an empty
   /// card is not worth a transcript.
-  static func takeChatCards() -> [PanelChatCard] {
+  static func takeChatCards(now: Date = Date()) -> [PanelChatCard] {
     defer {
       chatRecords.removeAll()
       liveChatRecordIndex = nil
     }
-    return chatRecords.compactMap { chatCard(title: $0.title, fields: $0.fields) }
+    let cutoff = now.addingTimeInterval(-chatRecordLifetime)
+    return
+      chatRecords
+      .filter { $0.at > cutoff }
+      .compactMap { chatCard(title: $0.title, fields: $0.fields) }
   }
 
   private static func beginChatRecord() {
@@ -469,10 +536,12 @@ enum PanelSession {
     if chatRecords.count >= maxChatRecords { chatRecords.removeFirst() }
     switch panel.content {
     case .copy(let copy):
-      chatRecords.append(ChatRecord(title: copy.title, fields: copy.fields))
+      chatRecords.append(ChatRecord(title: copy.title, fields: copy.fields, at: Date()))
     case .compose(let compose):
       chatRecords.append(
-        ChatRecord(title: "Draft for \(compose.appDisplayName)", fields: draftFields(compose.draft)))
+        ChatRecord(
+          title: "Draft for \(compose.appDisplayName)", fields: draftFields(compose.draft),
+          at: Date()))
     }
     liveChatRecordIndex = chatRecords.indices.last
   }
@@ -483,6 +552,7 @@ enum PanelSession {
     guard let index = liveChatRecordIndex, chatRecords.indices.contains(index) else { return }
     if let title { chatRecords[index].title = title }
     if let fields { chatRecords[index].fields = fields }
+    chatRecords[index].at = Date()
   }
 
   /// A draft as copyable rows, so the transcript keeps it exactly as the card showed it.
@@ -597,7 +667,9 @@ enum PanelSession {
           cardSize: size, visibleFrame: $0, offset: PanelPlacementStore.offset)
       },
       maxHeight: maxHeight,
-      autoDismissAfter: copy.autoDismissAfter,
+      // What is left of the countdown, not a fresh one: a card the user keeps tabbing
+      // away from and back to must still expire.
+      autoDismissAfter: remembered?.expiresAt.map { max(1, $0.timeIntervalSinceNow) },
       remembersPosition: true,
       // The offer's ✓ is answered once, wherever the panel is showing: clear the row
       // first, then hand the user's context to whoever asked.
@@ -616,7 +688,8 @@ enum PanelSession {
         let declined = PanelSession.userDismiss
         PanelSession.forget()
         declined?()
-      }
+      },
+      onExpire: { [expiring = token] in PanelSession.expire(expiring) }
     )
   }
 
