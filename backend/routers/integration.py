@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi import Request
@@ -12,7 +12,7 @@ from utils.apps import verify_api_key
 import database.redis_db as redis_db
 from database._client import db as firestore_db
 from utils.memory.memory_service import MemoryService, truncate_locked_memory_preview
-from database.redis_db import get_enabled_apps, r as redis_client
+from database.redis_db import get_enabled_apps
 import database.action_items as action_items_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
@@ -21,8 +21,14 @@ from models.conversation import SearchRequest
 from models.app import App
 from models.geolocation import Geolocation
 from utils.app_integrations import (
-    send_app_notification,
     trigger_external_integrations,
+)
+from utils.notification_dispatch import (
+    APP_NOTIFICATION_LIMIT,
+    NotificationDispatchStatus,
+    NotificationIntent,
+    NotificationPolicy,
+    dispatch_notification,
 )
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import redact_conversation_for_integration
@@ -35,50 +41,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Rate limit settings - more conservative limits to prevent notification fatigue
-RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
-MAX_NOTIFICATIONS_PER_HOUR = 10  # Maximum notifications per hour per app per user
-
 # Firestore 'in' filters accept at most 30 values (see database/apps.py, database/chat.py); keep
 # well under that so a caller-supplied statuses list can never blow the query up into a 500.
 MAX_STATUSES_FILTER_VALUES = 20
 
 router = APIRouter()
-
-
-def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
-    """
-    Check if the app has exceeded its rate limit for a specific user
-    Returns: (allowed, remaining, reset_time, retry_after)
-    """
-    now = datetime.now(timezone.utc)
-    hour_key = f"notification_rate_limit:{app_id}:{user_id}:{now.strftime('%Y-%m-%d-%H')}"
-
-    # Check hourly limit
-    hour_count = redis_client.get(hour_key)
-    if hour_count is None:
-        # Seed to 0, not 1: the unconditional incr below is the single source of truth for the count.
-        # Seeding to 1 AND incrementing made the first request consume two tokens, so only 9 of
-        # MAX_NOTIFICATIONS_PER_HOUR were ever allowed and the remaining header was off by one.
-        redis_client.setex(hour_key, RATE_LIMIT_PERIOD, 0)
-        hour_count = 0
-    else:
-        hour_count = int(hour_count)
-
-    # Calculate reset time
-    hour_reset = RATE_LIMIT_PERIOD - (int(now.timestamp()) % RATE_LIMIT_PERIOD)
-    reset_time = hour_reset
-
-    # Check if hourly limit is exceeded
-    if hour_count >= MAX_NOTIFICATIONS_PER_HOUR:
-        return False, MAX_NOTIFICATIONS_PER_HOUR - hour_count, hour_reset, hour_reset
-
-    # Increment counter
-    redis_client.incr(hour_key)
-
-    remaining = MAX_NOTIFICATIONS_PER_HOUR - hour_count - 1
-
-    return True, remaining, reset_time, 0
 
 
 async def _resolve_geolocation(geolocation: Optional[Geolocation]) -> Optional[Geolocation]:
@@ -568,25 +535,27 @@ def send_notification_via_integration(
     if app_id not in user_enabled:
         raise HTTPException(status_code=403, detail='User does not have this app installed')
 
-    # Check rate limit
-    allowed, remaining, reset_time, retry_after = check_rate_limit(app.id, uid)
+    outcome = dispatch_notification(
+        NotificationIntent.app_integration(
+            user_id=uid,
+            app_name=app.name,
+            app_id=app.id,
+            message=message,
+            source='api.v2.integration',
+            policy=NotificationPolicy.EXTERNAL_APP_HOURLY,
+        )
+    )
+    if outcome.rate_limit is None:
+        raise RuntimeError('external app notification dispatch did not return rate-limit metadata')
+    headers = outcome.rate_limit.headers()
 
-    # Add rate limit headers to response
-    headers = {
-        'X-RateLimit-Limit': str(MAX_NOTIFICATIONS_PER_HOUR),
-        'X-RateLimit-Remaining': str(remaining),
-        'X-RateLimit-Reset': str(reset_time),
-    }
-
-    if not allowed:
-        headers['Retry-After'] = str(retry_after)
+    if outcome.status == NotificationDispatchStatus.SUPPRESSED:
         return JSONResponse(
             status_code=429,
             headers=headers,
-            content={'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'},
+            content={'detail': f'Rate limit exceeded. Maximum {APP_NOTIFICATION_LIMIT} notifications per hour.'},
         )
 
-    send_app_notification(uid, app.name, app.id, message)
     return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})
 
 

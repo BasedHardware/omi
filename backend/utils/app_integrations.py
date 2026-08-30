@@ -50,9 +50,13 @@ from models.conversation import Conversation
 from models.conversation_enums import ConversationSource
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
-from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
-from utils.notifications import send_notification, send_notification_async
+from utils.notifications import send_notification
+from utils.notification_dispatch import (
+    NotificationIntent,
+    dispatch_notification,
+    dispatch_notification_async,
+)
 from utils.llm.clients import generate_embedding, get_llm
 from utils.llm.proactive_notification import (
     evaluate_relevance,
@@ -1029,29 +1033,30 @@ async def _async_trigger_realtime_integrations(
     return messages
 
 
-def _build_app_notification_payload(
-    app_name: str, app_id: str, message: str, target: str
-) -> tuple[str, dict[str, object]]:
-    navigate_to = '/chat/omi' if target == 'main' else f'/chat/{app_id}'
-    ai_message = NotificationMessage(
-        text=message,
-        plugin_id=app_id,
-        from_integration='true',
-        type='text',
-        notification_type='plugin',
-        navigate_to=navigate_to,
-    )
-    return app_name + ' says', NotificationMessage.get_message_as_dict(ai_message)
-
-
 def send_app_notification(user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'):
-    title, data = _build_app_notification_payload(app_name, app_id, message, target)
-    send_notification(user_id, title, message, data)
+    dispatch_notification(
+        NotificationIntent.app_integration(
+            user_id=user_id,
+            app_name=app_name,
+            app_id=app_id,
+            message=message,
+            target=target,
+            source='app_integrations.internal',
+        )
+    )
 
 
 async def send_app_notification_async(
     user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'
 ) -> None:
     """Async notification boundary for realtime integration coordinators."""
-    title, data = _build_app_notification_payload(app_name, app_id, message, target)
-    await send_notification_async(user_id, title, message, data)
+    await dispatch_notification_async(
+        NotificationIntent.app_integration(
+            user_id=user_id,
+            app_name=app_name,
+            app_id=app_id,
+            message=message,
+            target=target,
+            source='app_integrations.realtime',
+        )
+    )

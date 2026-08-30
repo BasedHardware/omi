@@ -4,6 +4,16 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: notification-dispatch-boundary
+    command: ["python3", ".github/scripts/check_notification_dispatch_boundary.py", "--base", "{base}"]
+    triggers: ["backend/**/*.py", ".github/scripts/check_notification_dispatch_boundary.py", ".github/scripts/notification_dispatch_boundary_baseline.json"]
+    lanes: ["local", "ci"]
+    reason: "#9518: notification policy converges only if new producers cannot bypass the typed dispatcher and call the FCM transport directly"
+  - id: notification-dispatch-boundary-tests
+    command: ["python3", ".github/scripts/test_check_notification_dispatch_boundary.py"]
+    triggers: [".github/scripts/check_notification_dispatch_boundary.py", ".github/scripts/test_check_notification_dispatch_boundary.py", ".github/scripts/notification_dispatch_boundary_baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the staged notification-owner ratchet must resolve aliases, ignore its transport owner, and reject baseline-assisted growth"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
