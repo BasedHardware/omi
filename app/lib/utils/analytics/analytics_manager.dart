@@ -934,8 +934,6 @@ class AnalyticsManager {
 
   void brainMapShareClicked() => track('Brain Map Share Clicked');
 
-  void brainMapRebuilt() => track('Brain Map Rebuilt');
-
   // Summarized Apps Sheet Events
   void summarizedAppSheetViewed({required String conversationId, String? currentSummarizedAppId}) {
     track(

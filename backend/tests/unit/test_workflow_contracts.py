@@ -198,6 +198,17 @@ def test_location_context_paths_select_their_focused_privacy_regressions(selecto
         assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
+def test_csat_surface_paths_select_their_focused_contracts(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+
+    for source_path in ("backend/database/csat.py", "backend/routers/csat.py"):
+        selected, reason = selector.tests_for_changed_paths([source_path], all_tests)
+        assert "tests/unit/test_csat.py" in selected, source_path
+        assert "tests/unit/test_desktop_rest_inventory.py" in selected, source_path
+        assert selected != all_tests, source_path
+        assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+
 def test_removed_test_forces_full_discovered_suite(selector_and_all_tests):
     selector, all_tests = selector_and_all_tests
 

@@ -12,7 +12,7 @@ from typing import Any
 
 from google.cloud.firestore_v1 import FieldFilter
 
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client
 from database.memory_collections import MemoryCollections
 from models.jit_proactivity import is_jit_trigger_paid_authority
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryKind
@@ -23,7 +23,11 @@ from utils.memory.jit_trigger_contract import (
     TriggerRuntimePolicy,
     compile_memory_item_trigger,
 )
-from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
+from utils.memory.v3.account_generation_source import (
+    V3AccountGenerationFailureReason,
+    V3TrustedAccountGenerationReadError,
+    read_memory_v3_trusted_account_generation,
+)
 
 MAX_AUTHORITATIVE_TRIGGERS = 500
 
@@ -160,6 +164,12 @@ def _revision(
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _empty_watchlist_revision(uid: str, account_generation: int) -> str:
+    """Deterministic revision for a watchlist proven empty by head absence."""
+    encoded = f'empty-watchlist:{uid}:{account_generation}'.encode('utf-8')
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def read_authoritative_trigger_snapshot(
     uid: str,
     *,
@@ -170,12 +180,35 @@ def read_authoritative_trigger_snapshot(
     Absence is authoritative only after the query is exhausted.  Any malformed,
     mixed-generation, oversized, or actionless active row makes the whole
     snapshot incomplete so ambient work cannot outrank an unseen planned action.
+    A state head proven absent (the owner has no memory-v3 generation at all)
+    yields a complete, empty watchlist with a deterministic revision; unproven
+    absence (read failure, malformed head) stays incomplete.
     """
 
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     head = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)
     try:
         account_generation = head.require_account_generation()
+    except V3TrustedAccountGenerationReadError as exc:
+        if exc.reason is not V3AccountGenerationFailureReason.MISSING_STATE_HEAD:
+            return AuthoritativeTriggerSnapshot(uid, 0, '', 0, '', False, (), 'generation_unavailable')
+        # A proven-absent state head means the owner never initialized memory
+        # v3, so the exhaustive watchlist is provably empty.  Fence the absence
+        # exactly like a row scan: certify complete only if the head is still
+        # absent on a trailing re-read, so a head created mid-flight cannot be
+        # certified away as an empty generation.
+        trailing = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)
+        if trailing.read_error_reason is not V3AccountGenerationFailureReason.MISSING_STATE_HEAD:
+            return AuthoritativeTriggerSnapshot(uid, 0, '', 0, '', False, (), 'generation_unavailable')
+        return AuthoritativeTriggerSnapshot(
+            owner_id=uid,
+            account_generation=0,
+            head_commit_id='',
+            commit_sequence=0,
+            snapshot_revision=_empty_watchlist_revision(uid, 0),
+            complete=True,
+            rows=(),
+        )
     except Exception:
         return AuthoritativeTriggerSnapshot(uid, 0, '', 0, '', False, (), 'generation_unavailable')
     head_commit_id = head.head_commit_id or ''

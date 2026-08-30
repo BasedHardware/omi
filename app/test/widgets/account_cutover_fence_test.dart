@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,8 +67,12 @@ void main() {
     await _pumpGate(tester);
 
     // The fence is correct — it fails closed — but the server never asked for
-    // a migration, so this screen must not be a dead end.
+    // a migration, so say that control is unavailable instead of claiming one.
     expect(find.text('product'), findsNothing);
+    expect(find.text('Connection Error'), findsOneWidget);
+    expect(find.text('Migration in Progress'), findsNothing);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Continue'), findsOneWidget);
     expect(find.byType(TextButton), findsOneWidget);
 
     await tester.tap(find.byType(TextButton));
@@ -97,6 +103,8 @@ void main() {
     await _pumpGate(tester);
 
     expect(find.text('product'), findsNothing);
+    expect(find.text('Migration in Progress'), findsOneWidget);
+    expect(find.text('Connection Error'), findsNothing);
     expect(find.byType(TextButton), findsNothing);
 
     // Same widget, same screen, different cause: the server answers "allow"
@@ -119,6 +127,10 @@ void main() {
     await tester.pump();
 
     expect(find.text('product'), findsNothing);
+    expect(find.text('Connection Error'), findsOneWidget);
+    expect(find.text('Migration in Progress'), findsNothing);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Continue'), findsOneWidget);
     expect(find.byType(TextButton), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -142,28 +154,86 @@ void main() {
     await runtime.bindAuthenticatedOwner('owner-a');
     expect(fetches, 1);
     expect(runtime.decision, AccountCutoverGateDecision.migrationMaintenance);
+    expect(runtime.blockingReason, AccountCutoverBlockingReason.controlUnavailable);
 
     await _pumpGate(tester);
     expect(find.text('product'), findsNothing);
+    expect(find.text('Connection Error'), findsOneWidget);
+    expect(find.text('Migration in Progress'), findsNothing);
     // The server has never allowed this owner, so there is no escape hatch to
     // fall back on: retrying is the only way this screen can ever clear.
     expect(find.byType(TextButton), findsNothing);
 
-    // Nothing else in the app re-fetches control while product traffic is
-    // blocked, so the fence can only lift if the gate retries by itself.
-    await tester.pump(const Duration(seconds: 29));
-    expect(fetches, 1);
-    expect(find.text('product'), findsNothing);
-
-    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.text('Retry'));
     await tester.pump();
     expect(fetches, 2);
     expect(find.text('product'), findsNothing);
 
-    await tester.pump(const Duration(seconds: 30));
+    // Nothing else in the app re-fetches control while product traffic is
+    // blocked, so the fence can only lift if the gate retries by itself.
+    await tester.pump(const Duration(seconds: 29));
+    expect(fetches, 2);
+    expect(find.text('product'), findsNothing);
+
+    await tester.pump(const Duration(seconds: 1));
     await tester.pump();
     expect(fetches, 3);
     expect(find.text('product'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('retry and the periodic refresh never overlap control requests', (tester) async {
+    final runtime = AccountCutoverRuntime.instance;
+    final pendingRetry = Completer<AccountCutoverFetchResult>();
+    var fetches = 0;
+    final client = AccountCutoverControlClient(
+      fetch: () {
+        fetches++;
+        if (fetches == 1) return Future.value(const AccountCutoverFetchResult.unavailable());
+        return pendingRetry.future;
+      },
+    );
+    AccountCutoverRuntime.controlClientOverrideForTesting = client;
+
+    await runtime.bindAuthenticatedOwner('owner-a');
+    await _pumpGate(tester);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pump();
+    expect(fetches, 2);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pump(const Duration(seconds: 30));
+    expect(fetches, 2);
+
+    pendingRetry.complete(AccountCutoverFetchResult.success(_control()));
+    await tester.pump();
+    expect(find.text('product'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('an offline owner switch shows a connection fence, never a migration claim', (tester) async {
+    final runtime = AccountCutoverRuntime.instance;
+    await runtime.bindAuthenticatedOwner(
+      'owner-a',
+      client: AccountCutoverControlClient(fetch: () async => AccountCutoverFetchResult.success(_control())),
+    );
+    await runtime.bindAuthenticatedOwner(
+      'owner-b',
+      client: AccountCutoverControlClient(fetch: () async => const AccountCutoverFetchResult.transportFailure()),
+    );
+
+    expect(runtime.decision, AccountCutoverGateDecision.migrationMaintenance);
+    expect(runtime.blockingReason, AccountCutoverBlockingReason.connectionUnavailable);
+
+    await _pumpGate(tester);
+
+    expect(find.text('product'), findsNothing);
+    expect(find.text('No internet connection'), findsOneWidget);
+    expect(find.text('Migration in Progress'), findsNothing);
+    expect(find.text('Retry'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

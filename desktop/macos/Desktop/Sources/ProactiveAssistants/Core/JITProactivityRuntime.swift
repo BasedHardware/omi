@@ -298,6 +298,28 @@ actor JITProactivityRuntime {
     }
   }
 
+  /// Signed-in startup mirror sync: fetch and reconcile the authoritative
+  /// trigger snapshot before any context visit exists, so the snapshot (and
+  /// its receipt) never depends on screen capture being live, a
+  /// notify-worthy visit, or calendar access. Shares admission's
+  /// flag → fetch → reconcile chain and its fail-closed gate; a non-permitting
+  /// authority performs no snapshot read. No evaluation, no delivery — the
+  /// next context visit still owns those. One shot per signed-in startup:
+  /// a transport failure is logged (bounded, content-free) and retried only
+  /// by the next owner change or launch.
+  func syncTriggerSnapshot(authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot) async {
+    let resolved = await flags(authorizationSnapshot)
+    guard resolved.permitsNewLane else { return }
+    do {
+      let snapshot = try await snapshots(authorizationSnapshot)
+      _ = try await reconcile(snapshot, authorizationSnapshot: authorizationSnapshot)
+    } catch {
+      NSLog(
+        "JIT trigger snapshot: startup sync failed error_type=%@",
+        ProactiveLaneFailureClassification.boundedNetworkErrorType(error))
+    }
+  }
+
   private func approvePlannedAmbiguity(
     _ ambiguous: KnowledgeLedgerTriggerRuntimeEntryResult,
     observation: KnowledgeLedgerTriggerObservation,

@@ -109,6 +109,129 @@ final class JITProactivityRuntimeTests: XCTestCase {
       .suppressed(reason: "authoritative_snapshot_unavailable"))
   }
 
+  /// The live gap: the server's `effective` verdict said enabled, but the client
+  /// re-derived admission from the raw flags and never read the snapshot. An
+  /// `effective`-enabled authority must reach the snapshot read even when the
+  /// raw pair is unknown, and a complete empty watchlist must still persist the
+  /// local trigger-snapshot receipt.
+  func testEffectiveEnabledAuthorityReadsSnapshotAndPersistsEmptyWatchlistReceipt() async throws {
+    let queue = try migratedQueue()
+    let emptyWatchlist = serverSnapshot(sequence: 4, revision: "revision-4", rows: [])
+    let sequence = SnapshotSequence([emptyWatchlist])
+    let runtime = JITProactivityRuntime(
+      flags: { _ in
+        JITProactivityFlags(rollout: .unknown, killSwitch: .unknown, effective: .enabled)
+      },
+      snapshots: { _ in try await sequence.next() },
+      reconcileSnapshot: { snapshot, _ in
+        try queue.write { db in try JITTriggerMirror.reconcile(snapshot, in: db, now: Date()) }
+      },
+      compileSnapshot: { _, _ in [] },
+      readWakeupCounts: { _, _, _ in [:] },
+      authorizationCurrent: { _ in true })
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(), observation: KnowledgeLedgerTriggerObservation())
+
+    XCTAssertEqual(decision, .suppressed(reason: "ambient_local_gate"))
+
+    let remaining = await sequence.remaining
+    XCTAssertEqual(remaining, 0, "effective-enabled authority must read the trigger snapshot")
+    let receipts = try await queue.read { db in
+      try String.fetchAll(
+        db, sql: "SELECT ownerID FROM jit_trigger_snapshot_receipts")
+    }
+    XCTAssertEqual(receipts, ["owner"])
+  }
+
+  // MARK: - Signed-in startup snapshot sync
+
+  /// Snapshot sync on signed-in startup must not wait for a context visit: an
+  /// effective-enabled owner fetches the authoritative snapshot and persists
+  /// the receipt even when the watchlist is empty and no visit ever settles.
+  func testStartupSyncFetchesSnapshotAndPersistsEmptyWatchlistReceiptWithoutAContextVisit() async throws {
+    let queue = try migratedQueue()
+    let emptyWatchlist = serverSnapshot(sequence: 4, revision: "revision-4", rows: [])
+    let sequence = SnapshotSequence([emptyWatchlist])
+    let runtime = JITProactivityRuntime(
+      flags: { _ in
+        JITProactivityFlags(rollout: .unknown, killSwitch: .unknown, effective: .enabled)
+      },
+      snapshots: { _ in try await sequence.next() },
+      reconcileSnapshot: { snapshot, _ in
+        try queue.write { db in try JITTriggerMirror.reconcile(snapshot, in: db, now: Date()) }
+      },
+      authorizationCurrent: { _ in true })
+
+    await runtime.syncTriggerSnapshot(authorizationSnapshot: try snapshot())
+
+    let remaining = await sequence.remaining
+    XCTAssertEqual(remaining, 0, "startup sync must read the trigger snapshot with zero context visits")
+    let receipts = try await queue.read { db in
+      try Row.fetchAll(
+        db, sql: "SELECT ownerID, rowCount FROM jit_trigger_snapshot_receipts")
+    }
+    XCTAssertEqual(receipts.count, 1)
+    let receipt = try XCTUnwrap(receipts.first)
+    let ownerID: String = receipt["ownerID"]
+    let rowCount: Int = receipt["rowCount"]
+    XCTAssertEqual(ownerID, "owner")
+    XCTAssertEqual(rowCount, 0, "an empty watchlist still persists its receipt")
+  }
+
+  /// Fail-closed startup: every non-permitting authority — unknown, rollout
+  /// disabled, kill switch, and an explicit `effective=disabled` — skips the
+  /// snapshot read and writes no receipt.
+  func testStartupSyncFailsClosedWhenAuthorityDoesNotPermitNewLane() async throws {
+    let nonPermitting: [JITProactivityFlags] = [
+      JITProactivityFlags(rollout: .unknown, killSwitch: .unknown),
+      JITProactivityFlags(rollout: .disabled, killSwitch: .disabled),
+      JITProactivityFlags(rollout: .enabled, killSwitch: .enabled),
+      JITProactivityFlags(rollout: .enabled, killSwitch: .disabled, effective: .disabled),
+    ]
+    for flags in nonPermitting {
+      let queue = try migratedQueue()
+      let runtime = JITProactivityRuntime(
+        flags: { _ in flags },
+        snapshots: { _ in
+          XCTFail("a non-permitting authority must not fetch the trigger snapshot")
+          throw ProactiveLaneClientError.invalidResponse
+        },
+        reconcileSnapshot: { snapshot, _ in
+          try queue.write { db in try JITTriggerMirror.reconcile(snapshot, in: db, now: Date()) }
+        })
+
+      await runtime.syncTriggerSnapshot(authorizationSnapshot: try snapshot())
+
+      let receipts = try await queue.read { db in
+        try String.fetchAll(db, sql: "SELECT ownerID FROM jit_trigger_snapshot_receipts")
+      }
+      XCTAssertTrue(receipts.isEmpty, "flags \(flags) must leave no receipt")
+    }
+  }
+
+  /// One shot, no loop: an unavailable snapshot at startup must swallow the
+  /// failure without crashing and leave the mirror untouched — the next
+  /// context visit's admission still owns recovery.
+  func testStartupSyncSwallowsSnapshotFailureWithoutPersistingAReceipt() async throws {
+    let queue = try migratedQueue()
+    let runtime = JITProactivityRuntime(
+      flags: { _ in
+        JITProactivityFlags(rollout: .unknown, killSwitch: .unknown, effective: .enabled)
+      },
+      snapshots: { _ in throw ProactiveLaneClientError.invalidResponse },
+      reconcileSnapshot: { snapshot, _ in
+        try queue.write { db in try JITTriggerMirror.reconcile(snapshot, in: db, now: Date()) }
+      })
+
+    await runtime.syncTriggerSnapshot(authorizationSnapshot: try snapshot())
+
+    let receipts = try await queue.read { db in
+      try String.fetchAll(db, sql: "SELECT ownerID FROM jit_trigger_snapshot_receipts")
+    }
+    XCTAssertTrue(receipts.isEmpty)
+  }
+
   func testAuthorityMismatchAndStaleLeaseSuppressWithoutAmbientFallback() async throws {
     let trigger = try compiledTrigger(id: "planned", condition: ["keywords": ["release"]])
     for (receiptOwner, receiptRevision, authorizationCurrent) in [
@@ -585,6 +708,10 @@ private actor SnapshotSequence {
   func next() throws -> JITTriggerSnapshot {
     guard !snapshots.isEmpty else { throw ProactiveLaneClientError.invalidResponse }
     return snapshots.removeFirst()
+  }
+
+  var remaining: Int {
+    snapshots.count
   }
 }
 

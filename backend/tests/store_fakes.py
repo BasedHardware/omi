@@ -464,6 +464,15 @@ def install_fake_db_client(
     client = NeutralFirestoreClient(fake)
     monkeypatch.setattr(_client, "get_firestore_client", lambda: client)
     monkeypatch.setattr(_client, "_firestore_client", client, raising=False)
+    # Upstream's +192 added a SECOND accessor, ``data_plane_db`` / ``get_data_plane_firestore_client``,
+    # for deployments whose compute project differs from the one holding customer data, and moved
+    # modules onto it (``database/screen_activity.py`` among them). Off that split — which is every
+    # on-prem deployment, see OMI_FIRESTORE_DATA_PLANE_PROJECT in the env-parity baseline — it resolves
+    # to the same client. Patch it here too, and clear its memo: a helper that covered one of the two
+    # idioms would leave a test silently driving the REAL client while asserting on a fake nobody wrote
+    # to (measured: seven tests in test_screen_activity_store.py went green-to-red exactly that way).
+    monkeypatch.setattr(_client, "get_data_plane_firestore_client", lambda: client)
+    monkeypatch.setattr(_client, "_data_plane_firestore_client", client, raising=False)
     return fake
 
 

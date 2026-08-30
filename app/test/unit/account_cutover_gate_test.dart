@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -183,6 +184,10 @@ void main() {
       () => AccountCutoverControl.fromJson({..._validControlJson()..remove('product_traffic_allowed')}),
       throwsA(isA<AccountCutoverControlParseException>()),
     );
+    expect(
+      () => AccountCutoverControl.fromJson({..._validControlJson(), 'state': 7}),
+      throwsA(isA<AccountCutoverControlParseException>()),
+    );
   });
 
   test('503 and malformed control responses classify as unavailable', () {
@@ -193,6 +198,12 @@ void main() {
     expect(
       AccountCutoverControlClient.interpretControlResponse(
         http.Response('{"state":"legacy","client_action":"none"}', 200),
+      ).kind,
+      AccountCutoverFetchKind.unavailable,
+    );
+    expect(
+      AccountCutoverControlClient.interpretControlResponse(
+        http.Response(jsonEncode({..._validControlJson(), 'client_action': 7}), 200),
       ).kind,
       AccountCutoverFetchKind.unavailable,
     );
@@ -242,6 +253,7 @@ void main() {
     expect(runtime.isResolvedForOwner, isTrue);
     expect(runtime.hasAuthoritativeControl, isFalse);
     expect(runtime.decision, AccountCutoverGateDecision.allowProductTraffic);
+    expect(runtime.blockingReason, AccountCutoverBlockingReason.none);
   });
 
   test('a genuine owner switch stays fenced across a transport failure (no leaked prior allow)', () async {
@@ -261,6 +273,7 @@ void main() {
     expect(runtime.isResolvedForOwner, isTrue);
     expect(runtime.hasAuthoritativeControl, isFalse);
     expect(runtime.decision, AccountCutoverGateDecision.migrationMaintenance);
+    expect(runtime.blockingReason, AccountCutoverBlockingReason.connectionUnavailable);
 
     // The owner change discarded owner-a's projection, so there is nothing the
     // server ever allowed for owner-b to fall back to: no escape hatch, and
@@ -268,6 +281,7 @@ void main() {
     expect(runtime.canSkipUnresolvedFence, isFalse);
     expect(runtime.skipUnresolvedFence(), isFalse);
     expect(runtime.decision, AccountCutoverGateDecision.migrationMaintenance);
+    expect(runtime.blockingReason, AccountCutoverBlockingReason.connectionUnavailable);
   });
 
   test('the escape hatch never invents an allow the server has not given', () async {
@@ -280,6 +294,7 @@ void main() {
     // The owner's first fetch has not landed, so the fence has no
     // server-allowed projection to fall back to: it must hold.
     expect(runtime.decision, AccountCutoverGateDecision.migrationMaintenance);
+    expect(runtime.blockingReason, AccountCutoverBlockingReason.checkingStatus);
     expect(runtime.canSkipUnresolvedFence, isFalse);
     expect(runtime.skipUnresolvedFence(), isFalse);
     expect(runtime.decision, AccountCutoverGateDecision.migrationMaintenance);
@@ -291,9 +306,13 @@ void main() {
     pending.complete(AccountCutoverFetchResult.success(fenced));
     await Future<void>.delayed(Duration.zero);
     expect(runtime.decision, AccountCutoverGateDecision.migrationMaintenance);
+    expect(runtime.blockingReason, AccountCutoverBlockingReason.confirmedMigration);
     expect(runtime.canSkipUnresolvedFence, isFalse);
     expect(runtime.skipUnresolvedFence(), isFalse);
     expect(runtime.decision, AccountCutoverGateDecision.migrationMaintenance);
+
+    runtime.applyFetchResult(const AccountCutoverFetchResult.unavailable());
+    expect(runtime.blockingReason, AccountCutoverBlockingReason.confirmedMigration);
   });
 
   test('a transport blip after an authoritative allow does NOT fence (stays on last-known-good)', () async {
@@ -318,6 +337,7 @@ void main() {
     expect(runtime.decision, AccountCutoverGateDecision.allowProductTraffic);
     expect(runtime.control.accountGeneration, 5);
     expect(runtime.canSkipUnresolvedFence, isTrue);
+    expect(runtime.blockingReason, AccountCutoverBlockingReason.none);
   });
 
   test('an explicit 503 after an authoritative allow fences but keeps the escape hatch', () async {
@@ -337,6 +357,7 @@ void main() {
 
     // The server explicitly failed closed — respect the fence...
     expect(runtime.decision, AccountCutoverGateDecision.migrationMaintenance);
+    expect(runtime.blockingReason, AccountCutoverBlockingReason.controlUnavailable);
     // ...but it never authoritatively said "migrating", so the fence is
     // unconfirmed and the user can skip back to the last-known-good state.
     expect(runtime.canSkipUnresolvedFence, isTrue);
@@ -370,6 +391,7 @@ void main() {
     await runtime.refresh(client: client);
 
     expect(runtime.decision, AccountCutoverGateDecision.migrationMaintenance);
+    expect(runtime.blockingReason, AccountCutoverBlockingReason.confirmedMigration);
     expect(runtime.canSkipUnresolvedFence, isFalse);
     expect(runtime.skipUnresolvedFence(), isFalse);
     expect(runtime.decision, AccountCutoverGateDecision.migrationMaintenance);

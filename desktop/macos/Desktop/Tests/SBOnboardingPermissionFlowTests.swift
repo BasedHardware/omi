@@ -353,7 +353,7 @@ final class SBOnboardingPermissionFlowTests: XCTestCase {
 /// The permission probes `AppState` owns, exercised through their injected seams.
 @MainActor
 final class AppStatePermissionProbeTests: XCTestCase {
-  func testAccessibilitySettingsOpenPresentsDragGuidance() {
+  func testAccessibilitySettingsOpenPresentsConditionalDragGuidance() {
     var openedURL: URL?
     var presentedDragGuidance = false
 
@@ -372,7 +372,7 @@ final class AppStatePermissionProbeTests: XCTestCase {
     XCTAssertTrue(presentedDragGuidance)
   }
 
-  func testAccessibilityDragGuidanceIsNotPresentedWhenSettingsFailsToOpen() {
+  func testAccessibilitySettingsFailureDoesNotPresentDragGuidance() {
     var presentedDragGuidance = false
 
     let opened = PermissionDragGuidance.openAccessibilitySettings(

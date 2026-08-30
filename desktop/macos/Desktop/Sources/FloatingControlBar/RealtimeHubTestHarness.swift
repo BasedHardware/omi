@@ -129,7 +129,8 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     // without spawning real agents / network calls inside the test.
     let stub: String
     switch HubTool(rawValue: name) {
-    case .askHigherModel: stub = "Paris is the capital of France."
+    case .thinkDeeper: stub = "Paris is the capital of France."
+    case .webSearch: stub = "According to the live forecast, New York is sunny and 73 degrees."
     case .getTasks: stub = "Due today (1):\n- Example task [id:task_123]"
     case .getMemories: stub = "You live in San Francisco and prefer concise answers."
     case .searchMemories: stub = "Your dog's name is Rex."

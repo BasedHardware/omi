@@ -77,7 +77,10 @@ try:
     from utils.llm.gateway_client import (
         BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS,
         CHAT_STRUCTURED_AUTO_LANE_ID,
+        ainvoke_openai_embeddings_gateway,
         feature_auto_lane_id,
+        invoke_gemini_embedding_gateway,
+        invoke_openai_embeddings_gateway,
         raise_if_gateway_feature_mode_blocks_direct_model_surface,
         should_route_chat_agent_through_gateway,
         should_route_features_through_gateway,
@@ -101,13 +104,14 @@ except ImportError as exc:
     def raise_if_gateway_feature_mode_blocks_direct_model_surface(_surface: str) -> None:
         return None
 
+    def invoke_openai_embeddings_gateway(*_args, **_kwargs):
+        raise RuntimeError('Omi gateway embeddings client is unavailable')
 
-try:
-    from utils.llm.gateway_observability import record_direct_exception_surface
-except ImportError:
+    async def ainvoke_openai_embeddings_gateway(*_args, **_kwargs):
+        raise RuntimeError('Omi gateway embeddings client is unavailable')
 
-    def record_direct_exception_surface(*, surface: str, reason: str = 'acknowledged') -> None:
-        return None
+    def invoke_gemini_embedding_gateway(*_args, **_kwargs):
+        raise RuntimeError('Omi gateway embeddings client is unavailable')
 
 
 try:
@@ -388,7 +392,54 @@ class _OpenAIEmbeddingsProxy:
             )
         )
 
+    def _gateway_mode(self) -> bool:
+        """Whether embeddings hop the gateway ledger lane.
+
+        A misconfigured prod rollout raises RuntimeError; embeddings are
+        load-bearing for memory/vector search, so that degrades to the direct
+        kill-switch path instead of failing closed.
+        """
+        try:
+            return should_route_features_through_gateway()
+        except RuntimeError:
+            return False
+
+    def _is_gateway_key_failure(self, error: Exception) -> bool:
+        if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in {401, 403, 429}:
+            return True
+        return self._is_key_failure(error)
+
+    def _gateway_embed_texts(self, texts: List[str]) -> List[List[float]]:
+        byok = get_byok_key('openai')
+        try:
+            return invoke_openai_embeddings_gateway(texts, byok_api_key=byok)
+        except Exception as e:
+            if byok:
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_documents')
+                if self._is_gateway_key_failure(e):
+                    logger.warning(
+                        "BYOK gateway OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
+                    )
+                    return invoke_openai_embeddings_gateway(texts)
+            raise
+
+    async def _agateway_embed_texts(self, texts: List[str]) -> List[List[float]]:
+        byok = get_byok_key('openai')
+        try:
+            return await ainvoke_openai_embeddings_gateway(texts, byok_api_key=byok)
+        except Exception as e:
+            if byok:
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents')
+                if self._is_gateway_key_failure(e):
+                    logger.warning(
+                        "BYOK gateway OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
+                    )
+                    return await ainvoke_openai_embeddings_gateway(texts)
+            raise
+
     def embed_query(self, text: str) -> List[float]:
+        if self._gateway_mode():
+            return self._gateway_embed_texts([text])[0]
         inst = self._resolve()
         text = self._cap_local_input(text)
         try:
@@ -402,6 +453,8 @@ class _OpenAIEmbeddingsProxy:
             raise
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        if self._gateway_mode():
+            return self._gateway_embed_texts(texts)
         inst = self._resolve()
         texts = self._cap_local_input(texts)
         try:
@@ -414,6 +467,36 @@ class _OpenAIEmbeddingsProxy:
                     return self._default_client().embed_documents(texts)
             raise
 
+    async def aembed_query(self, text: str) -> List[float]:
+        if self._gateway_mode():
+            return (await self._agateway_embed_texts([text]))[0]
+        inst = self._resolve()
+        text = self._cap_local_input(text)
+        try:
+            return await inst.aembed_query(text)
+        except Exception as e:
+            if inst is not self._default:
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_query')
+                if self._is_key_failure(e):
+                    logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                    return await self._default_client().aembed_query(text)
+            raise
+
+    async def aembed_documents(self, texts: List[str]) -> List[List[float]]:
+        if self._gateway_mode():
+            return await self._agateway_embed_texts(texts)
+        inst = self._resolve()
+        texts = self._cap_local_input(texts)
+        try:
+            return await inst.aembed_documents(texts)
+        except Exception as e:
+            if inst is not self._default:
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents')
+                if self._is_key_failure(e):
+                    logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                    return await self._default_client().aembed_documents(texts)
+            raise
+
     def __getattr__(self, name: str):
         inst = self._resolve()
         attr = getattr(inst, name)
@@ -422,9 +505,12 @@ class _OpenAIEmbeddingsProxy:
         if name.startswith('a'):
 
             async def _wrapped_async(*args, **kwargs):
-                # aembed_query(text)/aembed_documents(texts): cap the input on the local endpoint path whether
-                # it arrives positionally OR as a keyword — a kwargs-only call left args empty, so long input
-                # slipped through uncapped and failed at the local server (cubic PR 10887 clients.py:416).
+                # Cap on the local endpoint path whether the input arrives positionally OR as a keyword
+                # (cubic PR 10887 clients.py:416). NOTE: all four names in _METHODS_TO_WRAP are now
+                # defined explicitly on this class, and __getattr__ only runs when normal lookup fails —
+                # so this wrapper is a belt to the explicit methods' braces, not the thing that caps.
+                # Upstream's +192 added the explicit async pair and the cap went missing with it; the
+                # test that caught it is tests/unit/test_embeddings_local_input_cap.py.
                 if args:
                     args = (self._cap_local_input(args[0]), *args[1:])
                 elif 'text' in kwargs:
@@ -882,9 +968,14 @@ def num_tokens_from_string(string: str) -> int:
 
 
 def generate_embedding(content: str) -> List[float]:
-    if should_route_features_through_gateway():
-        record_direct_exception_surface(surface='openai_embeddings', reason='out_of_scope')
     return embeddings.embed_documents([content])[0]
+
+
+def _embeddings_gateway_mode() -> bool:
+    try:
+        return should_route_features_through_gateway()
+    except RuntimeError:
+        return False
 
 
 def gemini_embed_query(text: str) -> List[float]:
@@ -893,17 +984,25 @@ def gemini_embed_query(text: str) -> List[float]:
     Uses RETRIEVAL_QUERY task type to match the RETRIEVAL_DOCUMENT embeddings
     generated by the desktop app.
 
-    Prefers the per-request BYOK Gemini key; falls back to the process-wide
-    env key so non-BYOK callers behave exactly as before.
+    Gateway feature mode hops the omi:auto:gemini-embeddings lane (Vertex stays
+    an upstream adapter) so the call lands in the spend ledger. A Gemini BYOK
+    key keeps the thin direct AI Studio path — the gateway Vertex adapter
+    fail-closes BYOK — and FEATURE_MODE=off keeps the legacy direct path.
     """
     if _embeddings_base_url():
         # On-prem: screen-activity queries use the same local OpenAI-compatible endpoint as every
         # other embedding, so there is no Google egress. The desktop app must be configured to the
         # same model/endpoint so its RETRIEVAL_DOCUMENT vectors align with these query vectors.
+        # First, because it is the only branch that reaches nobody: everything below is Google.
         return generate_embedding(text)
-    if should_route_features_through_gateway():
-        record_direct_exception_surface(surface='gemini_screen_activity_query_embedding', reason='out_of_scope')
-    api_key = get_byok_key('gemini') or os.environ.get('GEMINI_API_KEY', '')
+    # Upstream's, verbatim. Our `record_direct_exception_surface(..., reason='out_of_scope')` used to
+    # sit here because this surface had NO gateway lane and went direct; upstream has now built one
+    # (`invoke_gemini_embedding_gateway`), so the exception it recorded no longer exists. What stays
+    # direct is BYOK and FEATURE_MODE=off, both of which are deliberate rather than a gap.
+    byok_key = get_byok_key('gemini')
+    if _embeddings_gateway_mode() and not byok_key:
+        return invoke_gemini_embedding_gateway(text, task_type='RETRIEVAL_QUERY')
+    api_key = byok_key or os.environ.get('GEMINI_API_KEY', '')
     url = 'https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent'
     payload = {
         'model': 'models/embedding-001',

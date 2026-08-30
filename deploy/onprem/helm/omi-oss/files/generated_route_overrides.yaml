@@ -83,6 +83,15 @@ generated_route_overrides:
     primary: {provider: openai, model: qwen3-vl:8b-instruct}
   - feature: external_structure
     primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  # Chat with an attached file, split by kind. `file_chat_vision` sends the IMAGE itself — same
+  # multimodal shape as screen_frame_judge — so the single served model must be vision-capable;
+  # `file_chat_documents` sends extracted text. Both arrived with upstream's +192 and default to
+  # gpt-5.6-luna/openai in the QoS table, which is a live vendor lane through our own gateway: a
+  # user's attachment would leave the box. Pinned like every other feature.
+  - feature: file_chat_documents
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: file_chat_vision
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
   - feature: fair_use
     primary: {provider: openai, model: qwen3-vl:8b-instruct}
   - feature: followup

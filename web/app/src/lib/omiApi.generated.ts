@@ -1465,6 +1465,30 @@ export interface CreateTaskResponse {
   success: boolean;
 }
 
+export interface CsatConfigResponse {
+  body: string;
+  comment_max_score: number;
+  enabled: boolean;
+  question_threshold: number;
+  refer_cta_text: string;
+  revision: number;
+  thank_you_text: string;
+  title: string;
+}
+
+export interface CsatRatingReceipt {
+  created: boolean;
+  id: string;
+}
+
+export interface CsatRatingRequest {
+  app_version?: string;
+  comment?: string | null;
+  platform: string;
+  revision?: number;
+  score: number;
+}
+
 export interface CustomerPortalSessionResponse {
   url: string;
 }
@@ -4825,6 +4849,9 @@ export interface OmiApiSchemas {
   "CreatePerson": CreatePerson;
   "CreateTaskRequest": CreateTaskRequest;
   "CreateTaskResponse": CreateTaskResponse;
+  "CsatConfigResponse": CsatConfigResponse;
+  "CsatRatingReceipt": CsatRatingReceipt;
+  "CsatRatingRequest": CsatRatingRequest;
   "CustomerPortalSessionResponse": CustomerPortalSessionResponse;
   "DailySummariesResponse": DailySummariesResponse;
   "DailySummaryActionItem": DailySummaryActionItem;
@@ -6641,6 +6668,26 @@ export interface OmiApiPaths {
         "200": ConversationStatusResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/csat/config": {
+    get: {
+      operationId: "get_csat_config_v1_csat_config_get";
+      responses: {
+        "200": CsatConfigResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/csat/ratings": {
+    post: {
+      operationId: "submit_csat_rating_v1_csat_ratings_post";
+      responses: {
+        "201": CsatRatingReceipt;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -12335,6 +12382,49 @@ export async function set_conversation_visibility_v1_conversations__conversation
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_csat_config_v1_csat_config_get(query: { platform?: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CsatConfigResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/csat/config`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function submit_csat_rating_v1_csat_ratings_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CsatRatingRequest, init?: OmiApiClientInit): Promise<CsatRatingReceipt> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/csat/ratings`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -18157,4 +18247,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 431 client methods generated.
+// Total: 433 client methods generated.

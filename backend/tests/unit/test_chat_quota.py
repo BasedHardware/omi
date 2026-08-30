@@ -47,6 +47,7 @@ _announcements_mod.compare_versions = _compare_versions
 _byok_mod = ModuleType("utils.byok")
 _byok_mod.get_byok_key = MagicMock(return_value=None)
 _byok_mod.get_byok_keys = MagicMock(return_value={})
+_byok_mod.get_byok_uid = MagicMock(return_value=None)
 _byok_mod.get_byok_llm_provider = MagicMock(return_value=None)
 _byok_mod.get_byok_uid = MagicMock(return_value=None)
 _byok_mod.get_cached_byok_state = MagicMock(return_value={})

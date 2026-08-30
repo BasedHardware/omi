@@ -375,8 +375,8 @@ enum SpineComposer {
   /// Recomposing on every keystroke would make the query bar feel like the list is thinking; this
   /// way the store composes when the *data* changes and filters when the *question* does.
   ///
-  /// It also keeps the day header honest: `filter(_:kind:query:)` never touches the counts, so a
-  /// filtered spine still says how big the day really was.
+  /// It also keeps the day header honest: `filter(_:kind:query:)` recomputes the counts from the
+  /// rows it leaves on screen, so a filtered spine does not claim that hidden records are visible.
   ///
   /// - Parameters:
   ///   - conversations: the loaded page(s) of the real conversation list, any order.
@@ -502,12 +502,28 @@ enum SpineComposer {
         }
       }
 
+      // The day header describes the rows currently on screen. Carrying the composed day's totals
+      // through a query made an empty-looking kind filter still say "1 conversation · 1 memory";
+      // recompute each unit count after narrowing while keeping the timeline's row ordering intact.
+      let momentCount = rows.reduce(0) { total, row in
+        guard case .moments(_, let count) = row.content else { return total }
+        return total + count
+      }
+      let conversationCount = rows.reduce(0) { total, row in
+        guard case .conversation = row.content else { return total }
+        return total + 1
+      }
+      let taskCount = rows.reduce(0) { total, row in
+        guard case .tasks(let tasks) = row.content else { return total }
+        return total + tasks.count
+      }
+
       return SpineDay(
         id: day.id,
         title: day.title,
-        momentCount: day.momentCount,
-        conversationCount: day.conversationCount,
-        taskCount: day.taskCount,
+        momentCount: momentCount,
+        conversationCount: conversationCount,
+        taskCount: taskCount,
         rows: rows
       )
     }

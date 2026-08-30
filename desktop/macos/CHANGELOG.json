@@ -2,6 +2,122 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.246",
+      "date": "2026-08-30",
+      "changes": [
+        "Asking Omi by voice what's on your list now returns tasks you added without a date, and Omi no longer assumes you only speak your Mac's menu-bar language"
+      ]
+    },
+    {
+      "version": "0.12.245",
+      "date": "2026-08-30",
+      "changes": [
+        "Voice turns that get cut off are no longer recorded as finished answers, so Omi stops re-asking what you already said, and a task that fails to save is no longer spoken as saved"
+      ]
+    },
+    {
+      "version": "0.12.244",
+      "date": "2026-08-30",
+      "changes": [
+        "Stopped proactive chat rows from repeating the category (Focus, Insight, Memory) above the same word in the body"
+      ]
+    },
+    {
+      "version": "0.12.243",
+      "date": "2026-08-30",
+      "changes": [
+        "Startup timing is measured and reported again, from real process start, and no longer calls every clean launch a crash"
+      ]
+    },
+    {
+      "version": "0.12.242",
+      "date": "2026-08-29",
+      "changes": [
+        "Fixed chat responses sometimes stopping before the complete answer appeared",
+        "Unified conversation, task, app, and settings navigation around one familiar UI, with working transcript playback and durable attach-to-chat conversation references",
+        "Chat can now save playbooks, standing watches, and durable facts to your knowledge ledger",
+        "Fixed onboarding permission guidance so working access is never requested twice, Omi returns to the foreground after a successful drag, and the draggable app icon and arrow are easier to spot"
+      ]
+    },
+    {
+      "version": "0.12.241",
+      "date": "2026-08-29",
+      "changes": [
+        "Fixed just-in-time proactive triggers never syncing on launch because the trigger snapshot download waited for a screen-capture context visit; signed-in startups now reconcile the snapshot directly"
+      ]
+    },
+    {
+      "version": "0.12.240",
+      "date": "2026-08-29",
+      "changes": [
+        "Fixed just-in-time proactive triggers never activating for admitted accounts because the app ignored the server's rollout verdict and blocked its snapshot download on an unrelated sync step"
+      ]
+    },
+    {
+      "version": "0.12.239",
+      "date": "2026-08-29",
+      "changes": [
+        "Improved difficult spoken questions with immediate acknowledgements in Omi's realtime voice and more reliable playback of long answers",
+        "Fixed push-to-talk answers failing to read recent conversations when their summaries were detailed",
+        "Fixed push-to-talk answers failing to search the web for weather and other current information"
+      ]
+    },
+    {
+      "version": "0.12.238",
+      "date": "2026-08-29",
+      "changes": [
+        "After a low in-app rating, you can leave an optional comment",
+        "Simplified Screen Recording permission guidance so it stays accurate for any number of apps"
+      ]
+    },
+    {
+      "version": "0.12.237",
+      "date": "2026-08-28",
+      "changes": [
+        "Renamed the Brain tab to Memories across the top navigation and back controls"
+      ]
+    },
+    {
+      "version": "0.12.236",
+      "date": "2026-08-28",
+      "changes": [
+        "Moved Rewind into Brain and unified compact search, navigation, filtering, and contextual actions across Chat, Brain, Tasks, and Apps",
+        "Voice stays instant while you're at your Mac, and stops burning provider quota while you're away: the always-warm voice session now pauses after 10 minutes without keyboard or mouse input and re-warms the moment you're back — this idle re-warm loop is what exhausted the shared Gemini quota and switched everyone's voice to the OpenAI fallback.",
+        "The Tasks page no longer shows a settings gear that pointed at a hidden pane",
+        "Tagging a speaker with a name now works everywhere: conversations opened from Memories or the Dashboard were missing the tap-to-name control, and recent recordings that hadn't finished syncing failed with \"Couldn't assign this speaker\"",
+        "Speaker names tagged on a recording that hasn't finished syncing now reliably survive restarting the app"
+      ]
+    },
+    {
+      "version": "0.12.235",
+      "date": "2026-08-28",
+      "changes": [
+        "Fixed the main window occasionally ignoring clicks after reopening",
+        "Fixed the post-rating referral button so its label remains readable"
+      ]
+    },
+    {
+      "version": "0.12.234",
+      "date": "2026-08-28",
+      "changes": [
+        "Chat's execute_sql tool now renders timestamp/*At columns in your local time zone instead of unlabeled UTC"
+      ]
+    },
+    {
+      "version": "0.12.233",
+      "date": "2026-08-28",
+      "changes": [
+        "Settings is lighter: the Task, Insight, and Memory Assistant panes and three floating-bar rows are hidden"
+      ]
+    },
+    {
+      "version": "0.12.232",
+      "date": "2026-08-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.231",
       "date": "2026-08-28",
       "changes": [

@@ -272,7 +272,12 @@ struct ChatBubble: View {
         }
       }
       if !message.displayResources.isEmpty {
-        ChatResourceStrip(resources: message.displayResources, density: .full, alignment: .leading)
+        ChatResourceStrip(
+          resources: message.displayResources,
+          density: .full,
+          alignment: .leading,
+          onOpen: openResource
+        )
       }
     } else if isDuplicate && !isExpanded {
       Button(action: { isExpanded = true }) {
@@ -299,7 +304,8 @@ struct ChatBubble: View {
           : ChatResourceStrip(
             resources: message.displayResources,
             density: .full,
-            alignment: message.sender == .user ? .trailing : .leading
+            alignment: message.sender == .user ? .trailing : .leading,
+            onOpen: openResource
           )
 
         if message.sender == .user, let resourceStrip {
@@ -350,6 +356,21 @@ struct ChatBubble: View {
     }
     // **A user turn gets no metadata band.** Its timestamp-only row cost every
     // question a reserved band for a fact the reply underneath already stamps.
+  }
+
+  private func openResource(_ resource: ChatResource) {
+    guard let reference = resource.conversationReference else {
+      ChatResourceActions.open(resource)
+      return
+    }
+    if let chatFirstRichBlockContext {
+      let moment = reference.momentTimestampMs.map { TimeInterval($0) / 1_000 }
+      chatFirstRichBlockContext.navigation.open(
+        focus: .capture(id: reference.sourceID, momentTs: moment)
+      )
+      return
+    }
+    onOpenInlineCitation?(reference.navigationReference)
   }
 
   private var presentation: ChatRowPresentation { ChatRowPresentation.of(message) }

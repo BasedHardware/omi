@@ -1891,6 +1891,8 @@ struct CanonicalMemoryAtlasTabView: View {
   let evidenceProvider: ([String]) async -> [MemoryAtlasEvidence]
   /// Opens a cited memory on the hub's Memories destination.
   let onOpenMemory: (String) -> Void
+  @Binding var searchText: String
+  var showsSearchField = true
   /// Where Escape goes once the map has nothing of its own left to undo.
   var onLeave: (() -> Void)?
 
@@ -1904,6 +1906,8 @@ struct CanonicalMemoryAtlasTabView: View {
         onOpenMemory: onOpenMemory,
         onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
         isRebuilding: viewModel.isRebuilding,
+        externalSearchText: $searchText,
+        showsSearchField: showsSearchField,
         onLeave: onLeave
       )
     }
@@ -1941,6 +1945,8 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// view model to drive it (the inline preview, offscreen export renders).
   let onRebuild: (() -> Void)?
   let isRebuilding: Bool
+  var externalSearchText: Binding<String>? = nil
+  var showsSearchField = true
   /// Where Escape goes once the map itself has nothing left to undo. Absent on
   /// surfaces with nowhere to go, which is how those keep passing the key on.
   let onLeave: (() -> Void)?
@@ -1954,7 +1960,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   private let previewTimeCursor: Double?
   private let previewEvidence: [MemoryAtlasEvidence]
 
-  @State private var searchText = ""
+  @State private var localSearchText = ""
   @State private var selectedNodeID: String?
   /// Set when the user clicked a painted connection rather than an entity.
   /// `selectedNodeID` still holds one endpoint so the map keeps its existing
@@ -2009,6 +2015,8 @@ private struct CanonicalMemoryAtlasSurface: View {
     onOpenMemory: ((String) -> Void)? = nil,
     onRebuild: (() -> Void)? = nil,
     isRebuilding: Bool = false,
+    externalSearchText: Binding<String>? = nil,
+    showsSearchField: Bool = true,
     onLeave: (() -> Void)? = nil,
     previewTimeCursor: Double? = nil,
     /// Deterministic offscreen renders open the inspector, which is otherwise
@@ -2029,6 +2037,8 @@ private struct CanonicalMemoryAtlasSurface: View {
     self.onOpenMemory = onOpenMemory
     self.onRebuild = onRebuild
     self.isRebuilding = isRebuilding
+    self.externalSearchText = externalSearchText
+    self.showsSearchField = showsSearchField
     self.onLeave = onLeave
     self.previewTimeCursor = previewTimeCursor
     self.previewEvidence = previewEvidence
@@ -2159,6 +2169,14 @@ private struct CanonicalMemoryAtlasSurface: View {
     recentConnectionCount > 99 ? "99+ new connections" : "\(recentConnectionCount) new connections"
   }
 
+  private var searchBinding: Binding<String> {
+    externalSearchText ?? $localSearchText
+  }
+
+  private var searchText: String {
+    searchBinding.wrappedValue
+  }
+
   var body: some View {
     // The inspector is a sibling of the whole map, not an overlay on it: the
     // canvas keeps its full height and the map simply narrows, so opening an
@@ -2172,6 +2190,9 @@ private struct CanonicalMemoryAtlasSurface: View {
       }
     }
     .animation(OmiMotion.gated(.easeOut(duration: 0.18)), value: selectedNodeID)
+    .onChange(of: searchText) { _, query in
+      updateSearchMatches(query)
+    }
     .task(id: evidenceSelectionKey) { await loadEvidence() }
     .onEscapeKey(priority: .content) {
       guard !compact else { return false }
@@ -2267,6 +2288,11 @@ private struct CanonicalMemoryAtlasSurface: View {
             // could cover would be the one label on the map with nothing
             // underneath it to explain itself.
             neighbourhoodCaptions(regions: regions)
+          }
+
+          if hasNoSearchMatches {
+            searchEmptyState
+              .allowsHitTesting(false)
           }
 
           zoomControls
@@ -2439,39 +2465,38 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private var atlasToolbar: some View {
     HStack(spacing: 12) {
-      HStack(spacing: 8) {
-        Image(systemName: "magnifyingglass")
-          .scaledFont(size: 12)
-          .foregroundColor(Ink.secondary)
+      if showsSearchField {
+        HStack(spacing: 8) {
+          Image(systemName: "magnifyingglass")
+            .scaledFont(size: 12)
+            .foregroundColor(Ink.secondary)
 
-        TextField("Search your entities", text: $searchText)
-          .textFieldStyle(.plain)
-          .focused($searchIsFocused)
-          .scaledFont(size: 12)
-          .foregroundColor(Ink.primary)
-          .onSubmit { selectFirstSearchResult() }
-          .onChange(of: searchText) { _, newValue in
-            updateSearchMatches(newValue)
-          }
-          .accessibilityLabel("Search entities")
-          .accessibilityIdentifier("memory_atlas_search")
+          TextField("Search your entities", text: searchBinding)
+            .textFieldStyle(.plain)
+            .focused($searchIsFocused)
+            .scaledFont(size: 12)
+            .foregroundColor(Ink.primary)
+            .onSubmit { selectFirstSearchResult() }
+            .accessibilityLabel("Search entities")
+            .accessibilityIdentifier("memory_atlas_search")
 
-        if !searchText.isEmpty {
-          Button {
-            searchText = ""
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .scaledFont(size: 11)
-              .foregroundColor(Ink.secondary)
+          if !searchText.isEmpty {
+            Button {
+              searchBinding.wrappedValue = ""
+            } label: {
+              Image(systemName: "xmark.circle.fill")
+                .scaledFont(size: 11)
+                .foregroundColor(Ink.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Clear search (Esc)")
+            .accessibilityLabel("Clear search")
           }
-          .buttonStyle(.plain)
-          .help("Clear search (Esc)")
-          .accessibilityLabel("Clear search")
         }
+        .padding(.horizontal, 12)
+        .frame(width: compact ? 250 : 320, height: 30)
+        .glassChip()
       }
-      .padding(.horizontal, 12)
-      .frame(width: compact ? 250 : 320, height: 30)
-      .glassChip()
 
       Spacer()
 
@@ -2493,24 +2518,58 @@ private struct CanonicalMemoryAtlasSurface: View {
       // The legacy Brain Map carried a rebuild control; without it a thin or
       // stale server graph has no recovery path from inside the atlas.
       if let onRebuild {
-        Button(action: onRebuild) {
-          Image(systemName: "arrow.clockwise")
-            .scaledFont(size: 11, weight: .medium)
-            .foregroundColor(Ink.secondary.opacity(isRebuilding ? 0.35 : 1))
-            .frame(width: 26, height: 26)
-            .glassChip()
+        Menu {
+          Button(action: onRebuild) {
+            Label(
+              isRebuilding ? "Rebuilding Brain Map…" : "Rebuild Brain Map…",
+              systemImage: "arrow.clockwise")
+          }
+          .disabled(isRebuilding)
+        } label: {
+          PageQueryActionLabel(icon: "ellipsis", title: "More")
         }
-        .buttonStyle(.plain)
-        .disabled(isRebuilding)
-        .help(isRebuilding ? "Rebuilding your Brain Map…" : "Rebuild the Brain Map from your memories")
-        .accessibilityLabel("Rebuild Brain Map")
-        .accessibilityIdentifier("memory_atlas_rebuild")
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("More Brain Map actions")
+        .accessibilityLabel("More Brain Map actions")
+        .accessibilityIdentifier("memory_atlas_more_actions")
       }
     }
     .padding(.horizontal, compact ? 12 : 18)
     .frame(height: compact ? 40 : 44)
     .background(Color.clear)
     .accessibilityHint("Press Command-F to search. Press Return to select the first visible result.")
+  }
+
+  private var hasNoSearchMatches: Bool {
+    !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && matchingNodeIDs?.isEmpty == true
+      && !snapshot.nodes.isEmpty
+  }
+
+  private var searchEmptyState: some View {
+    VStack(spacing: OmiSpacing.sm) {
+      Image(systemName: "magnifyingglass")
+        .scaledFont(size: OmiType.heading)
+        .foregroundStyle(Ink.surface)
+      Text(
+        "No entities match \u{201c}\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))\u{201d}"
+      )
+      .scaledFont(size: OmiType.body, weight: .semibold)
+      .foregroundStyle(Ink.surface)
+      .multilineTextAlignment(.center)
+      Text("Try a different search or clear the search above.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(Ink.surface.opacity(0.78))
+        .multilineTextAlignment(.center)
+    }
+    .padding(.horizontal, OmiSpacing.lg)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(
+      "No entities match \(searchText.trimmingCharacters(in: .whitespacesAndNewlines))"
+    )
+    .accessibilityHint("Try a different search or clear the search above.")
   }
 
   /// Which colour means which kind of entity.
@@ -2523,6 +2582,10 @@ private struct CanonicalMemoryAtlasSurface: View {
   /// without claiming a location for it.
   private var typeKey: some View {
     HStack(spacing: 11) {
+      Text("Legend")
+        .scaledFont(size: 10, weight: .semibold)
+        .foregroundColor(Ink.primary)
+
       ForEach(snapshot.activeClusters) { cluster in
         HStack(spacing: 5) {
           Circle().fill(cluster.color).frame(width: 5, height: 5)
@@ -2532,6 +2595,14 @@ private struct CanonicalMemoryAtlasSurface: View {
         }
       }
     }
+    // The key identifies the map's colors; it is intentionally not a filter. Naming that contract
+    // keeps the dots from presenting a false affordance to pointer-free users.
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Brain Map legend")
+    .accessibilityValue(
+      snapshot.activeClusters.map { "\($0.title), color coded" }.joined(separator: "; ")
+    )
+    .accessibilityHint("Legend only; these items are not interactive filters.")
     .accessibilityIdentifier("memory_atlas_type_key")
   }
 
@@ -3930,7 +4001,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     {
     case .search:
       searchIsFocused = false
-      searchText = ""
+      searchBinding.wrappedValue = ""
       matchingNodeIDs = nil
       matchingEdges = nil
     case .selectionStep:
