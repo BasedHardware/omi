@@ -33,11 +33,17 @@ extension FloatingControlBarManager {
   }
 
   /// Finalizes the existing pair after any late input-transcript correction.
+  ///
+  /// The user row always completes — the utterance happened regardless of how the
+  /// turn ended. Only the assistant row carries the outcome, because only the reply
+  /// can be cut off.
   func completeStreamingRealtimeExchange(
     projection: RealtimeStreamingJournalProjection,
     userText: String,
     assistantText: String,
-    assistantContentBlocks: [ChatContentBlock] = []
+    assistantContentBlocks: [ChatContentBlock] = [],
+    assistantStatus: KernelJournalTurnStatus = .completed,
+    terminalReason: String? = nil
   ) async -> Bool {
     guard RuntimeOwnerIdentity.currentOwnerId() == projection.ownerID,
       let provider = sharedFloatingProvider
@@ -55,7 +61,7 @@ extension FloatingControlBarManager {
         surface: surface,
         message: projection.assistantMessage(
           text: assistantText, isStreaming: false, contentBlocks: assistantContentBlocks),
-        status: .completed, ownerID: projection.ownerID) != nil
+        status: assistantStatus, terminalReason: terminalReason, ownerID: projection.ownerID) != nil
       {
         return true
       }

@@ -2,6 +2,20 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.246",
+      "date": "2026-08-30",
+      "changes": [
+        "Asking Omi by voice what's on your list now returns tasks you added without a date, and Omi no longer assumes you only speak your Mac's menu-bar language"
+      ]
+    },
+    {
+      "version": "0.12.245",
+      "date": "2026-08-30",
+      "changes": [
+        "Voice turns that get cut off are no longer recorded as finished answers, so Omi stops re-asking what you already said, and a task that fails to save is no longer spoken as saved"
+      ]
+    },
+    {
       "version": "0.12.244",
       "date": "2026-08-30",
       "changes": [

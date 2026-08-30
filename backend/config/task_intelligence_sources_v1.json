@@ -104,6 +104,16 @@
       ]
     },
     {
+      "id": "mobile_conversation_extraction",
+      "policy_class": "direct_command",
+      "owner_paths": ["backend/utils/conversations/process_conversation.py"],
+      "test_adapter": "direct_command_contract",
+      "writer_anchors": [
+        {"path": "backend/utils/conversations/process_conversation.py", "symbol": "action_items_db.create_action_items_batch", "discover": true},
+        {"path": "backend/utils/conversations/process_conversation.py", "symbol": "action_items_db.delete_action_items_for_conversation", "discover": true}
+      ]
+    },
+    {
       "id": "desktop_screen_extraction",
       "policy_class": "shared_capture_policy",
       "owner_paths": ["desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift"],

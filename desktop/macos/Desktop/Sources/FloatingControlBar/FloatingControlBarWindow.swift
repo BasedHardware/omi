@@ -4443,7 +4443,9 @@ class FloatingControlBarManager {
     assistantText: String,
     origin: String = "realtime_voice",
     continuityKey: String,
-    assistantContentBlocks: [ChatContentBlock] = []
+    assistantContentBlocks: [ChatContentBlock] = [],
+    assistantStatus: KernelJournalTurnStatus = .completed,
+    terminalReason: String? = nil
   ) async -> Bool {
     await historyChatProvider?.kernelTurnProjection.recordExchange(
       surface: surface,
@@ -4452,6 +4454,8 @@ class FloatingControlBarManager {
       origin: origin,
       continuityKey: continuityKey,
       assistantContentBlocks: assistantContentBlocks,
+      assistantStatus: assistantStatus,
+      terminalReason: terminalReason,
       ownerID: ownerID
     ) ?? false
   }

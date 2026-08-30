@@ -1481,13 +1481,26 @@ class AnalyticsManager {
     PostHogManager.shared.track("floating_bar_ptt_started", properties: props)
   }
 
-  /// Track when push-to-talk ends and sends (or discards) transcript
-  func floatingBarPTTEnded(mode: String, hadTranscript: Bool, transcriptLength: Int) {
-    let props: [String: Any] = [
+  /// Track when push-to-talk ends and sends (or discards) transcript.
+  ///
+  /// `had_transcript` does NOT mean "text exists". On the realtime-hub path the
+  /// client commits raw audio and never sees a transcript, so the property means
+  /// **the turn was committed for an answer**. Only the STT cascade can report a
+  /// real length; the hub passes `nil` rather than a literal, because a property
+  /// that is a fake `0` on most events silently poisons every aggregate built on
+  /// it. Read admitted-vs-rejected audio distributions from
+  /// `ptt_audio_capture_lifecycle`, which carries the real measurements.
+  ///
+  /// The wire property names are deliberately unchanged: existing dashboards and
+  /// the PTT quality baseline join on them.
+  func floatingBarPTTEnded(mode: String, committed: Bool, transcriptLength: Int?) {
+    var props: [String: Any] = [
       "mode": mode,
-      "had_transcript": hadTranscript,
-      "transcript_length": transcriptLength,
+      "had_transcript": committed,
     ]
+    if let transcriptLength {
+      props["transcript_length"] = transcriptLength
+    }
     PostHogManager.shared.track("floating_bar_ptt_ended", properties: props)
   }
 

@@ -1131,13 +1131,12 @@ def test_action_items_skipped_on_discard():
 
 
 def test_conversation_action_items_never_fall_back_to_a_task_writer(monkeypatch):
-    """I1: conversation extraction proposes Candidates and writes nothing else.
+    """A proposing surface stays proposing when its capture path is unavailable.
 
-    The old contract (legacy batch writer on postprocess_executor) died with the
-    writer. The contract that replaces it: even when the canonical capture path
-    reports itself unavailable (``process_conversation_before_legacy`` -> False,
-    e.g. rollout control unreadable), `_save_action_items` must NOT fall back to
-    writing action items — the previous bugs were all in exactly this fallback.
+    Desktop conversations propose Candidates. Even when the canonical capture
+    path reports itself unavailable (``process_conversation_before_legacy`` ->
+    False, e.g. rollout control unreadable), `_save_action_items` must NOT fall
+    back to writing action items — the previous bugs were all in that fallback.
     """
     action_item = MagicMock()
     action_item.description = 'Send the forecast'
@@ -1150,6 +1149,7 @@ def test_conversation_action_items_never_fall_back_to_a_task_writer(monkeypatch)
     conversation = MagicMock()
     conversation.id = 'conversation-1'
     conversation.is_locked = False
+    conversation.source = ConversationSource.desktop
     conversation.transcript_segments = []
     conversation.structured.action_items = [action_item]
 
