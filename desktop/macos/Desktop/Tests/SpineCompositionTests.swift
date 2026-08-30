@@ -577,6 +577,218 @@ final class SpineCompositionTests: XCTestCase {
       "every step goes back in time, exactly as the list under it does")
   }
 
+  // MARK: - The ribbon is continuous
+
+  /// The column height every geometry test measures against. One day is one column, so this stands
+  /// in for the real rail's height without any test depending on the window being a given size.
+  private static let ribbonViewport: CGFloat = 600
+
+  /// **The defect this ribbon replaced:** the rail drew one day at a time, so crossing midnight
+  /// swapped the whole column at once. Depth is monotonic across the day boundary now — one more
+  /// minute into the past is one step further down the strip, whether or not that minute is in a
+  /// different day.
+  func testDepthNeverJumpsBackwardsAcrossADayBoundary() {
+    var previous = -CGFloat.greatestFiniteMagnitude
+    for dayIndex in 0..<3 {
+      for hour in SpineHourRail.renderedHours {
+        for minute in [59, 30, 0] {
+          let depth = SpineRibbonGeometry.depth(
+            dayIndex: dayIndex, hour: hour, minute: minute, viewport: Self.ribbonViewport)
+          XCTAssertGreaterThan(
+            depth, previous,
+            "day \(dayIndex) \(hour):\(minute) went back up the strip")
+          previous = depth
+        }
+      }
+    }
+  }
+
+  /// The last minute of a day and the first of the next are adjacent in time, so they are adjacent
+  /// on the strip: one day break apart and nothing else. This is what makes the midnight crossing
+  /// glide rather than cut.
+  func testMidnightIsOneBreakWideAndNotACut() {
+    let viewport = Self.ribbonViewport
+    let lastOfDay = SpineRibbonGeometry.depth(
+      dayIndex: 0, hour: 0, minute: 0, viewport: viewport)
+    let firstOfNext = SpineRibbonGeometry.depth(
+      dayIndex: 1, hour: 23, minute: 59, viewport: viewport)
+    XCTAssertEqual(
+      firstOfNext - lastOfDay,
+      SpineRibbonGeometry.dayBreakHeight + SpineRibbonGeometry.hourHeight(viewport: viewport) / 60,
+      accuracy: 0.001)
+  }
+
+  /// **One day is one column**, the way the per-day rail always sized itself. The strip is longer
+  /// than the rail was; it is not drawn tighter, so nothing about how a single day reads changed.
+  func testOneDayFillsTheColumnAtAnySize() {
+    for viewport in [CGFloat(320), 600, 1400] {
+      XCTAssertEqual(SpineRibbonGeometry.dayHeight(viewport: viewport), viewport, accuracy: 0.001)
+      XCTAssertEqual(
+        SpineRibbonGeometry.hourHeight(viewport: viewport) * 24
+          + SpineRibbonGeometry.dayBreakHeight,
+        viewport, accuracy: 0.001)
+    }
+    XCTAssertGreaterThan(
+      SpineRibbonGeometry.hourHeight(viewport: 0), 0,
+      "a column with no height yet must not collapse an hour to nothing")
+  }
+
+  /// **A day with no reported row still parks the strip on that day.**
+  ///
+  /// The rail describes a fallback day whenever the reported one has been folded shut, and the hour
+  /// marker is deliberately dropped in that case — it belongs to a row nobody can see. The first
+  /// version carried that one `nil` into the strip's position too, so the headline named the
+  /// fallback day while the strip scrolled to the newest one. Position and highlight are separate
+  /// inputs now; this pins that they stay separate.
+  func testAnUnreportedDayStillParksTheStripOnThatDay() {
+    let height = Self.ribbonViewport
+    let parked = SpineRibbonGeometry.depth(
+      dayIndex: 4, hour: 23, minute: 59, viewport: height)
+    XCTAssertTrue(
+      SpineRibbonGeometry.visibleDays(depth: parked, height: height, count: 9).contains(4),
+      "the strip has to be showing the day the headline is describing")
+    XCTAssertNotEqual(
+      parked,
+      SpineRibbonGeometry.depth(dayIndex: 0, hour: 23, minute: 59, viewport: height),
+      "parking an unreported day must not collapse to the newest day")
+  }
+
+  /// **The strip labels exactly what the per-day rail labelled, and suppresses nothing.**
+  ///
+  /// Four fixed hours orient every day, and the hour being read names itself when it is not one of
+  /// them. An earlier version of the strip also *dropped* a fixed label within an hour of the marker,
+  /// to stop two captions colliding — a real collision, but only at the six-point hour spacing that
+  /// version drew at. At one day per column an hour is more than twenty points, so the rule deleted
+  /// labels to prevent an overlap that cannot happen, and made the strip read differently from the
+  /// rail it replaced.
+  func testTheStripLabelsTheSameHoursTheRailAlwaysDid() {
+    for hour in [0, 6, 12, 18] {
+      XCTAssertEqual(
+        SpineRibbon.caption(for: hour, isLit: false), SpineFormat.hourLabel(hour),
+        "a fixed label is drawn on every day, read or not")
+      XCTAssertEqual(SpineRibbon.caption(for: hour, isLit: true), SpineFormat.hourLabel(hour))
+    }
+    XCTAssertNil(
+      SpineRibbon.caption(for: 19, isLit: false),
+      "an unread hour that is not one of the four stays unnamed")
+    XCTAssertEqual(
+      SpineRibbon.caption(for: 19, isLit: true), "7 PM",
+      "the hour being read names itself even when it is not one of the four")
+    XCTAssertEqual(
+      SpineRibbon.caption(for: 17, isLit: false), SpineRibbon.caption(for: 17, isLit: false),
+      "and a label near the one being read is never taken away")
+    XCTAssertEqual(
+      SpineRibbon.caption(for: 18, isLit: false), "6 PM",
+      "including the fixed label directly beside it")
+  }
+
+  /// The heavy bar is derived from where the strip actually sits, so it can never be a bar other
+  /// than the one under the marker. `marker` is the inverse of `depth`.
+  func testTheLitHourIsTheOneTheStripIsSittingOn() {
+    let viewport = Self.ribbonViewport
+    for dayIndex in [0, 3] {
+      for hour in [0, 7, 12, 23] {
+        let at = SpineRibbonGeometry.marker(
+          atDepth: SpineRibbonGeometry.depth(
+            dayIndex: dayIndex, hour: hour, minute: 30, viewport: viewport),
+          viewport: viewport)
+        XCTAssertEqual(at.dayIndex, dayIndex)
+        XCTAssertEqual(at.hour, hour)
+      }
+    }
+  }
+
+  // MARK: - The reading position is continuous
+
+  private func anchor(hour: Int, minute: Int = 0, top: CGFloat, bottom: CGFloat) -> SpineRowAnchor {
+    SpineRowAnchor(dayID: Date(timeIntervalSince1970: 0), hour: hour, minute: minute, top: top, bottom: bottom)
+  }
+
+  /// **The whole point of reporting two rows.** As the row at the reading line travels past it, the
+  /// fraction runs 0 → 1; the strip blends towards the next row over that span and therefore moves
+  /// every frame the list does, instead of holding still for a whole row and then jumping.
+  func testTheFractionRunsTheLengthOfTheRow() {
+    let line = SpineLayout.readingLine
+    let justArrived = SpineReadingPosition(
+      row: anchor(hour: 12, top: line, bottom: line + 100), next: nil)
+    XCTAssertEqual(justArrived.fraction, 0, accuracy: 0.001)
+
+    let halfway = SpineReadingPosition(
+      row: anchor(hour: 12, top: line - 50, bottom: line + 50), next: nil)
+    XCTAssertEqual(halfway.fraction, 0.5, accuracy: 0.001)
+
+    let leaving = SpineReadingPosition(
+      row: anchor(hour: 12, top: line - 100, bottom: line), next: nil)
+    XCTAssertEqual(leaving.fraction, 1, accuracy: 0.001)
+  }
+
+  /// A row taller than the whole scroll, and a zero-height one, both have to produce a fraction the
+  /// blend can use rather than a NaN or a value outside 0…1 that would throw the strip off its ends.
+  func testTheFractionStaysInsideItsRange() {
+    let line = SpineLayout.readingLine
+    XCTAssertEqual(
+      SpineReadingPosition(row: anchor(hour: 12, top: line, bottom: line), next: nil).fraction, 0,
+      accuracy: 0.001, "a row with no height cannot be part-way past anything")
+    XCTAssertEqual(
+      SpineReadingPosition(row: anchor(hour: 12, top: line + 10, bottom: line + 20), next: nil)
+        .fraction, 0, accuracy: 0.001, "a row not yet at the line is at the start of its travel")
+    XCTAssertEqual(
+      SpineReadingPosition(row: anchor(hour: 12, top: line - 900, bottom: line - 1), next: nil)
+        .fraction, 1, accuracy: 0.001, "and one already past it is at the end")
+  }
+
+  /// The two rows kept are the two nearest the reading line, whatever order the list reported them
+  /// in — a `PreferenceKey` reduce sees them in no guaranteed order.
+  func testTheTwoRowsNearestTheReadingLineWin() {
+    let line = SpineLayout.readingLine
+    let first = SpineReadingPosition(row: anchor(hour: 12, top: line - 10, bottom: line + 10), next: nil)
+    let second = SpineReadingPosition(row: anchor(hour: 11, top: line + 10, bottom: line + 60), next: nil)
+    let far = SpineReadingPosition(row: anchor(hour: 9, top: line + 300, bottom: line + 400), next: nil)
+
+    for order in [[first, second, far], [far, second, first], [second, far, first]] {
+      let merged = order.reduce(nil) { SpineReadingPosition.merge($0, $1) }
+      XCTAssertEqual(merged?.row.hour, 12, "the row at the line is the position")
+      XCTAssertEqual(merged?.next?.hour, 11, "and the one after it is what to blend towards")
+    }
+    XCTAssertNil(SpineReadingPosition.merge(nil, nil))
+  }
+
+  /// At the end of the loaded stream there is no row to blend towards, and the position simply rests
+  /// on the last one rather than blending towards nothing.
+  func testTheLastRowHasNothingToBlendTowards() {
+    let line = SpineLayout.readingLine
+    let last = SpineReadingPosition(row: anchor(hour: 3, top: line - 20, bottom: line + 20), next: nil)
+    XCTAssertNil(last.next)
+    XCTAssertEqual(SpineReadingPosition.merge(nil, last)?.row.hour, 3)
+  }
+
+  /// Only the days on screen are drawn — the strip is the whole account, and drawing all of it on
+  /// every scroll tick is the cost a `Canvas` was chosen to avoid.
+  func testOnlyTheDaysInTheViewportAreDrawn() {
+    let height = Self.ribbonViewport
+    let window = SpineRibbonGeometry.visibleDays(
+      depth: SpineRibbonGeometry.depth(
+        dayIndex: 40, hour: 12, minute: 0, viewport: height),
+      height: height, count: 300)
+    XCTAssertTrue(window.contains(40))
+    XCTAssertLessThanOrEqual(
+      window.count,
+      Int((height / SpineRibbonGeometry.dayHeight(viewport: height)).rounded(.up)) + 1)
+  }
+
+  /// The strip runs out at both ends rather than the index going out of bounds: reading the newest
+  /// day means there is nothing above it, and an empty account has no strip at all.
+  func testTheVisibleWindowStaysInsideTheLoadedDays() {
+    let height = Self.ribbonViewport
+    let atNewest = SpineRibbonGeometry.visibleDays(
+      depth: SpineRibbonGeometry.depth(dayIndex: 0, hour: 23, minute: 59, viewport: height),
+      height: height, count: 2)
+    XCTAssertEqual(atNewest.lowerBound, 0)
+    XCTAssertLessThanOrEqual(atNewest.upperBound, 2)
+    XCTAssertTrue(SpineRibbonGeometry.visibleDays(depth: 0, height: height, count: 0).isEmpty)
+    XCTAssertTrue(SpineRibbonGeometry.visibleDays(depth: 0, height: 0, count: 5).isEmpty)
+  }
+
   /// **A day nobody has read yet is not a day with nothing on it.**
   ///
   /// Screen days are read lazily, three at a time, and an empty result is deliberately never stored
