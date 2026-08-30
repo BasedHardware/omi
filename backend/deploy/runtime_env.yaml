@@ -1142,7 +1142,7 @@ environments:
               value: '3'
               category: memory_rollout
             MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
-              value: 'false'
+              value: 'true'
               category: memory_rollout
           forbidden_env:
           - HOSTED_PUSHER_API_URL

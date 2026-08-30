@@ -517,7 +517,7 @@ overlay:
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS:
             value: '3'
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
-            value: 'false'
+            value: 'true'
       day3-reengagement-email-job:
         flags:
           --task-timeout: 900s
