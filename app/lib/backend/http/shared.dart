@@ -33,6 +33,30 @@ class AuthTokenUnavailableException implements Exception {
   String toString() => 'AuthTokenUnavailableException(${result.runtimeType})';
 }
 
+/// Returns the expiry carried by the JWT itself, falling back to the persisted
+/// Firebase metadata for legacy or malformed cached values.
+///
+/// The token is the credential sent on the wire, so its `exp` claim must win if
+/// it disagrees with the separately persisted expiration timestamp.
+@visibleForTesting
+DateTime resolveAuthTokenExpiration({required String token, required int cachedExpirationTime}) {
+  final segments = token.split('.');
+  if (segments.length == 3) {
+    try {
+      final payload = jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(segments[1]))));
+      final expirationSeconds = payload is Map<String, dynamic> ? payload['exp'] : null;
+      if (expirationSeconds is num && expirationSeconds.isFinite) {
+        return DateTime.fromMillisecondsSinceEpoch(expirationSeconds.toInt() * 1000, isUtc: true);
+      }
+    } on FormatException {
+      // Fall back to Firebase's persisted metadata below.
+    } on RangeError {
+      // Fall back to Firebase's persisted metadata below.
+    }
+  }
+  return DateTime.fromMillisecondsSinceEpoch(cachedExpirationTime);
+}
+
 // Normal-mode connectivity failures on mobile (no network, DNS failure,
 // connection reset, TLS handshake during reconnect, request timeout, OS abort
 // when the app backgrounds mid-upload). Reporting these to Crashlytics drowns
@@ -62,8 +86,12 @@ Future<String> getAuthHeader({bool expireTerminalSession = true}) async {
     throw AuthTokenUnavailableException(const AuthTokenMissingUser());
   }
 
-  final expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
-  bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
+  final cachedToken = SharedPreferencesUtil().authToken;
+  final expiry = resolveAuthTokenExpiration(
+    token: cachedToken,
+    cachedExpirationTime: SharedPreferencesUtil().tokenExpirationTime,
+  );
+  bool hasAuthToken = cachedToken.isNotEmpty;
 
   bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
       expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
