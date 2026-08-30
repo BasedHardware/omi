@@ -2224,6 +2224,58 @@ test("registerUserMcpTools: every page of a paginated tool list is registered", 
   }
 });
 
+// Registered names are capped at 64 chars, so two long tool names on one server
+// truncate to the same string. The second registration then shadows the first or
+// throws inside the Promise.all over servers, which would reject the whole
+// extension and take every Omi tool down with it.
+test("registerUserMcpTools: names that truncate to the same string stay distinct", async () => {
+  const { createServer: createHttpServer } = await import("node:http");
+  const long = "a".repeat(70);
+  const httpServer = createHttpServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => {
+      const message = JSON.parse(body) as { id?: number; method: string };
+      if (message.id === undefined) { res.writeHead(202).end(); return; }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result:
+        message.method === "initialize"
+          ? { protocolVersion: "2025-06-18", capabilities: { tools: {} } }
+          : message.method === "tools/list"
+            ? { tools: [
+                { name: `${long}_one`, inputSchema: { type: "object" } },
+                { name: `${long}_two`, inputSchema: { type: "object" } },
+              ] }
+            : {} }));
+    });
+  });
+  await new Promise<void>((r) => httpServer.listen(0, "127.0.0.1", r));
+  const address = httpServer.address() as { port: number };
+
+  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-names-"));
+  const configPath = pathJoin(dir, "mcp-servers.json");
+  await writeFile(configPath, JSON.stringify({ mcpServers: {
+    verbose: { url: `http://127.0.0.1:${address.port}/mcp` },
+  } }));
+  const previous = process.env.OMI_LOCAL_MCP_FILE;
+  process.env.OMI_LOCAL_MCP_FILE = configPath;
+
+  try {
+    const registered: Array<{ name: string }> = [];
+    const fakePi = { registerTool: (tool: never) => { registered.push(tool); } } as unknown as Parameters<typeof __registerUserMcpToolsForTest>[0];
+    await __registerUserMcpToolsForTest(fakePi);
+
+    const names = registered.map((t) => t.name);
+    assert.equal(names.length, 2);
+    assert.equal(new Set(names).size, 2, `collided: ${names.join(" ")}`);
+    assert.ok(names.every((n) => n.length <= 64));
+  } finally {
+    if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
+    httpServer.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("registerUserMcpTools: unreachable server is skipped, never fatal", async () => {
   const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-bad-"));
   const configPath = pathJoin(dir, "mcp-servers.json");

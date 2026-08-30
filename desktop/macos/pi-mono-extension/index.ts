@@ -839,9 +839,36 @@ export async function __registerOmiToolsForTest(pi: ExtensionAPI): Promise<void>
 // User-added remote MCP servers (managed from the desktop Apps page)
 // ---------------------------------------------------------------------------
 
-function mcpToolName(serverName: string, toolName: string): string {
-  return `mcp_${serverName}_${toolName}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+/**
+ * A registered name for one server tool or prompt, unique within the session.
+ *
+ * The 64-character ceiling means two long names on the same server can truncate
+ * to the same string; registering the second then either throws — which, inside
+ * the Promise.all over servers, would reject the whole extension and take every
+ * Omi tool down with it — or shadows the first so the model calls the wrong one.
+ * `taken` keeps the collision to a suffix.
+ */
+function mcpToolName(serverName: string, toolName: string, taken?: Set<string>): string {
+  const base = `mcp_${serverName}_${toolName}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+  if (!taken || !taken.has(base)) {
+    taken?.add(base);
+    return base;
+  }
+  for (let suffix = 2; ; suffix += 1) {
+    const candidate = `${base.slice(0, 64 - String(suffix).length - 1)}_${suffix}`;
+    if (taken.has(candidate)) continue;
+    taken.add(candidate);
+    return candidate;
+  }
 }
+
+/**
+ * Ceiling on one MCP tool or prompt call. Nothing else settles these: an SSE
+ * server's reply arrives on a stream that may simply never carry it, and a stdio
+ * server's only other terminal event is the child exiting. Without this the
+ * user's turn spins with no way out short of quitting the app.
+ */
+const CALL_TIMEOUT_MS = 120_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -856,6 +883,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
   const logErr = (msg: string) => process.stderr.write(`[user-mcp] ${msg}\n`);
   const servers = loadLocalMcpConfig(process.env.OMI_LOCAL_MCP_FILE, new Set(), logErr);
+  const takenNames = new Set<string>();
   await Promise.all(servers.map(async (server) => {
     let client: McpClient;
     let discoveryTimeoutMs: number;
@@ -874,6 +902,9 @@ async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
           : new McpHttpClient(server.url, token);
       discoveryTimeoutMs = 10_000;
     }
+    // One budget per server for both discovery calls: charging each its own turned a
+    // single wedged stdio server into a minute of blocked startup.
+    const deadline = Date.now() + discoveryTimeoutMs;
     let tools;
     try {
       tools = await withTimeout(client.listTools(), discoveryTimeoutMs);
@@ -899,14 +930,17 @@ async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
           })
         : {};
       pi.registerTool(defineTool({
-        name: mcpToolName(server.name, tool.name),
+        name: mcpToolName(server.name, tool.name, takenNames),
         label: `${server.name}: ${tool.name}`,
         description: `${tool.description || tool.name} (from the ${server.name} MCP server)`,
         parameters: Type.Object(properties, { additionalProperties: schema.additionalProperties === true }),
         async execute(_toolCallId, params) {
           let text: string;
           try {
-            text = await client.callTool(tool.name, (params ?? {}) as Record<string, unknown>);
+            text = await withTimeout(
+              client.callTool(tool.name, (params ?? {}) as Record<string, unknown>),
+              CALL_TIMEOUT_MS,
+            );
           } catch (err) {
             text = `Error calling ${tool.name}: ${err instanceof Error ? err.message : err}`;
           }
@@ -914,7 +948,8 @@ async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
         },
       }));
     }
-    const prompts = await registerUserMcpPrompts(pi, server.name, client, discoveryTimeoutMs);
+    const prompts = await registerUserMcpPrompts(
+      pi, server.name, client, Math.max(1_000, deadline - Date.now()), takenNames);
     if (tools.length === 0 && prompts === 0) {
       // Nothing registered means nothing holds this client, and nothing will ever
       // close it: an SSE server's GET stream and a stdio server's child would stay
@@ -940,6 +975,7 @@ async function registerUserMcpPrompts(
   serverName: string,
   client: McpClient,
   timeoutMs: number,
+  taken: Set<string>,
 ): Promise<number> {
   let prompts;
   try {
@@ -959,7 +995,7 @@ async function registerUserMcpPrompts(
       });
     }
     pi.registerTool(defineTool({
-      name: mcpToolName(serverName, `prompt_${prompt.name}`),
+      name: mcpToolName(serverName, `prompt_${prompt.name}`, taken),
       label: `${serverName}: ${prompt.name}`,
       description: `${prompt.description || prompt.name} (prompt from the ${serverName} MCP server)`,
       parameters: Type.Object(properties, {
@@ -969,7 +1005,10 @@ async function registerUserMcpPrompts(
       async execute(_toolCallId, params) {
         let text: string;
         try {
-          text = await client.getPrompt(prompt.name, (params ?? {}) as Record<string, unknown>);
+          text = await withTimeout(
+            client.getPrompt(prompt.name, (params ?? {}) as Record<string, unknown>),
+            CALL_TIMEOUT_MS,
+          );
         } catch (err) {
           text = `Error getting prompt ${prompt.name}: ${err instanceof Error ? err.message : err}`;
         }
@@ -1099,8 +1138,10 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
   void registerOmiTools(pi);
 
   // Remote MCP servers the user added from the Apps page. Awaited (pi waits
-  // for async extension factories) so the tools exist before the first prompt;
-  // each server is capped at 5s and a failing server is skipped, never fatal.
+  // for async extension factories) so the tools exist before the first prompt.
+  // Servers are discovered concurrently, each under one budget covering both its
+  // tool and prompt discovery — 10s remote, 30s local (a first `npx <package>`
+  // run downloads it). A failing server is skipped, never fatal.
   await registerUserMcpTools(pi);
 }
 

@@ -17,6 +17,7 @@ export class McpStdioClient extends McpClient {
   private readonly pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   private requestId = 0;
   private initialized: Promise<void> | null = null;
+  private exitHookInstalled = false;
 
   constructor(
     private readonly command: string,
@@ -40,8 +41,20 @@ export class McpStdioClient extends McpClient {
       (stream as unknown as { unref?: () => void } | null)?.unref?.();
     }
     this.holdEventLoop(false);
-    process.once("exit", () => child.kill("SIGTERM"));
+    // `once` per spawn would stack a listener per respawn; one registration for the
+    // client's lifetime kills whichever child is current.
+    if (!this.exitHookInstalled) {
+      this.exitHookInstalled = true;
+      process.once("exit", () => this.child?.kill("SIGTERM"));
+    }
     child.on("error", (err) => this.failAll(new Error(`MCP server failed to start: ${err.message}`)));
+    // A write to a dead child's stdin emits EPIPE on the stream itself, not on the
+    // child. With no listener that is an unhandled 'error' event, which takes down
+    // the whole agent process — every chat session with it — over one server that
+    // exited mid-call.
+    child.stdin?.on("error", (err) =>
+      this.failAll(new Error(`MCP server stdin closed: ${err.message}`)),
+    );
     child.on("exit", (code) => this.failAll(new Error(`MCP server exited (code ${code})`)));
     child.stderr?.on("data", () => {
       // Server logs are not part of the protocol; discard rather than pollute ours.
@@ -83,6 +96,11 @@ export class McpStdioClient extends McpClient {
   private failAll(error: Error): void {
     for (const waiter of this.pending.values()) waiter.reject(error);
     this.pending.clear();
+    // Closing the reader here is what keeps a respawn from stacking: `start()`
+    // overwrites `this.readline`, so an unclosed one would keep its dead child's
+    // stdout and its line handler reachable for the rest of the session.
+    this.readline?.close();
+    this.readline = null;
     this.child = null;
     this.initialized = null;
   }
@@ -94,7 +112,9 @@ export class McpStdioClient extends McpClient {
   }
 
   private send(payload: Record<string, unknown>): void {
-    this.child?.stdin?.write(`${JSON.stringify(payload)}\n`);
+    const stdin = this.child?.stdin;
+    if (!stdin?.writable) throw new Error("MCP server is not accepting input");
+    stdin.write(`${JSON.stringify(payload)}\n`);
   }
 
   protected rpc(method: string, params: Record<string, unknown>): Promise<unknown> {
