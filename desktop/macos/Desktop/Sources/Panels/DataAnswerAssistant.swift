@@ -122,7 +122,7 @@ actor DataAnswerAssistant {
         await MainActor.run {
           PanelSession.update(
             title: title,
-            subtitle: fields.count == 1 ? "Copy it with the button." : "Copy each with its button.",
+            subtitle: VoicePanel.changeHint,
             fields: fields, token: panel)
         }
         // Labels only: the values are on screen, and reading them back aloud is what the
@@ -277,7 +277,8 @@ actor DataAnswerAssistant {
       return .nothing(reason: items[0].text)
     }
     let title = (step.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    return .answer(title: title.isEmpty ? "Found for you" : title, items: items, missing: missing)
+    let heading = VoicePanel.isReadableTitle(title) ? title : ""
+    return .answer(title: heading.isEmpty ? "Found for you" : heading, items: items, missing: missing)
   }
 
   /// Whether a would-be value is really a report that there is no value.

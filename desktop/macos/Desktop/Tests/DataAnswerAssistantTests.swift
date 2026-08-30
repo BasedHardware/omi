@@ -92,14 +92,34 @@ final class DataAnswerAssistantTests: XCTestCase {
 /// 18-chapter beginner Python course syllabus was not found in your recent activity,
 /// screen history, or stored memories" on screen as the thing to copy.
 final class DataAnswerAbsenceGuardTests: XCTestCase {
-  private func step(items: [(String, String)], missing: [String] = []) throws -> DataAnswerAssistant.Step {
+  private func step(
+    items: [(String, String)], missing: [String] = [], title: String = "Result"
+  ) throws -> DataAnswerAssistant.Step {
     let json: [String: Any] = [
-      "action": "present_answer", "query": "", "title": "Result",
+      "action": "present_answer", "query": "", "title": title,
       "items": items.map { ["label": $0.0, "text": $0.1] }, "missing": missing,
     ]
     let data = try XCTUnwrap(try? JSONSerialization.data(withJSONObject: json))
     let text = try XCTUnwrap(String(data: data, encoding: .utf8))
     return try XCTUnwrap(DataAnswerAssistant.decodeStep(text))
+  }
+
+  /// The searching model names the panel too, so the same guard the voice tools use
+  /// applies here: an identifier-shaped heading is refused rather than shown.
+  func testAnIdentifierShapedTitleFallsBackToAReadableOne() throws {
+    guard
+      case .answer(let title, _, _)? = DataAnswerAssistant.outcome(
+        of: try step(items: [("Email", "a@b.c")], title: "floating_chat"))
+    else { return XCTFail("expected an answer") }
+    XCTAssertEqual(title, "Found for you")
+  }
+
+  func testAProseTitleFromTheModelIsKept() throws {
+    guard
+      case .answer(let title, _, _)? = DataAnswerAssistant.outcome(
+        of: try step(items: [("Email", "a@b.c")], title: "Your contact details"))
+    else { return XCTFail("expected an answer") }
+    XCTAssertEqual(title, "Your contact details")
   }
 
   func testALoneApologyIsNotAnAnswer() throws {

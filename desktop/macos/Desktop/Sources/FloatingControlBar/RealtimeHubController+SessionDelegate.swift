@@ -715,9 +715,12 @@ extension RealtimeHubController {
       return .succeeded("Clicked at \(Int(x)), \(Int(y)).")
 
     case .showPanel:
+      // Readable or nothing: an identifier the model picked out of its own tool
+      // vocabulary ("floating_chat") would otherwise become the heading on the user's card.
       let title =
-        (command.input["title"] as? String)?
-        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        (command.input["title"] as? String)
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .flatMap { VoicePanel.isReadableTitle($0) ? $0 : nil } ?? ""
       let items = Self.voicePanelItems(command.input["items"])
       guard !title.isEmpty, !items.isEmpty else {
         return .succeeded("Could not show the panel: show_panel needs a title and at least one item with text.")
