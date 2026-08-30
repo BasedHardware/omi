@@ -1392,11 +1392,15 @@ class AnalyticsManager {
     assistantId: String,
     surface: String,
     dismissalKind: NotificationDismissalKind,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    attention: InterjectAttention? = nil
   ) {
     if let suggestionIdentity {
       var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
       properties["dismissal_kind"] = dismissalKind.rawValue
+      if let attention {
+        properties["attention"] = attention.rawValue
+      }
       captureSuggestionAssistantTelemetryForTests(
         "Notification Dismissed",
         properties: properties
@@ -1408,6 +1412,43 @@ class AnalyticsManager {
       assistantId: assistantId,
       surface: surface,
       dismissalKind: dismissalKind,
+      suggestionIdentity: suggestionIdentity,
+      attention: attention
+    )
+  }
+
+  func notificationHovered(
+    notificationId: String,
+    assistantId: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    if let suggestionIdentity {
+      captureSuggestionAssistantTelemetryForTests(
+        "Notification Hovered",
+        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      )
+    }
+    PostHogManager.shared.notificationHovered(
+      notificationId: notificationId,
+      assistantId: assistantId,
+      suggestionIdentity: suggestionIdentity
+    )
+  }
+
+  func suggestionFeedbackRecorded(
+    verb: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    if let suggestionIdentity {
+      var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      properties["verb"] = verb
+      captureSuggestionAssistantTelemetryForTests(
+        "Suggestion Feedback Recorded",
+        properties: properties
+      )
+    }
+    PostHogManager.shared.suggestionFeedbackRecorded(
+      verb: verb,
       suggestionIdentity: suggestionIdentity
     )
   }
