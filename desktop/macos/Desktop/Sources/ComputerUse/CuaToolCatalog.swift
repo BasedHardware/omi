@@ -101,7 +101,7 @@ enum CuaToolCatalog {
     CuaTool(
       name: "click",
       description:
-        "Click at a coordinate in the last screenshot. Use ui_action instead when the control came from ui_snapshot.",
+        "Click at a coordinate in the last screenshot. Use ui_action instead when the control came from ui_snapshot. A click on a window that is not frontmost usually only brings it forward, so focus_window first when acting on a background app.",
       inputSchema: object(
         properties: [
           "x": number("Horizontal position in the screenshot."),
@@ -210,6 +210,21 @@ enum CuaToolCatalog {
         ],
         required: ["app"])),
     CuaTool(
+      name: "run_applescript",
+      description:
+        "Run AppleScript. The exact way to ask an app a question or drive it without clicking — the selected mail, the front tab's URL, every open document. Prefer it over screenshots when the app is scriptable.",
+      inputSchema: object(
+        properties: [
+          "script": string("The AppleScript source. Its result is returned as text."),
+          "timeout_ms": integer("How long to allow, up to 120000. Defaults to 20000."),
+        ],
+        required: ["script"])),
+    CuaTool(
+      name: "permissions",
+      description:
+        "What Omi is allowed to do on this Mac, and a prompt for anything missing. Call this when a tool says a permission is missing.",
+      inputSchema: object()),
+    CuaTool(
       name: "wait",
       description:
         "Pause before looking again, for a window that is still opening or a page that is still loading.",
@@ -244,6 +259,8 @@ enum CuaToolCatalog {
     case "open_app": return await openApp(args)
     case "focus_window": return await focusWindow(args)
     case "move_window": return await moveWindow(args)
+    case "run_applescript": return await runAppleScript(args)
+    case "permissions": return await permissions()
     case "wait": return await wait(args)
     default: return .error("Unknown tool \(name).")
     }
@@ -281,7 +298,7 @@ enum CuaToolCatalog {
   }
 
   private static func screenshot(_ args: CuaArguments) async -> CuaToolResult {
-    if let refusal = await CuaControlGate.shared.refusal(requiresAccessibility: false) {
+    if let refusal = await refusal(needs: [.screenRecording]) {
       return .error(refusal.message)
     }
     let maxLongEdge =
@@ -301,6 +318,12 @@ enum CuaToolCatalog {
       capture = await CuaScreenObserver.captureDisplay(display, maxLongEdge: maxLongEdge)
     }
 
+    if capture != nil {
+      // A frame came back, so the grant is real whatever a preflight says. This
+      // is what stops a stale "not granted" from following the user around for
+      // the rest of the session.
+      await MainActor.run { CuaPermission.markGranted(.screenRecording) }
+    }
     guard let capture, let png = CuaScreenObserver.pngData(from: capture.image) else {
       return .error(
         "Capture failed. Screen Recording permission may be missing — grant it in System Settings ▸ Privacy & Security ▸ Screen Recording."
@@ -321,7 +344,7 @@ enum CuaToolCatalog {
   }
 
   private static func uiSnapshot(_ args: CuaArguments) async -> CuaToolResult {
-    if let refusal = await CuaControlGate.shared.refusal() {
+    if let refusal = await refusal(needs: [.accessibility]) {
       return .error(refusal.message)
     }
     let named = args.string("app")
@@ -340,6 +363,9 @@ enum CuaToolCatalog {
         maxNodes: args.int("max_nodes") ?? 250)
     else { return .error("Could not read that app's accessibility tree.") }
 
+    if !snapshot.nodes.isEmpty {
+      await MainActor.run { CuaPermission.markGranted(.accessibility) }
+    }
     guard !snapshot.nodes.isEmpty else {
       return .text(
         "\(snapshot.appName) publishes no accessibility tree. Use screenshot and click instead.")
@@ -389,7 +415,7 @@ enum CuaToolCatalog {
     guard let snapshotID = args.string("snapshot") ?? CuaAxRegistry.shared.latestSnapshotID() else {
       return .error("Call ui_snapshot first.")
     }
-    if let refusal = await CuaControlGate.shared.refusal() {
+    if let refusal = await refusal(needs: [.accessibility]) {
       return .error(refusal.message)
     }
 
@@ -477,8 +503,9 @@ enum CuaToolCatalog {
     guard let text = args.string("text"), !text.isEmpty else {
       return .error("type_text needs text.")
     }
+    let layout = await MainActor.run { CuaKeyMap.KeyboardLayout.current() }
     return await perform("Typed \(text.count) characters") {
-      CuaInputSynth.typeText(text)
+      CuaInputSynth.typeText(text, layout: layout)
     }
   }
 
@@ -496,7 +523,7 @@ enum CuaToolCatalog {
 
   private static func setClipboard(_ args: CuaArguments) async -> CuaToolResult {
     guard let text = args.string("text") else { return .error("set_clipboard needs text.") }
-    if let refusal = await CuaControlGate.shared.refusal(requiresAccessibility: false) {
+    if let refusal = await refusal() {
       return .error(refusal.message)
     }
     await MainActor.run { CuaAppControl.writeClipboard(text) }
@@ -505,7 +532,7 @@ enum CuaToolCatalog {
 
   private static func openApp(_ args: CuaArguments) async -> CuaToolResult {
     guard let app = args.string("app") else { return .error("open_app needs an app.") }
-    if let refusal = await CuaControlGate.shared.refusal(requiresAccessibility: false) {
+    if let refusal = await refusal() {
       return .error(refusal.message)
     }
     guard CuaAppControl.open(app: app) else { return .error("Could not open \(app).") }
@@ -514,7 +541,7 @@ enum CuaToolCatalog {
 
   private static func focusWindow(_ args: CuaArguments) async -> CuaToolResult {
     guard let app = args.string("app") else { return .error("focus_window needs an app.") }
-    if let refusal = await CuaControlGate.shared.refusal() {
+    if let refusal = await refusal(needs: [.accessibility]) {
       return .error(refusal.message)
     }
     guard let pid = await MainActor.run(body: { CuaAxReader.processID(forAppNamed: app) }) else {
@@ -528,7 +555,7 @@ enum CuaToolCatalog {
 
   private static func moveWindow(_ args: CuaArguments) async -> CuaToolResult {
     guard let app = args.string("app") else { return .error("move_window needs an app.") }
-    if let refusal = await CuaControlGate.shared.refusal() {
+    if let refusal = await refusal(needs: [.accessibility]) {
       return .error(refusal.message)
     }
     guard let pid = await MainActor.run(body: { CuaAxReader.processID(forAppNamed: app) }) else {
@@ -554,13 +581,87 @@ enum CuaToolCatalog {
     return .text("Waited \(ms)ms.")
   }
 
+  private static func runAppleScript(_ args: CuaArguments) async -> CuaToolResult {
+    guard let script = args.string("script") else {
+      return .error("run_applescript needs a script.")
+    }
+    if let refusal = await refusal() {
+      return .error(refusal.message)
+    }
+    let timeout = min(max(Double(args.int("timeout_ms") ?? 20_000), 1_000), 120_000) / 1000
+
+    // Off the caller's queue: the runner waits on a child process, and the
+    // endpoint's queue is the one every other request is also waiting on.
+    let result = await withCheckedContinuation { (continuation: CheckedContinuation<CuaAppleScript.Result, Never>) in
+      DispatchQueue.global(qos: .userInitiated).async {
+        continuation.resume(returning: CuaAppleScript.run(script, timeout: timeout))
+      }
+    }
+    await CuaControlGate.shared.noteActivity()
+
+    if let failure = result.failure {
+      // A refused Apple Event names the app it was refused for, which is the one
+      // thing the user needs in order to fix it.
+      let isPermission = failure.contains("-1743") || failure.localizedCaseInsensitiveContains("not allowed")
+      return .error(isPermission ? "\(CuaPermission.appleEvents.refusalMessage)\n\(failure)" : failure)
+    }
+    return .text(result.output.isEmpty ? "The script ran and returned nothing." : result.output)
+  }
+
+  /// The permission surface, in one call.
+  ///
+  /// Every grant Omi already holds is used without asking; the ones it does not
+  /// are requested here, which is what shows the user the system prompt. Apple
+  /// Events is per target and has no process-wide answer, so it is reported as
+  /// such rather than guessed at.
+  private static func permissions() async -> CuaToolResult {
+    // The switch is asked first, and nothing is requested while it is off: a
+    // system prompt for a capability the user has not enabled is a dialog they
+    // did not ask for, about a feature that is not running.
+    let gate = await refusal()
+    let mayRequest = gate == nil
+    let lines = await MainActor.run { () -> [String] in
+      CuaPermission.allCases.map { permission -> String in
+        let label = "\(permission.title) (\(permission.rawValue))"
+        switch permission {
+        case .appleEvents:
+          return "\(label): granted per app, on first use."
+        default:
+          if permission.isGranted() { return "\(label): granted." }
+          guard mayRequest else { return "\(label): not granted." }
+          permission.request()
+          return
+            "\(label): NOT granted. Omi has asked macOS for it — the user has to approve it, "
+            + "and a grant given now applies from Omi's next launch."
+        }
+      }
+    }
+    let switchLine =
+      gate.map { "Computer control: off — \($0.message)" }
+      ?? "Computer control: on."
+    return .text(([switchLine] + lines).joined(separator: "\n"))
+  }
+
+  /// The gate's verdict, after giving a grant the user may have just ticked a
+  /// chance to be noticed. Every tool that needs a permission goes through here,
+  /// so "granted while Omi was running" works everywhere rather than in whichever
+  /// call site remembered to refresh.
+  private static func refusal(needs permissions: [CuaPermission] = []) async
+    -> CuaControlGate.Refusal?
+  {
+    await CuaPermission.refreshLiveGrants(permissions)
+    return await CuaControlGate.shared.refusal(needs: permissions)
+  }
+
   // MARK: - Shared plumbing
 
   /// Runs a synthetic gesture behind the gate, and says what happened either way.
-  private static func perform(_ success: String, _ effect: @escaping @Sendable () -> Void) async
-    -> CuaToolResult
-  {
-    let outcome = await CuaControlGate.shared.perform(effect)
+  private static func perform(
+    _ success: String, needs permissions: [CuaPermission] = [.postEvents],
+    _ effect: @escaping @Sendable () -> Void
+  ) async -> CuaToolResult {
+    await CuaPermission.refreshLiveGrants(permissions)
+    let outcome = await CuaControlGate.shared.perform(needs: permissions, effect)
     switch outcome {
     case .success:
       return .text(success + ".")

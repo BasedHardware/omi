@@ -14,9 +14,23 @@ struct ComputerControlSection: View {
   @ObservedObject private var gate = CuaControlGate.shared
 
   @State private var isEnabled = CuaControlGate.shared.isEnabled
-  @State private var accessibilityGranted = AXIsProcessTrusted()
-  @State private var screenRecordingGranted = false
+  /// Every grant, checked with the API that actually answers for it. Input and
+  /// UI reading are two TCC services behind one System Settings pane, so they
+  /// are listed separately: a Mac can hold either without the other.
+  @State private var granted: [CuaPermission: Bool] = [:]
   @State private var failure: String?
+
+  /// Two of these live in the same System Settings pane and are still two
+  /// separate grants, so each is named by what it lets Omi do rather than by the
+  /// pane it is found in.
+  private static let listed: [(permission: CuaPermission, title: String, detail: String)] = [
+    (.postEvents, "Input", "Move the pointer, click, and type. Accessibility pane."),
+    (
+      .accessibility, "Reading controls",
+      "List another app's controls and press them by name. Accessibility pane."
+    ),
+    (.screenRecording, "Screen", "Take screenshots. Screen Recording pane."),
+  ]
 
   private let permissionPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
@@ -41,16 +55,24 @@ struct ComputerControlSection: View {
         .toggleStyle(.switch)
 
         if isEnabled {
-          permissionRow(
-            title: "Accessibility",
-            detail: "Required to move the pointer, click, and type.",
-            granted: accessibilityGranted,
-            grant: { PermissionDragGuidance.openAccessibilitySettings() })
-          permissionRow(
-            title: "Screen Recording",
-            detail: "Required for screenshots.",
-            granted: screenRecordingGranted,
-            grant: { ScreenCaptureService.openScreenRecordingPreferences() })
+          ForEach(Self.listed, id: \.permission) { entry in
+            permissionRow(
+              title: entry.title,
+              detail: entry.detail,
+              granted: granted[entry.permission] ?? false,
+              grant: {
+                // Ask macOS first: the system prompt is the only path that grants
+                // anything, and Settings is the fallback for a prompt already
+                // answered once and never shown again.
+                entry.permission.request()
+                entry.permission.openSettings()
+              })
+          }
+          Text(
+            "A grant given now applies from Omi's next launch — macOS caches the answer per process."
+          )
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
           statusRow
         }
 
@@ -68,7 +90,14 @@ struct ComputerControlSection: View {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
           .stroke(Ink.separator, lineWidth: 1))
     }
-    .onReceive(permissionPoll) { _ in refreshPermissions() }
+    .onReceive(permissionPoll) { _ in
+      Task {
+        // The live probe is IPC and runs off the main actor; the ticked box in
+        // System Settings is what this is watching for.
+        await CuaPermission.refreshLiveGrants([.accessibility, .postEvents])
+        refreshPermissions()
+      }
+    }
     .onAppear { refreshPermissions() }
     // The toggle drives the switch through state rather than a `Binding(get:set:)`:
     // that shape crashes swift-frontend 6.3.3 in IRGen ("While emitting IR SIL
@@ -170,8 +199,8 @@ struct ComputerControlSection: View {
   }
 
   private func refreshPermissions() {
-    accessibilityGranted = AXIsProcessTrusted()
-    screenRecordingGranted = ScreenCaptureService.checkPermission()
+    granted = Dictionary(
+      uniqueKeysWithValues: Self.listed.map { ($0.permission, $0.permission.isGranted()) })
     isEnabled = gate.isEnabled
   }
 }

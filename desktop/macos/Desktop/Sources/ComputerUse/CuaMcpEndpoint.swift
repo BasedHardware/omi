@@ -138,6 +138,12 @@ enum CuaMcpEndpoint {
     guard CuaToolCatalog.tool(named: name) != nil else {
       return errorContent("Unknown tool \(name).")
     }
+    // The switch, once, for every tool. Listing what exists is harmless; doing
+    // any of it is what consent is about, and a tool that forgot to ask is
+    // covered here rather than in whichever handler remembered.
+    if let refusal = await CuaControlGate.shared.refusal() {
+      return errorContent(refusal.message)
+    }
     let arguments = params["arguments"] as? [String: Any] ?? [:]
     let result = await CuaToolCatalog.call(name, arguments: arguments)
     return [

@@ -24,7 +24,20 @@ enum CuaInputSynth {
     CGEventSource(stateID: .hidSystemState)
   }
 
+  /// Move the pointer, and move the *cursor*.
+  ///
+  /// A `.mouseMoved` event alone tells apps the pointer moved but does not move
+  /// the hardware cursor the window server tracks. Anything that reads
+  /// `NSEvent.mouseLocation` — hover states, menu tracking, drag targets, and
+  /// every app that samples the position rather than listening for the event —
+  /// keeps seeing the old point, so the click that follows lands somewhere the
+  /// app was not expecting. Warping first is what makes the two agree.
   static func moveCursor(to point: CGPoint) {
+    CGWarpMouseCursorPosition(point)
+    // The warp suppresses hardware mouse deltas for a quarter second unless the
+    // association is restored, which would otherwise freeze the user's own mouse
+    // for a moment after every synthetic move.
+    CGAssociateMouseAndMouseCursorPosition(1)
     let event = CGEvent(
       mouseEventSource: source(), mouseType: .mouseMoved, mouseCursorPosition: point,
       mouseButton: .left)
@@ -75,6 +88,11 @@ enum CuaInputSynth {
   /// plain clicks no matter how close together they are.
   static func click(at point: CGPoint, button: Button = .left, count: Int = 1, flags: CGEventFlags = []) {
     moveCursor(to: point)
+    // Let the move be seen before the press. Tracking areas, hover states and
+    // menu highlighting all update on the move, and an app that has not yet
+    // processed it treats the press as landing on whatever was under the old
+    // point.
+    Thread.sleep(forTimeInterval: pressInterval)
     let repeats = min(max(count, 1), 3)
     for click in 1...repeats {
       for type in [button.downType, button.upType] {
@@ -101,6 +119,7 @@ enum CuaInputSynth {
     flags: CGEventFlags = []
   ) {
     moveCursor(to: start)
+    Thread.sleep(forTimeInterval: pressInterval)
     let post = { (type: CGEventType, point: CGPoint) in
       guard
         let event = CGEvent(
@@ -127,53 +146,115 @@ enum CuaInputSynth {
 
   /// Scroll at a point. Positive `y` scrolls the content up (the gesture a user
   /// makes to read further down), matching the direction a wheel reports.
+  ///
+  /// Sent as a run of small line events rather than one large one. A single
+  /// event with a big delta is clamped by some views and ignored by others that
+  /// only animate continuous scrolls, so "scroll down 10" moved a page by
+  /// nothing in exactly the apps a model is most likely to be reading.
   static func scroll(at point: CGPoint, deltaX: Int, deltaY: Int, flags: CGEventFlags = []) {
     moveCursor(to: point)
-    guard
-      let event = CGEvent(
-        scrollWheelEvent2Source: source(), units: .line, wheelCount: 2,
-        wheel1: Int32(clamping: deltaY), wheel2: Int32(clamping: deltaX), wheel3: 0)
+    let steps = max(abs(deltaX), abs(deltaY))
+    guard steps > 0 else { return }
+    let stepX = deltaX == 0 ? 0 : (deltaX > 0 ? 1 : -1)
+    let stepY = deltaY == 0 ? 0 : (deltaY > 0 ? 1 : -1)
+    for step in 0..<min(steps, 200) {
+      guard
+        let event = CGEvent(
+          scrollWheelEvent2Source: source(), units: .line, wheelCount: 2,
+          wheel1: Int32(step < abs(deltaY) ? stepY : 0),
+          wheel2: Int32(step < abs(deltaX) ? stepX : 0),
+          wheel3: 0)
+      else { return }
+      event.flags = flags
+      event.post(tap: .cghidEventTap)
+      Thread.sleep(forTimeInterval: pressInterval / 2)
+    }
+  }
+
+  /// Virtual key codes for the modifiers, so a chord can hold real keys down
+  /// rather than only claiming to.
+  private static let modifierKeyCodes: [(CGEventFlags, CGKeyCode)] = [
+    (.maskCommand, CGKeyCode(kVK_Command)),
+    (.maskShift, CGKeyCode(kVK_Shift)),
+    (.maskAlternate, CGKeyCode(kVK_Option)),
+    (.maskControl, CGKeyCode(kVK_Control)),
+  ]
+
+  /// Press a chord.
+  ///
+  /// The modifiers are pressed as real keys around the keystroke, not just set
+  /// as flags on it. AppKit reads the flags, but Chromium — and so every Electron
+  /// app, VS Code and Slack included — tracks modifier state from the key events
+  /// themselves, and a flags-only cmd+S arrives there as a plain S typed into the
+  /// document. The flags are still set, because that is what everything else
+  /// reads.
+  static func key(_ chord: CuaKeyMap.Chord) {
+    let held = modifierKeyCodes.filter { chord.flags.contains($0.0) }
+    var flags: CGEventFlags = []
+    for (flag, keyCode) in held {
+      flags.insert(flag)
+      postKey(keyCode, down: true, flags: flags)
+    }
+    postKey(chord.keyCode, down: true, flags: chord.flags)
+    postKey(chord.keyCode, down: false, flags: chord.flags)
+    for (flag, keyCode) in held.reversed() {
+      flags.remove(flag)
+      postKey(keyCode, down: false, flags: flags)
+    }
+  }
+
+  private static func postKey(_ keyCode: CGKeyCode, down: Bool, flags: CGEventFlags) {
+    guard let event = CGEvent(keyboardEventSource: source(), virtualKey: keyCode, keyDown: down)
     else { return }
     event.flags = flags
     event.post(tap: .cghidEventTap)
-  }
-
-  static func key(_ chord: CuaKeyMap.Chord) {
-    for isDown in [true, false] {
-      guard
-        let event = CGEvent(
-          keyboardEventSource: source(), virtualKey: chord.keyCode, keyDown: isDown)
-      else { continue }
-      event.flags = chord.flags
-      event.post(tap: .cghidEventTap)
-      Thread.sleep(forTimeInterval: pressInterval)
-    }
+    Thread.sleep(forTimeInterval: pressInterval)
   }
 
   /// Type literal text.
   ///
-  /// The characters ride on the event as a Unicode string rather than being
-  /// resolved to key codes, so accents, emoji and every non-US layout type
-  /// correctly without a translation table. Newlines are the exception: a
-  /// carriage return delivered as text is ignored by most fields, so each line
-  /// break is posted as a real Return key.
-  static func typeText(_ text: String) {
+  /// Every character the keyboard can actually produce is typed as that key,
+  /// with shift where the layout needs it. A synthetic event carrying only a
+  /// Unicode string and no key code is ignored by a whole class of apps —
+  /// terminals, Chromium and anything reading the key code rather than the
+  /// characters — so a "typed" password or command silently arrives empty. The
+  /// Unicode path is kept for what no key produces: emoji, and characters
+  /// outside the current layout.
+  ///
+  /// Newlines are always a real Return: a carriage return delivered as text is
+  /// dropped by most fields.
+  static func typeText(_ text: String, layout: CuaKeyMap.KeyboardLayout) {
     for (index, line) in text.components(separatedBy: "\n").enumerated() {
       if index > 0 { key(.init(keyCode: CGKeyCode(kVK_Return), flags: [])) }
-      guard !line.isEmpty else { continue }
-      // The event's string field is a fixed buffer; long text has to be posted
-      // in slices or the tail is dropped without an error.
-      for slice in Array(line.utf16).chunked(into: 16) {
-        for isDown in [true, false] {
-          guard let event = CGEvent(keyboardEventSource: source(), virtualKey: 0, keyDown: isDown)
-          else { continue }
-          var buffer = slice
-          event.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: &buffer)
-          event.post(tap: .cghidEventTap)
-        }
-        Thread.sleep(forTimeInterval: pressInterval)
+      var unicodeRun: [UniChar] = []
+      let flushUnicode = {
+        for slice in unicodeRun.chunked(into: 16) { postUnicode(slice) }
+        unicodeRun.removeAll()
       }
+      for character in line {
+        if let stroke = layout.stroke(for: character) {
+          flushUnicode()
+          key(.init(keyCode: stroke.keyCode, flags: stroke.needsShift ? .maskShift : []))
+        } else {
+          unicodeRun.append(contentsOf: Array(String(character).utf16))
+        }
+      }
+      flushUnicode()
     }
+  }
+
+  /// One keystroke carrying characters instead of a key. The event's string
+  /// field is a fixed buffer, so a long run has to be posted in slices or the
+  /// tail is dropped with no error.
+  private static func postUnicode(_ characters: [UniChar]) {
+    for isDown in [true, false] {
+      guard let event = CGEvent(keyboardEventSource: source(), virtualKey: 0, keyDown: isDown)
+      else { continue }
+      var buffer = characters
+      event.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: &buffer)
+      event.post(tap: .cghidEventTap)
+    }
+    Thread.sleep(forTimeInterval: pressInterval)
   }
 
   static func cursorPosition() -> CGPoint {

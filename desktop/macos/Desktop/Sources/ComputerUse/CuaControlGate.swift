@@ -30,7 +30,7 @@ final class CuaControlGate: ObservableObject {
     case disabled
     case suspended(reason: String)
     case ownerChanged
-    case accessibilityMissing
+    case missingPermission(CuaPermission)
 
     var message: String {
       switch self {
@@ -41,9 +41,8 @@ final class CuaControlGate: ObservableObject {
         return "Computer control was stopped (\(reason)). Re-arm it in Omi ▸ Settings ▸ Apps."
       case .ownerChanged:
         return "Computer control was granted by a different account. Turn it on again for this one."
-      case .accessibilityMissing:
-        return
-          "Accessibility permission is missing, so input events would do nothing. Grant it in System Settings ▸ Privacy & Security ▸ Accessibility."
+      case .missingPermission(let permission):
+        return permission.refusalMessage
       }
     }
   }
@@ -58,7 +57,7 @@ final class CuaControlGate: ObservableObject {
   nonisolated static let stateChanged = Notification.Name("CuaControlGateStateChanged")
 
   private let defaults: UserDefaults
-  private let accessibilityIsTrusted: @MainActor () -> Bool
+  private let missingPermission: @MainActor ([CuaPermission]) -> CuaPermission?
   private let ownerID: @MainActor () -> String?
 
   @Published private(set) var suspension: String?
@@ -67,13 +66,15 @@ final class CuaControlGate: ObservableObject {
 
   init(
     defaults: UserDefaults = .standard,
-    accessibilityIsTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
+    missingPermission: @escaping @MainActor ([CuaPermission]) -> CuaPermission? = {
+      CuaPermission.ensure($0)
+    },
     ownerID: @escaping @MainActor () -> String? = {
       RuntimeOwnerIdentity.currentOwnerId(defaults: .standard)
     }
   ) {
     self.defaults = defaults
-    self.accessibilityIsTrusted = accessibilityIsTrusted
+    self.missingPermission = missingPermission
     self.ownerID = ownerID
   }
 
@@ -129,26 +130,28 @@ final class CuaControlGate: ObservableObject {
     NotificationCenter.default.post(name: Self.stateChanged, object: nil)
   }
 
-  /// The reason a physical effect may not run, or nil when it may.
+  /// The reason a tool may not run, or nil when it may.
   ///
-  /// Reads-only tools (a screenshot, an accessibility snapshot) ask for
-  /// `requiresAccessibility: false` when they do not need to post anything, so a
-  /// missing Accessibility grant does not blind a model that could still look.
-  func refusal(requiresAccessibility: Bool = true) -> Refusal? {
+  /// Each tool names the grants it actually needs, so a missing one refuses only
+  /// the tools that depend on it: no Screen Recording still leaves the
+  /// accessibility lane working, and no Accessibility still leaves a screenshot
+  /// readable. A grant the user has never been asked for is requested here, so
+  /// they see the system prompt rather than a sentence about a checkbox.
+  func refusal(needs permissions: [CuaPermission] = []) -> Refusal? {
     if let suspension { return .suspended(reason: suspension) }
     guard defaults.bool(forKey: Keys.enabled) else { return .disabled }
     guard grantedOwnerMatches else { return .ownerChanged }
-    if requiresAccessibility, !accessibilityIsTrusted() { return .accessibilityMissing }
+    if let missing = missingPermission(permissions) { return .missingPermission(missing) }
     return nil
   }
 
   /// Runs `effect` only while the gate is open, marking the surface active.
   /// Synchronous and `@MainActor`, so nothing can interleave between the check
   /// and the event.
-  func perform<T: Sendable>(requiresAccessibility: Bool = true, _ effect: @Sendable () -> T)
+  func perform<T: Sendable>(needs permissions: [CuaPermission], _ effect: @Sendable () -> T)
     -> Result<T, Refusal>
   {
-    if let refusal = refusal(requiresAccessibility: requiresAccessibility) {
+    if let refusal = refusal(needs: permissions) {
       return .failure(refusal)
     }
     let value = effect()
