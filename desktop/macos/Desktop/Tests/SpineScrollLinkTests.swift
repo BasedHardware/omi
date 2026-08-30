@@ -44,28 +44,32 @@ final class SpineScrollLinkTests: XCTestCase {
 
   /// A wheel event. `phase` is the axis the shipped bug turned on: `.none` is the legacy path an
   /// old mouse takes, anything else is the trackpad gesture path.
-  private func wheel(deltaY: Double, precise: Bool = true, phase: CGScrollPhase? = nil) -> NSEvent {
-    let event = CGEvent(
-      scrollWheelEvent2Source: nil, units: precise ? .pixel : .line, wheelCount: 1,
-      wheel1: Int32(deltaY), wheel2: 0, wheel3: 0)!
+  private func wheel(
+    deltaY: Double, precise: Bool = true, phase: CGScrollPhase? = nil,
+    file: StaticString = #filePath, line: UInt = #line
+  ) throws -> NSEvent {
+    let event = try XCTUnwrap(
+      CGEvent(
+        scrollWheelEvent2Source: nil, units: precise ? .pixel : .line, wheelCount: 1,
+        wheel1: Int32(deltaY), wheel2: 0, wheel3: 0), file: file, line: line)
     event.setIntegerValueField(.scrollWheelEventIsContinuous, value: precise ? 1 : 0)
     if let phase {
       event.setIntegerValueField(.scrollWheelEventScrollPhase, value: Int64(phase.rawValue))
     }
-    return NSEvent(cgEvent: event)!
+    return try XCTUnwrap(NSEvent(cgEvent: event), file: file, line: line)
   }
 
   /// **A real two-finger swipe moves the list.** This is the regression: the whole gesture — the
   /// `.began`, the run of `.changed`, the `.ended` — has to land on the list, because a trackpad
   /// sends nothing else.
-  func testATrackpadGestureWithPhasesScrollsTheList() {
+  func testATrackpadGestureWithPhasesScrollsTheList() throws {
     let scrollView = makeScrollView()
     let link = SpineScrollLink()
     link.scrollView = scrollView
 
-    link.scroll(by: wheel(deltaY: -10, phase: .began))
-    for _ in 0..<3 { link.scroll(by: wheel(deltaY: -10, phase: .changed)) }
-    link.scroll(by: wheel(deltaY: 0, phase: .ended))
+    link.scroll(by: try wheel(deltaY: -10, phase: .began))
+    for _ in 0..<3 { link.scroll(by: try wheel(deltaY: -10, phase: .changed)) }
+    link.scroll(by: try wheel(deltaY: 0, phase: .ended))
 
     XCTAssertEqual(
       scrollView.contentView.bounds.origin.y, 40, accuracy: 0.001,
@@ -74,14 +78,14 @@ final class SpineScrollLinkTests: XCTestCase {
 
   /// The coast after a flick is a stream of events macOS sends on its own with decaying deltas, so
   /// applying each one as it arrives *is* the inertia.
-  func testTheMomentumTailKeepsMovingTheList() {
+  func testTheMomentumTailKeepsMovingTheList() throws {
     let scrollView = makeScrollView()
     let link = SpineScrollLink()
     link.scrollView = scrollView
 
-    link.scroll(by: wheel(deltaY: -20, phase: .began))
+    link.scroll(by: try wheel(deltaY: -20, phase: .began))
     for decay in [-16.0, -12, -8, -4, -2, -1] {
-      link.scroll(by: wheel(deltaY: decay, phase: .none))
+      link.scroll(by: try wheel(deltaY: decay, phase: .none))
     }
     XCTAssertEqual(scrollView.contentView.bounds.origin.y, 63, accuracy: 0.001)
   }
@@ -89,15 +93,15 @@ final class SpineScrollLinkTests: XCTestCase {
   /// **Down the wheel is down the list.** A sign flip here would send the ribbon and the list in
   /// opposite directions, which is the one failure that makes the ribbon read as broken rather than
   /// as merely imprecise.
-  func testWheelingDownMovesTheListTowardsTheOlderEnd() {
+  func testWheelingDownMovesTheListTowardsTheOlderEnd() throws {
     let scrollView = makeScrollView()
     let link = SpineScrollLink()
     link.scrollView = scrollView
 
-    XCTAssertTrue(link.scroll(by: wheel(deltaY: -40)))
+    try XCTAssertTrue(link.scroll(by: wheel(deltaY: -40)))
     XCTAssertEqual(scrollView.contentView.bounds.origin.y, 40, accuracy: 0.001)
 
-    XCTAssertTrue(link.scroll(by: wheel(deltaY: 15)))
+    try XCTAssertTrue(link.scroll(by: wheel(deltaY: 15)))
     XCTAssertEqual(
       scrollView.contentView.bounds.origin.y, 25, accuracy: 0.001,
       "wheeling back up has to undo exactly what wheeling down did")
@@ -105,12 +109,12 @@ final class SpineScrollLinkTests: XCTestCase {
 
   /// A trackpad reports points; an old mouse wheel reports lines. Forwarding the raw number for both
   /// makes a real mouse move the list about a pixel a notch.
-  func testALineWheelTravelsFurtherThanASinglePoint() {
+  func testALineWheelTravelsFurtherThanASinglePoint() throws {
     let scrollView = makeScrollView()
     let link = SpineScrollLink()
     link.scrollView = scrollView
 
-    link.scroll(by: wheel(deltaY: -1, precise: false))
+    link.scroll(by: try wheel(deltaY: -1, precise: false))
     XCTAssertGreaterThan(
       scrollView.contentView.bounds.origin.y, 1,
       "a line-based notch is worth more than one point of list")
@@ -118,17 +122,17 @@ final class SpineScrollLinkTests: XCTestCase {
 
   /// The list stops at both ends. Without the clamp the ribbon can drive the content off its own
   /// document and leave the spine showing blank space it can never scroll back from.
-  func testTheListStopsAtBothEnds() {
+  func testTheListStopsAtBothEnds() throws {
     let scrollView = makeScrollView(documentHeight: 2_000, viewportHeight: 500)
     let link = SpineScrollLink()
     link.scrollView = scrollView
 
-    for _ in 0..<100 { link.scroll(by: wheel(deltaY: -200)) }
+    for _ in 0..<100 { link.scroll(by: try wheel(deltaY: -200)) }
     XCTAssertEqual(
       scrollView.contentView.bounds.origin.y, 1_500, accuracy: 0.001,
       "the oldest thing loaded is the bottom of the document, not past it")
 
-    for _ in 0..<100 { link.scroll(by: wheel(deltaY: 200)) }
+    for _ in 0..<100 { link.scroll(by: try wheel(deltaY: 200)) }
     XCTAssertEqual(
       scrollView.contentView.bounds.origin.y, 0, accuracy: 0.001,
       "and the newest is the top, not above it")
@@ -136,15 +140,15 @@ final class SpineScrollLinkTests: XCTestCase {
 
   /// A list shorter than its viewport has nowhere to go, and a ribbon with no list yet must not
   /// swallow the wheel — the caller falls through to normal handling on `false`.
-  func testAWheelWithNothingToScrollIsHarmless() {
+  func testAWheelWithNothingToScrollIsHarmless() throws {
     let link = SpineScrollLink()
-    XCTAssertFalse(
+    try XCTAssertFalse(
       link.scroll(by: wheel(deltaY: -40)),
       "no list resolved yet: the event has to go back to AppKit, not vanish")
 
     let shortList = makeScrollView(documentHeight: 200, viewportHeight: 500)
     link.scrollView = shortList
-    XCTAssertTrue(link.scroll(by: wheel(deltaY: -40)))
+    try XCTAssertTrue(link.scroll(by: wheel(deltaY: -40)))
     XCTAssertEqual(shortList.contentView.bounds.origin.y, 0, accuracy: 0.001)
   }
 }
