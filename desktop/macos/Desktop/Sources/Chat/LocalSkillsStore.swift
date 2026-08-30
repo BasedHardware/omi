@@ -97,6 +97,42 @@ enum LocalSkillsStore {
     return slug
   }
 
+  /// Write a skill that came with bundled files, replacing any folder already at its slug.
+  ///
+  /// A skill folder is one unit: its `SKILL.md` references the other files by relative path, so a
+  /// partial write leaves instructions pointing at nothing. Files land in a fresh folder that
+  /// replaces the old one only once every byte is on disk.
+  @discardableResult
+  static func saveSkillBundle(title: String, markdown: String, files: [String: Data]) throws -> String {
+    let slug = slugify(title)
+    guard !slug.isEmpty else {
+      throw NSError(
+        domain: "LocalSkillsStore", code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Skill name must contain letters or numbers"])
+    }
+    let fm = FileManager.default
+    let destination = skillsDirURL.appendingPathComponent(slug, isDirectory: true)
+    let staging = skillsDirURL.appendingPathComponent(".\(slug).incoming", isDirectory: true)
+    try? fm.removeItem(at: staging)
+    try fm.createDirectory(at: staging, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: staging) }
+
+    try Data(normalize(markdown: markdown, slug: slug).utf8)
+      .write(to: staging.appendingPathComponent("SKILL.md"), options: .atomic)
+    for (path, data) in files where path != "SKILL.md" {
+      guard ExtensionCatalog.SkillSource.isSafe(path: path) else { continue }
+      let file = staging.appendingPathComponent(path)
+      try fm.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try data.write(to: file, options: .atomic)
+    }
+
+    try? fm.removeItem(at: destination)
+    try fm.moveItem(at: staging, to: destination)
+    ensurePluginManifest()
+    notifyChanged()
+    return slug
+  }
+
   static func deleteSkill(slug: String) {
     try? FileManager.default.removeItem(at: skillsDirURL.appendingPathComponent(slug))
     notifyChanged()

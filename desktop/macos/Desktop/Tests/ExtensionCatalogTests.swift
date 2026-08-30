@@ -153,19 +153,61 @@ final class ExtensionCatalogTests: XCTestCase {
 
   // MARK: - Skills index
 
-  func testSkillsRepoContentsBecomeRawMarkdownInstalls() throws {
+  /// A skill is a folder. 22 of the 33 skills in the two default catalogs ship files their
+  /// SKILL.md points at — `docx` alone carries 59, including the scripts it tells the model to
+  /// run — so installing the Markdown alone yields instructions that reference nothing.
+  func testSkillsRepoTreeCarriesTheWholeFolder() throws {
     let payload = """
-      [{"type": "dir", "name": "web-research"},
-       {"type": "file", "name": "README.md"},
-       {"type": "dir", "name": "pdf"}]
+      {"tree": [
+        {"type": "blob", "path": "README.md"},
+        {"type": "blob", "path": "skills/web-research/SKILL.md"},
+        {"type": "blob", "path": "skills/web-research/scripts/fetch.py"},
+        {"type": "blob", "path": "skills/web-research/references/sources.md"},
+        {"type": "tree", "path": "skills/web-research/scripts"},
+        {"type": "blob", "path": "skills/pdf/SKILL.md"},
+        {"type": "blob", "path": "skills/no-manifest/notes.md"}
+      ]}
       """
     let entries = ExtensionCatalog.skillEntries(
-      fromRepoContents: Data(payload.utf8), repo: "acme/skills", ref: "main")
+      fromRepoTree: Data(payload.utf8), repo: "acme/skills", ref: "main")
 
-    XCTAssertEqual(entries.map(\.name), ["Web Research", "Pdf"])
-    let expected = try XCTUnwrap(
-      URL(string: "https://raw.githubusercontent.com/acme/skills/main/skills/web-research/SKILL.md"))
-    XCTAssertEqual(entries[0].install, .skill(markdownURL: expected))
+    XCTAssertEqual(
+      entries.map(\.name), ["Web Research", "Pdf"],
+      "a folder with no SKILL.md is not a skill")
+    XCTAssertEqual(
+      entries[0].install,
+      .skill(
+        source: ExtensionCatalog.SkillSource(
+          repo: "acme/skills", ref: "main", slug: "web-research",
+          files: ["SKILL.md", "references/sources.md", "scripts/fetch.py"])),
+      "SKILL.md leads: it is fetched and checked before anything is written")
+    XCTAssertEqual(
+      entries[0].install.needsInput, false, "a skill install never prompts for a secret")
+  }
+
+  /// The file list is remote input that decides where bytes land under ~/.omi.
+  func testSkillPathsThatEscapeTheFolderAreRejected() throws {
+    let source = ExtensionCatalog.SkillSource(
+      repo: "acme/skills", ref: "main", slug: "x", files: ["SKILL.md"])
+    for path in ["../evil", "a/../../evil", "/etc/passwd", "", "a//b", "./x"] {
+      XCTAssertFalse(ExtensionCatalog.SkillSource.isSafe(path: path), path)
+      XCTAssertNil(source.rawURL(for: path), path)
+    }
+    XCTAssertEqual(
+      source.rawURL(for: "scripts/run.py")?.absoluteString,
+      "https://raw.githubusercontent.com/acme/skills/main/skills/x/scripts/run.py")
+
+    let payload = """
+      {"tree": [{"type": "blob", "path": "skills/x/SKILL.md"},
+                {"type": "blob", "path": "skills/x/../../escape.sh"}]}
+      """
+    guard
+      case .skill(let parsed) = try XCTUnwrap(
+        ExtensionCatalog.skillEntries(fromRepoTree: Data(payload.utf8), repo: "a/b", ref: "main")
+          .first
+      ).install
+    else { return XCTFail("expected a skill install") }
+    XCTAssertEqual(parsed.files, ["SKILL.md"])
   }
 
   /// Real SKILL.md files in the wild use YAML block scalars for long descriptions. Reading only the

@@ -21,8 +21,8 @@ enum ExtensionCatalog {
     case mcpRemote(url: String, transport: String, secretHeader: String?)
     /// A local MCP command. `requiredEnv` are variables the server declares it cannot run without.
     case mcpStdio(command: String, args: [String], requiredEnv: [String])
-    /// A skill's raw `SKILL.md`, fetched on install.
-    case skill(markdownURL: URL)
+    /// A skill folder in a GitHub repo, fetched whole on install.
+    case skill(source: SkillSource)
 
     var needsInput: Bool {
       switch self {
@@ -31,6 +31,34 @@ enum ExtensionCatalog {
       case .skill: return false
       }
     }
+  }
+
+  /// Where a catalog skill's files live. A skill is a folder, not a file: its `SKILL.md` routinely
+  /// tells the model to run `scripts/x.py` or read `references/y.md`, and installing the Markdown
+  /// alone yields a skill whose every instruction points at something absent.
+  struct SkillSource: Equatable {
+    let repo: String
+    let ref: String
+    let slug: String
+    /// Paths relative to the skill folder, `SKILL.md` first.
+    let files: [String]
+
+    /// Files are fetched from raw.githubusercontent, so a path that climbs out of the folder
+    /// cannot exist. Rejected anyway: this list is remote input that decides where bytes land.
+    static func isSafe(path: String) -> Bool {
+      guard !path.isEmpty, !path.hasPrefix("/"), path.count <= 255 else { return false }
+      // Empty components must be kept to be rejected: the default `split` drops them, which let
+      // "a//b" through.
+      return !path.split(separator: "/", omittingEmptySubsequences: false)
+        .contains { $0 == ".." || $0 == "." || $0.isEmpty }
+    }
+
+    func rawURL(for path: String) -> URL? {
+      guard Self.isSafe(path: path) else { return nil }
+      return URL(string: "https://raw.githubusercontent.com/\(repo)/\(ref)/skills/\(slug)/\(path)")
+    }
+
+    var markdownURL: URL? { rawURL(for: "SKILL.md") }
   }
 
   struct Entry: Identifiable, Equatable {
@@ -342,16 +370,35 @@ enum ExtensionCatalog {
     return folded.isEmpty ? nil : folded
   }
 
-  static func skillEntries(fromRepoContents data: Data, repo: String, ref: String) -> [Entry] {
-    guard let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
-    return items.compactMap { item in
-      guard (item["type"] as? String) == "dir", let slug = item["name"] as? String, !slug.isEmpty
-      else { return nil }
-      guard
-        let url = URL(
-          string: "https://raw.githubusercontent.com/\(repo)/\(ref)/skills/\(slug)/SKILL.md")
-      else { return nil }
-      let owner = String(repo.split(separator: "/").first ?? Substring(repo))
+  /// Skills in a repo, from one recursive tree listing.
+  ///
+  /// The tree is read rather than `contents/skills` because it names every file in one request:
+  /// the folder listing gives slugs only, and a per-skill listing would be one request per tile
+  /// before the user has picked anything.
+  static func skillEntries(fromRepoTree data: Data, repo: String, ref: String) -> [Entry] {
+    guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let nodes = root["tree"] as? [[String: Any]]
+    else { return [] }
+
+    var filesBySlug: [String: [String]] = [:]
+    var order: [String] = []
+    for node in nodes {
+      guard (node["type"] as? String) == "blob", let path = node["path"] as? String else { continue }
+      let parts = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+      guard parts.count >= 3, parts[0] == "skills", !parts[1].isEmpty else { continue }
+      let slug = parts[1]
+      let relative = parts.dropFirst(2).joined(separator: "/")
+      guard SkillSource.isSafe(path: relative) else { continue }
+      if filesBySlug[slug] == nil { order.append(slug) }
+      filesBySlug[slug, default: []].append(relative)
+    }
+
+    let owner = String(repo.split(separator: "/").first ?? Substring(repo))
+    return order.compactMap { slug in
+      guard let files = filesBySlug[slug], files.contains("SKILL.md") else { return nil }
+      // SKILL.md first: it is the one file whose absence makes the install pointless, so it is
+      // fetched and checked before anything else is written.
+      let ordered = ["SKILL.md"] + files.filter { $0 != "SKILL.md" }.sorted()
       return Entry(
         id: "\(repo)/\(slug)",
         name: slug.replacingOccurrences(of: "-", with: " ").capitalized,
@@ -360,7 +407,7 @@ enum ExtensionCatalog {
         iconURL: "https://github.com/\(owner).png?size=128",
         websiteURL: "https://github.com/\(repo)/tree/\(ref)/skills/\(slug)",
         publisher: owner,
-        install: .skill(markdownURL: url))
+        install: .skill(source: SkillSource(repo: repo, ref: ref, slug: slug, files: ordered)))
     }
   }
 }

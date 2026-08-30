@@ -264,7 +264,10 @@ struct ExtensionDetailSheet: View {
     switch entry.install {
     case .mcpRemote(let url, let transport, _): return "\(transport.uppercased())  \(url)"
     case .mcpStdio(let command, let args, _): return ([command] + args).joined(separator: " ")
-    case .skill(let url): return url.absoluteString
+    case .skill(let source):
+      let folder = "\(source.repo)/skills/\(source.slug)"
+      guard source.files.count > 1 else { return "\(folder)  ·  SKILL.md" }
+      return "\(folder)  ·  SKILL.md and \(source.files.count - 1) bundled files"
     }
   }
 

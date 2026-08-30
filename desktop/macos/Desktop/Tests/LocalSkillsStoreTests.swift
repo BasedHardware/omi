@@ -56,6 +56,47 @@ final class LocalSkillsStoreTests: XCTestCase {
     XCTAssertTrue(LocalSkillsStore.listSkills().isEmpty)
   }
 
+  /// A catalog skill's SKILL.md references its siblings by relative path, so the folder is the
+  /// unit: nested files keep their layout, and a reinstall replaces the folder rather than
+  /// layering new files over whatever the last one left.
+  func testBundleWritesNestedFilesAndReplacesTheFolder() throws {
+    let md = "---\nname: x\ndescription: Does things\n---\nRun scripts/run.py."
+    let slug = try LocalSkillsStore.saveSkillBundle(
+      title: "Doc Tools", markdown: md,
+      files: ["scripts/run.py": Data("print(1)".utf8), "references/a.md": Data("ref".utf8)])
+
+    let dir = LocalSkillsStore.skillsDirURL.appendingPathComponent(slug)
+    XCTAssertEqual(
+      try String(contentsOf: dir.appendingPathComponent("scripts/run.py"), encoding: .utf8),
+      "print(1)")
+    XCTAssertEqual(
+      try String(contentsOf: dir.appendingPathComponent("references/a.md"), encoding: .utf8), "ref")
+    XCTAssertTrue(try XCTUnwrap(LocalSkillsStore.loadMarkdown(slug: slug)).contains("name: doc-tools"))
+
+    _ = try LocalSkillsStore.saveSkillBundle(
+      title: "Doc Tools", markdown: md, files: ["scripts/new.py": Data("print(2)".utf8)])
+    XCTAssertFalse(
+      FileManager.default.fileExists(atPath: dir.appendingPathComponent("scripts/run.py").path),
+      "a stale file from the previous version must not survive a reinstall")
+    XCTAssertEqual(LocalSkillsStore.listSkills().map(\.slug), [slug])
+
+    // No staging folder is left behind to show up as a skill.
+    let left = try FileManager.default.contentsOfDirectory(
+      atPath: LocalSkillsStore.skillsDirURL.path)
+    XCTAssertEqual(left, [slug])
+  }
+
+  func testBundleSkipsPathsThatEscapeTheFolder() throws {
+    let slug = try LocalSkillsStore.saveSkillBundle(
+      title: "Safe", markdown: "---\nname: x\ndescription: d\n---\nBody.",
+      files: ["../escape.sh": Data("x".utf8), "ok.md": Data("y".utf8)])
+    let dir = LocalSkillsStore.skillsDirURL.appendingPathComponent(slug)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("ok.md").path))
+    XCTAssertFalse(
+      FileManager.default.fileExists(
+        atPath: LocalSkillsStore.skillsDirURL.appendingPathComponent("escape.sh").path))
+  }
+
   func testInvalidTitleThrowsAndMissingDirListsEmpty() {
     XCTAssertThrowsError(try LocalSkillsStore.saveSkill(title: "!!!", markdown: "x"))
     XCTAssertTrue(LocalSkillsStore.listSkills().isEmpty)

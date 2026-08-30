@@ -9,6 +9,12 @@ enum ExtensionCatalogService {
   /// Long enough for a cold registry, short enough that a hung catalog never holds the section.
   static let requestTimeout: TimeInterval = 12
 
+  /// Caps on a skill folder, which is remote input: enough for the largest catalog skill today
+  /// (80-odd font files) without letting a hostile repo write a disk's worth into `~/.omi`.
+  static let maxSkillFiles = 200
+  static let maxSkillFileBytes = 4 * 1024 * 1024
+  static let maxSkillBundleBytes = 32 * 1024 * 1024
+
   enum CatalogError: LocalizedError {
     case unreachable
     case emptySkill
@@ -85,10 +91,11 @@ enum ExtensionCatalogService {
     for source in ExtensionCatalog.sources(kind: .skill) {
       guard case .githubSkillsRepo(let repo, let ref) = source.feed else { continue }
       guard
-        let url = URL(string: "https://api.github.com/repos/\(repo)/contents/skills?ref=\(ref)"),
+        let url = URL(
+          string: "https://api.github.com/repos/\(repo)/git/trees/\(ref)?recursive=1"),
         let data = await get(url, area: "extension_catalog_skills")
       else { continue }
-      let listed = ExtensionCatalog.skillEntries(fromRepoContents: data, repo: repo, ref: ref)
+      let listed = ExtensionCatalog.skillEntries(fromRepoTree: data, repo: repo, ref: ref)
       entries += await withDescriptions(listed)
     }
     // The index has no server-side search, so the query filters what came back.
@@ -108,7 +115,7 @@ enum ExtensionCatalogService {
   {
     let found = await withTaskGroup(of: (String, String)?.self) { group in
       for entry in entries {
-        guard case .skill(let url) = entry.install else { continue }
+        guard case .skill(let source) = entry.install, let url = source.markdownURL else { continue }
         group.addTask {
           guard let data = await get(url, area: "extension_catalog_skill_description"),
             let markdown = String(data: data, encoding: .utf8),
@@ -184,15 +191,48 @@ enum ExtensionCatalogService {
       if !env.isEmpty { raw["env"] = env }
       try LocalMcpStore.upsertServer(availableServerName(for: entry.name), entry: raw)
 
-    case .skill(let markdownURL):
-      guard let data = await get(markdownURL, area: "extension_catalog_skill_body"),
+    case .skill(let source):
+      guard let markdownURL = source.markdownURL,
+        let data = await get(markdownURL, area: "extension_catalog_skill_body"),
         let markdown = String(data: data, encoding: .utf8)
       else { throw CatalogError.unreachable }
       guard !markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         throw CatalogError.emptySkill
       }
-      _ = try LocalSkillsStore.saveSkill(title: entry.name, markdown: markdown)
+      let files = await bundledFiles(of: source)
+      _ = try LocalSkillsStore.saveSkillBundle(
+        title: entry.name, markdown: markdown, files: files)
     }
+  }
+
+  /// A skill's non-Markdown files: the scripts, references and assets its instructions point at.
+  ///
+  /// Fetched concurrently and capped, because a catalog folder is remote input of unknown size —
+  /// one repo's skill ships 80 font files. A file that will not load is left out rather than
+  /// failing the install: a skill missing one reference is still usable, and the alternative is
+  /// that one dead blob costs the user the whole skill.
+  static func bundledFiles(of source: ExtensionCatalog.SkillSource) async -> [String: Data] {
+    let paths = source.files.filter { $0 != "SKILL.md" }.prefix(maxSkillFiles)
+    let fetched = await withTaskGroup(of: (String, Data)?.self) { group in
+      for path in paths {
+        guard let url = source.rawURL(for: path) else { continue }
+        group.addTask {
+          guard let data = await get(url, area: "extension_catalog_skill_file"),
+            data.count <= maxSkillFileBytes
+          else { return nil }
+          return (path, data)
+        }
+      }
+      var byPath: [String: Data] = [:]
+      var total = 0
+      for await pair in group {
+        guard let pair, total + pair.1.count <= maxSkillBundleBytes else { continue }
+        total += pair.1.count
+        byPath[pair.0] = pair.1
+      }
+      return byPath
+    }
+    return fetched
   }
 
   /// An `Authorization` header carries a scheme; a user pasting a key types only the key. Storing
