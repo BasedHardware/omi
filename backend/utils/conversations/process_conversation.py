@@ -66,6 +66,7 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
+from utils.metrics import record_jit_first_open
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
@@ -2145,6 +2146,8 @@ def process_conversation(
         if first_open_plan.defer_derived_work:
             try:
                 jit_defer_expensive = conversations_db.initialize_first_open_work(uid, conversation.id)
+                if jit_defer_expensive:
+                    record_jit_first_open(event='claim', effect='obligation')
             except Exception as error:
                 logger.warning(
                     'JIT first-open initialization failed; using eager path uid=%s conv=%s: %s',
@@ -2152,6 +2155,10 @@ def process_conversation(
                     conversation.id,
                     error,
                 )
+                try:
+                    record_jit_first_open(event='fail', effect='obligation')
+                except Exception:
+                    pass
 
     # Wrap every post-persistence derived effect so the durable finalizer can
     # defer the bundle until it transactionally claims ownership (#10468 r5).

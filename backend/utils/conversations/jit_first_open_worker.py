@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from models.app import UsageHistoryType
 from models.other import Person
+from utils.metrics import record_jit_first_open
 
 
 def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], token: str) -> None:
@@ -32,10 +33,21 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
             raise RuntimeError(f'first-open authority suspended before {effect}')
 
     def complete(effect: str) -> None:
-        authorize(effect)
-        if not processing.conversations_db.complete_first_open_effect(uid, conversation.id, token, effect):
-            raise RuntimeError(f'first-open lease lost while completing {effect}')
-        states[effect] = {'state': 'complete'}
+        try:
+            authorize(effect)
+            if not processing.conversations_db.complete_first_open_effect(uid, conversation.id, token, effect):
+                raise RuntimeError(f'first-open lease lost while completing {effect}')
+            states[effect] = {'state': 'complete'}
+            try:
+                record_jit_first_open(event='complete', effect=effect)
+            except Exception:
+                pass
+        except Exception:
+            try:
+                record_jit_first_open(event='fail', effect=effect)
+            except Exception:
+                pass
+            raise
 
     if conversation.discarded:
         for effect in processing.conversations_db.FIRST_OPEN_EFFECTS:
