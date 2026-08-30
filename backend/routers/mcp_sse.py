@@ -1573,6 +1573,7 @@ def handle_mcp_message(
                 }
             return error, None
         except Exception:
+            logger.exception("hosted MCP tool call failed tool=%s", tool_name)
             schedule_mcp_tool_call(
                 uid=mcp_auth_context.uid,
                 tool_name=tool_name,

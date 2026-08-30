@@ -547,6 +547,7 @@ async def test_unexpected_tool_exception_is_json_rpc_http_200_without_private_de
         patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
         patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
         patch.object(sse, 'execute_tool', side_effect=RuntimeError('private failure detail')),
+        patch.object(sse.logger, 'exception') as log_exception,
     ):
         response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
 
@@ -554,6 +555,7 @@ async def test_unexpected_tool_exception_is_json_rpc_http_200_without_private_de
     assert response.status_code == 200
     assert payload['error'] == {'code': -32009, 'message': 'Tool temporarily unavailable. Retry shortly.'}
     assert 'private failure detail' not in response.body.decode()
+    log_exception.assert_called_once_with('hosted MCP tool call failed tool=%s', 'get_conversations')
 
 
 @pytest.mark.asyncio
