@@ -17,7 +17,7 @@ void main() {
   });
 
   test('reads a PlatformException message instead of its dump', () {
-    const error = PlatformException(
+    final error = PlatformException(
       code: 'Unexpected security result code',
       message: 'The specified item already exists in the keychain.',
       details: -25299,
@@ -27,7 +27,7 @@ void main() {
   });
 
   test('falls back to the platform code when the message is empty', () {
-    const error = PlatformException(code: 'channel-error', message: '  ');
+    final error = PlatformException(code: 'channel-error', message: '  ');
 
     expect(readableError(error), 'channel-error');
   });
