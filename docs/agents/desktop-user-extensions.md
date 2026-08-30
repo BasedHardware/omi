@@ -29,14 +29,14 @@ omitting `resource` — fails every hosted provider.
 
 ## MCP client
 
-`agent/src/runtime/mcp-client.ts` holds the wire subset every user server is
+`desktop/macos/agent/src/runtime/mcp-client.ts` holds the wire subset every user server is
 driven through; each transport supplies `rpc` and the handshake:
 
 | Transport | File | When |
 |---|---|---|
-| Streamable HTTP | `mcp-http-client.ts` | default for a `url` server |
-| HTTP+SSE | `mcp-sse-client.ts` | `transport: "sse"` — the URL is an event stream, and POSTing to it is a 404 |
-| stdio | `mcp-stdio-client.ts` | a `command` server |
+| Streamable HTTP | `desktop/macos/agent/src/runtime/mcp-http-client.ts` | default for a `url` server |
+| HTTP+SSE | `desktop/macos/agent/src/runtime/mcp-sse-client.ts` | `transport: "sse"` — the URL is an event stream, and POSTing to it is a 404 |
+| stdio | `desktop/macos/agent/src/runtime/mcp-stdio-client.ts` | a `command` server |
 
 `initialize` capabilities are recorded, so a server is never asked for prompts
 it does not publish. `tools/list` and `prompts/list` are walked to the last
