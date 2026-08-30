@@ -223,6 +223,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// When the current warm socket last connected — used to tell a normal idle-close
   /// (survived a while → keep re-warming) from a fast config/auth failure (don't loop).
   var lastWarmAt: Date?
+  /// The panel state this session has already been told, so an unchanged panel is not
+  /// re-sent at every turn boundary. Cleared with the session it describes.
+  var lastSentPanelState: String?
+  /// The state currently in flight. Delivery is async, and two turn boundaries can open
+  /// before the first send resolves — without this they both send the same line.
+  var inFlightPanelState: String?
   /// Consecutive failed (re)connects with no surviving session — caps churn on a hard
   /// failure. Reset when a socket survives past the idle window or a turn completes.
   var hubReconnectStrikes = 0

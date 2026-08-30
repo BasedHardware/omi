@@ -768,6 +768,31 @@ extension RealtimeHubController {
     guard isCurrentSession(source) else { return }
     AgentCompletionVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
     NotchCardVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
+    sendPanelStateIfChanged(source: source)
+  }
+
+  /// Tell the session what is on the panel before the user's words arrive, because a
+  /// turn that calls no tool otherwise learns nothing about it — and a model that cannot
+  /// see the panel cannot obey the rule about not claiming it changed one.
+  private func sendPanelStateIfChanged(source: RealtimeHubSession) {
+    guard let line = RealtimeHubPanelStateContext.line(lastSent: lastSentPanelState),
+      line != inFlightPanelState
+    else { return }
+    let label = RealtimeHubPanelStateContext.label()
+    inFlightPanelState = line
+    Task { [weak self, weak source] in
+      defer { if self?.inFlightPanelState == line { self?.inFlightPanelState = nil } }
+      guard let source else { return }
+      let delivered = await source.sendBackgroundAgentContext(line)
+      // Only remember what actually went. The window can close under us, and marking a
+      // dropped line as sent would leave the session permanently unaware of the panel.
+      guard delivered else {
+        log("RealtimeHub: panel state not delivered, will retry next turn")
+        return
+      }
+      self?.lastSentPanelState = line
+      log("RealtimeHub: panel state sent state=\(label) (\(line.count) chars)")
+    }
   }
 
   func hubDidConnect(source: RealtimeHubSession) {

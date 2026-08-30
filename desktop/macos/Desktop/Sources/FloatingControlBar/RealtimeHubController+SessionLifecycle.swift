@@ -422,6 +422,8 @@ extension RealtimeHubController {
       delegate: self)
     pendingContextCacheReplacement = false
     lastWarmAt = nil
+    // A new session has been told nothing, whatever the last one knew.
+    lastSentPanelState = nil
     hubConnected = false
     session = s
     voiceSessionID = VoiceSessionID()
