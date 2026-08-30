@@ -27,9 +27,14 @@ from database.vector_db import (
     delete_transcript_chunk_vectors_batch,
 )
 from utils import stripe as stripe_utils
-from utils.cloud_tasks import enqueue_account_deletion_wipe, is_account_deletion_dispatch_enabled
+from utils.cloud_tasks import (
+    assert_inline_account_deletion_permitted,
+    enqueue_account_deletion_wipe,
+    is_account_deletion_dispatch_enabled,
+)
 from utils.executors import cleanup_executor, submit_with_context
 from utils.log_sanitizer import sanitize
+from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
 from utils.memory.memory_service import MemoryService
@@ -420,7 +425,8 @@ def enqueue_deletion_wipe(uid: str, wipe_job_id: str):
         enqueue_account_deletion_wipe(wipe_job_id)
         return
     # Inline dispatch is retained solely for deterministic local/dev/test
-    # execution. Production startup rejects this mode before serving traffic.
+    # execution, and may never reach production data whatever the stage says.
+    assert_inline_account_deletion_permitted()
     submit_with_context(cleanup_executor, background_wipe_user_data, uid)
 
 
@@ -525,7 +531,14 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         enqueue_deletion_wipe(uid, wipe_job_id)
     except Exception as e:
         _mark_wipe_failed_after_enqueue_error(uid, e)
-        logger.warning('delete_account queue acceleration failed; durable reconciliation will retry')
+        record_fallback(
+            component='other',
+            from_mode='cloud_tasks',
+            to_mode='durable_reconciliation',
+            reason='enqueue_failed',
+            outcome='degraded',
+            log=logger,
+        )
         # The actionable marker is committed. Queue dispatch is only an
         # acceleration path; reconciliation owns eventual completion.
         return {'status': 'ok', 'message': 'Account deletion started'}
@@ -606,7 +619,11 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
             skipped += 1
             continue
         try:
-            enqueue_deletion_wipe(uid, wipe_job_id)
+            # Reconciliation re-dispatches; it never executes. Calling the
+            # mode-aware helper here made any inline process - a local run
+            # against prod data - the wipe executor for every account it could
+            # claim, which is how wipes ran outside the OIDC handler entirely.
+            enqueue_account_deletion_wipe(wipe_job_id)
         except Exception as e:
             logger.error(f'delete_account reconciliation enqueue failed for {uid}: {sanitize(str(e))}')
             _mark_wipe_failed_after_enqueue_error(uid, e)
