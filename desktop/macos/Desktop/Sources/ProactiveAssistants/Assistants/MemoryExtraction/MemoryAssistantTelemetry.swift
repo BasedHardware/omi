@@ -116,7 +116,7 @@ enum MemoryAssistantTelemetry {
 /// Data needed by the real local-insert → backend-create → synced-receipt path.
 /// It contains product data only while in-process; the telemetry emitted by the
 /// pipeline below remains the closed, bounded schema in ``MemoryAssistantTelemetry``.
-struct MemoryAssistantDurabilityRequest: Sendable {
+struct MemoryWriteDurabilityRequest: Sendable {
   let content: String
   let category: String
   let sourceApp: String
@@ -148,21 +148,21 @@ struct MemoryAssistantDurabilityRequest: Sendable {
 /// model has produced a candidate. The actor owns the real SQLite/API operations;
 /// tests inject a deterministic runner into the same pipeline used by
 /// ``MemoryAssistant`` rather than exercising a parallel helper.
-protocol MemoryAssistantDurabilityRunning: Sendable {
-  func persistAndSync(_ request: MemoryAssistantDurabilityRequest) async -> MemoryAssistantDurability.Outcome
+protocol MemoryWriteDurabilityRunning: Sendable {
+  func persistAndSync(_ request: MemoryWriteDurabilityRequest) async -> MemoryWriteDurability.Outcome
   /// Retry the backend half for a row that is already durable locally.
   func syncPersistedLocal(
-    _ request: MemoryAssistantDurabilityRequest,
+    _ request: MemoryWriteDurabilityRequest,
     localID: Int64
-  ) async -> MemoryAssistantDurability.Outcome
+  ) async -> MemoryWriteDurability.Outcome
 }
 
 /// The three production operations behind the durable sequence. Returning only
 /// bounded receipts lets the sequence itself be exercised with deterministic
 /// failures while the live implementation continues to own all product data.
-protocol MemoryAssistantDurabilityOperating: Sendable {
-  func insertLocalMemory(_ request: MemoryAssistantDurabilityRequest) async -> Int64?
-  func createRemoteMemory(_ request: MemoryAssistantDurabilityRequest) async -> MemoryAssistantRemoteReceipt?
+protocol MemoryWriteDurabilityOperating: Sendable {
+  func insertLocalMemory(_ request: MemoryWriteDurabilityRequest) async -> Int64?
+  func createRemoteMemory(_ request: MemoryWriteDurabilityRequest) async -> MemoryAssistantRemoteReceipt?
   func markLocalMemorySynced(
     id: Int64,
     receipt: MemoryAssistantRemoteReceipt,
@@ -188,7 +188,7 @@ struct MemoryAssistantRemoteReceipt: @unchecked Sendable {
   }
 }
 
-enum MemoryAssistantDurability {
+enum MemoryWriteDurability {
   enum Outcome: String, Equatable {
     /// Local SQLite insert, backend create, and local synced-state update all
     /// completed. This is the only fully synced terminal.
@@ -235,14 +235,14 @@ enum MemoryAssistantDurability {
 /// Production sequence used by `MemoryAssistant`. Tests inject failures into
 /// its operation boundary, so local insert, backend sync, and sync-receipt
 /// classification are covered through the same runner that ships.
-actor MemoryAssistantProductionDurability: MemoryAssistantDurabilityRunning {
-  private let operations: any MemoryAssistantDurabilityOperating
+actor MemoryAssistantProductionDurability: MemoryWriteDurabilityRunning {
+  private let operations: any MemoryWriteDurabilityOperating
 
-  init(operations: any MemoryAssistantDurabilityOperating) {
+  init(operations: any MemoryWriteDurabilityOperating) {
     self.operations = operations
   }
 
-  func persistAndSync(_ request: MemoryAssistantDurabilityRequest) async -> MemoryAssistantDurability.Outcome {
+  func persistAndSync(_ request: MemoryWriteDurabilityRequest) async -> MemoryWriteDurability.Outcome {
     guard let localID = await operations.insertLocalMemory(request) else {
       return .localPersistenceFailed
     }
@@ -262,9 +262,9 @@ actor MemoryAssistantProductionDurability: MemoryAssistantDurabilityRunning {
   }
 
   func syncPersistedLocal(
-    _ request: MemoryAssistantDurabilityRequest,
+    _ request: MemoryWriteDurabilityRequest,
     localID: Int64
-  ) async -> MemoryAssistantDurability.Outcome {
+  ) async -> MemoryWriteDurability.Outcome {
     guard let receipt = await operations.createRemoteMemory(request) else {
       return .syncFailed
     }
@@ -283,8 +283,8 @@ actor MemoryAssistantProductionDurability: MemoryAssistantDurabilityRunning {
 
 /// Live SQLite/API implementation. Owner checks stay adjacent to every product
 /// mutation; tests replace this actor without adding mutable global hooks.
-actor MemoryAssistantLiveDurabilityOperations: MemoryAssistantDurabilityOperating {
-  func insertLocalMemory(_ request: MemoryAssistantDurabilityRequest) async -> Int64? {
+actor MemoryAssistantLiveDurabilityOperations: MemoryWriteDurabilityOperating {
+  func insertLocalMemory(_ request: MemoryWriteDurabilityRequest) async -> Int64? {
     guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerID else {
       return nil
     }
@@ -314,7 +314,7 @@ actor MemoryAssistantLiveDurabilityOperations: MemoryAssistantDurabilityOperatin
     }
   }
 
-  func createRemoteMemory(_ request: MemoryAssistantDurabilityRequest) async -> MemoryAssistantRemoteReceipt? {
+  func createRemoteMemory(_ request: MemoryWriteDurabilityRequest) async -> MemoryAssistantRemoteReceipt? {
     guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerID else {
       return nil
     }
@@ -362,20 +362,20 @@ actor MemoryAssistantLiveDurabilityOperations: MemoryAssistantDurabilityOperatin
 /// The one path used by `MemoryAssistant` after a candidate passes confidence
 /// filtering. Keeping the runner injectable makes all four durability terminals
 /// behaviorally testable while preserving the real production wiring.
-actor MemoryAssistantDurabilityPipeline {
-  private let runner: any MemoryAssistantDurabilityRunning
+actor MemoryWriteDurabilityPipeline {
+  private let runner: any MemoryWriteDurabilityRunning
 
-  init(runner: any MemoryAssistantDurabilityRunning) {
+  init(runner: any MemoryWriteDurabilityRunning) {
     self.runner = runner
   }
 
   func persistSyncAndEmit(
-    _ request: MemoryAssistantDurabilityRequest,
+    _ request: MemoryWriteDurabilityRequest,
     confidence: Double
-  ) async -> MemoryAssistantDurability.Outcome {
+  ) async -> MemoryWriteDurability.Outcome {
     let outcome = await runner.persistAndSync(request)
     await MainActor.run {
-      MemoryAssistantDurability.emitPersistenceTerminal(outcome, confidence: confidence)
+      MemoryWriteDurability.emitPersistenceTerminal(outcome, confidence: confidence)
     }
     return outcome
   }
@@ -383,9 +383,9 @@ actor MemoryAssistantDurabilityPipeline {
   /// Retries emit no terminal: the extraction they belong to already emitted
   /// one, and re-emitting would count the same memory twice.
   func syncPersistedLocal(
-    _ request: MemoryAssistantDurabilityRequest,
+    _ request: MemoryWriteDurabilityRequest,
     localID: Int64
-  ) async -> MemoryAssistantDurability.Outcome {
+  ) async -> MemoryWriteDurability.Outcome {
     await runner.syncPersistedLocal(request, localID: localID)
   }
 }

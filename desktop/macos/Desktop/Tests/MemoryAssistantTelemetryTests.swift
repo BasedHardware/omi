@@ -116,7 +116,7 @@ final class MemoryAssistantTelemetryTests: XCTestCase {
 /// Deterministic operations injected into the real production sequence. Call
 /// order proves a failed SQLite insert cannot reach backend sync, while the
 /// other fixtures drive backend and sync-state failures independently.
-private actor MemoryAssistantDurabilityFixtureOperations: MemoryAssistantDurabilityOperating {
+private actor MemoryWriteDurabilityFixtureOperations: MemoryWriteDurabilityOperating {
   private let insertSucceeds: Bool
   private let remoteSucceeds: Bool
   private let markSucceeds: Bool
@@ -128,12 +128,12 @@ private actor MemoryAssistantDurabilityFixtureOperations: MemoryAssistantDurabil
     self.markSucceeds = markSucceeds
   }
 
-  func insertLocalMemory(_ request: MemoryAssistantDurabilityRequest) async -> Int64? {
+  func insertLocalMemory(_ request: MemoryWriteDurabilityRequest) async -> Int64? {
     calls.append("insert")
     return insertSucceeds ? 42 : nil
   }
 
-  func createRemoteMemory(_ request: MemoryAssistantDurabilityRequest) async -> MemoryAssistantRemoteReceipt? {
+  func createRemoteMemory(_ request: MemoryWriteDurabilityRequest) async -> MemoryAssistantRemoteReceipt? {
     calls.append("remote")
     return remoteSucceeds ? .testFixture : nil
   }
@@ -153,7 +153,7 @@ private actor MemoryAssistantDurabilityFixtureOperations: MemoryAssistantDurabil
 }
 
 @MainActor
-final class MemoryAssistantDurabilityPipelineTests: XCTestCase {
+final class MemoryWriteDurabilityPipelineTests: XCTestCase {
   private typealias CapturedEvent = (name: String, properties: [String: Any])
   private var captured: [CapturedEvent] = []
 
@@ -175,7 +175,7 @@ final class MemoryAssistantDurabilityPipelineTests: XCTestCase {
         insert: Bool,
         remote: Bool,
         mark: Bool,
-        outcome: MemoryAssistantDurability.Outcome,
+        outcome: MemoryWriteDurability.Outcome,
         terminal: String,
         historicalSuccess: Bool,
         calls: [String]
@@ -191,16 +191,16 @@ final class MemoryAssistantDurabilityPipelineTests: XCTestCase {
 
     for testCase in cases {
       captured = []
-      let operations = MemoryAssistantDurabilityFixtureOperations(
+      let operations = MemoryWriteDurabilityFixtureOperations(
         insertSucceeds: testCase.insert,
         remoteSucceeds: testCase.remote,
         markSucceeds: testCase.mark
       )
-      let pipeline = MemoryAssistantDurabilityPipeline(
+      let pipeline = MemoryWriteDurabilityPipeline(
         runner: MemoryAssistantProductionDurability(operations: operations)
       )
       let result = await pipeline.persistSyncAndEmit(
-        MemoryAssistantDurabilityRequest(
+        MemoryWriteDurabilityRequest(
           memory: ExtractedMemory(content: "test memory", category: .system, sourceApp: "Test", confidence: 0.82),
           screenshotId: nil,
           contextSummary: "test",
@@ -230,7 +230,7 @@ final class MemoryAssistantDurabilityPipelineTests: XCTestCase {
   /// re-sends only the backend create, and never re-emits the extraction
   /// terminal that would double-count the memory.
   func testRetryOfAPersistedLocalRowSyncsWithoutReemittingTelemetry() async {
-    let cases: [(remote: Bool, mark: Bool, outcome: MemoryAssistantDurability.Outcome, calls: [String])] = [
+    let cases: [(remote: Bool, mark: Bool, outcome: MemoryWriteDurability.Outcome, calls: [String])] = [
       (true, true, .synced, ["remote", "mark"]),
       (false, true, .syncFailed, ["remote"]),
       (true, false, .syncStatePersistenceFailed, ["remote", "mark"]),
@@ -238,17 +238,17 @@ final class MemoryAssistantDurabilityPipelineTests: XCTestCase {
 
     for testCase in cases {
       captured = []
-      let operations = MemoryAssistantDurabilityFixtureOperations(
+      let operations = MemoryWriteDurabilityFixtureOperations(
         insertSucceeds: true,
         remoteSucceeds: testCase.remote,
         markSucceeds: testCase.mark
       )
-      let pipeline = MemoryAssistantDurabilityPipeline(
+      let pipeline = MemoryWriteDurabilityPipeline(
         runner: MemoryAssistantProductionDurability(operations: operations)
       )
 
       let result = await pipeline.syncPersistedLocal(
-        MemoryAssistantDurabilityRequest(
+        MemoryWriteDurabilityRequest(
           memory: ExtractedMemory(content: "stranded memory", category: .system, sourceApp: "Test", confidence: 0.82),
           screenshotId: nil,
           contextSummary: "test",
@@ -314,7 +314,7 @@ final class MemoryAssistantAnalysisFailureTests: XCTestCase {
   }
 
   func testThrowingAnalysisEmitsExactlyOneBoundedAnalysisFailedTerminal() async {
-    let operations = MemoryAssistantDurabilityFixtureOperations(
+    let operations = MemoryWriteDurabilityFixtureOperations(
       insertSucceeds: false,
       remoteSucceeds: false,
       markSucceeds: false

@@ -32,7 +32,7 @@ actor MemoryAssistant: ProactiveAssistant {
 
   private let geminiClient: GeminiClient?
   private let extractionOverride: ExtractionOverride?
-  private let durabilityPipeline: MemoryAssistantDurabilityPipeline
+  private let durabilityPipeline: MemoryWriteDurabilityPipeline
   private var isRunning = false
   private var lastAnalysisTime: Date = .distantPast
   private var previousMemories: [ExtractedMemory] = []  // Last 20 extracted memories for deduplication
@@ -78,7 +78,7 @@ actor MemoryAssistant: ProactiveAssistant {
     self.geminiClient = try GeminiClient(
       apiKey: apiKey, model: ModelQoS.Gemini.lightweight, workload: .extraction)
     self.extractionOverride = nil
-    self.durabilityPipeline = MemoryAssistantDurabilityPipeline(
+    self.durabilityPipeline = MemoryWriteDurabilityPipeline(
       runner: MemoryAssistantProductionDurability(operations: MemoryAssistantLiveDurabilityOperations())
     )
 
@@ -97,11 +97,11 @@ actor MemoryAssistant: ProactiveAssistant {
   /// Gemini client or starting the background frame loop.
   init(
     extractionOverride: @escaping ExtractionOverride,
-    durabilityRunner: any MemoryAssistantDurabilityRunning
+    durabilityRunner: any MemoryWriteDurabilityRunning
   ) {
     self.geminiClient = nil
     self.extractionOverride = extractionOverride
-    self.durabilityPipeline = MemoryAssistantDurabilityPipeline(runner: durabilityRunner)
+    self.durabilityPipeline = MemoryWriteDurabilityPipeline(runner: durabilityRunner)
 
     let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
     self.frameSignal = stream
@@ -228,7 +228,7 @@ actor MemoryAssistant: ProactiveAssistant {
     }
 
     let durability = await durabilityPipeline.persistSyncAndEmit(
-      MemoryAssistantDurabilityRequest(
+      MemoryWriteDurabilityRequest(
         memory: memory,
         screenshotId: screenshotId,
         contextSummary: memoryResult.contextSummary,
@@ -368,7 +368,7 @@ actor MemoryAssistant: ProactiveAssistant {
     for record in stranded {
       guard let localID = record.id else { continue }
       guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-      let request = MemoryAssistantDurabilityRequest(
+      let request = MemoryWriteDurabilityRequest(
         memory: ExtractedMemory(
           content: record.content,
           category: ExtractedMemoryCategory(rawValue: record.category) ?? .system,
