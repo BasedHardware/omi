@@ -438,8 +438,7 @@ class AsyncStreamingCallback(BaseCallbackHandler):
 
 def _langchain_tool_parameters(lc_tool) -> tuple[str, str, dict]:
     """Shared name/description/JSON-schema extraction for both wire formats."""
-    schema_fn = getattr(lc_tool.args_schema, 'model_json_schema', None)
-    schema = schema_fn() if callable(schema_fn) else lc_tool.args_schema.schema()
+    schema = lc_tool.args_schema.schema()
     properties = {k: v for k, v in schema.get('properties', {}).items() if k != 'config'}
     required = [r for r in schema.get('required', []) if r != 'config']
     cleaned_properties = {}
