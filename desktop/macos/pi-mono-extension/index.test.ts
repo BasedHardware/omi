@@ -2060,6 +2060,112 @@ test("registerUserMcpTools: discovers tools over streamable HTTP and registers c
   }
 });
 
+test("registerUserMcpTools: a server's published prompts become callable tools", async () => {
+  const { createServer: createHttpServer } = await import("node:http");
+  const methods: string[] = [];
+  const httpServer = createHttpServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => {
+      const message = JSON.parse(body) as { id?: number; method: string; params?: { name?: string; arguments?: Record<string, unknown> } };
+      methods.push(message.method);
+      if (message.id === undefined) { res.writeHead(202).end(); return; }
+      const respond = (result: unknown) => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+      };
+      if (message.method === "initialize") {
+        respond({ protocolVersion: "2025-06-18", capabilities: { tools: {}, prompts: {} } });
+      } else if (message.method === "tools/list") {
+        respond({ tools: [] });
+      } else if (message.method === "prompts/list") {
+        respond({ prompts: [{
+          name: "review_pr",
+          description: "Review a pull request",
+          arguments: [
+            { name: "number", description: "PR number", required: true },
+            { name: "focus", description: "What to weigh", required: false },
+          ],
+        }] });
+      } else if (message.method === "prompts/get") {
+        respond({ messages: [
+          { role: "user", content: { type: "text", text: `Review PR ${message.params?.arguments?.number}` } },
+        ] });
+      } else {
+        respond({});
+      }
+    });
+  });
+  await new Promise<void>((r) => httpServer.listen(0, "127.0.0.1", r));
+  const address = httpServer.address() as { port: number };
+
+  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-prompts-"));
+  const configPath = pathJoin(dir, "mcp-servers.json");
+  await writeFile(configPath, JSON.stringify({ mcpServers: {
+    forge: { url: `http://127.0.0.1:${address.port}/mcp` },
+  } }));
+  const previous = process.env.OMI_LOCAL_MCP_FILE;
+  process.env.OMI_LOCAL_MCP_FILE = configPath;
+
+  try {
+    const registered: Array<{ name: string; parameters: { required?: string[] }; execute: (id: string, params: unknown) => Promise<{ content: Array<{ text: string }> }> }> = [];
+    const fakePi = { registerTool: (tool: never) => { registered.push(tool); } } as unknown as Parameters<typeof __registerUserMcpToolsForTest>[0];
+    await __registerUserMcpToolsForTest(fakePi);
+
+    assert.equal(registered.length, 1);
+    assert.equal(registered[0].name, "mcp_forge_prompt_review_pr");
+    // Only the arguments the prompt marks required are required of the model.
+    assert.deepEqual(registered[0].parameters.required, ["number"]);
+    const result = await registered[0].execute("call-1", { number: "42" });
+    assert.equal(result.content[0].text, "user: Review PR 42");
+  } finally {
+    if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
+    httpServer.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// A server that publishes no prompts capability must never be asked for prompts:
+// that is a guaranteed error response on every connection, every session.
+test("registerUserMcpTools: prompts are not requested from a server that has none", async () => {
+  const { createServer: createHttpServer } = await import("node:http");
+  const methods: string[] = [];
+  const httpServer = createHttpServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => {
+      const message = JSON.parse(body) as { id?: number; method: string };
+      methods.push(message.method);
+      if (message.id === undefined) { res.writeHead(202).end(); return; }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result:
+        message.method === "initialize"
+          ? { protocolVersion: "2025-06-18", capabilities: { tools: {} } }
+          : message.method === "tools/list" ? { tools: [] } : {} }));
+    });
+  });
+  await new Promise<void>((r) => httpServer.listen(0, "127.0.0.1", r));
+  const address = httpServer.address() as { port: number };
+
+  const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-noprompts-"));
+  const configPath = pathJoin(dir, "mcp-servers.json");
+  await writeFile(configPath, JSON.stringify({ mcpServers: {
+    plain: { url: `http://127.0.0.1:${address.port}/mcp` },
+  } }));
+  const previous = process.env.OMI_LOCAL_MCP_FILE;
+  process.env.OMI_LOCAL_MCP_FILE = configPath;
+
+  try {
+    const fakePi = { registerTool: () => {} } as unknown as Parameters<typeof __registerUserMcpToolsForTest>[0];
+    await __registerUserMcpToolsForTest(fakePi);
+    assert.ok(!methods.includes("prompts/list"));
+  } finally {
+    if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
+    httpServer.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("registerUserMcpTools: unreachable server is skipped, never fatal", async () => {
   const dir = await mkdtemp(pathJoin(tmpdir(), "user-mcp-bad-"));
   const configPath = pathJoin(dir, "mcp-servers.json");

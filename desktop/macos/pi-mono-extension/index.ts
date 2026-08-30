@@ -27,7 +27,7 @@ import {
   type ToolCallEventResult,
   type ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
-import { Type } from "@earendil-works/pi-ai";
+import { Type, type TSchema } from "@earendil-works/pi-ai";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
@@ -914,8 +914,64 @@ async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
         },
       }));
     }
-    process.stderr.write(`[user-mcp] ${server.name}: registered ${tools.length} tools\n`);
+    const prompts = await registerUserMcpPrompts(pi, server.name, client, discoveryTimeoutMs);
+    process.stderr.write(
+      `[user-mcp] ${server.name}: registered ${tools.length} tools, ${prompts} prompts\n`,
+    );
   }));
+}
+
+/**
+ * A server's published prompts, each as a tool the model can call.
+ *
+ * Prompts are where servers put their real workflows ("review this PR"), and a
+ * tools-only client never sees them. This chat has no slash-command surface to
+ * offer them through, so they become tools: same call path, same audit trail,
+ * and the model picks one the way it picks any other.
+ */
+async function registerUserMcpPrompts(
+  pi: ExtensionAPI,
+  serverName: string,
+  client: McpClient,
+  timeoutMs: number,
+): Promise<number> {
+  let prompts;
+  try {
+    prompts = await withTimeout(client.listPrompts(), timeoutMs);
+  } catch (err) {
+    process.stderr.write(
+      `[user-mcp] ${serverName}: prompt discovery failed, prompts skipped: ${err instanceof Error ? err.message : err}\n`,
+    );
+    return 0;
+  }
+
+  for (const prompt of prompts) {
+    const properties: Record<string, TSchema> = {};
+    for (const argument of prompt.arguments) {
+      properties[argument.name] = Type.String({
+        ...(argument.description ? { description: argument.description } : {}),
+      });
+    }
+    pi.registerTool(defineTool({
+      name: mcpToolName(serverName, `prompt_${prompt.name}`),
+      label: `${serverName}: ${prompt.name}`,
+      description: `${prompt.description || prompt.name} (prompt from the ${serverName} MCP server)`,
+      parameters: Type.Object(properties, {
+        additionalProperties: false,
+        required: prompt.arguments.filter((a) => a.required).map((a) => a.name),
+      }),
+      async execute(_toolCallId, params) {
+        let text: string;
+        try {
+          text = await client.getPrompt(prompt.name, (params ?? {}) as Record<string, unknown>);
+        } catch (err) {
+          text = `Error getting prompt ${prompt.name}: ${err instanceof Error ? err.message : err}`;
+        }
+        return { content: [{ type: "text" as const, text }], details: undefined };
+      },
+    }));
+  }
+  return prompts.length;
 }
 
 export async function __registerUserMcpToolsForTest(pi: ExtensionAPI): Promise<void> {

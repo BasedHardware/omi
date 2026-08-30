@@ -205,11 +205,13 @@ export class McpSseClient extends McpClient {
 
   protected ensureInitialized(): Promise<void> {
     this.initialized ??= settled((async () => {
-      await this.rpc("initialize", {
-        protocolVersion: MCP_PROTOCOL_VERSION,
-        capabilities: {},
-        clientInfo: MCP_CLIENT_INFO,
-      });
+      this.recordCapabilities(
+        await this.rpc("initialize", {
+          protocolVersion: MCP_PROTOCOL_VERSION,
+          capabilities: {},
+          clientInfo: MCP_CLIENT_INFO,
+        }),
+      );
       await this.send({ jsonrpc: "2.0", method: "notifications/initialized", params: {} });
     })().catch((err: unknown) => {
       this.initialized = null; // a failed handshake must be retryable

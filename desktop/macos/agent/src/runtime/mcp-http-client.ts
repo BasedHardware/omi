@@ -84,11 +84,13 @@ export class McpHttpClient extends McpClient {
 
   protected async ensureInitialized(): Promise<void> {
     if (this.initialized) return;
-    await this.rpc("initialize", {
-      protocolVersion: MCP_PROTOCOL_VERSION,
-      capabilities: {},
-      clientInfo: MCP_CLIENT_INFO,
-    });
+    this.recordCapabilities(
+      await this.rpc("initialize", {
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: MCP_CLIENT_INFO,
+      }),
+    );
     try {
       await this.rpc("notifications/initialized", {}, true);
     } catch {
