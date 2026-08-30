@@ -776,7 +776,7 @@ extension RealtimeHubController {
       guard AuthorizedToolExecution.isOwnerCurrent(command.ownerID) else {
         return .failed(Self.authorizedRealtimeOwnerChangedError())
       }
-      return .succeeded(result)
+      return .succeeded(result + Self.panelContentSuffix())
 
     case .assistForm:
       let context =
@@ -786,7 +786,7 @@ extension RealtimeHubController {
       guard AuthorizedToolExecution.isOwnerCurrent(command.ownerID) else {
         return .failed(Self.authorizedRealtimeOwnerChangedError())
       }
-      return .succeeded(result)
+      return .succeeded(result + Self.panelContentSuffix())
 
     case .findAndShow:
       let question =
@@ -796,7 +796,7 @@ extension RealtimeHubController {
       guard AuthorizedToolExecution.isOwnerCurrent(command.ownerID) else {
         return .failed(Self.authorizedRealtimeOwnerChangedError())
       }
-      return .succeeded(result)
+      return .succeeded(result + Self.panelContentSuffix())
 
     default:
       return .failed(Self.authorizedRealtimeToolError(code: "wrong_realtime_executor_tool"))
