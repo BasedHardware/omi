@@ -111,6 +111,31 @@ final class CuaMcpEndpointTests: XCTestCase {
     XCTAssertNil(response?["error"])
   }
 
+  /// A client's health probe opens with `initialize` and reads `tools/list`.
+  /// Refusing those while the switch is off made the probe report the server as
+  /// broken — "Needs sign-in", from a 403 it cannot tell from an expired token —
+  /// in the state the switch spends most of its life in.
+  func testTheHandshakeAnswersWhileTheSwitchIsOff() async {
+    let initialize = await send([
+      "jsonrpc": "2.0", "id": 20, "method": "initialize", "params": [:],
+    ])
+    XCTAssertNotNil((initialize?["result"] as? [String: Any])?["serverInfo"])
+    let tools = await send(["jsonrpc": "2.0", "id": 21, "method": "tools/list"])
+    XCTAssertFalse(((tools?["result"] as? [String: Any])?["tools"] as? [Any] ?? []).isEmpty)
+  }
+
+  /// And nothing that touches the Mac answers while it is off.
+  func testEveryToolCallIsRefusedWhileTheSwitchIsOff() async {
+    let response = await send([
+      "jsonrpc": "2.0", "id": 22, "method": "tools/call",
+      "params": ["name": "list_windows", "arguments": [:]],
+    ])
+    let result = response?["result"] as? [String: Any]
+    XCTAssertEqual(result?["isError"] as? Bool, true)
+    let text = (result?["content"] as? [[String: Any]])?.first?["text"] as? String
+    XCTAssertTrue(text?.contains("Computer control is off") ?? false)
+  }
+
   /// HIToolbox's input-source APIs assert they are on the main queue and *trap*
   /// when they are not, so resolving a chord from the server's own queue took the
   /// whole app down — `TSMGetInputSourceProperty` → `_dispatch_assert_queue_fail`

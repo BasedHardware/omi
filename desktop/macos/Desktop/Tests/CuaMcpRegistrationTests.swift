@@ -44,6 +44,26 @@ final class CuaMcpRegistrationTests: XCTestCase {
     XCTAssertFalse(CuaMcpRegistration.isRegistered(token: "new"))
   }
 
+  /// The failure this guards: the Keychain service is scoped to the signing
+  /// identity, so a rebuild signed differently cannot read the old token and a
+  /// fresh one is minted. The entry written when the user turned control on then
+  /// names a token the server rejects, the runtime is turned away with
+  /// "401 for initialize", and it reports a server with no tools — the feature is
+  /// absent with nothing in the UI that looks wrong. Re-registering has to
+  /// replace the entry rather than leave the stale one in place.
+  func testRegisteringAgainReplacesAStaleToken() throws {
+    try CuaMcpRegistration.register(token: "old")
+    try CuaMcpRegistration.register(token: "new")
+
+    let entry = LocalMcpStore.readAllServers()["omi-computer-use"] as? [String: Any]
+    XCTAssertEqual(entry?["token"] as? String, "new")
+    XCTAssertTrue(CuaMcpRegistration.isRegistered(token: "new"))
+
+    let script = try String(contentsOf: CuaStdioShim.scriptURL, encoding: .utf8)
+    XCTAssertTrue(script.contains("Bearer new"))
+    XCTAssertFalse(script.contains("Bearer old"))
+  }
+
   func testUnregisteringRemovesBoth() throws {
     try CuaMcpRegistration.register(token: "tok-123")
     CuaMcpRegistration.unregister()

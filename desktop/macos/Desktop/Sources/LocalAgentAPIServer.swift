@@ -144,13 +144,15 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     // If the feature was enabled before team+bundle scoping, the old Keychain
     // token is intentionally unread (to avoid password prompts). Mint a fresh
     // scoped token so the server can authenticate again; clients must re-copy it.
+    let token: String
     do {
-      _ = try LocalAgentAPISettings.ensureToken()
+      token = try LocalAgentAPISettings.ensureToken()
     } catch {
       log("LocalAgentAPIServer: cannot start — token storage unavailable (\(error.localizedDescription))")
       LocalAgentAPISettings.isEnabled = false
       return
     }
+    republishComputerUseRegistration(token: token)
     guard listener == nil else { return }
 
     do {
@@ -178,6 +180,26 @@ final class LocalAgentAPIServer: @unchecked Sendable {
       log("LocalAgentAPIServer: listening on \(LocalAgentAPISettings.serverURL)")
     } catch {
       logError("LocalAgentAPIServer: failed to start listener", error: error)
+    }
+  }
+
+  /// Keep `~/.omi/mcp.json` pointing at a token this server will actually accept.
+  ///
+  /// The token lives in the Keychain under a service scoped to the signing
+  /// identity, so a rebuild signed with a different certificate cannot read the
+  /// old one and `ensureToken` mints a fresh one. The entry written when the user
+  /// turned computer control on then carries a token that no longer exists, and
+  /// the runtime's own client is turned away with a 401 — which it reports as a
+  /// server with no tools, so the feature is simply absent with no error the user
+  /// can see. Rewriting it at startup is what makes that self-healing.
+  private func republishComputerUseRegistration(token: String) {
+    guard CuaControlGate.isEnabledForCurrentOwner() else { return }
+    guard !CuaMcpRegistration.isRegistered(token: token) else { return }
+    do {
+      try CuaMcpRegistration.register(token: token)
+      log("LocalAgentAPIServer: refreshed the computer-use MCP registration with the current token")
+    } catch {
+      logError("LocalAgentAPIServer: could not refresh the computer-use MCP registration", error: error)
     }
   }
 
@@ -345,16 +367,15 @@ final class LocalAgentAPIServer: @unchecked Sendable {
   ///
   /// It shares this server's token — a client the user has already trusted with
   /// the local API is the same client — but not its switch: driving the mouse
-  /// needs its own consent, and `CuaControlGate` holds it. The gate is checked
-  /// again inside every tool, so a grant revoked mid-session stops the next
-  /// action rather than the next connection.
+  /// needs its own consent, and `CuaControlGate` holds it.
+  ///
+  /// The switch gates `tools/call` and nothing else. Refusing the handshake too
+  /// made a client's health probe report the server as broken ("Needs sign-in",
+  /// from a 403 it could not tell apart from an expired token) whenever control
+  /// happened to be off — which is its resting state. Answering `initialize` and
+  /// `tools/list` touches nothing on the Mac; every call that does is refused
+  /// with the reason.
   private func mcpResponse(body: Data) async -> LocalHTTPResponse {
-    // The whole endpoint closes when the gate does, kill switch included: a
-    // suspend has to stop the client from reading the screen too, not only from
-    // moving the pointer.
-    if let refusal = await CuaControlGate.shared.refusal(requiresAccessibility: false) {
-      return errorResponse("computer_use_unavailable: \(refusal.message)", statusCode: 403)
-    }
     guard let message = try? JSONSerialization.jsonObject(with: body) else {
       return errorResponse("invalid_json_body", statusCode: 400)
     }
