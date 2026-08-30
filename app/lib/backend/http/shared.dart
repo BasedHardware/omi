@@ -10,6 +10,7 @@ import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/jwt_expiry.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
@@ -62,8 +63,12 @@ Future<String> getAuthHeader({bool expireTerminalSession = true}) async {
     throw AuthTokenUnavailableException(const AuthTokenMissingUser());
   }
 
-  final expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
-  bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
+  final storedToken = SharedPreferencesUtil().authToken;
+  // The token's own exp outranks the cached copy: #11694 saw clients present a
+  // three-day-dead token because the cached expiry had advanced without it.
+  final expiry =
+      jwtExpiry(storedToken) ?? DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
+  bool hasAuthToken = storedToken.isNotEmpty;
 
   bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
       expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
