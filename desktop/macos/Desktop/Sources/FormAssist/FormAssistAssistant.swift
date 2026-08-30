@@ -381,6 +381,7 @@ actor FormAssistAssistant: ProactiveAssistant {
       return
     }
     evaluationsToday.append(now)
+    let spentAt = now
 
     let roster = snapshot.emptyFields
     await MainActor.run {
@@ -393,9 +394,9 @@ actor FormAssistAssistant: ProactiveAssistant {
     do {
       switch try await fill(snapshot: snapshot, roster: roster, context: context, work: work) {
       case .cancelled:
-        refundEvaluation()
+        refundEvaluation(spentAt)
       case .noEvidence:
-        refundEvaluation()
+        refundEvaluation(spentAt)
         await MainActor.run {
           PanelSession.update(
             subtitle: "Nothing Omi has stored could answer this form.", fields: [],
@@ -419,9 +420,9 @@ actor FormAssistAssistant: ProactiveAssistant {
         }
       }
     } catch is CancellationError {
-      refundEvaluation()
+      refundEvaluation(spentAt)
     } catch {
-      refundEvaluation()
+      refundEvaluation(spentAt)
       logError("FormAssist: fill resolution failed", error: error)
       await MainActor.run {
         PanelSession.update(subtitle: "Could not read the form.", forForm: snapshot.fingerprint)
@@ -431,8 +432,12 @@ actor FormAssistAssistant: ProactiveAssistant {
 
   /// Hand the budget back when the answer never arrived. The budget bounds work that was
   /// actually done; a cancelled or failed call is not work the user got anything from.
-  private func refundEvaluation() {
-    if !evaluationsToday.isEmpty { evaluationsToday.removeLast() }
+  ///
+  /// By identity, not by position: an offer being filled and a spoken request can overlap,
+  /// and `removeLast` would refund whichever slot is newest rather than this one's.
+  private func refundEvaluation(_ spentAt: Date) {
+    guard let index = evaluationsToday.firstIndex(of: spentAt) else { return }
+    evaluationsToday.remove(at: index)
   }
 
   // MARK: - On demand
@@ -466,6 +471,7 @@ actor FormAssistAssistant: ProactiveAssistant {
       return .handled("Form assist has spent its budget for today.")
     }
     evaluationsToday.append(now)
+    let spentAt = now
 
     let roster = snapshot.emptyFields
     let work = CancellableWork()
@@ -482,7 +488,7 @@ actor FormAssistAssistant: ProactiveAssistant {
     }
 
     func abandon(_ message: String) -> OnDemandOutcome {
-      refundEvaluation()
+      refundEvaluation(spentAt)
       return .handled(message)
     }
 

@@ -826,7 +826,11 @@ extension RealtimeHubController {
   /// spinners are filtered out upstream.
   @MainActor
   static func panelContentSuffix() -> String {
-    guard let content = PanelSession.modelVisibleContent() else { return "" }
+    // Through `isPresenting`, not the remembered content: a tool whose panel is already
+    // gone — a lookup that found nothing and took its card down — must not hand the
+    // model text as if it were on screen.
+    guard PanelSession.isPresenting, let content = PanelSession.modelVisibleContent()
+    else { return "" }
     return """
 
 

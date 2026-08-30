@@ -127,6 +127,25 @@ final class PanelLifetimeTests: XCTestCase {
     XCTAssertFalse(ignored)
   }
 
+  /// A form panel holds answers a model call paid for, and asking again does not get them
+  /// back for free. `update_panel` must refuse it rather than write prose over them.
+  func testFormAnswersAreNotOverwrittenByAVoiceEdit() {
+    PanelSession.present(
+      title: "Safari form", subtitle: "3 of 7 fields", fields: [field("Email", "a@b.c")],
+      grain: .context, origin: .requested, formFingerprint: "form-7")
+    guard case .refused = PanelSession.revise(title: "Shorter", fields: [field("Note", "hi")])
+    else { return XCTFail("form answers must not be overwritten") }
+    XCTAssertEqual(PanelSession.modelVisibleContent(), "Email: a@b.c")
+  }
+
+  /// A panel with no form behind it is ordinary content and still edits in place.
+  func testAPanelWithNoFormBehindItStillEdits() {
+    present("Train Stations", "Barbican")
+    guard case .revised = PanelSession.revise(title: nil, fields: [field("Email", "Euston")])
+    else { return XCTFail("an ordinary panel should still be editable") }
+    XCTAssertEqual(PanelSession.modelVisibleContent(), "Email: Euston")
+  }
+
   // MARK: - The transcript queue
 
   /// A voice turn is the only thing that drains the queue, and a panel bought with the ✓

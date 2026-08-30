@@ -67,6 +67,9 @@ actor DataAnswerAssistant {
       return "Looking things up has spent its budget for today."
     }
     runsToday.append(now)
+    // Refund by identity. Two spoken lookups can overlap, and `removeLast` would hand
+    // back whichever slot is newest rather than this run's.
+    let spentAt = now
 
     let work = CancellableWork()
     // The panel this lookup owns. A search takes seconds and the user can ask for
@@ -95,7 +98,7 @@ actor DataAnswerAssistant {
       guard await !work.isCancelled else { return "Cancelled." }
       switch outcome {
       case .nothing(let reason):
-        if !runsToday.isEmpty { runsToday.removeLast() }
+        refund(spentAt)
         _ = await MainActor.run { PanelSession.dismiss(token: panel) }
         log("DataAnswer: nothing found — \(reason)")
         // Spelled out because the voice model must not claim a panel it saw go up
@@ -122,13 +125,19 @@ actor DataAnswerAssistant {
           + (missing.isEmpty ? "" : " Not found in the user's data: \(missing.joined(separator: ", ")).")
       }
     } catch is CancellationError {
-      if !runsToday.isEmpty { runsToday.removeLast() }
+      refund(spentAt)
       return "Cancelled."
     } catch {
       logError("DataAnswer: lookup failed", error: error)
       _ = await MainActor.run { PanelSession.dismiss(token: panel) }
       return "Could not search the user's data."
     }
+  }
+
+  /// Hand back the slot this run took. The budget bounds work that was actually done.
+  private func refund(_ spentAt: Date) {
+    guard let index = runsToday.firstIndex(of: spentAt) else { return }
+    runsToday.remove(at: index)
   }
 
   // MARK: - Exploration loop

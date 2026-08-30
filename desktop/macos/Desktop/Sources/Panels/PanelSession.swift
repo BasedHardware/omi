@@ -492,6 +492,15 @@ enum PanelSession {
         origin: .requested)
       return .created(fields.count)
     case .copy:
+      // A form's answers cost a model call and cannot be recovered by asking again for
+      // free, so overwriting them is refused the way the setup card is. The user can
+      // still take the panel down and ask for whatever they wanted instead.
+      if let fingerprint = remembered?.formFingerprint, !fingerprint.isEmpty {
+        return .refused(
+          "The panel on screen holds the answers Omi filled in for the form the user is "
+            + "looking at. Do not overwrite them — close_panel first if they want "
+            + "something else there.")
+      }
       // A setup card is a procedure the user is partway through, and its grouping is
       // part of the instructions. Replacing it with prose destroys both.
       guard remembered?.editable ?? true else {
