@@ -413,7 +413,12 @@ struct ExtensionLogo: View {
     .frame(width: size, height: size)
     .background(Ink.wash)
     .cornerRadius(OmiChrome.smallControlRadius)
-    .task(id: imageUrl) { image = await ExtensionLogoLoader.shared.image(for: imageUrl) }
+    // The loader hands back bytes, not an NSImage: decoded images are not Sendable, so
+    // returning one across the actor boundary is a strict-concurrency error. Decoding here
+    // also keeps every NSImage on the main actor, which is where it is drawn.
+    .task(id: imageUrl) {
+      image = await ExtensionLogoLoader.shared.data(for: imageUrl).flatMap(NSImage.init(data:))
+    }
   }
 
   private var symbol: some View {
@@ -423,29 +428,44 @@ struct ExtensionLogo: View {
   }
 }
 
-/// Session cache for catalog logos. The same publisher icon appears on a card and again in the
-/// detail sheet, and the grid re-renders on every keystroke of the search field.
+/// Session cache for catalog logo *bytes*. The same publisher icon appears on a card and again in
+/// the detail sheet, and the grid re-renders on every keystroke of the search field.
+///
+/// Bytes rather than images: `NSImage` is not Sendable, so handing one out of an actor is a
+/// strict-concurrency error, and a decoded image is not safe to share across isolation domains
+/// anyway. Callers decode on their own actor.
 actor ExtensionLogoLoader {
   static let shared = ExtensionLogoLoader()
 
-  private var cache: [String: NSImage?] = [:]
+  /// Enough for every tile of a catalog page and its detail sheets. A miss costs one request,
+  /// so the cap trades a rare refetch for a bound that a long browsing session cannot exceed.
+  private static let capacity = 128
+  private static let maxBytes = 2 * 1024 * 1024
 
-  func image(for urlString: String) async -> NSImage? {
+  /// `nil` value means "fetched and unusable" — cached so a broken icon is not retried per render.
+  private var cache: [String: Data?] = [:]
+  /// Insertion order, oldest first, for eviction.
+  private var order: [String] = []
+
+  func data(for urlString: String) async -> Data? {
     if let cached = cache[urlString] { return cached }
-    guard let url = URL(string: urlString), url.scheme == "https" else {
-      cache[urlString] = NSImage?.none
-      return nil
+    let loaded = await Self.fetch(urlString)
+    if cache.updateValue(loaded, forKey: urlString) == nil { order.append(urlString) }
+    while order.count > Self.capacity {
+      cache.removeValue(forKey: order.removeFirst())
     }
+    return loaded
+  }
+
+  private static func fetch(_ urlString: String) async -> Data? {
+    guard let url = URL(string: urlString), url.scheme == "https" else { return nil }
     var request = URLRequest(url: url, timeoutInterval: 10)
     request.setValue("image/*", forHTTPHeaderField: "Accept")
-    let loaded: NSImage? = await {
-      guard let (data, response) = try? await URLSession.shared.data(for: request),
-        (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true
-      else { return nil }
-      return NSImage(data: data)
-    }()
-    cache[urlString] = loaded
-    return loaded
+    guard let (data, response) = try? await URLSession.shared.data(for: request),
+      (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
+      data.count <= maxBytes
+    else { return nil }
+    return data
   }
 }
 
