@@ -1144,6 +1144,40 @@ MESSAGES_BY_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('chat_session_id'), _desc('created_at'), _desc('__name__')),
 )
 
+# EXP-001's daily cohort selection: every macOS account whose set-once
+# `signup_platform_at` lands in one 24h window 72-96h back. Equality plus a
+# range on a different field is a compound serving query, so automatic
+# single-field indexes do not cover it however the directions line up.
+DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY = FirestoreQuerySpec(
+    identifier='users_signup_platform_signup_at_range',
+    collection_group='users',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('signup_platform', '==', 'signup_platform'),
+        FirestoreQueryFilter('signup_platform_at', '>=', 'start'),
+        FirestoreQueryFilter('signup_platform_at', '<', 'end'),
+    ),
+    index_fields=(_asc('signup_platform'), _asc('signup_platform_at'), _asc('__name__')),
+)
+
+# EXP-001's day-0 output count: conversations created inside the 24h after
+# signup. Two range bounds on one field is a compound serving query even though
+# both bounds share a direction, so it is declared here rather than assumed to
+# fall out of the automatic single-field index.
+#
+# The companion "did they return after day 0" probe is a single `created_at >=`
+# bound with `limit(1)` — not compound, so it needs no spec.
+DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY = FirestoreQuerySpec(
+    identifier='conversations_created_range_day_zero',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('created_at', '>=', 'start'),
+        FirestoreQueryFilter('created_at', '<', 'end'),
+    ),
+    index_fields=(_asc('created_at'), _asc('__name__')),
+)
+
 QUERY_SPECS = (
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
@@ -1202,6 +1236,8 @@ QUERY_SPECS = (
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
     FRAME_VISION_OUTPUT_EXPIRY_QUERY,
     FRAME_REQUEST_METADATA_EXPIRY_QUERY,
+    DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY,
+    DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
