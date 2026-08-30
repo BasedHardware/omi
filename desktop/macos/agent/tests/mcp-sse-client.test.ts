@@ -9,7 +9,7 @@ import { McpSseClient } from "../src/runtime/mcp-sse-client.js";
  * A minimal HTTP+SSE MCP server: GET /sse holds the stream open and names the
  * POST endpoint, POST /messages answers 202 and writes the reply to the stream.
  */
-function startServer(options: { endpointEvent?: boolean } = {}): Promise<{
+function startServer(options: { endpointEvent?: boolean; crlf?: boolean } = {}): Promise<{
   server: Server;
   url: string;
   posts: string[];
@@ -22,7 +22,8 @@ function startServer(options: { endpointEvent?: boolean } = {}): Promise<{
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       stream = res;
       if (options.endpointEvent !== false) {
-        res.write("event: endpoint\ndata: /messages?sessionId=abc\n\n");
+        const eol = options.crlf ? "\r\n" : "\n";
+        res.write(`event: endpoint${eol}data: /messages?sessionId=abc${eol}${eol}`);
       }
       return;
     }
@@ -40,7 +41,8 @@ function startServer(options: { endpointEvent?: boolean } = {}): Promise<{
             ? { content: [{ type: "text", text: "7" }] }
             : {};
       // Split across two writes so the client must reassemble a partial frame.
-      const frame = `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: message.id, result })}\n\n`;
+      const eol = options.crlf ? "\r\n" : "\n";
+      const frame = `event: message${eol}data: ${JSON.stringify({ jsonrpc: "2.0", id: message.id, result })}${eol}${eol}`;
       stream?.write(frame.slice(0, 12));
       setTimeout(() => stream?.write(frame.slice(12)), 10);
     });
@@ -73,6 +75,18 @@ describe("McpSseClient", () => {
     expect(posts).toHaveLength(4);
     expect(JSON.parse(posts[0]).method).toBe("initialize");
     expect(JSON.parse(posts[1]).method).toBe("notifications/initialized");
+    client.dispose();
+  });
+
+  // SSE terminates a line with CRLF as readily as LF, and a CRLF frame separator
+  // ("\r\n\r\n") contains no "\n\n" — splitting the raw text found no frames at
+  // all, so a working server read as one that never spoke.
+  it("parses a server that terminates its lines with CRLF", async () => {
+    const { server, url } = await startServer({ crlf: true });
+    running = server;
+    const client = new McpSseClient(url);
+    expect((await client.listTools()).map((t) => t.name)).toEqual(["add"]);
+    expect(await client.callTool("add", { a: 3, b: 4 })).toBe("7");
     client.dispose();
   });
 

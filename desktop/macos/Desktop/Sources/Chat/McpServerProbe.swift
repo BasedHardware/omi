@@ -49,6 +49,10 @@ enum McpServerProbe {
   /// does not hold the section.
   static let timeout: TimeInterval = 20
 
+  /// How many event-stream lines to read before giving up on an SSE server naming its endpoint.
+  /// A conforming server names it first; anything past this is keepalives or another protocol.
+  static let maxSseProbeLines = 200
+
   /// A server's config reduced to what a probe needs, and to values that can cross an actor
   /// boundary — the raw `[String: Any]` entry cannot.
   enum Target: Sendable, Equatable {
@@ -155,12 +159,21 @@ enum McpServerProbe {
       guard (200..<300).contains(http.statusCode) else {
         return .unreachable("Server returned HTTP \(http.statusCode)")
       }
-      for try await line in bytes.lines where line.hasPrefix("event:") {
-        guard line.dropFirst("event:".count).trimmingCharacters(in: .whitespaces) == "endpoint"
-        else { continue }
-        return .running(toolCount: -1)
+      // Bounded by lines read, not only by the request timeout: that timeout measures
+      // the gap between packets, and a server sending `: ping` keepalives before it
+      // names an endpoint resets it forever, leaving the badge on "Checking…" and the
+      // connection open for as long as the app runs.
+      var linesRead = 0
+      for try await line in bytes.lines {
+        linesRead += 1
+        if line.hasPrefix("event:"),
+          line.dropFirst("event:".count).trimmingCharacters(in: .whitespaces) == "endpoint"
+        {
+          return .running(toolCount: -1)
+        }
+        if linesRead >= maxSseProbeLines { break }
       }
-      return .unreachable("Server never opened an event stream")
+      return .unreachable("Server never named a message endpoint")
     } catch {
       return .unreachable("Could not reach the server")
     }

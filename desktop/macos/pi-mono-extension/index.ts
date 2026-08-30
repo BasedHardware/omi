@@ -915,6 +915,12 @@ async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
       }));
     }
     const prompts = await registerUserMcpPrompts(pi, server.name, client, discoveryTimeoutMs);
+    if (tools.length === 0 && prompts === 0) {
+      // Nothing registered means nothing holds this client, and nothing will ever
+      // close it: an SSE server's GET stream and a stdio server's child would stay
+      // open for the whole session with no way to reach them.
+      client.dispose();
+    }
     process.stderr.write(
       `[user-mcp] ${server.name}: registered ${tools.length} tools, ${prompts} prompts\n`,
     );

@@ -22,6 +22,13 @@ interface JsonRpcMessage {
 const ENDPOINT_TIMEOUT_MS = 10_000;
 
 /**
+ * Cap on a single unterminated frame. A 200 response that streams something
+ * other than SSE never yields a blank line, and the buffer would otherwise grow
+ * for as long as the body does.
+ */
+const MAX_STREAM_BUFFER = 4 * 1024 * 1024;
+
+/**
  * Marks a promise we hold onto as handled. A stored promise that rejects with no
  * awaiter yet — a client disposed before its first call — is an unhandled
  * rejection, which crashes the host under Node's default policy.
@@ -115,9 +122,15 @@ export class McpSseClient extends McpClient {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) return;
-      buffer += decoder.decode(value, { stream: true });
-      // Frames are separated by a blank line; anything after the last one is a
-      // partial frame that must wait for the next chunk.
+      // SSE terminates a line with CRLF, LF, or a bare CR. Normalizing on the way
+      // in is what makes the blank-line split below correct: a CRLF server's frame
+      // separator is "\r\n\r\n", which contains no "\n\n" at all, so splitting on
+      // the raw text found no frames and the stream read as one that never spoke.
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n|\r/g, "\n");
+      if (buffer.length > MAX_STREAM_BUFFER) {
+        throw new Error("MCP event stream sent an oversized frame");
+      }
+      // Anything after the last blank line is a partial frame awaiting the next chunk.
       let split = buffer.indexOf("\n\n");
       while (split !== -1) {
         this.handleFrame(buffer.slice(0, split), onEndpoint);
@@ -130,8 +143,7 @@ export class McpSseClient extends McpClient {
   private handleFrame(frame: string, onEndpoint: (error?: Error) => void): void {
     let event = "message";
     const data: string[] = [];
-    for (const rawLine of frame.split("\n")) {
-      const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+    for (const line of frame.split("\n")) {
       if (line.startsWith("event:")) event = line.slice("event:".length).trim();
       else if (line.startsWith("data:")) data.push(line.slice("data:".length).trim());
     }
