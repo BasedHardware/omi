@@ -1,5 +1,4 @@
 import ast
-import base64
 import json
 import os
 import secrets
@@ -79,12 +78,13 @@ def try_catch_decorator(func: Callable[..., T]) -> Callable[..., Optional[T]]:
     return wrapper
 
 
-# Re-exported from generic_cache so existing callers keep importing database.redis_db.
+# Explicit re-export form so pyright does not flag these as unused imports.
+# Existing callers import from database.redis_db; generic_cache is the new home.
 from database.generic_cache import (  # noqa: E402
-    delete_generic_cache,
-    get_generic_cache,
-    pop_generic_cache,
-    set_generic_cache,
+    delete_generic_cache as delete_generic_cache,
+    get_generic_cache as get_generic_cache,
+    pop_generic_cache as pop_generic_cache,
+    set_generic_cache as set_generic_cache,
 )
 
 # ******************************************************

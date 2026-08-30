@@ -1563,8 +1563,32 @@ def get_scores(uid: str, date: Optional[str] = None, *, firestore_client: Any = 
     }
 
 
+# Public read-only accessors for sibling modules (action_items_cleanup_scan) so
+# they never have to reach into module-private symbols (pyright reportPrivateUsage).
+def get_action_items_list_hard_max() -> int:
+    return _ACTION_ITEMS_LIST_HARD_MAX
+
+
+def get_action_items_list_select_fields() -> tuple:
+    return _ACTION_ITEMS_LIST_SELECT_FIELDS
+
+
+def list_scan_budget(row_budget: int) -> int:
+    return _list_scan_budget(row_budget)
+
+
+def stream_action_items_bounded(
+    query: Any,
+    *,
+    max_docs: int,
+    budget: Optional[ListReadBudget] = None,
+) -> tuple[List[Dict[str, Any]], int]:
+    return _stream_action_items_bounded(query, max_docs=max_docs, budget=budget)
+
+
+# Explicit re-export form so pyright does not flag these as unused imports.
 from database.action_items_cleanup_scan import (  # noqa: E402
-    get_action_items_list_scan_cap,
-    get_open_action_items_count,
-    list_open_action_items_for_cleanup,
+    get_action_items_list_scan_cap as get_action_items_list_scan_cap,
+    get_open_action_items_count as get_open_action_items_count,
+    list_open_action_items_for_cleanup as list_open_action_items_for_cleanup,
 )

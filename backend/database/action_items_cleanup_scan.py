@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 def get_action_items_list_scan_cap() -> int:
     """Public accessor for the action-items list hard max."""
-    return action_items_db._ACTION_ITEMS_LIST_HARD_MAX
+    return action_items_db.get_action_items_list_hard_max()
 
 
 def get_open_action_items_count(uid: str) -> int:
@@ -83,11 +83,11 @@ def list_open_action_items_for_cleanup(
     cursor: Optional[str] = None,
 ) -> tuple[List[Dict[str, Any]], Optional[str], int]:
     """Return one oldest-first page of open action items for cleanup strategies."""
-    hard_max = action_items_db._ACTION_ITEMS_LIST_HARD_MAX
+    hard_max = action_items_db.get_action_items_list_hard_max()
     row_cap = min(limit or hard_max, hard_max)
     coll = action_items_db.db.collection('users').document(uid).collection(action_items_db.action_items_collection)
     query = ACTION_ITEMS_CLEANUP_OPEN_CREATED_SCAN_QUERY.build(
-        coll.select(list(action_items_db._ACTION_ITEMS_LIST_SELECT_FIELDS)),
+        coll.select(list(action_items_db.get_action_items_list_select_fields())),
         {'completed': False},
         field_filter_factory=FieldFilter,
     ).order_by('created_at', direction=firestore.Query.ASCENDING)
@@ -96,14 +96,14 @@ def list_open_action_items_for_cleanup(
         created_at, doc_id = decode_cleanup_scan_cursor(cursor)
         query = query.start_after({'created_at': created_at, '__name__': coll.document(doc_id)})
 
-    items, docs_read = action_items_db._stream_action_items_bounded(
+    items, docs_read = action_items_db.stream_action_items_bounded(
         query,
-        max_docs=action_items_db._list_scan_budget(row_cap),
+        max_docs=action_items_db.list_scan_budget(row_cap),
     )
     items.sort(key=lambda item: (_parse_cleanup_scan_created_at(item.get('created_at')), item['id']))
     page_items = items[:row_cap]
     next_cursor = None
-    if page_items and (len(items) > row_cap or docs_read >= action_items_db._list_scan_budget(row_cap)):
+    if page_items and (len(items) > row_cap or docs_read >= action_items_db.list_scan_budget(row_cap)):
         last = page_items[-1]
         next_cursor = encode_cleanup_scan_cursor(_parse_cleanup_scan_created_at(last.get('created_at')), last['id'])
     logger.debug(
