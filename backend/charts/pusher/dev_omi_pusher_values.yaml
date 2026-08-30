@@ -139,6 +139,8 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+  - name: MEMORY_ENABLED
+    value: "on"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
