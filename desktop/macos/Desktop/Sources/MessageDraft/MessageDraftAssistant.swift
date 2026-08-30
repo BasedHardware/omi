@@ -238,7 +238,7 @@ actor MessageDraftAssistant: ProactiveAssistant {
             id: "draft-body", label: "", value: draft.body, masksValue: false, wraps: true))
         await MainActor.run {
           PanelSession.update(
-            subtitle: "Copy it with the button.", fields: fields, token: panel)
+            subtitle: VoicePanel.changeHint, fields: fields, token: panel)
         }
         log("MessageDraft: on-demand draft on screen, \(draft.body.count) chars")
         return "Draft is on screen to copy."
@@ -396,10 +396,15 @@ actor MessageDraftAssistant: ProactiveAssistant {
     You write the message a user is about to send, so they can paste it and hit send.
 
     Your sources, in order of authority:
-    - The user's instruction, when there is one. It says what the message is for and it
-      wins every conflict.
-    - The screenshot: the conversation or email thread on screen. Reply to what was
-      actually said. Match the language it is written in.
+    - The screenshot: the conversation, thread, or page on screen. It is what the user
+      is looking at as they ask, so it is what "this", "that", "here" and "them" refer
+      to. Reply to what was actually said. Match the language it is written in.
+    - The user's instruction, when there is one. It says what to DO — reply, decline,
+      ask for details, keep it short. Treat it as a relay of what they just said, not
+      as a record of fact: it reaches you through an assistant that may have carried
+      over a subject from earlier in the conversation. When it names a topic the screen
+      does not support, the screen wins and you draft about what is actually there.
+      Never write a message about something you cannot see any evidence of.
     - The facts stored about the user. Any concrete claim — what they do, what they
       built, when they are free — comes from here or from the thread, never from
       imagination.

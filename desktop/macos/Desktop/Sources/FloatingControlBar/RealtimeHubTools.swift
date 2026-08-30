@@ -123,6 +123,13 @@ enum RealtimeHubTools {
       plan, a list, an outline, a recipe, code, a translation, notes — if they will \
       read it back or paste it, it goes on the panel.
 
+      When a panel tool takes context or a question, pass the user's OWN words for this \
+      request and nothing else. Do not summarise, do not helpfully expand it, and above \
+      all do not carry a subject over from earlier in the conversation: these tools can \
+      see the screen and you cannot, so a topic you add from memory overrides what the \
+      user is actually looking at. "Write a mail for this" is the whole instruction — \
+      send exactly that and let the tool resolve "this".
+
       Changing what is on screen: every panel tool tells you the text the panel now \
       holds, so when the user asks to change it — shorter, warmer, fix that name, drop \
       a line, add one — call update_panel with the complete corrected items. Do NOT \
