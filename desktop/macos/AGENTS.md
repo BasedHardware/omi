@@ -293,14 +293,14 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
   component suites and the live continuity gauntlet for PR readiness.
 
 ### Proactive surfaces must be driven live
-Panels, form assist, message draft and the realtime voice tools fail in ways unit tests cannot see: turn shape, what a later turn does to state an earlier one consumed, and countdowns. A green suite over `PanelSession` said nothing about a `spawn_agent` turn dropping its chat card, an edit whose correction never reached the transcript, or an offer that came back forever. Before landing a change to these, drive real turns:
+Panels, form assist, message draft and the realtime voice tools fail across turn boundaries and on countdowns, where unit tests cannot reach — a green `PanelSession` suite has passed over a dropped chat card, a lost edit, and an offer that never stopped. Drive real turns before landing:
 ```bash
 ./run.sh --yolo                              # bridge port is in run.sh's banner
 python3 -c "open('/tmp/q.pcm','wb').write(b'\x00\x00'*16000)"
 ./scripts/omi-ctl action ptt_test_turn pcm=/tmp/q.pcm text_only=1 \
-  force_transcript="Put three stations on my screen: Aldgate, Barbican, Camden."
+  force_transcript="Put Aldgate, Barbican and Camden on my screen."
 ```
-`force_transcript` + `text_only=1` drives the real provider and real tool calls with deterministic user text. Exercise the **second** turn too — most of these bugs only exist across a turn boundary — and cite the log lines (`panel card(s) into chat`, `panel state sent`, `FormAssist: offering`) in the PR.
+`force_transcript` + `text_only=1` gives the real provider deterministic user text. Always exercise a **second** turn, and cite the log lines (`panel card(s) into chat`, `panel state sent`, `FormAssist: offering`).
 
 ### Run Variants & Parallel Worktrees
 - `./run.sh --yolo` — quick start against the dev backend, no local services. `OMI_SKIP_BACKEND=1` — app only, remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
