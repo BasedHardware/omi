@@ -1,0 +1,92 @@
+version: 2
+name: computer-control
+tier: manual
+description: Computer control on the Apps page — the switch is off by default, turning it on writes the MCP entry and the stdio shim, the tools drive the real Mac through the loopback endpoint, and the kill switch stops them
+app: com.omi.computer-macos
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ComputerControlSection.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaControlGate.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaMcpEndpoint.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaMcpRegistration.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaStdioShim.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaToolCatalog.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaScreenObserver.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaAxReader.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaAppControl.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaInputSynth.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaKeyMap.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaFrameGeometry.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaFrameRegistry.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: The switch is off, and says what it turns on
+    # Off by default is the whole consent model. A flow that starts by turning it on would never
+    # notice the day it starts shipping on.
+    do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8), then the apps-section-mcp chip. Confirm a Computer Control card sits above MCP Servers, its switch is off, and its text names the loopback endpoint it serves."
+    expect:
+      interactive_count: { min: 6 }
+      text_visible:
+        - Computer Control
+        - Allow Omi to control this Mac
+
+  - id: S2
+    name: Turning it on names every permission it still needs
+    # A missing grant is the difference between a click that works and a click that silently does
+    # nothing, which reads to a model as success. The card has to say so before the first tool call.
+    do: "Turn the switch on. Confirm rows appear for Accessibility and Screen Recording, each showing granted or a Grant button, and a status line reading Ready."
+    expect:
+      interactive_count: { min: 3 }
+      text_visible:
+        - Accessibility
+        - Screen Recording
+
+  - id: S3
+    name: One switch is the whole setup
+    do: "Confirm ~/.omi/mcp.json now has an mcpServers entry named 'omi-computer-use' whose url is http://127.0.0.1:47778/mcp with a token, and that ~/.omi/omi-cua exists and is executable by its owner only (mode 700)."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S4
+    name: The endpoint answers both protocol eras
+    do: "POST an `initialize` request (protocolVersion 2025-06-18) to http://127.0.0.1:47778/mcp with the token from ~/.omi/mcp.json as a bearer. Confirm the result names protocolVersion 2025-06-18 and serverInfo omi-computer-use. POST `server/discover` and confirm supportedVersions starts with 2026-07-28. POST `tools/list` and confirm the tool list arrives."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S5
+    name: A screenshot comes back as a picture with the frame it was measured in
+    do: "Call tools/call for `screenshot`. Confirm the result carries an image block plus a text block naming a frame id, the image's size, and the region in points. Confirm the image's long edge is at most 1568 pixels even on a Retina display."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S6
+    name: A click lands where the model pointed, on every display
+    # Coordinates are the one thing that is either right or somewhere else on the user's screen.
+    # A second display starting at a non-zero global origin is where this has always broken.
+    do: "Open TextEdit with an empty document. Call `screenshot`, then `click` with the coordinates of the document body as measured in that screenshot, then `type_text` with a short string. Confirm the text lands in TextEdit. With a second display attached, move TextEdit onto it and repeat using a screenshot of that display; confirm the click lands there and not on the main screen."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S7
+    name: The accessibility lane presses a control by name
+    do: "With TextEdit frontmost, call `ui_snapshot`. Confirm controls come back as refs with roles, labels and frames. Call `ui_action` with `press` on a button ref and confirm the app responds without any coordinate being involved."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S8
+    name: The kill switch stops everything, and stays stopped
+    # A kill switch that expires, or that only stops the next click and not the next screenshot, is
+    # not one. The user reaches for it precisely when they cannot reach the pointer.
+    do: "While the tools are working, press ⌃⌥⌘. Confirm the card's status reads Stopped, and that a further tools/call for `click` and for `screenshot` both come back refused. Confirm nothing re-arms on its own, then click Re-arm and confirm calls work again."
+    expect:
+      interactive_count: { min: 2 }
+      text_visible:
+        - Stopped
+
+  - id: S9
+    name: Turning it off revokes both artefacts
+    do: "Turn the switch off. Confirm the 'omi-computer-use' entry is gone from ~/.omi/mcp.json, ~/.omi/omi-cua no longer exists, any other MCP server in the file is untouched, and a POST to /mcp is refused."
+    expect:
+      interactive_count: { min: 2 }
