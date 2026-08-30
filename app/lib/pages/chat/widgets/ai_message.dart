@@ -951,7 +951,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     context.read<ConversationDetailProvider>().updateConversation(conversation.id, date);
     await Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: conversation!)));
+    ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: conversation)));
 
     if (SharedPreferencesUtil().modifiedConversationDetails?.id == conversation.id) {
       final modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;

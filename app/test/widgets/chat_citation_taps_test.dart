@@ -12,7 +12,6 @@ import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/jump_to_latest_button.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/components/chat_evidence_card.dart';
 
 void main() {
@@ -87,8 +86,8 @@ void main() {
   });
 
   testWidgets('a memories message renders one source list and all attached citations', (tester) async {
-    final evidence = ChatEvidenceReferenceEnvelope(
-      references: const [
+    const evidence = ChatEvidenceReferenceEnvelope(
+      references: [
         ChatEvidenceReference(
           id: 'summary-0',
           kind: ChatEvidenceReferenceKind.conversationSummary,
