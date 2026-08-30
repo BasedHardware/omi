@@ -7,6 +7,8 @@
     "Omi offers to fill a form on screen before spending anything, and an offer you ignore stops asking",
     "Omi offers to draft the message when you're in a compose box, in Mail, Messages, Slack, Telegram, WhatsApp and their web versions",
     "Spoken questions about your own things — where you studied, what you built, a link you saw — now search everything Omi has stored locally before answering",
-    "Chat can save several memories at once, and memories saved outside the memories page now show up there"
+    "Chat can save several memories at once, and memories saved outside the memories page now show up there",
+    "Form assist and the draft card now work in Slack, Discord, VS Code, Notion and other Electron apps, which previously reported nothing at all",
+    "Panels say which key to hold to change what they put up, and a panel kept in chat can be copied without opening it"
   ]
 }

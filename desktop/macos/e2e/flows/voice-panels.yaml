@@ -19,6 +19,7 @@ covers:
   - desktop/macos/Desktop/Sources/FormAssist/FormFieldScanner.swift
   - desktop/macos/Desktop/Sources/FormAssist/FormAssistCardPlacement.swift
   - desktop/macos/Desktop/Sources/FormAssist/AXFormTree.swift
+  - desktop/macos/Desktop/Sources/FormAssist/ElectronAccessibility.swift
   - desktop/macos/Desktop/Sources/MessageDraft/MessageDraftAssistant.swift
   - desktop/macos/Desktop/Sources/MessageDraft/MessageComposeScanner.swift
   - desktop/macos/Desktop/Sources/MessageDraft/MessageDraftCard.swift
@@ -142,6 +143,14 @@ steps:
       - screenshot: step-S11.webp
       - log_grep: "MessageDraft: offering"
     note: "MessageComposeScanner matches messaging hosts by URL first and window title as fallback; MessageDraftCard takes keystrokes, so it renders in its own window."
+
+  - id: S11b
+    name: An Electron app publishes its tree when you switch to it
+    do: "Switch to Slack, Discord or VS Code. Verify the log records the app being asked to publish its accessibility tree, then focus an empty compose box and verify the draft card offers — this surface reports no fields at all until the app is asked."
+    verify: true
+    evidence:
+      - log_grep: "ElectronAccessibility: asked"
+    note: "Electron keeps the tree off until an assistive client sets AXManualAccessibility. Chromium browsers read a different flag and are deliberately not asked, so Brave stays dark and is answered from the window's picture instead."
 
   - id: S12
     name: One card at a time
