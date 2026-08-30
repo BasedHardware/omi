@@ -1134,6 +1134,42 @@ environments:
               category: memory_rollout
           forbidden_env:
           - HOSTED_PUSHER_API_URL
+        day3-reengagement-email-job:
+          flags:
+            --remove-env-vars: HOSTED_PUSHER_API_URL
+            --task-timeout: 900s
+          secrets:
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
+            RESEND_API_KEY:
+              secret: RESEND_API_KEY
+              version: latest
+            LIFECYCLE_EMAIL_SIGNING_SECRET:
+              secret: LIFECYCLE_EMAIL_SIGNING_SECRET
+              version: latest
+          env:
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware-dev
+            BASE_API_URL:
+              value: https://api.omiapi.com
+            DAY3_REENGAGEMENT_EMAIL_ENABLED:
+              value: 'false'
+              category: lifecycle_email
+            DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
+              value: 'false'
+              category: lifecycle_email
+          forbidden_env:
+          - HOSTED_PUSHER_API_URL
       workflow_files:
       - .github/workflows/gcp_backend_auto_dev.yml
       - .github/workflows/gcp_backend.yml
@@ -1143,6 +1179,8 @@ environments:
       - .github/workflows/gcp_frame_request_retention_job.yml
       - .github/workflows/gcp_daily_memory_sweep_job.yml
       - .github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml
+      - .github/workflows/gcp_day3_reengagement_email_job.yml
+      - .github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml
     compute_project: based-hardware-dev
     data_plane_project: based-hardware
     runtime_gcp_project: based-hardware
@@ -2209,12 +2247,49 @@ environments:
               category: memory_rollout
           forbidden_env:
           - HOSTED_PUSHER_API_URL
+        day3-reengagement-email-job:
+          flags:
+            --remove-env-vars: HOSTED_PUSHER_API_URL
+            --task-timeout: 900s
+          secrets:
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
+            RESEND_API_KEY:
+              secret: RESEND_API_KEY
+              version: latest
+            LIFECYCLE_EMAIL_SIGNING_SECRET:
+              secret: LIFECYCLE_EMAIL_SIGNING_SECRET
+              version: latest
+          env:
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            BASE_API_URL:
+              value: https://api.omi.me
+            DAY3_REENGAGEMENT_EMAIL_ENABLED:
+              value: 'false'
+              category: lifecycle_email
+            DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
+              value: 'false'
+              category: lifecycle_email
+          forbidden_env:
+          - HOSTED_PUSHER_API_URL
       workflow_files:
       - .github/workflows/gcp_backend.yml
       - .github/workflows/gcp_notifications_job.yml
       - .github/workflows/gcp_memory_maintenance_job.yml
       - .github/workflows/gcp_frame_request_retention_job.yml
       - .github/workflows/gcp_daily_memory_sweep_job.yml
+      - .github/workflows/gcp_day3_reengagement_email_job.yml
     compute_project: based-hardware
     data_plane_project: based-hardware
     runtime_gcp_project: based-hardware

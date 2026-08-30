@@ -45,6 +45,8 @@ def _resend(monkeypatch):
     """A working Resend + signing configuration, with httpx.post patched out."""
     monkeypatch.setenv('RESEND_API_KEY', 'fake-resend-key')
     monkeypatch.setenv('LIFECYCLE_EMAIL_SIGNING_SECRET', 'test-lifecycle-signing-secret-do-not-use-in-prod')
+    # The API that serves /email/unsubscribe. Absent, no send may proceed.
+    monkeypatch.setenv('BASE_API_URL', 'https://api.example.test')
 
     calls: list[dict] = []
 
@@ -56,7 +58,9 @@ def _resend(monkeypatch):
         return _FakeResponse()
 
     monkeypatch.setattr(lifecycle.httpx, 'post', fake_post)
-    return SimpleNamespace(calls=calls)
+    # `post` is exposed so a test can swap the transport mid-scenario (e.g.
+    # fail one run, succeed the next) and put this one back.
+    return SimpleNamespace(calls=calls, post=fake_post)
 
 
 # --- evaluate_candidate: eligibility partition and precedence ------------
@@ -275,11 +279,22 @@ def test_collect_day3_candidates_maps_signup_os_and_excludes_off_window_and_off_
     assert day3_reengagement.evaluate_candidate(by_uid['uid-win'], now=NOW).reason == 'not_macos'
 
 
+def _conversation(created_at, *, discarded=False, status='completed'):
+    """A conversation document as the pipeline writes it.
+
+    `status` and `discarded` are explicit in every fixture because they are
+    part of what makes a document count: an `in_progress` stub (written on
+    every listen session start and reconnect) or a discarded empty session
+    must not read as user output.
+    """
+    return {'created_at': created_at, 'discarded': discarded, 'status': status}
+
+
 def test_collect_day3_candidates_caps_day_zero_count_and_bools_the_after_day_zero_check(monkeypatch):
     signup_at = NOW - timedelta(hours=80)
     docs = {'users/uid-prolific': _user_doc('macos')}
     for i in range(15):
-        docs[f'users/uid-prolific/conversations/conv-{i}'] = {'created_at': signup_at + timedelta(minutes=i)}
+        docs[f'users/uid-prolific/conversations/conv-{i}'] = _conversation(signup_at + timedelta(minutes=i))
     _fake_get_user_from_uid(monkeypatch, {'uid-prolific': 'prolific@example.com'})
 
     candidates = day3_reengagement.collect_day3_candidates(now=NOW, firestore_client=FakeFirestore(docs=docs))
@@ -294,9 +309,9 @@ def test_collect_day3_candidates_flags_a_user_who_returned_after_day_zero(monkey
     signup_at = NOW - timedelta(hours=80)
     docs = {
         'users/uid-returned': _user_doc('macos'),
-        'users/uid-returned/conversations/conv-0': {'created_at': signup_at + timedelta(hours=1)},
+        'users/uid-returned/conversations/conv-0': _conversation(signup_at + timedelta(hours=1)),
         # 30h after signup is after the 24h day-0 window.
-        'users/uid-returned/conversations/conv-after': {'created_at': signup_at + timedelta(hours=30)},
+        'users/uid-returned/conversations/conv-after': _conversation(signup_at + timedelta(hours=30)),
     }
     _fake_get_user_from_uid(monkeypatch, {'uid-returned': 'returned@example.com'})
 
@@ -305,6 +320,36 @@ def test_collect_day3_candidates_flags_a_user_who_returned_after_day_zero(monkey
 
     assert facts.conversations_after_day_zero == 1
     assert day3_reengagement.evaluate_candidate(facts, now=NOW).reason == 'returned'
+
+
+def test_in_progress_stubs_and_discards_do_not_count_as_coming_back(monkeypatch):
+    """The whole target cohort depends on this.
+
+    The desktop listen socket writes an `in_progress` conversation on every
+    session start and reconnect, so a Mac that is merely still switched on --
+    launch-at-login, wake from sleep, socket reconnect -- produces documents
+    with fresh `created_at` values and no content. Counting those as "the user
+    came back" is the same launch-at-login contamination that disqualified
+    `last_active_at`, and it would leave the experiment enrolling only users
+    whose machines are off.
+    """
+    signup_at = NOW - timedelta(hours=80)
+    after_day_zero = signup_at + timedelta(hours=30)
+    docs = {
+        'users/uid-idle': _user_doc('macos'),
+        # A live-but-empty listen session, and an empty session that was
+        # discarded at the end. Neither is user output.
+        'users/uid-idle/conversations/conv-stub': _conversation(after_day_zero, status='in_progress'),
+        'users/uid-idle/conversations/conv-discarded': _conversation(after_day_zero, discarded=True),
+    }
+    _fake_get_user_from_uid(monkeypatch, {'uid-idle': 'idle@example.com'})
+
+    candidates = day3_reengagement.collect_day3_candidates(now=NOW, firestore_client=FakeFirestore(docs=docs))
+    facts = next(c for c in candidates if c.uid == 'uid-idle')
+
+    assert facts.conversations_after_day_zero == 0
+    assert facts.day_zero_conversation_count == 0
+    assert day3_reengagement.evaluate_candidate(facts, now=NOW).eligible
 
 
 def test_collect_day3_candidates_reads_opt_out_already_sent_and_email(monkeypatch):
@@ -460,8 +505,13 @@ def test_send_claim_blocks_a_second_send_after_a_crashed_first_attempt(_resend):
 
 
 def test_rerunning_with_the_same_candidate_does_not_double_send(_resend):
-    """End-to-end idempotency across two job runs: the second run sees an
-    existing assignment and stops before ever reaching the claim/send steps."""
+    """End-to-end idempotency across two job runs.
+
+    The second run still re-enrolls (idempotently, same variant) and still
+    reaches the claim -- the standing claim from the first run is what stops
+    it. Deliberately *not* an early return on "already enrolled": see
+    `test_a_treatment_user_whose_send_failed_is_retried_on_the_next_run`.
+    """
     db = FakeFirestore(docs={'users/uid-two-runs': {}})
     facts = _eligible_facts('uid-two-runs')
 
@@ -485,4 +535,50 @@ def test_rerunning_with_the_same_candidate_does_not_double_send(_resend):
     assert first.sent == 1
     assert second.sent == 0
     assert second.ineligible.get('already_enrolled') == 1
+    assert second.ineligible.get('send_already_claimed') == 1, 'the ledger, not enrollment, is the lock'
+    assert len(_resend.calls) == 1
+
+
+def test_a_treatment_user_whose_send_failed_is_retried_on_the_next_run(_resend, monkeypatch):
+    """Enrollment is the analysis lock; the claim ledger is the send-once lock.
+
+    Conflating them looks like idempotency and is actually a permanent send
+    failure: a treatment user whose first attempt died after enrolling would be
+    skipped by every later run and never mailed, while still counting as
+    treated -- silently diluting the very effect the experiment measures.
+    """
+    db = FakeFirestore(docs={'users/uid-retry': {}})
+    facts = _eligible_facts('uid-retry')
+
+    # First run: the provider is unreachable, which is a definitive
+    # non-delivery, so the claim is released.
+    def unreachable(url, *, json, headers, timeout):
+        raise lifecycle.httpx.ConnectError('provider unreachable')
+
+    monkeypatch.setattr(lifecycle.httpx, 'post', unreachable)
+    first = day3_reengagement.run_day3_reengagement(
+        candidates=[facts],
+        now=NOW,
+        authority=day3_reengagement.Day3Authority(enabled=True),
+        display_name_for=lambda uid: None,
+        firestore_client=db,
+        treatment_share=1.0,
+    )
+    assert first.sent == 0
+    assert first.failed == 1
+    assert first.enrolled_treatment == 1
+
+    # Second run: same user, provider healthy again. They must be mailed.
+    monkeypatch.setattr(lifecycle.httpx, 'post', _resend.post)
+    second = day3_reengagement.run_day3_reengagement(
+        candidates=[facts],
+        now=NOW,
+        authority=day3_reengagement.Day3Authority(enabled=True),
+        display_name_for=lambda uid: None,
+        firestore_client=db,
+        treatment_share=1.0,
+    )
+
+    assert second.sent == 1, 'a failed send must be retried, not permanently skipped'
+    assert second.enrolled_treatment == 0, 'the arm assignment is unchanged, not re-counted'
     assert len(_resend.calls) == 1

@@ -13,6 +13,7 @@ import pytest
 
 from tests.unit.fixtures.generic_firestore_fake import FakeFirestore
 from utils.email.lifecycle import (
+    LifecycleEmailNotConfigured,
     claim_lifecycle_send,
     is_lifecycle_opted_out,
     mint_unsubscribe_token,
@@ -62,10 +63,29 @@ def test_garbage_tokens_return_none(garbage):
     assert verify_unsubscribe_token(garbage) is None
 
 
-def test_unsubscribe_url_never_needs_a_session():
+def test_unsubscribe_url_points_at_the_api_that_serves_the_route(monkeypatch):
+    """The link has to reach the service that actually has the endpoint.
+
+    `/email/unsubscribe` is a FastAPI route on the backend, so the link must be
+    built from `BASE_API_URL`. Building it from `share_base_url()` -- the
+    conversation-share web origin -- produces a link that 404s, and takes the
+    `List-Unsubscribe` header down with it, since that carries the same URL.
+    An asserted `startswith('http')` would pass for either, which is why this
+    pins the host.
+    """
+    monkeypatch.setenv('BASE_API_URL', 'https://api.example.test/')
+
     url = unsubscribe_url('uid-link')
-    assert url.startswith('http')
-    assert '/email/unsubscribe?token=' in url
+
+    assert url.startswith('https://api.example.test/email/unsubscribe?token=')
+
+
+def test_unsubscribe_url_refuses_to_guess_a_host(monkeypatch):
+    """No `BASE_API_URL` means no working opt-out, so no send may proceed."""
+    monkeypatch.delenv('BASE_API_URL', raising=False)
+
+    with pytest.raises(LifecycleEmailNotConfigured):
+        unsubscribe_url('uid-link')
 
 
 # --- opt-out ------------------------------------------------------------

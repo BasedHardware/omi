@@ -48,8 +48,10 @@ All of:
    rather than a canonical value, so it is matched against a set. A bare
    `desktop` is excluded because Windows writes it too.
 2. `signup_platform_at` between 72h and 96h before the run (one 24h cohort/day)
-3. **Zero conversations created after the day-0 window** (day 0 = 24h from
-   `signup_platform_at`)
+3. **Zero real conversations created after the day-0 window** (day 0 = 24h
+   from `signup_platform_at`). "Real" means `discarded == False` and
+   `status == 'completed'` — see below; the qualifier is load-bearing, not
+   hygiene.
 4. A deliverable email address on the Firebase Auth record
 5. Not opted out of lifecycle email, and no prior EXP-001 send
 
@@ -62,6 +64,22 @@ defect, which is why the churn study reports a strict 14.1% retention next to
 its 27.4% headline. Keying "did they come back" on either signal would
 systematically exclude the disengaged-but-still-running users this email exists
 to reach. Rule 3 uses a **value** signal instead.
+
+### And why a raw conversation count is the same mistake
+
+A conversation *document* is not user output. The desktop listen socket writes
+an `in_progress` conversation on every session start and every reconnect, so a
+Mac that is merely still switched on manufactures documents with fresh
+`created_at` values and no content — and empty sessions are marked `discarded`
+when they finish. Counting those would make "did they come back" true for every
+install that is powered on, which is launch-at-login contamination wearing a
+different hat: it would strip the eligible set down to users whose machines are
+*off*, i.e. the opposite of the intended cohort.
+
+So rule 3 counts only `discarded == False, status == 'completed'` documents,
+which is also what `database.conversations.get_conversations` counts by
+default. Pinned by
+`test_in_progress_stubs_and_discards_do_not_count_as_coming_back`.
 
 This is a coverage choice, not a validity threat — it changes who is eligible,
 equally in both arms.
@@ -94,6 +112,15 @@ Measured day-14–23 proxy baseline ~13.2%.
 
 **Guardrails — stop for harm:** lifecycle unsubscribe rate, spam complaint
 rate, hard bounce rate.
+
+The unsubscribe rate is only readable because the opt-out endpoint splits the
+verbs: `GET /email/unsubscribe` renders a confirm form and writes nothing,
+`POST` performs the opt-out. Corporate link scanners (Outlook Safe Links and
+similar gateways) fetch every URL in a message body before the recipient sees
+it, so a writing `GET` would record opt-outs nobody asked for — suppressing
+real recipients and inflating this guardrail until it measured scanner traffic
+instead of harm. Mail clients issue the RFC 8058 one-click unsubscribe as a
+`POST`, so that path stays genuinely one-click.
 
 **Descriptive only:** sent, delivered, bounced, opened. Analysis is
 intention-to-treat; the comparison is **never** conditioned on opens. Openers

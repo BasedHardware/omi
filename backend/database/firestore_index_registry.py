@@ -1160,22 +1160,46 @@ DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('signup_platform'), _asc('signup_platform_at'), _asc('__name__')),
 )
 
-# EXP-001's day-0 output count: conversations created inside the 24h after
-# signup. Two range bounds on one field is a compound serving query even though
-# both bounds share a direction, so it is declared here rather than assumed to
-# fall out of the automatic single-field index.
+# EXP-001's day-0 output count: real conversations created inside the 24h after
+# signup.
 #
-# The companion "did they return after day 0" probe is a single `created_at >=`
-# bound with `limit(1)` — not compound, so it needs no spec.
+# `discarded == False` and `status == 'completed'` are not incidental hygiene,
+# they are the definition of the signal. A raw `created_at` scan counts the
+# `in_progress` stub the desktop listen socket writes on every session start
+# and reconnect, so a Mac that is merely still running — launch-at-login, wakes
+# from sleep, reconnects — manufactures "conversations" indistinguishable from
+# real output. That is the same contamination that made `last_active_at`
+# unusable for this experiment, and re-importing it through the value signal
+# would hollow out the target cohort exactly as badly. It also matches the
+# codebase's own default reader, `get_conversations`, which excludes discarded
+# rows unless asked otherwise.
 DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     identifier='conversations_created_range_day_zero',
     collection_group='conversations',
     query_scope='COLLECTION',
     filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('status', '==', 'status'),
         FirestoreQueryFilter('created_at', '>=', 'start'),
         FirestoreQueryFilter('created_at', '<', 'end'),
     ),
-    index_fields=(_asc('created_at'), _asc('__name__')),
+    index_fields=(_asc('discarded'), _asc('status'), _asc('created_at'), _asc('__name__')),
+)
+
+# The companion "did they come back after day 0" probe: same definition of a
+# real conversation, one open-ended lower bound, `limit(1)`. Served by the same
+# composite as the day-0 count (equalities then range), declared separately so
+# the coverage checker can match each call site to a spec.
+DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY = FirestoreQuerySpec(
+    identifier='conversations_created_after_day_zero',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('created_at', '>=', 'start'),
+    ),
+    index_fields=(_asc('discarded'), _asc('status'), _asc('created_at'), _asc('__name__')),
 )
 
 QUERY_SPECS = (
@@ -1238,6 +1262,7 @@ QUERY_SPECS = (
     FRAME_REQUEST_METADATA_EXPIRY_QUERY,
     DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY,
     DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY,
+    DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

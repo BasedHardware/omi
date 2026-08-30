@@ -8,6 +8,9 @@ through.
 
 from __future__ import annotations
 
+import html
+import re
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -41,19 +44,48 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def test_get_unsubscribe_with_valid_token_opts_out_and_confirms(_opt_outs):
+def test_get_unsubscribe_renders_a_confirm_form_and_writes_nothing(_opt_outs):
+    """The load-bearing property: GET is safe.
+
+    Outlook Safe Links and comparable scanning gateways fetch every URL in a
+    message before the recipient sees it. If GET opted people out, those
+    prefetches would silently suppress recipients who never clicked and would
+    inflate the unsubscribe rate EXP-001 pre-registers as its stop-for-harm
+    guardrail -- a guardrail that fires on scanner traffic measures nothing.
+    """
     token = mint_unsubscribe_token('uid-get')
     response = _client().get('/email/unsubscribe', params={'token': token})
 
     assert response.status_code == 200
-    assert 'unsubscribed' in response.text.lower()
-    assert _opt_outs == [('uid-get', True)]
+    assert _opt_outs == [], 'a GET must never write an opt-out'
+    assert 'form' in response.text.lower()
+    assert 'method="post"' in response.text.lower()
 
 
-def test_get_unsubscribe_never_echoes_the_token(_opt_outs):
+def test_confirming_from_the_get_page_posts_back_and_opts_out(_opt_outs):
+    """The two halves have to actually connect: whatever the confirm page
+    submits must be a request that opts the same uid out."""
+    token = mint_unsubscribe_token('uid-confirm')
+    client = _client()
+    page = client.get('/email/unsubscribe', params={'token': token})
+    action = re.search(r'action="([^"]+)"', page.text)
+    assert action is not None, 'the confirm page must carry a form action'
+
+    submitted = client.post(html.unescape(action.group(1)))
+
+    assert submitted.status_code == 200
+    assert _opt_outs == [('uid-confirm', True)]
+
+
+def test_get_unsubscribe_never_echoes_the_token_on_a_failure(_opt_outs):
+    """A rejected token must not come back in the response at all. (The
+    confirm page for an *accepted* token does carry it, in a form field, to
+    whoever already holds it -- that is the only way POST can receive it.)"""
     token = mint_unsubscribe_token('uid-no-echo')
-    response = _client().get('/email/unsubscribe', params={'token': token})
-    assert token not in response.text
+    tampered = token[:-1] + ('a' if token[-1] != 'a' else 'b')
+    response = _client().get('/email/unsubscribe', params={'token': tampered})
+    assert response.status_code == 400
+    assert tampered not in response.text
 
 
 def test_get_unsubscribe_missing_token_is_a_neutral_400(_opt_outs):
@@ -72,23 +104,24 @@ def test_get_unsubscribe_tampered_token_is_a_neutral_400(_opt_outs):
     assert _opt_outs == []
 
 
-def test_get_unsubscribe_is_idempotent(_opt_outs):
+def test_repeated_gets_stay_read_only(_opt_outs):
     token = mint_unsubscribe_token('uid-twice')
     client = _client()
     first = client.get('/email/unsubscribe', params={'token': token})
     second = client.get('/email/unsubscribe', params={'token': token})
     assert first.status_code == 200
     assert second.status_code == 200
-    assert _opt_outs == [('uid-twice', True), ('uid-twice', True)]
+    assert _opt_outs == []
 
 
-def test_get_unsubscribe_does_not_reveal_whether_the_uid_exists(_opt_outs):
+def test_unsubscribe_does_not_reveal_whether_the_uid_exists(_opt_outs):
     """A syntactically-valid, correctly-signed token for a uid the caller made
-    up gets exactly the same 200 confirmation as a real one -- existence is
-    never distinguishable from the response."""
+    up gets exactly the same 200 as a real one -- existence is never
+    distinguishable from the response, on either verb."""
     token = mint_unsubscribe_token('uid-does-not-exist-anywhere')
-    response = _client().get('/email/unsubscribe', params={'token': token})
-    assert response.status_code == 200
+    client = _client()
+    assert client.get('/email/unsubscribe', params={'token': token}).status_code == 200
+    assert client.post('/email/unsubscribe', params={'token': token}).status_code == 200
     assert _opt_outs == [('uid-does-not-exist-anywhere', True)]
 
 

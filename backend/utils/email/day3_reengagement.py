@@ -36,8 +36,10 @@ from database.auth import get_user_from_uid
 from database.conversations import conversations_collection
 from database.firestore_index_registry import (
     DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY,
+    DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
     DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY,
 )
+from models.conversation_enums import ConversationStatus
 from utils.email.lifecycle import (
     LifecycleEmailNotConfigured,
     LifecycleEmailSuppressed,
@@ -242,11 +244,25 @@ def _has_existing_send(uid: str, client: Any) -> bool:
 def _conversation_signals(uid: str, signup_at: Optional[datetime], *, client: Any) -> tuple[int, bool]:
     """Day-0 output count (capped) and whether the user returned after day 0.
 
-    Both come from ``users/{uid}/conversations.created_at`` — same collection
-    and field as ``database.conversations.get_conversations``. The "after day
-    0" check uses ``limit(1)``: it is a boolean, so streaming the whole set
-    would be pure waste. The day-0 count is capped at 11 because the copy only
-    ever reports "N conversations" for small N.
+    ## What counts as a conversation here
+
+    Both probes require ``discarded == False`` and ``status == 'completed'``,
+    which is the same definition ``database.conversations.get_conversations``
+    uses by default. That is load-bearing, not tidiness: the desktop listen
+    socket writes an ``in_progress`` conversation document on every session
+    start and reconnect, so a Mac that is merely *running* — launch-at-login,
+    wake from sleep, socket reconnect — mints documents with fresh
+    ``created_at`` values and no content.
+
+    Counting those would make "has the user come back?" true for every install
+    still switched on, which is precisely the contamination that disqualified
+    ``last_active_at`` from being the eligibility signal in the first place.
+    Re-importing it here, through the value signal chosen to avoid it, would
+    strip the target cohort down to users whose machines are off.
+
+    The "after day 0" check uses ``limit(1)``: it is a boolean, so streaming
+    the whole set would be pure waste. The day-0 count is capped at 11 because
+    the copy only ever reports "N conversations" for small N.
 
     Without a ``signup_at`` neither can be windowed; both come back
     zero/False and ``evaluate_candidate`` rejects on ``no_signup_timestamp``
@@ -257,20 +273,25 @@ def _conversation_signals(uid: str, signup_at: Optional[datetime], *, client: An
 
     day_zero_end = signup_at + timedelta(hours=DAY_ZERO_HOURS)
     conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
+    real_conversation = {'discarded': False, 'status': ConversationStatus.completed.value}
 
-    # Built through the registered spec rather than chained by hand. Beyond
+    # Built through the registered specs rather than chained by hand. Beyond
     # keeping the declared index and the served query in one place, the
     # coverage checker is AST-only: a hand-chained `.where()` on a collection
     # named by an imported constant has no resolvable collection group, so it
     # cannot be matched to its spec and lands as an unsupported shape.
     day_zero_query = DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY.build(
         conversations_ref,
-        {'start': signup_at, 'end': day_zero_end},
+        {**real_conversation, 'start': signup_at, 'end': day_zero_end},
         field_filter_factory=FieldFilter,
     ).limit(11)
     day_zero_count = sum(1 for _ in day_zero_query.stream())
 
-    after_query = conversations_ref.where(filter=FieldFilter('created_at', '>=', day_zero_end)).limit(1)
+    after_query = DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY.build(
+        conversations_ref,
+        {**real_conversation, 'start': day_zero_end},
+        field_filter_factory=FieldFilter,
+    ).limit(1)
     returned = any(True for _ in after_query.stream())
 
     return day_zero_count, returned
@@ -398,30 +419,44 @@ def run_day3_reengagement(
         if enrollment is None:
             summary.failed += 1
             continue
-        if not enrollment.newly_enrolled:
-            summary.note_ineligible('already_enrolled')
-            continue
 
-        if enrollment.variant == TREATMENT:
-            summary.enrolled_treatment += 1
+        if enrollment.newly_enrolled:
+            if enrollment.variant == TREATMENT:
+                summary.enrolled_treatment += 1
+            else:
+                summary.enrolled_control += 1
         else:
+            summary.note_ineligible('already_enrolled')
+
+        if enrollment.variant != TREATMENT:
             # The holdout is enrolled and then deliberately left alone. Its
             # visibility in analysis comes from the enrollment event, not from
             # anything the user does.
-            summary.enrolled_control += 1
             continue
 
+        # The claim ledger is the send-once lock; enrollment is the *analysis*
+        # lock, and the two must not be conflated. Returning early on
+        # `not newly_enrolled` would look like idempotency and actually be a
+        # permanent send failure: a treatment user whose first attempt died
+        # between enrolling and delivering (a provider blip, a killed job, a
+        # released claim after a definitive rejection) would be skipped by
+        # every later run and never mailed, while still counting as treated.
+        # `claim_lifecycle_send`'s atomic create() is what prevents duplicates
+        # here, and it works whether or not this is the first attempt.
         if not claim_lifecycle_send(facts.uid, CAMPAIGN, firestore_client=firestore_client):
             summary.note_ineligible('send_already_claimed')
             continue
 
-        content = build_reengagement_email(
-            display_name=display_name_for(facts.uid),
-            has_day_zero_output=decision.has_day_zero_output,
-            day_zero_conversation_count=facts.day_zero_conversation_count,
-            unsubscribe=unsubscribe_url(facts.uid),
-        )
         try:
+            # Inside the try: `unsubscribe_url` raises when the signing secret
+            # or BASE_API_URL is missing, and that must release the claim it
+            # would otherwise strand.
+            content = build_reengagement_email(
+                display_name=display_name_for(facts.uid),
+                has_day_zero_output=decision.has_day_zero_output,
+                day_zero_conversation_count=facts.day_zero_conversation_count,
+                unsubscribe=unsubscribe_url(facts.uid),
+            )
             send_lifecycle_email(
                 uid=facts.uid,
                 campaign=CAMPAIGN,

@@ -39,7 +39,6 @@ from typing import Any, Dict, Optional
 import httpx
 
 from database._client import db
-from utils.share_links import share_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +101,23 @@ def verify_unsubscribe_token(token: str, *, purpose: str = LIFECYCLE_PURPOSE) ->
 
 
 def unsubscribe_url(uid: str, *, purpose: str = LIFECYCLE_PURPOSE) -> str:
-    return f'{share_base_url()}/email/unsubscribe?token={mint_unsubscribe_token(uid, purpose=purpose)}'
+    """Absolute URL of the unsubscribe endpoint, on the API that serves it.
+
+    Deliberately ``BASE_API_URL`` and **not** ``share_base_url()``: the share
+    origin (``h.omi.me``) is the conversation-share web frontend and has no
+    ``/email/unsubscribe`` route, so a link built from it 404s — taking the
+    ``List-Unsubscribe`` header down with it, since that carries the same URL.
+    An unsubscribe that does not work is the one defect this whole module
+    exists to prevent.
+
+    Raises rather than defaulting: a lifecycle send with no working opt-out
+    must not happen, so this failure has to reach ``send_lifecycle_email`` and
+    stop it.
+    """
+    base = (os.getenv('BASE_API_URL') or '').strip().rstrip('/')
+    if not base:
+        raise LifecycleEmailNotConfigured('BASE_API_URL is not configured; cannot mint an unsubscribe link')
+    return f'{base}/email/unsubscribe?token={mint_unsubscribe_token(uid, purpose=purpose)}'
 
 
 def is_lifecycle_opted_out(uid: str, *, firestore_client: Any | None = None) -> bool:
