@@ -11,6 +11,7 @@ covers:
   - desktop/macos/Desktop/Sources/Panels/CancellableWork.swift
   - desktop/macos/Desktop/Sources/Panels/DataAnswerAssistant.swift
   - desktop/macos/Desktop/Sources/Panels/OmiSweep.swift
+  - desktop/macos/Desktop/Sources/Panels/ScreenGlance.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/SweepFTSSchema.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubPanelStateContext.swift
   - desktop/macos/Desktop/Sources/FormAssist/FormAssistAssistant.swift
@@ -86,6 +87,15 @@ steps:
     evidence:
       - screenshot: step-S6.webp
     note: "find_and_show puts the card up before the first search because the loop takes seconds; OmiSweep greps every local store (memories and transcript segments through their FTS5 indexes) before the first model call."
+
+  - id: S6b
+    name: Ask about what is on the screen, not what is stored
+    do: "Open a page in a Chromium browser (where web accessibility is dark) and ask for something visible on it — a title, a date, a price. Verify the panel carries the real value rather than a bracketed placeholder, and that the log names how much screen text and whether an image was captured."
+    verify: true
+    evidence:
+      - screenshot: step-S6b.webp
+      - log_grep: "DataAnswer: on-demand lookup started"
+    note: "ScreenGlance sends the front window's accessibility text and a picture of it with the question. Repeat with Screen Recording denied: the lookup still answers from text, and the prompt must not claim an attached image."
 
   - id: S7
     name: Close a panel mid-search
