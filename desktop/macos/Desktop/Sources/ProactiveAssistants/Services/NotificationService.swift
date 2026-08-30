@@ -1161,6 +1161,21 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     )
 
     print("[\(assistantId)] Sending notification: \(title) - \(message)")
+    // Observability only: `add(request:)` silently no-ops when authorization is
+    // `.notDetermined` or `.denied` — no error, no callback difference — so an
+    // unauthorized user's every proactive notification used to fail invisibly.
+    // This check never blocks or changes delivery below, and it must never
+    // request permission itself: that is a background delivery path, and
+    // turning it into a consent prompt is exactly what `startMonitoring`
+    // deliberately avoids (see `ProactiveAssistantsPlugin`).
+    UserNotificationCallbackBridge.authorizationStatus { authorizationStatus in
+      guard !NotificationPermissionPolicy.isGranted(authorizationStatus) else { return }
+      log("Notification dropped: not authorized (status=\(authorizationStatus.rawValue), assistantId=\(assistantId))")
+      AnalyticsManager.shared.notificationDeliverySkipped(
+        authStatus: NotificationDeliveryTelemetry.AuthStatus(authorizationStatus),
+        surface: ProactiveNotificationKind.from(assistantId: assistantId)
+      )
+    }
     UserNotificationCallbackBridge.add(request) { [weak self] result in
       if let errorDescription = result.errorDescription {
         print("Notification error: \(errorDescription)")

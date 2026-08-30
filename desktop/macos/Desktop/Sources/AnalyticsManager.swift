@@ -127,6 +127,17 @@ class AnalyticsManager {
     PostHogManager.shared.track(event, properties: properties)
   }
 
+  /// Notification-delivery-drop seam: nil in production; tests install a scoped
+  /// capture to observe the real event/payload `NotificationService` emits when
+  /// it drops a notification for lack of authorization.
+  private var notificationDeliveryTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setNotificationDeliveryTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    notificationDeliveryTelemetryCaptureForTests = capture
+  }
+
   func setDevicePairingTelemetryCaptureForTests(
     _ capture: (@MainActor (String?, [String: Any], [String: Any]) -> Void)?
   ) {
@@ -345,6 +356,21 @@ class AnalyticsManager {
         triggerID: triggerID
       )
     )
+  }
+
+  // MARK: - Notification Delivery Events
+
+  /// A proactive notification was dropped because the app is not authorized to
+  /// show it. See `NotificationDeliveryTelemetry` for the full contract. Never
+  /// call this from a permission-request path — it only observes an existing
+  /// drop, it must never itself trigger the system prompt.
+  func notificationDeliverySkipped(
+    authStatus: NotificationDeliveryTelemetry.AuthStatus,
+    surface: ProactiveNotificationKind
+  ) {
+    let payload = NotificationDeliveryTelemetry.skippedPayload(authStatus: authStatus, surface: surface)
+    notificationDeliveryTelemetryCaptureForTests?(NotificationDeliveryTelemetry.skippedEventName, payload)
+    PostHogManager.shared.track(NotificationDeliveryTelemetry.skippedEventName, properties: payload)
   }
 
   // MARK: - Monitoring Events

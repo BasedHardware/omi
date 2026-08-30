@@ -54,7 +54,7 @@ final class SBOnboardingModel: ObservableObject {
 
   enum Step: Int, CaseIterable {
     case promise, name, howHeard, language, role
-    case mic, systemAudio, screen, files, accessibility, automation
+    case mic, systemAudio, screen, files, accessibility, automation, notifications
     case shortcutOpen, shortcutTalk, screenDemo, agents, context, capture, referral
   }
 
@@ -110,6 +110,7 @@ final class SBOnboardingModel: ObservableObject {
   @Published var fdaState: PermState = .ask  // full disk access (files)
   @Published var accState: PermState = .ask  // accessibility
   @Published var autoState: PermState = .ask  // automation / Apple Events
+  @Published var notifState: PermState = .ask  // notifications
   @Published var localFileProfileState: LocalFileProfileState = .idle
 
   var launchAtLogin: Bool = LaunchAtLoginManager.shared.isEnabled
@@ -314,6 +315,9 @@ final class SBOnboardingModel: ObservableObject {
       return "Turn on Accessibility, so I can use your shortcut and click and type for you."
     case .automation:
       return "Turn on Automation, so I can help with tasks in the apps you choose."
+    case .notifications:
+      return
+        "Turn on Notifications, so I can tell you the moment I notice something — a mistake before you hit send, a meeting about to start, a follow-up you're about to miss."
     // Both steps used to invite "press any key", and `acceptsRecordedChord` then refused a bare key
     // in silence — correct (a global bare `L` is unrecoverable) but unexplained. Name the rule.
     case .shortcutOpen:
@@ -386,6 +390,31 @@ final class SBOnboardingModel: ObservableObject {
   /// mandatory lacked this flag, so `begin()` clamps them back through the steps.
   static let shortcutsCompletedKey = "sbOnboardingShortcutsCompleted"
 
+  /// Layout version of the persisted `resumeStepKey` value.
+  ///
+  /// `Step`'s raw values are written to disk, so inserting a case renumbers
+  /// every later step and silently reinterprets any resume state written by an
+  /// older build. Version 2 added `.notifications` between `.automation` and
+  /// `.shortcutOpen`; absent (0) means the version-1 layout that predates it.
+  static let resumeStepSchemaKey = "sbOnboardingResumeStepSchema"
+  static let resumeStepSchemaVersion = 2
+
+  /// Raw value `.notifications` took in version 2, frozen as a literal.
+  ///
+  /// Deliberately **not** `Step.notifications.rawValue`: this describes a
+  /// historical layout boundary, so it must not move if the enum is edited
+  /// again. A future insertion adds a version 3 rule beside this one.
+  private static let notificationsStepRawInV2 = 11
+
+  /// Translate a persisted resume step into the current layout.
+  ///
+  /// Pure so the renumbering is testable without `UserDefaults`. Anything at or
+  /// after the inserted case shifts up by one; earlier steps are unaffected.
+  static func migratedResumeStepRaw(savedRaw: Int, storedSchema: Int) -> Int {
+    guard storedSchema < 2 else { return savedRaw }
+    return savedRaw >= notificationsStepRawInV2 ? savedRaw + 1 : savedRaw
+  }
+
   func begin() {
     guard thread.isEmpty && streamingText == nil else { return }
     // Re-hydrate the editable drafts from what was already saved, so stepping
@@ -396,7 +425,17 @@ final class SBOnboardingModel: ObservableObject {
     // were already saved to the backend/settings, so we just re-enter at the saved
     // step; each permission step re-checks its grant on appear, so a permission
     // granted before the quit shows ✓ rather than prompting again.
-    let savedRaw = UserDefaults.standard.integer(forKey: Self.resumeStepKey)
+    // Renumber a resume state written before `.notifications` existed before
+    // anything reads it, and stamp the layout so this runs exactly once.
+    let persistedRaw = UserDefaults.standard.integer(forKey: Self.resumeStepKey)
+    let storedSchema = UserDefaults.standard.integer(forKey: Self.resumeStepSchemaKey)
+    let savedRaw = Self.migratedResumeStepRaw(savedRaw: persistedRaw, storedSchema: storedSchema)
+    if storedSchema < Self.resumeStepSchemaVersion {
+      if savedRaw != persistedRaw {
+        UserDefaults.standard.set(savedRaw, forKey: Self.resumeStepKey)
+      }
+      UserDefaults.standard.set(Self.resumeStepSchemaVersion, forKey: Self.resumeStepSchemaKey)
+    }
     recordSetupStateDisagreementAtRead(savedRaw: savedRaw)
     if savedRaw > Step.promise.rawValue, let resumed = Step(rawValue: savedRaw) {
       // A legacy resume state persisted before shortcuts were mandatory bypasses the new
@@ -510,6 +549,7 @@ final class SBOnboardingModel: ObservableObject {
     case .files: precheckPerm("full_disk_access")
     case .accessibility: precheckPerm("accessibility")
     case .automation: precheckPerm("automation")
+    case .notifications: precheckPerm("notifications")
     case .shortcutOpen, .shortcutTalk: armShortcutSummon()
     case .screenDemo: startScreenDemo()
     case .agents: refreshAgentStates()
