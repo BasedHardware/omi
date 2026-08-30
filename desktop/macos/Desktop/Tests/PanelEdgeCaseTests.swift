@@ -7,7 +7,6 @@ import XCTest
 @MainActor
 final class PanelEdgeCaseTests: XCTestCase {
   override func setUp() async throws {
-    try await super.setUp()
     await MainActor.run {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
@@ -19,7 +18,6 @@ final class PanelEdgeCaseTests: XCTestCase {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
     }
-    try await super.tearDown()
   }
 
   private func items(_ pairs: [(String, String)]) -> [VoicePanelItem] {

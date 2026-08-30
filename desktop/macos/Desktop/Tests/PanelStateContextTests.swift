@@ -11,7 +11,6 @@ import XCTest
 @MainActor
 final class PanelStateContextTests: XCTestCase {
   override func setUp() async throws {
-    try await super.setUp()
     await MainActor.run {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
@@ -23,7 +22,6 @@ final class PanelStateContextTests: XCTestCase {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
     }
-    try await super.tearDown()
   }
 
   private func present(_ value: String, masked: Bool = false) {
@@ -105,7 +103,6 @@ final class PanelStateContextTests: XCTestCase {
 @MainActor
 final class PanelPresenceTests: XCTestCase {
   override func setUp() async throws {
-    try await super.setUp()
     await MainActor.run {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
@@ -117,7 +114,6 @@ final class PanelPresenceTests: XCTestCase {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
     }
-    try await super.tearDown()
   }
 
   func testNothingOnScreenIsNone() {

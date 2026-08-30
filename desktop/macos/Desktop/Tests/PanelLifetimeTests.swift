@@ -12,7 +12,6 @@ final class PanelLifetimeTests: XCTestCase {
   /// PanelSession is process-wide state, so drain on the way in as well as out: a suite
   /// that leaves a panel or a record behind must not be able to fail a later one.
   override func setUp() async throws {
-    try await super.setUp()
     _ = PanelSession.dismiss()
     _ = PanelSession.takeChatCards()
   }
@@ -20,7 +19,6 @@ final class PanelLifetimeTests: XCTestCase {
   override func tearDown() async throws {
     _ = PanelSession.dismiss()
     _ = PanelSession.takeChatCards()
-    try await super.tearDown()
   }
 
   private func field(_ label: String, _ value: String) -> CloudConnectorCopyField {

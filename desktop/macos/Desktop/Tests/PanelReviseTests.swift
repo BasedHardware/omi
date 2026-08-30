@@ -13,7 +13,6 @@ final class PanelReviseTests: XCTestCase {
   /// these order-independent: a suite that leaves a record behind must not be able to
   /// fail a later one.
   override func setUp() async throws {
-    try await super.setUp()
     await MainActor.run {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
@@ -25,7 +24,6 @@ final class PanelReviseTests: XCTestCase {
       PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
     }
-    try await super.tearDown()
   }
 
   private func field(

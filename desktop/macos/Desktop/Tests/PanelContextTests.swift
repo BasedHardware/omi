@@ -72,13 +72,11 @@ final class PanelPlacementStoreTests: XCTestCase {
   private let visible = CGRect(x: 0, y: 0, width: 1_512, height: 950)
 
   override func setUp() async throws {
-    try await super.setUp()
     PanelPlacementStore.offset = nil
   }
 
   override func tearDown() async throws {
     PanelPlacementStore.offset = nil
-    try await super.tearDown()
   }
 
   func testNothingIsRememberedUntilAPanelMoves() {
