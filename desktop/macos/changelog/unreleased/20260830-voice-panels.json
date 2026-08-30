@@ -2,6 +2,7 @@
   "changes": [
     "Ask Omi out loud for something to keep — a list, an address, a draft, an outline — and it goes on screen with a copy button instead of only being spoken",
     "Say what to change about what's on screen ('make that shorter', 'swap that name') and Omi edits the panel in place rather than starting over",
+    "Spoken questions about what's on your screen now read the window itself — its text where the app publishes it, a picture of it where the app doesn't — so asking about a page in any app gets real values instead of placeholders",
     "Panels you asked for are saved into the chat transcript as a card, so what they held survives after the panel goes away",
     "Omi offers to fill a form on screen before spending anything, and an offer you ignore stops asking",
     "Omi offers to draft the message when you're in a compose box, in Mail, Messages, Slack, Telegram, WhatsApp and their web versions",

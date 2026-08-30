@@ -91,10 +91,19 @@ actor DataAnswerAssistant {
         onCancel: { work.cancel() }
       )
     }
-    log("DataAnswer: on-demand lookup started, question=\(asked.count) chars")
+    // After the panel, not before it: the card going up is what tells the user the
+    // lookup started, and a capture that stalls must not hold that back. Capturing one
+    // window rather than the display keeps Omi's own panel out of the frame regardless.
+    let glance = await ScreenGlance.capture()
+    log(
+      "DataAnswer: on-demand lookup started, question=\(asked.count) chars"
+        + " screen=\(glance.map { "\($0.text.count) chars" } ?? "none")"
+        + " image=\(glance?.image != nil ? "yes" : "no")")
 
     do {
-      let outcome = try await work.run { try await self.explore(question: asked, panel: panel) }
+      let outcome = try await work.run {
+        try await self.explore(question: asked, panel: panel, glance: glance)
+      }
       guard await !work.isCancelled else { return "Cancelled." }
       switch outcome {
       case .nothing(let reason):
@@ -142,7 +151,9 @@ actor DataAnswerAssistant {
 
   // MARK: - Exploration loop
 
-  private func explore(question: String, panel: PanelSession.Token) async throws -> Outcome {
+  private func explore(
+    question: String, panel: PanelSession.Token, glance: ScreenGlance.Glance?
+  ) async throws -> Outcome {
     // Attached, not offered. Asking the model whether it wants a lookup was measured as
     // a coin flip in this codebase (`ContextDirectorRetrievalHop`), and a loop that has
     // to guess which store to try first is exactly how an answer ends up biased toward
@@ -160,16 +171,13 @@ actor DataAnswerAssistant {
         reason: "sweep_empty", outcome: .degraded)
     }
     var transcript = await Self.openingPrompt(question: question)
+    let screen = ScreenGlance.promptSection(glance)
+    if !screen.isEmpty { transcript += "\n\n" + screen }
     transcript += "\n\n" + OmiSweep.promptSection(sweep)
 
     for _ in 0..<Self.maxToolTurns {
       try Task.checkCancellation()
-      let raw = try await geminiClient.sendRequest(
-        prompt: transcript,
-        systemPrompt: Self.systemPrompt,
-        responseSchema: Self.stepSchema,
-        thinkingBudget: 1024
-      )
+      let raw = try await ask(transcript, image: glance?.image)
       guard let step = Self.decodeStep(raw) else {
         DesktopDiagnosticsManager.shared.recordFallback(
           area: "panel_lookup", from: "model_step", to: "retry",
@@ -216,16 +224,25 @@ actor DataAnswerAssistant {
     try Task.checkCancellation()
     transcript +=
       "\n\nNo more searches. Answer now with action=present_answer: items holds everything found, missing names the rest."
-    let raw = try await geminiClient.sendRequest(
-      prompt: transcript,
-      systemPrompt: Self.systemPrompt,
-      responseSchema: Self.stepSchema,
-      thinkingBudget: 1024
-    )
+    let raw = try await ask(transcript, image: glance?.image)
     guard let step = Self.decodeStep(raw), let outcome = Self.outcome(of: step) else {
       return .nothing(reason: "the search did not settle on an answer")
     }
     return outcome
+  }
+
+  /// One step of the search. The window image rides every turn rather than only the
+  /// first: the loop answers on its last turn, and a value the model can only read off
+  /// the picture has to still be in front of it then.
+  private func ask(_ transcript: String, image: Data?) async throws -> String {
+    guard let image else {
+      return try await geminiClient.sendRequest(
+        prompt: transcript, systemPrompt: Self.systemPrompt,
+        responseSchema: Self.stepSchema, thinkingBudget: 1024)
+    }
+    return try await geminiClient.sendRequest(
+      prompt: transcript, imageData: image, systemPrompt: Self.systemPrompt,
+      responseSchema: Self.stepSchema, thinkingBudget: 1024)
   }
 
   nonisolated static func decodeStep(_ raw: String) -> Step? {
@@ -334,11 +351,22 @@ actor DataAnswerAssistant {
 
   private static let systemPrompt = """
     You are Omi's lookup assistant. The user asked out loud for something of their own,
-    and your one job is to find it in their data and present it as copyable text. Each
-    response is one JSON step: a search to run next, or the finished answer.
+    and your one job is to find it — in their data or on the screen in front of them —
+    and present it as copyable text. Each response is one JSON step: a search to run
+    next, or the finished answer.
 
     The user block and profile are already-found data: an email, name, or fact stated
     there needs no search and belongs straight in the answer.
+
+    When a screen block is present it is what the user is looking at as they ask, so
+    "this", "here", and "that" mean what is in it. Read it before searching: a name,
+    title, date, price, or link that is on their screen is already found, and its
+    attached picture is authoritative for anything the text does not carry — apps that
+    publish no accessibility text still render pixels, so a page that looks empty in
+    text may be fully readable in the image. Never answer a question about what they
+    can see with a placeholder like [Name] or [Website]: the value is in front of you,
+    so read it. A screen block does not stop you searching their stored data as well
+    when the question needs both.
 
     The keyword sweep below it has already looked in every local store the user has —
     memories, screen history, tasks, suggested tasks, task chats, insights, and what
@@ -377,8 +405,8 @@ actor DataAnswerAssistant {
     copied from, and nobody copies "this was not found in your memories".
 
     NEVER invent a value. Every item must be traceable to the user block, the profile,
-    an opened ref, or a search result; the user will paste these somewhere real, so a
-    wrong value costs far more than a missing one.
+    the screen block or its picture, an opened ref, or a search result; the user will
+    paste these somewhere real, so a wrong value costs far more than a missing one.
     """
 
   private static let stepSchema = GeminiRequest.GenerationConfig.ResponseSchema(
