@@ -73,6 +73,7 @@ from utils.memory.knowledge_ledger import (
     LedgerProvenance,
     LedgerWrite,
     amend_fact,
+    evidence_id_for_ledger_provenance,
     save_ledger_write,
 )
 from utils.memory.memory_system import ensure_canonical_apply_control_state
@@ -2652,6 +2653,29 @@ def _apply_candidate(
     if candidate.operation == "add":
         occupant = _find_active_slot_or_subject(uid, candidate, db_client=db_client)
         if occupant is not None:
+            # Crash-replay recognition: if the occupant already carries this
+            # exact plan/candidate's evidence identity, the canonical write for
+            # this receipt landed before a crash prevented receipt
+            # finalization. Re-applying would supersede our own row with a
+            # duplicate; recognize the landed effect and complete as a skip.
+            # A next-day sweep derives a different ``_plan_id`` and therefore a
+            # different evidence identity, so legitimate same-slot refreshes
+            # are unaffected.
+            replay_evidence_id = evidence_id_for_ledger_provenance(
+                uid,
+                LedgerProvenance(
+                    source_id=candidate.source_id,
+                    source_type=candidate.source_type,
+                    source_version=candidate.source_version,
+                    action_id=f"{_plan_id(uid, local_date)}:{candidate.source_key}",
+                ),
+            )
+            # An occupant without readable evidence cannot be proven to be our
+            # own replay, so fall through to the ordinary authority rules
+            # rather than suppressing a write we cannot account for.
+            occupant_evidence = getattr(occupant, "evidence", None) or ()
+            if any(getattr(item, "evidence_id", None) == replay_evidence_id for item in occupant_evidence):
+                return occupant.memory_id, "existing_active_slot" if candidate.slot else "existing_active_subject"
             occupant_rank = _target_authority(occupant)
             # A slot is a standing attribute the daily run maintains: a
             # sweep-authored occupant may be refreshed by an equal-rank sweep
