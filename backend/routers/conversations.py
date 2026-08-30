@@ -483,6 +483,7 @@ def reprocess_conversation(
         conversation,
         force_process=True,
         is_reprocess=True,
+        bypass_jit_first_open=True,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(

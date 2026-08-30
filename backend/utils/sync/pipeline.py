@@ -799,6 +799,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         conversation=conversation,
         force_process=True,
         is_reprocess=True,
+        bypass_jit_first_open=True,
         persistence_observer=_require_current_conversation_persistence,
     )
 

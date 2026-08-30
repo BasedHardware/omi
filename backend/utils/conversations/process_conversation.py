@@ -1995,6 +1995,7 @@ def process_conversation(
     defer_memory_extraction: bool = False,
     defer_derived_effects: bool = False,
     derived_effects_observer: Callable[[Callable[[], None]], None] | None = None,
+    bypass_jit_first_open: bool = False,
 ) -> Conversation:
     if app_usage_attribution is None:
         app_usage_attribution = (
@@ -2086,6 +2087,9 @@ def process_conversation(
     # force_process=True). Paid desktop plans (Operator / Architect), BYOK users, and all
     # non-desktop sources are processed normally here. force_process / is_reprocess — the lazy
     # trigger and manual reprocess — bypass this so the enrichment actually runs.
+    # force_process does not bypass JIT first-open: Flutter create and macOS
+    # finalize need it to still defer folders/apps when rollout admits. Explicit
+    # "run everything now" paths pass bypass_jit_first_open=True.
     if (
         not force_process
         and not is_reprocess
@@ -2140,7 +2144,7 @@ def process_conversation(
     # conversation source. We create the durable obligation before omitting a
     # single effect; authority/Firestore failure preserves full-eager behavior.
     jit_defer_expensive = False
-    if not force_process and not is_reprocess and not discarded:
+    if not bypass_jit_first_open and not is_reprocess and not discarded:
         source_value = getattr(conversation.source, 'value', conversation.source)
         first_open_plan = resolve_authorized_first_open_plan(uid=uid, source=str(source_value))
         if first_open_plan.defer_derived_work:
