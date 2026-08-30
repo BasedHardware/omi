@@ -1509,6 +1509,43 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  /// Voice could start background work and never continue it: `spawn_agent` was
+  /// the only handle it had, so the turn after "open Safari" was answered from
+  /// the model's own knowledge while the run it started sat idle. A follow-up
+  /// with no session names the work already in progress.
+  it("continues the owner's most recent run when no session is named", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const first = await kernel.executeRun({ ...baseRunInput, ownerId: "owner-1" });
+    const context: AgentControlToolContext = { kernel, getOwnerId: () => "owner-1" };
+
+    const sent = parseToolResult(
+      await handleAgentControlToolCall(context, "send_agent_message", {
+        prompt: "now search YouTube",
+      }),
+    );
+    expect(sent.ok).toBe(true);
+    expect(sent.session.sessionId).toBe(first.session.sessionId);
+    expect(sent.routeDecision.intent).toBe("continue_run");
+    store.close();
+  });
+
+  /// A follow-up must never reach into another account's work, and the resolver
+  /// offers a handle rather than deciding ownership — the kernel still does that.
+  it("does not continue another owner's run", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    await kernel.executeRun({ ...baseRunInput, ownerId: "other-owner" });
+    const context: AgentControlToolContext = { kernel, getOwnerId: () => "owner-1" };
+
+    const sent = parseToolResult(
+      await handleAgentControlToolCall(context, "send_agent_message", {
+        prompt: "carry on",
+      }),
+    );
+    expect(sent).toMatchObject({ ok: false, error: { code: "control_tool_failed" } });
+    expect(sent.error.message).toContain("No recent run to continue");
+    store.close();
+  });
+
   it("treats caller-provided owner ids as trimmed guards", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     await kernel.executeRun({ ...baseRunInput, ownerId: "owner-from-context" });

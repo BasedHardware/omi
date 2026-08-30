@@ -286,7 +286,9 @@ const searchToolOutputSchema = strictObject({
 });
 
 const sendAgentMessageSchema = strictObject({
-  sessionId: z.string().min(1),
+  // Optional so a voice follow-up can continue the work in progress without
+  // knowing an id. `resolveContinuationSessionId` supplies it.
+  sessionId: z.string().min(1).optional(),
   originSurfaceKind: originSurfaceKindSchema,
   ownerId: z.string().min(1).optional(),
   prompt: z.string().min(1),
@@ -618,6 +620,43 @@ class PartialAgentSpawnError extends Error {
       cause: causeMessage,
     };
   }
+}
+
+/**
+ * How long a finished turn stays continuable when the caller names no session.
+ *
+ * Matches the desktop context packet's own TTL. Long enough that a user who
+ * looks away and comes back is still in the same piece of work; short enough
+ * that tomorrow's unrelated request cannot reopen yesterday's run.
+ */
+const CONTINUATION_RECENCY_MS = 30 * 60 * 1_000;
+
+/**
+ * The run a follow-up means when the user does not say.
+ *
+ * Voice could start background work and never continue it: the model had
+ * `spawn_agent` and no way to name the session it had just created, so the turn
+ * after "open Safari" was answered from the model's own knowledge while the run
+ * it started sat idle. A person does not repeat an id to carry on a sentence,
+ * and neither should the surface — the owner's most recently active open session
+ * is what "carry on" refers to.
+ *
+ * Ownership is not decided here. The kernel re-resolves the session against the
+ * active owner and its lifecycle before any effect lands; this only chooses
+ * which handle to offer it.
+ */
+function resolveContinuationSessionId(
+  context: AgentControlToolContext,
+  ownerId: string,
+  now: number = Date.now(),
+): string | undefined {
+  const [candidate] = context.kernel.listSessions({ ownerId, status: "open", limit: 1 });
+  if (!candidate) return undefined;
+  const lastActivity = candidate.session.lastActivityAtMs ?? candidate.session.createdAtMs;
+  if (typeof lastActivity === "number" && now - lastActivity > CONTINUATION_RECENCY_MS) {
+    return undefined;
+  }
+  return candidate.session.sessionId;
 }
 
 function controlRunRecovery(
@@ -1071,8 +1110,15 @@ export async function handleAgentControlToolCall(
         });
       }
       case "send_agent_message": {
-        const parsed = agentControlToolSchemas.send_agent_message.parse(input);
-        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const raw = agentControlToolSchemas.send_agent_message.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, raw.ownerId);
+        const sessionId = raw.sessionId ?? resolveContinuationSessionId(context, ownerId);
+        if (!sessionId) {
+          throw new Error(
+            "No recent run to continue. Start one with spawn_agent, or name a sessionId from list_agent_sessions.",
+          );
+        }
+        const parsed = { ...raw, sessionId };
         const targetPolicy = context.kernel.executionPolicyForOwnedSession(parsed.sessionId, ownerId);
         const adapterId = parsed.adapterId ?? targetPolicy.defaultAdapterId;
         assertAdapterAllowedForDirectSessionContinuation(context, adapterId, targetPolicy);

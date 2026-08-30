@@ -1845,6 +1845,17 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
       ["objective"],
     ),
   },
+  send_agent_message: {
+    realtimeDescription:
+      "Continue the background work already in progress instead of answering from your own knowledge. When the user's request follows on from a run you started — the next step in the same app, the same task, or a correction to it — send it here. Omit sessionId to continue the run this surface started most recently.",
+    schemaOverride: schema(
+      {
+        prompt: { type: "string", description: "The follow-up instruction, in the user's terms." },
+        sessionId: { type: "string", description: "Optional. Omit to continue the most recent run started from this surface." },
+      },
+      ["prompt"],
+    ),
+  },
   list_agent_sessions: {
     realtimeDescription:
       "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, omit status filters: session archive state is not run completion. List recent sessions, then answer from latestRun.finalText or inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",

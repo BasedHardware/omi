@@ -200,6 +200,11 @@ function realtimeTools() {
     "inspect_agent_artifacts",
     "update_agent_artifact_lifecycle",
     "spawn_agent",
+    // Voice can start background work and could never continue it, so a
+    // follow-up ("now search YouTube" after "open Safari") was answered from the
+    // model's own knowledge while the run it had just started sat idle. The
+    // kernel has always supported the continuation; only this list withheld it.
+    "send_agent_message",
     "set_desktop_attention_override",
   ]);
 
