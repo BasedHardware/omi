@@ -57,6 +57,27 @@ describe("MCP tool result content", () => {
     expect(await client.callTool("render", {})).toBe("Tool render returned no readable content.");
   });
 
+  // A prompt's messages carry the same block types a tool result does. They used
+  // to go through a text-only reader, so `resource-prompt` — a prompt whose whole
+  // point is the resource it carries — expanded to its preamble and nothing else.
+  it("names a resource a prompt carries instead of dropping it", async () => {
+    const client = clientReturning({
+      messages: [
+        { role: "user", content: { type: "text", text: "Analyze this:" } },
+        { role: "user", content: { type: "resource", resource: { uri: "demo://blob/1", blob: "AAAA" } } },
+      ],
+    });
+    expect(await client.getPrompt("resource-prompt", {})).toBe(
+      "user: Analyze this:\n\nuser: [resource: demo://blob/1, not shown]",
+    );
+  });
+
+  // Older servers send a message's content as a bare string rather than a block.
+  it("reads a prompt message whose content is a plain string", async () => {
+    const client = clientReturning({ messages: [{ role: "user", content: "just text" }] });
+    expect(await client.getPrompt("simple", {})).toBe("user: just text");
+  });
+
   it("raises a tool error with its own text", async () => {
     const client = clientReturning({ content: [{ type: "text", text: "quota exceeded" }], isError: true });
     await expect(client.callTool("query", {})).rejects.toThrow("quota exceeded");

@@ -136,7 +136,7 @@ export abstract class McpClient {
       messages?: Array<{ role?: string; content?: unknown }>;
     };
     const parts = (result?.messages ?? []).flatMap((message) => {
-      const text = textOf(message?.content);
+      const text = describeContent(blocksOf(message?.content));
       if (!text) return [];
       // Prompts carry a conversation; the roles are what make it one.
       return [message?.role ? `${message.role}: ${text}` : text];
@@ -210,10 +210,13 @@ function describeContent(blocks: unknown[]): string {
     .join("\n");
 }
 
-/** The text carried by a content block, or by a list of them. */
-function textOf(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) return content.map(textOf).filter(Boolean).join("\n");
-  const block = content as { type?: string; text?: string } | undefined;
-  return block?.type === "text" && typeof block.text === "string" ? block.text : "";
+/**
+ * A prompt message's content as blocks. The spec allows one block or a list,
+ * and older servers send a bare string; all three become the block list
+ * `describeContent` renders, so a prompt carrying an image or a resource is
+ * named rather than dropped the way a tool result's would not be.
+ */
+function blocksOf(content: unknown): unknown[] {
+  if (typeof content === "string") return [{ type: "text", text: content }];
+  return Array.isArray(content) ? content : [content];
 }
