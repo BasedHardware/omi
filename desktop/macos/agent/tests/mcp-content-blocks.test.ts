@@ -15,8 +15,34 @@ function clientReturning(result: unknown): McpHttpClient {
       headers: { "content-type": "application/json" },
     });
   }) as unknown as typeof fetch;
-  return new McpHttpClient("https://example.test/mcp", undefined, fetchImpl);
+  return new McpHttpClient("https://example.test/mcp", {}, fetchImpl);
 }
+
+describe("MCP request headers", () => {
+  // The loader builds an Authorization header from a `token` or a stored OAuth
+  // access_token; the caller used to unwrap it and the client rebuilt it as
+  // `Bearer <value>`, which corrupted any scheme that was not Bearer.
+  it("sends configured headers verbatim, whatever the scheme", async () => {
+    const seen: Array<Record<string, string>> = [];
+    const fetchImpl = (async (_url: string, init: { body: string; headers: Record<string, string> }) => {
+      seen.push(init.headers);
+      const message = JSON.parse(init.body) as { id?: number };
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: { tools: [] } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const client = new McpHttpClient(
+      "https://example.test/mcp",
+      { Authorization: "Basic dXNlcjpwYXNz", "X-Api-Key": "k1" },
+      fetchImpl,
+    );
+    await client.listTools();
+    expect(seen[0].Authorization).toBe("Basic dXNlcjpwYXNz");
+    expect(seen[0]["X-Api-Key"]).toBe("k1");
+  });
+});
 
 describe("MCP tool result content", () => {
   // A screenshot tool returned no text blocks, so the old code fell through to

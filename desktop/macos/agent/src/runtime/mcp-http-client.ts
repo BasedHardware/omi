@@ -41,7 +41,7 @@ export class McpHttpClient extends McpClient {
 
   constructor(
     private readonly url: string,
-    private readonly token?: string,
+    private readonly authHeaders: Readonly<Record<string, string>> = {},
     private readonly fetchImpl: typeof fetch = fetch,
   ) {
     super();
@@ -52,7 +52,9 @@ export class McpHttpClient extends McpClient {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
       "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
-      ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+      // The server's configured headers verbatim: an Authorization value carries its own
+      // scheme, and rebuilding one as `Bearer <value>` corrupted every non-Bearer scheme.
+      ...this.authHeaders,
       ...(this.sessionId ? { "Mcp-Session-Id": this.sessionId } : {}),
     };
   }

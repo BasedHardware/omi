@@ -892,14 +892,17 @@ async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
       // A first `npx <package>` run downloads the package; give it room.
       discoveryTimeoutMs = 30_000;
     } else {
-      const bearer = server.headers?.find((header) => header.name === "Authorization")?.value;
-      const token = bearer?.replace(/^Bearer\s+/i, "");
+      // Headers pass through as configured. `loadLocalMcpConfig` has already turned a
+      // `token` or a stored OAuth `access_token` into an Authorization header, so
+      // unwrapping one here only to have the client rebuild it corrupted any scheme
+      // that was not Bearer.
+      const headers = Object.fromEntries((server.headers ?? []).map((h) => [h.name, h.value]));
       // An `sse` server publishes a long-lived event stream, not a POST target;
       // driving it as Streamable HTTP is a 404 on every message.
       client =
         server.type === "sse"
-          ? new McpSseClient(server.url, token)
-          : new McpHttpClient(server.url, token);
+          ? new McpSseClient(server.url, headers)
+          : new McpHttpClient(server.url, headers);
       discoveryTimeoutMs = 10_000;
     }
     // One budget per server for both discovery calls: charging each its own turned a

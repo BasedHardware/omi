@@ -2667,8 +2667,8 @@ actor AgentRuntimeProcess {
     }
 
     // User-managed local skills and MCP servers (~/.omi). The runtime reads
-    // both per session, so a file change is enough to apply; OAuth tokens in
-    // mcp.json are refreshed here so sessions always start with a live token.
+    // both per session, so a file change is enough to apply. The OAuth refresh is unawaited:
+    // a stale token costs one server a 401 (fail-open) and applies from the next session.
     env["OMI_USER_SKILLS_DIR"] = LocalSkillsStore.rootURL.path
     env["OMI_LOCAL_MCP_FILE"] = LocalMcpStore.fileURL.path
     Task { await LocalMcpStore.refreshExpiredTokens() }

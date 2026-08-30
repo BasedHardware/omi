@@ -2,6 +2,7 @@ import AppKit
 import CryptoKit
 import Foundation
 import Network
+import Security
 
 /// Fully local OAuth for remote MCP servers: metadata discovery, dynamic client
 /// registration, PKCE, a loopback redirect listener, code exchange, and refresh.
@@ -236,9 +237,10 @@ extension LocalMcpStore {
     let clientSecret = registered["client_secret"] as? String
 
     // PKCE + authorization request
-    let verifier = randomURLSafeString(length: 64)
+    // RFC 7636 §4.1's recommended construction: 32 random octets, base64url-encoded.
+    let verifier = try randomURLSafeToken(byteCount: 32)
     let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded()
-    let state = randomURLSafeString(length: 24)
+    let state = try randomURLSafeToken(byteCount: 16)
     guard var components = URLComponents(string: meta.authorizationEndpoint) else {
       throw storeError("The server advertised an invalid authorization endpoint")
     }
@@ -321,9 +323,23 @@ extension LocalMcpStore {
     return json
   }
 
-  private static func randomURLSafeString(length: Int) -> String {
-    let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-    return String((0..<length).map { _ in alphabet[Int.random(in: 0..<alphabet.count)] })
+  /// A PKCE verifier or an OAuth `state`, from the system CSPRNG.
+  ///
+  /// `Int.random` draws from a generator that carries no cryptographic guarantee, and these two
+  /// values are exactly what an attacker must not predict: the verifier is the proof that the
+  /// party redeeming the code is the one that started the flow, and `state` is the CSRF binding.
+  /// A failure to draw randomness throws rather than falling back to a weaker source — an OAuth
+  /// flow the user can retry is strictly better than one built on guessable secrets.
+  ///
+  /// Base64url of raw bytes rather than picking characters out of an alphabet: index-by-modulo
+  /// over 66 characters is biased for any byte-sized draw, and this is the construction RFC 7636
+  /// recommends anyway.
+  static func randomURLSafeToken(byteCount: Int) throws -> String {
+    var bytes = [UInt8](repeating: 0, count: byteCount)
+    guard SecRandomCopyBytes(kSecRandomDefault, byteCount, &bytes) == errSecSuccess else {
+      throw storeError("Could not generate secure random data for the sign-in request")
+    }
+    return Data(bytes).base64URLEncoded()
   }
 }
 

@@ -17,8 +17,22 @@ supports three auth shapes: no auth, API key (`token`), and OAuth.
 `LocalMcpStore+OAuth` runs the full native-app flow locally — discovery,
 dynamic client registration, PKCE, loopback redirect on 127.0.0.1, code
 exchange — and stores tokens under the entry's `auth` key.
-`refreshExpiredTokens()` runs at agent-runtime start, so a session never begins
-with a stale token.
+`refreshExpiredTokens()` is kicked off at agent-runtime start, but **not
+awaited** — it races the runtime spawn, so a session can begin on a token that
+is still refreshing. That is deliberate: awaiting it would put a network round
+trip per expired token in front of every launch. It is safe because the path
+fails open (a stale token means one server answers 401 and is skipped, never a
+broken session) and because the runtime re-reads mcp.json per session, so the
+refreshed token applies from the next one.
+
+Tokens are stored **in plaintext** in ~/.omi/mcp.json, under the server
+entry's `auth` key — the same trust model as other local MCP clients, in a
+user-owned file. Anything that can read the user's home directory can read
+them; the Keychain would be the stricter home if that ever stops being enough.
+
+PKCE verifiers and OAuth `state` come from `SecRandomCopyBytes`, base64url-encoded
+per RFC 7636 §4.1. A failure to draw randomness aborts the flow rather than
+falling back to a weaker generator.
 
 Discovery follows RFC 9728: the resource's
 `/.well-known/oauth-protected-resource` names its authorization servers, which

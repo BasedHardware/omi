@@ -62,4 +62,25 @@ final class LocalMcpStoreTests: XCTestCase {
     XCTAssertThrowsError(try LocalMcpStore.addCommandServer(name: "!!!", commandLine: "npx x"))
     XCTAssertThrowsError(try LocalMcpStore.addCommandServer(name: "ok", commandLine: "   "))
   }
+
+  /// The PKCE verifier proves the party redeeming the code is the one that began the flow, and
+  /// `state` is the CSRF binding; both must come from the system CSPRNG, not `Int.random`.
+  func testOAuthTokensAreUrlSafeUniqueAndFullLength() throws {
+    // RFC 7636 §4.1: 32 octets base64url-encode to 43 characters, 16 to 22.
+    XCTAssertEqual(try LocalMcpStore.randomURLSafeToken(byteCount: 32).count, 43)
+    XCTAssertEqual(try LocalMcpStore.randomURLSafeToken(byteCount: 16).count, 22)
+
+    let allowed = CharacterSet(
+      charactersIn:
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+    var seen = Set<String>()
+    for _ in 0..<200 {
+      let token = try LocalMcpStore.randomURLSafeToken(byteCount: 32)
+      XCTAssertNil(
+        token.rangeOfCharacter(from: allowed.inverted),
+        "a verifier must survive a query string unescaped: \(token)")
+      seen.insert(token)
+    }
+    XCTAssertEqual(seen.count, 200, "every draw must be distinct")
+  }
 }

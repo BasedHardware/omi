@@ -51,14 +51,15 @@ export class McpSseClient extends McpClient {
 
   constructor(
     private readonly url: string,
-    private readonly token?: string,
+    private readonly configuredHeaders: Readonly<Record<string, string>> = {},
     private readonly fetchImpl: typeof fetch = fetch,
   ) {
     super();
   }
 
+  /// The server's configured headers verbatim; an Authorization value carries its own scheme.
   private authHeaders(): Record<string, string> {
-    return this.token ? { Authorization: `Bearer ${this.token}` } : {};
+    return { ...this.configuredHeaders };
   }
 
   dispose(): void {
