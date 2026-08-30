@@ -302,10 +302,6 @@ class MemoriesViewModel: ObservableObject {
   @Published var showingDeleteAllConfirmation = false
   @Published var isBulkOperationInProgress = false
 
-  // Conversation linking state
-  @Published var linkedConversation: ServerConversation? = nil
-  @Published var isLoadingConversation = false
-
   // Visibility toggle state
   @Published var isTogglingVisibility = false
 
@@ -667,8 +663,6 @@ class MemoriesViewModel: ObservableObject {
     rawBackendOffset = 0
     showingDeleteAllConfirmation = false
     isBulkOperationInProgress = false
-    linkedConversation = nil
-    isLoadingConversation = false
     isTogglingVisibility = false
     totalMemoriesCount = 0
     hasMoreFilteredResults = false
@@ -1881,21 +1875,6 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
-  // MARK: - Conversation Linking
-
-  func navigateToConversation(id: String) async {
-    isLoadingConversation = true
-    do {
-      linkedConversation = try await APIClient.shared.getConversation(id: id)
-    } catch {
-      logError("Failed to load conversation", error: error)
-    }
-    isLoadingConversation = false
-  }
-
-  func dismissConversation() {
-    linkedConversation = nil
-  }
 }
 
 // MARK: - Memories Page
@@ -1904,6 +1883,7 @@ struct MemoriesPage: View {
   @ObservedObject var viewModel: MemoriesViewModel
   var brainDestination: MemoryHubDestination? = nil
   var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
+  var onOpenConversation: ((String) -> Void)? = nil
   @State private var showCategoryFilter = false
   @State private var categorySearchText = ""
   @State private var pendingSelectedTags: Set<MemoryTag> = []
@@ -1936,16 +1916,7 @@ struct MemoriesPage: View {
 
   @ViewBuilder
   private var pageContent: some View {
-    if let conversation = viewModel.linkedConversation {
-      // Show conversation detail view
-      ConversationDetailView(
-        conversation: conversation,
-        onBack: { viewModel.dismissConversation() }
-      )
-    } else {
-      // Main memories view
-      mainMemoriesView
-    }
+    mainMemoriesView
   }
 
   private var memoriesColumn: some View {
@@ -1979,7 +1950,8 @@ struct MemoriesPage: View {
       categoryColor: categoryColor,
       tagColorFor: tagColorFor,
       formatDate: formatDate,
-      onDismiss: { viewModel.selectedMemory = nil }
+      onDismiss: { viewModel.selectedMemory = nil },
+      onOpenConversation: openSourceConversation
     )
     // Identity per memory: the panel holds edit state, and without this
     // SwiftUI reuses the same instance across selections, carrying one
@@ -1994,6 +1966,18 @@ struct MemoriesPage: View {
       Rectangle().fill(Ink.separator.opacity(0.25)).frame(width: 1)
     }
     .accessibilityIdentifier("memory_detail_panel")
+  }
+
+  private func openSourceConversation(_ conversationID: String) {
+    if let onOpenConversation {
+      onOpenConversation(conversationID)
+      return
+    }
+    ConversationDetailAutomationState.shared.requestOpen(
+      conversationId: conversationID,
+      showTranscript: false
+    )
+    NotificationCenter.default.post(name: .desktopAutomationOpenConversationRequested, object: nil)
   }
 
   private var mainMemoriesView: some View {
@@ -2022,20 +2006,6 @@ struct MemoriesPage: View {
     }
     .overlay(alignment: .bottom) {
       undoDeleteToast
-    }
-    .overlay {
-      // Loading overlay for conversation fetch. This page rides on `PageGlassLane`'s panel, so the
-      // dim fills that panel and stops at its corner. The `.ignoresSafeArea()` it replaces asked to
-      // bleed past exactly the surface the dim belongs to.
-      if viewModel.isLoadingConversation {
-        ShellModalScrim()
-          .overlay {
-            ProgressView()
-              .scaleEffect(1.2)
-              // Two rungs on glass: the dim sits on the panel, so the spinner is `Ink.primary`.
-              .tint(Ink.primary)
-          }
-      }
     }
     .task {
       await viewModel.loadMemoriesIfNeeded()
@@ -3090,7 +3060,7 @@ private struct MemoryReviewControls: View {
 // MARK: - Memory Detail Button (info icon with hover popover)
 
 /// Small inline info button with hover preview showing memory metadata.
-/// Follows the same pattern as TaskDetailButton in TaskDetailViews.swift.
+/// Compact hover metadata for a memory row.
 private struct MemoryDetailButton: View {
   let memory: ServerMemory
   let categoryIcon: (MemoryCategory) -> String
@@ -3270,6 +3240,7 @@ struct MemoryDetailPanel: View {
   let tagColorFor: (String) -> Color
   let formatDate: (Date) -> String
   var onDismiss: (() -> Void)? = nil
+  var onOpenConversation: ((String) -> Void)? = nil
 
   @Environment(\.dismiss) private var environmentDismiss
   @State private var isEditingContent = false
@@ -3349,7 +3320,7 @@ struct MemoryDetailPanel: View {
               Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 100_000_000)
                 dismissSheet()
-                await viewModel.navigateToConversation(id: conversationId)
+                onOpenConversation?(conversationId)
               }
             }
           }

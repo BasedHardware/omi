@@ -477,6 +477,18 @@ class ChatToolExecutor {
         toolCall,
         runID: originatingRunId,
         attemptID: originatingAttemptId,
+        surfaceKind: originatingSurfaceRef?.surfaceKind,
+        expectedOwnerID: expectedOwnerID,
+        api: backendAPIClient)
+
+    // JIT knowledge-ledger tools — generic passthrough to the Python backend's
+    // /v1/agent/execute-tool endpoint. These have no bespoke typed REST route:
+    // the backend re-validates the JIT rollout server-side on every call, so
+    // this client dispatch is UX-only, not an authorization boundary.
+    case .searchKnowledge, .readPlaybook, .searchHistoricalFacts, .getEntityTimelineTool,
+      .savePlaybook, .createStandingTrigger, .closeFact:
+      return await executeAgentLedgerTool(
+        toolCall,
         expectedOwnerID: expectedOwnerID,
         api: backendAPIClient)
 
@@ -2089,7 +2101,7 @@ class ChatToolExecutor {
         // Same drag-to-grant mechanic as Full Disk Access. macOS pre-registers
         // the row here, but the card still walks the user to the right toggle —
         // and re-adds the app if the row was removed via tccutil or a reset.
-        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+        Task { await PermissionDragGuidance.presentDragToGrantHelper(for: .screenRecording) }
         try? await Task.sleep(nanoseconds: 2_000_000_000)
         guard
           isPermissionAuthorizationCurrent(
@@ -2221,7 +2233,7 @@ class ChatToolExecutor {
           authorizationSnapshot: authorizationSnapshot)
         // Same drag-to-grant mechanic as Screen Recording: drop the app into the
         // Full Disk Access list to add and enable it in one gesture.
-        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+        Task { await PermissionDragGuidance.presentDragToGrantHelper(for: .fullDiskAccess) }
         try? await Task.sleep(nanoseconds: 3_000_000_000)
         guard
           isPermissionAuthorizationCurrent(
@@ -3134,6 +3146,7 @@ class ChatToolExecutor {
     _ toolCall: ToolCall,
     runID: String?,
     attemptID: String?,
+    surfaceKind: String?,
     expectedOwnerID: String?,
     api: APIClient
   ) async -> String {
@@ -3173,30 +3186,46 @@ class ChatToolExecutor {
 
       switch toolCall.name {
       case "get_conversations":
+        let isRealtimeVoice = RealtimeConversationToolProjection.applies(to: surfaceKind)
+        let limit =
+          isRealtimeVoice
+          ? RealtimeConversationToolProjection.requestLimit(args["limit"])
+          : args["limit"] as? Int ?? 20
         let resp = try await api.toolGetConversations(
           startDate: validatedStartDate,
           endDate: validatedEndDate,
-          limit: args["limit"] as? Int ?? 20,
+          limit: limit,
           offset: args["offset"] as? Int ?? 0,
-          includeTranscript: args["include_transcript"] as? Bool ?? true,
+          includeTranscript: isRealtimeVoice ? false : args["include_transcript"] as? Bool ?? true,
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
+        if isRealtimeVoice {
+          return RealtimeConversationToolProjection.makeResult(resp, limit: limit)
+        }
         return await annotated(resp)
 
       case "search_conversations":
         guard let query = args["query"] as? String, !query.isEmpty else {
           return "Error: query is required"
         }
+        let isRealtimeVoice = RealtimeConversationToolProjection.applies(to: surfaceKind)
+        let limit =
+          isRealtimeVoice
+          ? RealtimeConversationToolProjection.requestLimit(args["limit"])
+          : args["limit"] as? Int ?? 5
         let resp = try await api.toolSearchConversations(
           query: query,
           startDate: validatedStartDate,
           endDate: validatedEndDate,
-          limit: args["limit"] as? Int ?? 5,
-          includeTranscript: args["include_transcript"] as? Bool ?? true,
+          limit: limit,
+          includeTranscript: isRealtimeVoice ? false : args["include_transcript"] as? Bool ?? true,
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
+        if isRealtimeVoice {
+          return RealtimeConversationToolProjection.makeResult(resp, limit: limit)
+        }
         return await annotated(resp)
 
       case "get_memories":
@@ -3342,6 +3371,35 @@ class ChatToolExecutor {
       }
     } catch {
       log("Backend tool error (\(toolCall.name)): \(error)")
+      return "Error calling backend: \(error.localizedDescription)"
+    }
+  }
+
+  /// Generic passthrough for the JIT-gated knowledge-ledger tools (search_knowledge,
+  /// read_playbook, search_historical_facts, get_entity_timeline_tool, save_playbook,
+  /// create_standing_trigger, close_fact). Unlike the typed `/v1/tools/*` routes above,
+  /// these share one backend contract — `POST /v1/agent/execute-tool` with
+  /// `{tool_name, params}` — so there is no bespoke per-tool Swift wrapper. The backend
+  /// re-validates the JIT rollout for `tool_name` on every call regardless of whether the
+  /// manifest advertised it, so this dispatch is a UX convenience, not an authorization
+  /// decision.
+  private static func executeAgentLedgerTool(
+    _ toolCall: ToolCall,
+    expectedOwnerID: String?,
+    api: APIClient
+  ) async -> String {
+    do {
+      let resp = try await api.executeAgentTool(
+        toolName: toolCall.name,
+        params: toolCall.arguments,
+        expectedOwnerId: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+      if let error = resp.error, !error.isEmpty {
+        return "Error: \(error)"
+      }
+      return resp.result ?? ""
+    } catch {
+      log("Agent ledger tool error (\(toolCall.name)): \(error)")
       return "Error calling backend: \(error.localizedDescription)"
     }
   }

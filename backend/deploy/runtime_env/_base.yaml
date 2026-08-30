@@ -175,6 +175,13 @@ environment_shared:
         value: '{compute_project}'
       GCP_LOCATION:
         value: us-central1
+      # The customer data plane (memory ledger, JIT proactivity state, screen
+      # sync) for this deployment family — see backend/database/_client.py's
+      # get_data_plane_firestore_client(). Equal to compute_project in prod by
+      # construction, so this is a no-op there; only dev's compute project
+      # (based-hardware-dev) diverges from it.
+      OMI_FIRESTORE_DATA_PLANE_PROJECT:
+        value: '{data_plane_project}'
       PROMETHEUS_SIDECAR_PORT:
         value: '9090'
         category: telemetry

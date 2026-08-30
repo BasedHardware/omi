@@ -17,6 +17,7 @@ covers:
   - desktop/macos/agent/src/runtime/kernel-core.ts
   - desktop/macos/agent/src/index.ts
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+JITKnowledgeToolsGate.swift
   # S1a's authorized executor result is projected through this store before
   # the fixture card becomes visible at S1b.
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeStatusStore.swift
@@ -27,7 +28,14 @@ covers:
   - desktop/macos/Desktop/Sources/Services/KnowledgeGraphToolSupport.swift
   - desktop/macos/Desktop/Sources/Providers/ChatFirstBlockToolExecutor.swift
   - desktop/macos/Desktop/Sources/Chat/ChatFirstBlockValidation.swift
+  # S14-S22 prove a capture is staged as a typed, removable composer reference,
+  # persists on the accepted user turn after the composer clears, and reopens
+  # the same canonical hub-owned detail as every other conversation entry.
+  - desktop/macos/Desktop/Sources/Chat/ChatComposerReference.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatResource.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatConversationReferencePill.swift
   # S8 drives the Tasks-page closure, including its bounded attempt/terminal telemetry.
   - desktop/macos/Desktop/Sources/Chat/ChatFirstAnalytics.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstAutomationRuntime.swift
@@ -39,17 +47,17 @@ covers:
   # fail-closed branch is part of the mounted path rather than a paper cover.
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstCaptureLinkPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstGoalsPage.swift
-  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore+CanonicalTask.swift
   # S3-S6 load canonical goals, acknowledge focus, and mutate focused-goal state.
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CanonicalGoalsStore.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+TaskCatalog.swift
-  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureArchivePage.swift
-  # S12/S13 load the Omi-only archive, select detail, and prepare its playback through typed audio APIs.
+  # S12/S13 load the canonical conversation detail and prepare its playback through typed audio APIs.
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureArchiveRepository.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CapturePlayback.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CapturePlaybackAPI.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstShell.swift
+  - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
 preconditions:
   - automation_bridge_ready
   - named_non_production_bundle_ui_lane
@@ -168,7 +176,7 @@ steps:
     timeout_seconds: 10
     wait:
       state.shellVariant: chat_first
-      state.visibleChatFirstRoute: conversations
+      state.visibleChatFirstRoute: memories
       state.isFocusedEntityAcknowledged: true
 
   - id: S13
@@ -176,19 +184,45 @@ steps:
     bridge.action:
       name: chat_first_runtime_snapshot
     expect:
-      result.detail.route: conversations
+      result.detail.route: memories
       result.detail.route_visible: "true"
       result.detail.capture_detail_visible: "true"
 
   - id: S14
-    name: Discuss the selected capture through the normal main-Chat owner
+    name: Seed a draft before discussing the selected capture
+    bridge.action:
+      name: set_chat_drafts
+      params:
+        main: "Keep this draft while attaching the conversation"
+    expect:
+      result.detail.main: "Keep this draft while attaching the conversation"
+
+  - id: S15
+    name: Stage the selected capture through the normal main-Chat composer owner
     bridge.action:
       name: chat_first_discuss_capture
     expect:
-      result.detail.capture_discussion_started: "true"
+      result.detail.capture_reference_staged: "true"
+      result.detail.composer_reference_count: "1"
 
-  - id: S15
-    name: Wait for the resulting ordinary main-Chat response to terminalize
+  - id: S16
+    name: Confirm staging preserved the user's draft
+    bridge.action:
+      name: chat_drafts_snapshot
+    expect:
+      result.detail.main: "Keep this draft while attaching the conversation"
+
+  - id: S17
+    name: Send the draft with its staged conversation reference
+    bridge.action:
+      name: ask_main_chat
+      params:
+        query: "Acknowledge this attached conversation."
+    expect:
+      result.detail.sent: "Acknowledge this attached conversation."
+
+  - id: S18
+    name: Wait for the accepted turn to finish
     bridge.action:
       name: wait_main_chat_idle
       params:
@@ -196,16 +230,47 @@ steps:
     expect:
       result.detail.idle: "true"
 
-  - id: S16
-    name: Confirm the response returned to visibly mounted Chat without exposing transcript content
+  - id: S19
+    name: Confirm the sent user turn retained the typed conversation resource
+    bridge.action:
+      name: main_chat_snapshot
+      params:
+        limit: "4"
+    expect:
+      result.detail.is_sending: "false"
+      result.detail.is_streaming: "false"
+      result.detail.messages_json:
+        contains: "reference:conversation:chat-first-e2e-capture-v1"
+
+  - id: S20
+    name: Confirm Chat stayed mounted and only the composer copy cleared
     bridge.action:
       name: chat_first_runtime_snapshot
     expect:
       result.detail.route: chat
       result.detail.route_visible: "true"
+      result.detail.composer_reference_count: "0"
       result.detail.completed_visible_task_count: "1"
 
-  - id: S17
+  - id: S21
+    name: Reopen the persisted conversation attachment through the real Chat pill
+    ax.activate:
+      identifier: chat-conversation-reference-chat-first-e2e-capture-v1-open
+    timeout_seconds: 10
+    wait:
+      state.shellVariant: chat_first
+      state.visibleChatFirstRoute: memories
+
+  - id: S22
+    name: Confirm the Chat attachment reused the canonical hub-owned conversation detail
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: memories
+      result.detail.route_visible: "true"
+      result.detail.capture_detail_visible: "true"
+
+  - id: S23
     name: Confirm the bridge recorded no route failure
     log.expect:
       absent:

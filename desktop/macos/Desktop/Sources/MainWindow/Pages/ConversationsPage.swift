@@ -42,6 +42,10 @@ struct ConversationsPage: View {
   @Binding var selectedConversation: ServerConversation?
   var brainDestination: MemoryHubDestination? = nil
   var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
+  var initialCaptureMomentTimestamp: TimeInterval? = nil
+  var onCaptureFocusResolved: ((Bool) -> Void)? = nil
+  var onDiscussInChat: ((ServerConversation) -> Void)? = nil
+  var onOpenLinkedTask: ((String) -> Void)? = nil
   @ObservedObject private var automation = ConversationDetailAutomationState.shared
 
   /// When true, renders without internal ScrollViews (for embedding in an outer ScrollView)
@@ -126,6 +130,7 @@ struct ConversationsPage: View {
       // folder sheets) otherwise keeps rendering the previous account's rows even
       // after AppState and the repository reset.
       .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+        selectedConversation = nil
         searchQuery = ""
         searchResults = []
         isSearching = false
@@ -142,6 +147,12 @@ struct ConversationsPage: View {
         isMerging = false
         mergeError = nil
         isLiveTranscriptExpanded = false
+      }
+      .onReceive(appState.$conversations) { conversations in
+        guard let selectedConversation,
+          let refreshed = conversations.first(where: { $0.id == selectedConversation.id })
+        else { return }
+        self.selectedConversation = refreshed
       }
       .dismissableSheet(isPresented: $showCreateFolderSheet) {
         FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })
@@ -208,7 +219,11 @@ struct ConversationsPage: View {
               await appState.refreshConversations()
             }
           }
-        }
+        },
+        initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
+        onCaptureFocusResolved: onCaptureFocusResolved,
+        onDiscussInChat: selected.source == .omi ? { onDiscussInChat?(selected) } : nil,
+        onOpenLinkedTask: onOpenLinkedTask
       )
     } else {
       // Main view with recording header and conversation list

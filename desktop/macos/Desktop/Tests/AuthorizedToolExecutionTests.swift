@@ -330,6 +330,20 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     )
   }
 
+  /// The same contract over flat string values, kept alongside the nested-array case:
+  /// both expected values come from the kernel's own `stableJsonStringify`.
+  func testCanonicalInputHashMatchesKernelWhenTextContainsForwardSlashes() throws {
+    let input: [String: Any] = [
+      "context": "Use memories/conversations from https://omi.me",
+      "query": "Think carefully",
+    ]
+
+    XCTAssertEqual(
+      try AuthorizedToolExecution.inputHash(for: input),
+      "sha256:8a78b524b6be791ca7d4bad17e2e9ab8f902cabefdf8294c2e99b0409ab71749"
+    )
+  }
+
   private func payload(
     toolName: String = "get_memories",
     overrides: [String: Any] = [:]

@@ -14,7 +14,7 @@ from typing import Any, Callable
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client
 from database.conversations import conversations_collection, prepare_photo_for_write
 from database.firestore_index_registry import (
     FRAME_REQUEST_METADATA_EXPIRY_QUERY,
@@ -61,7 +61,7 @@ def _get_client(firestore_client: Any | None) -> Any:
     of a customer-data client during module import.
     """
 
-    return firestore_client if firestore_client is not None else get_firestore_client()
+    return firestore_client if firestore_client is not None else get_data_plane_firestore_client()
 
 
 def _collection(uid: str, *, firestore_client: Any | None = None) -> Any:

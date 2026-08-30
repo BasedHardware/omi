@@ -214,10 +214,11 @@ The supported controls and rollback floor are documented in
   on with `MEMORY_CANONICAL_MAINTENANCE_FLEX=true`.
 - `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` and its batch/candidate settings are
   global cost/incident controls.
-- `GET /v3/memories` first page uses `read_page`, which 503s
-  `Memory cursor unavailable` when `MEMORY_V3_CURSOR_SECRET` is missing. That is
-  the list fence, not `MEMORY_V3_GET_ENABLED` (unused on the route). First page
-  falls back to offset `read()` for that 503.
+- `GET /v3/memories` first page uses `read_page`, which raises
+  `MemoryBackingStoreUnavailable` (503 `Memory cursor unavailable`) when
+  `MEMORY_V3_CURSOR_SECRET` is missing. That is the list fence, not
+  `MEMORY_V3_GET_ENABLED` (unused on the route). First page falls back to
+  offset `read()` for that typed failure — not by matching detail strings.
 
 The universal dual-format reader is the rollback floor. A rollback may stop new
 canonical intake or L2 maintenance globally, but must keep the universal reader

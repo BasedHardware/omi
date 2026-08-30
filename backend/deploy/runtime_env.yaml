@@ -360,6 +360,8 @@ environments:
           value: based-hardware-dev
         GCP_LOCATION:
           value: us-central1
+        OMI_FIRESTORE_DATA_PLANE_PROJECT:
+          value: based-hardware
         PROMETHEUS_SIDECAR_PORT:
           value: '9090'
           category: telemetry
@@ -1427,6 +1429,8 @@ environments:
           value: based-hardware
         GCP_LOCATION:
           value: us-central1
+        OMI_FIRESTORE_DATA_PLANE_PROJECT:
+          value: based-hardware
         PROMETHEUS_SIDECAR_PORT:
           value: '9090'
           category: telemetry

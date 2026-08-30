@@ -583,23 +583,46 @@ class AnalyticsManager {
     PostHogManager.shared.appLaunched()
   }
 
+  /// A process reports startup once. `ViewModelContainer.loadAllData()` runs
+  /// again after an owner switch, and that second run is not a launch.
+  private var didReportStartupTiming = false
+
+  /// Report one launch's startup timing.
+  ///
+  /// - `dataLoadMs` is the critical startup path inside `loadAllData()`. This is
+  ///   what the old `time_to_interactive_ms` actually measured, which is why it
+  ///   reported 11–131ms for a "cold start".
+  /// - `timeToInteractiveMs` is measured from the kernel's process-start stamp,
+  ///   so it includes dyld, `main`, and everything before the data load. It is
+  ///   omitted rather than faked when the kernel lookup fails.
   func trackStartupTiming(
-    dbInitMs: Double, timeToInteractiveMs: Double, hadUncleanShutdown: Bool,
-    databaseInitFailed: Bool
+    dbInitMs: Double, dataLoadMs: Double, hadUncleanShutdown: Bool,
+    databaseInitFailed: Bool,
+    timeToInteractiveMs: Double? = AppStartupTiming.millisecondsSinceProcessStart()
   ) {
     guard !Self.isDevBuild else { return }
-    // Routed to Sentry as a breadcrumb (perf telemetry, not product analytics) so the data
-    // is attached to any same-session crash report without creating a per-launch analytics
-    // event. If we ever need real perf metrics, wire up SentrySDK.startTransaction here.
-    let breadcrumb = Breadcrumb(level: .info, category: "app.startup")
-    breadcrumb.message = "App Startup Timing"
-    breadcrumb.data = [
+    guard !didReportStartupTiming else { return }
+    didReportStartupTiming = true
+
+    var properties: [String: Any] = [
       "db_init_ms": round(dbInitMs),
-      "time_to_interactive_ms": round(timeToInteractiveMs),
+      "data_load_ms": round(dataLoadMs),
       "had_unclean_shutdown": hadUncleanShutdown,
       "database_init_failed": databaseInitFailed,
     ]
+    if let timeToInteractiveMs {
+      properties["time_to_interactive_ms"] = round(timeToInteractiveMs)
+    }
+
+    // Also a Sentry breadcrumb so the numbers stay attached to a same-session
+    // crash report. Sentry is a per-issue view; it cannot answer "is startup
+    // getting slower across the fleet", which is why this is in PostHog too.
+    let breadcrumb = Breadcrumb(level: .info, category: "app.startup")
+    breadcrumb.message = "App Startup Timing"
+    breadcrumb.data = properties
     SentrySDK.addBreadcrumb(breadcrumb)
+
+    PostHogManager.shared.track("App Startup Timing", properties: properties)
   }
 
   /// Track first launch with comprehensive system diagnostics

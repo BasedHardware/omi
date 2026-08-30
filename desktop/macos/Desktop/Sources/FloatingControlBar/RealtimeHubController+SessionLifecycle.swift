@@ -456,8 +456,7 @@ extension RealtimeHubController {
     /// Availability contract, mirroring `KernelVoiceContextSnapshot.isResolved`:
     /// a kernel session bound to this owner scope plus a deterministic freshness
     /// identity. Rendered context, plan identities, and semantic guidance are
-    /// context *material* — a valid new conversation renders none of it, and
-    /// `RealtimeHubTools.escalationBody` omits each empty section on its own.
+    /// context *material* — a valid new conversation renders none of it.
     /// Requiring them here would fail-closed on the first turn of every session.
     var isResolved: Bool {
       !sessionID.isEmpty && !snapshotFreshnessIdentity.isEmpty

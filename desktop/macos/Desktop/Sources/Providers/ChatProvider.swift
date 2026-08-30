@@ -972,6 +972,85 @@ enum ChatSystemPromptStyle {
   case floating
 }
 
+enum RealtimeChatLaneError: Error {
+  case busy
+  case unavailable
+  case emptyResponse
+  case ownerChanged
+  case revoked
+}
+
+struct RealtimeChatLaneInvocationGate: Equatable {
+  private(set) var activeInvocationID: String?
+  private var revokedInvocationID: String?
+
+  mutating func begin(_ invocationID: String) -> Bool {
+    guard activeInvocationID == nil, !invocationID.isEmpty else { return false }
+    activeInvocationID = invocationID
+    return true
+  }
+
+  func accepts(_ invocationID: String) -> Bool {
+    activeInvocationID == invocationID && revokedInvocationID != invocationID
+  }
+
+  @discardableResult
+  mutating func finish(_ invocationID: String) -> Bool {
+    guard activeInvocationID == invocationID else { return false }
+    activeInvocationID = nil
+    revokedInvocationID = nil
+    return true
+  }
+
+  mutating func revokeActive() -> String? {
+    guard let activeInvocationID, revokedInvocationID != activeInvocationID else { return nil }
+    revokedInvocationID = activeInvocationID
+    return activeInvocationID
+  }
+}
+
+/// Binds a voice companion query to one bridge request id so a delayed interrupt
+/// cannot cancel a later typed chat turn.
+struct RealtimeChatLaneInterruptBinding: Equatable {
+  private(set) var boundIdentity: String?
+  private(set) var pendingInterruptIdentity: String?
+  private(set) var activeRequestId: String?
+
+  mutating func bind(_ identity: String) {
+    guard !identity.isEmpty else { return }
+    boundIdentity = identity
+  }
+
+  mutating func unbind(_ identity: String) {
+    guard boundIdentity == identity else { return }
+    boundIdentity = nil
+    if pendingInterruptIdentity == identity {
+      pendingInterruptIdentity = nil
+    }
+    activeRequestId = nil
+  }
+
+  mutating func beginRequest(_ requestId: String) -> Bool {
+    guard !requestId.isEmpty else { return false }
+    activeRequestId = requestId
+    if let boundIdentity, pendingInterruptIdentity == boundIdentity {
+      return false
+    }
+    return true
+  }
+
+  mutating func requestInterrupt(_ identity: String) -> String? {
+    pendingInterruptIdentity = identity
+    guard boundIdentity == identity else { return nil }
+    return activeRequestId
+  }
+
+  mutating func finishRequest(_ requestId: String) {
+    guard activeRequestId == requestId else { return }
+    activeRequestId = nil
+  }
+}
+
 /// State management for chat functionality with Claude Agent SDK
 /// Uses hybrid architecture: Swift → Claude Agent (via Node.js bridge) for AI, Backend for persistence + context
 @MainActor
@@ -1014,6 +1093,10 @@ class ChatProvider: ObservableObject {
   }
   /// Files staged for attachment to the next message. Cleared when the message is sent.
   @Published var pendingAttachments: [ChatAttachment] = []
+  /// Conversation references staged for the next main-chat turn. These are
+  /// composer state, not chat history, and remain visible until the turn is
+  /// accepted or the user removes them.
+  @Published var pendingComposerReferences: [ChatComposerReference] = []
   @Published var messages: [ChatMessage] = []
   @Published var sessions: [ChatSession] = []
   @Published var currentSession: ChatSession? {
@@ -1079,12 +1162,16 @@ class ChatProvider: ObservableObject {
   /// makes `ChatQueryResultAuthority` reject the dead turn's late result.
   private(set) var sendGeneration: Int = 0
   private var sendLockOwnership = ChatSendLockOwnership()
+  private var realtimeChatLaneInvocationGate = RealtimeChatLaneInvocationGate()
 
   /// Whether a new turn can start right now. The bridge holds one message
   /// continuation, so a second concurrent turn would have its response
   /// consumed by the wrong caller. Exposed so a caller can ask before it
   /// sends — and report the refusal — instead of discovering it as a `nil`.
-  var canAcceptSend: Bool { !isSending && !sendLockOwnership.isHeld }
+  var canAcceptSend: Bool {
+    !isSending && !sendLockOwnership.isHeld
+      && realtimeChatLaneInvocationGate.activeInvocationID == nil
+  }
 
   /// Said, not swallowed: a refused send is the reader's message going
   /// nowhere, so it needs an account of where it went.
@@ -1703,6 +1790,7 @@ class ChatProvider: ObservableObject {
     messages.removeAll()
     resetMessagesPagination()
     pendingAttachments.removeAll()
+    pendingComposerReferences.removeAll()
     sessions.removeAll()
     currentSession = nil
     cachedMemories = []
@@ -1828,7 +1916,8 @@ class ChatProvider: ObservableObject {
     includeScreenSource: Bool = true,
     includePromptCitations: Bool = true,
     requestedModelProfile: String? = nil,
-    pinnedSession: AgentSurfaceSession? = nil
+    pinnedSession: AgentSurfaceSession? = nil,
+    composerReferences: [ChatComposerReference] = []
   ) async throws -> KernelQueryContext {
     let client = resolvedAgentClient()
     let session: AgentSurfaceSession
@@ -1851,7 +1940,10 @@ class ChatProvider: ObservableObject {
     let includesLegacyGoals = !isChatFirstEnabled(for: surface)
     let promptCitationLedger =
       includePromptCitations
-      ? makePromptCitationLedger(includesLegacyGoals: includesLegacyGoals)
+      ? makePromptCitationLedger(
+        includesLegacyGoals: includesLegacyGoals,
+        additionalSources: composerReferences.map(\.promptCitationSource)
+      )
       : ChatPromptCitationLedger(sources: [])
     let memoryText = formatMemoriesSection(citations: promptCitationLedger)
     let goalText = includesLegacyGoals ? formatGoalSection(citations: promptCitationLedger) : ""
@@ -1879,6 +1971,30 @@ class ChatProvider: ObservableObject {
     }
     if let notificationContext, !notificationContext.isEmpty {
       surfacePayload["notificationContext"] = notificationContext
+    }
+    if !composerReferences.isEmpty {
+      let selectedReferences: [[String: Any]] = composerReferences.compactMap { reference in
+        guard
+          let marker = promptCitationLedger.marker(
+            kind: reference.promptCitationSource.kind,
+            sourceID: reference.sourceID
+          )
+        else { return nil }
+        var payload: [String: Any] = [
+          "kind": reference.kind.rawValue,
+          "sourceId": reference.sourceID,
+          "title": reference.displayTitle,
+          "preview": reference.preview,
+          "citation": marker,
+        ]
+        if let momentTimestampMs = reference.momentTimestampMs {
+          payload["momentTimestampMs"] = momentTimestampMs
+        }
+        return payload
+      }
+      if !selectedReferences.isEmpty {
+        surfacePayload["selectedChatReferences"] = selectedReferences
+      }
     }
     let capturedAtMs = Int(Date().timeIntervalSince1970 * 1_000)
     let screenOutcome: AgentContextSourceOutcome = screenPayload == nil ? .empty : .available
@@ -1981,6 +2097,85 @@ class ChatProvider: ObservableObject {
       log("ChatProvider: realtime kernel context preparation failed: \(error.localizedDescription)")
       return .empty
     }
+  }
+
+  /// Executes one non-journaled companion query on the canonical main-chat
+  /// session. Session resolution supplies the same selected model and complete
+  /// desktop-chat capability projection as typed Chat; the voice reducer still
+  /// owns the enclosing audible turn and its persistence.
+  func askChatLaneForSpokenAnswer(
+    prompt: String,
+    invocationID: String,
+    expectedOwnerID: String
+  ) async throws -> String {
+    guard runtimeOwnerId == expectedOwnerID else { throw RealtimeChatLaneError.ownerChanged }
+    guard canAcceptSend, realtimeChatLaneInvocationGate.begin(invocationID) else {
+      throw RealtimeChatLaneError.busy
+    }
+    defer { realtimeChatLaneInvocationGate.finish(invocationID) }
+
+    guard await ensureBridgeStartedForKernel() else { throw RealtimeChatLaneError.unavailable }
+    guard runtimeOwnerId == expectedOwnerID else { throw RealtimeChatLaneError.ownerChanged }
+    guard realtimeChatLaneInvocationGate.accepts(invocationID) else {
+      throw RealtimeChatLaneError.revoked
+    }
+
+    let surface = mainChatSurfaceReference()
+    let kernelContext = try await prepareKernelQueryContext(
+      surface: surface,
+      systemPromptStyle: .main,
+      systemPromptPrefix: nil,
+      systemPromptSuffix: RealtimeHubTools.escalationSystemPrompt(),
+      notificationContext: nil,
+      screenPayload: nil,
+      includePromptCitations: true,
+      requestedModelProfile: nil
+    )
+    await resolvedAgentClient().warmupSession(kernelContext.session)
+    guard runtimeOwnerId == expectedOwnerID else { throw RealtimeChatLaneError.ownerChanged }
+    guard realtimeChatLaneInvocationGate.accepts(invocationID) else {
+      throw RealtimeChatLaneError.revoked
+    }
+
+    let client = resolvedAgentClient()
+    await client.bindRealtimeChatLaneInterrupt(invocationID)
+    let result: AgentClient.QueryResult
+    do {
+      result = try await client.query(
+        prompt: ChatPromptBuilder.currentTimePrompt(for: prompt),
+        session: kernelContext.session,
+        surface: surface,
+        mode: chatMode.rawValue,
+        expectedContext: kernelContext.snapshot.freshness,
+        reasoningEffort: ChatTurnOwner.mainChat.reasoningEffort,
+        onTextDelta: { _ in },
+        onToolActivity: { _, _, _, _ in },
+        onThinkingDelta: { _ in }
+      )
+      await client.unbindRealtimeChatLaneInterrupt(invocationID)
+    } catch {
+      await client.unbindRealtimeChatLaneInterrupt(invocationID)
+      if case BridgeError.stopped = error {
+        throw RealtimeChatLaneError.revoked
+      }
+      throw error
+    }
+    guard runtimeOwnerId == expectedOwnerID else { throw RealtimeChatLaneError.ownerChanged }
+    guard realtimeChatLaneInvocationGate.accepts(invocationID) else {
+      throw RealtimeChatLaneError.revoked
+    }
+    let answer = try Self.requireSuccessfulQueryResult(result).text
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !answer.isEmpty else { throw RealtimeChatLaneError.emptyResponse }
+    return answer
+  }
+
+  /// Revokes only the exact voice companion query. The gate remains occupied
+  /// until that query unwinds, so its interrupt cannot touch a newer typed turn.
+  func cancelActiveRealtimeChatLaneInvocation() {
+    guard let identity = realtimeChatLaneInvocationGate.revokeActive() else { return }
+    let client = resolvedAgentClient()
+    Task { await client.interruptRealtimeChatLane(identity: identity) }
   }
 
   private static func queryAttachments(_ attachments: [ChatAttachment]) -> [AgentQueryAttachment] {
@@ -2580,7 +2775,10 @@ class ChatProvider: ObservableObject {
     return lines.joined(separator: "\n")
   }
 
-  private func makePromptCitationLedger(includesLegacyGoals: Bool) -> ChatPromptCitationLedger {
+  private func makePromptCitationLedger(
+    includesLegacyGoals: Bool,
+    additionalSources: [ChatPromptCitationSource] = []
+  ) -> ChatPromptCitationLedger {
     let formatter = ISO8601DateFormatter()
     var sources =
       cachedLedgerPromptProjection?.citationSources
@@ -2612,7 +2810,10 @@ class ChatProvider: ObservableObject {
           preview: $0.contextSummary ?? $0.description,
           createdAt: formatter.string(from: $0.createdAt))
       })
-    return ChatPromptCitationLedger(sources: sources)
+    // Explicit composer selections are user intent, so reserve their citation
+    // ordinals ahead of ambient memory/task context before the bounded ledger
+    // applies its 128-source cap.
+    return ChatPromptCitationLedger(sources: additionalSources + sources)
   }
 
   // MARK: - Load Goals
@@ -3740,6 +3941,21 @@ class ChatProvider: ObservableObject {
     pendingAttachments.removeAll { $0.id == id }
   }
 
+  /// Stage a source in the one main-chat composer. Re-selecting the same
+  /// source replaces its display metadata rather than creating duplicate
+  /// chips, and never changes the current draft or submits a turn.
+  func stageComposerReference(_ reference: ChatComposerReference) {
+    guard !reference.sourceID.isEmpty else { return }
+    pendingComposerReferences.removeAll {
+      $0.kind == reference.kind && $0.sourceID == reference.sourceID
+    }
+    pendingComposerReferences.append(reference)
+  }
+
+  func removeComposerReference(id: String) {
+    pendingComposerReferences.removeAll { $0.id == id }
+  }
+
   /// Upload a single staged attachment in the background. The user can send
   /// the message before this completes — `sendMessage` will await the upload.
   private func uploadAttachment(id: String, appId: String?) {
@@ -4471,6 +4687,7 @@ class ChatProvider: ObservableObject {
     // via the local thumbnail data — we only block sending until the upload
     // settles so persistence stays consistent across sessions.
     var attachmentsForMessage: [ChatAttachment] = []
+    let composerReferencesForMessage = pendingComposerReferences
     if !pendingAttachments.isEmpty {
       let ok = await awaitPendingUploads()
       guard
@@ -4566,12 +4783,17 @@ class ChatProvider: ObservableObject {
     let capturedSessionId = sessionId
     let capturedAppId = overrideAppId ?? selectedAppId
     let journalOrigin = journalOrigin(for: resolvedSurface)
+    let userMessageResources = ChatResource.userMessageResources(
+      attachments: attachmentsForMessage,
+      references: composerReferencesForMessage
+    )
     let userMessage = ChatMessage(
       id: userMessageId,
       clientTurnId: turnAttemptId,
       text: effectivePrompt,
       sender: .user,
       attachments: attachmentsForMessage,
+      resources: userMessageResources,
       turnOwner: turnOwner
     )
     let aiMessageId = turnMessageIds.assistant
@@ -4639,6 +4861,10 @@ class ChatProvider: ObservableObject {
     // Signal to ChatMessagesView only after the complete exchange exists so
     // anchoring can never expose a user row without its response target.
     localSendToken = LocalSendToken(generation: sendGen)
+    // The staged reference is now a durable resource on the accepted user
+    // turn. Clearing composer state keeps it out of the next draft without
+    // removing the pill from this message or a later journal replay.
+    pendingComposerReferences.removeAll()
     onAccepted?()
 
     // Track onboarding user-message shape without content.
@@ -4749,7 +4975,8 @@ class ChatProvider: ObservableObject {
         screenPayload: screenPayload,
         includePromptCitations: turnOwner != .floatingVoice,
         requestedModelProfile: model,
-        pinnedSession: pinnedSession
+        pinnedSession: pinnedSession,
+        composerReferences: composerReferencesForMessage
       )
       await resolvedAgentClient().warmupSession(kernelContext.session)
       let effectiveRequestModel = kernelContext.session.profile.modelProfile
@@ -6645,6 +6872,7 @@ class ChatProvider: ObservableObject {
     // result — the reconstructed failure notice included — resurrects a row in
     // the transcript the user just cleared.
     revokeActiveTurn(reason: .superseded)
+    pendingComposerReferences.removeAll()
 
     if isInDefaultChat {
       let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)

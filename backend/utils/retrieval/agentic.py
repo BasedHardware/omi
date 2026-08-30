@@ -57,6 +57,9 @@ from utils.retrieval.tools import (
     read_playbook,
     search_historical_facts,
     search_knowledge,
+    save_playbook,
+    create_standing_trigger,
+    close_fact_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tools.conversation_jit_gate import (
@@ -270,6 +273,9 @@ CORE_TOOLS = [
     search_knowledge,
     read_playbook,
     search_historical_facts,
+    save_playbook,
+    create_standing_trigger,
+    close_fact_tool,
 ]
 
 # JIT-only tools: schemas must not reach the model for users outside the JIT
@@ -277,7 +283,10 @@ CORE_TOOLS = [
 # only burns tool-call budget on "no entries found" answers and changes chat
 # behavior for the whole fleet. Filtered per request off the same resolved
 # rollout boolean that gates the JIT prompt appendix, keeping the tool block
-# stable per user within a rollout state.
+# stable per user within a rollout state. The three ledger write verbs
+# (save_playbook, create_standing_trigger, close_fact) mutate the same
+# rollout-gated ledger the read tools above expose, so they are gated
+# identically.
 JIT_ONLY_TOOL_NAMES = frozenset(
     tool.name
     for tool in (
@@ -286,6 +295,9 @@ JIT_ONLY_TOOL_NAMES = frozenset(
         search_knowledge,
         read_playbook,
         search_historical_facts,
+        save_playbook,
+        create_standing_trigger,
+        close_fact_tool,
     )
 )
 
@@ -320,6 +332,9 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'search_knowledge': 'Searching current knowledge',
         'read_playbook': 'Reading playbook',
         'search_historical_facts': 'Searching historical facts',
+        'save_playbook': 'Saving playbook',
+        'create_standing_trigger': 'Creating standing trigger',
+        'close_fact': 'Closing fact',
         'get_action_items_tool': 'Checking action items',
         'create_action_item_tool': 'Creating action item',
         'update_action_item_tool': 'Updating action item',

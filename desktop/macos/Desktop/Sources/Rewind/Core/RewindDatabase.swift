@@ -23,6 +23,14 @@ actor RewindDatabase {
   /// Path to the running flag file (used to detect unclean shutdown)
   private var runningFlagPath: String?
 
+  /// Whether the *previous* session ended uncleanly, latched at the first
+  /// observation in this process. `.omi_running` is created at the end of
+  /// `performInitialization()`, so the answer stops being observable once the
+  /// database opens — and any of the lazily-initializing storage actors can get
+  /// there first. That race is why `App Startup Timing` reported
+  /// `had_unclean_shutdown = true` on ~every sample.
+  private var uncleanShutdownVerdict: Bool?
+
   /// The user ID this database is configured for (nil = not yet configured → "anonymous")
   private var configuredUserId: String?
 
@@ -332,6 +340,10 @@ actor RewindDatabase {
     initializationTask = nil
     runningFlagPath = nil
     openedForUserId = nil
+    // The database identity is being torn down, so the latched verdict no longer
+    // describes anything. The next performInitialization() makes a fresh
+    // authoritative observation for whichever user it opens.
+    uncleanShutdownVerdict = nil
     initGeneration += 1
     poolEpoch += 1
     log("RewindDatabase: Closed database (generation \(initGeneration), pool epoch \(poolEpoch))")
@@ -383,9 +395,17 @@ actor RewindDatabase {
   }
 
   /// Check if the previous session ended with an unclean shutdown (crash, force quit, etc.)
+  ///
+  /// Order-independent: whoever observes first latches the verdict for the whole
+  /// process, and `performInitialization()` latches it before it writes this
+  /// session's own running flag. A later caller therefore reads the previous
+  /// session's state, not this one's.
   func hadUncleanShutdown() -> Bool {
+    if let uncleanShutdownVerdict { return uncleanShutdownVerdict }
     let flagPath = userBaseDirectory().appendingPathComponent(".omi_running").path
-    return FileManager.default.fileExists(atPath: flagPath)
+    let verdict = FileManager.default.fileExists(atPath: flagPath)
+    uncleanShutdownVerdict = verdict
+    return verdict
   }
 
   /// Initialize the database with migrations.
@@ -471,6 +491,13 @@ actor RewindDatabase {
     // Detect unclean shutdown: if the running flag file exists, the previous launch
     // didn't exit cleanly (crash, force quit, power loss)
     let previousCrashed = FileManager.default.fileExists(atPath: flagPath)
+    // This is the authoritative, user-scoped observation and it happens before
+    // this session's flag is written below. Latch it here so a startup-timing
+    // reader that arrives after the database opened still reports the previous
+    // session, whatever order the storage actors initialized in.
+    if uncleanShutdownVerdict == nil {
+      uncleanShutdownVerdict = previousCrashed
+    }
     if previousCrashed {
       log("RewindDatabase: Unclean shutdown detected (running flag exists)")
     }

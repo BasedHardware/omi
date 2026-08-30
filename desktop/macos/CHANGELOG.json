@@ -2,6 +2,61 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.244",
+      "date": "2026-08-30",
+      "changes": [
+        "Stopped proactive chat rows from repeating the category (Focus, Insight, Memory) above the same word in the body"
+      ]
+    },
+    {
+      "version": "0.12.243",
+      "date": "2026-08-30",
+      "changes": [
+        "Startup timing is measured and reported again, from real process start, and no longer calls every clean launch a crash"
+      ]
+    },
+    {
+      "version": "0.12.242",
+      "date": "2026-08-29",
+      "changes": [
+        "Fixed chat responses sometimes stopping before the complete answer appeared",
+        "Unified conversation, task, app, and settings navigation around one familiar UI, with working transcript playback and durable attach-to-chat conversation references",
+        "Chat can now save playbooks, standing watches, and durable facts to your knowledge ledger",
+        "Fixed onboarding permission guidance so working access is never requested twice, Omi returns to the foreground after a successful drag, and the draggable app icon and arrow are easier to spot"
+      ]
+    },
+    {
+      "version": "0.12.241",
+      "date": "2026-08-29",
+      "changes": [
+        "Fixed just-in-time proactive triggers never syncing on launch because the trigger snapshot download waited for a screen-capture context visit; signed-in startups now reconcile the snapshot directly"
+      ]
+    },
+    {
+      "version": "0.12.240",
+      "date": "2026-08-29",
+      "changes": [
+        "Fixed just-in-time proactive triggers never activating for admitted accounts because the app ignored the server's rollout verdict and blocked its snapshot download on an unrelated sync step"
+      ]
+    },
+    {
+      "version": "0.12.239",
+      "date": "2026-08-29",
+      "changes": [
+        "Improved difficult spoken questions with immediate acknowledgements in Omi's realtime voice and more reliable playback of long answers",
+        "Fixed push-to-talk answers failing to read recent conversations when their summaries were detailed",
+        "Fixed push-to-talk answers failing to search the web for weather and other current information"
+      ]
+    },
+    {
+      "version": "0.12.238",
+      "date": "2026-08-29",
+      "changes": [
+        "After a low in-app rating, you can leave an optional comment",
+        "Simplified Screen Recording permission guidance so it stays accurate for any number of apps"
+      ]
+    },
+    {
       "version": "0.12.237",
       "date": "2026-08-28",
       "changes": [
