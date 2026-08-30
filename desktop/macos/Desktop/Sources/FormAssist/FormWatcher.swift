@@ -160,6 +160,9 @@ final class FormWatcher {
   private func retargetObserver() {
     guard let app = NSWorkspace.shared.frontmostApplication else { return }
     let pid = app.processIdentifier
+    // On the way in, not when something needs the tree: Electron takes a moment to build
+    // one after being asked, and this is the earliest point we know the user is there.
+    ElectronAccessibility.requestTree(for: app)
     guard pid != observedPID else { return }
     guard pid != ProcessInfo.processInfo.processIdentifier else {
       tearDownObserver()
