@@ -148,19 +148,66 @@ export abstract class McpClient {
 
   async callTool(name: string, args: Record<string, unknown>): Promise<string> {
     await this.ensureInitialized();
-    const result = (await this.rpc("tools/call", { name, arguments: args })) as {
-      content?: Array<{ type?: string; text?: string }>;
-      isError?: boolean;
-    };
-    const text = (result?.content ?? [])
-      .filter((block) => block?.type === "text" && typeof block.text === "string")
-      .map((block) => block.text)
-      .join("\n");
+    const result = (await this.rpc("tools/call", { name, arguments: args })) as McpToolResult;
+    const text = describeContent(result?.content ?? []);
     if (result?.isError) {
       throw new Error(text || `MCP tool ${name} reported an error`);
     }
-    return text || JSON.stringify(result ?? {});
+    if (text) return text;
+    // Structured output (spec 2025-06-18) is a tool's answer when it has no
+    // prose to go with it; a server that returns only this used to fall through
+    // to the raw envelope.
+    if (result?.structuredContent !== undefined) {
+      return JSON.stringify(result.structuredContent);
+    }
+    return `Tool ${name} returned no readable content.`;
   }
+}
+
+interface McpToolResult {
+  content?: unknown[];
+  structuredContent?: unknown;
+  isError?: boolean;
+}
+
+/**
+ * A tool result rendered as text.
+ *
+ * Only `text` blocks used to survive, and a result made only of images fell
+ * through to `JSON.stringify(result)` — which put the entire base64 payload into
+ * the conversation. Non-text blocks are named instead: the model learns what
+ * came back and can ask for it another way, and the context stays readable.
+ */
+function describeContent(blocks: unknown[]): string {
+  return blocks
+    .map((raw) => {
+      const block = (raw ?? {}) as Record<string, unknown>;
+      switch (block.type) {
+        case "text":
+          return typeof block.text === "string" ? block.text : "";
+        case "image":
+        case "audio": {
+          const mime = typeof block.mimeType === "string" ? block.mimeType : "unknown type";
+          return `[${block.type}: ${mime}, not shown]`;
+        }
+        case "resource_link": {
+          const uri = typeof block.uri === "string" ? block.uri : "";
+          const label = typeof block.name === "string" && block.name ? block.name : uri;
+          return uri ? `[resource: ${label} — ${uri}]` : "";
+        }
+        case "resource": {
+          // An embedded resource carries the text inline when it has any.
+          const resource = (block.resource ?? {}) as Record<string, unknown>;
+          if (typeof resource.text === "string") return resource.text;
+          const uri = typeof resource.uri === "string" ? resource.uri : "";
+          return uri ? `[resource: ${uri}, not shown]` : "";
+        }
+        default:
+          return "";
+      }
+    })
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** The text carried by a content block, or by a list of them. */
