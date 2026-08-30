@@ -108,13 +108,13 @@ checks:
     lanes: ["local", "ci"]
     reason: "base-derived oversized-file checks must reject growth and stale approvals while ratcheting reductions down automatically"
   - id: structured-string-sink-registry
-    command: ["python3", ".github/scripts/check_structured_string_sinks.py"]
-    triggers: [".github/workflows/**", ".github/actions/**", ".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", ".github/checks-manifest.yaml"]
+    command: ["bash", "scripts/run-structured-string-sinks.sh"]
+    triggers: [".github/workflows/**", ".github/actions/**", ".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", "scripts/run-structured-string-sinks.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#10337 registers the three delimiter, argv, and executable workflow sinks that blocked deploys in #9986, #9947, and #9945"
   - id: structured-string-sink-registry-tests
-    command: ["python3", ".github/scripts/test_check_structured_string_sinks.py"]
-    triggers: [".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/test_check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", ".github/checks-manifest.yaml"]
+    command: ["bash", "scripts/run-structured-string-sink-tests.sh"]
+    triggers: [".github/structured-string-sinks/**", ".github/scripts/check_structured_string_sinks.py", ".github/scripts/test_check_structured_string_sinks.py", ".github/scripts/fixtures/structured_string_sinks/**", "scripts/run-structured-string-sink-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "every registered sink must keep a paired historical mutation fixture proving the checker rejects the incident grammar"
   - id: desktop-release-manifest-v1
