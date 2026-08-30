@@ -63,20 +63,6 @@ enum SpineRibbonGeometry {
     return CGFloat(dayIndex) * dayHeight(viewport: viewport) + dayBreakHeight + withinDay
   }
 
-  /// Which day and hour sit at a point on the strip — the inverse of `depth`.
-  ///
-  /// The reading position is continuous, so the hour to draw heavier is the one the marker is
-  /// *inside*, not the hour of whichever row last reported. Deriving it from the same number that
-  /// positions the strip is what stops the heavy bar from ever being a bar other than the one under
-  /// the marker.
-  static func marker(atDepth depth: CGFloat, viewport: CGFloat) -> (dayIndex: Int, hour: Int) {
-    let day = dayHeight(viewport: viewport)
-    let dayIndex = max(0, Int((depth / day).rounded(.down)))
-    let withinDay = depth - CGFloat(dayIndex) * day - dayBreakHeight
-    let hour = 24 - withinDay / hourHeight(viewport: viewport)
-    return (dayIndex, min(23, max(0, Int(hour.rounded(.down)))))
-  }
-
   /// The days with any part inside a viewport of `height` reading at `depth`.
   ///
   /// Empty when there is nothing loaded, and clamped to the ends: scrolling past the newest or the
@@ -135,6 +121,49 @@ struct SpineRibbon: View, Animatable {
   /// A bar this fraction of its day's peak or more is drawn heavier. One ink at three weights, like
   /// every other ranking in this system.
   private static let hotThreshold = 0.6
+
+  /// **How lit a bar is, from `0` to `1`, by how near the marker is to it.**
+  ///
+  /// The strip's position is continuous, but "which hour is lit" was not: a bar was lit or it was
+  /// not, so the one thing the eye follows ticked from slot to slot while everything around it slid.
+  /// Sharing the highlight with the neighbour the marker is leaving is what closes that gap, in
+  /// phase with the scroll rather than trailing it — an easing curve on a value that keeps changing
+  /// never settles, and would put the highlight behind the finger.
+  ///
+  /// **The nearest bar is always fully lit, and that is the whole shape of this curve.** Sharing the
+  /// weight evenly between the two neighbours was the obvious version and it made the highlight
+  /// disappear: at the moment the marker sits between two slots each got half of it, so the one
+  /// thing on the strip that has to be findable was drawn at half strength for most of every scroll.
+  /// A bar within half an hour of the marker — there is always exactly one — is therefore at full
+  /// `1`, exactly the weight the rail has always drawn the hour being read at, and only the *second*
+  /// nearest fades, from full at the hand-over down to nothing an hour out. The highlight never dims;
+  /// it stretches across the gap and lets go.
+  nonisolated static func litness(slotCentre: CGFloat, marker: CGFloat, hourHeight: CGFloat)
+    -> CGFloat
+  {
+    guard hourHeight > 0 else { return 0 }
+    return min(1, max(0, 2 * (1 - abs(slotCentre - marker) / hourHeight)))
+  }
+
+  /// Whether this bar is the one being read — the single slot the marker is inside.
+  ///
+  /// Separate from `litness` because it answers a different question. Lit-ness is how a bar is
+  /// *drawn*, and is deliberately shared during a hand-over; this is which bar the strip is *about*,
+  /// and there is only ever one. It is what decides who says the time: a partly lit neighbour
+  /// captioning itself put two hours on screen at once and left the reader to work out which of them
+  /// the list was actually showing.
+  /// **Half-open, not symmetric**, so the answer is yes for exactly one slot at every position the
+  /// marker can take. `abs(...) < half` reads like the same thing and is not: with the marker
+  /// exactly midway between two slots it is false for both, and the time blinks out for the frame
+  /// the strip spends there.
+  nonisolated static func isBeingRead(slotCentre: CGFloat, marker: CGFloat, hourHeight: CGFloat)
+    -> Bool
+  {
+    guard hourHeight > 0 else { return false }
+    let offset = marker - slotCentre
+    return offset >= -hourHeight / 2 && offset < hourHeight / 2
+  }
+
   /// The bar's own metrics, unchanged from the per-day rail: the shortest a bar is ever drawn (an
   /// hour with nothing in it is still an hour, and a gap would read as the rail having ended), and
   /// how much the busiest hour adds to it.
@@ -143,6 +172,13 @@ struct SpineRibbon: View, Animatable {
   /// The gap between a bar and its caption. The caption follows the bar rather than sitting in a
   /// fixed column, which is how the rail has always drawn it.
   private static let captionGap: CGFloat = 7
+  /// The two ends every bar interpolates between, unchanged from the rail's own values: a plain bar,
+  /// a busy one, and the one being read.
+  private static let plainOpacity: CGFloat = 0.2
+  private static let hotOpacity: CGFloat = 0.42
+  private static let litOpacity: CGFloat = 0.85
+  private static let plainBarHeight: CGFloat = 5
+  private static let litBarHeight: CGFloat = 6
   /// How far into the break band the hairline sits, leaving the day's name room underneath.
   private static let breakRuleOffset: CGFloat = 4
 
@@ -164,7 +200,9 @@ struct SpineRibbon: View, Animatable {
     let translate = size.height * SpineRibbonGeometry.markerFraction - depth
     let dayHeight = SpineRibbonGeometry.dayHeight(viewport: size.height)
     let hourHeight = SpineRibbonGeometry.hourHeight(viewport: size.height)
-    let marker = SpineRibbonGeometry.marker(atDepth: depth, viewport: size.height)
+    // The marker never moves; the strip slides under it. In strip coordinates that is `depth`, and
+    // in the column's own coordinates it is this — which is what every bar measures itself against.
+    let markerY = size.height * SpineRibbonGeometry.markerFraction
     let window = SpineRibbonGeometry.visibleDays(
       depth: depth, height: size.height, count: days.count)
 
@@ -173,11 +211,10 @@ struct SpineRibbon: View, Animatable {
       let dayTop = translate + CGFloat(index) * dayHeight
       // No break above the newest day: the strip starts there, it does not resume there.
       if index > 0 { drawBreak(&context, day: day, top: dayTop, width: size.width) }
-      let litHour = highlightsMarker && index == marker.dayIndex ? marker.hour : nil
       for hour in SpineHourRail.renderedHours {
         drawBar(
-          &context, day: day, hour: hour, litHour: litHour, dayTop: dayTop, hourHeight: hourHeight,
-          height: size.height)
+          &context, day: day, hour: hour, dayTop: dayTop, hourHeight: hourHeight,
+          height: size.height, markerY: highlightsMarker ? markerY : nil)
       }
     }
   }
@@ -206,8 +243,8 @@ struct SpineRibbon: View, Animatable {
   }
 
   private func drawBar(
-    _ context: inout GraphicsContext, day: SpineRibbonDay, hour: Int, litHour: Int?,
-    dayTop: CGFloat, hourHeight: CGFloat, height: CGFloat
+    _ context: inout GraphicsContext, day: SpineRibbonDay, hour: Int, dayTop: CGFloat,
+    hourHeight: CGFloat, height: CGFloat, markerY: CGFloat?
   ) {
     let slotTop = dayTop + SpineRibbonGeometry.dayBreakHeight + CGFloat(23 - hour) * hourHeight
     let centerY = slotTop + hourHeight / 2
@@ -216,22 +253,33 @@ struct SpineRibbon: View, Animatable {
     guard centerY > -hourHeight, centerY < height + hourHeight else { return }
 
     let weight = day.weight(hour)
-    let isCurrent = hour == litHour
-    let barHeight: CGFloat = isCurrent ? 6 : 5
+    let lit = markerY.map { Self.litness(slotCentre: centerY, marker: $0, hourHeight: hourHeight) } ?? 0
+    let isRead =
+      markerY.map { Self.isBeingRead(slotCentre: centerY, marker: $0, hourHeight: hourHeight) }
+      ?? false
+    // The bar's resting look is exactly the rail's: heavier past the day's own busy threshold, plain
+    // otherwise. Being read lifts it from there to `litOpacity`, so the bar the marker is leaving
+    // settles back to whichever of the two it was.
+    let resting = weight >= Self.hotThreshold ? Self.hotOpacity : Self.plainOpacity
+    let opacity = resting + (Self.litOpacity - resting) * lit
+    let barHeight = Self.plainBarHeight + (Self.litBarHeight - Self.plainBarHeight) * lit
     let barWidth = Self.minimumBarWidth + CGFloat(weight) * Self.maximumBarExtra
-    let opacity = isCurrent ? 0.85 : (weight >= Self.hotThreshold ? 0.42 : 0.2)
     context.fill(
       Path(
         roundedRect: CGRect(x: 0, y: centerY - barHeight / 2, width: barWidth, height: barHeight),
         cornerRadius: barHeight / 2, style: .continuous),
       with: .color(Ink.primary.opacity(opacity)))
 
-    guard let hourLabel = Self.caption(for: hour, isLit: isCurrent) else { return }
+    // **Only the hour being read says its time**, plus the four the strip labels on every day. The
+    // caption does not cross-fade with the bar: a half-drawn time is a time somebody has to squint
+    // at to decide whether it is the answer, and two of them at once is worse than a caption that
+    // simply moves.
+    guard let hourLabel = Self.caption(for: hour, isLit: isRead) else { return }
     let text =
       Text(hourLabel)
-      .font(.system(size: 9, weight: isCurrent ? .semibold : .regular))
+      .font(.system(size: 9, weight: isRead ? .semibold : .regular))
       .tracking(0.6)
-      .foregroundStyle(isCurrent ? Ink.primary : Ink.secondary)
+      .foregroundStyle(isRead ? Ink.primary : Ink.secondary)
     context.draw(
       text, at: CGPoint(x: barWidth + Self.captionGap, y: centerY), anchor: .leading)
   }

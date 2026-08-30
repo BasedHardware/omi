@@ -682,19 +682,69 @@ final class SpineCompositionTests: XCTestCase {
       "including the fixed label directly beside it")
   }
 
-  /// The heavy bar is derived from where the strip actually sits, so it can never be a bar other
-  /// than the one under the marker. `marker` is the inverse of `depth`.
-  func testTheLitHourIsTheOneTheStripIsSittingOn() {
-    let viewport = Self.ribbonViewport
-    for dayIndex in [0, 3] {
-      for hour in [0, 7, 12, 23] {
-        let at = SpineRibbonGeometry.marker(
-          atDepth: SpineRibbonGeometry.depth(
-            dayIndex: dayIndex, hour: hour, minute: 30, viewport: viewport),
-          viewport: viewport)
-        XCTAssertEqual(at.dayIndex, dayIndex)
-        XCTAssertEqual(at.hour, hour)
+  /// **The bar being read is always at full strength, and only its outgoing neighbour fades.**
+  ///
+  /// Sharing the weight evenly was the obvious way to make the highlight glide and it made the
+  /// highlight vanish: with the marker between two slots each bar got half of it, so the one thing
+  /// on the strip that has to be findable was drawn at half strength for most of every scroll.
+  func testTheBarBeingReadIsNeverDimmedByTheHandover() {
+    let hour: CGFloat = 24
+    let marker: CGFloat = 300
+
+    XCTAssertEqual(
+      SpineRibbon.litness(slotCentre: marker, marker: marker, hourHeight: hour), 1, accuracy: 0.001)
+    for offset in [CGFloat(0), 0.1, 0.25, 0.4, 0.49] {
+      XCTAssertEqual(
+        SpineRibbon.litness(slotCentre: marker + hour * offset, marker: marker, hourHeight: hour), 1,
+        accuracy: 0.001,
+        "every bar the marker is inside is fully lit, wherever inside it sits")
+    }
+
+    XCTAssertEqual(
+      SpineRibbon.litness(slotCentre: marker + hour * 0.75, marker: marker, hourHeight: hour), 0.5,
+      accuracy: 0.001, "the bar being left fades across the second half")
+    XCTAssertEqual(
+      SpineRibbon.litness(slotCentre: marker + hour, marker: marker, hourHeight: hour), 0,
+      accuracy: 0.001, "an hour away is where it lets go")
+    XCTAssertEqual(
+      SpineRibbon.litness(slotCentre: marker + hour * 3, marker: marker, hourHeight: hour), 0,
+      accuracy: 0.001, "and it never goes negative further out")
+    XCTAssertEqual(
+      SpineRibbon.litness(slotCentre: marker, marker: marker, hourHeight: 0), 0, accuracy: 0.001,
+      "a column with no height yet lights nothing rather than dividing by zero")
+  }
+
+  /// **One hour says the time, never two.** A partly lit neighbour captioning itself put two hours
+  /// on screen at once and left the reader to work out which of them the list was actually showing.
+  func testOnlyTheHourBeingReadSaysTheTime() {
+    let hour: CGFloat = 24
+    let marker: CGFloat = 300
+
+    XCTAssertTrue(
+      SpineRibbon.isBeingRead(slotCentre: marker, marker: marker, hourHeight: hour))
+    XCTAssertTrue(
+      SpineRibbon.isBeingRead(slotCentre: marker + hour * 0.49, marker: marker, hourHeight: hour))
+    XCTAssertFalse(
+      SpineRibbon.isBeingRead(slotCentre: marker + hour * 0.51, marker: marker, hourHeight: hour),
+      "the neighbour is lit during the hand-over but is not the hour being read")
+    XCTAssertTrue(
+      SpineRibbon.isBeingRead(slotCentre: marker + hour / 2, marker: marker, hourHeight: hour),
+      "the boundary belongs to one side, so the hand-over has no gap in it")
+    XCTAssertFalse(
+      SpineRibbon.isBeingRead(slotCentre: marker - hour / 2, marker: marker, hourHeight: hour),
+      "and not to both")
+    XCTAssertFalse(
+      SpineRibbon.isBeingRead(slotCentre: marker - hour * 0.75, marker: marker, hourHeight: hour))
+    XCTAssertFalse(
+      SpineRibbon.isBeingRead(slotCentre: marker, marker: marker, hourHeight: 0))
+
+    // Exactly one slot on the strip owns the caption, wherever the marker falls between them.
+    for shift in stride(from: CGFloat(0), through: 0.95, by: 0.05) {
+      let centres = [marker - hour * shift, marker + hour * (1 - shift)]
+      let owning = centres.filter {
+        SpineRibbon.isBeingRead(slotCentre: $0, marker: marker, hourHeight: hour)
       }
+      XCTAssertEqual(owning.count, 1, "two adjacent slots, one of them reading")
     }
   }
 
