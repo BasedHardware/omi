@@ -539,13 +539,19 @@ extension RealtimeHubController {
       }
       let overdue = TasksStore.shared.overdueTasks
       let today = TasksStore.shared.todaysTasks
+      // `loadDashboardTasks` already fetches this bucket. Dropping it here is why
+      // "remind me to X" followed by "what's on my list" answered "no tasks": a
+      // task the user never dated belongs to no date, so it appeared in neither
+      // of the other two buckets and was silently discarded on the way out.
+      let undated = TasksStore.shared.tasksWithoutDueDate
       func list(_ items: [TaskActionItem]) -> String {
         items.prefix(15).map { "- \($0.description) [id:\($0.id)]" }.joined(separator: "\n")
       }
       var output = ""
       if !overdue.isEmpty { output += "Overdue (\(overdue.count)):\n\(list(overdue))\n" }
       if !today.isEmpty { output += "Due today (\(today.count)):\n\(list(today))\n" }
-      return .succeeded(output.isEmpty ? "No tasks overdue or due today." : output)
+      if !undated.isEmpty { output += "No due date (\(undated.count)):\n\(list(undated))\n" }
+      return .succeeded(output.isEmpty ? "No tasks overdue, due today, or waiting without a date." : output)
 
     case .thinkDeeper:
       let query = (command.input["query"] as? String) ?? turnTranscript
