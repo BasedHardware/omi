@@ -3134,6 +3134,22 @@ class ChatToolExecutor {
 
   // MARK: - Backend RAG Tools
 
+  /// The model-visible failure envelope for a tool that did not succeed.
+  ///
+  /// `relay-tool-result.ts` treats `ok:false` (or an `error` key) as canonical and
+  /// flips the invocation outcome to `failed`. Returning prose instead left a failed
+  /// write indistinguishable from a successful one, which is how "I've added that"
+  /// was spoken over a write that never landed.
+  static func toolFailureEnvelope(code: String, message: String) -> String {
+    let payload: [String: Any] = ["ok": false, "error": ["code": code, "message": message]]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "{\"ok\":false,\"error\":{\"code\":\"\(code)\"}}"
+    }
+    return json
+  }
+
   private static func executeBackendTool(
     _ toolCall: ToolCall,
     runID: String?,
@@ -3144,7 +3160,12 @@ class ChatToolExecutor {
   ) async -> String {
     let args = toolCall.arguments
 
+    func backendFailureEnvelope(_ response: APIClient.ToolResponse) -> String {
+      toolFailureEnvelope(code: "backend_tool_failed", message: response.resultText)
+    }
+
     func annotated(_ response: APIClient.ToolResponse) async -> String {
+      if response.isError { return backendFailureEnvelope(response) }
       let sources: [APIClient.ToolSource]
       if let typedSources = response.sources {
         sources = typedSources
@@ -3296,7 +3317,7 @@ class ChatToolExecutor {
                 authorizationSnapshot: currentOwnerAuthorizationSnapshot)
             })
         else { return authorizedOwnerChangedResult() }
-        return resp.resultText
+        return resp.isError ? backendFailureEnvelope(resp) : resp.resultText
 
       case "update_action_item":
         guard let itemId = resolveActionItemID(args) else {
@@ -3326,7 +3347,7 @@ class ChatToolExecutor {
                 authorizationSnapshot: currentOwnerAuthorizationSnapshot)
             })
         else { return authorizedOwnerChangedResult() }
-        return resp.resultText
+        return resp.isError ? backendFailureEnvelope(resp) : resp.resultText
 
       case "create_calendar_event":
         guard let rawTitle = args["title"] as? String else {
@@ -3356,14 +3377,16 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
-        return resp.resultText
+        return resp.isError ? backendFailureEnvelope(resp) : resp.resultText
 
       default:
         return "Unknown backend tool: \(toolCall.name)"
       }
     } catch {
       log("Backend tool error (\(toolCall.name)): \(error)")
-      return "Error calling backend: \(error.localizedDescription)"
+      return toolFailureEnvelope(
+        code: "backend_tool_unreachable",
+        message: "Error calling backend: \(error.localizedDescription)")
     }
   }
 
