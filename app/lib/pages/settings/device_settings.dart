@@ -16,6 +16,7 @@ import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
@@ -47,6 +48,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   bool _isFindingDevice = false;
 
   bool _autoSyncOfflineRecordings = SharedPreferencesUtil().autoSyncOfflineRecordings;
+  bool _omiButtonActionsEnabled = SharedPreferencesUtil().omiButtonActionsEnabled;
 
   Future _bleUnpairDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
@@ -757,13 +759,46 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
           ],
-          // Double Tap
-          _buildProfileStyleItem(
-            icon: FontAwesomeIcons.handPointer,
-            title: context.l10n.doubleTap,
-            chipValue: _getDoubleTapActionLabel(doubleTapAction),
-            onTap: _showDoubleTapActionSheet,
-          ),
+          if (device?.type == DeviceType.omi) ...[
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.handPointer,
+              title: context.l10n.omiButtonActions,
+              showChevron: false,
+              trailing: Switch(
+                key: const Key('omi_button_actions_toggle'),
+                value: _omiButtonActionsEnabled,
+                activeThumbColor: Colors.white,
+                activeTrackColor: const Color(0xFF636366),
+                onChanged: (value) {
+                  setState(() => _omiButtonActionsEnabled = value);
+                  SharedPreferencesUtil().omiButtonActionsEnabled = value;
+                  if (!value) {
+                    // Drop any in-flight voice-command session so audio captured
+                    // while actions were enabled is not submitted after disabling.
+                    context.read<CaptureProvider>().cancelActiveVoiceSession();
+                  }
+                },
+              ),
+            ),
+            if (_omiButtonActionsEnabled) ...[
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              // Double Tap (only configurable while Omi button actions are enabled)
+              _buildProfileStyleItem(
+                icon: FontAwesomeIcons.handPointer,
+                title: context.l10n.doubleTap,
+                chipValue: _getDoubleTapActionLabel(doubleTapAction),
+                onTap: _showDoubleTapActionSheet,
+              ),
+            ],
+          ] else ...[
+            // Double Tap (non-Omi devices)
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.handPointer,
+              title: context.l10n.doubleTap,
+              chipValue: _getDoubleTapActionLabel(doubleTapAction),
+              onTap: _showDoubleTapActionSheet,
+            ),
+          ],
           // LED Brightness
           if (_isDimRatioLoaded && _hasDimmingFeature == true) ...[
             const Divider(height: 1, color: Color(0xFF3C3C43)),
@@ -964,7 +999,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 if (provider.isConnected) ...[
                   const SizedBox(height: 16),
                   _buildSectionHeader(context.l10n.customizationSection),
-                  _buildCustomizationSection(provider.connectedDevice ?? provider.pairedDevice, provider),
+                  _buildCustomizationSection(provider.pairedDevice ?? provider.connectedDevice, provider),
                   const SizedBox(height: 32),
                   _buildSectionHeader(context.l10n.deviceInfoSection),
                   _buildDeviceInfoSection(provider.pairedDevice, provider),

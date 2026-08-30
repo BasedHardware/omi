@@ -73,6 +73,7 @@ class CaptureController extends ChangeNotifier
   final ConversationLocationCapture _conversationLocationCapture;
   final Future<void> Function()? _inProgressConversationLoader;
   final Future<BleAudioCodec> Function(String deviceId)? _audioCodecLoader;
+  final Future<bool> Function(String deviceId, int level)? _speakerHaptic;
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -187,11 +188,13 @@ class CaptureController extends ChangeNotifier
     ConversationLocationCapture? conversationLocationCapture,
     Future<void> Function()? inProgressConversationLoader,
     Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
+    Future<bool> Function(String deviceId, int level)? speakerHaptic,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ??
             ConversationLocationCapture(onNewlyGranted: _startAndroidLocationForegroundTask),
         _inProgressConversationLoader = inProgressConversationLoader,
-        _audioCodecLoader = audioCodecLoader {
+        _audioCodecLoader = audioCodecLoader,
+        _speakerHaptic = speakerHaptic {
     // Restore a persisted device mute so it survives an app kill/restart. When
     // the device reconnects, streamDeviceRecording() reads _isPaused as
     // `wasPaused` and re-applies the mute instead of silently resuming.
@@ -447,6 +450,8 @@ class CaptureController extends ChangeNotifier
   StreamSubscription? _bleButtonStream;
   DateTime? _voiceCommandSession;
   List<List<int>> _commandBytes = [];
+  int _voiceCommandSubmissionGeneration = 0;
+  bool _voiceCommandStartedDuringOnboarding = false;
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   Timer? _voiceCommandTimeoutTimer; // 30s auto-end timer for voice questions
   bool _voiceSessionStartedByLegacyLongPress =
@@ -511,10 +516,24 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  BtDevice? _recordingDevicePreservingNormalizedType(BtDevice? device) {
+    final current = _recordingDevice;
+    if (device == null || current == null || current.id != device.id) {
+      return device;
+    }
+    // Same device: do not downgrade capability-normalized OpenGlass back to
+    // the advertising-time Omi type (Home / speech-profile restarts).
+    if (current.type == DeviceType.openglass && device.type == DeviceType.omi) {
+      return device.copyWith(type: DeviceType.openglass);
+    }
+    return device;
+  }
+
   void _updateRecordingDevice(BtDevice? device) {
-    Logger.debug('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
-    _recordingDevice = device;
-    if (device == null) _endOfflineSession();
+    final next = _recordingDevicePreservingNormalizedType(device);
+    Logger.debug('connected device changed from ${_recordingDevice?.id} to ${next?.id}');
+    _recordingDevice = next;
+    if (next == null) _endOfflineSession();
     notifyListeners();
   }
 
@@ -834,7 +853,28 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  void _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
+  // Omi-button actions are user-configurable; when disabled, single/double-tap
+  // and device-button voice commands are ignored. This gate intentionally does
+  // NOT apply to interactive onboarding, which must still receive button events.
+  bool get _omiButtonActionsDisabled =>
+      _isOmiButtonActionsDevice(_recordingDevice) && !SharedPreferencesUtil().omiButtonActionsEnabled;
+
+  /// Whether this device honors the Omi button actions preference. Identity is
+  /// capability-normalized: BtDevice.getDeviceInfo() reclassifies image-stream
+  /// hardware as DeviceType.openglass, and DeviceProvider pushes that normalized
+  /// paired device into updateRecordingDevice after connect — so the device type
+  /// alone is authoritative here and advertising names are never inspected.
+  bool _isOmiButtonActionsDevice(BtDevice? device) {
+    return device?.type == DeviceType.omi;
+  }
+
+  Future<void> _processVoiceCommandBytes(
+    String deviceId,
+    List<List<int>> data, {
+    bool allowWhenDisabled = false,
+  }) async {
+    final submissionGeneration = _voiceCommandSubmissionGeneration;
+    if (_omiButtonActionsDisabled && !allowWhenDisabled) return;
     if (data.isEmpty) {
       Logger.debug("voice frames is empty");
       return;
@@ -846,6 +886,8 @@ class CaptureController extends ChangeNotifier
     }
 
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+    if (submissionGeneration != _voiceCommandSubmissionGeneration) return;
+    if (_omiButtonActionsDisabled && !allowWhenDisabled) return;
     await externalActions.sendVoiceMessageStreamToServer(
       data,
       onFirstChunkRecived: () {
@@ -856,6 +898,11 @@ class CaptureController extends ChangeNotifier
       // Gated by SharedPreferencesUtil().voiceResponseEnabled inside the service.
       playResponseAudio: true,
     );
+  }
+
+  @visibleForTesting
+  Future<void> processVoiceCommandBytesForTesting(String deviceId, List<List<int>> data) {
+    return _processVoiceCommandBytes(deviceId, data);
   }
 
   // Start a 15s timeout timer for voice commands - auto-ends if user forgets to tap again
@@ -875,9 +922,47 @@ class CaptureController extends ChangeNotifier
     _voiceCommandTimeoutTimer = null;
     _voiceCommandSession = null;
     _voiceSessionStartedByLegacyLongPress = false; // Reset flag
+    // The started-during-onboarding exemption only holds while the tutorial is
+    // still active: if onboarding exited (dispose/skip/complete), the session
+    // should have been cancelled — never submit audio captured after leaving.
+    final allowWhenDisabled =
+        _voiceCommandStartedDuringOnboarding && deviceOnboardingProvider?.isOnboardingActive == true;
+    _voiceCommandStartedDuringOnboarding = false;
     var data = List<List<int>>.from(_commandBytes);
     _commandBytes = [];
-    _processVoiceCommandBytes(deviceId, data);
+    _processVoiceCommandBytes(deviceId, data, allowWhenDisabled: allowWhenDisabled);
+  }
+
+  void cancelActiveVoiceSession() {
+    _voiceCommandSubmissionGeneration++;
+    _voiceCommandTimeoutTimer?.cancel();
+    _voiceCommandTimeoutTimer = null;
+    _voiceCommandSession = null;
+    _voiceSessionStartedByLegacyLongPress = false;
+    _voiceCommandStartedDuringOnboarding = false;
+    _commandBytes = [];
+  }
+
+  /// Cancel a voice session only if the tutorial started it.
+  ///
+  /// Tapping Start then exiting during step 0 never starts a voice session, so
+  /// a pre-existing Omi command must be left alone.
+  void cancelTutorialOwnedVoiceSession() {
+    if (!_voiceCommandStartedDuringOnboarding) return;
+    cancelActiveVoiceSession();
+  }
+
+  @visibleForTesting
+  bool get hasVoiceCommandSessionForTesting => _voiceCommandSession != null;
+
+  @visibleForTesting
+  void addVoiceCommandBytesForTesting(List<int> payload) {
+    _commandBytes.add(payload);
+  }
+
+  @visibleForTesting
+  void endVoiceCommandSessionForTesting(String deviceId) {
+    _endVoiceCommandSession(deviceId);
   }
 
   Future streamButton(String deviceId) async {
@@ -891,117 +976,131 @@ class CaptureController extends ChangeNotifier
         var buttonState =
             ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
         Logger.debug("device button $buttonState");
-
-        // Intercept for interactive device onboarding
-        if (deviceOnboardingProvider?.isOnboardingActive == true) {
-          deviceOnboardingProvider!.onButtonEvent(buttonState);
-          // For step 1 (ask question), let single-tap fall through to normal voice command handling
-          if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
-            // Fall through to normal single-tap handling below
-          } else {
-            return;
-          }
-        }
-
-        // double tap
-        if (buttonState == 2) {
-          Logger.debug("Double tap detected");
-
-          // Guard: ignore if already processing a button event
-          if (_isProcessingButtonEvent) {
-            Logger.debug("Double tap: already processing, ignoring");
-            return;
-          }
-
-          int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
-
-          if (doubleTapAction == 1) {
-            // Pause/resume recording
-            Logger.debug("Double tap: toggling pause/mute");
-            _isProcessingButtonEvent = true;
-            if (_isPaused) {
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error resuming device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
-            } else {
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error pausing device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
-            }
-          } else if (doubleTapAction == 2) {
-            // Star ongoing conversation (doesn't end it)
-            Logger.debug("Double tap: marking conversation for starring");
-            if (!_starOngoingConversation) {
-              markConversationForStarring();
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
-              // Haptic feedback to confirm
-              HapticFeedback.mediumImpact();
-            } else {
-              // Toggle off if already marked
-              unmarkConversationForStarring();
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
-              HapticFeedback.lightImpact();
-            }
-          } else {
-            // End conversation and process (default)
-            Logger.debug("Double tap: processing conversation");
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
-            forceProcessingCurrentConversation();
-          }
-          return;
-        }
-
-        // Single tap (buttonState == 1) - toggle voice question mode
-        // Tap once to start, tap again to end
-        if (buttonState == 1) {
-          debugPrint("Single tap detected");
-          if (_voiceCommandSession == null) {
-            // Start voice question session (new toggle mode)
-            debugPrint("Starting voice question session (toggle mode)");
-            // Cut off any in-flight voice playback from a prior reply so the
-            // new recording starts clean.
-            if (OmiVoicePlaybackService.instance.isSpeaking) {
-              OmiVoicePlaybackService.instance.interrupt();
-            }
-            _voiceCommandSession = DateTime.now();
-            _commandBytes = [];
-            _voiceSessionStartedByLegacyLongPress = false; // New toggle mode
-            _startVoiceCommandTimeout(deviceId);
-            _playSpeakerHaptic(deviceId, 1);
-          } else if (!_voiceSessionStartedByLegacyLongPress) {
-            // Only end on second tap if session was started by toggle mode (not legacy)
-            debugPrint("Ending voice question session (toggle mode)");
-            _endVoiceCommandSession(deviceId);
-          }
-          return;
-        }
-
-        // Legacy support: start long press (for voice commands) - older firmware
-        if (buttonState == 3 && _voiceCommandSession == null) {
-          debugPrint("Legacy: Long press start detected");
-          _voiceCommandSession = DateTime.now();
-          _commandBytes = [];
-          _voiceSessionStartedByLegacyLongPress = true; // Legacy hold-to-talk mode
-          _startVoiceCommandTimeout(deviceId);
-          _playSpeakerHaptic(deviceId, 1);
-        }
-
-        // Legacy support: release (end voice command) - older firmware
-        // Only end on release if session was started by legacy long press (buttonState 3)
-        if (buttonState == 5 && _voiceCommandSession != null && _voiceSessionStartedByLegacyLongPress) {
-          debugPrint("Legacy: Release detected - ending voice command");
-          _endVoiceCommandSession(deviceId);
-        }
+        _handleButtonEvent(deviceId, buttonState);
       },
     );
+  }
+
+  @visibleForTesting
+  void handleButtonEventForTesting(String deviceId, int buttonState) {
+    _handleButtonEvent(deviceId, buttonState);
+  }
+
+  void _handleButtonEvent(String deviceId, int buttonState) {
+    // Intercept for interactive device onboarding
+    if (deviceOnboardingProvider?.isOnboardingActive == true) {
+      deviceOnboardingProvider!.onButtonEvent(buttonState);
+      // For step 1 (ask question), let single-tap fall through to normal voice command handling
+      if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
+        // Fall through to normal single-tap handling below
+      } else {
+        return;
+      }
+    }
+
+    // Omi button actions are disabled by the user: skip action handling but
+    // onboarding (handled above) still receives button events regardless.
+    if (_omiButtonActionsDisabled && deviceOnboardingProvider?.isOnboardingActive != true) return;
+
+    // double tap
+    if (buttonState == 2) {
+      Logger.debug("Double tap detected");
+
+      // Guard: ignore if already processing a button event
+      if (_isProcessingButtonEvent) {
+        Logger.debug("Double tap: already processing, ignoring");
+        return;
+      }
+
+      int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
+
+      if (doubleTapAction == 1) {
+        // Pause/resume recording
+        Logger.debug("Double tap: toggling pause/mute");
+        _isProcessingButtonEvent = true;
+        if (_isPaused) {
+          PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
+          resumeDeviceRecording().then((_) {
+            _isProcessingButtonEvent = false;
+          }).catchError((e) {
+            Logger.debug("Error resuming device recording: $e");
+            _isProcessingButtonEvent = false;
+          });
+        } else {
+          PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
+          pauseDeviceRecording().then((_) {
+            _isProcessingButtonEvent = false;
+          }).catchError((e) {
+            Logger.debug("Error pausing device recording: $e");
+            _isProcessingButtonEvent = false;
+          });
+        }
+      } else if (doubleTapAction == 2) {
+        // Star ongoing conversation (doesn't end it)
+        Logger.debug("Double tap: marking conversation for starring");
+        if (!_starOngoingConversation) {
+          markConversationForStarring();
+          PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
+          // Haptic feedback to confirm
+          HapticFeedback.mediumImpact();
+        } else {
+          // Toggle off if already marked
+          unmarkConversationForStarring();
+          PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
+          HapticFeedback.lightImpact();
+        }
+      } else {
+        // End conversation and process (default)
+        Logger.debug("Double tap: processing conversation");
+        PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+        forceProcessingCurrentConversation();
+      }
+      return;
+    }
+
+    // Single tap (buttonState == 1) - toggle voice question mode
+    // Tap once to start, tap again to end
+    if (buttonState == 1) {
+      debugPrint("Single tap detected");
+      if (_voiceCommandSession == null) {
+        // Start voice question session (new toggle mode)
+        debugPrint("Starting voice question session (toggle mode)");
+        // Cut off any in-flight voice playback from a prior reply so the
+        // new recording starts clean.
+        if (OmiVoicePlaybackService.instance.isSpeaking) {
+          OmiVoicePlaybackService.instance.interrupt();
+        }
+        _voiceCommandSession = DateTime.now();
+        _commandBytes = [];
+        _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
+        _voiceSessionStartedByLegacyLongPress = false; // New toggle mode
+        _startVoiceCommandTimeout(deviceId);
+        _playSpeakerHaptic(deviceId, 1);
+      } else if (!_voiceSessionStartedByLegacyLongPress) {
+        // Only end on second tap if session was started by toggle mode (not legacy)
+        debugPrint("Ending voice question session (toggle mode)");
+        _endVoiceCommandSession(deviceId);
+      }
+      return;
+    }
+
+    // Legacy support: start long press (for voice commands) - older firmware
+    if (buttonState == 3 && _voiceCommandSession == null) {
+      debugPrint("Legacy: Long press start detected");
+      _voiceCommandSession = DateTime.now();
+      _commandBytes = [];
+      _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
+      _voiceSessionStartedByLegacyLongPress = true; // Legacy hold-to-talk mode
+      _startVoiceCommandTimeout(deviceId);
+      _playSpeakerHaptic(deviceId, 1);
+    }
+
+    // Legacy support: release (end voice command) - older firmware
+    // Only end on release if session was started by legacy long press (buttonState 3)
+    if (buttonState == 5 && _voiceCommandSession != null && _voiceSessionStartedByLegacyLongPress) {
+      debugPrint("Legacy: Release detected - ending voice command");
+      _endVoiceCommandSession(deviceId);
+    }
   }
 
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec) async {
@@ -1021,7 +1120,12 @@ class CaptureController extends ChangeNotifier
         bool voiceCommandSupported = _recordingDevice != null
             ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
             : false;
-        if (_voiceCommandSession != null && voiceCommandSupported) {
+        // Once Omi button actions are disabled, stop collecting command audio so
+        // a session missed by cancelActiveVoiceSession cannot keep buffering
+        // frames that would be submitted later. Interactive onboarding still
+        // receives command audio (its step-1 session runs while disabled).
+        final collectCommandAudio = !_omiButtonActionsDisabled || deviceOnboardingProvider?.isOnboardingActive == true;
+        if (_voiceCommandSession != null && voiceCommandSupported && collectCommandAudio) {
           final payload = _activeSource?.getSocketPayload(snapshot) ?? snapshot.sublist(3);
           _commandBytes.add(payload);
         }
@@ -1103,6 +1207,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<bool> _playSpeakerHaptic(String deviceId, int level) async {
+    if (_speakerHaptic != null) return _speakerHaptic!(deviceId, level);
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return false;

@@ -439,6 +439,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get autoSyncDescription => 'Automaticky synchronizovať offline nahrávky pri pripojení zariadenia';
 
   @override
+  String get omiButtonActions => 'Akcie tlačidla Omi';
+
+  @override
   String get deviceSettings => 'Nastavenia zariadenia';
 
   @override

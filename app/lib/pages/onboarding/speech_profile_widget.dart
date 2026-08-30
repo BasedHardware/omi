@@ -99,7 +99,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
       // Restart device recording, clear transcripts
       if (mounted) {
         Provider.of<CaptureProvider>(context, listen: false).clearTranscripts();
-        final device = Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.connectedDevice;
+        final device = Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.capabilityNormalizedDevice;
         if (device != null) {
           Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: device);
         }

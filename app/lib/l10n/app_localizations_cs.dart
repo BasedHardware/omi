@@ -438,6 +438,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get autoSyncDescription => 'Automaticky synchronizovat offline nahrávky při připojení zařízení';
 
   @override
+  String get omiButtonActions => 'Akce tlačítka Omi';
+
+  @override
   String get deviceSettings => 'Nastavení zařízení';
 
   @override

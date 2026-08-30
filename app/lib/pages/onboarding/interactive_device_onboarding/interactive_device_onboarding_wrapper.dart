@@ -60,6 +60,13 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     if (_started && !_completed) {
       AnalyticsManager().deviceOnboardingAbandoned(_onboardingProvider.currentStep);
     }
+    // Cancel only a tutorial-owned voice session. Opening Settings → Device
+    // Tutorial attaches CaptureProvider in the post-frame callback before the
+    // user starts the flow; exiting the intro must not discard an unrelated
+    // in-flight Omi voice command. `_showIntro` stays true until `_startTutorial`.
+    if (!_showIntro) {
+      _captureProvider?.cancelTutorialOwnedVoiceSession();
+    }
     _captureProvider?.restoreBatchModeAfterOnboarding();
     _captureProvider?.deviceOnboardingProvider = null;
     _onboardingProvider.dispose();

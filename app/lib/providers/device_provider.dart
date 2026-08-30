@@ -52,6 +52,22 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
+
+  /// Capability-normalized identity for capture/home restarts.
+  ///
+  /// `getDeviceInfo()` reclassifies image-stream hardware as
+  /// [DeviceType.openglass] on [pairedDevice]. Home and speech-profile
+  /// restarts must prefer that over the advertising-time [connectedDevice]
+  /// so the Omi-button gate matches Device Settings.
+  BtDevice? get capabilityNormalizedDevice {
+    final connected = connectedDevice;
+    final paired = pairedDevice;
+    if (paired != null && (connected == null || paired.id == connected.id)) {
+      return paired;
+    }
+    return connected ?? paired;
+  }
+
   DateTime? _deviceSessionStartedAt;
   final BleDiagnosticsLoader _bleDiagnosticsLoader;
   final FindDeviceRunner _findDeviceRunner;
@@ -597,8 +613,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
 
+    final normalizedDevice = pairedDevice ?? device;
     if (captureProvider != null) {
-      captureProvider?.updateRecordingDevice(device);
+      captureProvider?.updateRecordingDevice(normalizedDevice);
     }
 
     setisDeviceStorageSupport();
@@ -623,10 +640,20 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
-    await captureProvider?.streamDeviceRecording(device: device);
+    await captureProvider?.streamDeviceRecording(device: normalizedDevice);
 
     await getDeviceInfo();
     SharedPreferencesUtil().deviceName = device.name;
+
+    // getDeviceInfo() may have reclassified the discovery object — an Omi-typed
+    // Glass unit becomes DeviceType.openglass once hasImageStream is read. Push
+    // the capability-normalized paired device so consumers of the recording
+    // device (e.g. the Omi button-actions gate) see the same identity as
+    // pairedDevice instead of the raw advertising-time object.
+    final normalizedPairedDevice = pairedDevice ?? normalizedDevice;
+    if (captureProvider != null) {
+      captureProvider?.updateRecordingDevice(normalizedPairedDevice);
+    }
 
     // Wals — pass the firmware resolved by getDeviceInfo() above so background
     // discovery routes ring-buffer devices correctly; `device` here is the raw

@@ -436,6 +436,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get autoSyncDescription => 'जब आपका डिवाइस कनेक्ट हो, तो ऑफ़लाइन रिकॉर्डिंग अपने आप सिंक करें';
 
   @override
+  String get omiButtonActions => 'Omi बटन क्रियाएँ';
+
+  @override
   String get deviceSettings => 'डिवाइस सेटिंग्स';
 
   @override
