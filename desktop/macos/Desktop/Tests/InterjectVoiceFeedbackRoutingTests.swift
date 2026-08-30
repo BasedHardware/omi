@@ -44,6 +44,17 @@ final class InterjectVoiceFeedbackRoutingTests: XCTestCase {
   func testDisplayTextHidesATokenStillStreamingIn() {
     XCTAssertEqual(InterjectVoiceFeedbackRouting.displayText(from: "[[interject:corr"), "")
     XCTAssertEqual(InterjectVoiceFeedbackRouting.displayText(from: "[[inter"), "")
+    XCTAssertEqual(InterjectVoiceFeedbackRouting.displayText(from: "[[i"), "")
+  }
+
+  func testDisplayTextDoesNotBlankAMarkdownLinkMidStream() {
+    // A stream that has only emitted `[` or `[[` is ordinary copy far more
+    // often than a token opener; blanking it flickers real assistant text.
+    for partial in ["[", "[[", "[C", "[Click here](https://omi.me)"] {
+      XCTAssertEqual(
+        InterjectVoiceFeedbackRouting.displayText(from: partial), partial,
+        "a Markdown link must survive every streaming prefix")
+    }
   }
 
   func testDisplayTextLeavesOrdinaryRepliesUntouched() {

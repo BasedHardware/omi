@@ -42,13 +42,22 @@ enum InterjectVoiceFeedbackRouting {
   /// Display copy of an assistant message: the classification token never
   /// renders. A leading token still streaming in (the opener with no `]]`
   /// yet, or a prefix of the opener) is hidden rather than flashed.
+  ///
+  /// The partial match starts at `[[i`, never at `[` or `[[`. A stream that has
+  /// only emitted `[` is far more often an ordinary Markdown link than a token,
+  /// and blanking it would flicker real assistant copy — including with the
+  /// feature off. This sanitizer is deliberately flag-independent: a token must
+  /// not render even in history written while the flag was on.
+  private static let tokenOpener = "[[interject:"
+  private static let shortestPartialOpener = 3  // "[[i"
+
   static func displayText(from text: String) -> String {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.hasPrefix("[[interject:") {
+    if trimmed.hasPrefix(tokenOpener) {
       guard trimmed.range(of: "]]") != nil else { return "" }
       return parse(text).spoken
     }
-    if !trimmed.isEmpty, "[[interject:".hasPrefix(trimmed) {
+    if trimmed.count >= shortestPartialOpener, tokenOpener.hasPrefix(trimmed) {
       return ""
     }
     return text
