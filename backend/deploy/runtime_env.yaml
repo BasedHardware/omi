@@ -119,6 +119,12 @@ environments:
               key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
+          OMI_FIRESTORE_DATA_PLANE_PROJECT:
+            value: based-hardware
+          POSTHOG_PROJECT_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: POSTHOG_PROJECT_API_KEY
           TWILIO_API_KEY_SID:
             config_map:
               name: dev-omi-backend-config
@@ -982,6 +988,9 @@ environments:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
               version: latest
@@ -1305,6 +1314,12 @@ environments:
               key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
+          OMI_FIRESTORE_DATA_PLANE_PROJECT:
+            value: based-hardware
+          POSTHOG_PROJECT_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: POSTHOG_PROJECT_API_KEY
           TWILIO_API_KEY_SID:
             config_map:
               name: prod-omi-backend-config
@@ -2100,6 +2115,9 @@ environments:
               version: latest
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
