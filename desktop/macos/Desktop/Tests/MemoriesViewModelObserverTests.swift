@@ -54,8 +54,18 @@ final class MemoriesViewModelObserverTests: XCTestCase {
     XCTAssertEqual(viewModel.refreshInvocations, 0, "Fresh instance must start at zero")
 
     NotificationCenter.default.post(name: .memoriesDidChange, object: nil)
-    await Task.yield()
-    try? await Task.sleep(nanoseconds: 50_000_000)
+    // A deterministic signal rather than a fixed wait: the subscriber hops through the
+    // main queue, so poll its own counter until it lands instead of guessing how long
+    // that takes.
+    await fulfillment(
+      of: [
+        XCTNSPredicateExpectation(
+          predicate: NSPredicate { _, _ in
+            MainActor.assumeIsolated { viewModel.refreshInvocations >= 1 }
+          },
+          object: nil)
+      ],
+      timeout: 5)
 
     XCTAssertEqual(
       viewModel.refreshInvocations, 1,

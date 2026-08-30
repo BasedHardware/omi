@@ -79,8 +79,9 @@ enum AXFormTree {
       return nil
     }
     guard let raw, CFGetTypeID(raw) == AXUIElementGetTypeID() else { return nil }
-    // swiftlint:disable:next force_cast - the CFGetTypeID guard above is the real check;
-    // Swift rejects `as?` to a CoreFoundation type as always-succeeding.
+    // Swift rejects `as?` to a CoreFoundation type as always-succeeding, so the
+    // CFGetTypeID guard above is the real check.
+    // swiftlint:disable:next force_cast - guarded by the type id immediately above.
     return (raw as! AXUIElement)
   }
 
