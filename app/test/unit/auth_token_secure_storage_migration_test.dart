@@ -1,3 +1,6 @@
+import 'dart:math';
+
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -81,4 +84,122 @@ void main() {
     expect(prefs.containsKey('authToken'), isFalse);
     expect(prefs.getBool('authTokenSecureMigrated'), isTrue);
   });
+
+  test('a duplicate-item keychain write deletes the stale entry and rewrites', () async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = _FakeSecureStorage()..duplicateWrites = 1;
+    await SharedPreferencesUtil.init(secureStorage: storage);
+
+    SharedPreferencesUtil().authToken = 'fresh-token';
+    await pumpEventQueue();
+
+    expect(storage.store['authToken'], 'fresh-token');
+    expect(storage.calls, containsAllInOrder(<String>['write', 'delete', 'write']));
+    expect(SharedPreferencesUtil().authToken, 'fresh-token');
+  });
+
+  test('overlapping token writes never run concurrently in the keychain', () async {
+    SharedPreferences.setMockInitialValues({});
+    final storage = _FakeSecureStorage();
+    await SharedPreferencesUtil.init(secureStorage: storage);
+
+    SharedPreferencesUtil().authToken = 'token-a';
+    SharedPreferencesUtil().authToken = 'token-b';
+    await pumpEventQueue();
+
+    expect(storage.maxConcurrent, 1);
+    expect(storage.store['authToken'], 'token-b');
+  });
+
+  test('migration keeps the prefs token when the keychain rejects the write', () async {
+    SharedPreferences.setMockInitialValues({'authToken': 'legacy-session-token'});
+    final storage = _FakeSecureStorage()..writeError = _keychainError(-25308, 'Interaction is not allowed.');
+    await SharedPreferencesUtil.init(secureStorage: storage);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('authToken'), 'legacy-session-token');
+    expect(prefs.getBool('authTokenSecureMigrated'), isNull);
+    // The session still works this launch; the next launch retries the move.
+    expect(SharedPreferencesUtil().authToken, 'legacy-session-token');
+  });
+}
+
+PlatformException _keychainError(int status, String message) {
+  return PlatformException(
+    code: 'Unexpected security result code',
+    message: 'Code: $status, Message: $message',
+    details: status,
+  );
+}
+
+/// Stands in for the plugin so a keychain failure is reachable from a test.
+class _FakeSecureStorage extends FlutterSecureStorage {
+  _FakeSecureStorage();
+
+  final Map<String, String> store = <String, String>{};
+  final List<String> calls = <String>[];
+
+  /// Number of leading writes that fail with `errSecDuplicateItem`.
+  int duplicateWrites = 0;
+
+  /// Failure every write raises, for keychains that never accept the entry.
+  PlatformException? writeError;
+
+  int maxConcurrent = 0;
+  int _inFlight = 0;
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    _inFlight++;
+    maxConcurrent = max(maxConcurrent, _inFlight);
+    try {
+      await Future<void>.delayed(Duration.zero);
+      calls.add('write');
+      if (writeError != null) throw writeError!;
+      if (duplicateWrites > 0) {
+        duplicateWrites--;
+        throw _keychainError(-25299, 'The specified item already exists in the keychain.');
+      }
+      store[key] = value!;
+    } finally {
+      _inFlight--;
+    }
+  }
+
+  @override
+  Future<String?> read({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    calls.add('read');
+    return store[key];
+  }
+
+  @override
+  Future<void> delete({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    calls.add('delete');
+    store.remove(key);
+  }
 }

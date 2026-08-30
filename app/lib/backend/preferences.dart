@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:collection/collection.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -33,6 +34,20 @@ class SharedPreferencesUtil {
 
   /// Plain prefs mirror for in-tree native readers (Android background socket).
   static const String _nativeAuthTokenPrefsKey = 'nativeAuthToken';
+
+  /// `errSecDuplicateItem`. The keychain plugin writes with a check-then-add,
+  /// so an entry its probe cannot see — stored under another accessibility, or
+  /// added by a write racing this one — makes the add collide instead of update.
+  static const int _duplicateKeychainItem = -25299;
+
+  /// Deletes with no accessibility in the query match the entry whatever
+  /// accessibility it was stored under; the default query would miss it.
+  static const IOSOptions _anyAccessibilityIos = IOSOptions(accessibility: null);
+  static const MacOsOptions _anyAccessibilityMacOs = MacOsOptions(accessibility: null);
+
+  /// Serializes keychain calls. The plugin answers each call on a background
+  /// queue, so two overlapping writes both take its add path and one loses.
+  static Future<void> _secureQueue = Future<void>.value();
 
   factory SharedPreferencesUtil() {
     return _instance;
@@ -88,7 +103,12 @@ class SharedPreferencesUtil {
     try {
       final existingSecure = await _readSecureAuthToken();
       if ((existingSecure == null || existingSecure.isEmpty) && legacyToken != null && legacyToken.isNotEmpty) {
-        await _writeSecureAuthToken(legacyToken);
+        final persisted = await _writeSecureAuthToken(legacyToken);
+        if (!persisted) {
+          // Keychain unreachable (locked since boot). Keep the prefs copy and
+          // leave the flag unset so the next launch retries.
+          return;
+        }
       }
       if (legacyToken != null) {
         await prefs.remove('authToken');
@@ -101,19 +121,62 @@ class SharedPreferencesUtil {
     }
   }
 
+  /// Runs one keychain call after the previous one finishes. A failure is
+  /// reported as `null` rather than thrown: callers are fire-and-forget, and an
+  /// unhandled async error here is recorded as a fatal crash.
+  static Future<T?> _runSecure<T extends Object>(String op, Future<T?> Function() action) {
+    final result = Completer<T?>();
+    _secureQueue = _secureQueue.then((_) async {
+      try {
+        result.complete(await action());
+      } catch (e, stack) {
+        Logger.debug('Secure storage $op failed: $e');
+        Logger.debug('Stack: $stack');
+        result.complete(null);
+      }
+    });
+    return result.future;
+  }
+
+  static bool _isDuplicateKeychainItem(PlatformException e) =>
+      e.details == _duplicateKeychainItem || (e.message?.contains('$_duplicateKeychainItem') ?? false);
+
   static Future<String?> _readSecureAuthToken() async {
     final fallback = _testSecureFallback;
     if (fallback != null) return fallback[_authTokenSecureKey];
-    return _secureStorage?.read(key: _authTokenSecureKey);
+    final storage = _secureStorage;
+    if (storage == null) return null;
+    return _runSecure<String>('read', () => storage.read(key: _authTokenSecureKey));
   }
 
-  static Future<void> _writeSecureAuthToken(String value) async {
+  /// Returns whether the token reached secure storage. A keychain locked since
+  /// boot fails every call, so callers that drop a plaintext copy must check
+  /// this instead of assuming the write landed.
+  static Future<bool> _writeSecureAuthToken(String value) async {
     final fallback = _testSecureFallback;
     if (fallback != null) {
       fallback[_authTokenSecureKey] = value;
-      return;
+      return true;
     }
-    await _secureStorage?.write(key: _authTokenSecureKey, value: value);
+    final storage = _secureStorage;
+    if (storage == null) return false;
+    final wrote = await _runSecure<bool>('write', () async {
+      try {
+        await storage.write(key: _authTokenSecureKey, value: value);
+      } on PlatformException catch (e) {
+        if (!_isDuplicateKeychainItem(e)) rethrow;
+        // The entry exists but the plugin added instead of updated. Drop it at
+        // any accessibility and re-add, so the session survives the collision.
+        await storage.delete(
+          key: _authTokenSecureKey,
+          iOptions: _anyAccessibilityIos,
+          mOptions: _anyAccessibilityMacOs,
+        );
+        await storage.write(key: _authTokenSecureKey, value: value);
+      }
+      return true;
+    });
+    return wrote ?? false;
   }
 
   static Future<void> _deleteSecureAuthToken() async {
@@ -121,7 +184,17 @@ class SharedPreferencesUtil {
     if (fallback != null) {
       fallback.remove(_authTokenSecureKey);
     } else {
-      await _secureStorage?.delete(key: _authTokenSecureKey);
+      final storage = _secureStorage;
+      if (storage != null) {
+        await _runSecure<bool>('delete', () async {
+          await storage.delete(
+            key: _authTokenSecureKey,
+            iOptions: _anyAccessibilityIos,
+            mOptions: _anyAccessibilityMacOs,
+          );
+          return true;
+        });
+      }
     }
     await _syncNativeAuthToken('');
   }
