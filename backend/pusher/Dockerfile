@@ -65,12 +65,10 @@ ENV LD_PRELOAD=libjemalloc.so.2
 
 # Copy compiled liblc3 library from builder staging dir
 COPY --from=builder /opt/liblc3/ /usr/local/lib/
-COPY --from=builder /tmp/wheels /tmp/wheels
-
 # Install liblc3 Python package and set library path
-RUN ldconfig && \
-    pip install --no-cache-dir /tmp/wheels/*.whl && \
-    rm -rf /tmp/wheels
+RUN --mount=type=bind,from=builder,source=/tmp/wheels,target=/tmp/wheels \
+    ldconfig && \
+    pip install --no-cache-dir /tmp/wheels/*.whl
 
 COPY --from=builder /opt/venv /opt/venv
 
