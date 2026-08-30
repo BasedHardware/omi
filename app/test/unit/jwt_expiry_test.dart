@@ -5,8 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/utils/jwt_expiry.dart';
 
 String _token(Map<String, dynamic> payload) {
-  String segment(Map<String, dynamic> value) =>
-      base64Url.encode(utf8.encode(jsonEncode(value))).replaceAll('=', '');
+  String segment(Map<String, dynamic> value) => base64Url.encode(utf8.encode(jsonEncode(value))).replaceAll('=', '');
   return '${segment({'alg': 'RS256'})}.${segment(payload)}.signature';
 }
 
