@@ -39,7 +39,9 @@ struct McpServersSection: View {
       if servers.isEmpty {
         AgentExtensionEmptyCard(
           icon: "server.rack",
-          text: "No servers yet. Add a remote URL, or a local command like npx @playwright/mcp@latest.")
+          text: searchText.isEmpty
+            ? "No servers yet. Add a remote URL, or a local command like npx @playwright/mcp@latest."
+            : "No installed server matches \(searchText).")
       } else {
         LazyVGrid(
           columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
@@ -126,7 +128,9 @@ struct SkillsSection: View {
       if skills.isEmpty {
         AgentExtensionEmptyCard(
           icon: "graduationcap",
-          text: "No skills yet. Paste or drop a SKILL.md, or write one from scratch.")
+          text: searchText.isEmpty
+            ? "No skills yet. Paste or drop a SKILL.md, or write one from scratch."
+            : "No installed skill matches \(searchText).")
       } else {
         LazyVGrid(
           columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
