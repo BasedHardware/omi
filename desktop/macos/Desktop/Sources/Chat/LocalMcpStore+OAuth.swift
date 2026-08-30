@@ -82,26 +82,93 @@ extension LocalMcpStore {
     let tokenEndpoint: String
     let registrationEndpoint: String?
     let scopes: [String]?
+    /// The canonical resource identifier this token is for (RFC 8707). An authorization server
+    /// fronting several resources issues an audience-scoped token, so omitting it gets a token the
+    /// MCP server then rejects.
+    let resource: String
   }
 
+  /// Where a server's authorization server actually lives.
+  ///
+  /// Probing only the resource's own `/.well-known/oauth-authorization-server` assumes the resource
+  /// *is* its own authorization server. The current spec does not: a server answers 401 with
+  /// `resource_metadata` (RFC 9728), and that document names the authorization servers — which are
+  /// routinely on a different host. Hosted providers work exactly this way, so resource-only
+  /// discovery failed every one of them.
   private static func discoverOAuthMetadata(serverURL: URL) async -> OAuthMeta? {
-    guard let host = serverURL.host, let scheme = serverURL.scheme else { return nil }
-    let portPart = serverURL.port.map { ":\($0)" } ?? ""
-    let wellKnown = "\(scheme)://\(host)\(portPart)/.well-known/oauth-authorization-server"
-    guard let url = URL(string: wellKnown) else { return nil }
+    let discovered = await protectedResource(for: serverURL)
+    let resource = discovered.resource ?? origin(of: serverURL)?.absoluteString ?? serverURL.absoluteString
+    for issuer in discovered.issuers {
+      if let meta = await authorizationServerMetadata(issuer: issuer, resource: resource) {
+        return meta
+      }
+    }
+    return nil
+  }
+
+  /// Issuers to try, best-documented first, ending with the resource itself for older servers that
+  /// publish their own authorization metadata and no protected-resource document.
+  private static func protectedResource(for serverURL: URL) async -> (issuers: [URL], resource: String?) {
+    var issuers: [URL] = []
+    var resource: String?
+    if let origin = origin(of: serverURL),
+      let metadata = await getJSON(origin.appendingPathComponent(".well-known/oauth-protected-resource"))
+    {
+      issuers += ((metadata["authorization_servers"] as? [String]) ?? []).compactMap(URL.init(string:))
+      resource = metadata["resource"] as? String
+    }
+    if let origin = origin(of: serverURL), !issuers.contains(origin) { issuers.append(origin) }
+    return (issuers, resource)
+  }
+
+  /// An issuer's OAuth metadata. Both well-known paths are tried: `oauth-authorization-server` is
+  /// the OAuth one, `openid-configuration` is what some providers publish instead.
+  private static func authorizationServerMetadata(issuer: URL, resource: String) async -> OAuthMeta? {
+    for suffix in ["oauth-authorization-server", "openid-configuration"] {
+      // RFC 8414 inserts the well-known segment before an issuer's path rather than after it.
+      let candidates = [
+        issuerWellKnown(issuer: issuer, suffix: suffix),
+        issuer.appendingPathComponent(".well-known/\(suffix)"),
+      ]
+      for url in candidates.compactMap({ $0 }) {
+        guard let json = await getJSON(url),
+          let authorize = json["authorization_endpoint"] as? String,
+          let token = json["token_endpoint"] as? String
+        else { continue }
+        return OAuthMeta(
+          authorizationEndpoint: authorize,
+          tokenEndpoint: token,
+          registrationEndpoint: json["registration_endpoint"] as? String,
+          scopes: json["scopes_supported"] as? [String],
+          resource: resource)
+      }
+    }
+    return nil
+  }
+
+  static func issuerWellKnown(issuer: URL, suffix: String) -> URL? {
+    guard var components = URLComponents(url: issuer, resolvingAgainstBaseURL: false) else {
+      return nil
+    }
+    let path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    components.path = path.isEmpty ? "/.well-known/\(suffix)" : "/.well-known/\(suffix)/\(path)"
+    return components.url
+  }
+
+  static func origin(of url: URL) -> URL? {
+    guard let scheme = url.scheme, let host = url.host else { return nil }
+    let port = url.port.map { ":\($0)" } ?? ""
+    return URL(string: "\(scheme)://\(host)\(port)")
+  }
+
+  private static func getJSON(_ url: URL) async -> [String: Any]? {
     var request = URLRequest(url: url)
     request.timeoutInterval = 10
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
     guard let (data, response) = try? await URLSession.shared.data(for: request),
-      (response as? HTTPURLResponse)?.statusCode == 200,
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let authorize = json["authorization_endpoint"] as? String,
-      let token = json["token_endpoint"] as? String
+      (response as? HTTPURLResponse)?.statusCode == 200
     else { return nil }
-    return OAuthMeta(
-      authorizationEndpoint: authorize,
-      tokenEndpoint: token,
-      registrationEndpoint: json["registration_endpoint"] as? String,
-      scopes: json["scopes_supported"] as? [String])
+    return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
   }
 
   private static func runOAuthFlow(meta: OAuthMeta) async throws -> [String: Any] {
@@ -142,6 +209,7 @@ extension LocalMcpStore {
       URLQueryItem(name: "state", value: state),
       URLQueryItem(name: "code_challenge", value: challenge),
       URLQueryItem(name: "code_challenge_method", value: "S256"),
+      URLQueryItem(name: "resource", value: meta.resource),
     ]
     if let scopes = meta.scopes, !scopes.isEmpty {
       query.append(URLQueryItem(name: "scope", value: scopes.joined(separator: " ")))
@@ -159,6 +227,7 @@ extension LocalMcpStore {
       "redirect_uri": redirectURI,
       "client_id": clientId,
       "code_verifier": verifier,
+      "resource": meta.resource,
     ]
     if let clientSecret { form["client_secret"] = clientSecret }
     let tokens = try await postForm(endpoint: meta.tokenEndpoint, form: form)

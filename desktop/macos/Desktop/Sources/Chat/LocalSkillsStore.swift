@@ -125,6 +125,28 @@ enum LocalSkillsStore {
 
   // MARK: - Markdown normalization
 
+  /// Whether a file is an Agent Skill rather than any other Markdown. The format's whole contract
+  /// is YAML frontmatter carrying a `description` — that string is what the model matches a request
+  /// against, so a README imported without one is a skill that can never be selected.
+  ///
+  /// Only the *import* paths check this. Text typed or pasted into the editor is still normalized,
+  /// because there the user is authoring the skill rather than claiming a file already is one.
+  static func validationError(forImportedMarkdown markdown: String) -> String? {
+    let (meta, body) = splitFrontmatter(of: markdown)
+    guard !meta.isEmpty else {
+      return "That file has no SKILL.md frontmatter. A skill starts with a --- block naming it."
+    }
+    guard let description = frontmatterValue(meta, key: "description"),
+      !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else {
+      return "That file's frontmatter has no description. The assistant needs one to know when to load the skill."
+    }
+    guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      return "That file has frontmatter but no instructions under it."
+    }
+    return nil
+  }
+
   static func normalize(markdown: String, slug: String) -> String {
     let (meta, body) = splitFrontmatter(of: markdown)
     var lines = ["name: \(slug)"]
