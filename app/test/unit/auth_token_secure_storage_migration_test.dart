@@ -139,7 +139,6 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('authToken'), 'legacy-session-token');
     expect(prefs.getBool('authTokenSecureMigrated'), isNull);
-    // The session still works this launch; the next launch retries the move.
     expect(SharedPreferencesUtil().authToken, 'legacy-session-token');
   });
 }
@@ -152,17 +151,13 @@ PlatformException _keychainError(int status, String message) {
   );
 }
 
-/// Stands in for the plugin so a keychain failure is reachable from a test.
 class _FakeSecureStorage extends FlutterSecureStorage {
   _FakeSecureStorage();
 
   final Map<String, String> store = <String, String>{};
   final List<String> calls = <String>[];
 
-  /// Number of leading writes that fail with `errSecDuplicateItem`.
   int duplicateWrites = 0;
-
-  /// Failure every write raises, for keychains that never accept the entry.
   PlatformException? writeError;
 
   int maxConcurrent = 0;

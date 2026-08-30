@@ -32,25 +32,16 @@ class SharedPreferencesUtil {
   static const String _authTokenSecureKey = 'authToken';
   static const String _authTokenMigratedPrefsKey = 'authTokenSecureMigrated';
 
-  /// Plain prefs mirror for the Android background socket, the one native
-  /// reader that cannot reach secure storage. Other platforms keep the token in
-  /// the keychain only, so the migration is not undone by the mirror.
+  /// Plain prefs mirror for in-tree native readers (Android background socket).
   static const String _nativeAuthTokenPrefsKey = 'nativeAuthToken';
 
   static bool _mirrorNativeAuthToken = false;
 
-  /// `errSecDuplicateItem`. The keychain plugin writes with a check-then-add,
-  /// so an entry its probe cannot see — stored under another accessibility, or
-  /// added by a write racing this one — makes the add collide instead of update.
   static const int _duplicateKeychainItem = -25299;
 
-  /// Deletes with no accessibility in the query match the entry whatever
-  /// accessibility it was stored under; the default query would miss it.
   static const IOSOptions _anyAccessibilityIos = IOSOptions(accessibility: null);
   static const MacOsOptions _anyAccessibilityMacOs = MacOsOptions(accessibility: null);
 
-  /// Serializes keychain calls. The plugin answers each call on a background
-  /// queue, so two overlapping writes both take its add path and one loses.
   static Future<void> _secureQueue = Future<void>.value();
 
   factory SharedPreferencesUtil() {
@@ -62,8 +53,6 @@ class SharedPreferencesUtil {
   String get deviceIdHash => _preferences?.getString('deviceIdHash') ?? '';
   set deviceIdHash(String value) => _preferences?.setString('deviceIdHash', value);
 
-  /// [mirrorNativeAuthToken] exists because the host running `flutter test` is
-  /// never the Android device whose native reader the mirror serves.
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
@@ -111,11 +100,7 @@ class SharedPreferencesUtil {
       final existingSecure = await _readSecureAuthToken();
       if ((existingSecure == null || existingSecure.isEmpty) && legacyToken != null && legacyToken.isNotEmpty) {
         final persisted = await _writeSecureAuthToken(legacyToken);
-        if (!persisted) {
-          // Keychain unreachable (locked since boot). Keep the prefs copy and
-          // leave the flag unset so the next launch retries.
-          return;
-        }
+        if (!persisted) return;
       }
       if (legacyToken != null) {
         await prefs.remove('authToken');
@@ -128,9 +113,6 @@ class SharedPreferencesUtil {
     }
   }
 
-  /// Runs one keychain call after the previous one finishes. A failure is
-  /// reported as `null` rather than thrown: callers are fire-and-forget, and an
-  /// unhandled async error here is recorded as a fatal crash.
   static Future<T?> _runSecure<T extends Object>(String op, Future<T?> Function() action) {
     final result = Completer<T?>();
     _secureQueue = _secureQueue.then((_) async {
@@ -156,9 +138,6 @@ class SharedPreferencesUtil {
     return _runSecure<String>('read', () => storage.read(key: _authTokenSecureKey));
   }
 
-  /// Returns whether the token reached secure storage. A keychain locked since
-  /// boot fails every call, so callers that drop a plaintext copy must check
-  /// this instead of assuming the write landed.
   static Future<bool> _writeSecureAuthToken(String value) async {
     final fallback = _testSecureFallback;
     if (fallback != null) {
@@ -172,8 +151,6 @@ class SharedPreferencesUtil {
         await storage.write(key: _authTokenSecureKey, value: value);
       } on PlatformException catch (e) {
         if (!_isDuplicateKeychainItem(e)) rethrow;
-        // The entry exists but the plugin added instead of updated. Drop it at
-        // any accessibility and re-add, so the session survives the collision.
         await storage.delete(
           key: _authTokenSecureKey,
           iOptions: _anyAccessibilityIos,
@@ -206,10 +183,8 @@ class SharedPreferencesUtil {
     await _syncNativeAuthToken('');
   }
 
-  /// Android's background streaming service reads SharedPreferences natively,
-  /// so the live token is mirrored there for it. Where nothing reads the mirror
-  /// the token would sit in plaintext for no one, so the key is cleared instead
-  /// — including a copy an earlier build left behind.
+  /// Native Android still reads SharedPreferences. Mirror the live token there
+  /// under a dedicated key so background streaming survives the secure migration.
   static Future<void> _syncNativeAuthToken(String value) async {
     final prefs = _preferences;
     if (prefs == null) return;
