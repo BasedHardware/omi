@@ -734,7 +734,7 @@ class PushToTalkManager: ObservableObject {
 
   private func stopListening(endInterjectHold: Bool = true) {
     if endInterjectHold {
-      FloatingControlBarManager.shared.interjectPushToTalkDidEnd()
+      FloatingControlBarManager.shared.interjectPushToTalkDidCancel()
     }
     if let turnID = currentVoiceTurnID,
       voiceTurnCoordinator.activeTurnID == turnID

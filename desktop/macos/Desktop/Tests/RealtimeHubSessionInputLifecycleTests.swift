@@ -405,6 +405,53 @@ import XCTest
       XCTAssertFalse(accepted, "Gemini must refuse a trusted instruction with no activity window")
     }
 
+    func testTrustedTurnInstructionUsesOpenAIResponseCreateInstructions() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .openai, delegate: delegate)
+      session.markReadyForTesting()
+      _ = await session.inputLifecycleSnapshot()
+
+      let accepted = await session.sendTrustedTurnInstruction("TURN INSTRUCTION")
+      XCTAssertTrue(accepted, "an open OpenAI session accepts a trusted instruction by parking it")
+      let parked = await session.inputLifecycleSnapshot()
+      XCTAssertNil(
+        parked.testingLastResponseInstruction,
+        "parking must not send response.create yet")
+      XCTAssertNil(
+        parked.testingLastConversationItemRole,
+        "a trusted instruction must not be a durable conversation item")
+
+      session.commitInputTurn()
+      let committed = await session.inputLifecycleSnapshot()
+      XCTAssertEqual(committed.testingResponseCreateCount, 1)
+      XCTAssertEqual(committed.testingLastResponseInstruction, "TURN INSTRUCTION")
+      XCTAssertNil(
+        committed.testingLastConversationItemRole,
+        "response.create instructions must not create a system conversation item")
+    }
+
+    func testGeminiFlushesAParkedTrustedInstructionBeforeAPendingCommitClosesTheWindow() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+      _ = await session.inputLifecycleSnapshot()
+
+      let refusedWhileIdle = await session.sendTrustedTurnInstruction("TURN INSTRUCTION")
+      XCTAssertFalse(refusedWhileIdle)
+
+      session.commitInputTurn()
+      session.beginInputTurn()
+      let committed = await session.inputLifecycleSnapshot()
+      XCTAssertEqual(
+        committed.testingLastRealtimeInputText, "TURN INSTRUCTION",
+        "the parked instruction must land inside the activity window before activityEnd")
+      XCTAssertFalse(committed.activityOpen)
+      XCTAssertFalse(committed.pendingCommit)
+
+      let replay = await session.sendTrustedTurnInstruction("TURN INSTRUCTION")
+      XCTAssertTrue(replay, "a flushed instruction is confirmed on retry without a second send")
+    }
+
     func testGeminiBackgroundAgentContextRefusesWithoutAnActivityWindow() async {
       // Gemini can only accept text inside an open activity window; without one,
       // sendTextInput would buffer. Background context must instead refuse so the

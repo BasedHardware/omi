@@ -3739,10 +3739,21 @@ class FloatingControlBarManager {
   }
 
   func interjectPushToTalkDidEnd() {
+    endInterjectHoldVisually()
+    // Finalize / PTT-up: keep an unconfirmed classification inject so this
+    // turn's input window can still accept it.
+    InterjectClassificationDelivery.shared.pttDidRelease()
+  }
+
+  func interjectPushToTalkDidCancel() {
+    endInterjectHoldVisually()
+    InterjectClassificationDelivery.shared.pttDidCancel()
+  }
+
+  private func endInterjectHoldVisually() {
     interjectPTTHoldActive = false
     window?.state.interjectReplyingToTitle = nil
     resumeInterjectTimerIfIdle()
-    InterjectClassificationDelivery.shared.pttDidEnd()
   }
 
   func recentNotchCardTitle() -> String? {

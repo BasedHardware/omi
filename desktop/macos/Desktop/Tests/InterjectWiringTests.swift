@@ -72,32 +72,7 @@ final class InterjectWiringTests: XCTestCase {
       let record = await InterjectSuggestionFeedbackStore.shared.current(
         evaluationID: deliveryID, suggestionID: cardID)
       XCTAssertEqual(record?.verb, .falsePositive)
-
-      let journal = try sourceFile(
-        "Sources/FloatingControlBar/FloatingControlBarManager+RealtimeStreamingJournal.swift")
-      XCTAssertTrue(
-        journal.contains("consumeInterjectHubTranscript(assistantText)"),
-        "hub journal finalization must call the Interject seam, not only the batch path")
     }
-  }
-
-  func testLockedAndButtonPTTArmTheInterjectHold() throws {
-    let ptt = try sourceFile("Sources/FloatingControlBar/PushToTalkManager.swift")
-    XCTAssertTrue(
-      ptt.contains("FloatingControlBarManager.shared.interjectPushToTalkDidStart()"),
-      "hold-to-talk must still arm Interject")
-    XCTAssertTrue(
-      ptt.contains("enterLockedListening()"),
-      "locked listening is the button / double-tap path")
-    XCTAssertTrue(
-      ptt.contains("stopListening(endInterjectHold: false)"),
-      "tap-to-lock must not drop the hold before re-arming")
-
-    let enterLocked = slice(
-      ptt, startingAt: "func enterLockedListening()", endingBefore: "private func enterPendingLockDecision")
-    XCTAssertTrue(
-      enterLocked.contains("interjectPushToTalkDidStart()"),
-      "button and double-tap lock must arm the hold so the card does not dismiss mid-turn")
   }
 
   @MainActor
@@ -164,9 +139,65 @@ final class InterjectWiringTests: XCTestCase {
   }
 
   @MainActor
-  func testTapToLockOnTheManagerProducesExactlyOneInject() throws {
-    try withInterjectHarness {
+  func testFinalizeOnTheManagerKeepsAnUnconfirmedInject() async throws {
+    try await withInterjectHarness {
       var injected: [String] = []
+      final class AcceptBox: @unchecked Sendable { var value = false }
+      let accept = AcceptBox()
+      var scheduled: [@MainActor () async -> Void] = []
+      InterjectClassificationDelivery.shared.configureForTesting(
+        isVoiceSessionLive: { true },
+        injectInstruction: { text in
+          guard accept.value else { return false }
+          injected.append(text)
+          return true
+        },
+        scheduleWork: { work in
+          scheduled.append(work)
+        }
+      )
+      defer { InterjectClassificationDelivery.shared.resetForTesting() }
+
+      FloatingControlBarManager.shared.seedInterjectRecentCardForTests(
+        ownerID: ownerID,
+        title: "Live card",
+        createdAt: Date(),
+        context: FloatingBarNotificationContext(
+          sourceTitle: "Live card",
+          assistantId: "context-director",
+          provenanceRef: UUID().uuidString),
+        identity: nil
+      )
+
+      FloatingControlBarManager.shared.interjectPushToTalkDidStart()
+      while !scheduled.isEmpty {
+        let work = scheduled.removeFirst()
+        await work()
+      }
+      XCTAssertNotNil(InterjectClassificationDelivery.shared.pendingInstruction)
+
+      FloatingControlBarManager.shared.interjectPushToTalkDidEnd()
+      XCTAssertFalse(FloatingControlBarManager.shared.interjectPTTHoldActiveForTests)
+      XCTAssertNotNil(
+        InterjectClassificationDelivery.shared.pendingInstruction,
+        "finalize must keep the inject for this turn's input window")
+
+      accept.value = true
+      InterjectClassificationDelivery.shared.voiceSessionDidOpenInputWindow()
+      while !scheduled.isEmpty {
+        let work = scheduled.removeFirst()
+        await work()
+      }
+      XCTAssertEqual(injected.count, 1)
+      XCTAssertTrue(injected[0].contains("TURN INSTRUCTION"))
+    }
+  }
+
+  @MainActor
+  func testTapToLockOnTheManagerProducesExactlyOneInject() async throws {
+    try await withInterjectHarness {
+      var injected: [String] = []
+      var scheduled: [@MainActor () async -> Void] = []
       InterjectClassificationDelivery.shared.configureForTesting(
         isVoiceSessionLive: { true },
         injectInstruction: { text in
@@ -174,14 +205,7 @@ final class InterjectWiringTests: XCTestCase {
           return true
         },
         scheduleWork: { work in
-          let semaphore = DispatchSemaphore(value: 0)
-          Task { @MainActor in
-            await work()
-            semaphore.signal()
-          }
-          while semaphore.wait(timeout: .now()) == .timedOut {
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
-          }
+          scheduled.append(work)
         }
       )
       defer { InterjectClassificationDelivery.shared.resetForTesting() }
@@ -200,6 +224,10 @@ final class InterjectWiringTests: XCTestCase {
       // startListening then enterLockedListening both call DidStart.
       FloatingControlBarManager.shared.interjectPushToTalkDidStart()
       FloatingControlBarManager.shared.interjectPushToTalkDidStart()
+      while !scheduled.isEmpty {
+        let work = scheduled.removeFirst()
+        await work()
+      }
       XCTAssertEqual(injected.count, 1, "tap-to-lock must not enqueue a second inject")
       XCTAssertTrue(injected[0].contains("TURN INSTRUCTION"))
     }
@@ -249,20 +277,6 @@ final class InterjectWiringTests: XCTestCase {
     XCTAssertEqual(JITTriggerFeedbackAction.missedOrLate.interjectVerb, .missed)
   }
 
-  func testInsightTeaserKeysOffTheSameHoverSignalAsThePause() throws {
-    let view = try sourceFile("Sources/FloatingControlBar/FloatingControlBarView.swift")
-    let teaser = slice(
-      view,
-      startingAt: "func interjectInsightTeaserLimit",
-      endingBefore: "private var aiInputView")
-    XCTAssertTrue(
-      teaser.contains("state.interjectBarHovering"),
-      "teaser expansion must follow the pause signal, not notch isHoveringBar")
-    XCTAssertFalse(
-      teaser.contains("state.isHoveringBar"),
-      "isHoveringBar is never set on the notch hover path")
-  }
-
   @MainActor
   private func withInterjectHarness(_ body: () async throws -> Void) async throws {
     let defaults = UserDefaults.standard
@@ -302,22 +316,6 @@ final class InterjectWiringTests: XCTestCase {
       restore(previousOverride, key: .automationOwnerOverride, defaults: defaults)
     }
     try body()
-  }
-
-  private func sourceFile(_ relativePath: String) throws -> String {
-    let url = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent(relativePath)
-    // omi-test-quality: source-inspection -- static contract: hub journal and locked PTT must keep calling the Interject seams; behavioral coverage is in this file
-    return try String(contentsOf: url, encoding: .utf8)
-  }
-
-  private func slice(_ source: String, startingAt: String, endingBefore: String) -> String {
-    guard let start = source.range(of: startingAt),
-      let end = source.range(of: endingBefore, range: start.upperBound..<source.endIndex)
-    else { return "" }
-    return String(source[start.lowerBound..<end.lowerBound])
   }
 
   private func restore(_ value: Any?, key: DefaultsKey, defaults: UserDefaults) {

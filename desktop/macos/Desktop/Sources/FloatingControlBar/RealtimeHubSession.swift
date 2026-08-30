@@ -68,6 +68,8 @@ enum RealtimeHubBargeInStrategy: Equatable {
     let testingResponseCreateCount: Int
     let testingLastResponseToolChoice: String?
     let testingLastResponseInstruction: String?
+    let testingLastConversationItemRole: String?
+    let testingLastRealtimeInputText: String?
   }
 #endif
 
@@ -123,6 +125,8 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     private var testingResponseCreateCount = 0
     private var testingLastResponseToolChoice: String?
     private var testingLastResponseInstruction: String?
+    private var testingLastConversationItemRole: String?
+    private var testingLastRealtimeInputText: String?
     /// When set, the testing transport reports this error from `send`, so a
     /// confirmed-delivery caller can be tested against a failed provider send.
     private var testingForcedSendError: Error?
@@ -139,6 +143,11 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   private var pendingVideo: [(b64: String, mime: String)] = []
   /// Headless-test text awaiting a provider-acceptable input window.
   private var pendingTextInputs: [(text: String, logLabel: String)] = []
+  /// Per-turn Interject / trusted instruction. OpenAI applies it on the next
+  /// `response.create`; Gemini flushes it as text inside the activity window.
+  /// Not a durable conversation item — abandon and stop drop it.
+  private var pendingTrustedTurnInstruction: String?
+  private var flushedTrustedTurnInstruction: String?
   private var pendingCommit = false
   /// OpenAI: call_id → function name, captured from response.output_item.added.
   private var openAIFunctionNames: [String: String] = [:]
@@ -279,6 +288,8 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     pendingAudio.removeAll()
     pendingVideo.removeAll()
     pendingTextInputs.removeAll()
+    pendingTrustedTurnInstruction = nil
+    flushedTrustedTurnInstruction = nil
     pendingCommit = false
     openAIFunctionNames.removeAll()
     dispatchedToolItems.removeAll()
@@ -389,7 +400,9 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
               inputIdentityCount: self.openAIInputItemIdentities.count,
               testingResponseCreateCount: self.testingResponseCreateCount,
               testingLastResponseToolChoice: self.testingLastResponseToolChoice,
-              testingLastResponseInstruction: self.testingLastResponseInstruction))
+              testingLastResponseInstruction: self.testingLastResponseInstruction,
+              testingLastConversationItemRole: self.testingLastConversationItemRole,
+              testingLastRealtimeInputText: self.testingLastRealtimeInputText))
         }
       }
     }
@@ -497,28 +510,72 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   /// becomes ready (`hubDidOpenInputWindow`). When it can, `true` follows the
   /// provider send's completion, not a fire-and-forget enqueue.
   func sendBackgroundAgentContext(_ text: String) async -> Bool {
-    await sendConfirmedContext(text, trusted: false)
+    await sendConfirmedContext(text)
   }
 
-  /// Same confirmed, non-buffering contract as `sendBackgroundAgentContext`,
-  /// but OpenAI uses a system-role item so a turn instruction is not a user
-  /// utterance in session history. Gemini has no role channel — text only.
+  /// Same confirmed, non-buffering contract as `sendBackgroundAgentContext`.
+  /// OpenAI parks the text for this turn's `response.create` `instructions`
+  /// (not a durable conversation item). Gemini sends it only inside an open
+  /// activity window, or parks it for `beginInputTurn` / `commitInputTurnNow`
+  /// to flush before `activityEnd`. A closed socket still refuses.
   func sendTrustedTurnInstruction(_ text: String) async -> Bool {
-    await sendConfirmedContext(text, trusted: true)
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        guard let self else {
+          continuation.resume(returning: false)
+          return
+        }
+        if self.flushedTrustedTurnInstruction == text {
+          continuation.resume(returning: true)
+          return
+        }
+        guard self.isOpen else {
+          continuation.resume(returning: false)
+          return
+        }
+        self.pendingTrustedTurnInstruction = text
+        continuation.resume(returning: self.flushTrustedTurnInstructionIfPossible())
+      }
+    }
   }
 
-  private func sendConfirmedContext(_ text: String, trusted: Bool) async -> Bool {
+  func clearTrustedTurnInstruction() {
+    q.async { [weak self] in
+      self?.pendingTrustedTurnInstruction = nil
+      self?.flushedTrustedTurnInstruction = nil
+    }
+  }
+
+  private func sendConfirmedContext(_ text: String) async -> Bool {
     await withCheckedContinuation { continuation in
       q.async { [weak self] in
         guard let self, self.canAcceptInjectedContext else {
           continuation.resume(returning: false)
           return
         }
-        let json = trusted ? self.trustedInstructionWire(text) : self.textInputWire(text)
-        self.send(json: json) { error in
+        self.send(json: self.textInputWire(text)) { error in
           continuation.resume(returning: error == nil)
         }
       }
+    }
+  }
+
+  /// Gemini: send now if the activity window is open. OpenAI: accepted once
+  /// the socket is open — the text stays parked for `requestResponse`.
+  @discardableResult
+  private func flushTrustedTurnInstructionIfPossible() -> Bool {
+    guard let text = pendingTrustedTurnInstruction else {
+      return flushedTrustedTurnInstruction != nil
+    }
+    switch provider {
+    case .openai:
+      return isOpen
+    case .gemini:
+      guard isOpen, activityOpen else { return false }
+      send(json: textInputWire(text))
+      flushedTrustedTurnInstruction = text
+      pendingTrustedTurnInstruction = nil
+      return true
     }
   }
 
@@ -662,24 +719,6 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
   }
 
-  /// OpenAI system-role item for trusted turn instructions. Gemini has no
-  /// separate role channel, so the same text input as background context.
-  private func trustedInstructionWire(_ text: String) -> [String: Any] {
-    switch provider {
-    case .gemini:
-      return ["realtimeInput": ["text": text]]
-    case .openai:
-      return [
-        "type": "conversation.item.create",
-        "item": [
-          "type": "message",
-          "role": "system",
-          "content": [["type": "input_text", "text": text]],
-        ],
-      ]
-    }
-  }
-
   private func sendTextInputNow(_ text: String, logLabel: String) {
     send(json: textInputWire(text))
     log("\(tag): \(logLabel) sent (\(text.count) chars)")
@@ -691,7 +730,8 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   func beginInputTurn(
     turnID: VoiceTurnID? = nil,
     responseID: VoiceResponseID? = nil,
-    interrupting: Bool = false
+    interrupting: Bool = false,
+    trustedTurnInstruction: String? = nil
   ) {
     q.async { [weak self] in
       guard let self else { return }
@@ -703,7 +743,18 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         self.activeEventIdentity = nil
       }
       self.postToolContinuationAttempted = false
+      if self.provider == .openai, let trustedTurnInstruction {
+        self.pendingTrustedTurnInstruction = trustedTurnInstruction
+      }
       guard self.provider == .gemini else { return }
+      // A second begin on an already-open window must not reset flush state
+      // or the commit that follows would send the instruction twice.
+      if !self.activityOpen {
+        self.flushedTrustedTurnInstruction = nil
+        if let trustedTurnInstruction {
+          self.pendingTrustedTurnInstruction = trustedTurnInstruction
+        }
+      }
       // Barge-in on a live Gemini generation uses a fresh session at the controller
       // boundary. This same-session flag is only a local gate for abandoned/stale
       // Gemini events that arrive before replacement or on non-provider interruptions.
@@ -717,6 +768,10 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         self.send(json: ["realtimeInput": ["activityStart": [:]]])
         self.flushPendingAudioIfReady()
         self.flushPendingTextInputs()
+        // Flush a parked trusted instruction inside this window, before a
+        // pending commit can close it. Interject's MainActor retry is too late
+        // for that race.
+        self.flushTrustedTurnInstructionIfPossible()
         log("\(self.tag): turn begin (activityStart\(interrupting ? ", interrupting in-flight reply" : ""))")
         // The activity window is open — the session can now accept injected
         // context. Signal delivery so a background completion left unadvanced
@@ -748,6 +803,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   private func commitInputTurnNow() {
     flushPendingAudioIfReady()
     flushPendingTextInputs()
+    flushTrustedTurnInstructionIfPossible()
     log("\(tag): turn committed")
     switch provider {
     case .openai:
@@ -776,6 +832,8 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       self.pendingAudio.removeAll()
       self.pendingVideo.removeAll()
       self.pendingTextInputs.removeAll()
+      self.pendingTrustedTurnInstruction = nil
+      self.flushedTrustedTurnInstruction = nil
       self.pendingCommit = false
       self.pendingActivityStart = false
       self.activeEventIdentity = nil
@@ -964,8 +1022,13 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     if let toolChoice {
       response["tool_choice"] = toolChoice
     }
-    if let instructions {
-      response["instructions"] = instructions
+    let resolvedInstructions = instructions ?? pendingTrustedTurnInstruction
+    if let resolvedInstructions {
+      response["instructions"] = resolvedInstructions
+    }
+    if instructions == nil, let parked = pendingTrustedTurnInstruction {
+      flushedTrustedTurnInstruction = parked
+      pendingTrustedTurnInstruction = nil
     }
     log("\(tag): response.create reason=\(reason) tool_choice=\(toolChoice ?? "session_default")")
     send(json: ["type": "response.create", "response": response])
@@ -1585,6 +1648,14 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           testingResponseCreateCount += 1
           testingLastResponseToolChoice = (json["response"] as? [String: Any])?["tool_choice"] as? String
           testingLastResponseInstruction = (json["response"] as? [String: Any])?["instructions"] as? String
+        }
+        if (json["type"] as? String) == "conversation.item.create" {
+          testingLastConversationItemRole = (json["item"] as? [String: Any])?["role"] as? String
+        }
+        if let realtime = json["realtimeInput"] as? [String: Any],
+          let text = realtime["text"] as? String
+        {
+          testingLastRealtimeInputText = text
         }
         // Lets tests exercise a failed send so callers that gate on delivery
         // (sendBackgroundAgentContext → exactly-once checkpoint) can be verified.

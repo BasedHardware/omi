@@ -449,7 +449,8 @@ extension RealtimeHubController {
       // PTT-up can beat asynchronous context preparation. Queue begin before
       // commit on the session transport so Gemini always has activityStart and
       // OpenAI always has an immutable event identity.
-      s.beginInputTurn(
+      beginLiveInputTurn(
+        s,
         turnID: turnID,
         responseID: voiceResponseID,
         interrupting: reducerInterruptsPreviousTurn)
