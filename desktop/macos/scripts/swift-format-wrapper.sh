@@ -136,8 +136,31 @@ case "$cmd" in
     ;;
   format)
     shift
+    # Generated sources are excluded from the formatter, and `scope` already says so —
+    # but this subcommand took whatever it was handed. A `format -i $(git diff
+    # --name-only)` over a tree with regenerated output silently reformats it, and the
+    # result only fails later, in generate-tool-surfaces --check. Drop them here, where
+    # the rule can actually be enforced.
+    format_args=()
+    kept_files=0
+    for arg in "$@"; do
+      if [ -f "$arg" ] && case "$(cd "$(dirname "$arg")" && pwd)/$(basename "$arg")" in
+        "$GENERATED_DIR"/*) true ;;
+        *) false ;;
+      esac; then
+        echo "swift-format: skipping generated source $arg" >&2
+        continue
+      fi
+      [ -f "$arg" ] && kept_files=$((kept_files + 1))
+      format_args+=("$arg")
+    done
+    # Flags alone are not work: swift-format reads stdin and rejects --in-place.
+    if [ ${#format_args[@]} -eq 0 ] || { [ "$kept_files" -eq 0 ] && [ $# -gt 0 ]; }; then
+      echo "swift-format: nothing to format (all inputs were generated sources)" >&2
+      exit 0
+    fi
     bootstrap >&2
-    exec "$BINARY" format --configuration "$CONFIG_FILE" "$@"
+    exec "$BINARY" format --configuration "$CONFIG_FILE" "${format_args[@]}"
     ;;
   scope)
     # List all first-party hand-written Swift files, excluding generated sources.

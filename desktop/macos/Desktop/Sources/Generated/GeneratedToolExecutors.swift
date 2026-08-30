@@ -60,7 +60,7 @@ enum GeneratedToolExecutors {
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
     "start_file_scan": .scanFiles,
-    "get_file_scan_results": .scanFiles,
+    "get_file_scan_results": .scanFiles
   ]
 
   static let executorByTool: [GeneratedSwiftTool: GeneratedSwiftToolExecutor] = [
@@ -106,7 +106,7 @@ enum GeneratedToolExecutors {
     .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,
     .renderChatBlocks: .chatToolExecutor,
-    .showRewindEvidence: .chatToolExecutor,
+    .showRewindEvidence: .chatToolExecutor
   ]
 
   static func resolve(_ name: String) -> GeneratedSwiftTool? {
@@ -126,9 +126,9 @@ enum GeneratedToolExecutors {
       executorByTool.compactMap { tool, executor in
         executor == .chatToolExecutor ? tool.rawValue : nil
       }
-        + aliasToCanonical.compactMap { alias, tool in
-          executorByTool[tool] == .chatToolExecutor ? alias : nil
-        }
+      + aliasToCanonical.compactMap { alias, tool in
+        executorByTool[tool] == .chatToolExecutor ? alias : nil
+      }
     )
   }
 
