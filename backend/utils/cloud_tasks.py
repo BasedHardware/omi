@@ -19,11 +19,13 @@ import uuid
 from typing import Any, Dict, Literal, NamedTuple, Optional
 
 from fastapi import HTTPException, Request
-from google.api_core.exceptions import AlreadyExists
+from google.api_core.exceptions import AlreadyExists, NotFound
 from google.auth.transport import requests as google_auth_requests
 from google.cloud import tasks_v2
 from google.oauth2 import id_token
 from google.protobuf import duration_pb2
+
+from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
@@ -89,8 +91,30 @@ def is_audio_merge_dispatch_enabled() -> bool:
     return os.getenv('AUDIO_MERGE_DISPATCH_MODE', 'inline') == 'cloud_tasks'
 
 
+# The production customer data plane, per INV-DATA-1
+# (docs/product/invariants/data-plane-continuity.md).
+PRODUCTION_DATA_PROJECTS = frozenset({'based-hardware'})
+
+
 def is_account_deletion_dispatch_enabled() -> bool:
     return os.getenv('ACCOUNT_DELETION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
+
+
+def assert_inline_account_deletion_permitted() -> None:
+    """Refuse to execute a wipe in-process against production data.
+
+    ``OMI_ENV_STAGE`` is unset on a developer machine, so the production guard
+    below returns early there while ``.env`` still points at the production
+    project. That combination made a local backend run a wipe executor for real
+    accounts. The project a process is pointed at is the honest test, and it is
+    one no local run can forget to set.
+    """
+    project = (os.getenv('GOOGLE_CLOUD_PROJECT') or os.getenv('SYNC_TASKS_PROJECT') or '').strip()
+    if project and project in PRODUCTION_DATA_PROJECTS:
+        raise RuntimeError(
+            f'refusing inline account-deletion execution against production project {project!r}; '
+            'set ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks so the OIDC handler owns the wipe'
+        )
 
 
 def validate_account_deletion_dispatch_configuration() -> None:
@@ -118,6 +142,33 @@ def validate_account_deletion_dispatch_configuration() -> None:
     missing = [name for name in required_env if not os.getenv(name, '').strip()]
     if missing:
         raise RuntimeError(f'production account-deletion Cloud Tasks config is incomplete: {", ".join(missing)}')
+
+    assert_account_deletion_queue_exists()
+
+
+def assert_account_deletion_queue_exists(client: Any = None) -> None:
+    """Prove the configured queue resolves, not merely that its name is set.
+
+    Reading env vars said "configured" for a month while the queue did not
+    exist, so every dispatch 404'd behind an accepted deletion request. Only a
+    definitive NotFound fails startup; an unreachable Cloud Tasks API is an
+    unanswered question, not a proven absence.
+    """
+    project = os.getenv('SYNC_TASKS_PROJECT', '').strip()
+    location = os.getenv('SYNC_TASKS_LOCATION', '').strip()
+    queue = os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip()
+    if not all([project, location, queue]):
+        return
+    resolved = client or _get_tasks_client()
+    try:
+        resolved.get_queue(name=resolved.queue_path(project, location, queue))
+    except NotFound as exc:
+        raise RuntimeError(
+            f'account-deletion Cloud Tasks queue {queue!r} does not exist in {project}/{location}; '
+            'an accepted deletion request would have no executor'
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 - availability is not absence
+        logger.warning('account-deletion queue existence probe inconclusive: %s', sanitize(str(exc)))
 
 
 def is_listen_finalization_dispatch_enabled() -> bool:
