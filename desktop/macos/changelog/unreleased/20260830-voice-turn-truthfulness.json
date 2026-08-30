@@ -1,3 +1,0 @@
-{
-  "change": "Voice turns that get cut off are no longer recorded as finished answers, so Omi stops re-asking what you already said, and a task that fails to save is no longer spoken as saved"
-}
