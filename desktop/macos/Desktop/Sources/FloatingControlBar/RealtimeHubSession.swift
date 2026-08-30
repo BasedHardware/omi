@@ -497,13 +497,25 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   /// becomes ready (`hubDidOpenInputWindow`). When it can, `true` follows the
   /// provider send's completion, not a fire-and-forget enqueue.
   func sendBackgroundAgentContext(_ text: String) async -> Bool {
+    await sendConfirmedContext(text, trusted: false)
+  }
+
+  /// Same confirmed, non-buffering contract as `sendBackgroundAgentContext`,
+  /// but OpenAI uses a system-role item so a turn instruction is not a user
+  /// utterance in session history. Gemini has no role channel — text only.
+  func sendTrustedTurnInstruction(_ text: String) async -> Bool {
+    await sendConfirmedContext(text, trusted: true)
+  }
+
+  private func sendConfirmedContext(_ text: String, trusted: Bool) async -> Bool {
     await withCheckedContinuation { continuation in
       q.async { [weak self] in
         guard let self, self.canAcceptInjectedContext else {
           continuation.resume(returning: false)
           return
         }
-        self.send(json: self.textInputWire(text)) { error in
+        let json = trusted ? self.trustedInstructionWire(text) : self.textInputWire(text)
+        self.send(json: json) { error in
           continuation.resume(returning: error == nil)
         }
       }
@@ -644,6 +656,24 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         "item": [
           "type": "message",
           "role": "user",
+          "content": [["type": "input_text", "text": text]],
+        ],
+      ]
+    }
+  }
+
+  /// OpenAI system-role item for trusted turn instructions. Gemini has no
+  /// separate role channel, so the same text input as background context.
+  private func trustedInstructionWire(_ text: String) -> [String: Any] {
+    switch provider {
+    case .gemini:
+      return ["realtimeInput": ["text": text]]
+    case .openai:
+      return [
+        "type": "conversation.item.create",
+        "item": [
+          "type": "message",
+          "role": "system",
           "content": [["type": "input_text", "text": text]],
         ],
       ]

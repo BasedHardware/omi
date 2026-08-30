@@ -3733,18 +3733,16 @@ class FloatingControlBarManager {
     } else if let title = recentNotchCardTitle() {
       window?.state.interjectReplyingToTitle = title
     }
-    if shouldAttachInterjectClassification() {
-      let instruction = InterjectVoiceFeedbackRouting.trustedTurnInstruction
-      Task {
-        await RealtimeHubController.shared.injectTrustedTurnInstruction(instruction)
-      }
-    }
+    InterjectClassificationDelivery.shared.pttDidStart(
+      shouldAttach: shouldAttachInterjectClassification()
+    )
   }
 
   func interjectPushToTalkDidEnd() {
     interjectPTTHoldActive = false
     window?.state.interjectReplyingToTitle = nil
     resumeInterjectTimerIfIdle()
+    InterjectClassificationDelivery.shared.pttDidEnd()
   }
 
   func recentNotchCardTitle() -> String? {
@@ -3770,6 +3768,22 @@ class FloatingControlBarManager {
 
   func consumeInterjectVoiceReply(_ text: String) {
     Task { await consumeInterjectVoiceReplyAsync(text) }
+  }
+
+  /// JIT verdict buttons share the Interject ledger only when the flag is on.
+  /// Flag-off must stay byte-identical: no store row, no
+  /// `Suggestion Feedback Recorded`. The pre-existing
+  /// `JITTriggerFeedbackActionRouter.record` call is unchanged.
+  func recordInterjectJITVerdictIfEnabled(
+    identity: SuggestionAssistantTelemetry.NotificationIdentity,
+    verb: InterjectFeedbackVerb
+  ) async {
+    guard InterjectFeature.isEnabled else { return }
+    await InterjectSuggestionFeedbackMutation.record(
+      evaluationID: identity.evaluationID,
+      suggestionID: identity.suggestionID,
+      verb: verb
+    )
   }
 
   func consumeInterjectVoiceReplyAsync(_ text: String) async {

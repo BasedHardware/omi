@@ -163,6 +163,75 @@ final class InterjectWiringTests: XCTestCase {
     }
   }
 
+  @MainActor
+  func testTapToLockOnTheManagerProducesExactlyOneInject() throws {
+    try withInterjectHarness {
+      var injected: [String] = []
+      InterjectClassificationDelivery.shared.configureForTesting(
+        isVoiceSessionLive: { true },
+        injectInstruction: { text in
+          injected.append(text)
+          return true
+        },
+        scheduleWork: { work in
+          let semaphore = DispatchSemaphore(value: 0)
+          Task { @MainActor in
+            await work()
+            semaphore.signal()
+          }
+          while semaphore.wait(timeout: .now()) == .timedOut {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
+          }
+        }
+      )
+      defer { InterjectClassificationDelivery.shared.resetForTesting() }
+
+      FloatingControlBarManager.shared.seedInterjectRecentCardForTests(
+        ownerID: ownerID,
+        title: "Live card",
+        createdAt: Date(),
+        context: FloatingBarNotificationContext(
+          sourceTitle: "Live card",
+          assistantId: "context-director",
+          provenanceRef: UUID().uuidString),
+        identity: nil
+      )
+
+      // startListening then enterLockedListening both call DidStart.
+      FloatingControlBarManager.shared.interjectPushToTalkDidStart()
+      FloatingControlBarManager.shared.interjectPushToTalkDidStart()
+      XCTAssertEqual(injected.count, 1, "tap-to-lock must not enqueue a second inject")
+      XCTAssertTrue(injected[0].contains("TURN INSTRUCTION"))
+    }
+  }
+
+  @MainActor
+  func testFlagOffJITVerdictWritesNoLedgerAndEmitsNoAnalytics() async throws {
+    try await withInterjectHarness {
+      InterjectFeature.testOverride = false
+      var events: [String] = []
+      AnalyticsManager.shared.setSuggestionAssistantTelemetryCaptureForTests { event, _ in
+        events.append(event)
+      }
+      defer { AnalyticsManager.shared.setSuggestionAssistantTelemetryCaptureForTests(nil) }
+
+      let evaluation = try XCTUnwrap(UUID(uuidString: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"))
+      let suggestion = try XCTUnwrap(UUID(uuidString: "ffffffff-ffff-ffff-ffff-ffffffffffff"))
+      await FloatingControlBarManager.shared.recordInterjectJITVerdictIfEnabled(
+        identity: SuggestionAssistantTelemetry.NotificationIdentity(
+          evaluationID: evaluation, suggestionID: suggestion),
+        verb: .useful
+      )
+
+      let record = await InterjectSuggestionFeedbackStore.shared.current(
+        evaluationID: evaluation, suggestionID: suggestion)
+      XCTAssertNil(record, "flag-off JIT must not write the Interject store")
+      XCTAssertFalse(
+        events.contains("Suggestion Feedback Recorded"),
+        "flag-off JIT must not emit Suggestion Feedback Recorded")
+    }
+  }
+
   func testContextDirectorFeedbackIdentityDoesNotNeedSuggestionTelemetry() {
     let delivery = UUID()
     let card = FloatingBarNotification(
@@ -203,7 +272,9 @@ final class InterjectWiringTests: XCTestCase {
     defaults.set(ownerID, forKey: .authUserId)
     InterjectFeature.testOverride = true
     FloatingControlBarManager.shared.resetOwnerProjection()
+    InterjectClassificationDelivery.shared.resetForTesting()
     defer {
+      InterjectClassificationDelivery.shared.resetForTesting()
       FloatingControlBarManager.shared.resetOwnerProjection()
       InterjectFeature.testOverride = nil
       restore(previousOwner, key: .authUserId, defaults: defaults)
@@ -222,7 +293,9 @@ final class InterjectWiringTests: XCTestCase {
     defaults.set(ownerID, forKey: .authUserId)
     InterjectFeature.testOverride = true
     FloatingControlBarManager.shared.resetOwnerProjection()
+    InterjectClassificationDelivery.shared.resetForTesting()
     defer {
+      InterjectClassificationDelivery.shared.resetForTesting()
       FloatingControlBarManager.shared.resetOwnerProjection()
       InterjectFeature.testOverride = nil
       restore(previousOwner, key: .authUserId, defaults: defaults)

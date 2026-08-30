@@ -702,9 +702,8 @@ struct FloatingControlBarView: View {
     else { return }
     let identity = notification.feedbackIdentity
     Task {
-      await InterjectSuggestionFeedbackMutation.record(
-        evaluationID: identity.evaluationID,
-        suggestionID: identity.suggestionID,
+      await FloatingControlBarManager.shared.recordInterjectJITVerdictIfEnabled(
+        identity: identity,
         verb: action.interjectVerb)
       await JITTriggerFeedbackActionRouter.record(
         action,

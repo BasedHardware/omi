@@ -60,4 +60,21 @@ final class InterjectDisplayDurationTests: XCTestCase {
       4
     )
   }
+
+  func testInsightDurationUsesTheTeaserNotTheUnexpandedBody() {
+    let longBody = Array(repeating: "word", count: 40).joined(separator: " ")
+    let teaser = InterjectDisplayDuration.teaserText(of: longBody)
+    XCTAssertEqual(InterjectDisplayDuration.wordCount(in: teaser), 12)
+
+    // insight base 5s + (title 1 + teaser 12) * 0.25s = 8.25s
+    XCTAssertEqual(
+      InterjectDisplayDuration.timeout(title: "Title", message: longBody, kind: .insight),
+      8.25
+    )
+    // A task still counts the full body and hits the 14s clamp.
+    XCTAssertEqual(
+      InterjectDisplayDuration.timeout(title: "Title", message: longBody, kind: .task),
+      14
+    )
+  }
 }

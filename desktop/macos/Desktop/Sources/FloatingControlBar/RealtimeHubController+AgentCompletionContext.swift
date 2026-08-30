@@ -16,9 +16,10 @@ extension RealtimeHubController {
   }
 
   /// Trusted turn instruction — not quoted card body. Callers must not wrap
-  /// this in `NotchCardVoiceDelivery.contextBlock`.
+  /// this in `NotchCardVoiceDelivery.contextBlock`. OpenAI goes out as a
+  /// system-role item so it is not a user turn in session history.
   func injectTrustedTurnInstruction(_ text: String) async -> Bool {
     guard let session else { return false }
-    return await session.sendBackgroundAgentContext(text)
+    return await session.sendTrustedTurnInstruction(text)
   }
 }

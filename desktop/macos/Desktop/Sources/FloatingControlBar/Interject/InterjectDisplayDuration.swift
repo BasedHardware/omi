@@ -28,13 +28,29 @@ enum InterjectDisplayDuration {
     text.split { $0.isWhitespace || $0.isNewline }.count
   }
 
-  /// `base + 250ms/word`, clamped to 4…14s.
+  /// Insight cards render one line until hover. Duration follows that teaser
+  /// so a long body the user has not expanded cannot pin the card at 14s.
+  static let insightTeaserWordCap = 12
+
+  /// First line, capped to the notch teaser width.
+  static func teaserText(of message: String) -> String {
+    let firstLine =
+      message.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+      .first.map(String.init) ?? message
+    let words = firstLine.split { $0.isWhitespace }
+    if words.count <= insightTeaserWordCap { return firstLine }
+    return words.prefix(insightTeaserWordCap).joined(separator: " ")
+  }
+
+  /// `base + 250ms/word`, clamped to 4…14s. Insights count the teaser, not
+  /// the unexpanded body.
   static func timeout(
     title: String,
     message: String,
     kind: ProactiveNotificationKind
   ) -> TimeInterval {
-    let words = wordCount(in: title) + wordCount(in: message)
+    let countedMessage = kind == .insight ? teaserText(of: message) : message
+    let words = wordCount(in: title) + wordCount(in: countedMessage)
     let raw = baseTimeout(for: kind) + (TimeInterval(words) * secondsPerWord)
     return min(maximumTimeout, max(minimumTimeout, raw))
   }

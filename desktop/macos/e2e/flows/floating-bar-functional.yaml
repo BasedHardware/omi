@@ -24,6 +24,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarManager+RealtimeStreamingJournal.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectClassificationDelivery.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectAttention.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectCopyBudget.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectDisplayDuration.swift

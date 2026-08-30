@@ -384,6 +384,27 @@ import XCTest
       XCTAssertEqual(readySnapshot.pendingTextInputCount, 0, "an accepted send leaves nothing buffered")
     }
 
+    func testTrustedTurnInstructionRefusesWhenTheSessionCannotAcceptContext() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .openai, delegate: delegate)
+
+      let refusedWhileCold = await session.sendTrustedTurnInstruction("TURN INSTRUCTION")
+      XCTAssertFalse(refusedWhileCold, "a closed socket must refuse a trusted turn instruction")
+
+      session.markReadyForTesting()
+      let acceptedWhenReady = await session.sendTrustedTurnInstruction("TURN INSTRUCTION")
+      XCTAssertTrue(acceptedWhenReady, "an open OpenAI session accepts a trusted turn instruction")
+    }
+
+    func testGeminiTrustedTurnInstructionRefusesWithoutAnActivityWindow() async {
+      let delegate = RealtimeHubSessionDelegateSpy()
+      let session = makeSession(provider: .gemini, delegate: delegate)
+      session.markReadyForTesting()
+
+      let accepted = await session.sendTrustedTurnInstruction("TURN INSTRUCTION")
+      XCTAssertFalse(accepted, "Gemini must refuse a trusted instruction with no activity window")
+    }
+
     func testGeminiBackgroundAgentContextRefusesWithoutAnActivityWindow() async {
       // Gemini can only accept text inside an open activity window; without one,
       // sendTextInput would buffer. Background context must instead refuse so the
