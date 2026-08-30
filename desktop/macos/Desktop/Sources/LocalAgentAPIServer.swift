@@ -349,8 +349,11 @@ final class LocalAgentAPIServer: @unchecked Sendable {
   /// again inside every tool, so a grant revoked mid-session stops the next
   /// action rather than the next connection.
   private func mcpResponse(body: Data) async -> LocalHTTPResponse {
-    guard await CuaControlGate.shared.isEnabled else {
-      return errorResponse("computer_use_disabled", statusCode: 403)
+    // The whole endpoint closes when the gate does, kill switch included: a
+    // suspend has to stop the client from reading the screen too, not only from
+    // moving the pointer.
+    if let refusal = await CuaControlGate.shared.refusal(requiresAccessibility: false) {
+      return errorResponse("computer_use_unavailable: \(refusal.message)", statusCode: 403)
     }
     guard let message = try? JSONSerialization.jsonObject(with: body) else {
       return errorResponse("invalid_json_body", statusCode: 400)

@@ -73,7 +73,7 @@ enum CuaToolCatalog {
       inputSchema: object(properties: [
         "display": integer("Display number from list_displays. Defaults to the main display."),
         "window_id": integer("Capture just this window instead of a whole display."),
-        "max_width": integer("Long edge of the returned image in pixels. Defaults to 1568."),
+        "max_long_edge": integer("Long edge of the returned image in pixels. Defaults to 1568."),
       ])),
     CuaTool(
       name: "ui_snapshot",
@@ -326,7 +326,7 @@ enum CuaToolCatalog {
     }
     let pid: pid_t?
     if let app = args.string("app") {
-      pid = CuaAxReader.processID(forAppNamed: app)
+      pid = await MainActor.run { CuaAxReader.processID(forAppNamed: app) }
       guard pid != nil else { return .error("No running app named \(app).") }
     } else {
       pid = await MainActor.run { CuaAxReader.frontmostProcessID() }
@@ -483,7 +483,8 @@ enum CuaToolCatalog {
 
   private static func key(_ args: CuaArguments) async -> CuaToolResult {
     guard let combo = args.string("combo") else { return .error("key needs a combo.") }
-    guard let chord = CuaKeyMap.chord(from: combo) else {
+    let layout = await MainActor.run { CuaKeyMap.KeyboardLayout.current() }
+    guard let chord = CuaKeyMap.chord(from: combo, layout: layout) else {
       return .error("\(combo) is not a key this keyboard has.")
     }
     let count = min(max(args.int("count") ?? 1, 1), 20)
@@ -515,7 +516,7 @@ enum CuaToolCatalog {
     if let refusal = await CuaControlGate.shared.refusal() {
       return .error(refusal.message)
     }
-    guard let pid = CuaAxReader.processID(forAppNamed: app) else {
+    guard let pid = await MainActor.run(body: { CuaAxReader.processID(forAppNamed: app) }) else {
       return .error("No running app named \(app).")
     }
     let raised = await CuaAppControl.raiseWindow(pid: pid, titled: args.string("title"))
@@ -529,7 +530,7 @@ enum CuaToolCatalog {
     if let refusal = await CuaControlGate.shared.refusal() {
       return .error(refusal.message)
     }
-    guard let pid = CuaAxReader.processID(forAppNamed: app) else {
+    guard let pid = await MainActor.run(body: { CuaAxReader.processID(forAppNamed: app) }) else {
       return .error("No running app named \(app).")
     }
     var origin: CGPoint?

@@ -82,6 +82,11 @@ enum CuaAxReader {
 
   /// The frontmost app, which is what "look at the screen" means when nothing
   /// names an app.
+  ///
+  /// `@MainActor`, with `processID(forAppNamed:)`, because AppKit's shared
+  /// workspace is not a background-thread API and this module has already lost
+  /// the app once to a main-queue assertion (see `CuaKeyMap.KeyboardLayout`).
+  @MainActor
   static func frontmostProcessID() -> pid_t? {
     guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier,
       AccessibilityProcessBoundary.isForeignProcess(pid)
@@ -89,6 +94,7 @@ enum CuaAxReader {
     return pid
   }
 
+  @MainActor
   static func processID(forAppNamed name: String) -> pid_t? {
     let needle = name.lowercased()
     return NSWorkspace.shared.runningApplications.first { app in

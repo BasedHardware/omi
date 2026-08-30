@@ -44,7 +44,7 @@ enum CuaKeyMap {
   /// literal `+` still works as `cmd++`. An unknown name is an error rather than
   /// a dropped modifier, because a silently weakened chord does something else
   /// entirely — `cmd+q` typed as `q` types a letter into whatever is focused.
-  static func chord(from combination: String, layout: KeyboardLayout = .current()) -> Chord? {
+  static func chord(from combination: String, layout: KeyboardLayout) -> Chord? {
     let segments =
       combination
       .split(separator: "+", omittingEmptySubsequences: false)
@@ -104,35 +104,23 @@ enum CuaKeyMap {
     /// Built from the active input source, and rebuilt when the user switches to
     /// another one. Keyed by the source id because the layout data itself is an
     /// opaque blob with nothing cheaper to compare.
+    ///
+    /// `@MainActor` because HIToolbox says so, and says it with a trap:
+    /// `TISGetInputSourceProperty` runs `dispatch_assert_queue` on the main
+    /// queue, so reading the layout from a background thread kills the process
+    /// (`_dispatch_assert_queue_fail` → SIGTRAP) rather than returning an error.
+    /// Reached from a tool call, that is the whole app going down because a model
+    /// asked to press a key.
+    @MainActor
     static func current() -> KeyboardLayout {
       let sourceID = currentInputSourceID()
-      if let cached = cache.value(for: sourceID) { return cached }
-      let built = KeyboardLayout(strokes: readCurrentStrokes())
-      cache.store(built, for: sourceID)
-      return built
-    }
-  }
-
-  private static let cache = LayoutCache()
-
-  private final class LayoutCache: @unchecked Sendable {
-    private let lock = NSLock()
-    private var sourceID: String?
-    private var layout: KeyboardLayout?
-
-    func value(for sourceID: String?) -> KeyboardLayout? {
-      lock.lock()
-      defer { lock.unlock() }
-      guard self.sourceID == sourceID else { return nil }
+      if let cached, cached.sourceID == sourceID { return cached.layout }
+      let layout = KeyboardLayout(strokes: readCurrentStrokes())
+      cached = (sourceID, layout)
       return layout
     }
 
-    func store(_ layout: KeyboardLayout, for sourceID: String?) {
-      lock.lock()
-      self.sourceID = sourceID
-      self.layout = layout
-      lock.unlock()
-    }
+    @MainActor private static var cached: (sourceID: String?, layout: KeyboardLayout)?
   }
 
   private static func currentInputSourceID() -> String? {

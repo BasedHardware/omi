@@ -84,7 +84,7 @@ enum CuaScreenObserver {
       let content = try? await SCShareableContent.excludingDesktopWindows(
         true, onScreenWindowsOnly: true)
     else { return [] }
-    let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
+    let frontmost = await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier }
     return content.windows.compactMap { window in
       guard let app = window.owningApplication, window.frame.width > 1, window.frame.height > 1
       else { return nil }

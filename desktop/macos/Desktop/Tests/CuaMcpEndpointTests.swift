@@ -111,6 +111,19 @@ final class CuaMcpEndpointTests: XCTestCase {
     XCTAssertNil(response?["error"])
   }
 
+  /// HIToolbox's input-source APIs assert they are on the main queue and *trap*
+  /// when they are not, so resolving a chord from the server's own queue took the
+  /// whole app down — `TSMGetInputSourceProperty` → `_dispatch_assert_queue_fail`
+  /// → SIGTRAP — the first time a model pressed a key. This drives `key` from a
+  /// background context the way the endpoint does; if the main-actor hop is
+  /// removed, this test does not fail, it kills the test runner.
+  func testResolvingAChordFromABackgroundContextDoesNotTrap() async {
+    let result = await Task.detached {
+      await CuaToolCatalog.call("key", arguments: ["combo": "hyper+q"])
+    }.value
+    XCTAssertTrue(result.isError)
+  }
+
   /// Every listed tool must be dispatched, and nothing else. The list and the
   /// switch are written in two places, and a tool that lists but does not
   /// dispatch is one the model will call exactly once and never get an answer
