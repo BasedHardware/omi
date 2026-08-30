@@ -580,6 +580,12 @@ def get_llm(
     get_model(feature) to get the model string and the provider-specific client.
     """
     gateway_feature_mode = should_route_features_through_gateway()
+    # Chat-agent has its own kill switch. FEATURE_MODE=gateway plus
+    # CHAT_AGENT_ROUTE=direct must stay on direct OpenAI/Luna, not the gateway lane
+    # and not a leftover Anthropic Messages client.
+    route_through_gateway = (
+        should_route_chat_agent_through_gateway() if feature == 'chat_agent' else gateway_feature_mode
+    )
 
     if is_anthropic_only_feature(feature) and not gateway_feature_mode:
         raise ValueError(
@@ -674,7 +680,7 @@ def get_llm(
     # VertexGeminiProvider._reject_byok() — Gemini BYOK must use the direct
     # OpenAI-compatible client, not the gateway lane.
     gateway_accepts_byok = effective_provider != "gemini"
-    if byok_key and gateway_feature_mode and effective_provider == lane_provider and gateway_accepts_byok:
+    if byok_key and route_through_gateway and effective_provider == lane_provider and gateway_accepts_byok:
         result = get_or_create_omi_gateway_llm_for_byok(
             feature_auto_lane_id(feature),
             provider=effective_provider,
@@ -689,7 +695,7 @@ def get_llm(
             if byok_client is not None
             else get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
         )
-    elif gateway_feature_mode:
+    elif route_through_gateway:
         gateway_options = {}
         if request_timeout is not None:
             gateway_options["request_timeout"] = request_timeout
