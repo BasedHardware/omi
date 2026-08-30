@@ -1,0 +1,142 @@
+version: 2
+name: voice-panels
+tier: manual
+description: Floating panel surface — panels asked for out loud, edited in place, carried into chat, and the ambient form and draft offers that share the same single card
+app: com.omi.computer-macos
+covers:
+  - desktop/macos/Desktop/Sources/Panels/PanelSession.swift
+  - desktop/macos/Desktop/Sources/Panels/VoicePanel.swift
+  - desktop/macos/Desktop/Sources/Panels/PanelContext.swift
+  - desktop/macos/Desktop/Sources/Panels/PanelPlacementStore.swift
+  - desktop/macos/Desktop/Sources/Panels/CancellableWork.swift
+  - desktop/macos/Desktop/Sources/Panels/DataAnswerAssistant.swift
+  - desktop/macos/Desktop/Sources/Panels/OmiSweep.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/SweepFTSSchema.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubPanelStateContext.swift
+  - desktop/macos/Desktop/Sources/FormAssist/FormAssistAssistant.swift
+  - desktop/macos/Desktop/Sources/FormAssist/FormWatcher.swift
+  - desktop/macos/Desktop/Sources/FormAssist/FormFieldScanner.swift
+  - desktop/macos/Desktop/Sources/FormAssist/FormAssistCardPlacement.swift
+  - desktop/macos/Desktop/Sources/FormAssist/AXFormTree.swift
+  - desktop/macos/Desktop/Sources/MessageDraft/MessageDraftAssistant.swift
+  - desktop/macos/Desktop/Sources/MessageDraft/MessageComposeScanner.swift
+  - desktop/macos/Desktop/Sources/MessageDraft/MessageDraftCard.swift
+preconditions:
+  - auth_ready
+  - microphone_permission_granted
+  - accessibility_permission_granted
+
+steps:
+  - id: S1
+    name: Ask for something to keep and get a panel
+    do: "Say 'put three train stations on my screen: Aldgate, Barbican and Camden'. Verify a floating card appears at the display's top-right with one copy button per station, and the spoken reply says what went up rather than reading the list back."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S1.webp
+    note: "show_panel routes through VoicePanel into PanelSession; the panel is grain .app so it survives a tab change and leaves with the app."
+
+  - id: S2
+    name: Edit what is on screen without rebuilding it
+    do: "Say 'swap Barbican for Euston'. Verify only that row changes, the card stays exactly where it was placed, and no second card appears."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Euston"]
+      - kind: text_not_visible
+        values: ["Barbican"]
+    evidence:
+      - screenshot: step-S2.webp
+    note: "update_panel revises in place. Rebuilding would discard a dragged position and log the panel twice in chat."
+
+  - id: S3
+    name: Read the panel back with no tool call
+    do: "Say 'read me back exactly what is on the panel'. Verify all three values are named correctly and the app log shows no panel tool call for this turn."
+    verify: true
+    evidence:
+      - log_grep: "panel state sent state=copy"
+    note: "RealtimeHubPanelStateContext injects the panel's text at the turn boundary, so a turn that calls no tool still knows what is on screen."
+
+  - id: S4
+    name: Drag the card, then leave and return
+    do: "Drag the card to another corner. Switch to a different app, then switch back. Verify the card returns where you dragged it, not at the default corner."
+    verify: true
+    evidence:
+      - screenshot: step-S4.webp
+    note: "PanelPlacementStore remembers the offset from the corner, clamped per display; PanelContext decides that returning to the owning app re-presents it."
+
+  - id: S5
+    name: The panel survives into the chat transcript
+    do: "Open the chat window. Verify the voice turn carries a collapsible card whose header names the values and whose fold holds them, and that S2's edit is present as its own card rather than the pre-edit text."
+    verify: true
+    evidence:
+      - screenshot: step-S5.webp
+      - log_grep: "voice turn carries"
+    note: "A panel leaves with its context, so the transcript is where its content survives."
+
+  - id: S6
+    name: Look something up in your own data
+    do: "Say 'what is my email address' or ask for something you have stored. Verify a panel appears immediately with a spinner, the subtitle changes as it searches, and it fills in with copyable values."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 1
+    evidence:
+      - screenshot: step-S6.webp
+    note: "find_and_show puts the card up before the first search because the loop takes seconds; OmiSweep greps every local store (memories and transcript segments through their FTS5 indexes) before the first model call."
+
+  - id: S7
+    name: Close a panel mid-search
+    do: "Start another lookup and press the card's x before it finishes. Verify the card goes, the search stops, and no answer arrives afterwards."
+    verify: true
+    note: "CancellableWork cancels the model call and hands the daily budget back."
+
+  - id: S8
+    name: A form on screen is offered, not answered
+    do: "Open a web form with several empty fields. Verify a card offers to fill it, names how many fields it found and how many it would write, and that no model call happens until the tick is pressed."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Fill this form?"]
+    evidence:
+      - screenshot: step-S8.webp
+      - log_grep: "FormAssist: offering to fill"
+    note: "Reading the form is a free accessibility walk (FormWatcher, FormFieldScanner, AXFormTree); answering it sends memories and a screenshot off the machine, so the tick is what buys it."
+
+  - id: S9
+    name: Accept the offer and copy the answers
+    do: "Type a steer into the card's context box, then press the tick. Verify the same card fills in where it stands, shows every field in tab order with a reason on the ones it could not answer, and stays within half the display height with its rows scrolling."
+    verify: true
+    evidence:
+      - screenshot: step-S9.webp
+    note: "FormAssistCardPlacement caps the card; the tick also promotes the panel from ambient to requested, so it survives into the transcript."
+
+  - id: S10
+    name: An ignored offer stops asking, then comes back later
+    do: "Open a second form and leave its offer untouched for four minutes without leaving the page. Verify the card disappears, does not reappear when you switch away and back, and the log records the form going quiet."
+    verify: true
+    evidence:
+      - log_grep: "offer expired unanswered"
+    note: "Ignoring is weaker than the x: the form is quiet for 30 minutes rather than for the run, because four minutes of silence is equally what stepping away looks like."
+
+  - id: S11
+    name: A compose box is offered a draft
+    do: "Focus an empty compose box in Mail, Messages, Slack or a messaging site. Verify a card asks to draft, and that pressing the tick writes a draft from the signed-in user's side of the conversation with per-row copy for subject and body."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Want me to draft?"]
+    evidence:
+      - screenshot: step-S11.webp
+      - log_grep: "MessageDraft: offering"
+    note: "MessageComposeScanner matches messaging hosts by URL first and window title as fallback; MessageDraftCard takes keystrokes, so it renders in its own window."
+
+  - id: S12
+    name: One card at a time
+    do: "With a draft card on screen, bring a form into view. Verify the form offer does not draw over the draft card, and the log records the refusal."
+    verify: true
+    evidence:
+      - log_grep: "another card is on screen"
+    note: "PanelSession owns which card is up: an unrequested offer never replaces one the user asked for or paid for."
