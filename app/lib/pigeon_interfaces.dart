@@ -283,6 +283,34 @@ class BluetoothHfpInput {
   BluetoothHfpInput({required this.uid, required this.name});
 }
 
+/// One rendered row of a HUD screen. [style] is 'heading' | 'body' | 'meta'.
+class HudLineWire {
+  final String text;
+  final String style;
+  final bool muted;
+
+  HudLineWire({required this.text, required this.style, required this.muted});
+}
+
+/// A tappable control on a HUD screen; [id] comes back through
+/// RayBanMetaFlutterAPI.onDisplayActionTapped.
+class HudActionWire {
+  final String id;
+  final String label;
+
+  HudActionWire({required this.id, required this.label});
+}
+
+/// A whole HUD screen. The native side owns the translation into the vendor's
+/// renderer, so nothing here is Meta-specific.
+class HudScreenWire {
+  final String title;
+  final List<HudLineWire> lines;
+  final List<HudActionWire> actions;
+
+  HudScreenWire({required this.title, required this.lines, required this.actions});
+}
+
 /// Dart → native. Camera/photo capture goes through the Meta Wearables Device
 /// Access Toolkit (DAT); the toolkit has no microphone API, so audio capture
 /// uses the platform Bluetooth HFP route as Meta's docs prescribe. All methods
@@ -362,6 +390,27 @@ abstract class RayBanMetaHostAPI {
   /// Captures one photo; result arrives via RayBanMetaFlutterAPI.onPhotoCaptured.
   @SwiftFunction('capturePhoto()')
   void capturePhoto();
+
+  /// Whether the connected glasses can render, from the toolkit's own
+  /// capability check rather than the device type. False on builds without
+  /// the Display module, so the HUD gate closes instead of throwing.
+  @SwiftFunction('deviceSupportsDisplay()')
+  bool deviceSupportsDisplay();
+
+  /// Attaches a display capability to the active device session. Requires the
+  /// DAT App Model (DAMEnabled in Info.plist).
+  @SwiftFunction('attachDisplay()')
+  void attachDisplay();
+
+  @SwiftFunction('detachDisplay()')
+  void detachDisplay();
+
+  /// Renders [screen], replacing whatever the glasses currently show.
+  @SwiftFunction('sendDisplayScreen(screen:)')
+  void sendDisplayScreen(HudScreenWire screen);
+
+  @SwiftFunction('clearDisplay()')
+  void clearDisplay();
 }
 
 /// Native → Dart events for Ray-Ban Meta.
@@ -384,4 +433,10 @@ abstract class RayBanMetaFlutterAPI {
   void onCameraStateChanged(String state);
   void onCameraPermissionChanged(String status);
   void onError(String code, String message);
+
+  /// 'unavailable' | 'detached' | 'attaching' | 'ready' | 'error'.
+  void onDisplayStateChanged(String state);
+
+  /// The id of the HudActionWire the wearer tapped.
+  void onDisplayActionTapped(String actionId);
 }

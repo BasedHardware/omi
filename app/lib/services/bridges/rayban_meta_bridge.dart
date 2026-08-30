@@ -13,6 +13,8 @@ class RayBanMetaFlutterBridge implements RayBanMetaFlutterAPI {
   final void Function(String state)? onCameraStateChangedCb;
   final void Function(String status)? onCameraPermissionChangedCb;
   final void Function(String code, String message)? onErrorCb;
+  final void Function(String state)? onDisplayStateChangedCb;
+  final void Function(String actionId)? onDisplayActionTappedCb;
 
   RayBanMetaFlutterBridge({
     this.onRegistrationStateChangedCb,
@@ -24,6 +26,8 @@ class RayBanMetaFlutterBridge implements RayBanMetaFlutterAPI {
     this.onCameraStateChangedCb,
     this.onCameraPermissionChangedCb,
     this.onErrorCb,
+    this.onDisplayStateChangedCb,
+    this.onDisplayActionTappedCb,
   });
 
   @override
@@ -69,5 +73,15 @@ class RayBanMetaFlutterBridge implements RayBanMetaFlutterAPI {
   @override
   void onError(String code, String message) {
     onErrorCb?.call(code, message);
+  }
+
+  @override
+  void onDisplayStateChanged(String state) {
+    onDisplayStateChangedCb?.call(state);
+  }
+
+  @override
+  void onDisplayActionTapped(String actionId) {
+    onDisplayActionTappedCb?.call(actionId);
   }
 }
