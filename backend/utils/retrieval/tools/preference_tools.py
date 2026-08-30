@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, cast
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client
 from models.memory_contracts import deterministic_contract_id
 from models.memory_apply import WriterMode
 from models.memories import MemoryDB
@@ -180,7 +180,7 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
         return "Error: Could not determine user ID"
 
     try:
-        firestore_client = get_firestore_client()
+        firestore_client = get_data_plane_firestore_client()
     except Exception as e:
         logger.error("Failed to resolve preference storage error_type=%s", type(e).__name__)
         return "Error saving preference"

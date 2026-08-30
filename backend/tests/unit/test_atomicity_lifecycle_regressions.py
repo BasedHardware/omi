@@ -105,7 +105,7 @@ def test_preference_tool_writes_retry_stable_agent_conclusion_to_ledger(preferen
     monkeypatch.setattr(module, "LedgerProvenance", Provenance)
     monkeypatch.setattr(module, "save_fact", save_fact)
     monkeypatch.setattr(module, "capture_memory_write", capture_memory_write)
-    monkeypatch.setattr(module, "get_firestore_client", MagicMock(return_value=firestore_client))
+    monkeypatch.setattr(module, "get_data_plane_firestore_client", MagicMock(return_value=firestore_client))
     monkeypatch.setattr(
         module,
         "ensure_canonical_apply_control_state",
@@ -203,7 +203,7 @@ def test_preference_tool_uses_strict_compatibility_writer_in_default_mode(prefer
     monkeypatch.setattr(module.uuid, "uuid4", lambda: "mem-compat")
     monkeypatch.setattr(module, "save_fact", save_fact)
     monkeypatch.setattr(module, "capture_memory_write", capture_memory_write)
-    monkeypatch.setattr(module, "get_firestore_client", MagicMock(return_value=firestore_client))
+    monkeypatch.setattr(module, "get_data_plane_firestore_client", MagicMock(return_value=firestore_client))
     monkeypatch.setattr(
         module,
         "ensure_canonical_apply_control_state",
@@ -236,7 +236,7 @@ def test_preference_tool_fails_closed_during_writer_transition(preference_tools_
     compatibility_service = MagicMock()
     monkeypatch.setattr(module, "save_fact", save_fact)
     monkeypatch.setattr(module, "MemoryService", compatibility_service)
-    monkeypatch.setattr(module, "get_firestore_client", MagicMock(return_value=object()))
+    monkeypatch.setattr(module, "get_data_plane_firestore_client", MagicMock(return_value=object()))
     monkeypatch.setattr(
         module,
         "ensure_canonical_apply_control_state",
@@ -267,7 +267,9 @@ def test_preference_tool_does_not_write_without_user_authority(preference_tools_
 def test_preference_tool_fails_closed_when_storage_authority_is_unavailable(preference_tools_module, monkeypatch):
     module = preference_tools_module
     save_fact = MagicMock()
-    monkeypatch.setattr(module, "get_firestore_client", MagicMock(side_effect=RuntimeError("credential detail")))
+    monkeypatch.setattr(
+        module, "get_data_plane_firestore_client", MagicMock(side_effect=RuntimeError("credential detail"))
+    )
     monkeypatch.setattr(module, "save_fact", save_fact)
 
     result = module.save_user_preference_tool(
