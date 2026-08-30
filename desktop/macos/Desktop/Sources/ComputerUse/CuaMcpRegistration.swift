@@ -23,10 +23,12 @@ enum CuaMcpRegistration {
 
   static func register(token: String) throws {
     try LocalMcpStore.upsertServer(serverName, entry: entry(token: token))
+    try CuaStdioShim.install(token: token)
   }
 
   static func unregister() {
     LocalMcpStore.removeServer(name: serverName)
+    CuaStdioShim.uninstall()
   }
 
   /// Whether the entry present on disk points at this build's endpoint. A port

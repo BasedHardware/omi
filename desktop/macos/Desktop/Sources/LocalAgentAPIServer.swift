@@ -363,7 +363,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
       for entry in batch {
         if let response = await CuaMcpEndpoint.handle(entry) { responses.append(response) }
       }
-      return responses.isEmpty ? acceptedResponse() : jsonResponse(responses)
+      return responses.isEmpty ? acceptedResponse() : compactJSONResponse(responses)
     }
     guard let single = message as? [String: Any] else {
       return errorResponse("invalid_json_body", statusCode: 400)
@@ -371,7 +371,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     guard let response = await CuaMcpEndpoint.handle(single) else {
       return acceptedResponse()
     }
-    return jsonResponse(response)
+    return compactJSONResponse(response)
   }
 
   /// A notification has no reply. 202 with an empty body is what the Streamable
@@ -635,6 +635,19 @@ final class LocalAgentAPIServer: @unchecked Sendable {
       "content_type": "text/plain",
       "result": result,
     ])
+  }
+
+  /// One JSON object on one line.
+  ///
+  /// MCP's stdio framing is newline-delimited, and the shim that bridges a
+  /// stdio-only client to this endpoint copies the body through verbatim. A
+  /// pretty-printed body would arrive as a dozen frames, none of which parse.
+  private func compactJSONResponse(_ payload: Any) -> LocalHTTPResponse {
+    let body =
+      (try? JSONSerialization.data(withJSONObject: payload))
+      ?? Data("{\"error\":\"encode_failed\"}".utf8)
+    return LocalHTTPResponse(
+      statusCode: 200, headers: ["Content-Type": "application/json"], body: body)
   }
 
   private func jsonResponse(_ payload: Any, statusCode: Int = 200) -> LocalHTTPResponse {
