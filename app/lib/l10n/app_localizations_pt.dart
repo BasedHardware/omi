@@ -2018,6 +2018,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get memoryDeleted => 'Memória apagada.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Desfazer';
 
   @override
@@ -9908,4 +9911,15 @@ class AppLocalizationsPt extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Último erro: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Pré-gravado';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'O Pendant ainda está gravando, então o áudio armazenado não pode ser transferido. Pressione o botão do Pendant para parar a gravação e sincronize novamente.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'O armazenamento do Pendant está cheio e ele ainda está no modo de gravação, então o áudio armazenado não pode ser transferido. Pressione o botão do Pendant para parar a gravação e sincronize novamente.';
 }

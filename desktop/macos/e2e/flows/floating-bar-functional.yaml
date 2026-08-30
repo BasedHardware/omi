@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentCompletionVoiceDelivery.swift
   - desktop/macos/Desktop/Sources/Chat/ChatDraftStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationCardLead.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationJournalCopy.swift
   - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AskAIInputView.swift
@@ -34,6 +35,10 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+WarmRecovery.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionVoiceConfig.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubVoicePolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/UserInputPresence.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTestHarness.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTools.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift
@@ -46,6 +51,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBackgroundModifier.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceWaveformBars.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Tools.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+People.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarReceiptCard.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchCardVoiceDelivery.swift

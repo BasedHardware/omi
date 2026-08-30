@@ -74,6 +74,13 @@ def make_database_client_stub() -> ModuleType:
     client_mod.delete_collection_recursive = MagicMock()
     client_mod.get_firestore_client = lambda: client_mod.db
     client_mod.get_customer_firestore_client = lambda: client_mod.db
+    # The data-plane seam (database/_client.py's get_data_plane_firestore_client()):
+    # memory_apply_store, jit_proactivity_store, and screen/frame sync import
+    # `data_plane_db` at their module boundary instead of the shared `db` above.
+    # Default it to the same stub client so callers that never set
+    # OMI_FIRESTORE_DATA_PLANE_PROJECT see identical behavior under test too.
+    client_mod.data_plane_db = client_mod.db
+    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
 
     def _document_id_from_seed(seed: str) -> str:
         seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
@@ -105,6 +112,7 @@ def install_canonical_write_runtime_stubs() -> list[str]:
     subscription_mod.get_default_basic_subscription = MagicMock()
     subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
+    subscription_mod.request_has_llm_byok_key = lambda: False
     sys.modules["utils.subscription"] = subscription_mod
     touched.append("utils.subscription")
 
@@ -265,6 +273,7 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     subscription_mod.get_default_basic_subscription = MagicMock()
     subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
+    subscription_mod.request_has_llm_byok_key = lambda: False
     _set("utils.subscription", subscription_mod)
 
     vector_db_mod = AutoMockModule("database.vector_db")

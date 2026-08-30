@@ -17,6 +17,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -771,7 +772,7 @@ class AddAppProvider extends ChangeNotifier {
         } catch (e) {
           Logger.debug('🖼️ FilePicker general error: $e');
           AppSnackbar.showSnackbarError(
-            globalNavigatorKey.currentContext!.l10n.addAppErrorSelectingImage(e.toString()),
+            globalNavigatorKey.currentContext!.l10n.addAppErrorSelectingImage(readableError(e)),
           );
         }
       } else {
@@ -839,7 +840,7 @@ class AddAppProvider extends ChangeNotifier {
         } catch (e) {
           Logger.debug('🖼️ FilePicker general error (thumbnail): $e');
           AppSnackbar.showSnackbarError(
-            globalNavigatorKey.currentContext!.l10n.addAppErrorSelectingThumbnail(e.toString()),
+            globalNavigatorKey.currentContext!.l10n.addAppErrorSelectingThumbnail(readableError(e)),
           );
           return;
         }

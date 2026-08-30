@@ -224,7 +224,8 @@ jobs:
             DESKTOP_REDIS_DB_PASSWORD \
             DESKTOP_REDIS_DB_HOST \
             DESKTOP_REDIS_DB_PORT \
-            METRICS_SECRET; do
+            METRICS_SECRET \
+            POSTHOG_PROJECT_API_KEY; do
             gcloud secrets describe "$secret" \
               --project="$PROJECT_ID" \
               --format='none'
@@ -319,6 +320,7 @@ jobs:
             USE_VERTEX_AI=true
             GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
             GCP_LOCATION=us-central1
+            OMI_FIRESTORE_DATA_PLANE_PROJECT=${{ vars.GCP_PROJECT_ID }}
             GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json
             BASE_API_URL=${{ env.PRODUCTION_DESKTOP_BACKEND_URL }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.admitted-source.outputs.source_sha }}
@@ -342,6 +344,7 @@ jobs:
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
             METRICS_SECRET=METRICS_SECRET:latest
+            POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest
 
       # The sidecar attach re-serialises the live Cloud Run export, so it verifies
       # the ingress env it is about to rewrite against what the manifest says it

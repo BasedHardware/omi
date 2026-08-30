@@ -148,6 +148,7 @@ struct QueryShellHome: View {
             total: total,
             onExitAnswer: nil,
             bodyHeight: bodyHeight,
+            topAccessory: { EmptyView() },
             headerAccessory: { headerAccessory },
             footer: {
               if mode == .answer {
@@ -276,7 +277,9 @@ struct QueryShellHome: View {
       onAsk: ask,
       onStop: { chatProvider.stopAgent(owner: .mainChat) },
       onAttachmentsAdded: stageAttachments,
-      onAttachmentRemoved: { chatProvider.removePendingAttachment(id: $0) }
+      onAttachmentRemoved: { chatProvider.removePendingAttachment(id: $0) },
+      references: chatProvider.pendingComposerReferences,
+      onReferenceRemoved: { chatProvider.removeComposerReference(id: $0) }
     )
     .background {
       GeometryReader { composer in
@@ -341,25 +344,14 @@ struct QueryShellHome: View {
       isClearing: chatProvider.isClearing)
   }
 
-  /// Clear, copy and the jump to AI settings — the deleted chat page's last three controls, which
-  /// have had nowhere to live since it went. An overflow rather than three icons in the header,
-  /// because none of them is something you reach for during a conversation.
+  /// Conversation-local actions only. Global AI configuration belongs to the
+  /// Settings gear that is already present on every page.
   private var chatMenu: some View {
     Menu {
       Button(didCopyTranscript ? "Copied" : "Copy conversation", action: copyTranscript)
         .disabled(!menu.canCopy)
       Button("Clear conversation", role: .destructive, action: clearTranscript)
         .disabled(!menu.canClear)
-      Divider()
-      // The deleted page's gear, with its own words ("Advanced AI settings"). It posts the shared
-      // notification rather than routing itself, so it lands wherever `DesktopHomeView` already
-      // sends that jump — today `.advanced`, which is the *visible* section holding AI Provider, the
-      // Claude connection and the chat workspace directory. `SettingsSection.aiChat` is deliberately
-      // absent from the sidebar and bounces to `.advanced` on production bundles; pointing a chat
-      // control straight at it would be a menu item that silently lands somewhere else.
-      Button("Advanced AI settings…") {
-        NotificationCenter.default.post(name: .navigateToAIChatSettings, object: nil)
-      }
     } label: {
       QueryPanelChipLabel(
         systemImage: didCopyTranscript ? "checkmark" : "ellipsis",

@@ -3231,5 +3231,8 @@
     "appReEnableFailedTitle": "Opnieuw inschakelen mislukt",
     "appReEnableFailedBody": "Deze app kon niet opnieuw worden ingeschakeld. Probeer het opnieuw.",
     "appDisabledOn": "Uitgeschakeld op {date}.",
-    "appDisabledLastError": "Laatste fout: {error}."
+    "appDisabledLastError": "Laatste fout: {error}.",
+    "prerecordedTranscript": "Vooraf opgenomen",
+    "pendantRecordingSyncBlocked": "Je Pendant is nog aan het opnemen, dus de opgeslagen audio kan niet worden overgezet. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer opnieuw.",
+    "pendantFullSyncBlocked": "De opslag van je Pendant is vol en hij staat nog in de opnamemodus, dus de opgeslagen audio kan niet worden overgedragen. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer daarna opnieuw."
 }

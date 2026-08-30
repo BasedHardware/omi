@@ -173,8 +173,8 @@ final class SpineCompositionTests: XCTestCase {
 
     let matchingOneTask = SpineComposer.filter(days, kind: .everything, query: "coffee")
     XCTAssertEqual(
-      matchingOneTask[0].taskCount, 2,
-      "a filtered day header still describes every task hidden behind that day"
+      matchingOneTask[0].taskCount, 1,
+      "a filtered day header describes the task that remains visible"
     )
 
     let tasksOnly = SpineComposer.filter(days, kind: .tasks, query: "")
@@ -228,7 +228,7 @@ final class SpineCompositionTests: XCTestCase {
 
   // MARK: - Day header counts
 
-  func testTheDayHeaderCountsTheWholeDayNotTheFilteredView() {
+  func testTheDayHeaderCountsTheFilteredView() {
     let start = date(6, 20, 0)
     let screen = SpineDayScreen(total: 1204, hourCounts: [], sampled: [moment(1, at: date(6, 20, 2))])
     let composed = SpineComposer.compose(
@@ -246,8 +246,16 @@ final class SpineCompositionTests: XCTestCase {
 
     let soloed = SpineComposer.filter(composed, kind: .memories, query: "")
     XCTAssertEqual(
-      soloed[0].momentCount, 1204, "a filtered spine still says how big the day really was")
-    XCTAssertEqual(soloed[0].conversationCount, 1)
+      soloed[0].momentCount, 0, "a memory filter must not claim screen moments are visible")
+    XCTAssertEqual(soloed[0].conversationCount, 0)
+    XCTAssertEqual(soloed[0].memoryCount, 1)
+    XCTAssertEqual(soloed[0].subtitle, "1 memory")
+
+    let matchingMemory = SpineComposer.filter(composed, kind: .everything, query: "doors")
+    XCTAssertEqual(matchingMemory[0].momentCount, 0)
+    XCTAssertEqual(matchingMemory[0].conversationCount, 0)
+    XCTAssertEqual(matchingMemory[0].memoryCount, 1)
+    XCTAssertEqual(matchingMemory[0].subtitle, "1 memory")
   }
 
   // MARK: - Solo

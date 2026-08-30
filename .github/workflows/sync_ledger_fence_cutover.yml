@@ -271,6 +271,11 @@ jobs:
           candidate_api_url: ${{ steps.prepare.outputs.candidate_probe_url }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
           firebase_auth_project_id: based-hardware
+          # Development deploys into a different project than the Firebase auth
+          # project, so the deploy identity cannot sign the probe's custom token.
+          # Production already deploys into based-hardware and keeps signing with
+          # its active identity, so this stays empty there.
+          firebase_signer_credentials: ${{ github.event.inputs.environment == 'prod' && '' || secrets.GCP_SERVICE_ACCOUNT }}
           evidence_path: ${{ runner.temp }}/transcription-capability-probe.json
 
       - name: Record protected full-route probe proof

@@ -1065,6 +1065,7 @@ actor AgentRuntimeProcess {
     sessionID: String,
     turnID: String,
     prompt: String,
+    promptIsSynthetic: Bool = false,
     mode: ExternalSurfaceRunMode
   ) async throws -> ExternalSurfaceRunBinding {
     guard
@@ -1107,6 +1108,7 @@ actor AgentRuntimeProcess {
         sessionId: sessionID,
         turnId: turnID,
         prompt: prompt,
+        promptIsSynthetic: promptIsSynthetic,
         mode: mode
       ),
       expectedKind: .externalSurfaceRunBeginResult,
@@ -1478,6 +1480,7 @@ actor AgentRuntimeProcess {
     sessionId: String,
     turnId: String,
     prompt: String,
+    promptIsSynthetic: Bool = false,
     mode: ExternalSurfaceRunMode
   ) -> [String: Any] {
     var message = protocolEnvelope(
@@ -1489,6 +1492,7 @@ actor AgentRuntimeProcess {
     message["sessionId"] = sessionId
     message["turnId"] = turnId
     message["prompt"] = prompt
+    if promptIsSynthetic { message["promptIsSynthetic"] = true }
     message["mode"] = mode.rawValue
     return message
   }
@@ -1549,7 +1553,8 @@ actor AgentRuntimeProcess {
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
-    reasoningEffort: String? = nil
+    reasoningEffort: String? = nil,
+    jitKnowledgeToolsEnabled: Bool = false
   ) -> [String: Any] {
     var message = protocolEnvelope(
       type: "query",
@@ -1565,6 +1570,11 @@ actor AgentRuntimeProcess {
     if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
     if let producingTurnId, !producingTurnId.isEmpty { message["producingTurnId"] = producingTurnId }
     if let reasoningEffort, !reasoningEffort.isEmpty { message["reasoningEffort"] = reasoningEffort }
+    // UX gate only: the backend independently re-checks JIT entitlement on
+    // every /v1/agent/execute-tool call. Omitted (not `false`) when the
+    // rollout verdict isn't `enabled`, matching how the runtime treats an
+    // absent field as false.
+    if jitKnowledgeToolsEnabled { message["jitKnowledgeToolsEnabled"] = true }
     if let expectedContext {
       message["expectedContextSnapshotVersion"] = expectedContext.version
       message["expectedContextSnapshotGeneration"] = expectedContext.generation
@@ -2360,6 +2370,10 @@ actor AgentRuntimeProcess {
     guard isBridgeReady else { throw BridgeError.stopped }
     try assertAuthorization(authorizationSnapshot)
 
+    // See AgentRuntimeProcess+JITKnowledgeToolsGate.swift: fail-closed UX gate only.
+    let jitKnowledgeToolsEnabled = await Self.resolvedJitKnowledgeToolsEnabled(
+      authorizationSnapshot: authorizationSnapshot)
+
     return try await withCheckedThrowingContinuation { continuation in
       let surfaceRef = surface
       let request = ActiveRequest(
@@ -2394,7 +2408,8 @@ actor AgentRuntimeProcess {
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
-        reasoningEffort: reasoningEffort
+        reasoningEffort: reasoningEffort,
+        jitKnowledgeToolsEnabled: jitKnowledgeToolsEnabled
       )
       sendJson(queryDict)
     }
@@ -2563,9 +2578,8 @@ actor AgentRuntimeProcess {
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
-    if !rustBase.isEmpty {
-      env["OMI_API_BASE_URL"] = rustBase.hasSuffix("/") ? "\(rustBase)v2" : "\(rustBase)/v2"
-    } else if preferredAdapterId == .piMono {
+    env = Self.childBackendRoutingEnvironment(baseEnvironment: env, rustBase: rustBase)
+    if rustBase.isEmpty && preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: pi-mono start refused, OMI_DESKTOP_API_URL is not configured")
       throw BridgeError.bridgeScriptNotFound
     }
@@ -2784,19 +2798,19 @@ actor AgentRuntimeProcess {
 
     var candidateValues: [String: String] = [:]
     var suppressedProviders: [BYOKProvider] = []
-    for provider in BYOKProvider.allCases {
-      guard let key = APIKeyService.byokKey(provider) else { continue }
-      let fingerprint = APIKeyService.byokFingerprint(key)
-      if CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: fingerprint) {
-        candidateValues[byokEnvironmentKey(for: provider)] = key
+    for (provider, entry) in APIKeyService.activeBYOKSnapshot {
+      if CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: entry.fingerprint) {
+        candidateValues[byokEnvironmentKey(for: provider)] = entry.key
       } else {
         suppressedProviders.append(provider)
       }
     }
-    guard suppressedProviders.isEmpty, candidateValues.count == BYOKProvider.allCases.count else {
+    guard let selectedProvider = APIKeyService.selectedBYOKLLMProvider,
+      candidateValues[byokEnvironmentKey(for: selectedProvider)] != nil
+    else {
       return ([:], suppressedProviders)
     }
-    return (candidateValues, [])
+    return (candidateValues, suppressedProviders)
   }
 
   static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {

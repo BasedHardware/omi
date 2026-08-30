@@ -804,18 +804,6 @@ def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str
     _update_chat_session_if_exists(uid, chat_session_id, {"file_ids": firestore.ArrayUnion(file_ids)}, "file link")
 
 
-def update_chat_session_openai_ids(uid: str, chat_session_id: str, thread_id: str, assistant_id: str) -> None:
-    """Update OpenAI thread and assistant IDs for a chat session"""
-    update_data: Dict[str, str] = {}
-    if thread_id:
-        update_data['openai_thread_id'] = thread_id
-    if assistant_id:
-        update_data['openai_assistant_id'] = assistant_id
-
-    if update_data and _update_chat_session_if_exists(uid, chat_session_id, update_data, "openai id link"):
-        logger.info(f"Updated session {chat_session_id} with thread {thread_id} and assistant {assistant_id}")
-
-
 # **************************************
 # ********* MIGRATION HELPERS **********
 # **************************************
@@ -877,7 +865,7 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
 # CHAT SESSIONS (v2)
 #
 # v2 sessions support: title, preview, message_count, starred, updated_at.
-# v1 sessions store: message_ids, file_ids, openai_thread_id.
+# v1 sessions store: message_ids, file_ids (legacy docs may still carry openai_thread_id).
 # Both schemas coexist in the same Firestore collection.
 # Both MUST write plugin_id alongside app_id for cross-platform query compat.
 # ============================================================================

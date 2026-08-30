@@ -2054,6 +2054,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get memoryDeleted => 'Ang Alaala ay Natanggal.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Undo';
 
   @override
@@ -9990,4 +9993,15 @@ class AppLocalizationsTl extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Huling error: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Paunang-rekord';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Nagre-record pa rin ang Pendant, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.';
 }

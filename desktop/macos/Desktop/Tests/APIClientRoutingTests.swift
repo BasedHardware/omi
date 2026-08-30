@@ -231,6 +231,66 @@ final class APIClientRoutingTests: XCTestCase {
     )
   }
 
+  func testJITQATranscriptionBackendIsResolvedAtUseTime() {
+    let original = ProcessInfo.processInfo.environment["OMI_PYTHON_API_URL"]
+    defer {
+      if let original {
+        setenv("OMI_PYTHON_API_URL", original, 1)
+      } else {
+        unsetenv("OMI_PYTHON_API_URL")
+      }
+    }
+
+    setenv("OMI_PYTHON_API_URL", "http://127.0.0.1:18080", 1)
+    XCTAssertEqual(TranscriptionService.pythonBackendBaseURL, "http://127.0.0.1:18080/")
+
+    setenv("OMI_PYTHON_API_URL", "https://api.omiapi.com", 1)
+    XCTAssertEqual(TranscriptionService.pythonBackendBaseURL, "https://api.omiapi.com/")
+  }
+
+  func testJITQAExactTuplesResolveAcrossPythonDesktopAndAuthAuthorities() {
+    let bundleIdentifier = "com.omi.omi-jit-qa"
+    let tuples = [
+      (
+        python: "http://127.0.0.1:18080", desktop: "http://127.0.0.1:18081",
+        auth: "http://127.0.0.1:18080"
+      ),
+      (
+        python: "https://api.omiapi.com",
+        desktop: "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
+        auth: "https://api.omiapi.com"
+      ),
+    ]
+
+    for tuple in tuples {
+      XCTAssertEqual(
+        DesktopBackendEnvironment.pythonBaseURL(
+          useDevelopmentBackends: true,
+          bundleIdentifier: bundleIdentifier,
+          environmentValue: tuple.python
+        ),
+        "\(tuple.python)/"
+      )
+      XCTAssertEqual(
+        DesktopBackendEnvironment.rustBackendURL(
+          useDevelopmentBackends: true,
+          bundleIdentifier: bundleIdentifier,
+          environmentValue: tuple.desktop,
+          launchEnvironmentValue: tuple.desktop
+        ),
+        "\(tuple.desktop)/"
+      )
+      XCTAssertEqual(
+        DesktopBackendEnvironment.authBaseURL(
+          useDevelopmentBackends: true,
+          bundleIdentifier: bundleIdentifier,
+          environmentValue: tuple.auth
+        ),
+        "\(tuple.auth)/"
+      )
+    }
+  }
+
   func testBundleEnvironmentDoesNotOverwriteExplicitLaunchBackendURLs() {
     let launchEnvironment = [
       "OMI_DESKTOP_API_URL": "http://127.0.0.1:10343",

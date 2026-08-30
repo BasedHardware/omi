@@ -3209,5 +3209,8 @@
     "appReEnableFailedTitle": "Nepodařilo se znovu zapnout",
     "appReEnableFailedBody": "Tuto aplikaci se nepodařilo znovu zapnout. Zkus to znovu.",
     "appDisabledOn": "Vypnuto {date}.",
-    "appDisabledLastError": "Poslední chyba: {error}."
+    "appDisabledLastError": "Poslední chyba: {error}.",
+    "prerecordedTranscript": "Předem nahráno",
+    "pendantRecordingSyncBlocked": "Pendant stále nahrává, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu nahrávání zastavte a poté synchronizujte znovu.",
+    "pendantFullSyncBlocked": "Úložiště Pendantu je plné a stále je v režimu nahrávání, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu zastavte nahrávání a poté znovu synchronizujte."
 }

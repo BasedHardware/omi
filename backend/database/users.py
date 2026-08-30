@@ -2,7 +2,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional, TypedDict
 
-from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
@@ -14,6 +13,7 @@ from database.account_deletion_transitions import (
 )
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
+from database.person_aliases import rename_person_retaining_aliases
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import (
     delete_cached_user_geolocation,
@@ -43,6 +43,8 @@ DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
+ONBOARDING_ADMISSION_PATH = "onboarding_admission/current"
+ONBOARDING_ADMISSION_TTL = timedelta(minutes=20)
 
 
 class DeletionWipeTaskResolution(TypedDict):
@@ -295,18 +297,34 @@ def is_byok_active(uid: str, *, firestore_client: Any | None = None) -> bool:
     return age <= BYOK_HEARTBEAT_TTL_SECONDS
 
 
-def set_byok_active(uid: str, fingerprints: dict):
-    user_ref = db.collection('users').document(uid)
-    user_ref.set(
+@transactional
+def _set_byok_active_transaction(transaction, user_ref, fingerprints: dict):
+    snapshot = user_ref.get(transaction=transaction)
+    data = snapshot.to_dict() or {}
+    byok = data.get('byok') or {}
+    enrolled_fingerprints = dict(fingerprints) if isinstance(fingerprints, dict) else {}
+    fingerprints_write = dict(enrolled_fingerprints)
+    existing_fingerprints = byok.get('fingerprints')
+    if isinstance(existing_fingerprints, dict):
+        for provider in existing_fingerprints:
+            if provider not in enrolled_fingerprints:
+                fingerprints_write[provider] = firestore.DELETE_FIELD
+    transaction.set(
+        user_ref,
         {
             'byok': {
                 'active': True,
-                'fingerprints': fingerprints,
+                'fingerprints': fingerprints_write,
                 'last_seen_at': datetime.now(timezone.utc),
             }
         },
         merge=True,
     )
+
+
+def set_byok_active(uid: str, fingerprints: dict):
+    user_ref = db.collection('users').document(uid)
+    _set_byok_active_transaction(db.transaction(), user_ref, fingerprints)
 
 
 def clear_byok_active(uid: str):
@@ -942,18 +960,9 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
 
 
 def update_person(uid: str, person_id: str, name: str) -> bool:
-    """Rename a person. Returns False when the person does not exist so callers can 404,
-    instead of letting Firestore .update() raise NotFound and surface as an HTTP 500."""
-    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    if not person_ref.get().exists:
-        return False
-    try:
-        person_ref.update({'name': name})
-    except NotFound:
-        # The person was deleted between the existence check and the update; treat as missing so
-        # the caller 404s instead of 500ing on the Firestore NotFound race.
-        return False
-    return True
+    """Rename a stable person and retain old names as owner-scoped aliases."""
+
+    return rename_person_retaining_aliases(db, uid, person_id, name)
 
 
 def delete_person(uid: str, person_id: str):
@@ -1569,6 +1578,96 @@ def get_user_onboarding_state(uid: str) -> dict:
         user_data = user_doc.to_dict()
         return user_data.get('onboarding', {})
     return {}
+
+
+def ensure_backend_onboarding_admission(uid: str, *, firestore_client: Any = None) -> bool:
+    """Issue a short-lived server-owned admission for pending onboarding.
+
+    The listen query flag is not an authority.  This marker is written only by
+    authenticated backend code after reading the durable account state and is
+    the provenance gate used by the transcript writer.
+    """
+
+    client = firestore_client or db
+    user_ref = client.collection("users").document(uid)
+    admission_ref = client.document(f"users/{uid}/{ONBOARDING_ADMISSION_PATH}")
+    now = datetime.now(timezone.utc)
+
+    @transactional
+    def admit(transaction: Any) -> bool:
+        user_snapshot = transaction.get(user_ref)
+        user_payload = user_snapshot.to_dict() if getattr(user_snapshot, "exists", False) else {}
+        onboarding = user_payload.get("onboarding", {}) if isinstance(user_payload, dict) else {}
+        if not isinstance(onboarding, dict):
+            onboarding = {}
+        if onboarding.get("completed") is True or onboarding.get("device_onboarding_completed") is True:
+            return False
+        admission_snapshot = transaction.get(admission_ref)
+        existing = admission_snapshot.to_dict() if getattr(admission_snapshot, "exists", False) else {}
+        expires_at = existing.get("expires_at") if isinstance(existing, dict) else None
+        if (
+            isinstance(existing, dict)
+            and existing.get("status") == "active"
+            and isinstance(expires_at, datetime)
+            and expires_at > now
+            and isinstance(existing.get("session_id"), str)
+            and len(existing["session_id"]) >= 16
+        ):
+            return True
+        transaction.set(
+            admission_ref,
+            {
+                "schema_version": "onboarding_admission.v1",
+                "uid": uid,
+                "session_id": uuid.uuid4().hex,
+                "status": "active",
+                "issued_at": now,
+                "expires_at": now + ONBOARDING_ADMISSION_TTL,
+            },
+        )
+        return True
+
+    return bool(admit(client.transaction()))
+
+
+def get_backend_onboarding_admission(uid: str, *, firestore_client: Any = None) -> Optional[str]:
+    """Return the active server-owned onboarding session, if one exists."""
+
+    client = firestore_client or db
+    try:
+        user_snapshot = client.collection("users").document(uid).get()
+        user_payload = user_snapshot.to_dict() if getattr(user_snapshot, "exists", False) else {}
+        onboarding = user_payload.get("onboarding", {}) if isinstance(user_payload, dict) else {}
+        if (
+            not getattr(user_snapshot, "exists", False)
+            or not isinstance(onboarding, dict)
+            or onboarding.get("completed") is True
+            or onboarding.get("device_onboarding_completed") is True
+        ):
+            return None
+        admission_snapshot = client.document(f"users/{uid}/{ONBOARDING_ADMISSION_PATH}").get()
+        payload = admission_snapshot.to_dict() if getattr(admission_snapshot, "exists", False) else {}
+        expires_at = payload.get("expires_at") if isinstance(payload, dict) else None
+        if (
+            isinstance(payload, dict)
+            and payload.get("schema_version") == "onboarding_admission.v1"
+            and payload.get("uid") == uid
+            and payload.get("status") == "active"
+            and isinstance(payload.get("session_id"), str)
+            and len(payload["session_id"]) >= 16
+            and isinstance(expires_at, datetime)
+            and expires_at > datetime.now(timezone.utc)
+        ):
+            return payload["session_id"]
+        return None
+    except Exception:
+        return None
+
+
+def is_backend_onboarding_admitted(uid: str, *, firestore_client: Any = None) -> bool:
+    """Read the server-owned admission without trusting any listen query flag."""
+
+    return get_backend_onboarding_admission(uid, firestore_client=firestore_client) is not None
 
 
 def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:

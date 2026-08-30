@@ -10797,5 +10797,8 @@
     "appReEnableFailedTitle": "Ponovno omogućivanje nije uspjelo",
     "appReEnableFailedBody": "Ovu aplikaciju nije bilo moguće ponovno omogućiti. Pokušaj ponovno.",
     "appDisabledOn": "Onemogućeno {date}.",
-    "appDisabledLastError": "Posljednja pogreška: {error}."
+    "appDisabledLastError": "Posljednja pogreška: {error}.",
+    "prerecordedTranscript": "Unaprijed snimljeno",
+    "pendantRecordingSyncBlocked": "Pendant još uvijek snima pa se pohranjeni zvuk ne može prenijeti. Pritisnite gumb na Pendantu da zaustavite snimanje, a zatim ponovno sinkronizirajte.",
+    "pendantFullSyncBlocked": "Pohrana Pendanta je puna i još je u načinu snimanja, pa se pohranjeni zvuk ne može prenijeti. Pritisnite gumb na Pendantu da zaustavite snimanje, a zatim ponovno sinkronizirajte."
 }

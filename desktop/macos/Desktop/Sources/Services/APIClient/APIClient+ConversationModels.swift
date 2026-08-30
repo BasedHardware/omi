@@ -561,8 +561,8 @@ struct ActionItem: Codable, Identifiable, Equatable {
   /// locally cached rows predate the field.
   let captureOwner: String?
   /// Canonical task linkage is optional on legacy captures. When present, the
-  /// chat-first archive uses this opaque ID for a typed deep link rather than
-  /// inferring a task from the description.
+  /// canonical conversation detail uses this opaque ID for a typed deep link
+  /// rather than inferring a task from the description.
   let targetTaskID: String?
   let sourceSegmentIDs: [String]
 
@@ -826,12 +826,17 @@ typealias Geolocation = OmiAPI.Geolocation
 struct ConversationPhoto: Codable, Identifiable {
   let id: String
   let base64: String
+  let contentType: String?
+  let storageId: String?
   let description: String?
   let createdAt: Date
   let discarded: Bool
 
   enum CodingKeys: String, CodingKey {
-    case id, base64, description
+    case id, base64
+    case contentType = "content_type"
+    case storageId = "storage_id"
+    case description
     case createdAt = "created_at"
     case discarded
   }
@@ -840,6 +845,8 @@ struct ConversationPhoto: Codable, Identifiable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
     base64 = try container.decodeIfPresent(String.self, forKey: .base64) ?? ""
+    contentType = try container.decodeIfPresent(String.self, forKey: .contentType)
+    storageId = try container.decodeIfPresent(String.self, forKey: .storageId)
     description = try container.decodeIfPresent(String.self, forKey: .description)
     createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
     discarded = try container.decodeIfPresent(Bool.self, forKey: .discarded) ?? false
@@ -851,6 +858,8 @@ struct ConversationPhoto: Codable, Identifiable {
   init(_ wire: OmiAPI.ConversationPhoto) {
     self.id = wire.id ?? UUID().uuidString
     self.base64 = wire.base64
+    self.contentType = wire.contentType
+    self.storageId = wire.storageId
     self.description = wire.description_
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

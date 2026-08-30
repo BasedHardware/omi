@@ -2065,6 +2065,10 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "memoryHistoryPartial": "Some memory history is unavailable. Showing the history received so far.",
+    "@memoryHistoryPartial": {
+        "description": "Notice shown when the memory history response is truncated"
+    },
     "undo": "Undo",
     "@undo": {
         "description": "Undo button text"
@@ -11719,5 +11723,17 @@
                 "example": "HTTP 307"
             }
         }
+    },
+    "prerecordedTranscript": "Prerecorded",
+    "@prerecordedTranscript": {
+        "description": "Tab label for the prerecorded conversation transcript"
+    },
+    "pendantRecordingSyncBlocked": "Your Pendant is still recording, so its stored audio can't be transferred. Press the Pendant's button to stop recording, then sync again.",
+    "@pendantRecordingSyncBlocked": {
+        "description": "Shown when offline sync stalls because the Limitless Pendant is actively recording; it cannot serve stored audio until recording stops"
+    },
+    "pendantFullSyncBlocked": "Your Pendant's storage is full and it's still in recording mode, so its stored audio can't be transferred. Press the Pendant's button to stop recording, then sync again.",
+    "@pendantFullSyncBlocked": {
+        "description": "Shown when offline sync stalls because the Limitless Pendant's flash storage is full; a full pendant stays armed in recording mode and serves no stored audio until recording is stopped"
     }
 }

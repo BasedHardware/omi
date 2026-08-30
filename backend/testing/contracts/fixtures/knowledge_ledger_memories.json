@@ -1,0 +1,53 @@
+{
+  "legacy": {
+    "content": "A released client row without ledger fields.",
+    "id": "legacy-memory-1",
+    "uid": "contract-user-1",
+    "created_at": "2026-08-23T00:00:00Z",
+    "updated_at": "2026-08-23T00:00:00Z",
+    "layer": "long_term"
+  },
+  "v1": {
+    "content": "The user lives in New York.",
+    "id": "ledger-memory-1",
+    "uid": "contract-user-1",
+    "created_at": "2026-08-23T00:00:00Z",
+    "updated_at": "2026-08-23T00:00:00Z",
+    "layer": "long_term",
+    "ledger_schema_version": "knowledge_ledger.v1",
+    "kind": "fact",
+    "subject_scope": "primary_user",
+    "subject_entity_id": "contract-user-1",
+    "intent_backed": true,
+    "curation_weight": 3,
+    "write_reason": "direct_user_statement",
+    "evidence": [
+      {
+        "evidence_id": "evidence-1",
+        "independence_group": "conversation-1",
+        "source_type": "conversation",
+        "source_signal": "transcript",
+        "client_device_id": "desktop-1"
+      }
+    ]
+  },
+  "future": {
+    "content": "A future-version row retains authoritative text.",
+    "id": "future-memory-1",
+    "uid": "contract-user-1",
+    "created_at": "2026-08-23T00:00:00Z",
+    "updated_at": "2026-08-23T00:00:00Z",
+    "layer": "long_term",
+    "ledger_schema_version": "knowledge_ledger.v2",
+    "evidence": [
+      {
+        "evidence_id": "future-evidence-1",
+        "independence_group": "future-group",
+        "future_evidence_field": "ignored_by_v1_clients"
+      }
+    ],
+    "future_ledger_field": {
+      "ignored_by_v1_clients": true
+    }
+  }
+}

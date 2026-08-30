@@ -3266,5 +3266,8 @@
     "appReEnableFailedTitle": "Не удалось включить снова",
     "appReEnableFailedBody": "Это приложение не удалось включить снова. Попробуйте ещё раз.",
     "appDisabledOn": "Отключено {date}.",
-    "appDisabledLastError": "Последняя ошибка: {error}."
+    "appDisabledLastError": "Последняя ошибка: {error}.",
+    "prerecordedTranscript": "Предзапись",
+    "pendantRecordingSyncBlocked": "Pendant всё ещё ведёт запись, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова.",
+    "pendantFullSyncBlocked": "Память Pendant заполнена, и он всё ещё в режиме записи, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова."
 }

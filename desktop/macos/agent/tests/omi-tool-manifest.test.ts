@@ -339,6 +339,10 @@ describe("omi tool manifest", () => {
       canonicalName: "semantic_search",
       wasAlias: true,
     });
+    expect(normalizeOmiToolName("local-agent-api", "look_at_frame")).toEqual({
+      canonicalName: "get_screenshot",
+      wasAlias: true,
+    });
   });
 
   it("builds a debuggable availability snapshot", () => {
@@ -349,6 +353,96 @@ describe("omi tool manifest", () => {
     expect(snapshot.advertisedToolNames).toEqual(toolNamesForAdapter("pi-mono"));
     expect(snapshot.aliases["mcp__omi-tools__execute_sql"]).toBe("execute_sql");
     expect(snapshot.disabled.some((tool) => tool.name === "get_email_insights")).toBe(true);
+  });
+
+  describe("JIT knowledge-ledger tools", () => {
+    const READ_TOOLS = ["search_knowledge", "read_playbook", "search_historical_facts", "get_entity_timeline_tool"];
+    const WRITE_TOOLS = ["save_playbook", "create_standing_trigger", "close_fact"];
+    const ALL_LEDGER_TOOLS = [...READ_TOOLS, ...WRITE_TOOLS];
+
+    it("are hidden from every adapter by default (fail closed)", () => {
+      for (const adapterId of ["pi-mono", "omi-tools-stdio"] as const) {
+        const names = toolNamesForAdapter(adapterId);
+        for (const toolName of ALL_LEDGER_TOOLS) {
+          expect(names, `${adapterId} should not advertise ${toolName} by default`).not.toContain(toolName);
+        }
+      }
+      // Explicitly false, and every other context flag on, is still hidden.
+      const names = toolNamesForAdapter("pi-mono", {
+        jitKnowledgeToolsEnabled: false,
+        onboarding: true,
+        screenContext: true,
+      });
+      for (const toolName of ALL_LEDGER_TOOLS) {
+        expect(names).not.toContain(toolName);
+      }
+    });
+
+    it("are advertised to pi-mono and omi-tools-stdio once the JIT rollout gate is on", () => {
+      for (const adapterId of ["pi-mono", "omi-tools-stdio"] as const) {
+        const names = toolNamesForAdapter(adapterId, { jitKnowledgeToolsEnabled: true });
+        for (const toolName of ALL_LEDGER_TOOLS) {
+          expect(names, `${adapterId} should advertise ${toolName} when gated on`).toContain(toolName);
+        }
+      }
+    });
+
+    it("declares a swiftTool/chatToolExecutor dispatch for every ledger tool", () => {
+      for (const toolName of ALL_LEDGER_TOOLS) {
+        const tool = omiToolManifest.find((entry) => entry.name === toolName);
+        expect(tool, `${toolName} manifest entry`).toBeTruthy();
+        expect(tool?.executor).toEqual({ kind: "swiftTool", executorName: "chatToolExecutor" });
+        expect(tool?.surfaces).toEqual(["desktop_chat"]);
+        expect(tool?.latency).toBe("fast network");
+        expect(tool?.intendedForAgents).toBe(true);
+      }
+    });
+
+    it("marks the four read tools read-only and the three write verbs as writes", () => {
+      for (const toolName of READ_TOOLS) {
+        const tool = omiToolManifest.find((entry) => entry.name === toolName);
+        expect(tool?.annotations.readOnlyHint, `${toolName} readOnlyHint`).toBe(true);
+      }
+      for (const toolName of WRITE_TOOLS) {
+        const tool = omiToolManifest.find((entry) => entry.name === toolName);
+        expect(tool?.annotations.readOnlyHint, `${toolName} readOnlyHint`).toBe(false);
+      }
+    });
+
+    it("keeps faithful, minimal input schemas matching the backend tool contracts", () => {
+      const enabled = toolsForAdapter("pi-mono", { jitKnowledgeToolsEnabled: true });
+      const byName = Object.fromEntries(enabled.map((tool) => [tool.name, tool]));
+
+      expect(byName.search_knowledge.inputSchema.required).toEqual(["query"]);
+      expect(byName.search_knowledge.inputSchema.properties).toHaveProperty("kinds");
+      expect(byName.search_knowledge.inputSchema.properties).toHaveProperty("limit");
+
+      expect(byName.read_playbook.inputSchema.required).toEqual(["memory_id"]);
+
+      expect(byName.search_historical_facts.inputSchema.required).toEqual(["query"]);
+      expect(byName.search_historical_facts.inputSchema.properties).toHaveProperty("include_rejected");
+
+      expect(byName.get_entity_timeline_tool.inputSchema.required).toEqual(["entity"]);
+      expect(byName.get_entity_timeline_tool.inputSchema.properties).toHaveProperty("sources");
+
+      expect(byName.save_playbook.inputSchema.required).toEqual(["description", "body"]);
+      expect(byName.create_standing_trigger.inputSchema.required).toEqual(["description", "condition"]);
+      expect(byName.close_fact.inputSchema.required).toEqual(["memory_id", "reason"]);
+    });
+
+    it("steers durable facts, playbooks, standing intent, and closures away from generic tools", () => {
+      const createMemory = omiToolManifest.find((entry) => entry.name === "create_memory");
+      const searchKnowledge = omiToolManifest.find((entry) => entry.name === "search_knowledge");
+      const savePlaybook = omiToolManifest.find((entry) => entry.name === "save_playbook");
+      const createStandingTrigger = omiToolManifest.find((entry) => entry.name === "create_standing_trigger");
+      const closeFact = omiToolManifest.find((entry) => entry.name === "close_fact");
+
+      expect(createMemory?.promptGuidelines?.join("\n")).toContain("knowledge-ledger tools");
+      expect(searchKnowledge?.promptGuidelines?.join("\n")).toContain("rather than create_memory or a filesystem document");
+      expect(savePlaybook?.promptGuidelines?.join("\n")).toContain("not a filesystem document and not create_memory");
+      expect(createStandingTrigger?.promptGuidelines?.join("\n")).toContain("explicit standing-intent request");
+      expect(closeFact?.promptGuidelines?.join("\n")).toContain("nothing should replace the closed fact");
+    });
   });
 
   it("requires surfaces and capabilityDoc on every manifest entry", () => {

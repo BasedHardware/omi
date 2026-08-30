@@ -483,6 +483,7 @@ export function Conversations(): React.JSX.Element {
           await omiApi.delete(`/v1/conversations/${row.id}`)
           anyCloud = true
         }
+        await window.omi.deleteJitConversationKeyframe(row.id)
       } catch (e) {
         console.error('Delete failed:', row.id, e)
       }

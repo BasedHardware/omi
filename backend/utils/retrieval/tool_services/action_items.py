@@ -178,8 +178,9 @@ def create_action_item_text(
         except ValueError as e:
             return f"Error: Invalid due_at format: {e}"
     else:
-        now = datetime.now(datetime.now().astimezone().tzinfo)
-        action_item_data['due_at'] = now + timedelta(hours=24)
+        # No invented due date: see create_action_item_tool. A task with no date
+        # the user gave belongs in the undated bucket, not tomorrow's.
+        pass
 
     try:
         action_item_id = action_items_db.create_action_item(uid, action_item_data)

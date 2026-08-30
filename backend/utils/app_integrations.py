@@ -1,5 +1,4 @@
 import asyncio
-import threading
 from typing import List
 import os
 import time
@@ -19,7 +18,6 @@ from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.async_tasks import gather_safe
 import utils.dev_cache as dev_cache
 
-import database.notifications as notification_db
 import database.dev_api_key as dev_api_key_db
 from database import mem_db
 from database import redis_db
@@ -46,7 +44,7 @@ from database.redis_db import (
     incr_daily_notification_count,
     get_daily_notification_count,
 )
-from models.app import App, ProactiveNotification, UsageHistoryType
+from models.app import App, UsageHistoryType
 from models.chat import Message
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource
@@ -63,6 +61,7 @@ from utils.llm.proactive_notification import (
     FREQUENCY_TO_BASE_THRESHOLD,
     MAX_DAILY_NOTIFICATIONS,
 )
+from utils.llm.temporal import current_date_for_uid
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
@@ -546,6 +545,11 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
         logger.error(f"mentor_proactive goals_failed uid={uid} error={e}")
         goals = []
 
+    # The pipeline's date anchor: without it the prompts fall back to UTC, which is
+    # wrong by up to a day for non-UTC users and desyncs the year guard near local
+    # midnight (SCA-358). Computed once so gate/generate/critic share one "today".
+    current_date = current_date_for_uid(uid)
+
     try:
         recent_notifications = get_app_messages(uid, 'mentor', limit=20)
     except Exception as e:
@@ -561,6 +565,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 goals=goals,
                 current_messages=conversation_messages,
                 recent_notifications=recent_notifications,
+                current_date=current_date,
             )
     except Exception as e:
         logger.error(f"mentor_proactive gate_failed uid={uid} error={e}")
@@ -641,6 +646,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 frequency=frequency,
                 gate_reasoning=relevance.reasoning,
                 output_language=output_language,
+                current_date=current_date,
             )
     except Exception as e:
         logger.error(f"mentor_proactive generate_failed uid={uid} error={e}")
@@ -668,6 +674,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 current_messages=conversation_messages,
                 goals=goals,
                 output_language=output_language,
+                current_date=current_date,
             )
     except Exception as e:
         logger.error(f"mentor_proactive critic_failed uid={uid} error={e}")

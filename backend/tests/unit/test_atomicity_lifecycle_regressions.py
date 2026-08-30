@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from models.memory_apply import MemoryControlState
+from models.memory_apply import MemoryControlState, WriterMode
 from models.product_memory import MemoryItemStatus
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 from utils.memory.memory_system import (
@@ -25,14 +25,15 @@ from utils.memory.memory_system import (
 _BACKEND = Path(__file__).resolve().parents[2]
 
 
-def _preference_duplicate_message():
-    """Load preference_duplicate_message without tools/__init__ side effects."""
+def _preference_tools_module():
+    """Load preference_tools without tools/__init__ side effects."""
     tools_pkg = types.ModuleType("utils.retrieval.tools")
     tools_pkg.__path__ = [os.path.join(str(_BACKEND), "utils", "retrieval", "tools")]  # type: ignore[attr-defined]
     fakes = {
         "utils.retrieval.tools": tools_pkg,
         "database._client": AutoMockModule("database._client"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
+        "utils.memory.knowledge_ledger": AutoMockModule("utils.memory.knowledge_ledger"),
         "utils.memory.memory_service": AutoMockModule("utils.memory.memory_service"),
         "utils.memory.memory_system": AutoMockModule("utils.memory.memory_system"),
         "testing.parity_pack_v0.live_capture": AutoMockModule("testing.parity_pack_v0.live_capture"),
@@ -53,22 +54,27 @@ def _preference_duplicate_message():
             "utils.retrieval.tools.preference_tools",
             os.path.join(str(_BACKEND), "utils", "retrieval", "tools", "preference_tools.py"),
         )
-        return module.preference_duplicate_message
+        return module
 
 
-def test_preference_tool_ignores_scoreless_unrelated_hits():
+@pytest.fixture(scope="module")
+def preference_tools_module():
+    """Amortize the intentionally isolated module load across focused tests."""
+
+    return _preference_tools_module()
+
+
+def test_preference_tool_ignores_scoreless_unrelated_hits(preference_tools_module):
     """Scoreless/synthetic search hits must not suppress unrelated preferences."""
-    preference_duplicate_message = _preference_duplicate_message()
-    message = preference_duplicate_message(
+    message = preference_tools_module.preference_duplicate_message(
         "Prefers Google Calendar over Outlook",
         [{"memory_id": "other", "content": "Prefers Outlook calendar"}],
     )
     assert message is None
 
 
-def test_preference_tool_blocks_exact_normalized_duplicate():
-    preference_duplicate_message = _preference_duplicate_message()
-    message = preference_duplicate_message(
+def test_preference_tool_blocks_exact_normalized_duplicate(preference_tools_module):
+    message = preference_tools_module.preference_duplicate_message(
         "Prefers Google Calendar over Outlook",
         [{"memory_id": "dup", "content": "  Prefers Google Calendar over Outlook "}],
     )
@@ -76,14 +82,201 @@ def test_preference_tool_blocks_exact_normalized_duplicate():
     assert message.startswith("Similar preference already exists:")
 
 
-def test_preference_tool_honors_real_relevance_score():
-    preference_duplicate_message = _preference_duplicate_message()
-    message = preference_duplicate_message(
+def test_preference_tool_honors_real_relevance_score(preference_tools_module):
+    message = preference_tools_module.preference_duplicate_message(
         "Prefers Google Calendar over Outlook",
         [{"memory_id": "near", "content": "Uses Google Calendar", "score": 0.95}],
     )
     assert message is not None
     assert "Uses Google Calendar" in message
+
+
+def test_preference_tool_writes_retry_stable_agent_conclusion_to_ledger(preference_tools_module, monkeypatch):
+    module = preference_tools_module
+
+    class Provenance:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    save_fact = MagicMock(return_value="mem_ledger")
+    capture_memory_write = MagicMock()
+    firestore_client = object()
+    monkeypatch.setattr(module, "LedgerProvenance", Provenance)
+    monkeypatch.setattr(module, "save_fact", save_fact)
+    monkeypatch.setattr(module, "capture_memory_write", capture_memory_write)
+    monkeypatch.setattr(module, "get_firestore_client", MagicMock(return_value=firestore_client))
+    monkeypatch.setattr(
+        module,
+        "ensure_canonical_apply_control_state",
+        lambda *_args, **_kwargs: types.SimpleNamespace(writer_mode=WriterMode.ledger),
+    )
+    config = {
+        "configurable": {
+            "user_id": "user-1",
+            "chat_session_id": "chat-1",
+            "thread_id": "thread-ignored",
+        }
+    }
+
+    first = module.save_user_preference_tool("Prefers metric units", config=config)
+    second = module.save_user_preference_tool("Prefers metric units", config=config)
+
+    assert first == second == "Preference saved: Prefers metric units"
+    assert save_fact.call_count == 2
+    first_call = save_fact.call_args_list[0]
+    second_call = save_fact.call_args_list[1]
+    assert first_call.kwargs["write_reason"].value == "agent_reusable_conclusion"
+    assert first_call.kwargs["provenance"].source_id == "chat-1"
+    assert first_call.kwargs["provenance"].source_type == "agent_chat"
+    assert first_call.kwargs["provenance"].action_id == second_call.kwargs["provenance"].action_id
+    assert first_call.kwargs["provenance"].artifact_ref == {"chat_session_id": "chat-1"}
+    assert first_call.kwargs["db_client"] is firestore_client
+    capture_memory_write.assert_called_with(
+        principal_id="user-1",
+        source="agent_preference_ledger_write",
+        session_id="chat-1",
+        memories=[
+            {
+                "id": "mem_ledger",
+                "content": "Prefers metric units",
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "write_reason": "agent_reusable_conclusion",
+            }
+        ],
+    )
+
+
+def test_preference_tool_uses_strict_compatibility_writer_in_default_mode(preference_tools_module, monkeypatch):
+    """The default writer mode retains the released MemoryService contract."""
+    module = preference_tools_module
+    firestore_client = object()
+    capture_memory_write = MagicMock()
+    save_fact = MagicMock(side_effect=AssertionError("ledger writer must stay gated"))
+
+    class StrictMemory:
+        def __init__(self, payload):
+            self.payload = payload
+            self.id = "mem-compat"
+
+    class StrictMemoryDB:
+        @classmethod
+        def model_validate(cls, payload):
+            assert payload["category"] == "system"
+            assert payload["manually_added"] is False
+            assert payload["visibility"] == "private"
+            assert payload["tags"] == ["agent-learned"]
+            assert "ledger_schema_version" not in payload
+            return StrictMemory(payload)
+
+        @staticmethod
+        def calculate_score(memory):
+            assert memory.payload["content"] == "Prefers metric units"
+            return "00_999_0000000000"
+
+    class StrictMemoryService:
+        def __init__(self, *, db_client):
+            assert db_client is firestore_client
+
+        def create_external_memory(
+            self,
+            uid,
+            memory_db,
+            *,
+            memory_system,
+            consumer,
+            operation,
+            upsert_vector,
+            require_canonical_promotion,
+        ):
+            assert uid == "user-compat"
+            assert memory_db.payload["content"] == "Prefers metric units"
+            assert memory_system is module.MemorySystem.CANONICAL
+            assert consumer == "agent_preference"
+            assert operation == "save_user_preference"
+            assert upsert_vector is False
+            assert require_canonical_promotion is True
+            return types.SimpleNamespace(id="adapter-returned-id")
+
+    monkeypatch.setattr(module, "MemoryDB", StrictMemoryDB)
+    monkeypatch.setattr(module, "MemoryService", StrictMemoryService)
+    monkeypatch.setattr(module.uuid, "uuid4", lambda: "mem-compat")
+    monkeypatch.setattr(module, "save_fact", save_fact)
+    monkeypatch.setattr(module, "capture_memory_write", capture_memory_write)
+    monkeypatch.setattr(module, "get_firestore_client", MagicMock(return_value=firestore_client))
+    monkeypatch.setattr(
+        module,
+        "ensure_canonical_apply_control_state",
+        lambda *_args, **_kwargs: types.SimpleNamespace(writer_mode=WriterMode.compatibility),
+    )
+    config = {"configurable": {"user_id": "user-compat", "chat_session_id": "chat-compat"}}
+
+    result = module.save_user_preference_tool("Prefers metric units", config=config)
+
+    assert result == "Preference saved: Prefers metric units"
+    save_fact.assert_not_called()
+    capture_memory_write.assert_called_once()
+    capture = capture_memory_write.call_args.kwargs
+    assert capture["principal_id"] == "user-compat"
+    assert capture["source"] == "agent_preference_memory_create"
+    assert capture["session_id"] == "mem-compat"
+    captured_memory = capture["memories"][0]
+    assert captured_memory["id"] == "mem-compat"
+    assert captured_memory["content"] == "Prefers metric units"
+    assert captured_memory["category"] == "system"
+    assert captured_memory["tags"] == ["agent-learned"]
+    assert captured_memory["scoring"] == "00_999_0000000000"
+    assert "ledger_schema_version" not in captured_memory
+
+
+def test_preference_tool_fails_closed_during_writer_transition(preference_tools_module, monkeypatch):
+    """A transition fence may not silently choose either writer."""
+    module = preference_tools_module
+    save_fact = MagicMock()
+    compatibility_service = MagicMock()
+    monkeypatch.setattr(module, "save_fact", save_fact)
+    monkeypatch.setattr(module, "MemoryService", compatibility_service)
+    monkeypatch.setattr(module, "get_firestore_client", MagicMock(return_value=object()))
+    monkeypatch.setattr(
+        module,
+        "ensure_canonical_apply_control_state",
+        lambda *_args, **_kwargs: types.SimpleNamespace(writer_mode=WriterMode.transitioning_to_ledger),
+    )
+
+    result = module.save_user_preference_tool(
+        "Prefers metric units",
+        config={"configurable": {"user_id": "user-transition"}},
+    )
+
+    assert result == "Error saving preference"
+    save_fact.assert_not_called()
+    compatibility_service.assert_not_called()
+
+
+def test_preference_tool_does_not_write_without_user_authority(preference_tools_module, monkeypatch):
+    module = preference_tools_module
+    save_fact = MagicMock()
+    monkeypatch.setattr(module, "save_fact", save_fact)
+
+    result = module.save_user_preference_tool("Prefers metric units", config={"configurable": {}})
+
+    assert result == "Error: Could not determine user ID"
+    save_fact.assert_not_called()
+
+
+def test_preference_tool_fails_closed_when_storage_authority_is_unavailable(preference_tools_module, monkeypatch):
+    module = preference_tools_module
+    save_fact = MagicMock()
+    monkeypatch.setattr(module, "get_firestore_client", MagicMock(side_effect=RuntimeError("credential detail")))
+    monkeypatch.setattr(module, "save_fact", save_fact)
+
+    result = module.save_user_preference_tool(
+        "Prefers metric units",
+        config={"configurable": {"user_id": "user-1"}},
+    )
+
+    assert result == "Error saving preference"
+    save_fact.assert_not_called()
 
 
 def test_explicit_integration_memories_keep_required_processing_contract():
@@ -130,7 +323,13 @@ def test_review_reject_is_idempotent_after_tombstone(review_queue_module):
 
     memory_service_module = types.ModuleType("utils.memory.memory_service")
     memory_service_module.MemoryService = lambda db_client=None: memory_service
-    with stub_modules({"utils.memory.memory_service": memory_service_module}):
+    canonical_adapter_module = AutoMockModule("utils.memory.canonical_memory_adapter")
+    with stub_modules(
+        {
+            "utils.memory.memory_service": memory_service_module,
+            "utils.memory.canonical_memory_adapter": canonical_adapter_module,
+        }
+    ):
         result = review_queue_module.append_resolution_commit(
             "u1",
             {

@@ -163,4 +163,5 @@ final class APIClientMemoryLifecycleHeaderTests: XCTestCase {
     XCTAssertTrue(raw.contains("cursor=uml.prev%2Btoken"), raw)
     XCTAssertFalse(raw.contains("offset="), raw)
   }
+
 }

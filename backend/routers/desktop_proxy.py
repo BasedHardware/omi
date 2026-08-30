@@ -25,6 +25,7 @@ from utils.http_client import (
     get_desktop_gemini_stream_client,
 )
 from utils.llm import vertex_pt_routing as ptr
+from utils.llm import desktop_gemini_gateway
 from utils.llm.desktop_llm_stub import (
     llm_stub_enabled,
     stub_gemini_proxy_json,
@@ -70,13 +71,15 @@ VERTEX_PT_MODEL = ptr.PT_MODEL_CURRENT
 # on it, with no deploy. See backend/docs/vertex-pt-flash.md.
 VERTEX_PT_TARGET_MODEL = ptr.PT_MODEL_TARGET
 # Emergency operator pins. Both beat auto-detection so a bad promotion or a
-# bad overflow target can be corrected without shipping code.
-_PT_MODEL_OVERRIDE_ENV = 'OMI_VERTEX_PT_MODEL'
-_OVERFLOW_MODEL_OVERRIDE_ENV = 'OMI_GEMINI_OVERFLOW_MODEL'
-_OVERFLOW_ENABLED_ENV = 'OMI_GEMINI_OVERFLOW_ENABLED'
+# bad overflow target can be corrected without shipping code. The env names
+# live in vertex_pt_routing so the gateway's provider and this kill-switch
+# path read the same strings.
+_PT_MODEL_OVERRIDE_ENV = ptr.PT_MODEL_OVERRIDE_ENV
+_OVERFLOW_MODEL_OVERRIDE_ENV = ptr.OVERFLOW_MODEL_OVERRIDE_ENV
+_OVERFLOW_ENABLED_ENV = ptr.OVERFLOW_ENABLED_ENV
 # Data-residency pin for the families that have no regional endpoint. `us`
 # keeps inference in the US multi-region; `global` would widen it worldwide.
-_MULTI_REGION_LOCATION_ENV = 'OMI_VERTEX_GLOBAL_LOCATION'
+_MULTI_REGION_LOCATION_ENV = ptr.MULTI_REGION_LOCATION_ENV
 # How long a PT-capacity observation is trusted before it is re-probed. Bounds
 # both the promotion delay after the order lands and the cost of probing.
 _PT_PROBE_TTL_SECONDS = 600.0
@@ -91,7 +94,7 @@ _QUOTA_DEMOTION_MODEL = 'gemini-2.5-flash-lite'
 _MAX_BODY_BYTES = 5 * 1024 * 1024
 # Absolute ceiling; also the default for BYOK traffic, which keeps its
 # historical behavior.
-_MAX_OUTPUT_TOKENS = 8192
+_MAX_OUTPUT_TOKENS = desktop_gemini_gateway._MAX_OUTPUT_TOKENS  # pyright: ignore[reportPrivateUsage]
 # Server-paid requests get a smaller default and clamp. No shipped desktop
 # client can emit maxOutputTokens (macOS GenerationConfig has no such field;
 # Windows sends none), so every request used to take the 8192 default while the
@@ -100,10 +103,10 @@ _MAX_OUTPUT_TOKENS = 8192
 # Mean measured output is ~241 tokens — this bounds the paid tail, it does not
 # change the mean.
 _SERVER_PAID_MAX_OUTPUT_TOKENS = 2048
-_DEFAULT_THINKING_BUDGET = 1024
-_MAX_CONTENT_ITEMS = 128
-_MAX_CONTENT_PARTS = 512
-_MAX_INLINE_MEDIA_PARTS = 16
+_DEFAULT_THINKING_BUDGET = desktop_gemini_gateway._DEFAULT_THINKING_BUDGET  # pyright: ignore[reportPrivateUsage]
+_MAX_CONTENT_ITEMS = desktop_gemini_gateway._MAX_CONTENT_ITEMS  # pyright: ignore[reportPrivateUsage]
+_MAX_CONTENT_PARTS = desktop_gemini_gateway._MAX_CONTENT_PARTS  # pyright: ignore[reportPrivateUsage]
+_MAX_INLINE_MEDIA_PARTS = desktop_gemini_gateway._MAX_INLINE_MEDIA_PARTS  # pyright: ignore[reportPrivateUsage]
 _BURST_LIMIT = 30
 _DAILY_HARD_LIMIT = 1500
 _ALLOWED_WORKLOADS = frozenset({'interactive', 'extraction', 'maintenance'})
@@ -138,13 +141,6 @@ class UpstreamRoute:
     provider: str
     credential_source: str
     region: str
-
-
-@dataclass(frozen=True)
-class PayloadShape:
-    size_bucket: str
-    content_parts_bucket: str
-    inline_media_bucket: str
 
 
 class RoutingFailure(Exception):
@@ -304,52 +300,14 @@ def _status_class(status: int | None) -> str:
     return 'unknown'
 
 
-def _bucket(value: int, thresholds: tuple[tuple[int, str], ...], overflow: str) -> str:
-    for maximum, label in thresholds:
-        if value <= maximum:
-            return label
-    return overflow
-
-
-def _payload_shape(body: bytes) -> PayloadShape:
-    try:
-        payload = json.loads(body)
-    except (TypeError, ValueError):
-        return PayloadShape(_size_bucket(len(body)), 'unknown', 'unknown')
-    if not isinstance(payload, dict):
-        return PayloadShape(_size_bucket(len(body)), 'unknown', 'unknown')
-    contents = payload.get('contents')
-    content_count = len(contents) if isinstance(contents, list) else 0
-    part_count = 0
-    inline_media_count = 0
-    if isinstance(contents, list):
-        for content in contents:
-            if not isinstance(content, dict) or not isinstance(content.get('parts'), list):
-                continue
-            parts = content['parts']
-            part_count += len(parts)
-            for part in parts:
-                if isinstance(part, dict) and ('inlineData' in part or 'inline_data' in part):
-                    inline_media_count += 1
-    if content_count > _MAX_CONTENT_ITEMS:
-        raise HTTPException(status_code=413, detail='Gemini request has too many content items')
-    if part_count > _MAX_CONTENT_PARTS:
-        raise HTTPException(status_code=413, detail='Gemini request has too many content parts')
-    if inline_media_count > _MAX_INLINE_MEDIA_PARTS:
-        raise HTTPException(status_code=413, detail='Gemini request has too many inline media parts')
-    return PayloadShape(
-        _size_bucket(len(body)),
-        _bucket(part_count, ((2, '0-2'), (8, '3-8'), (32, '9-32'), (128, '33-128')), '129+'),
-        _bucket(inline_media_count, ((0, '0'), (1, '1'), (4, '2-4')), '5+'),
-    )
-
-
-def _size_bucket(size: int) -> str:
-    return _bucket(
-        size,
-        ((16_384, '0-16kb'), (131_072, '16-128kb'), (524_288, '128-512kb'), (1_048_576, '512kb-1mb')),
-        '1mb+',
-    )
+# Gemini body sanitization moved to utils/llm/desktop_gemini_gateway.py; these
+# aliases keep the proxy's call sites and tests stable.
+_as_nonnegative_int = desktop_gemini_gateway._as_nonnegative_int  # pyright: ignore[reportPrivateUsage]
+_bucket = desktop_gemini_gateway._bucket  # pyright: ignore[reportPrivateUsage]
+_payload_shape = desktop_gemini_gateway._payload_shape  # pyright: ignore[reportPrivateUsage]
+_sanitize = desktop_gemini_gateway._sanitize  # pyright: ignore[reportPrivateUsage]
+_size_bucket = desktop_gemini_gateway._size_bucket  # pyright: ignore[reportPrivateUsage]
+PayloadShape = desktop_gemini_gateway.PayloadShape
 
 
 def _path_parts(path: str) -> tuple[str, str, str]:
@@ -359,86 +317,6 @@ def _path_parts(path: str) -> tuple[str, str, str]:
     if action not in _ALLOWED_ACTIONS or model not in _ALLOWED_MODELS:
         raise HTTPException(status_code=403, detail='Gemini model or action is not allowed')
     return path, model, action
-
-
-def _as_nonnegative_int(value: Any) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int) and value >= 0:
-        return value
-    if isinstance(value, float) and value >= 0 and value.is_integer():
-        return int(value)
-    if isinstance(value, str) and value.isdigit():
-        return int(value)
-    return None
-
-
-def _sanitize(
-    body: bytes,
-    action: str,
-    *,
-    max_output_tokens: int = _MAX_OUTPUT_TOKENS,
-) -> bytes:
-    try:
-        payload = json.loads(body)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail='Request body must be valid JSON') from exc
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail='Request body must be a JSON object')
-    for key in ('safety_settings', 'safetySettings', 'cached_content', 'cachedContent'):
-        payload.pop(key, None)
-    contents = payload.get('contents')
-    if isinstance(contents, list):
-        system_parts: list[Any] = []
-        remaining = []
-        for content in contents:
-            if not isinstance(content, dict):
-                remaining.append(content)
-                continue
-            role = content.setdefault('role', 'user')
-            if role == 'system':
-                if isinstance(content.get('parts'), list):
-                    system_parts.extend(content['parts'])
-            else:
-                remaining.append(content)
-        payload['contents'] = remaining
-        if system_parts:
-            key = 'system_instruction' if 'system_instruction' in payload else 'systemInstruction'
-            instruction = payload.get(key)
-            if isinstance(instruction, dict) and isinstance(instruction.get('parts'), list):
-                instruction['parts'].extend(system_parts)
-            else:
-                payload['systemInstruction'] = {'parts': system_parts}
-    if action not in {'embedContent', 'batchEmbedContents'}:
-        for key in ('candidate_count', 'candidateCount'):
-            value = _as_nonnegative_int(payload.get(key))
-            if value is not None and value > 1:
-                raise HTTPException(status_code=400, detail='candidate_count must be 1 or absent')
-        generation_configs = [
-            payload[key] for key in ('generation_config', 'generationConfig') if isinstance(payload.get(key), dict)
-        ]
-        if not generation_configs:
-            payload['generationConfig'] = {
-                'maxOutputTokens': max_output_tokens,
-                'thinkingConfig': ptr.thinking_config_for(budget=_DEFAULT_THINKING_BUDGET),
-            }
-        for config in generation_configs:
-            for key in ('candidate_count', 'candidateCount'):
-                value = _as_nonnegative_int(config.get(key))
-                if value is not None and value > 1:
-                    raise HTTPException(status_code=400, detail='candidate_count must be 1 or absent')
-            output_key_present = False
-            for key in ('max_output_tokens', 'maxOutputTokens'):
-                value = _as_nonnegative_int(config.get(key))
-                if value is not None:
-                    output_key_present = True
-                    if value > max_output_tokens:
-                        config[key] = max_output_tokens
-            if not output_key_present:
-                config['maxOutputTokens'] = max_output_tokens
-            if 'thinking_config' not in config and 'thinkingConfig' not in config:
-                config['thinkingConfig'] = ptr.thinking_config_for(budget=_DEFAULT_THINKING_BUDGET)
-    return json.dumps(payload, separators=(',', ':')).encode()
 
 
 def _output_token_cap() -> int:
@@ -1315,6 +1193,44 @@ def _proxy_issue_class(status_code: int) -> str:
     return 'invalid_response'
 
 
+def _company_paid_via_gateway(model: str, action: str) -> bool:
+    return desktop_gemini_gateway.company_paid_via_gateway(model, action)
+
+
+def _gateway_envelope() -> desktop_gemini_gateway.ProxyEnvelope:
+    return desktop_gemini_gateway.ProxyEnvelope(
+        error_response=_error_response,
+        response_headers=_response_headers,
+        stream_error_event=_stream_error_event,
+        cancel_on_disconnect=_cancel_on_disconnect,
+        timeout_phase=_timeout_phase,
+        client_disconnected=ClientDisconnected,
+        provider_unavailable_retry_after=_PROVIDER_UNAVAILABLE_RETRY_AFTER_SECONDS,
+    )
+
+
+async def _proxy_via_gateway(
+    request: Request,
+    body: bytes,
+    *,
+    model: str,
+    action: str,
+    streaming: bool,
+    uid: str,
+    telemetry: ProxyTelemetry,
+) -> Response:
+    return await desktop_gemini_gateway.proxy_company_paid_via_gateway(
+        request,
+        body,
+        model=model,
+        action=action,
+        streaming=streaming,
+        uid=uid,
+        telemetry=telemetry,
+        envelope=_gateway_envelope(),
+    )
+
+
 async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Response:
     try:
         _, _, action = _path_parts(path)
@@ -1400,6 +1316,15 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
             )
         telemetry.phase = 'metering'
         path = await _meter_server_request(uid, path, model, action)
+        if _company_paid_via_gateway(model, action):
+            # The gateway owns pin/overflow/host policy for company-paid
+            # traffic; the requested model (post quota-demotion) picks the
+            # lane and this proxy keeps only its BFF limits.
+            body = _sanitize(body, action, max_output_tokens=_output_token_cap())
+            telemetry.shape = _payload_shape(body)
+            return await _proxy_via_gateway(
+                request, body, model=model, action=action, streaming=streaming, uid=uid, telemetry=telemetry
+            )
         path = _retarget_path(*_path_parts(path))
         _, model, action = _path_parts(path)
         telemetry.model = model
@@ -1582,7 +1507,13 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
 
 
 async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
-    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, 'desktop'):
+    if await run_blocking(
+        db_executor,
+        is_desktop_trial_paywalled,
+        uid,
+        'desktop',
+        required_byok_provider='gemini',
+    ):
         raise HTTPException(status_code=402, detail='trial_expired')
     return uid
 

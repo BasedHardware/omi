@@ -385,21 +385,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       case 'download_audio':
         await _downloadAudio(context, provider);
         break;
-      // case 'export_transcript':
-      //   showShareBottomSheet(context, provider.conversation, (fn) {});
-      //   break;
-      // case 'export_summary':
-      //   showShareBottomSheet(context, provider.conversation, (fn) {});
-      //   break;
-      // case 'copy_raw_transcript':
-      //   _copyContent(context, provider.conversation.getTranscript());
-      //   break;
-      // case 'copy_conversation_raw':
-      //   _copyContent(context, provider.conversation.toJson().toString());
-      //   break;
-      // case 'trigger_integration':
-      //   _triggerWebhookIntegration(context, provider.conversation);
-      //   break;
       case 'test_prompt':
         routeToPage(context, TestPromptsPage(conversation: provider.conversation));
         break;
@@ -656,41 +641,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       }
     }
   }
-
-  // void _triggerWebhookIntegration(BuildContext context, ServerConversation conversation) {
-  //   if (SharedPreferencesUtil().webhookOnConversationCreated.isEmpty) {
-  //     showDialog(
-  //       context: context,
-  //       builder: (c) => getDialog(
-  //         context,
-  //         () => Navigator.pop(context),
-  //         () {
-  //           Navigator.pop(context);
-  //           routeToPage(context, const DeveloperSettingsPage());
-  //         },
-  //         'Webhook URL not set',
-  //         'Please set the webhook URL in developer settings to use this feature.',
-  //         okButtonText: 'Settings',
-  //       ),
-  //     );
-  //     return;
-  //   }
-  //
-  //   webhookOnConversationCreatedCall(conversation, returnRawBody: true).then((response) {
-  //     showDialog(
-  //       context: context,
-  //       builder: (c) => getDialog(
-  //         context,
-  //         () => Navigator.pop(context),
-  //         () => Navigator.pop(context),
-  //         'Result:',
-  //         response,
-  //         okButtonText: 'Ok',
-  //         singleButton: true,
-  //       ),
-  //     );
-  //   });
-  // }
 
   @override
   Widget build(BuildContext context) {
@@ -1215,110 +1165,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   ),
                 ),
 
-              // thinh's comment: temporary disabled
-              //// Unassigned segments notification - positioned above the bottom bar
-              //Positioned(
-              //  bottom: 88, // Position above the bottom bar
-              //  left: 16,
-              //  right: 16,
-              //  child: Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(
-              //    selector: (context, provider) {
-              //      final conversation = provider.conversation;
-              //      if (conversation == null) {
-              //        return (
-              //          count: 0,
-              //          shouldShow: false,
-              //        );
-              //      }
-              //      return (
-              //        count: conversation.unassignedSegmentsLength(),
-              //        shouldShow: provider.showUnassignedFloatingButton && (selectedTab == ConversationTab.transcript),
-              //      );
-              //    },
-              //    builder: (context, value, child) {
-              //      if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
-              //      return Container(
-              //        padding: const EdgeInsets.symmetric(
-              //          vertical: 8,
-              //          horizontal: 16,
-              //        ),
-              //        decoration: BoxDecoration(
-              //          borderRadius: BorderRadius.circular(16),
-              //          color: const Color(0xFF1F1F25),
-              //          boxShadow: [
-              //            BoxShadow(
-              //              color: Colors.black.withValues(alpha: 0.3),
-              //              spreadRadius: 1,
-              //              blurRadius: 2,
-              //              offset: const Offset(0, 1),
-              //            ),
-              //          ],
-              //        ),
-              //        child: Row(
-              //          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              //          children: [
-              //            Row(
-              //              children: [
-              //                InkWell(
-              //                  onTap: () {
-              //                    var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-              //                    provider.setShowUnassignedFloatingButton(false);
-              //                  },
-              //                  child: const Icon(
-              //                    Icons.close,
-              //                    color: Colors.white,
-              //                  ),
-              //                ),
-              //                const SizedBox(width: 8),
-              //                Text(
-              //                  "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
-              //                  style: const TextStyle(
-              //                    color: Colors.white,
-              //                    fontSize: 16,
-              //                  ),
-              //                ),
-              //              ],
-              //            ),
-              //            ElevatedButton(
-              //              style: ElevatedButton.styleFrom(
-              //                backgroundColor: Colors.deepPurple.withValues(alpha: 0.5),
-              //                shape: RoundedRectangleBorder(
-              //                  borderRadius: BorderRadius.circular(16),
-              //                ),
-              //              ),
-              //              onPressed: () {
-              //                var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-              //                var speakerId = provider.conversation.speakerWithMostUnassignedSegments();
-              //                var segmentIdx = provider.conversation.firstSegmentIndexForSpeaker(speakerId);
-              //                showModalBottomSheet(
-              //                  context: context,
-              //                  isScrollControlled: true,
-              //                  backgroundColor: Colors.black,
-              //                  shape: const RoundedRectangleBorder(
-              //                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              //                  ),
-              //                  builder: (context) {
-              //                    return NameSpeakerBottomSheet(
-              //                      segmentIdx: segmentIdx,
-              //                      speakerId: speakerId,
-              //                    );
-              //                  },
-              //                );
-              //              },
-              //              child: const Text(
-              //                "Tag",
-              //                style: TextStyle(
-              //                  color: Colors.white,
-              //                  fontWeight: FontWeight.bold,
-              //                ),
-              //              ),
-              //            ),
-              //          ],
-              //        ),
-              //      );
-              //    },
-              //  ),
-              //),
               // Search overlay
               if (_isSearching)
                 Positioned(
@@ -1902,6 +1748,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               segments,
               photos,
               null,
+              conversationId: conversation.id,
               horizontalMargin: false,
               topMargin: false,
               canDisplaySeconds: provider.canDisplaySeconds,

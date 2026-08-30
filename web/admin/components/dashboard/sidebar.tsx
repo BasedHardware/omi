@@ -22,6 +22,8 @@ import {
   FlaskConical,
   Rocket,
   Handshake,
+  Star,
+  MessageSquarePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,9 +36,9 @@ export function DashboardSidebar() {
 
   // Load collapsed state from localStorage on mount
   useEffect(() => {
-    const savedState = localStorage.getItem('sidebarCollapsed');
+    const savedState = localStorage.getItem("sidebarCollapsed");
     if (savedState !== null) {
-      setIsCollapsed(savedState === 'true');
+      setIsCollapsed(savedState === "true");
     }
   }, []);
 
@@ -44,9 +46,9 @@ export function DashboardSidebar() {
   const toggleCollapse = () => {
     const newState = !isCollapsed;
     setIsCollapsed(newState);
-    localStorage.setItem('sidebarCollapsed', String(newState));
+    localStorage.setItem("sidebarCollapsed", String(newState));
   };
-  
+
   const navItems = [
     {
       title: "Dashboard",
@@ -104,6 +106,16 @@ export function DashboardSidebar() {
       icon: Bell,
     },
     {
+      title: "Prompts",
+      href: "/dashboard/prompts",
+      icon: MessageSquarePlus,
+    },
+    {
+      title: "CSAT",
+      href: "/dashboard/csat",
+      icon: Star,
+    },
+    {
       title: "Releases",
       href: "/dashboard/releases",
       icon: Rocket,
@@ -130,26 +142,32 @@ export function DashboardSidebar() {
   };
 
   return (
-    <aside className={cn(
-      "border-r bg-card h-screen flex-shrink-0 sticky top-0 flex flex-col z-20 transition-all duration-300",
-      isCollapsed ? "w-16" : "w-64"
-    )}>
-      <div className={cn(
-        "border-b h-14 flex items-center transition-all duration-300 relative",
-        isCollapsed ? "px-2 justify-center" : "px-4 justify-between"
-      )}>
-        <Link 
-          href="/dashboard" 
+    <aside
+      className={cn(
+        "sticky top-0 z-20 flex h-screen flex-shrink-0 flex-col border-r bg-card transition-all duration-300",
+        isCollapsed ? "w-16" : "w-64"
+      )}
+    >
+      <div
+        className={cn(
+          "relative flex h-14 items-center border-b transition-all duration-300",
+          isCollapsed ? "justify-center px-2" : "justify-between px-4"
+        )}
+      >
+        <Link
+          href="/dashboard"
           className={cn(
             "flex items-center space-x-2 font-semibold transition-all duration-200",
             isCollapsed ? "justify-center" : "justify-start"
           )}
         >
           <Package2 className="h-6 w-6 flex-shrink-0" />
-          <span className={cn(
-            "transition-opacity duration-200 whitespace-nowrap",
-            isCollapsed ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
-          )}>
+          <span
+            className={cn(
+              "whitespace-nowrap transition-opacity duration-200",
+              isCollapsed ? "w-0 overflow-hidden opacity-0" : "opacity-100"
+            )}
+          >
             OMI Admin
           </span>
         </Link>
@@ -158,7 +176,8 @@ export function DashboardSidebar() {
           size="icon"
           className={cn(
             "h-8 w-8 flex-shrink-0",
-            isCollapsed && "absolute top-1/2 -right-3 translate-y-[-50%] bg-background border border-border rounded-full shadow-sm z-10"
+            isCollapsed &&
+              "absolute -right-3 top-1/2 z-10 translate-y-[-50%] rounded-full border border-border bg-background shadow-sm"
           )}
           onClick={toggleCollapse}
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -170,14 +189,14 @@ export function DashboardSidebar() {
           )}
         </Button>
       </div>
-      <div className="flex-1 py-6 flex flex-col justify-between">
-        <nav className="px-2 space-y-1">
+      <div className="flex flex-1 flex-col justify-between py-6">
+        <nav className="space-y-1 px-2">
           {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center px-2 py-2 rounded-md text-sm font-medium transition-colors",
+                "flex items-center rounded-md px-2 py-2 text-sm font-medium transition-colors",
                 isCollapsed ? "justify-center" : "justify-start",
                 pathname === item.href
                   ? "bg-primary/10 text-primary"
@@ -186,18 +205,22 @@ export function DashboardSidebar() {
               title={isCollapsed ? item.title : undefined}
             >
               <item.icon className="h-5 w-5 flex-shrink-0" />
-              <span className={cn(
-                "transition-opacity duration-200",
-                isCollapsed ? "opacity-0 w-0 overflow-hidden ml-0" : "opacity-100 ml-3"
-              )}>
+              <span
+                className={cn(
+                  "transition-opacity duration-200",
+                  isCollapsed
+                    ? "ml-0 w-0 overflow-hidden opacity-0"
+                    : "ml-3 opacity-100"
+                )}
+              >
                 {item.title}
               </span>
             </Link>
           ))}
         </nav>
-        <div className="px-2 space-y-1">
-          <Button 
-            variant="ghost" 
+        <div className="space-y-1 px-2">
+          <Button
+            variant="ghost"
             className={cn(
               "w-full text-muted-foreground transition-colors",
               isCollapsed ? "justify-center" : "justify-start"
@@ -206,10 +229,14 @@ export function DashboardSidebar() {
             title={isCollapsed ? "Log out" : undefined}
           >
             <LogOut className="h-5 w-5 flex-shrink-0" />
-            <span className={cn(
-              "transition-opacity duration-200",
-              isCollapsed ? "opacity-0 w-0 overflow-hidden ml-0" : "opacity-100 ml-3"
-            )}>
+            <span
+              className={cn(
+                "transition-opacity duration-200",
+                isCollapsed
+                  ? "ml-0 w-0 overflow-hidden opacity-0"
+                  : "ml-3 opacity-100"
+              )}
+            >
               Log out
             </span>
           </Button>

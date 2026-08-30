@@ -88,6 +88,10 @@ struct QueryHeroBar: View {
   var onStop: () -> Void = {}
   var onAttachmentsAdded: ([URL]) -> Void = { _ in }
   var onAttachmentRemoved: (String) -> Void = { _ in }
+  /// Sources staged from a page action (for example, “Discuss in Chat”).
+  /// These are rendered as removable chips and never submit on their own.
+  var references: [ChatComposerReference] = []
+  var onReferenceRemoved: (String) -> Void = { _ in }
 
   @State private var isDropTargeted = false
   /// True while an input method has uncommitted marked text, which is the one moment the placeholder
@@ -172,6 +176,10 @@ struct QueryHeroBar: View {
       if !attachments.isEmpty {
         AttachmentPreviewRow(attachments: attachments, onRemove: onAttachmentRemoved)
           .accessibilityIdentifier("query-shell-attachments")
+      }
+      if !references.isEmpty {
+        ChatComposerReferenceRow(references: references, onRemove: onReferenceRemoved)
+          .accessibilityIdentifier("query-shell-references")
       }
       inputRow
     }

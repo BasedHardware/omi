@@ -11,6 +11,20 @@ enum NotificationDismissalKind: String, CaseIterable, Sendable {
   case replaced
 }
 
+/// Closed source for `floating_bar_query_sent`. Historical events omit this
+/// property; dashboards that need continuity with that volume should filter
+/// `source=typed`.
+enum FloatingBarQuerySource: String, CaseIterable, Sendable {
+  case typed
+  case ptt
+  case pttVoiceOnly = "ptt_voice_only"
+  case pttRealtime = "ptt_realtime"
+
+  static func visibleQuery(fromVoice: Bool) -> Self {
+    fromVoice ? .ptt : .typed
+  }
+}
+
 /// Unified analytics manager that sends events to PostHog.
 /// Use this instead of calling PostHogManager directly
 @MainActor
@@ -117,6 +131,16 @@ class AnalyticsManager {
     _ capture: (@MainActor (String?, [String: Any], [String: Any]) -> Void)?
   ) {
     devicePairingTelemetryCaptureForTests = capture
+  }
+
+  /// Scoped observation of floating-bar query telemetry. Nil in production;
+  /// tests install a capture at the same boundary as PostHog.
+  private var floatingBarQueryTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setFloatingBarQueryTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    floatingBarQueryTelemetryCaptureForTests = capture
   }
 
   // MARK: - Initialization
@@ -559,23 +583,46 @@ class AnalyticsManager {
     PostHogManager.shared.appLaunched()
   }
 
+  /// A process reports startup once. `ViewModelContainer.loadAllData()` runs
+  /// again after an owner switch, and that second run is not a launch.
+  private var didReportStartupTiming = false
+
+  /// Report one launch's startup timing.
+  ///
+  /// - `dataLoadMs` is the critical startup path inside `loadAllData()`. This is
+  ///   what the old `time_to_interactive_ms` actually measured, which is why it
+  ///   reported 11–131ms for a "cold start".
+  /// - `timeToInteractiveMs` is measured from the kernel's process-start stamp,
+  ///   so it includes dyld, `main`, and everything before the data load. It is
+  ///   omitted rather than faked when the kernel lookup fails.
   func trackStartupTiming(
-    dbInitMs: Double, timeToInteractiveMs: Double, hadUncleanShutdown: Bool,
-    databaseInitFailed: Bool
+    dbInitMs: Double, dataLoadMs: Double, hadUncleanShutdown: Bool,
+    databaseInitFailed: Bool,
+    timeToInteractiveMs: Double? = AppStartupTiming.millisecondsSinceProcessStart()
   ) {
     guard !Self.isDevBuild else { return }
-    // Routed to Sentry as a breadcrumb (perf telemetry, not product analytics) so the data
-    // is attached to any same-session crash report without creating a per-launch analytics
-    // event. If we ever need real perf metrics, wire up SentrySDK.startTransaction here.
-    let breadcrumb = Breadcrumb(level: .info, category: "app.startup")
-    breadcrumb.message = "App Startup Timing"
-    breadcrumb.data = [
+    guard !didReportStartupTiming else { return }
+    didReportStartupTiming = true
+
+    var properties: [String: Any] = [
       "db_init_ms": round(dbInitMs),
-      "time_to_interactive_ms": round(timeToInteractiveMs),
+      "data_load_ms": round(dataLoadMs),
       "had_unclean_shutdown": hadUncleanShutdown,
       "database_init_failed": databaseInitFailed,
     ]
+    if let timeToInteractiveMs {
+      properties["time_to_interactive_ms"] = round(timeToInteractiveMs)
+    }
+
+    // Also a Sentry breadcrumb so the numbers stay attached to a same-session
+    // crash report. Sentry is a per-issue view; it cannot answer "is startup
+    // getting slower across the fleet", which is why this is in PostHog too.
+    let breadcrumb = Breadcrumb(level: .info, category: "app.startup")
+    breadcrumb.message = "App Startup Timing"
+    breadcrumb.data = properties
     SentrySDK.addBreadcrumb(breadcrumb)
+
+    PostHogManager.shared.track("App Startup Timing", properties: properties)
   }
 
   /// Track first launch with comprehensive system diagnostics
@@ -711,8 +758,24 @@ class AnalyticsManager {
     }
   }
 
-  func desktopRatingSubmitted(rating: Int) {
-    PostHogManager.shared.desktopRatingSubmitted(rating: rating)
+  func desktopRatingSubmitted(rating: Int, revision: Int? = nil) {
+    PostHogManager.shared.desktopRatingSubmitted(rating: rating, revision: revision)
+  }
+
+  func desktopPromptShown(promptId: String, promptType: String) {
+    PostHogManager.shared.track(
+      "Desktop Prompt Shown", properties: ["prompt_id": promptId, "prompt_type": promptType])
+  }
+
+  func desktopPromptAnswered(promptId: String, promptType: String, value: String) {
+    PostHogManager.shared.track(
+      "Desktop Prompt Answered",
+      properties: ["prompt_id": promptId, "prompt_type": promptType, "value": value])
+  }
+
+  func desktopPromptDismissed(promptId: String, promptType: String) {
+    PostHogManager.shared.track(
+      "Desktop Prompt Dismissed", properties: ["prompt_id": promptId, "prompt_type": promptType])
   }
 
   // MARK: - Search Events
@@ -1402,11 +1465,13 @@ class AnalyticsManager {
   }
 
   /// Track when an AI query is sent from the floating bar
-  func floatingBarQuerySent(messageLength: Int, hasScreenshot: Bool) {
+  func floatingBarQuerySent(messageLength: Int, hasScreenshot: Bool, source: FloatingBarQuerySource) {
     let props: [String: Any] = [
       "message_length": messageLength,
       "has_screenshot": hasScreenshot,
+      "source": source.rawValue,
     ]
+    floatingBarQueryTelemetryCaptureForTests?("floating_bar_query_sent", props)
     PostHogManager.shared.track("floating_bar_query_sent", properties: props)
   }
 
@@ -1416,13 +1481,26 @@ class AnalyticsManager {
     PostHogManager.shared.track("floating_bar_ptt_started", properties: props)
   }
 
-  /// Track when push-to-talk ends and sends (or discards) transcript
-  func floatingBarPTTEnded(mode: String, hadTranscript: Bool, transcriptLength: Int) {
-    let props: [String: Any] = [
+  /// Track when push-to-talk ends and sends (or discards) transcript.
+  ///
+  /// `had_transcript` does NOT mean "text exists". On the realtime-hub path the
+  /// client commits raw audio and never sees a transcript, so the property means
+  /// **the turn was committed for an answer**. Only the STT cascade can report a
+  /// real length; the hub passes `nil` rather than a literal, because a property
+  /// that is a fake `0` on most events silently poisons every aggregate built on
+  /// it. Read admitted-vs-rejected audio distributions from
+  /// `ptt_audio_capture_lifecycle`, which carries the real measurements.
+  ///
+  /// The wire property names are deliberately unchanged: existing dashboards and
+  /// the PTT quality baseline join on them.
+  func floatingBarPTTEnded(mode: String, committed: Bool, transcriptLength: Int?) {
+    var props: [String: Any] = [
       "mode": mode,
-      "had_transcript": hadTranscript,
-      "transcript_length": transcriptLength,
+      "had_transcript": committed,
     ]
+    if let transcriptLength {
+      props["transcript_length"] = transcriptLength
+    }
     PostHogManager.shared.track("floating_bar_ptt_ended", properties: props)
   }
 

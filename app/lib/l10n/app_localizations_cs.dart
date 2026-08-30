@@ -2044,6 +2044,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryDeleted => 'Vzpomínka smazána.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Vrátit zpět';
 
   @override
@@ -9900,4 +9903,15 @@ class AppLocalizationsCs extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'Poslední chyba: $error.';
   }
+
+  @override
+  String get prerecordedTranscript => 'Předem nahráno';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant stále nahrává, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu nahrávání zastavte a poté synchronizujte znovu.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Úložiště Pendantu je plné a stále je v režimu nahrávání, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu zastavte nahrávání a poté znovu synchronizujte.';
 }

@@ -7,11 +7,15 @@ import Foundation
 // execution profile, and durable run identity before Swift executes anything.
 
 enum RealtimeHubTools {
-  static func resolvedVoiceLanguages(
-    explicit codes: [String],
-    preferredLanguages: [String] = Locale.preferredLanguages
-  ) -> [String] {
-    let source = codes.isEmpty ? preferredLanguages : codes
+  /// Only what the user actually configured. There is deliberately no fallback to
+  /// `Locale.preferredLanguages`: the macOS UI language is a claim about the
+  /// interface, not about the person, and the line built from this asserts the user
+  /// speaks ONLY these languages and that anything else "was misheard". Pinning an
+  /// unconfigured bilingual user to their menu-bar language told the model to
+  /// reinterpret their real speech as a mishearing. The Windows port already omits
+  /// the line for an unconfigured user; this brings macOS to parity.
+  static func resolvedVoiceLanguages(explicit codes: [String]) -> [String] {
+    let source = codes
     var seen = Set<String>()
     var resolved: [String] = []
     for code in source {
@@ -25,8 +29,8 @@ enum RealtimeHubTools {
 
   /// One line telling the model which languages the user actually speaks, so a short or
   /// ambiguous utterance is never interpreted (or transcribed, where the provider allows
-  /// it) as some third language. Falls back to the Mac's preferred language when the user
-  /// has not configured an explicit voice-language set.
+  /// it) as some third language. Empty when the user has configured no voice languages —
+  /// a user who has claimed nothing must not have a claim made for them.
   private static func userLanguagesLine(_ codes: [String]) -> String {
     let resolved = resolvedVoiceLanguages(explicit: codes)
     guard !resolved.isEmpty else { return "" }
@@ -65,7 +69,7 @@ enum RealtimeHubTools {
       permission decision. Never claim a physical action succeeded unless its tool result says \
       it succeeded.
 
-      Using tools: when a request needs a tool, ALWAYS give a short spoken heads-up and call the \
+      Using tools: when a request needs a tool, ordinarily give a short spoken heads-up and call the \
       tool in the same turn so the user knows you're on it and that it won't be instant. A heads-up \
       is a status, not a question or confirmation. Speak the result when it returns. Never go \
       silent during a tool call; the user can't see what you're \
@@ -78,7 +82,10 @@ enum RealtimeHubTools {
       to a few words, vary the wording each turn, and don't include any answer or data you don't \
       have yet. For a slower step, it's fine to signal it'll take a moment. NEVER speak an answer — \
       real or guessed — before the tool returns, NEVER skip the \
-      tool call, and never read tool JSON or ids aloud. You cannot see the user's data or screen \
+      tool call, and never read tool JSON or ids aloud. The think_deeper and web_search tool cards \
+      are exceptions: call either one silently and immediately because the app speaks an instant \
+      acknowledgement after the kernel accepts it. Do not repeat that acknowledgement when its \
+      result arrives. You cannot see the user's data or screen \
       without calling a tool. When the screenshot tool succeeds for a current-screen question, the \
       attached image and, when present, its locally captured foreground-application context are \
       the only current visual source of truth. The foreground-application context is trustworthy \
@@ -94,7 +101,8 @@ enum RealtimeHubTools {
       screen question, unless the user specifically asks about Omi. Answer about the user's \
       visible work and intent, not the assistant UI.
 
-      Keep latency low: prefer answering directly when you can.
+      Keep latency low for simple requests. Never skip a tool call required by its declaration \
+      just to answer faster.
       """
   }
 
@@ -241,67 +249,37 @@ enum RealtimeHubTools {
     return out
   }
 
-  /// System prompt for an escalated (ask_higher_model) answer. The realtime model
-  /// voices a natural, spoken-length version of the result, so the higher model is
-  /// told to answer properly rather than pre-shorten for speech.
+  /// Response contract for typed-chat turns behind `think_deeper` and
+  /// realtime `web_search`.
+  /// This model authors the answer that will be spoken; realtime only voices it.
   static func escalationSystemPrompt() -> String {
     """
-    You are Omi, a knowledgeable assistant. Answer the user's question accurately and \
-    usefully. When the question needs current facts (news, weather, prices, scores, \
-    schedules), use your web search tool and ground the answer in what it returns. A \
-    voice assistant will relay your answer aloud and adapt the phrasing for speech, so \
-    be clear and well-structured; you don't need to pre-shorten it.
+    Your final response will be spoken aloud as Omi's answer. Use the same tools and \
+    evidence you would use for a typed-chat answer, but write only the final speakable \
+    conclusion: short, conversational prose with no Markdown, lists, citations, IDs, \
+    tool JSON, or tool trace. Prefer one to four spoken sentences unless the user asks \
+    for more detail. If you use tools, speak the conclusion rather than narrating the \
+    tool work. The realtime voice will read this answer faithfully and may make only \
+    light pronunciation or spoken-flow adjustments; it will not rewrite a long essay.
     """
   }
 
-  static func escalationBody(
-    query: String,
-    kernelSemanticGuidance: String,
-    kernelContext: String,
-    stableCacheIdentity: String,
-    dynamicContextIdentity: String,
-    contextPlanID: String,
-    toolContext: String
-  ) -> [String: Any] {
-    let semanticGuidance = kernelSemanticGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
-    let canonicalContext = kernelContext.trimmingCharacters(in: .whitespacesAndNewlines)
+  static func escalationUserPrompt(query: String, toolContext: String) -> String {
     let trimmedToolContext = toolContext.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedToolContext.isEmpty else { return query }
+    return query + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
+  }
 
-    // The cache marker is derived only from the typed kernel plan. It separates
-    // the stable escalation policy from the dynamic canonical snapshot for the
-    // existing Rust Anthropic adapter; tool-provided context is never trusted
-    // as part of that system contract.
-    let cacheBoundary: String
-    if !semanticGuidance.isEmpty,
-      !stableCacheIdentity.isEmpty,
-      !dynamicContextIdentity.isEmpty,
-      !contextPlanID.isEmpty
-    {
-      cacheBoundary =
-        "<!-- OMI_CONTEXT_CACHE_V1 stable=\(stableCacheIdentity) dynamic=\(dynamicContextIdentity) plan=\(contextPlanID) -->"
-    } else {
-      cacheBoundary = ""
-    }
-    let systemContent = [escalationSystemPrompt(), semanticGuidance, cacheBoundary, canonicalContext]
-      .filter { !$0.isEmpty }
-      .joined(separator: "\n\n")
-    let userContent =
-      !trimmedToolContext.isEmpty
-      ? query + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
-      : query
-    let messages: [[String: String]] = [
-      ["role": "system", "content": systemContent],
-      ["role": "user", "content": userContent],
-    ]
-    return [
-      "model": ModelQoS.Claude.defaultSelection,
-      "max_tokens": 1024,
-      "messages": messages,
-      "stream": false,
-      // Escalations carry no client tools, so opt in to the gateway's
-      // managed Perplexity web-search lane explicitly — voice escalations are
-      // exactly the "current facts" turns that need a live lookup.
-      "omi_web_search": true,
-    ]
+  /// Host-authored public-only request sent to the managed web-search lane.
+  /// Private realtime context is deliberately excluded: provider-hosted search
+  /// must never inherit memories or tool output from the canonical chat session.
+  static func publicWebSearchPrompt(query: String) -> String {
+    """
+    Search the live public web before answering this request. Reply with one to four concise, \
+    natural spoken sentences. Name the source you relied on, but do not use Markdown or recite a URL.
+
+    Request:
+    \(query)
+    """
   }
 }

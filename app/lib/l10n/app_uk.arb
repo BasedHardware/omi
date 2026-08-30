@@ -3231,5 +3231,8 @@
     "appReEnableFailedTitle": "Не вдалося ввімкнути знову",
     "appReEnableFailedBody": "Не вдалося повторно ввімкнути цей застосунок. Спробуйте ще раз.",
     "appDisabledOn": "Вимкнено {date}.",
-    "appDisabledLastError": "Остання помилка: {error}."
+    "appDisabledLastError": "Остання помилка: {error}.",
+    "prerecordedTranscript": "Попередній запис",
+    "pendantRecordingSyncBlocked": "Pendant усе ще записує, тому збережене аудіо не можна передати. Натисніть кнопку Pendant, щоб зупинити запис, а потім синхронізуйте знову.",
+    "pendantFullSyncBlocked": "Пам'ять Pendant заповнена, і він досі в режимі запису, тому збережене аудіо не можна передати. Натисніть кнопку Pendant, щоб зупинити запис, а потім синхронізуйте знову."
 }

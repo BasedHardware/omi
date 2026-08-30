@@ -115,6 +115,19 @@ def wire_common_stubs(install) -> SimpleNamespace:
     helpers.extract_memory_ids = MagicMock(return_value=[])
     goals = install('utils.llm.goals', ModuleType('utils.llm.goals'))
     goals.extract_and_update_goal_progress = MagicMock()
+    # routers.chat resolves the chat-agent provider through the gateway route
+    # pin (a6988be309); stub it so these suites stay off the real LLM package.
+    gateway_client = install('utils.llm.gateway_client', ModuleType('utils.llm.gateway_client'))
+    gateway_client.CHAT_AGENT_ROUTE_DIRECT = 'direct'
+    gateway_client.CHAT_AGENT_ROUTE_GATEWAY = 'gateway'
+    gateway_client.get_chat_agent_route = MagicMock(return_value='direct')
+    # chat_file's gateway-mode helpers; the upload suite loads the real chat_file,
+    # so the imports must resolve even though these tests never call them.
+    gateway_client.should_route_features_through_gateway = MagicMock(return_value=False)
+    gateway_client.file_chat_auto_lane_id = MagicMock(return_value='omi:auto:file-chat-vision')
+    gateway_client.file_chat_feature_header = MagicMock(return_value={})
+    gateway_client.get_file_chat_gateway_async_client = MagicMock()
+    gateway_client.get_file_chat_gateway_sync_client = MagicMock()
     users = install('utils.users', ModuleType('utils.users'))
     users.get_user_display_name = MagicMock(return_value='Test User')
     sanitizer = install('utils.log_sanitizer', ModuleType('utils.log_sanitizer'))
@@ -249,11 +262,21 @@ def wire_common_stubs(install) -> SimpleNamespace:
     usage_tracker = install('utils.llm.usage_tracker', ModuleType('utils.llm.usage_tracker'))
     usage_tracker.set_usage_context = MagicMock(return_value='usage-token')
     usage_tracker.reset_usage_context = MagicMock()
+    usage_tracker.get_current_context = MagicMock(return_value=None)
+    usage_tracker.track_usage = MagicMock()
 
     class Features:
         CHAT = 'chat'
 
     usage_tracker.Features = Features
+
+    # routers.chat imports gateway_client at module load. Keep a package-safe stub
+    # so isolated file runs never pull the real client (which imports get_current_context).
+    gateway_client = install('utils.llm.gateway_client', ModuleType('utils.llm.gateway_client'))
+    gateway_client.CHAT_AGENT_ROUTE_DIRECT = 'direct'
+    gateway_client.get_chat_agent_route = MagicMock(return_value='direct')
+    gateway_client.should_route_features_through_gateway = MagicMock(return_value=False)
+    gateway_client.GatewayDirectModelSurfaceBlocked = type('GatewayDirectModelSurfaceBlocked', (Exception,), {})
 
     limiter = install('utils.voice_duration_limiter', ModuleType('utils.voice_duration_limiter'))
     limiter.compute_pcm_duration_ms = MagicMock(return_value=1000)

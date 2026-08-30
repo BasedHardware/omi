@@ -330,7 +330,7 @@ extension APIClient {
     if httpResponse.statusCode == 401 {
       let detail = (try? JSONDecoder().decode(APIErrorPayload.self, from: data))?.preferredMessage
       if detail?.hasPrefix("OpenAI TTS request failed:") == true {
-        let mode: CredentialAuthMode = APIKeyService.isByokActive ? .byok : .managed
+        let mode: CredentialAuthMode = APIKeyService.selectedBYOKLLMProvider == .openai ? .byok : .managed
         throw CredentialHealthError.providerAuth(
           provider: .openai,
           mode: mode,

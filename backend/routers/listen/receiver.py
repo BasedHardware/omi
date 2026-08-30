@@ -39,7 +39,7 @@ from utils.aac import AACDecoder
 from utils.llm.openglass import describe_image
 from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_assignment import update_speaker_assignment_maps
-from utils.byok import get_byok_key
+from utils.subscription import request_has_llm_byok_key
 from utils.executors import db_executor, run_blocking
 from utils.transcribe_decisions import should_skip_custom_stt_postprocessing
 from utils.stt.live_failure import (
@@ -59,6 +59,7 @@ from utils.stt.streaming import (
     parakeet_is_configured_fallback,
     process_audio_dg,
     process_audio_modulate,
+    process_audio_soniox,
     process_audio_parakeet,
 )
 from utils.stt.speaker_identity import SpeakerProviderEpoch
@@ -236,6 +237,48 @@ class ListenReceiver:
             self.host.stt_service = actual_service
             if actual_service == STTService.modulate:
                 self.host.stt_model = 'velma-2'
+            return socket
+        if self.host.stt_service == STTService.soniox:
+            # Soniox identifies language itself, so no language gate on the fallbacks;
+            # they inherit the same chain a Modulate primary uses.
+            dg_fallback_model = deepgram_fallback_model(self.host.stt_language)
+
+            def connect_deepgram_from_soniox() -> Any:
+                return process_audio_dg(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model=cast(str, dg_fallback_model),
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
+            socket, actual_service = await connect_stt_socket_with_fallback(
+                primary_service=STTService.soniox,
+                connect_primary=lambda: process_audio_soniox(
+                    modulate_callback or callback,
+                    sample_rate,
+                    self.host.stt_language,
+                ),
+                connect_modulate=(
+                    (
+                        lambda: process_audio_modulate(
+                            modulate_callback or callback,
+                            sample_rate,
+                            self.host.stt_language,
+                        )
+                    )
+                    if modulate_is_configured_fallback(self.host.stt_language)
+                    else None
+                ),
+                connect_deepgram=connect_deepgram_from_soniox if dg_fallback_model else None,
+            )
+            self.host.stt_service = actual_service
+            if actual_service == STTService.modulate:
+                self.host.stt_model = 'velma-2'
+            elif actual_service == STTService.deepgram:
+                self.host.stt_model = cast(str, dg_fallback_model)
             return socket
         if self.host.stt_service == STTService.modulate:
             # Velma-2 accepts the upgrade and only then reports being over quota,
@@ -486,7 +529,7 @@ class ListenReceiver:
             except Exception as error:
                 logger.warning('Custom-STT photo BYOK enrollment lookup failed type=%s', type(error).__name__)
                 byok_active = False
-            has_llm_byok_key = bool(byok_active and (get_byok_key('openai') or get_byok_key('anthropic')))
+            has_llm_byok_key = bool(byok_active and request_has_llm_byok_key())
             skip_photo_description = should_skip_custom_stt_postprocessing(
                 uses_custom_stt=True,
                 has_llm_byok_key=has_llm_byok_key,

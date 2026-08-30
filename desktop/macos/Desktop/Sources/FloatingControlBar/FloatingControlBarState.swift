@@ -247,6 +247,9 @@ struct FloatingBarNotification: Identifiable, Equatable {
   let kind: ProactiveNotificationKind
   let context: FloatingBarNotificationContext?
   let action: FloatingBarNotificationAction?
+  /// Explicit feedback controls for a planned JIT trigger. This is opaque
+  /// provenance only; action labels are rendered by the card.
+  let jitFeedbackContext: JITTriggerFeedbackContext?
   /// Optional opaque proactive-suggestion join keys. No card content or screen
   /// provenance enters notification analytics through this field.
   let suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
@@ -268,6 +271,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     kind: ProactiveNotificationKind? = nil,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
+    jitFeedbackContext: JITTriggerFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
@@ -280,6 +284,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.kind = kind ?? ProactiveNotificationKind.from(assistantId: assistantId)
     self.context = context
     self.action = action
+    self.jitFeedbackContext = jitFeedbackContext
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
     self.insightDeliveryID = insightDeliveryID
     self.screenshotData = screenshotData

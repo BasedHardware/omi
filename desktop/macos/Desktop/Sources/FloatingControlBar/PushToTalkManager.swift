@@ -326,7 +326,7 @@ class PushToTalkManager: ObservableObject {
     RealtimeHubController.shared.setup()
     // Hermetic local harness has no Firebase SDK and no live realtime providers.
     if !DesktopLocalProfile.isEnabled {
-      RealtimeHubController.shared.ensureWarm()
+      RealtimeHubController.shared.ensureWarm(userInitiated: true)
     }
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
   }
@@ -1191,7 +1191,6 @@ class PushToTalkManager: ObservableObject {
           rms: rms,
           turnAudioSeconds: totalSec,
           voicedAudioSeconds: nil,
-          isNearZero: peak <= 5 && rms <= 5,
           judgeable: totalSec >= Self.minTurnAudioSeconds)
         log(
           "PushToTalkManager: discarding hub turn — audio \(String(format: "%.2f", totalSec))s "
@@ -1204,7 +1203,7 @@ class PushToTalkManager: ObservableObject {
         }
         _ = RealtimeHubController.shared.cancelTurn(turnID: turnID)
         AnalyticsManager.shared.floatingBarPTTEnded(
-          mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
+          mode: finalizedMode, committed: false, transcriptLength: nil)
         // Too short to have captured anything (fast tap / capture not ready) — hint
         // the user to hold longer instead of clearing silently. A longer hub turn
         // that simply had no speech keeps the quiet reset.
@@ -1233,17 +1232,20 @@ class PushToTalkManager: ObservableObject {
       }
       recordSilentMicRecoveryOutcome(silentMicRecoveryPolicy.recordSuccessfulTurn())
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
+      // Committed turns must report the same measurements as rejected ones. While
+      // this reported a literal 0, admitted and rejected energy were on different
+      // scales and the speech gate could not be tuned against its own traffic.
+      let (committedPeak, committedRMS) = Self.audioEnergy(pcm16k: turnAudio)
       pttLifecycle.terminate(
         disposition: .committed,
         source: "hub",
-        peak: 0,
-        rms: 0,
-        turnAudioSeconds: 0,
+        peak: committedPeak,
+        rms: committedRMS,
+        turnAudioSeconds: totalSec,
         voicedAudioSeconds: nil,
-        isNearZero: false,
         judgeable: true)
       AnalyticsManager.shared.floatingBarPTTEnded(
-        mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
+        mode: finalizedMode, committed: true, transcriptLength: nil)
       log(
         "PushToTalkManager: hub turn "
           + "\(commitResult == .accepted ? "committed" : "deferred until its realtime session is ready")")
@@ -1287,13 +1289,12 @@ class PushToTalkManager: ObservableObject {
           rms: rms,
           turnAudioSeconds: totalSec,
           voicedAudioSeconds: voicedSec,
-          isNearZero: peak <= 5 && rms <= 5,
           judgeable: totalSec >= Self.minTurnAudioSeconds)
         log(
           "PushToTalkManager: discarding silent turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s) — not transcribing"
         )
         AnalyticsManager.shared.floatingBarPTTEnded(
-          mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
+          mode: finalizedMode, committed: false, transcriptLength: nil)
         if recoveryDecision.shouldRebuildCapture {
           requestCoreAudioCaptureRecovery(reason: "repeated dead-mic PTT turns", restartPTT: false, batchMode: isBatch)
         }
@@ -1401,14 +1402,14 @@ class PushToTalkManager: ObservableObject {
           }
         } catch {
           logError("PushToTalkManager: batch transcription failed", error: error)
+          let (batchPeak, batchRMS) = Self.audioEnergy(pcm16k: audioData)
           self.pttLifecycle.terminate(
             disposition: .committed,
             source: "batch_stt",
-            peak: 0,
-            rms: 0,
-            turnAudioSeconds: 0,
+            peak: batchPeak,
+            rms: batchRMS,
+            turnAudioSeconds: Double(audioData.count / 2) / 16000.0,
             voicedAudioSeconds: nil,
-            isNearZero: false,
             judgeable: true)
           self.voiceTurnCoordinator.publish(
             .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
@@ -1536,7 +1537,7 @@ class PushToTalkManager: ObservableObject {
 
     AnalyticsManager.shared.floatingBarPTTEnded(
       mode: finalizedMode,
-      hadTranscript: hasQuery,
+      committed: hasQuery,
       transcriptLength: query.count
     )
     if hasQuery {
@@ -1544,11 +1545,12 @@ class PushToTalkManager: ObservableObject {
       pttLifecycle.terminate(
         disposition: .committed,
         source: isOmniSTT ? "omni_stt" : "batch_stt",
-        peak: 0,
-        rms: 0,
-        turnAudioSeconds: 0,
+        // The turn's PCM was consumed before finalization reached this point, so
+        // these are genuinely unknown here rather than zero.
+        peak: nil,
+        rms: nil,
+        turnAudioSeconds: nil,
         voicedAudioSeconds: nil,
-        isNearZero: false,
         judgeable: true)
     } else {
       // Empty transcript after the turn reached finalization (e.g. a live-Deepgram
@@ -1558,11 +1560,12 @@ class PushToTalkManager: ObservableObject {
       pttLifecycle.terminate(
         disposition: .committed,
         source: isOmniSTT ? "omni_stt" : "batch_stt",
-        peak: 0,
-        rms: 0,
-        turnAudioSeconds: 0,
+        // The turn's PCM was consumed before finalization reached this point, so
+        // these are genuinely unknown here rather than zero.
+        peak: nil,
+        rms: nil,
+        turnAudioSeconds: nil,
         voicedAudioSeconds: nil,
-        isNearZero: false,
         judgeable: true)
     }
 
@@ -1794,7 +1797,7 @@ class PushToTalkManager: ObservableObject {
       // behind a global fence with no captured-turn owner.
       _ = RealtimeHubController.shared.beginTurn(turnID: turnID)
     }
-    RealtimeHubController.shared.ensureWarm()
+    RealtimeHubController.shared.ensureWarm(userInitiated: true)
     guard startMicrophoneCapture else { return }
     if let builtIn = preferredPTTInputOverrideDeviceID() {
       log("PushToTalkManager: waiting for realtime hub — buffering built-in mic audio")
@@ -1878,7 +1881,6 @@ class PushToTalkManager: ObservableObject {
         rms: rms,
         turnAudioSeconds: totalSec,
         voicedAudioSeconds: nil,
-        isNearZero: peak <= 5 && rms <= 5,
         judgeable: totalSec >= Self.minTurnAudioSeconds)
       log(
         "PushToTalkManager: discarding buffered hub turn — audio \(String(format: "%.2f", totalSec))s "
@@ -1890,7 +1892,7 @@ class PushToTalkManager: ObservableObject {
         requestCoreAudioCaptureRecovery(reason: "repeated dead-mic PTT turns", restartPTT: false, batchMode: false)
       }
       AnalyticsManager.shared.floatingBarPTTEnded(
-        mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
+        mode: finalizedMode, committed: false, transcriptLength: nil)
       if let turnID = currentVoiceTurnID {
         voiceTurnCoordinator.publish(
           .finish(
@@ -1915,17 +1917,17 @@ class PushToTalkManager: ObservableObject {
     }
     recordSilentMicRecoveryOutcome(silentMicRecoveryPolicy.recordSuccessfulTurn())
     DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
+    let (committedPeak, committedRMS) = Self.audioEnergy(pcm16k: turnAudio)
     pttLifecycle.terminate(
       disposition: .committed,
       source: "buffered_hub",
-      peak: 0,
-      rms: 0,
-      turnAudioSeconds: 0,
+      peak: committedPeak,
+      rms: committedRMS,
+      turnAudioSeconds: totalSec,
       voicedAudioSeconds: nil,
-      isNearZero: false,
       judgeable: true)
     AnalyticsManager.shared.floatingBarPTTEnded(
-      mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
+      mode: finalizedMode, committed: true, transcriptLength: nil)
     log(
       "PushToTalkManager: buffered hub turn "
         + "\(commitResult == .accepted ? "committed" : "deferred until its realtime session is ready") after warm wait")
@@ -1961,13 +1963,12 @@ class PushToTalkManager: ObservableObject {
         rms: rms,
         turnAudioSeconds: totalSec,
         voicedAudioSeconds: voicedSec,
-        isNearZero: peak <= 5 && rms <= 5,
         judgeable: totalSec >= Self.minTurnAudioSeconds)
       log(
         "PushToTalkManager: discarding warm-wait fallback turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s)"
       )
       AnalyticsManager.shared.floatingBarPTTEnded(
-        mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
+        mode: finalizedMode, committed: false, transcriptLength: nil)
       if recoveryDecision.shouldRebuildCapture {
         requestCoreAudioCaptureRecovery(reason: "repeated dead-mic PTT turns", restartPTT: false, batchMode: true)
       }
@@ -2312,11 +2313,12 @@ class PushToTalkManager: ObservableObject {
         self.pttLifecycle.terminate(
           disposition: .silentRejected,
           source: "capture_start",
+          // Capture never started, so zero samples is a measured fact here, not a
+          // placeholder: it is what distinguishes a failed start from an unknown.
           peak: 0,
           rms: 0,
           turnAudioSeconds: 0,
           voicedAudioSeconds: nil,
-          isNearZero: true,
           judgeable: false)
         if let diagnosticRecoveryAction {
           DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(

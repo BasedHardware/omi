@@ -129,26 +129,176 @@ actor ProactiveLaneClient {
   private let session: URLSession
   private let baseURL: () -> String
   private let authorization: () async throws -> String
+  /// Owner-bound header for the read-only JIT authority routes; stricter
+  /// than `authorization` because the decision must never be evaluated for
+  /// another owner's credentials.
+  private let jitAuthorization: @Sendable (_ ownerID: String) async throws -> String
+  /// Downstream ledger-mirror sync attempted after a complete trigger
+  /// snapshot; injectable so tests can prove its failure is non-blocking.
+  private let ledgerMirrorSync:
+    @Sendable (_ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot, _ snapshot: JITTriggerSnapshot) async throws
+      -> Void
   private let now: @Sendable () -> Date
   private var quotaCooldownUntil: [String: Date] = [:]
   private var loggedQuotaSkip: Set<String> = []
   private var loggedQuotaClamp: Set<String> = []
   private var cooldownOwner: String?
+  private var jitFlagsCache: (ownerID: String, flags: JITProactivityFlags, expiresAt: Date)?
+
+  func fetchJITTriggerSnapshot(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> JITTriggerSnapshot {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw ProactiveLaneClientError.ownerChanged
+    }
+    let root = baseURL().hasSuffix("/") ? baseURL() : baseURL() + "/"
+    guard let url = URL(string: root + "v1/jit/trigger-snapshot") else {
+      throw ProactiveLaneClientError.invalidResponse
+    }
+    let header = try await jitAuthorization(authorizationSnapshot.ownerID)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw ProactiveLaneClientError.ownerChanged
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.setValue(header, forHTTPHeaderField: "Authorization")
+    request.timeoutInterval = 15
+    let (data, response) = try await session.data(for: request)
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw ProactiveLaneClientError.ownerChanged
+    }
+    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+      throw ProactiveLaneClientError.invalidResponse
+    }
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    guard let snapshot = try? decoder.decode(JITTriggerSnapshot.self, from: data),
+      snapshot.ownerID == authorizationSnapshot.ownerID
+    else { throw ProactiveLaneClientError.invalidResponse }
+    guard snapshot.complete, snapshot.failureReason == nil else { return snapshot }
+    // The trigger snapshot is a cheap authoritative head read and the receipt
+    // authority for this lane. A matching local mirror receipt takes the fast
+    // path; otherwise the coordinator resumes its durable cursor chain. The
+    // mirror is a downstream projection: when its sync fails, fail the mirror
+    // closed and still return the complete snapshot so the trigger receipt is
+    // never blocked by ledger catch-up. The mirror retries on its own schedule.
+    do {
+      try await ledgerMirrorSync(authorizationSnapshot, snapshot)
+    } catch {
+      // Bounded and content-free: classification only, never error text.
+      NSLog(
+        "JIT trigger snapshot: ledger mirror sync failed error_type=%@",
+        ProactiveLaneFailureClassification.boundedNetworkErrorType(error))
+    }
+    return snapshot
+  }
 
   init(
     session: URLSession = .shared,
     baseURL: @escaping () -> String = { ProactiveLaneClient.backendBaseURL },
     authorization: (() async throws -> String)? = nil,
-    now: @escaping @Sendable () -> Date = { Date() }
+    now: @escaping @Sendable () -> Date = { Date() },
+    jitAuthorization: (@Sendable (_ ownerID: String) async throws -> String)? = nil,
+    ledgerMirrorSync:
+      (
+        @Sendable (_ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot, _ snapshot: JITTriggerSnapshot)
+          async throws -> Void
+      )? = nil
   ) {
     self.session = session
     self.baseURL = baseURL
     self.now = now
     self.authorization =
-      authorization ?? {
+      authorization
+      ?? {
         let authService = await MainActor.run { AuthService.shared }
         return try await authService.getAuthHeader()
       }
+    self.jitAuthorization =
+      jitAuthorization
+      ?? { ownerID in
+        let authService = await MainActor.run { AuthService.shared }
+        return try await authService.getAuthHeader(expectedUserId: ownerID)
+      }
+    self.ledgerMirrorSync =
+      ledgerMirrorSync
+      ?? { authorizationSnapshot, snapshot in
+        _ = try await KnowledgeLedgerMirrorCoordinator.shared.sync(
+          authorizationSnapshot: authorizationSnapshot,
+          knownAuthority: snapshot)
+      }
+  }
+
+  /// Read the authenticated backend rollout authority. Any transport or
+  /// decoding failure is represented as unknown; clients never self-enrol.
+  func jitProactivityFlags(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async -> JITProactivityFlags {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      return JITProactivityFlags(rollout: .unknown, killSwitch: .unknown)
+    }
+    if let cached = jitFlagsCache,
+      cached.ownerID == authorizationSnapshot.ownerID,
+      cached.expiresAt > now()
+    {
+      return cached.flags
+    }
+    if jitFlagsCache?.ownerID != authorizationSnapshot.ownerID {
+      jitFlagsCache = nil
+    }
+    let root = baseURL().hasSuffix("/") ? baseURL() : baseURL() + "/"
+    guard let url = URL(string: root + "v1/jit/rollout-decision") else {
+      return JITProactivityFlags(rollout: .unknown, killSwitch: .unknown)
+    }
+    do {
+      let header = try await jitAuthorization(authorizationSnapshot.ownerID)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        return JITProactivityFlags(rollout: .unknown, killSwitch: .unknown)
+      }
+      var request = URLRequest(url: url)
+      request.httpMethod = "GET"
+      request.setValue(header, forHTTPHeaderField: "Authorization")
+      request.timeoutInterval = 10
+      let (data, response) = try await session.data(for: request)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+        let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+      else {
+        return cacheUnknownJITFlags(ownerID: authorizationSnapshot.ownerID)
+      }
+      // The server-computed `effective` verdict owns admission; the raw
+      // rollout + kill-switch pair stays as the older-server fallback. An
+      // absent `kill_switch` is compatibility, not an unknown-off veto.
+      let flags = JITProactivityFlags(
+        rollout: Self.jitState(object["rollout"]),
+        killSwitch: Self.jitState(object["kill_switch"]),
+        effective: Self.jitState(object["effective"]),
+        killSwitchPresent: object["kill_switch"] != nil)
+      let rawTTL = object["cache_ttl_seconds"] as? Int ?? 60
+      let ttl = min(max(rawTTL, 15), 15 * 60)
+      jitFlagsCache = (
+        authorizationSnapshot.ownerID, flags, now().addingTimeInterval(TimeInterval(ttl))
+      )
+      return flags
+    } catch {
+      return cacheUnknownJITFlags(ownerID: authorizationSnapshot.ownerID)
+    }
+  }
+
+  private func cacheUnknownJITFlags(ownerID: String) -> JITProactivityFlags {
+    let flags = JITProactivityFlags(rollout: .unknown, killSwitch: .unknown)
+    jitFlagsCache = (ownerID, flags, now().addingTimeInterval(15))
+    return flags
+  }
+
+  static func jitState(_ value: Any?) -> JITProactivityRolloutState {
+    // Wire contract: backend TriState serializes exactly `enabled`/`disabled`/
+    // `unknown`. Anything else — including retired spellings — fails closed.
+    switch (value as? String)?.lowercased() {
+    case "enabled": return .enabled
+    case "disabled": return .disabled
+    default: return .unknown
+    }
   }
 
   func complete(
@@ -371,6 +521,7 @@ enum ScreenDerivedContent {
 }
 
 enum ContextProactivityTelemetry {
+  @MainActor private static var recordedJITAdmissions: Set<String> = []
   /// Shadow-only repetition signal. The event intentionally carries no
   /// identifier, statement, bucket, app, or owner data; it is never consulted
   /// for fact validity, delivery, or candidate graduation.
@@ -379,6 +530,32 @@ enum ContextProactivityTelemetry {
       PostHogManager.shared.track(
         "context_bucket_fact_identity_shadow",
         properties: ["classification": "same_identifier_different_statement"])
+    }
+  }
+
+  static func recordJITAdmission(outcome: String, reason: String) async {
+    let allowedOutcomes = Set(["legacy_fallback", "suppressed", "contract_missing"])
+    // Exact reason set produced by JITProactivityPolicy.decide,
+    // JITProactivityRuntime.admission/admitAmbient, and
+    // JITProactivityCoordinator.handle. Anything else stays "other".
+    let allowedReasons = Set([
+      "kill_switch", "rollout_unknown", "rollout_disabled",
+      "no_eligible_candidate",
+      "planned_runtime_rejected", "planned_match_ambiguous", "planned_action_invalid",
+      "planned_duplicate_or_budget", "authoritative_snapshot_unavailable", "jit_execution_missing",
+      "ambient_local_gate", "ambient_nano_receipt_unavailable", "ambient_nano_budget",
+      "ambient_nano_rejected", "ambient_duplicate_or_budget", "ambient_receipt_unavailable",
+    ])
+    await MainActor.run {
+      let boundedOutcome = allowedOutcomes.contains(outcome) ? outcome : "other"
+      let boundedReason = allowedReasons.contains(reason) ? reason : "other"
+      guard recordedJITAdmissions.insert("\(boundedOutcome):\(boundedReason)").inserted else { return }
+      PostHogManager.shared.track(
+        "jit_proactivity_admission",
+        properties: [
+          "outcome": boundedOutcome,
+          "reason": boundedReason,
+        ])
     }
   }
 

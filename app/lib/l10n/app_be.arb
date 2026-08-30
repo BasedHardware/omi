@@ -10797,5 +10797,8 @@
     "appReEnableFailedTitle": "Не ўдалося ўключыць зноў",
     "appReEnableFailedBody": "Не ўдалося паўторна ўключыць гэту праграму. Паспрабуйце яшчэ раз.",
     "appDisabledOn": "Адключана {date}.",
-    "appDisabledLastError": "Апошняя памылка: {error}."
+    "appDisabledLastError": "Апошняя памылка: {error}.",
+    "prerecordedTranscript": "Папярэдне запісанае",
+    "pendantRecordingSyncBlocked": "Pendant усё яшчэ запісвае, таму захаваны гук нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а потым сінхранізуйце зноў.",
+    "pendantFullSyncBlocked": "Памяць Pendant запоўнена, і ён усё яшчэ ў рэжыме запісу, таму захаванае аўдыя нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а затым сінхранізуйце зноў."
 }

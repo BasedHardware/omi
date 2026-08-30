@@ -3231,5 +3231,8 @@
     "appReEnableFailedTitle": "Uuesti sisselülitamine ebaõnnestus",
     "appReEnableFailedBody": "Seda rakendust ei õnnestunud uuesti sisse lülitada. Proovi uuesti.",
     "appDisabledOn": "Välja lülitatud {date}.",
-    "appDisabledLastError": "Viimane viga: {error}."
+    "appDisabledLastError": "Viimane viga: {error}.",
+    "prerecordedTranscript": "Eelsalvestatud",
+    "pendantRecordingSyncBlocked": "Pendant salvestab endiselt, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja sünkrooni uuesti.",
+    "pendantFullSyncBlocked": "Pendanti mälu on täis ja see on endiselt salvestusrežiimis, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja seejärel sünkrooni uuesti."
 }

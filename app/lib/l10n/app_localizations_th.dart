@@ -2031,6 +2031,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get memoryDeleted => 'ลบความทรงจำแล้ว';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'เลิกทำ';
 
   @override
@@ -9842,4 +9845,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'ข้อผิดพลาดล่าสุด: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'บันทึกไว้ล่วงหน้า';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant ยังบันทึกอยู่ จึงไม่สามารถถ่ายโอนเสียงที่จัดเก็บไว้ได้ กดปุ่มของ Pendant เพื่อหยุดบันทึก แล้วซิงค์อีกครั้ง';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'พื้นที่จัดเก็บของ Pendant เต็มและยังอยู่ในโหมดบันทึกเสียง จึงไม่สามารถถ่ายโอนเสียงที่บันทึกไว้ได้ กดปุ่มของ Pendant เพื่อหยุดการบันทึก แล้วซิงค์อีกครั้ง';
 }

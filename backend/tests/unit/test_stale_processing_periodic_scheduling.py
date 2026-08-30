@@ -28,6 +28,7 @@ def test_periodic_reconcile_invokes_the_stale_processing_sweep(monkeypatch):
 
     monkeypatch.setattr(main, 'reconcile_stale_processing_conversations', fake_stale)
     monkeypatch.setattr(main, 'reconcile_listen_finalization_jobs', lambda **kwargs: {'requeued': 0})
+    monkeypatch.setattr(main, 'reconcile_abandoned_byok_finalization_jobs', lambda **kwargs: {'abandoned': 0})
     monkeypatch.setattr(
         main,
         'reconcile_meeting_receipts',

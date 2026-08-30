@@ -91,3 +91,10 @@ def test_memory_maintenance_job_exits_with_failure_when_cron_reports_outbox_erro
 
     with pytest.raises(RuntimeError, match=r"completed with 1 error\(s\)"):
         memory_maintenance_job.main()
+
+
+def test_daily_sweep_has_no_legacy_orchestrator_edge():
+    entry_path = Path(__file__).resolve().parents[2] / "modal" / "daily_memory_sweep_job.py"
+    source = entry_path.read_text(encoding="utf-8")
+    assert "canonical_short_term_maintenance_cron" not in source
+    assert "memory_maintenance_job" not in source

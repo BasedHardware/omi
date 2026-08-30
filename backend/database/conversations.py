@@ -22,11 +22,23 @@ from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
+from .first_open_obligations import (
+    FIRST_OPEN_EFFECTS,
+    claim_authorized_first_open_work,
+    claim_first_open_work,
+    commit_first_open_app_result,
+    commit_first_open_app_usage,
+    commit_first_open_conversation_patch,
+    commit_first_open_folder_count,
+    complete_first_open_effect,
+    finish_first_open_work,
+    first_open_effect_is_authorized,
+    initialize_first_open_work,
+)
 
 logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
-
 
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
 _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
@@ -317,7 +329,7 @@ def _document_data_with_revision(document) -> Optional[Dict[str, Any]]:
     return data
 
 
-def _prepare_photo_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
+def prepare_photo_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     data = copy.deepcopy(data)
     data['data_protection_level'] = level
     if level == 'enhanced' and 'base64' in data and isinstance(data['base64'], str):
@@ -1752,7 +1764,7 @@ def set_postprocessing_status(
     conversation_id: str,
     status: PostProcessingStatus,
     fail_reason: str = None,
-    model: PostProcessingModel = PostProcessingModel.fal_whisperx,
+    model: PostProcessingModel = PostProcessingModel.prerecorded,
 ):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -1812,6 +1824,7 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
     soniox_ref = conversation_ref.collection('soniox_streaming')
     speechmatics_ref = conversation_ref.collection('speechmatics_streaming')
     whisperx_ref = conversation_ref.collection('fal_whisperx')
+    prerecorded_ref = conversation_ref.collection('prerecorded')
 
     # Sort each provider's segments by start time, tolerating a legacy/partial doc missing 'start'
     # (a bare x['start'] would KeyError and 500 the whole transcripts response).
@@ -1822,6 +1835,9 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
             sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x.get('start', 0))
         ),
         'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x.get('start', 0))),
+        'prerecorded': list(
+            sorted([doc.to_dict() for doc in prerecorded_ref.stream()], key=lambda x: x.get('start', 0))
+        ),
     }
 
 
@@ -1854,7 +1870,7 @@ def store_conversation_photos(
             photo_ref = photos_ref.document(photo_id)
             data = photo.model_dump()
             data['id'] = photo_id
-            transaction.set(photo_ref, _prepare_photo_for_write(data, uid, level))
+            transaction.set(photo_ref, prepare_photo_for_write(data, uid, level))
         transaction.update(conversation_ref, {'has_content': True, 'has_photos': True})
         return True
 

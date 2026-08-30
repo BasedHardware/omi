@@ -231,6 +231,7 @@ jobs:
             GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
             USE_VERTEX_AI=true
             GCP_LOCATION=us-central1
+            OMI_FIRESTORE_DATA_PLANE_PROJECT=based-hardware
             FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
@@ -256,6 +257,7 @@ jobs:
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
             METRICS_SECRET=METRICS_SECRET:latest
+            POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest
 
       # See desktop_backend_prod.yml: the expectation is rendered from the
       # manifest so it cannot drift from the values actually deployed.

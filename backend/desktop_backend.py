@@ -7,6 +7,15 @@ import firebase_admin
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from utils.env_loader import firebase_admin_options, load_backend_env
+from utils.firebase_admin_runtime import (
+    firebase_verify_only_credential,
+    install_firebase_auth_mutation_guard,
+    install_google_adc_guard,
+)
+
+install_google_adc_guard()
+
 from database.google_credentials import prepare_google_credentials
 from routers import (
     auth,
@@ -17,12 +26,14 @@ from routers import (
     desktop_proxy,
     metrics,
     desktop_proactivity,
+    jit_ledger_snapshot,
+    jit_rollout,
     desktop_realtime,
     desktop_screen_crisp,
     desktop_tts_updates,
 )
-from utils.env_loader import firebase_admin_options, load_backend_env
 from utils.http_client import close_all_clients
+from utils.jit_rollout import close_posthog_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 
 
@@ -37,7 +48,11 @@ def _initialize_firebase_admin() -> None:
     audience; ADC continues to use ``GOOGLE_CLOUD_PROJECT`` independently.
     """
     auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
-    if auth_emulator_host:
+    install_firebase_auth_mutation_guard()
+    verify_only_credential = firebase_verify_only_credential()
+    if verify_only_credential is not None:
+        firebase_admin.initialize_app(verify_only_credential, options=firebase_admin_options())
+    elif auth_emulator_host:
         for adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON", "FIREBASE_AUTH_CREDENTIALS_PATH"):
             os.environ.pop(adc_key, None)
         firebase_project_id = (
@@ -64,6 +79,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await close_all_clients()
+        close_posthog_control_plane()
         stop_metrics_sidecar_server()
 
 
@@ -94,11 +110,14 @@ def _build_app() -> FastAPI:
     app.include_router(desktop_chat.router)
     app.include_router(desktop_proxy.router)
     app.include_router(desktop_proactivity.router)
+    app.include_router(jit_ledger_snapshot.router)
+    app.include_router(jit_rollout.router)
     app.include_router(desktop_realtime.router)
     app.include_router(desktop_screen_crisp.router)
     app.include_router(desktop_tts_updates.router)
     app.include_router(desktop_deprecated.router)
     app.include_router(metrics.router)
+    jit_rollout.validate_jit_rollout_contract(app)
     return app
 
 

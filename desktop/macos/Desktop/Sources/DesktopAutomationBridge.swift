@@ -2469,6 +2469,33 @@ final class DesktopAutomationActionRegistry {
       }
     }
 
+    // Cursor-free notch hover driver: enter/exit run the same pointer update
+    // the tracking view calls from mouse events; state reads the island's
+    // visibility inputs so a stuck reveal or menu can be caught mechanically.
+    register(
+      name: "notch_hover",
+      summary: "Simulate notch pointer enter/exit or read island state (non-prod). action=enter|exit|state",
+      params: ["action"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "notch_hover is disabled on production bundles"]
+      }
+      guard let bar = FloatingControlBarManager.shared.window else {
+        return ["error": "no floating bar window"]
+      }
+      switch params["action"] ?? "state" {
+      case "enter":
+        bar.automationSimulateNotchPointer(inside: true)
+      case "exit":
+        bar.automationSimulateNotchPointer(inside: false)
+      case "state":
+        break
+      default:
+        throw DesktopAutomationActionError.invalidParams("action must be enter, exit, or state")
+      }
+      return bar.automationNotchStateSnapshot
+    }
+
     register(
       name: "seed_subagents",
       summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
@@ -3550,7 +3577,8 @@ final class DesktopAutomationActionRegistry {
       NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
       return [
         "posted": "navigateToRewindNotes",
-        "expected_tab_index": "\(SidebarNavItem.rewind.rawValue)",
+        "expected_tab_index": "\(SidebarNavItem.conversations.rawValue)",
+        "expected_memory_destination": "\(MemoryHubDestination.rewind.rawValue)",
       ]
     }
 
@@ -3569,6 +3597,8 @@ final class DesktopAutomationActionRegistry {
 
     registerNotificationActions()
     registerRatingPromptActions()
+    registerRemotePromptActions()
+    registerRealtimeHubActions()
     register(
       name: "rewind_settings_snapshot",
       summary: "Return Rewind settings retention and excluded-app counts"
@@ -3604,6 +3634,15 @@ final class DesktopAutomationActionRegistry {
       case "5", "rewind": item = .rewind
       case "6", "apps": item = .apps
       case ",", "comma", "settings": item = .settings
+      // Settings sub-sections ride the same notifications the app already posts
+      // for its own deep-links (the Tasks gear, the floating-bar context menu),
+      // so QA can land on a specific pane without any cursor input.
+      case "tasksettings", "advancedsettings":
+        NotificationCenter.default.post(name: .navigateToTaskSettings, object: nil)
+        return ["navigated": "Settings › Advanced"]
+      case "floatingbarsettings":
+        NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
+        return ["navigated": "Settings › Floating Bar"]
       default: item = nil
       }
       guard let item else {
@@ -3671,6 +3710,31 @@ final class DesktopAutomationActionRegistry {
         params["personName"]?.trimmingCharacters(in: .whitespacesAndNewlines)
         ?? "[[MARKER:speaker-naming]] Harness Speaker"
       let segmentIndex = max(0, Int(params["segmentIndex"] ?? "") ?? 0)
+
+      // Raw mode: drive assignSpeakerToSegments with the ids exactly as given,
+      // without resolving the conversation first — the seam that exercises the
+      // local-first fallback for conversations the backend does not have yet.
+      if let rawConversationId = params["rawConversationId"]?.trimmingCharacters(
+        in: .whitespacesAndNewlines), !rawConversationId.isEmpty
+      {
+        let rawSegmentIds = (params["rawSegmentIds"] ?? "").split(separator: ",").map(String.init)
+        guard !rawSegmentIds.isEmpty else { return ["error": "rawSegmentIds required in raw mode"] }
+        guard let person = await appState.createPerson(name: personName) else {
+          return ["error": "failed to create person"]
+        }
+        let assigned = await appState.assignSpeakerToSegments(
+          conversationId: rawConversationId,
+          segmentIds: rawSegmentIds,
+          personId: person.id,
+          isUser: false
+        )
+        return [
+          "raw_mode": "true",
+          "assigned": assigned ? "true" : "false",
+          "conversation_id": rawConversationId,
+          "person_id": person.id,
+        ]
+      }
 
       var conversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
       if conversationId == "latest" || conversationId?.isEmpty != false {

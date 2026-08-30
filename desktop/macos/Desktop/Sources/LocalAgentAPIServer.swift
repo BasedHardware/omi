@@ -315,13 +315,14 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     }
 
     var arguments = json["arguments"] as? [String: Any] ?? [:]
-    guard Self.tools.contains(where: { $0.name == toolName }) else {
+    let canonicalToolName = toolName == "look_at_frame" ? "get_screenshot" : toolName
+    guard Self.tools.contains(where: { $0.name == canonicalToolName }) else {
       return errorResponse("unknown_tool: \(toolName)", statusCode: 404)
     }
     if toolName == "get_work_context" {
       return await workContextResponse(arguments: arguments)
     }
-    if toolName == "get_screenshot" {
+    if canonicalToolName == "get_screenshot" {
       return await screenshotToolResponse(toolName: toolName, arguments: arguments)
     }
     if toolName == "execute_sql" {
@@ -432,7 +433,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     } catch {
       logError("LocalAgentAPIServer: get_screenshot lookup failed", error: error)
       ScreenContextToolTelemetry.trackToolResult(
-        toolName: "get_screenshot",
+        toolName: toolName,
         context: ScreenContextTelemetryContext(surface: "local_api"),
         ok: false,
         failureCode: .databaseUnavailable,
@@ -442,7 +443,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     }
     guard let screenshot else {
       ScreenContextToolTelemetry.trackToolResult(
-        toolName: "get_screenshot",
+        toolName: toolName,
         context: ScreenContextTelemetryContext(surface: "local_api"),
         ok: false,
         failureCode: .imageUnavailable,
@@ -455,7 +456,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
       let imageData = try await loadScreenshotDataEnsuringStorage(for: screenshot)
       let metadata = screenshotMetadata(screenshot, imageByteCount: imageData.count)
       ScreenContextToolTelemetry.trackToolResult(
-        toolName: "get_screenshot",
+        toolName: toolName,
         context: ScreenContextTelemetryContext(surface: "local_api"),
         ok: true,
         imageBytes: imageData.count,
@@ -471,7 +472,8 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     } catch {
       // The image row exists but its pixels could not be loaded. Rather than a
       // generic 500, classify why so agents get an actionable reason + hint.
-      return await screenshotUnavailableResponse(screenshot, screenshotID: screenshotID, error: error)
+      return await screenshotUnavailableResponse(
+        screenshot, screenshotID: screenshotID, error: error, toolName: toolName)
     }
   }
 
@@ -483,7 +485,8 @@ final class LocalAgentAPIServer: @unchecked Sendable {
   private func screenshotUnavailableResponse(
     _ screenshot: Screenshot,
     screenshotID: Int64,
-    error: Error
+    error: Error,
+    toolName: String
   ) async -> LocalHTTPResponse {
     let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
 
@@ -502,7 +505,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     } else {
       logError("LocalAgentAPIServer: get_screenshot failed", error: error)
       ScreenContextToolTelemetry.trackToolResult(
-        toolName: "get_screenshot",
+        toolName: toolName,
         context: ScreenContextTelemetryContext(surface: "local_api"),
         ok: false,
         failureCode: .unknown,
@@ -512,7 +515,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     }
 
     ScreenContextToolTelemetry.trackToolResult(
-      toolName: "get_screenshot",
+      toolName: toolName,
       context: ScreenContextTelemetryContext(surface: "local_api"),
       ok: false,
       failureCode: ScreenContextFailureCode(rawValue: code) ?? .unknown,

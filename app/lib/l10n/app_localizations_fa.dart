@@ -2040,6 +2040,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get memoryDeleted => 'خاطره حذف شد.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'بازگشت';
 
   @override
@@ -9899,4 +9902,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String appDisabledLastError(String error) {
     return 'آخرین خطا: $error';
   }
+
+  @override
+  String get prerecordedTranscript => 'از پیش ضبط‌شده';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant هنوز در حال ضبط است، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'حافظه Pendant پر است و همچنان در حالت ضبط قرار دارد، بنابراین صدای ذخیره‌شده قابل انتقال نیست. دکمه Pendant را فشار دهید تا ضبط متوقف شود، سپس دوباره همگام‌سازی کنید.';
 }

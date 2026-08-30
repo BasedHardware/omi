@@ -1017,7 +1017,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
             "turn_detection": NSNull(),  // PTT controls turns
             "transcription": transcription,
           ],
-          "output": ["format": ["type": "audio/pcm", "rate": 24000], "voice": "marin"],
+          "output": Self.openAIOutputAudioConfig(),
         ],
         "tools": RealtimeHubTools.openAITools(availableDirectedProviders: availableDirectedProviders),
         "tool_choice": "auto",
@@ -1043,12 +1043,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           "generationConfig": [
             "responseModalities": ["AUDIO"], "temperature": 0.3,
             "mediaResolution": "MEDIA_RESOLUTION_HIGH",
-            // Pin the spoken voice — with no speechConfig Gemini picks its own default,
-            // which differs from the OpenAI hub voice (marin) and can change across
-            // model revisions. Charon: deep, calm, "informative" — closest match to marin.
-            "speechConfig": [
-              "voiceConfig": ["prebuiltVoiceConfig": ["voiceName": "Charon"]]
-            ],
+            "speechConfig": Self.geminiSpeechConfig(),
           ],
           "systemInstruction": ["parts": [["text": instructions]]],
           "tools": [

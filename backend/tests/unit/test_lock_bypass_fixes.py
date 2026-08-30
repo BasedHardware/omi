@@ -988,7 +988,7 @@ class TestUsersLockEnforcement:
 
         memory_service = MagicMock()
         exported_memory = MagicMock(model_dump=MagicMock(return_value={"id": "mem-1"}))
-        memory_service.iter_export_memories.return_value = iter([exported_memory])
+        memory_service.iter_portability_export_memories.return_value = iter([exported_memory])
 
         # The export generator lives in services.users.data_export, which binds
         # these helpers at module level. Patch the service-level symbols so the
@@ -1000,23 +1000,19 @@ class TestUsersLockEnforcement:
                     "services.users.data_export.get_standalone_action_items",
                     return_value=[],
                 ):
-                    with patch("services.users.data_export.MemoryService", return_value=memory_service):
-                        from routers.users import export_all_user_data
+                    with patch("services.users.data_export._iter_user_subcollection", return_value=iter(())):
+                        with patch(
+                            "services.users.data_export._iter_user_nested_subcollection",
+                            return_value=iter(()),
+                        ):
+                            with patch("services.users.data_export.MemoryService", return_value=memory_service):
+                                from services.users.data_export import iter_user_data_export
 
-                        response = export_all_user_data(uid="test-uid")
-
-                        # Consume body inside patches — the generator is lazy.
-                        # StreamingResponse wraps sync generators as async iterators,
-                        # so iterate the underlying generator directly.
-                        import asyncio
-
-                        async def _consume():
-                            parts = []
-                            async for chunk in response.body_iterator:
-                                parts.append(chunk)
-                            return "".join(parts)
-
-                        body = asyncio.run(_consume())
+                                # Exercise the export producer directly and keep every
+                                # user-data source hermetic. This test module can be
+                                # collected after the real data-export module, so its
+                                # import-time dependency stubs are not reliable isolation.
+                                body = "".join(iter_user_data_export(uid="test-uid"))
 
         import json
 
@@ -1026,7 +1022,7 @@ class TestUsersLockEnforcement:
         assert data["conversations"][0]["is_locked"] is True
         assert data["conversations"][1]["id"] == "conv-2"
         assert data["memories"] == [{"id": "mem-1"}]
-        memory_service.iter_export_memories.assert_called_once_with("test-uid", include_archive=True)
+        memory_service.iter_portability_export_memories.assert_called_once_with("test-uid", include_archive=True)
 
 
 # =============================================================================
