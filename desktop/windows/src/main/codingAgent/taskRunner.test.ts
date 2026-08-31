@@ -142,9 +142,10 @@ describe('candidateAgents', () => {
     // unverified known_limitation. That's a sourced reason to prefer Hermes
     // for a wide refactor specifically, not just a coin flip.
     activate('hermes', 'codex')
-    expect(
-      candidateAgents(undefined, {}, process.env, 'refactor this across the codebase')
-    ).toEqual(['hermes', 'codex'])
+    expect(candidateAgents(undefined, {}, process.env, 'bulk_refactor')).toEqual([
+      'hermes',
+      'codex'
+    ])
   })
 
   it('lets recorded history move the unnamed fallback order', () => {
@@ -154,10 +155,7 @@ describe('candidateAgents', () => {
       { adapterId: 'codex', tag: 'general', outcome: 'success', ts: 2 },
       { adapterId: 'codex', tag: 'general', outcome: 'success', ts: 3 }
     ])
-    expect(candidateAgents(undefined, {}, process.env, 'just chatting')).toEqual([
-      'codex',
-      'hermes'
-    ])
+    expect(candidateAgents(undefined, {}, process.env, 'general')).toEqual(['codex', 'hermes'])
   })
 })
 

@@ -39,14 +39,17 @@ describe('rankAgentsForTask', () => {
     // on a plain task. hermes/codex tie at a neutral baseline and keep input
     // order; openclaw's real, matrix-documented lack of tool support
     // (ADAPTER_CAPABILITY_MATRIX.openclaw.toolSupport) drops it last.
-    expect(
-      rankAgentsForTask(['acp', 'openclaw', 'hermes', 'codex'], 'fix the failing test', [])
-    ).toEqual(['acp', 'hermes', 'codex', 'openclaw'])
+    expect(rankAgentsForTask(['acp', 'openclaw', 'hermes', 'codex'], 'general', [])).toEqual([
+      'acp',
+      'hermes',
+      'codex',
+      'openclaw'
+    ])
   })
 
   it('breaks a score tie by input order, not alphabetically or randomly', () => {
-    expect(rankAgentsForTask(['codex', 'hermes'], 'just chatting', [])).toEqual(['codex', 'hermes'])
-    expect(rankAgentsForTask(['hermes', 'codex'], 'just chatting', [])).toEqual(['hermes', 'codex'])
+    expect(rankAgentsForTask(['codex', 'hermes'], 'general', [])).toEqual(['codex', 'hermes'])
+    expect(rankAgentsForTask(['hermes', 'codex'], 'general', [])).toEqual(['hermes', 'codex'])
   })
 
   it('lets a task-relevant capability override plain input order', () => {
@@ -54,9 +57,7 @@ describe('rankAgentsForTask', () => {
     // Codex's is an unverified known_limitation. For a bulk refactor — where
     // being able to size the model to the job matters — that's a real,
     // sourced reason to prefer Hermes, even though Codex was listed first.
-    expect(rankAgentsForTask(['codex', 'hermes'], 'refactor this across the codebase', [])).toEqual(
-      ['hermes', 'codex']
-    )
+    expect(rankAgentsForTask(['codex', 'hermes'], 'bulk_refactor', [])).toEqual(['hermes', 'codex'])
   })
 
   it('lets a winning streak move an agent ahead of an input-order tie', () => {
@@ -66,10 +67,7 @@ describe('rankAgentsForTask', () => {
       outcome: 'success',
       ts: i
     }))
-    expect(rankAgentsForTask(['hermes', 'codex'], 'just chatting', ledger)).toEqual([
-      'codex',
-      'hermes'
-    ])
+    expect(rankAgentsForTask(['hermes', 'codex'], 'general', ledger)).toEqual(['codex', 'hermes'])
   })
 
   it('only weighs the most recent matching attempts, so a stale bad stretch clears out', () => {
@@ -90,7 +88,7 @@ describe('rankAgentsForTask', () => {
     // wash, not a net negative — so the input-order tie-break decides rather
     // than a month-old streak permanently outranking Hermes.
     expect(
-      rankAgentsForTask(['codex', 'hermes'], 'just chatting', [...staleFailures, ...recentWins])
+      rankAgentsForTask(['codex', 'hermes'], 'general', [...staleFailures, ...recentWins])
     ).toEqual(['codex', 'hermes'])
   })
 
@@ -104,10 +102,7 @@ describe('rankAgentsForTask', () => {
     // OpenClaw's real, matrix-documented gap (it can't call tools at all) is
     // bigger than the ledger's max swing, on purpose — a lucky streak nudges,
     // it never fully overrides a structural capability gap.
-    expect(rankAgentsForTask(['openclaw', 'acp'], 'just chatting', allWins)).toEqual([
-      'acp',
-      'openclaw'
-    ])
+    expect(rankAgentsForTask(['openclaw', 'acp'], 'general', allWins)).toEqual(['acp', 'openclaw'])
   })
 
   it('ignores history for a different agent or a different kind of task', () => {
@@ -117,9 +112,6 @@ describe('rankAgentsForTask', () => {
     ]
     // Same codex win streak as the earlier test, but recorded against a
     // different task tag — must not leak into an unrelated 'general' ranking.
-    expect(rankAgentsForTask(['hermes', 'codex'], 'just chatting', ledger)).toEqual([
-      'hermes',
-      'codex'
-    ])
+    expect(rankAgentsForTask(['hermes', 'codex'], 'general', ledger)).toEqual(['hermes', 'codex'])
   })
 })

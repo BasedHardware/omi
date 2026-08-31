@@ -129,16 +129,20 @@ function historyScore(
  * two agents scoring identically keep today's behavior instead of shuffling
  * on every call.
  *
+ * Takes an already-classified `tag` rather than a raw prompt: callers that
+ * also need the tag for something else (taskRunner records outcomes against
+ * it) classify once and pass the result here instead of paying for
+ * `classifyTask` twice on the same prompt.
+ *
  * Pure given `ledgerEntries`; taskRunner passes the real persisted ledger and
  * tests pass a fixed one, so ranking never depends on wall-clock disk state
  * mid-test.
  */
 export function rankAgentsForTask(
   connected: readonly CodingAgentAdapterId[],
-  prompt: string,
+  tag: TaskTag,
   ledgerEntries: readonly AgentOutcomeEntry[] = readOutcomeLedger()
 ): CodingAgentAdapterId[] {
-  const tag = classifyTask(prompt)
   return connected
     .map((adapterId, declaredIndex) => ({
       adapterId,

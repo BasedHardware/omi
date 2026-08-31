@@ -22,7 +22,7 @@ import {
 import { failureFromError, messageFrom } from './failures'
 import { isRecoverableAcpAuthError } from './acp'
 import { claudeAuthStatus } from './claudeOAuth'
-import { classifyTask, rankAgentsForTask } from './agentConcierge'
+import { classifyTask, rankAgentsForTask, type TaskTag } from './agentConcierge'
 import { recordAgentOutcome } from './agentOutcomeLedger'
 import type {
   CodingAgentEvent,
@@ -46,15 +46,18 @@ export const AGENT_FALLBACK_ORDER = PRODUCTION_ADAPTER_IDS
  * than just handed back in declared order, so "no agent named" actually means
  * "pick the best connected one" the way CodingAgentRunArgs.agentId's doc
  * comment already promises.
+ *
+ * Takes the already-classified `taskTag` (see runCodingAgentTask) rather than
+ * a raw prompt, so a single call site's prompt is only ever classified once.
  */
 export function candidateAgents(
   named: CodingAgentAdapterId | undefined,
   overrides: AdapterCommandOverrides,
   env: NodeJS.ProcessEnv = process.env,
-  prompt = ''
+  taskTag: TaskTag = 'general'
 ): CodingAgentAdapterId[] {
   const connected = AGENT_FALLBACK_ORDER.filter((id) => adapterIsActivated(id, overrides, env))
-  const ranked = rankAgentsForTask(connected, prompt)
+  const ranked = rankAgentsForTask(connected, taskTag)
   if (!named) return ranked
   return [named, ...ranked.filter((id) => id !== named)]
 }
@@ -142,8 +145,8 @@ export async function runCodingAgentTask(
   log: (message: string) => void = () => {}
 ): Promise<CodingAgentResult> {
   const overrides = args.commandOverrides ?? {}
-  const candidates = candidateAgents(args.agentId, overrides, process.env, args.prompt)
   const taskTag = classifyTask(args.prompt)
+  const candidates = candidateAgents(args.agentId, overrides, process.env, taskTag)
   if (candidates.length === 0) {
     return {
       taskId: args.taskId,
