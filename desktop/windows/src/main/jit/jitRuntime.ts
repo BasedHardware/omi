@@ -130,7 +130,6 @@ export class WindowsJitRuntime {
   private snapshotReceipt: JitMirrorReceipt | null = null
   private snapshotAt = 0
   private ledgerReceipt: JitLedgerMirrorReceipt | null = null
-  private ledgerAt = 0
   private policy: JitRuntimePolicy | null = null
   private calendarCacheAt = 0
   private calendarCache: { authorized: boolean; events: JitCalendarEvent[] } | null = null
@@ -196,7 +195,6 @@ export class WindowsJitRuntime {
     this.snapshotReceipt = null
     this.snapshotAt = 0
     this.ledgerReceipt = null
-    this.ledgerAt = 0
     this.policy = null
   }
 
@@ -407,7 +405,6 @@ export class WindowsJitRuntime {
           ownerId,
           this.now()
         )
-        this.ledgerAt = this.now()
       } catch {
         // Fail closed for the mirror only. A torn or incomplete ledger must not
         // discard a complete trigger snapshot or reopen the Insight pipeline.
