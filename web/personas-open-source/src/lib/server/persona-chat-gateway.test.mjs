@@ -5,6 +5,7 @@ import {
   PERSONA_CHAT_LANES,
   PersonaAuthenticationError,
   PersonaGatewayUnavailableError,
+  personaLaneForIdentity,
   requestPersonaChatStream,
   resolvePersonaIdentity,
 } from './persona-chat-gateway.mjs';
@@ -127,4 +128,10 @@ test('missing gateway URL or service token fails closed before a request is sent
     );
     assert.equal(calls, 0);
   }
+});
+
+test('personaLaneForIdentity returns the correct lane for valid and null identities', () => {
+  assert.equal(personaLaneForIdentity(null), 'omi:auto:persona-chat');
+  assert.equal(personaLaneForIdentity(undefined), 'omi:auto:persona-chat');
+  assert.equal(personaLaneForIdentity({ uid: 'test-user' }), 'omi:auto:persona-chat-premium');
 });
