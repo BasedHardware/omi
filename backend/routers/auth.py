@@ -448,7 +448,6 @@ async def auth_authorize(
     # page — both would leave the user on a blank screen.
     if _auth_emulator_active():
         auth_code = await _issue_emulator_auth_code(session_data)
-        app_redirect_uri = session_data.get("redirect_uri", _DEFAULT_MOBILE_REDIRECT)
         _log_auth_event(
             provider=provider,
             stage="auth_code_created",
@@ -464,10 +463,8 @@ async def auth_authorize(
             redirect_scheme=redirect_scheme,
         )
         if normalized_response_mode == "json":
-            return JSONResponse({"code": auth_code, "state": session_data.get("state") or ""})
-        return RedirectResponse(
-            url=_build_callback_redirect_url(app_redirect_uri, auth_code, session_data.get("state"))
-        )
+            return JSONResponse({"code": auth_code, "state": state or ""})
+        return RedirectResponse(url=_build_callback_redirect_url(redirect_uri, auth_code, state))
 
     # Redirect to provider OAuth
     if provider == 'google':
