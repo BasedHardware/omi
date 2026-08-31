@@ -1,16 +1,18 @@
 {
   "mcpServers": {
-    "github": {
-      "url": "https://api.githubcopilot.com/mcp/",
-      "headers": {
-        "Authorization": "Bearer ${env:GITHUB_TOKEN}"
+    "notion": {
+      "command": "npx",
+      "args": ["-y", "@notionhq/notion-mcp-server@2.5.1"],
+      "env": {
+        "NOTION_TOKEN": "${env:NOTION_TOKEN}"
       }
     },
-    "notion": {
-      "url": "https://mcp.notion.com/mcp"
-    },
     "figma": {
-      "url": "https://mcp.figma.com/mcp"
+      "command": "npx",
+      "args": ["-y", "figma-developer-mcp@0.13.2", "--stdio"],
+      "env": {
+        "FIGMA_API_KEY": "${env:FIGMA_ACCESS_TOKEN}"
+      }
     },
     "browser": {
       "command": "npx",

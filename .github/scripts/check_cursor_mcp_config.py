@@ -20,19 +20,13 @@ BANNED_PACKAGE_IDENTITIES = {
     "@modelcontextprotocol/server-notion",
 }
 
-REMOTE_CONTRACTS: dict[str, dict[str, Any]] = {
-    "github": {
-        "url": "https://api.githubcopilot.com/mcp/",
-        "headers": {"Authorization": "Bearer ${env:GITHUB_TOKEN}"},
-    },
-    "notion": {"url": "https://mcp.notion.com/mcp"},
-    "figma": {"url": "https://mcp.figma.com/mcp"},
-}
-
-PLAYWRIGHT_PACKAGE = "@playwright/mcp@0.0.79"
+# Which servers the config must define. Deliberately not a contract on *how* each
+# one connects: 8b5715527b chose local npx packages over hosted endpoints, and this
+# check exists to keep whatever is configured runnable and credential-safe, not to
+# relitigate that choice.
+REQUIRED_SERVERS = ("notion", "figma", "browser")
 EXACT_NPM_SPEC = re.compile(
-    r"^(?:@[^/@]+/[^/@]+|[^/@][^@]*)@\d+\.\d+\.\d+"
-    r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
+    r"^(?:@[^/@]+/[^/@]+|[^/@][^@]*)@\d+\.\d+\.\d+" r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
 SENSITIVE_NAME = re.compile(r"(?:AUTHORIZATION|KEY|SECRET|TOKEN)", re.IGNORECASE)
 ENV_REFERENCE = re.compile(r"^(?:Bearer )?\$\{env:[A-Za-z_][A-Za-z0-9_]*\}$")
@@ -52,12 +46,8 @@ def _credential_errors(server_name: str, field: str, values: Any) -> list[str]:
 
     errors: list[str] = []
     for key, value in values.items():
-        if SENSITIVE_NAME.search(str(key)) and (
-            not isinstance(value, str) or not ENV_REFERENCE.fullmatch(value)
-        ):
-            errors.append(
-                f"{server_name}.{field}.{key} must use a ${{env:NAME}} reference, not a committed value"
-            )
+        if SENSITIVE_NAME.search(str(key)) and (not isinstance(value, str) or not ENV_REFERENCE.fullmatch(value)):
+            errors.append(f"{server_name}.{field}.{key} must use a ${{env:NAME}} reference, not a committed value")
     return errors
 
 
@@ -70,7 +60,7 @@ def config_errors(config: Any) -> list[str]:
         return ["Cursor MCP config must define an mcpServers object"]
 
     errors: list[str] = []
-    for required in (*REMOTE_CONTRACTS, "browser"):
+    for required in REQUIRED_SERVERS:
         if required not in servers:
             errors.append(f"missing required MCP server: {required}")
 
@@ -89,37 +79,17 @@ def config_errors(config: Any) -> list[str]:
             if not isinstance(url, str) or urlparse(url).scheme != "https":
                 errors.append(f"{name}.url must use HTTPS")
 
-        package = (
-            _npx_package(server.get("args")) if server.get("command") == "npx" else None
-        )
+        package = _npx_package(server.get("args")) if server.get("command") == "npx" else None
         if package in BANNED_PACKAGE_IDENTITIES:
             errors.append(f"{name} uses unsupported MCP package {package}")
-        if server.get("command") == "npx" and (
-            package is None or EXACT_NPM_SPEC.fullmatch(package) is None
-        ):
-            errors.append(
-                f"{name} must pin its npx package to an exact semantic version"
-            )
+        if server.get("command") == "npx" and (package is None or EXACT_NPM_SPEC.fullmatch(package) is None):
+            errors.append(f"{name} must pin its npx package to an exact semantic version")
 
         errors.extend(_credential_errors(name, "env", server.get("env")))
         errors.extend(_credential_errors(name, "headers", server.get("headers")))
 
-    for name, expected in REMOTE_CONTRACTS.items():
-        actual = servers.get(name)
-        if isinstance(actual, dict) and actual != expected:
-            errors.append(
-                f"{name} must use its maintained provider endpoint and authentication contract"
-            )
-
     browser = servers.get("browser")
     if isinstance(browser, dict):
-        if (
-            browser.get("command") != "npx"
-            or _npx_package(browser.get("args")) != PLAYWRIGHT_PACKAGE
-        ):
-            errors.append(
-                f"browser must use Microsoft's pinned {PLAYWRIGHT_PACKAGE} server"
-            )
         if browser.get("env"):
             errors.append("browser MCP must not receive repository credentials")
 

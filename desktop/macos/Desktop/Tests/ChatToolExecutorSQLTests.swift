@@ -102,6 +102,39 @@ final class ChatToolExecutorSQLTests: XCTestCase {
     try await super.tearDown()
   }
 
+  func testExecuteSQLRendersUTCTimestampInPinnedLocalTimeZone() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("execute-sql-tz-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+    try await pool.write { db in
+      try db.execute(sql: "CREATE TABLE screenshots (timestamp TEXT, appName TEXT)")
+      try db.execute(
+        sql: "INSERT INTO screenshots VALUES (?, ?)",
+        arguments: ["2026-08-27 19:59:51", "Claude"]
+      )
+    }
+
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+    let result = await ChatToolExecutor.executeSQL(
+      ["query": "SELECT timestamp, appName FROM screenshots"],
+      dbQueue: pool,
+      expectedOwnerID: nil,
+      timeZone: timeZone
+    )
+
+    XCTAssertTrue(
+      result.contains("3:59:51 PM") || result.contains("15:59:51"),
+      "expected local 3:59:51, got \(result)")
+    XCTAssertTrue(
+      result.contains("America/New_York") || result.contains("EDT"),
+      "expected a zone token, got \(result)")
+    XCTAssertFalse(result.contains("7:59:51 PM"), "must not present UTC-as-local \(result)")
+    XCTAssertTrue(result.contains("Claude"))
+  }
+
   func testReadOnlySQLAllowsSelectAndReadOnlyCTE() {
     XCTAssertTrue(ChatToolExecutor.isReadOnlySQLStatement("SELECT * FROM screenshots LIMIT 1"))
     XCTAssertTrue(
@@ -277,7 +310,7 @@ final class ChatToolExecutorSQLTests: XCTestCase {
     XCTAssertTrue(result.contains("call get_work_context"))
   }
 
-  func testExecuteSQLRendersDatetimeColumnsInLocalTimeWithZoneLabel() async throws {
+  func testExecuteSQLRendersStoredGRDBDateInPinnedLocalTimeWithZoneLabel() async throws {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("execute-sql-datetime-localization-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -285,7 +318,7 @@ final class ChatToolExecutorSQLTests: XCTestCase {
 
     let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
     // 2026-08-27T19:59:51Z — the exact UTC instant from #12321's repro.
-    let utcInstant = Date(timeIntervalSince1970: 1_787_082_791)
+    let utcInstant = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-08-27T19:59:51Z"))
     try await pool.write { db in
       try db.execute(sql: "CREATE TABLE screenshots (appName TEXT, timestamp DATETIME NOT NULL)")
       try db.execute(
@@ -294,26 +327,56 @@ final class ChatToolExecutorSQLTests: XCTestCase {
       )
     }
 
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
     let result = await ChatToolExecutor.executeSQL(
       ["query": "SELECT appName, timestamp FROM screenshots"],
       dbQueue: pool,
-      expectedOwnerID: nil
+      expectedOwnerID: nil,
+      timeZone: timeZone
     )
-
-    let expectedLocalFormatter = DateFormatter()
-    expectedLocalFormatter.locale = Locale(identifier: "en_US_POSIX")
-    expectedLocalFormatter.timeZone = .current
-    expectedLocalFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss zzz"
-    let expectedLocal = expectedLocalFormatter.string(from: utcInstant)
 
     XCTAssertTrue(
-      result.contains(expectedLocal),
-      "expected local+zone rendering '\(expectedLocal)' in result:\n\(result)"
+      result.contains("2026-08-27 3:59:51 PM"),
+      "expected pinned local+zone rendering in result:\n\(result)"
     )
-    // Only meaningful off UTC, but guards against silently falling back to the raw UTC cell.
-    if TimeZone.current.secondsFromGMT(for: utcInstant) != 0 {
-      XCTAssertFalse(result.contains("2026-08-27 19:59:51.000"))
+    XCTAssertTrue(result.contains("(America/New_York)"))
+    XCTAssertFalse(result.contains("2026-08-27 19:59:51"))
+  }
+
+  func testExecuteSQLRejectsProjectedLocaltimeButAllowsUTCBoundaryConversion() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("execute-sql-localtime-projection-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+    try await pool.write { db in
+      try db.execute(sql: "CREATE TABLE screenshots (timestamp DATETIME NOT NULL)")
+      try db.execute(sql: "INSERT INTO screenshots VALUES (datetime('now'))")
     }
+
+    let utc = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+    let boundaryResult = await ChatToolExecutor.executeSQL(
+      [
+        "query": """
+        SELECT timestamp FROM screenshots
+        WHERE timestamp >= datetime('now', 'localtime', 'start of day', 'utc')
+        """
+      ],
+      dbQueue: pool,
+      expectedOwnerID: nil,
+      timeZone: utc
+    )
+    XCTAssertFalse(boundaryResult.contains("keep timestamp result expressions in UTC"))
+    XCTAssertTrue(boundaryResult.contains("timestamp"))
+
+    let projectedResult = await ChatToolExecutor.executeSQL(
+      ["query": "SELECT datetime(timestamp, 'localtime') AS timestamp FROM screenshots"],
+      dbQueue: pool,
+      expectedOwnerID: nil,
+      timeZone: utc
+    )
+    XCTAssertTrue(projectedResult.contains("keep timestamp result expressions in UTC"))
   }
 
   func testSQLAuthorizationIsOutsideSwiftPhysicalPreconditions() {

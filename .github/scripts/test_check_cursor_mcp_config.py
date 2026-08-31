@@ -7,7 +7,6 @@ import unittest
 
 from check_cursor_mcp_config import (
     CONFIG_PATH,
-    PLAYWRIGHT_PACKAGE,
     config_errors,
     load_config,
 )
@@ -31,44 +30,29 @@ class CursorMCPConfigContractTests(unittest.TestCase):
         for server_name, package in old_packages.items():
             with self.subTest(server=server_name):
                 mutated = copy.deepcopy(self.config)
+                # `github` is not a configured server any more; adding it proves the
+                # banned list is enforced for every server, not only the shipped ones.
                 mutated["mcpServers"][server_name] = {
                     "command": "npx",
                     "args": ["-y", package],
                 }
-                self.assertTrue(
-                    any(
-                        f"unsupported MCP package {package}" in error
-                        for error in config_errors(mutated)
-                    )
-                )
+                self.assertTrue(any(f"unsupported MCP package {package}" in error for error in config_errors(mutated)))
 
     def test_rejects_floating_npx_package(self) -> None:
         self.config["mcpServers"]["browser"]["args"] = ["-y", "@playwright/mcp@latest"]
         errors = config_errors(self.config)
-        self.assertIn(
-            "browser must pin its npx package to an exact semantic version", errors
-        )
-        self.assertIn(
-            f"browser must use Microsoft's pinned {PLAYWRIGHT_PACKAGE} server", errors
-        )
+        self.assertIn("browser must pin its npx package to an exact semantic version", errors)
 
     def test_rejects_remote_endpoint_downgrade(self) -> None:
-        self.config["mcpServers"]["notion"]["url"] = "http://mcp.notion.com/mcp"
-        errors = config_errors(self.config)
-        self.assertIn("notion.url must use HTTPS", errors)
-        self.assertIn(
-            "notion must use its maintained provider endpoint and authentication contract",
-            errors,
-        )
+        """A url-form server must stay on HTTPS whichever endpoint it points at."""
+        self.config["mcpServers"]["notion"] = {"url": "http://mcp.notion.com/mcp"}
+        self.assertIn("notion.url must use HTTPS", config_errors(self.config))
 
     def test_rejects_plaintext_credential(self) -> None:
-        self.config["mcpServers"]["github"]["headers"][
-            "Authorization"
-        ] = "Bearer secret-value"
-        errors = config_errors(self.config)
+        self.config["mcpServers"]["notion"]["env"]["NOTION_TOKEN"] = "secret-value"
         self.assertIn(
-            "github.headers.Authorization must use a ${env:NAME} reference, not a committed value",
-            errors,
+            "notion.env.NOTION_TOKEN must use a ${env:NAME} reference, not a committed value",
+            config_errors(self.config),
         )
 
     def test_rejects_credentials_forwarded_to_browser_process(self) -> None:

@@ -65,9 +65,9 @@ Optional hook scripts/config to observe and extend the agent loop. Useful for en
 
 ### MCP config (`.cursor/mcp.json`)
 
-Configuration for MCP servers that provide external tools (e.g. browser testing, GitHub automation, Notion/Figma integration if enabled).
+Configuration for MCP servers that provide external tools (e.g. browser testing, Notion/Figma integration if enabled).
 
-The checked-in project config uses maintained provider endpoints for GitHub, Notion, and Figma. Export `GITHUB_TOKEN` before starting Cursor to enable GitHub; Cursor completes the provider OAuth flow for Notion and Figma when first used. Browser automation runs Microsoft's Playwright MCP package at the exact version recorded in the config. Do not replace these entries with guessed `@modelcontextprotocol/server-*` names or floating npm versions.
+Every entry runs a published npm package pinned to an exact version, so contributor setup never executes a floating dependency. Export `NOTION_TOKEN` and `FIGMA_ACCESS_TOKEN` before starting Cursor to enable those servers; browser automation needs no credentials and is given none. A repository contract (`.github/scripts/check_cursor_mcp_config.py`) enforces this: it rejects the four `@modelcontextprotocol/server-*` names that were never published, any unpinned or floating npm spec, a plaintext credential where a `${env:NAME}` reference belongs, and credentials forwarded into the browser server. Bump a version deliberately rather than reaching for `@latest`.
 
 ---
 

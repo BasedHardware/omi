@@ -424,6 +424,7 @@ def test_fully_suppressed_historical_set_stops_at_the_scan_row_budget(service_mo
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail == service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL
+    assert isinstance(exc_info.value, service_mod.MemoryBackingStoreUnavailable)
     # The walk stopped at the budget instead of scanning every historical row.
     scanned = sum(call.kwargs["limit"] for call in updated_mock.call_args_list)
     assert scanned <= 150
@@ -1379,6 +1380,8 @@ def test_canonical_scan_failure_logs_underlying_exception_and_503s(service_mod, 
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail == "Canonical memory unavailable"
+    assert isinstance(exc_info.value, service_mod.MemoryBackingStoreUnavailable)
+    assert exc_info.value.stream == "canonical"
     assert isinstance(exc_info.value.__cause__, RuntimeError)
     assert "canonical list scan page failed" in caplog.text
     assert "RuntimeError" in caplog.text
@@ -1388,10 +1391,10 @@ def test_canonical_scan_failure_logs_underlying_exception_and_503s(service_mod, 
 def test_building_index_failure_is_the_historical_unavailable_detail(service_mod):
     """Pin the detail the historical keyset scan raises while an index builds.
 
-    ``routers.memories`` matches this exact string to fall the first page back
-    to the legacy offset read (the 2026-08-18 5.5h GET /v3/memories outage), so
-    a rename here would silently reopen it. Drives the real adapter with the
-    Firestore error prod raised.
+    ``routers.memories`` catches ``MemoryBackingStoreUnavailable`` to fall the
+    first page back to the legacy offset read (the 2026-08-18 5.5h GET
+    /v3/memories outage). The detail is preserved for the 503 body. Drives the
+    real adapter with the Firestore error prod raised.
     """
     from fastapi import HTTPException
     from google.api_core import exceptions as gcloud_exceptions
@@ -1411,4 +1414,6 @@ def test_building_index_failure_is_the_historical_unavailable_detail(service_mod
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail == "Historical memory unavailable"
+    assert isinstance(exc_info.value, service_mod.MemoryBackingStoreUnavailable)
+    assert exc_info.value.stream == "historical"
     assert isinstance(exc_info.value.__cause__, gcloud_exceptions.FailedPrecondition)

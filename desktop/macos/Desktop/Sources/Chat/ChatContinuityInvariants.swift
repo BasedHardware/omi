@@ -1,6 +1,6 @@
 import Foundation
 
-enum ProactiveNotificationKind: String, Equatable {
+enum ProactiveNotificationKind: String, Equatable, CaseIterable {
   case general
   case suggestion
   case insight

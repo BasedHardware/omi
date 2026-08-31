@@ -143,10 +143,11 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     assert body["structured"]["title"] == "Hermetic Conversation Lifecycle"
     assert body["transcript_segments"][0]["text"] == "We should ship deterministic conversation lifecycle coverage."
 
-    # INVARIANT I1: extraction proposes only. The summary still lists the item,
-    # but the user's action_items collection must stay empty — a task appears
-    # there only through an explicit user gesture.
-    assert read_action_items("123") == []
+    # INV-TASK-2: an omi conversation has no Suggested surface to review a
+    # proposal on, so what the extractor admits lands in the task list.
+    written = read_action_items("123")
+    assert [item["description"] for item in written] == ["Ship deterministic conversation lifecycle coverage"]
+    assert {item["conversation_id"] for item in written} == {processed.id}
     memories_response = client.get("/v3/memories", headers=auth_headers)
     assert memories_response.status_code == 200, memories_response.text
     memories = memories_response.json()

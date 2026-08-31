@@ -82,6 +82,9 @@ class CaptureController extends ChangeNotifier
 
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
+
+  static const Duration _rejectedTokenRefreshInterval = Duration(seconds: 30);
+  DateTime? _lastRejectedTokenRefreshAt;
   DateTime? _keepAliveLastExecutedAt;
   Timer? _inProgressConversationRefreshTimer;
   int _inProgressConversationRefreshAttempts = 0;
@@ -1717,6 +1720,10 @@ class CaptureController extends ChangeNotifier
       externalActions.markAsOutOfCreditsAndRefresh();
     }
 
+    if (closeCode == 4001) {
+      unawaited(_refreshRejectedAuthToken());
+    }
+
     // Reflect the transcription pipeline break in recordingState. Before this
     // change the UI kept reading "record" while the socket was dead, which
     // looked like active capture to the user (issue #6499). Only flip when we
@@ -1787,6 +1794,26 @@ class CaptureController extends ChangeNotifier
 
       await _reconnectActiveCapture();
     });
+  }
+
+  /// Close code 4001 is the server saying the presented token is expired.
+  ///
+  /// It is the only authority on that: the local expiry copy and the device
+  /// clock can both call a dead token valid, which is how #11694's clients
+  /// re-presented a three-day-expired token every ~15s indefinitely. Refresh
+  /// before the next attempt so the reconnect carries a new credential.
+  Future<void> _refreshRejectedAuthToken() async {
+    final now = DateTime.now();
+    final last = _lastRejectedTokenRefreshAt;
+    if (last != null && now.difference(last) < _rejectedTokenRefreshInterval) return;
+    _lastRejectedTokenRefreshAt = now;
+    try {
+      // refreshIdToken persists the new token and its expiry itself.
+      final result = await AuthService.instance.refreshIdToken();
+      Logger.debug('[Provider] token refresh after 4001: ${result.runtimeType}');
+    } catch (e) {
+      Logger.debug('[Provider] token refresh after 4001 failed: $e');
+    }
   }
 
   Future<void> _reconnectActiveCapture() async {

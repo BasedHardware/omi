@@ -34,6 +34,11 @@ checks:
     triggers: ["scripts/pre-commit", "scripts/test-pre-commit-pinned-toolchains.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#11304: the hook's floating prettier fallback (prettier 3 against web/frontend's pinned ^2.8.8) rewrote getPlatformLink in web/frontend/src/app/apps/[id]/page.tsx into a CI-rejected shape and polluted four PRs in one day; an unpinned formatter must refuse, never silently rewrite"
+  - id: backend-python-format-contract
+    command: ["bash", "scripts/test-backend-python-format.sh"]
+    triggers: ["scripts/backend-python-format", "scripts/test-backend-python-format.sh", "scripts/pre-commit", "scripts/pre-push", ".github/workflows/repo-checks.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PR #11454 reached CI with two backend Python files that the pinned formatter rejected; local auto-format, pre-push, and CI must converge through one cached formatter primitive"
   - id: pre-push-backend-test-cap
     command: ["bash", "scripts/test-pre-push-backend-test-cap.sh"]
     triggers: ["scripts/pre-push", "scripts/test-pre-push-backend-test-cap.sh", ".github/checks-manifest.yaml"]

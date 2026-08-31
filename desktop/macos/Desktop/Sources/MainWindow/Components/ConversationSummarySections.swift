@@ -9,7 +9,7 @@
 //  regression: the writing did not get worse, the client stopped reading most of it.
 //
 //  This is one view rather than two because the two surfaces that show a summary — the legacy
-//  `ConversationDetailView` and the chat-first `CaptureArchivePage` — already drifted once (one
+//  conversation entry point and `ConversationDetailView` — already drifted once (one
 //  renders markdown, the other rendered plain `Text`). A shared renderer is what keeps the next
 //  section the backend adds from appearing on only one of them.
 //

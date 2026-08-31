@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client
 from database.firestore_index_registry import (
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
@@ -93,7 +93,7 @@ def ensure_conversation_keyframe_job(uid: str, conversation: Any, *, firestore_c
     device_id = str(getattr(conversation, "client_device_id", None) or "").strip()
     if source != "desktop" or not isinstance(started, datetime) or not isinstance(finished, datetime) or not device_id:
         return False
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     ref = client.collection("users").document(uid).collection(_COLLECTION).document(str(conversation.id))
     transaction = client.transaction()
 
@@ -128,7 +128,7 @@ def reconcile_conversation_keyframe_jobs(
     limit: int = 16,
 ) -> int:
     """Select and enqueue one deterministic eligible frame for pending jobs."""
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     user = client.collection("users").document(uid)
     jobs = CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY.build(
         user.collection(_COLLECTION),
@@ -237,7 +237,7 @@ def prune_expired_conversation_keyframe_jobs(
         raise ValueError("keyframe job cleanup limit is outside the bounded window")
     current = _utc(now or datetime.now(timezone.utc))
     rows = (
-        (firestore_client or get_firestore_client())
+        (firestore_client or get_data_plane_firestore_client())
         .collection("users")
         .document(uid)
         .collection(_COLLECTION)
