@@ -791,6 +791,8 @@ export interface ResultMessage extends QueryScopedOutbound {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /// Served model identities observed on this run's completions, deduplicated.
+  modelsUsed?: string[];
   artifacts?: SerializedArtifact[];
   completionDeltaArtifacts?: SerializedArtifact[];
 }
@@ -826,6 +828,17 @@ export interface RuntimeFailurePayload {
   recoveryAction?: "worker_recycled";
   recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
   retryDisposition?: "next_send";
+}
+
+/// One concrete model identity observed serving this turn's completions.
+/// `model` is the SERVED model from the provider's response stream (e.g. the
+/// gateway lane's resolved upstream), falling back to the requested id only
+/// when the response carried none. Deduplicated per turn by the adapter.
+export interface ModelUsedMessage extends QueryScopedOutbound {
+  type: "model_used";
+  model: string;
+  requestedModel?: string;
+  provider?: string;
 }
 
 export interface ToolActivityMessage extends QueryScopedOutbound {
@@ -1199,6 +1212,7 @@ export type OutboundMessage =
   | TextDeltaMessage
   | ToolUseMessage
   | ToolActivityMessage
+  | ModelUsedMessage
   | TurnActivityMessage
   | ToolResultDisplayMessage
   | ThinkingDeltaMessage
@@ -1240,6 +1254,7 @@ export type OutboundMessageDraft =
   | DraftEnvelope<TextDeltaMessage>
   | DraftEnvelope<ToolUseMessage>
   | DraftEnvelope<ToolActivityMessage>
+  | DraftEnvelope<ModelUsedMessage>
   | DraftEnvelope<TurnActivityMessage>
   | DraftEnvelope<ToolResultDisplayMessage>
   | DraftEnvelope<ThinkingDeltaMessage>

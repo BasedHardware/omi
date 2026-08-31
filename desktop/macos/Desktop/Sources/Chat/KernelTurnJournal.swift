@@ -285,7 +285,7 @@ extension KernelJournalTurn {
     case "task_chat", "workstream": owner = .taskChat(externalRefId)
     default: owner = .mainChat
     }
-    return ChatMessage(
+    var message = ChatMessage(
       id: turnId,
       clientTurnId: continuityKey,
       text: content,
@@ -305,6 +305,16 @@ extension KernelJournalTurn {
       journalStatus: status,
       hidesEmptyStreamingPlaceholder: metadata["hiddenUntilOutput"] as? Bool ?? false
     )
+    // Persisted served-model attribution: lets a journaled voice turn (or a
+    // restored one) show the Response Context Model row that in-memory
+    // metadata would otherwise lose.
+    if message.sender == .ai, let models = metadata["modelsUsed"] as? [String], !models.isEmpty {
+      message.metadata = MessageMetadata(
+        adapterId: origin == "realtime_voice" ? "realtime" : "",
+        modelsUsed: models
+      )
+    }
+    return message
   }
 
   private static func metadataObject(_ raw: String) -> [String: Any] {
@@ -328,6 +338,7 @@ extension ChatMessage {
   ) -> KernelJournalTurnWrite {
     var metadata: [String: Any] = [:]
     if let continuityKey, !continuityKey.isEmpty { metadata["continuityKey"] = continuityKey }
+    if let models = self.metadata?.modelsUsed, !models.isEmpty { metadata["modelsUsed"] = models }
     if let notificationContext { metadata["notificationContext"] = notificationContext }
     // These rollback-compatible fields are consumed only by the kernel outbox
     // renderer for the existing /v2/desktop/messages POST shape.

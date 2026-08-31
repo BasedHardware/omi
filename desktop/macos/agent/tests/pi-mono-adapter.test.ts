@@ -1197,3 +1197,80 @@ describe("tool_use event filtering", () => {
     ]);
   });
 });
+
+describe("PiMonoAdapter served-model attribution", () => {
+  it("reports the response-observed model once per prompt, preferring responseModel", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "which model are you?" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => "",
+    );
+
+    // Two completions in one turn (tool loop) served by the same model — the
+    // identity must be reported exactly once, from the RESPONSE stream's
+    // model, not the requested alias.
+    for (let i = 0; i < 2; i++) {
+      (adapter as any).handleEvent(JSON.stringify({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "…" }],
+          model: "omi-sonnet",
+          responseModel: "gpt-5.6-luna",
+        },
+      }));
+    }
+
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+    await expect(prompt).resolves.toMatchObject({ text: "done" });
+
+    const modelEvents = events.filter((e: any) => e.type === "model_used");
+    expect(modelEvents).toEqual([{
+      type: "model_used",
+      model: "gpt-5.6-luna",
+      requestedModel: "omi-sonnet",
+      provider: undefined,
+    }]);
+  });
+
+  it("falls back to the requested model when the response carried none, and resets per prompt", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const first = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "q1" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => "",
+    );
+    const turnEnd = makeTurnEndEvent("a1");
+    (turnEnd.message as any).model = "omi-sonnet";
+    (adapter as any).handleTurnEnd(turnEnd);
+    await first;
+
+    const second = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "q2" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => "",
+    );
+    const turnEnd2 = makeTurnEndEvent("a2");
+    (turnEnd2.message as any).model = "omi-sonnet";
+    (adapter as any).handleTurnEnd(turnEnd2);
+    await second;
+
+    const modelEvents = events.filter((e: any) => e.type === "model_used");
+    expect(modelEvents).toHaveLength(2);
+    expect(modelEvents.every((e: any) => e.model === "omi-sonnet")).toBe(true);
+  });
+});
