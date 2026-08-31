@@ -31,6 +31,10 @@ no_data_semantics:
   traffic_gated_journey: NoData
   live_transcription_journey: OK
   scrape_health: Alerting
+  # Page-class finalization queue series (oldest-nonterminal age, dead-letter
+  # counter): unlabeled and zero-initialized on every backend-listen replica,
+  # so absence during real traffic means the emitter or its scrape is gone.
+  finalization_queue_health: Alerting
 
 managed_gke_exclusions:
   # Owned by #9138 / PR #11093 — do not page TargetDown for these.
