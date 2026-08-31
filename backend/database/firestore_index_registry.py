@@ -886,6 +886,36 @@ CONVERSATIONS_ACTIVE_ORDERED_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('discarded'), _desc('created_at'), _desc('__name__')),
 )
 
+
+MCP_CONVERSATION_CARD_QUERY_SPECS: dict[tuple[bool, bool, bool], FirestoreQuerySpec] = {}
+for _has_categories in (False, True):
+    for _has_start_date in (False, True):
+        for _has_end_date in (False, True):
+            _suffixes = []
+            _filters = [
+                FirestoreQueryFilter('discarded', '==', 'discarded'),
+                FirestoreQueryFilter('status', '==', 'status'),
+            ]
+            _index_fields = [_asc('discarded'), _asc('status')]
+            if _has_categories:
+                _suffixes.append('category')
+                _filters.append(FirestoreQueryFilter('structured.category', 'in', 'categories'))
+                _index_fields.append(_asc('structured.category'))
+            if _has_start_date:
+                _suffixes.append('start')
+                _filters.append(FirestoreQueryFilter('created_at', '>=', 'start_date'))
+            if _has_end_date:
+                _suffixes.append('end')
+                _filters.append(FirestoreQueryFilter('created_at', '<=', 'end_date'))
+            _variant = '_'.join(_suffixes) or 'all'
+            MCP_CONVERSATION_CARD_QUERY_SPECS[(_has_categories, _has_start_date, _has_end_date)] = FirestoreQuerySpec(
+                identifier=f'mcp_conversation_cards_{_variant}',
+                collection_group='conversations',
+                query_scope='COLLECTION',
+                filters=tuple(_filters),
+                index_fields=tuple((*_index_fields, _desc('created_at'), _desc('__name__'))),
+            )
+
 ENTITY_TIMELINE_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     identifier='conversations_entity_timeline_completed',
     collection_group='conversations',
@@ -1255,6 +1285,7 @@ QUERY_SPECS = (
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
+    *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,

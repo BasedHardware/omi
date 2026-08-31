@@ -183,6 +183,55 @@ deployment health, not read as zero traffic.
 The live-transcription failure alert uses Grafana `noDataState: OK`: an empty
 result is expected before that traffic exists and is not an outage.
 
+## Page-class journey SLI alerts
+
+The warning-class rules above report degradations; they did not page during
+the 2026-08-30 capture-finalization outage, when `capture_finalization`
+success sat at 0% for hours (failure ~360/h, stale ~290/h, accepted ~750/h)
+while listen pods, WebSockets, LB traffic, and 5xx rates all stayed green.
+These `severity: critical` rules page on the user outcome itself. All live in
+the `Resilience` group and link the matching **Omi Core Features** panel.
+
+| Rule | Fires when | Traffic gate | `noDataState` |
+| --- | --- | --- | --- |
+| `omi-journey-capture-success-critical` | capture success share < 0.90 for 10m | ≥ 20 accepted in 30m | `NoData` |
+| `omi-journey-pusher-success-critical` | pusher success share < 0.90 for 10m | ≥ 20 accepted in 30m | `NoData` |
+| `omi-journey-chat-success-critical` | chat success share < 0.90 for 10m | ≥ 20 accepted in 30m | `NoData` |
+| `omi-journey-capture-settle-gap` | accepted − settled > 50 per 1h for 15m | ≥ 100 accepted in 1h | `NoData` |
+| `omi-capture-oldest-nonterminal` | oldest nonterminal job age > 3600s for 15m | none (queue-age is traffic-independent) | `Alerting` |
+| `omi-capture-dead-letter-surge` | dead letters > 50 per 1h for 15m | none (each is a lost capture) | `Alerting` |
+
+The success-share numerator and denominator both read `omi_journey_terminal_total`
+for the same `journey` from the same emitter, gated on `omi_journey_accepted_total`
+for that journey, so quiet hours cannot page and a partial emitter outage cannot
+fake a healthy ratio. A total terminal stall with real accepted traffic yields a
+0 share through `clamp_min(..., 1)` and pages here too.
+
+Calibration (initial, from the 2026-08-30 incident fingerprint and documented
+measurements; replay against production history when the rules are imported):
+
+- **0.90 paging floor** — the Core Features tiles display 95/99 thresholds; a
+  sustained 90% floor with real traffic is unambiguous user harm. The incident
+  sat at 0% for hours.
+- **≥ 20 accepted / 30m** — the incident ran ~375 accepted per 30m; 20 is the
+  same floor the existing warning rules use for terminal outcomes.
+- **Gap > 50 / 1h at ≥ 100 accepted / 1h** — the incident left ~100 journeys
+  per hour accepted-but-never-settled while the backlog aged to 5.9 days;
+  normal in-flight work settles in minutes, so a 1h window gap stays near zero.
+- **Oldest job > 3600s** — healthy finalization drains in minutes; the
+  incident's oldest job was ~5.9 days old.
+- **Dead letters > 50 / 1h** — the incident produced ~2.5k dead letters per
+  day (~104/h); each dead letter is a capture that exhausted every retry.
+- **Chat liveness gate** (`omi-journey-signal-dead` chat arm) — the
+  `omi:auto:chat-agent` lane measured min 9, p01 15, p05 23 requests/hour
+  over 7 production days; `> 20/1h` demands liveness only at above-p05
+  chat demand.
+
+The two queue rules use `noDataState: Alerting` because their series are
+unlabeled and zero-initialized: every scraped backend-listen replica exports
+them at zero, so absence means the emitter or its scrape is gone, which is
+itself page-worthy during real traffic.
+
 Known blind spots: a server can only observe the SSE/WS boundary it controls,
 not client rendering; process restarts may defer a terminal metric until the
 durable worker/reconciler resumes; and a durable job still within its bounded

@@ -36,7 +36,7 @@ extension SettingsContentView {
 
               Button("Sign Out") {
                 appState.stopTranscription()
-                ProactiveAssistantsPlugin.shared.stopMonitoring()
+                ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .signOut)
                 Task {
                   try? await AuthService.shared.signOut()
                 }

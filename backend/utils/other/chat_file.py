@@ -1,4 +1,5 @@
 import base64
+import logging
 import mimetypes
 import re
 from pathlib import Path
@@ -21,9 +22,10 @@ from utils.llm.gateway_client import (
     file_chat_feature_header,
     get_file_chat_gateway_async_client,
     get_file_chat_gateway_sync_client,
+    is_gateway_model_not_found,
     should_route_features_through_gateway,
 )
-import logging
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +107,11 @@ def _get_async_openai() -> AsyncOpenAI:
     return _async_openai
 
 
+def _get_sync_openai() -> Any:
+    """Injectable seam around the OpenAI module's lazy synchronous client."""
+    return openai
+
+
 def _file_chat_gateway_enabled() -> bool:
     """Whether the model call uses the gateway file-chat lanes.
 
@@ -137,9 +144,27 @@ def _completion_model(files: List[FileChat]) -> str:
     pdf = bool(files) and any(f.is_pdf() for f in files)
     if _file_chat_gateway_enabled():
         return file_chat_auto_lane_id(pdf=pdf)
+    return _direct_completion_model(files)
+
+
+def _direct_completion_model(files: List[FileChat]) -> str:
+    """Provider model for the feature-off and compatibility fallback paths."""
+    pdf = bool(files) and any(f.is_pdf() for f in files)
     if pdf:
         return _FILE_CHAT_DOCUMENT_MODEL
     return _FILE_CHAT_VISION_MODEL
+
+
+def _record_gateway_file_chat_fallback(outcome: str) -> None:
+    """Record the terminal result of an admitted gateway compatibility fallback."""
+    record_fallback(
+        component='llm_gateway',
+        from_mode='gateway_file_chat',
+        to_mode='direct_file_chat',
+        reason='capability_mismatch',
+        outcome=outcome,
+        log=logger,
+    )
 
 
 class _StreamingCallbackProtocol:
@@ -287,77 +312,105 @@ class FileChatTool:
         """One Chat Completions stream: images as base64 image_url, PDFs as file parts."""
         assert callback is not None
         output_list: List[str] = []
+        gateway_fallback_used = False
         try:
             try:
-                messages = await self._completion_messages(question, files)
-                model = _completion_model(files)
-                if _file_chat_gateway_enabled():
-                    # Gateway lanes accept max_completion_tokens on every model
-                    # and stay in the ledger; typed SDK errors keep their meaning.
-                    stream = await get_file_chat_gateway_async_client().chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        stream=True,
-                        max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
-                        extra_headers=file_chat_feature_header(model, uid=self.uid),
-                    )
-                else:
-                    client = _get_async_openai()
-                    if model.startswith('gpt-5'):
-                        stream = await client.chat.completions.create(
+                try:
+                    messages = await self._completion_messages(question, files)
+                    gateway_enabled = _file_chat_gateway_enabled()
+                    model = _completion_model(files)
+                    if gateway_enabled:
+                        # Gateway lanes accept max_completion_tokens on every model
+                        # and stay in the ledger; typed SDK errors keep their meaning.
+                        try:
+                            stream = await get_file_chat_gateway_async_client().chat.completions.create(
+                                model=model,
+                                messages=messages,
+                                stream=True,
+                                max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                                extra_headers=file_chat_feature_header(model, uid=self.uid),
+                            )
+                        except openai.NotFoundError as error:
+                            if not is_gateway_model_not_found(error):
+                                raise
+                            gateway_fallback_used = True
+                            model = _direct_completion_model(files)
+                            stream = await _get_async_openai().chat.completions.create(
+                                model=model,
+                                messages=messages,
+                                stream=True,
+                                max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                            )
+                    else:
+                        model = _direct_completion_model(files)
+                        stream = await _get_async_openai().chat.completions.create(
                             model=model,
                             messages=messages,
                             stream=True,
                             max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
                         )
-                    else:
-                        stream = await client.chat.completions.create(
-                            model=model,
-                            messages=messages,
-                            stream=True,
-                            max_tokens=_FILE_CHAT_COMPLETION_TOKENS,
-                        )
-            except (openai.NotFoundError, openai.BadRequestError) as error:
-                _reraise_provider_file_error(error)
-            async for chunk in stream:
-                delta = chunk.choices[0].delta if chunk.choices else None
-                if delta and delta.content:
-                    await callback.put_data(delta.content)
-                    output_list.append(delta.content)
-        finally:
-            await callback.end()
+                except (openai.NotFoundError, openai.BadRequestError) as error:
+                    _reraise_provider_file_error(error)
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta if chunk.choices else None
+                    if delta and delta.content:
+                        await callback.put_data(delta.content)
+                        output_list.append(delta.content)
+            finally:
+                await callback.end()
+        except Exception:
+            if gateway_fallback_used:
+                _record_gateway_file_chat_fallback('exhausted')
+            raise
+        if gateway_fallback_used:
+            _record_gateway_file_chat_fallback('recovered')
         return ''.join(output_list)
 
     def _ask_files(self, question: str, files: List[FileChat]) -> str:
         """Non-streaming Chat Completions path used by search_files_tool."""
+        gateway_fallback_used = False
         try:
-            messages = self._completion_messages_sync(question, files)
-            model = _completion_model(files)
-            if _file_chat_gateway_enabled():
-                response = get_file_chat_gateway_sync_client().chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
-                    extra_headers=file_chat_feature_header(model, uid=self.uid),
-                )
-            elif model.startswith('gpt-5'):
-                response = openai.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
-                )
-            else:
-                response = openai.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_tokens=_FILE_CHAT_COMPLETION_TOKENS,
-                )
-        except (openai.NotFoundError, openai.BadRequestError) as error:
-            _reraise_provider_file_error(error)
-        choice = response.choices[0] if response.choices else None
-        content = choice.message.content if choice and choice.message else None
-        if not content:
-            raise ProviderRejectedChatFileError("The file could not be processed.")
+            try:
+                messages = self._completion_messages_sync(question, files)
+                gateway_enabled = _file_chat_gateway_enabled()
+                model = _completion_model(files)
+                if gateway_enabled:
+                    try:
+                        response = get_file_chat_gateway_sync_client().chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                            extra_headers=file_chat_feature_header(model, uid=self.uid),
+                        )
+                    except openai.NotFoundError as error:
+                        if not is_gateway_model_not_found(error):
+                            raise
+                        gateway_fallback_used = True
+                        model = _direct_completion_model(files)
+                        response = _get_sync_openai().chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                        )
+                else:
+                    model = _direct_completion_model(files)
+                    response = _get_sync_openai().chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                    )
+            except (openai.NotFoundError, openai.BadRequestError) as error:
+                _reraise_provider_file_error(error)
+            choice = response.choices[0] if response.choices else None
+            content = choice.message.content if choice and choice.message else None
+            if not content:
+                raise ProviderRejectedChatFileError("The file could not be processed.")
+        except Exception:
+            if gateway_fallback_used:
+                _record_gateway_file_chat_fallback('exhausted')
+            raise
+        if gateway_fallback_used:
+            _record_gateway_file_chat_fallback('recovered')
         return content
 
     async def _completion_messages(self, question: str, files: List[FileChat]) -> List[ChatCompletionMessageParam]:

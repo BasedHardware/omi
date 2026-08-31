@@ -56,6 +56,14 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var captureTimer: Timer?
   private var analysisDelayTimer: Timer?
   private var isInDelayPeriod = false
+  // Monitoring-duration telemetry (see MonitoringSessionTracker /
+  // MonitoringSessionStore). Deliberately a separate timer from
+  // `captureTimer`: it must keep ticking through
+  // `pauseCaptureForSystemInterruption()`, which invalidates the capture
+  // timers on purpose.
+  private var monitoringSessionTracker = MonitoringSessionTracker()
+  private let monitoringSessionStore: MonitoringSessionPersisting = MonitoringSessionDefaultsStore.shared
+  private var monitoringHeartbeatTimer: Timer?
   // Content-refresh dwell tracking (see ContextDwellRefreshPolicy): anchored at
   // the last real context switch or fired refresh, reset on real switches.
   private var dwellContextAnchor: Date?
@@ -406,6 +414,15 @@ public class ProactiveAssistantsPlugin: NSObject {
     isMonitoring = true
     setScreenCaptureHealth(.active)
 
+    let monitoringSessionID = UUID().uuidString
+    monitoringSessionTracker.start(
+      at: Date(),
+      sessionID: monitoringSessionID,
+      heldBy: isScreenLocked ? [.screenLock] : []
+    )
+    persistMonitoringSessionIfActive()
+    startMonitoringHeartbeatTimer()
+
     // Capture the first frame immediately so screenshots appear right away
     // (don't wait for the first timer interval to elapse)
     Task { @MainActor in
@@ -417,7 +434,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     ResourceMonitor.shared.reportResourcesNow(context: "after_monitoring_start")
 
     sendEvent(type: "monitoringStarted", data: [:])
-    AnalyticsManager.shared.monitoringStarted()
+    AnalyticsManager.shared.monitoringStarted(sessionID: monitoringSessionID)
     log("Proactive assistants started")
 
     completion(true, nil)
@@ -471,6 +488,57 @@ public class ProactiveAssistantsPlugin: NSObject {
     )
   }
 
+  /// 60-second repeating write-only heartbeat for monitoring-duration
+  /// recovery: refreshes `lastHeartbeatAt` on the persisted
+  /// `MonitoringSessionRecord` so a crash has an upper bound on how long the
+  /// session actually ran. Modeled on `startSentryHeartbeat()`
+  /// (`OmiApp.swift`), but deliberately NOT invalidated by
+  /// `pauseCaptureForSystemInterruption()` — the whole point is to keep
+  /// ticking through sleep/screen-lock, which is exactly what that function
+  /// tears down for the capture timers. Started in `continueStartMonitoring`,
+  /// invalidated in `stopMonitoring()`.
+  ///
+  /// This only writes to disk — it must never emit a PostHog event, or an
+  /// 8-hour monitoring session would produce 480 events instead of the one
+  /// `Monitoring Stopped` at the end.
+  private func startMonitoringHeartbeatTimer() {
+    monitoringHeartbeatTimer?.invalidate()
+    monitoringHeartbeatTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+      Task { @MainActor in
+        self?.recordMonitoringHeartbeat()
+      }
+    }
+  }
+
+  private func recordMonitoringHeartbeat() {
+    monitoringSessionTracker.heartbeat(at: Date())
+    persistMonitoringSessionIfActive()
+  }
+
+  private func persistMonitoringSessionIfActive() {
+    guard monitoringSessionTracker.hasActiveSession else { return }
+    monitoringSessionStore.save(monitoringSessionTracker.record)
+  }
+
+  /// Cheap synchronous disk stamp for `applicationWillTerminate` — there is
+  /// no synchronous PostHog flush available at terminate time, so this and
+  /// `MonitoringSessionRecovery` are how a normal quit while monitoring gets
+  /// its `Monitoring Stopped` event (recovered at the next launch) instead of
+  /// silently losing the session.
+  func stampMonitoringSessionAppQuit(at date: Date = Date()) {
+    // Stop the heartbeat first. The stamp is a snapshot, not a `finish()`, so
+    // the tracker stays live — and a heartbeat landing on the terminate run
+    // loop would overwrite the stamped record with a live one (`endedAt` nil),
+    // turning a clean quit into a recovered `session_lost` at the next launch.
+    monitoringHeartbeatTimer?.invalidate()
+    monitoringHeartbeatTimer = nil
+    // Nil for a session that already emitted its live `Monitoring Stopped`,
+    // so quitting later cannot rewrite a finished session into a clean quit
+    // and have the next launch recover it as a second event.
+    guard let stamped = monitoringSessionTracker.quitStampedRecord(at: date) else { return }
+    monitoringSessionStore.save(stamped)
+  }
+
   /// Suspend every timer that can capture or distribute context while the
   /// display is unavailable. Keeping the background-recovery mode flag lets
   /// resume restore that mode without accidentally starting the 1 Hz capture
@@ -509,9 +577,15 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
   }
 
-  /// Stop monitoring
-  public func stopMonitoring() {
+  /// Stop monitoring. `reason` is recorded on the persisted session and
+  /// emitted as `stop_reason` on `Monitoring Stopped` — see
+  /// `MonitoringStopReason`. Defaults to `.userToggle` so ordinary UI toggle
+  /// call sites keep compiling unchanged.
+  public func stopMonitoring(reason: MonitoringStopReason = .userToggle) {
     guard isMonitoring else { return }
+
+    monitoringHeartbeatTimer?.invalidate()
+    monitoringHeartbeatTimer = nil
 
     captureTimer?.invalidate()
     captureTimer = nil
@@ -583,7 +657,15 @@ public class ProactiveAssistantsPlugin: NSObject {
     ResourceMonitor.shared.reportResourcesNow(context: "after_monitoring_stop")
 
     sendEvent(type: "monitoringStopped", data: [:])
-    AnalyticsManager.shared.monitoringStopped()
+    let monitoringSummary = monitoringSessionTracker.finish(at: Date(), reason: reason)
+    // Clear before emitting, not after. The stored record is still the last
+    // heartbeat snapshot with `endedAt == nil`, so a crash in this window with
+    // the old ordering left it on disk and the next launch recovered the same
+    // `session_id` as a *second* stop. Clearing first makes that window lose
+    // an event instead of duplicating one, and a lost stop is visibly missing
+    // where a duplicate silently inflates the numbers.
+    monitoringSessionStore.clear()
+    AnalyticsManager.shared.monitoringStopped(summary: monitoringSummary)
     log("Proactive assistants stopped")
   }
 
@@ -835,7 +917,7 @@ public class ProactiveAssistantsPlugin: NSObject {
       AnalyticsManager.shared.screenCaptureBrokenDetected()
       sendEvent(type: "captureConsentDeclined", data: [:])
       let ownerID = RuntimeOwnerIdentity.currentOwnerId()
-      stopMonitoring()
+      stopMonitoring(reason: .captureConsentDeclined)
       guard shouldNotify, let ownerID else { return }
       Self.hasNotifiedConsentDeclinedThisSession = true
       NotificationService.shared.sendNotification(
@@ -967,7 +1049,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         log("ProactiveAssistantsPlugin: Screen recording permission revoked — stopping monitoring")
         // Send user-visible notification about lost permission
         sendEvent(type: "permissionLost", data: ["permission": "screenRecording"])
-        stopMonitoring()
+        stopMonitoring(reason: .permissionRevoked)
         return
       }
     }
@@ -1549,6 +1631,8 @@ public class ProactiveAssistantsPlugin: NSObject {
           "ProactiveAssistantsPlugin: System going to sleep, wasMonitoring=\(self?.wasMonitoringBeforeSleep ?? false)")
 
         self?.pauseCaptureForSystemInterruption()
+        self?.monitoringSessionTracker.pause(at: Date(), source: .systemSleep)
+        self?.persistMonitoringSessionIfActive()
         ContextVisitCoordinator.interruptForSleepIfEnabled()
       }
     }
@@ -1564,6 +1648,23 @@ public class ProactiveAssistantsPlugin: NSObject {
       }
     }
     systemEventObservers.append(wakeObserver)
+
+    // The duration clock's own wake signal, taken from the same notification
+    // center as its pause. `.systemDidWake` above is an `AppState` rebroadcast
+    // of this notification; pausing on the workspace center and resuming on a
+    // rebroadcast means one dropped hop leaves the session paused forever.
+    // Resume is idempotent per source, so both firing is harmless.
+    let durationWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didWakeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.monitoringSessionTracker.resume(at: Date(), source: .systemSleep)
+        self?.persistMonitoringSessionIfActive()
+      }
+    }
+    systemEventObservers.append(durationWakeObserver)
 
     // Screen locked
     let lockObserver = NotificationCenter.default.addObserver(
@@ -1594,6 +1695,13 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// Handle system wake from sleep
   private func handleSystemWake() {
     log("ProactiveAssistantsPlugin: System woke from sleep")
+
+    // Releases only the sleep hold. On the standard password-after-sleep path
+    // the screen is still locked here — capture stays down until unlock (see
+    // the `!isScreenLocked` guard below), so the paused interval must stay
+    // open too. `handleScreenUnlock` releases the other half.
+    monitoringSessionTracker.resume(at: Date(), source: .systemSleep)
+    persistMonitoringSessionIfActive()
 
     // Reset failure counter
     screenCaptureFailureTracker.reset()
@@ -1642,6 +1750,8 @@ public class ProactiveAssistantsPlugin: NSObject {
     wasMonitoringBeforeLock = isMonitoring
 
     pauseCaptureForSystemInterruption()
+    monitoringSessionTracker.pause(at: Date(), source: .screenLock)
+    persistMonitoringSessionIfActive()
   }
 
   /// Handle screen unlock - resume capture
@@ -1649,6 +1759,20 @@ public class ProactiveAssistantsPlugin: NSObject {
     log("ProactiveAssistantsPlugin: Screen unlocked - resuming capture")
 
     isScreenLocked = false
+    // Releases the lock hold. Screen-lock and system-sleep overlap on the
+    // usual laptop path (lock -> sleep -> wake -> unlock); the tracker's
+    // source set closes the single paused interval when the *last* hold
+    // clears, which on that path is this one, not the wake above.
+    monitoringSessionTracker.resume(at: Date(), source: .screenLock)
+    // A machine cannot be unlocked while asleep, so reaching here proves the
+    // sleep hold is stale. Releasing it is the backstop for a wake that never
+    // arrived: the pause comes straight off `NSWorkspace.willSleepNotification`
+    // while the resume rides an `AppState` rebroadcast, and the old boolean
+    // guard survived a dropped wake only because *any* resume cleared it.
+    // Without this, one missed wake would report the rest of the session as
+    // paused — the exact inverse of the bug the source set fixes.
+    monitoringSessionTracker.resume(at: Date(), source: .systemSleep)
+    persistMonitoringSessionIfActive()
     // Reset failure counter
     screenCaptureFailureTracker.reset()
     lastCaptureSucceeded = true
@@ -1756,7 +1880,7 @@ public class ProactiveAssistantsPlugin: NSObject {
       NotificationCenter.default.post(name: .screenCapturePermissionLost, object: nil)
 
       // Stop monitoring since we can't capture
-      self.stopMonitoring()
+      self.stopMonitoring(reason: .permissionRevoked)
 
       // Send user notification
       if let ownerID {
@@ -2060,7 +2184,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
       AnalyticsManager.shared.screenCaptureBrokenDetected()
       NotificationCenter.default.post(name: .screenCaptureKitBroken, object: nil)
-      stopMonitoring()
+      stopMonitoring(reason: .recoveryExhausted)
 
       guard let ownerID else { return }
       NotificationService.shared.sendNotification(
@@ -2077,7 +2201,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     log("ProactiveAssistantsPlugin: Soft recovery + restart already tried, notifying user")
     AnalyticsManager.shared.screenCaptureBrokenDetected()
     NotificationCenter.default.post(name: .screenCaptureKitBroken, object: nil)
-    stopMonitoring()
+    stopMonitoring(reason: .recoveryExhausted)
 
     guard let ownerID else { return }
     NotificationService.shared.sendNotification(

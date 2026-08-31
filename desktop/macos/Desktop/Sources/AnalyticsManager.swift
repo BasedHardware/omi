@@ -138,6 +138,21 @@ class AnalyticsManager {
     notificationDeliveryTelemetryCaptureForTests = capture
   }
 
+  /// Monitoring-duration seam: nil in production; tests install a scoped
+  /// capture to observe the real event names/payloads these methods emit.
+  private var monitoringTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setMonitoringTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    monitoringTelemetryCaptureForTests = capture
+  }
+
+  private func trackMonitoring(_ event: String, properties: [String: Any]) {
+    monitoringTelemetryCaptureForTests?(event, properties)
+    PostHogManager.shared.track(event, properties: properties)
+  }
+
   func setDevicePairingTelemetryCaptureForTests(
     _ capture: (@MainActor (String?, [String: Any], [String: Any]) -> Void)?
   ) {
@@ -375,12 +390,44 @@ class AnalyticsManager {
 
   // MARK: - Monitoring Events
 
-  func monitoringStarted() {
-    PostHogManager.shared.monitoringStarted()
+  func monitoringStarted(sessionID: String) {
+    trackMonitoring(
+      MonitoringTelemetry.startedEventName,
+      properties: MonitoringTelemetry.startedPayload(sessionID: sessionID))
   }
 
-  func monitoringStopped() {
-    PostHogManager.shared.monitoringStopped()
+  func monitoringStopped(summary: MonitoringSummary) {
+    trackMonitoring(
+      MonitoringTelemetry.stoppedEventName,
+      properties: MonitoringTelemetry.stoppedPayload(summary: summary))
+  }
+
+  /// Emits the missing `Monitoring Stopped` for a session recovered from disk
+  /// at launch (crash or quit — see `MonitoringSessionRecovery`). Shares the
+  /// `Monitoring Stopped` event name with a live stop; `duration_source`
+  /// (`recovered_clean` / `recovered_heartbeat`) is what distinguishes a
+  /// recovered row in analysis.
+  func monitoringSessionRecovered(_ outcome: MonitoringSessionRecovery.Outcome) {
+    trackMonitoring(
+      MonitoringTelemetry.stoppedEventName,
+      properties: MonitoringTelemetry.recoveredStoppedPayload(outcome))
+  }
+
+  /// Recovers a monitoring session that never got to emit its live
+  /// `Monitoring Stopped` — either the app quit (`applicationWillTerminate`
+  /// stamped `endedAt`/`endReason` synchronously; there is no synchronous
+  /// PostHog flush available at terminate time) or crashed outright (no
+  /// stamp at all; the last heartbeat is the only evidence). Call once at
+  /// launch, adjacent to `detectAndReportCrash()`.
+  ///
+  /// Ownership is enforced in the store, not here: a rewind-only process reads
+  /// nil and writes nothing, so this is a no-op there without needing its own
+  /// launch-mode check. See `MonitoringSessionDefaultsStore.shared`.
+  func recoverMonitoringSessionIfNeeded() {
+    guard let record = MonitoringSessionDefaultsStore.shared.load() else { return }
+    let outcome = MonitoringSessionRecovery.recover(record, now: Date())
+    monitoringSessionRecovered(outcome)
+    MonitoringSessionDefaultsStore.shared.clear()
   }
 
   // MARK: - Recording Events
