@@ -301,13 +301,17 @@ class CalendarCaptureGap {
   });
 
   factory CalendarCaptureGap.fromJson(Map<String, dynamic> json) {
+    return CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(json));
+  }
+
+  factory CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap generated) {
     return CalendarCaptureGap(
-      eventId: json['event_id'] as String? ?? '',
-      title: json['title'] as String? ?? 'Untitled Event',
-      startTime: DateTime.parse(json['start_time'] as String),
-      endTime: DateTime.parse(json['end_time'] as String),
-      status: json['status'] as String? ?? 'confirmed',
-      coverage: json['coverage'] as String? ?? 'not_captured',
+      eventId: generated.eventId,
+      title: generated.title,
+      startTime: generated.startTime,
+      endTime: generated.endTime,
+      status: generated.status,
+      coverage: generated.coverage,
     );
   }
 }

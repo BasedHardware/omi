@@ -244,7 +244,11 @@ Future<List<CalendarCaptureGap>> getCalendarCaptureGaps({
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     return (jsonDecode(body) as List<dynamic>)
-        .map((row) => CalendarCaptureGap.fromJson(row as Map<String, dynamic>))
+        .map(
+          (row) => CalendarCaptureGap.fromGenerated(
+            wire.GeneratedCalendarCaptureGap.fromJson(row as Map<String, dynamic>),
+          ),
+        )
         .toList();
   }
   // 400 means no connected calendar — nothing was captured, so nothing to show.
