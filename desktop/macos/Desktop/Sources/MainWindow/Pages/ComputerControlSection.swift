@@ -199,8 +199,13 @@ struct ComputerControlSection: View {
   }
 
   private func refreshPermissions() {
-    granted = Dictionary(
-      uniqueKeysWithValues: Self.listed.map { ($0.permission, $0.permission.isGranted()) })
+    // A plain literal, not `Dictionary(uniqueKeysWithValues:)`: that traps on a
+    // duplicate key, and `listed` is a table someone will one day add a row to.
+    var refreshed: [CuaPermission: Bool] = [:]
+    for entry in Self.listed {
+      refreshed[entry.permission] = entry.permission.isGranted()
+    }
+    granted = refreshed
     isEnabled = gate.isEnabled
   }
 }

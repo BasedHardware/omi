@@ -6,6 +6,8 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ComputerControlSection.swift
   - desktop/macos/Desktop/Sources/ComputerUse/CuaControlGate.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaPermissions.swift
+  - desktop/macos/Desktop/Sources/ComputerUse/CuaAppleScript.swift
   - desktop/macos/Desktop/Sources/ComputerUse/CuaMcpEndpoint.swift
   - desktop/macos/Desktop/Sources/ComputerUse/CuaMcpRegistration.swift
   - desktop/macos/Desktop/Sources/ComputerUse/CuaStdioShim.swift
@@ -42,6 +44,30 @@ steps:
       text_visible:
         - Accessibility
         - Screen Recording
+
+  - id: S2b
+    name: A grant given while Omi is running is noticed without a relaunch
+    # `AXIsProcessTrusted` answers from a per-process cache filled on its first
+    # call, so the app used to go on asking for a permission the user had already
+    # given. The live probe is the whole point of this step.
+    do: "With Accessibility not yet granted, tick Omi in System Settings ▸ Privacy & Security ▸ Accessibility and return to the card without relaunching Omi. Confirm the Input and Reading controls rows both turn granted within a few seconds, and that a click tool now works rather than repeating the refusal."
+    expect:
+      interactive_count: { min: 2 }
+
+  - id: S2c
+    name: Each grant refuses only what depends on it
+    do: "With Screen Recording denied and Accessibility granted, call screenshot and confirm it is refused naming Screen Recording, then call ui_snapshot and confirm it still returns controls. Reverse the two grants and confirm the opposite: screenshot works, ui_action is refused naming Accessibility."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S2d
+    name: AppleScript answers, and a script that hangs is stopped
+    # A model-written script can wait forever on a dialog. In process that would
+    # freeze the main thread, which is where the Stop button and the kill switch
+    # live.
+    do: "Call run_applescript with `return 6 * 7` and confirm it answers 42. Call it with `display dialog \"wait\"` and confirm the call returns a timeout failure within its timeout rather than hanging, that no dialog is left on screen blocking Omi, and that the Stop now button still responds."
+    expect:
+      interactive_count: { min: 1 }
 
   - id: S3
     name: One switch is the whole setup
