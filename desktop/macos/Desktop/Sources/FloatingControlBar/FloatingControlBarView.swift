@@ -619,6 +619,12 @@ struct FloatingControlBarView: View {
               .foregroundColor(.white.opacity(0.78))
               .lineLimit(3)
               .multilineTextAlignment(.leading)
+            if InterjectFeature.isEnabled {
+              Text(InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens))
+                .scaledFont(size: OmiType.micro, weight: .medium)
+                .foregroundColor(.white.opacity(0.45))
+                .lineLimit(1)
+            }
           }
           Spacer(minLength: 0)
         }
@@ -628,19 +634,21 @@ struct FloatingControlBarView: View {
 
       HStack(spacing: OmiSpacing.xs) {
         jitFeedbackButton("Useful", systemImage: "hand.thumbsup.fill") {
-          submitJITFeedback(.useful, context: context)
+          submitJITFeedback(.useful, notification: notification, context: context)
         }
         jitFeedbackButton("Not relevant", systemImage: "hand.thumbsdown.fill") {
-          submitJITFeedback(.falsePositive, context: context)
+          submitJITFeedback(.falsePositive, notification: notification, context: context)
         }
         jitFeedbackButton("Snooze", systemImage: "zzz") {
-          submitJITFeedback(.snooze, context: context, snoozedUntil: Date().addingTimeInterval(24 * 60 * 60))
+          submitJITFeedback(
+            .snooze, notification: notification, context: context,
+            snoozedUntil: Date().addingTimeInterval(24 * 60 * 60))
         }
         jitFeedbackButton("Disable", systemImage: "bell.slash.fill") {
-          submitJITFeedback(.disable, context: context)
+          submitJITFeedback(.disable, notification: notification, context: context)
         }
         jitFeedbackButton("Missed", systemImage: "clock.badge.exclamationmark") {
-          submitJITFeedback(.missedOrLate, context: context)
+          submitJITFeedback(.missedOrLate, notification: notification, context: context)
         }
       }
     }
@@ -683,6 +691,7 @@ struct FloatingControlBarView: View {
 
   private func submitJITFeedback(
     _ action: JITTriggerFeedbackAction,
+    notification: FloatingBarNotification,
     context: JITTriggerFeedbackContext,
     snoozedUntil: Date? = nil
   ) {
@@ -691,7 +700,11 @@ struct FloatingControlBarView: View {
         expectedOwnerID: context.ownerID
       )
     else { return }
+    let identity = notification.feedbackIdentity
     Task {
+      await FloatingControlBarManager.shared.recordInterjectJITVerdictIfEnabled(
+        identity: identity,
+        verb: action.interjectVerb)
       await JITTriggerFeedbackActionRouter.record(
         action,
         context: context,
@@ -743,6 +756,13 @@ struct FloatingControlBarView: View {
             .multilineTextAlignment(.leading)
             .lineSpacing(1.5)
             .fixedSize(horizontal: false, vertical: true)
+
+          if InterjectFeature.isEnabled {
+            Text(InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens))
+              .scaledFont(size: OmiType.micro, weight: .medium)
+              .foregroundColor(.white.opacity(0.45))
+              .lineLimit(1)
+          }
         }
 
         Spacer(minLength: OmiSpacing.xs)
@@ -1180,6 +1200,7 @@ struct FloatingControlBarView: View {
   }
 
   private func handleBarHover(_ hovering: Bool) {
+    FloatingControlBarManager.shared.interjectBarHoverChanged(hovering)
     if state.usesNotchIsland {
       (window as? FloatingControlBarWindow)?.updateNotchPointerFromGlobalMouse()
       let showsHoverChrome = hovering && !state.isVoicePresentationActive
@@ -1273,7 +1294,13 @@ struct FloatingControlBarView: View {
       FloatingControlBarManager.shared.openNotificationAsChat(notification)
     } label: {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
-        FloatingBarNotificationCardLead(copy: copy)
+        FloatingBarNotificationCardLead(
+          copy: copy,
+          messageLineLimit: interjectInsightTeaserLimit(notification),
+          footer: InterjectFeature.isEnabled
+            ? InterjectReplyHint.text(tokens: ShortcutSettings.shared.pttShortcut.displayTokens)
+            : nil
+        )
         Spacer(minLength: 0)
 
         // Reserve space so text never runs under the overlaid action buttons.
@@ -1579,6 +1606,13 @@ struct FloatingControlBarView: View {
         .scaledFont(size: 12, weight: .semibold)
         .foregroundColor(.white)
 
+      if let title = state.interjectReplyingToTitle, InterjectFeature.isEnabled {
+        Text(InterjectReplyHint.listeningChip(title: title))
+          .scaledFont(size: OmiType.micro, weight: .medium)
+          .foregroundColor(.white.opacity(0.72))
+          .lineLimit(1)
+      }
+
       if state.isVoiceLocked && state.pttHintText.isEmpty {
         Image(systemName: "lock.fill")
           .scaledFont(size: OmiType.micro, weight: .bold)
@@ -1588,6 +1622,11 @@ struct FloatingControlBarView: View {
           .cornerRadius(4)
       }
     }
+  }
+
+  private func interjectInsightTeaserLimit(_ notification: FloatingBarNotification) -> Int {
+    guard InterjectFeature.isEnabled, notification.kind == .insight else { return 3 }
+    return (isHovering || state.interjectBarHovering) ? 6 : 1
   }
 
   private var aiInputView: some View {

@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
@@ -155,26 +156,67 @@ class _CountingConversationLocationCapture extends ConversationLocationCapture {
   final List<bool> promptIfDeniedArgs = [];
 
   @override
-  Future<bool> captureAndUpload({bool promptIfDenied = true}) async {
+  Future<Geolocation?> captureAndUpload({bool promptIfDenied = true}) async {
     calls++;
     promptIfDeniedArgs.add(promptIfDenied);
-    return true;
+    return Geolocation(latitude: 1, longitude: 2, time: DateTime.utc(2026));
   }
 }
 
 class _HangingConversationLocationCapture extends ConversationLocationCapture {
   int calls = 0;
-  final Completer<bool> _done = Completer<bool>();
+  final Completer<Geolocation?> _done = Completer<Geolocation?>();
 
   @override
-  Future<bool> captureAndUpload({bool promptIfDenied = true}) async {
+  Future<Geolocation?> captureAndUpload({bool promptIfDenied = true}) async {
     calls++;
     return _done.future;
   }
 
-  void complete() {
-    if (!_done.isCompleted) _done.complete(true);
+  @override
+  Future<Geolocation?> capture({bool promptIfDenied = true}) async {
+    calls++;
+    return _done.future;
   }
+
+  @override
+  Future<void> uploadCompatibilitySnapshot(Geolocation geolocation) async {}
+
+  void complete() {
+    if (!_done.isCompleted) {
+      _done.complete(Geolocation(latitude: 1, longitude: 2, time: DateTime.utc(2026)));
+    }
+  }
+}
+
+class _FakeBatchMicRecorder implements IMicRecorderService {
+  int startBatchCalls = 0;
+
+  @override
+  Future<void> start({
+    required Function(Uint8List bytes) onByteReceived,
+    Function()? onRecording,
+    Function()? onStop,
+    Function()? onInitializing,
+    Function()? onStalled,
+    Function(bool began)? onInterruption,
+  }) async {}
+
+  @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    startBatchCalls++;
+  }
+
+  @override
+  void stop() {}
+
+  @override
+  void probeStallAfterForeground() {}
 }
 
 /// Minimal EnvFields stub so Env-backed code paths (e.g. native BLE stream
@@ -281,9 +323,7 @@ void main() {
 
   test('streamDeviceRecording does not wait for location capture', () async {
     final locationCapture = _HangingConversationLocationCapture();
-    final provider = CaptureProvider(
-      conversationLocationCapture: locationCapture,
-    );
+    final provider = CaptureProvider(conversationLocationCapture: locationCapture);
 
     await provider.streamDeviceRecording().timeout(
           const Duration(seconds: 2),
@@ -294,11 +334,38 @@ void main() {
     provider.dispose();
   });
 
-  test('homepage no-device streamDeviceRecording is check-only', () async {
-    final locationCapture = _CountingConversationLocationCapture();
+  test('phone batch starts native audio before waiting for location metadata', () async {
+    await SharedPreferencesUtil().remove('phoneBatchGeolocation');
+    final locationCapture = _HangingConversationLocationCapture();
+    final micRecorder = _FakeBatchMicRecorder();
     final provider = CaptureProvider(
       conversationLocationCapture: locationCapture,
+      microphonePermissionRequester: () async => true,
+      phoneMicBatchRecorder: micRecorder,
     );
+
+    await provider.startPhoneMicBatchForTesting().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => fail('phone batch start blocked on location capture'),
+        );
+
+    expect(micRecorder.startBatchCalls, 1);
+    expect(provider.recordingState, RecordingState.record);
+    expect(locationCapture.calls, 1);
+    var preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('phoneBatchGeolocation'), isNull);
+
+    locationCapture.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('phoneBatchGeolocation'), isNotNull);
+    provider.dispose();
+  });
+
+  test('homepage no-device streamDeviceRecording is check-only', () async {
+    final locationCapture = _CountingConversationLocationCapture();
+    final provider = CaptureProvider(conversationLocationCapture: locationCapture);
 
     await provider.streamDeviceRecording();
     expect(locationCapture.calls, 1);
@@ -1570,9 +1637,7 @@ void main() {
     test('the cycle self-terminates at its cap when nothing interrupts it', () {
       fakeAsync((async) {
         var loadCalls = 0;
-        final provider = CaptureProvider(
-          inProgressConversationLoader: () async => loadCalls++,
-        );
+        final provider = CaptureProvider(inProgressConversationLoader: () async => loadCalls++);
         provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
         provider.updateRecordingState(RecordingState.deviceRecord);
 

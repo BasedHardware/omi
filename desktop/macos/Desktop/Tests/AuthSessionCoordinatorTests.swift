@@ -197,7 +197,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("docs/product/invariants/auth-session.md")
+      .appendingPathComponent("product/invariants/auth-session.md")
     XCTAssertTrue(FileManager.default.fileExists(atPath: path.path))
     let text = try String(contentsOf: path, encoding: .utf8)
     XCTAssertTrue(text.contains("INV-AUTH-1"))

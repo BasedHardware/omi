@@ -1035,7 +1035,8 @@ class ChatToolExecutor {
   static func executeSQL(
     _ args: [String: Any],
     dbQueue: DatabasePool?,
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    timeZone: TimeZone = .current
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
     guard let query = args["query"] as? String, !query.isEmpty else {
@@ -1102,7 +1103,8 @@ class ChatToolExecutor {
           upper: upper,
           parameters: parameters,
           dbQueue: databaseQueue,
-          expectedOwnerID: expectedOwnerID)
+          expectedOwnerID: expectedOwnerID,
+          timeZone: timeZone)
       } else if isInsert || isUpdate || isDelete {
         return try await executeWriteQuery(
           trimmed,
@@ -1208,7 +1210,8 @@ class ChatToolExecutor {
     upper: String,
     parameters: [String],
     dbQueue: DatabasePool,
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    timeZone: TimeZone
   )
     async throws -> String
   {
@@ -1226,7 +1229,7 @@ class ChatToolExecutor {
     let query = finalQuery
     let formatted = try await dbQueue.read { db -> (text: String, count: Int) in
       let rows = try Row.fetchAll(db, sql: query, arguments: StatementArguments(parameters))
-      return SQLQueryResultProjection.format(rows: rows, query: query)
+      return SQLQueryResultProjection.format(rows: rows, query: query, timeZone: timeZone)
     }
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
@@ -1432,11 +1435,9 @@ class ChatToolExecutor {
     }
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
-    // For today (daysAgo=0), upper bound is now; for past days, upper bound is start of today
-    let upperBound =
-      daysAgo == 0
-      ? "datetime('now', 'localtime')"
-      : "datetime('now', 'start of day', 'localtime')"
+    // UTC-vs-UTC: local midnight converted back to UTC so "today" does not shift by offset.
+    let lowerBound = DesktopChatTimestampFormat.SQLDayBounds.startAsUTC(daysAgo: daysAgo)
+    let upperBound = DesktopChatTimestampFormat.SQLDayBounds.exclusiveEndAsUTC(daysAgo: daysAgo)
 
     do {
       let result = try await dbQueue.read { db in
@@ -1445,9 +1446,9 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT appName, COUNT(*) as screenshots, ROUND(COUNT(*) * 10.0 / 60, 1) as minutes,
-                MIN(time(timestamp, 'localtime')) as first_seen, MAX(time(timestamp, 'localtime')) as last_seen
+                MIN(timestamp) AS firstSeenAt, MAX(timestamp) AS lastSeenAt
             FROM screenshots
-            WHERE timestamp >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE timestamp >= \(lowerBound)
                 AND timestamp < \(upperBound)
                 AND appName IS NOT NULL AND appName != ''
             GROUP BY appName ORDER BY screenshots DESC
@@ -1460,7 +1461,7 @@ class ChatToolExecutor {
             SELECT backendId, title, overview, emoji, category, startedAt, finishedAt,
                 ROUND((julianday(finishedAt) - julianday(startedAt)) * 1440, 1) as duration_min
             FROM transcription_sessions
-            WHERE startedAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE startedAt >= \(lowerBound)
                 AND startedAt < \(upperBound)
                 AND deleted = 0 AND discarded = 0
             ORDER BY startedAt DESC
@@ -1471,7 +1472,7 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT backendId, description, completed, priority, createdAt FROM action_items
-            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE createdAt >= \(lowerBound)
                 AND createdAt < \(upperBound)
                 AND deleted = 0
             ORDER BY createdAt DESC
@@ -1482,7 +1483,7 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT status, appOrSite, description, durationSeconds FROM focus_sessions
-            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE createdAt >= \(lowerBound)
                 AND createdAt < \(upperBound)
             ORDER BY createdAt DESC
             """)
@@ -1492,7 +1493,7 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT backendId, content, category, source FROM memories
-            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE createdAt >= \(lowerBound)
                 AND createdAt < \(upperBound)
                 AND deleted = 0
             ORDER BY createdAt DESC
@@ -1503,7 +1504,7 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT appName, currentActivity, contextSummary FROM observations
-            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE createdAt >= \(lowerBound)
                 AND createdAt < \(upperBound)
             ORDER BY createdAt DESC
             LIMIT 20
@@ -1541,10 +1542,16 @@ class ChatToolExecutor {
             let name = app["appName"] as? String ?? "Unknown"
             let minutes = app["minutes"] as? Double ?? 0
             let screenshots = Self.rowInt(app["screenshots"]) ?? 0
-            let firstSeen = app["first_seen"] as? String ?? ""
-            let lastSeen = app["last_seen"] as? String ?? ""
+            let timeZone = TimeZone.current
+            let firstSeen =
+              DesktopChatTimestampFormat.formatSQLCell(
+                column: "firstSeenAt", value: app["firstSeenAt"], timeZone: timeZone) ?? ""
+            let lastSeen =
+              DesktopChatTimestampFormat.formatSQLCell(
+                column: "lastSeenAt", value: app["lastSeenAt"], timeZone: timeZone) ?? ""
+            let window = firstSeen.isEmpty && lastSeen.isEmpty ? "" : " \(firstSeen)–\(lastSeen)"
             out +=
-              "- **\(name)**: \(minutes) min (\(screenshots) captures, \(firstSeen)–\(lastSeen))\n"
+              "- **\(name)**: \(minutes) min (\(screenshots) captures,\(window))\n"
           }
           if apps.count > 20 { out += "- ...and \(apps.count - 20) more apps\n" }
         }
@@ -1699,9 +1706,7 @@ class ChatToolExecutor {
       log("Tool semantic_search: vector returned \(vectorResults.count) results")
 
       // Filter by similarity threshold and fetch screenshot details
-      let dateFormatter = DateFormatter()
-      dateFormatter.dateStyle = .medium
-      dateFormatter.timeStyle = .short
+      let displayTimeZone = TimeZone.current
 
       var lines: [String] = []
       var sources = [APIClient.ToolSource]()
@@ -1721,7 +1726,8 @@ class ChatToolExecutor {
         }
 
         count += 1
-        let dateStr = dateFormatter.string(from: screenshot.timestamp)
+        let dateStr = DesktopChatTimestampFormat.userFacing(
+          screenshot.timestamp, timeZone: displayTimeZone)
         let windowTitle = screenshot.windowTitle ?? ""
         let titlePart = windowTitle.isEmpty ? "" : " - \(windowTitle)"
         lines.append(

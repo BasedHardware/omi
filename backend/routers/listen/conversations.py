@@ -280,6 +280,7 @@ class LiveConversationController:
             client_device_id=context.client_device_id,
             client_platform=context.platform,
             external_data=external_data,
+            geolocation=request.geolocation,
         )
         await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,

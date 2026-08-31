@@ -5,16 +5,26 @@ import XCTest
 @MainActor
 final class SBOnboardingBackNavigationTests: XCTestCase {
   private let resumeStepKey = "sbOnboardingResumeStep"
+  // Literals, not `SBOnboardingModel.*`: setUp/tearDown are nonisolated and
+  // those constants are main-actor isolated. Mirrors this file's existing style.
+  private let resumeSchemaKey = "sbOnboardingResumeStepSchema"
+  private let currentResumeSchemaVersion = 2
 
   override func setUp() {
     super.setUp()
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingHowDidYouHearSource)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingRole)
+    // These tests seed resume values in the *current* `Step` numbering. Without
+    // the schema stamp, `begin()` would correctly read them as version-1 state
+    // and renumber them, so the assertions below would be about a step nobody
+    // wrote. Stamping says "this install is already current".
+    UserDefaults.standard.set(currentResumeSchemaVersion, forKey: resumeSchemaKey)
   }
 
   override func tearDown() {
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
+    UserDefaults.standard.removeObject(forKey: resumeSchemaKey)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingHowDidYouHearSource)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingRole)
     super.tearDown()

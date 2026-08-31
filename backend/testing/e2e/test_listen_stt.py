@@ -41,6 +41,7 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
         call_id=None,
         client_conversation_id=None,
         client_device_context=None,
+        geolocation=None,
     ):
         captured.update(
             {
@@ -59,6 +60,7 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
                 "client_conversation_id": client_conversation_id,
                 "client_device_id": getattr(client_device_context, "client_device_id", None),
                 "client_platform": getattr(client_device_context, "platform", None),
+                "geolocation": geolocation.model_dump(mode="json") if geolocation else None,
             }
         )
         await websocket.send_json({"type": "fake_stt_ready", "uid": uid, "custom_stt": captured["custom_stt_mode"]})
@@ -68,7 +70,17 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
     monkeypatch.setattr(transcribe_router, "_stream_handler", fake_stream_handler)
 
     with client.websocket_connect(
-        "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=1&source=e2e"
+        "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=1&source=e2e",
+        headers={
+            "X-Omi-Conversation-Geolocation": json.dumps(
+                {
+                    "latitude": 37.7749,
+                    "longitude": -122.4194,
+                    "captured_at": "2026-08-01T12:30:00Z",
+                    "capture_source": "current_position",
+                }
+            )
+        },
     ) as websocket:
         websocket.send_text(json.dumps({"type": "auth", "token": "dev-token", "device_id_hash": "a1b2c3d4"}))
         auth_response = websocket.receive_json()
@@ -88,6 +100,17 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
     assert captured["custom_stt_mode"] == "enabled"
     assert captured["client_device_id"] == "web_a1b2c3d4"
     assert captured["client_platform"] == "web"
+    assert captured["geolocation"] == {
+        "latitude": 37.7749,
+        "longitude": -122.4194,
+        "altitude": None,
+        "accuracy": None,
+        "captured_at": "2026-08-01T12:30:00Z",
+        "capture_source": "current_position",
+        "google_place_id": None,
+        "address": None,
+        "location_type": None,
+    }
 
 
 def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(client, auth_headers, test_uid):

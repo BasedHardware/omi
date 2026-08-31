@@ -114,8 +114,18 @@ async def run_listen_finalization_job(
         claim_status = claim['status']
         if claim_status == 'completed':
             return JSONResponse(status_code=200, content={'status': 'acked', 'job_status': 'completed'})
-        if claim_status in {'leased', 'stale_generation'}:
+        if claim_status == 'leased':
             return JSONResponse(status_code=409, content={'status': claim_status})
+        if claim_status == 'stale_generation':
+            # The reconciler has already enqueued the newer generation. An old
+            # named task is no longer actionable and must be acknowledged so
+            # Cloud Tasks does not retry this permanently fenced payload.
+            logger.info(
+                'listen finalization stale generation task acknowledged job=%s dispatch_generation=%s',
+                job_id,
+                dispatch_generation,
+            )
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
         if claim_status != 'claimed':
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
         claimed_lease_epoch = claim['lease_epoch']

@@ -13454,6 +13454,18 @@
       },
       "Geolocation": {
         "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
           "address": {
             "anyOf": [
               {
@@ -13464,6 +13476,46 @@
               }
             ],
             "title": "Address"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude"
+          },
+          "capture_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "current_position",
+                  "last_known_position",
+                  "manual",
+                  "integration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Source"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "google_place_id": {
             "anyOf": [
@@ -13510,6 +13562,18 @@
       "GeolocationInput": {
         "description": "Released wire contract for coordinates accepted at legacy API boundaries.\n\nBounds are enforced before any value is cached, geocoded, or persisted. Keeping\nthis transport shape broad preserves clients released before the bound contract\nexisted, while ``Geolocation`` remains the only usable server-side value.",
         "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
           "address": {
             "anyOf": [
               {
@@ -13520,6 +13584,46 @@
               }
             ],
             "title": "Address"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude"
+          },
+          "capture_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "current_position",
+                  "last_known_position",
+                  "manual",
+                  "integration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Source"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "google_place_id": {
             "anyOf": [
@@ -14474,6 +14578,12 @@
       "GoogleCalendarEvent": {
         "description": "Response model for a Google Calendar event.",
         "properties": {
+          "all_day": {
+            "default": false,
+            "description": "True when the event has a date but no time",
+            "title": "All Day",
+            "type": "boolean"
+          },
           "attendee_emails": {
             "default": [],
             "description": "List of attendee email addresses",
@@ -14491,6 +14601,12 @@
             },
             "title": "Attendees",
             "type": "array"
+          },
+          "description": {
+            "default": "",
+            "description": "Event description, truncated for transport",
+            "title": "Description",
+            "type": "string"
           },
           "end_time": {
             "description": "Event end time",
@@ -14514,6 +14630,12 @@
             ],
             "description": "Link to open event in Google Calendar",
             "title": "Html Link"
+          },
+          "location": {
+            "default": "",
+            "description": "Event location",
+            "title": "Location",
+            "type": "string"
           },
           "start_time": {
             "description": "Event start time",
@@ -34655,7 +34777,7 @@
             "schema": {
               "default": 20,
               "description": "Maximum number of events to return",
-              "maximum": 100,
+              "maximum": 500,
               "minimum": 1,
               "title": "Max Results",
               "type": "integer"
@@ -64241,6 +64363,22 @@
                 }
               ],
               "title": "X-Omi-Sync-Capture-Manifest"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Conversation-Geolocation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Conversation-Geolocation"
             }
           },
           {

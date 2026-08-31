@@ -101,6 +101,16 @@ class TestRedisFakePaths:
         # Should return 200 with empty list or existing conversations
         assert resp.status_code == 200, f"List should work: {resp.text}"
 
+    def test_voice_duration_lua_uses_fake_redis(self, client, fake_redis):
+        """Lua scripts imported outside database.redis_db must stay on FakeRedis."""
+        from utils import voice_duration_limiter
+
+        allowed, used_ms, _remaining_ms = voice_duration_limiter.try_consume_budget('e2e-voice-script', 1000)
+
+        assert allowed is True
+        assert used_ms == 1000
+        assert fake_redis.zcard('voice_duration:e2e-voice-script') == 1
+
 
 class TestSTTFailureHandling:
     """Test STT failure/timeout scenarios."""

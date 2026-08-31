@@ -161,7 +161,13 @@ def postprocess_conversation(
             return 200, conversation
 
         # Reprocess conversation with improved transcription
-        result: Conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+        result: Conversation = process_conversation(
+            uid,
+            conversation.language,
+            conversation,
+            force_process=True,
+            bypass_jit_first_open=True,
+        )
 
         # Process users emotion, async
         if emotional_feedback:
