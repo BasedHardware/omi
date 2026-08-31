@@ -101,9 +101,11 @@ finally:
     _restore(_snap)
 
 
+import json
+
 def test_consume_uses_atomic_getdel_not_get_then_delete():
     fake_r = MagicMock()
-    fake_r.getdel.return_value = repr({'uid': 'u1', 'app_key': 'a1'}).encode()
+    fake_r.getdel.return_value = json.dumps({'uid': 'u1', 'app_key': 'a1'}).encode()
     with patch.object(ti.redis_db, 'r', fake_r):
         result = ti.validate_and_consume_oauth_state('tok')
 
@@ -114,7 +116,7 @@ def test_consume_uses_atomic_getdel_not_get_then_delete():
 
 
 def test_consume_is_single_use():
-    store = {'oauth_state:tok': repr({'uid': 'u1', 'app_key': 'a1'}).encode()}
+    store = {'oauth_state:tok': json.dumps({'uid': 'u1', 'app_key': 'a1'}).encode()}
     fake_r = MagicMock()
     fake_r.getdel.side_effect = lambda key: store.pop(key, None)
 
