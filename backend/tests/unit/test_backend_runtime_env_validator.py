@@ -275,6 +275,101 @@ def test_repo_prod_gke_values_match_manifest():
     assert errors == []
 
 
+def test_conversation_finalization_capability_inventory_explicitly_covers_pusher_in_every_environment():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+
+    for env in ('dev', 'prod'):
+        pusher = manifest['environments'][env]['gke']['pusher']
+        assert set(pusher['capabilities']) == {
+            'conversation.finalize.persisted',
+            'memory.canonical.mutate',
+        }
+        assert pusher['env']['MEMORY_ENABLED']['value'] == 'on'
+        assert validator.validate_conversation_finalization_capabilities(env, manifest['environments'][env]) == []
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_conversation_finalization_capability_contract_rejects_omitted_pusher(env):
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments'][env])
+    del env_config['gke']['pusher']
+
+    errors = validator.validate_conversation_finalization_capabilities(env, env_config)
+
+    assert (
+        validator.ValidationError(
+            f'{env}/gke/pusher',
+            'required conversation-finalization deployable is omitted from runtime_env',
+        )
+        in errors
+    )
+
+
+def test_conversation_finalization_capability_contract_rejects_missing_declared_capability():
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+    env_config['gke']['pusher']['capabilities'].remove('memory.canonical.mutate')
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert (
+        validator.ValidationError(
+            'prod/gke/pusher',
+            "missing required runtime capability 'memory.canonical.mutate'",
+        )
+        in errors
+    )
+
+
+@pytest.mark.parametrize('memory_enabled', [None, 'off', 'invalid'])
+def test_conversation_finalization_capability_contract_rejects_non_writable_memory_fence(memory_enabled):
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+    pusher_env = env_config['gke']['pusher']['env']
+    if memory_enabled is None:
+        del pusher_env['MEMORY_ENABLED']
+    else:
+        pusher_env['MEMORY_ENABLED']['value'] = memory_enabled
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert any(
+        error.scope == 'prod/gke/pusher'
+        and error.message.startswith(
+            'capability memory.canonical.mutate requires the runtime memory fence to permit writes'
+        )
+        for error in errors
+    )
+
+
+def test_conversation_finalization_capability_contract_rejects_unknown_and_uncovered_declarations():
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['dev'])
+    env_config['gke']['pusher']['capabilities'].append('conversation.finalize.unknown')
+    env_config['gke']['uncovered-finalizer'] = {
+        'capabilities': ['conversation.finalize.persisted'],
+        'env': {'MEMORY_ENABLED': {'value': 'on'}},
+    }
+
+    errors = validator.validate_conversation_finalization_capabilities('dev', env_config)
+
+    assert (
+        validator.ValidationError(
+            'dev/gke/pusher',
+            "unknown runtime capability 'conversation.finalize.unknown'",
+        )
+        in errors
+    )
+    assert (
+        validator.ValidationError(
+            'dev/gke/uncovered-finalizer',
+            'declares conversation-finalization capability but is not covered by the explicit deployable roster',
+        )
+        in errors
+    )
+
+
 def test_prod_account_deletion_dispatch_contract_rejects_missing_or_inline_profile():
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
@@ -1025,7 +1120,7 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
         ),
         validator.ValidationError(
             'prod/gke/backend-listen',
-            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'dg-nova-3,modulate-velma-2,parakeet', got 'modulate-velma-2'",
+            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'modulate-velma-2,soniox,dg-nova-3,parakeet', got 'modulate-velma-2'",
         ),
     ]
 

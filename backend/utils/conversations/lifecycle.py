@@ -810,6 +810,12 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
         return None
 
     status = str(job.get('status') or 'unknown')
+    terminal_outcome = str(job.get('terminal_outcome') or 'unknown')
+    if terminal_outcome not in {'success', 'failure', 'stale'}:
+        terminal_outcome = 'unknown'
+    fanout_status = str(job.get('fanout_status') or 'unknown')
+    if fanout_status not in {'pending', 'leased', 'completed', 'fenced'}:
+        fanout_status = 'unknown'
     return {
         'job_id': job_id,
         'status': status,
@@ -820,4 +826,6 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
         'attempt_count': int(job.get('attempt_count') or 0),
         'task_retry_count': int(job.get('task_retry_count') or 0),
         'meeting_treatment_eligible': bool(job.get('meeting_treatment_eligible', False)),
+        'terminal_outcome': terminal_outcome,
+        'fanout_status': fanout_status,
     }

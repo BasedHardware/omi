@@ -67,6 +67,7 @@ from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
 from utils.metrics import record_jit_first_open
+from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
@@ -893,6 +894,12 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     Finalization workers use this public boundary while holding their durable
     lease. Keep the private helper below for existing in-module async callers.
     """
+    # The deployment-wide capability fence is mandatory even when this
+    # account's non-compatibility writer delegates formation to the sweep.
+    # Otherwise a reused release-probe principal could skip the exact static
+    # configuration contract that Pusher qualification is meant to exercise.
+    db_client = getattr(db_client_module, 'db', None)
+    MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
     sweep_owned_mode = _sweep_owned_writer_mode(uid)
     if sweep_owned_mode is not None:
         logger.info(
@@ -1239,6 +1246,7 @@ def _canonical_extraction_unavailable(
         reason='provider_5xx',
         outcome='degraded',
     )
+    record_finalization_failure(FinalizationFailureReason.provider)
     return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
 
 

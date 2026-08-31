@@ -484,6 +484,16 @@ checks:
     triggers: ["backend/deploy/runtime_env/_base.yaml", "backend/deploy/runtime_env/dev.overlay.yaml", "backend/deploy/runtime_env/prod.overlay.yaml", "backend/deploy/compose_runtime_env.py", "backend/deploy/_generate_runtime_env_sources.py", "backend/deploy/runtime_env.yaml", "backend/scripts/check_runtime_env_compose.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "composed runtime_env.yaml must match its declarative base and overlay sources"
+  - id: pusher-runtime-capability-admission-dev
+    command: ["python3", "backend/scripts/validate-backend-runtime-env.py", "--env", "dev"]
+    triggers: ["backend/deploy/runtime_env/**", "backend/charts/pusher/**", "backend/config/memory_rollout.py", "backend/pusher/main.py", "backend/scripts/runtime_env_capability_contracts.py", "backend/scripts/runtime_env_validation/**", "backend/scripts/validate-backend-runtime-env.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-08-30 Pusher outage: every explicit conversation-finalization host must satisfy its semantic memory-mutation capability before deployment"
+  - id: pusher-runtime-capability-admission-prod
+    command: ["python3", "backend/scripts/validate-backend-runtime-env.py", "--env", "prod"]
+    triggers: ["backend/deploy/runtime_env/**", "backend/charts/pusher/**", "backend/config/memory_rollout.py", "backend/pusher/main.py", "backend/scripts/runtime_env_capability_contracts.py", "backend/scripts/runtime_env_validation/**", "backend/scripts/validate-backend-runtime-env.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-08-30 Pusher outage: production admission must reject an omitted host or missing, disabled, or invalid memory fence"
   - id: backend-workflow-contracts
     command: ["python3", "backend/scripts/check_workflow_contracts.py", "--changed-files", "{changed_files}"]
     triggers: ["backend/**/*.py", "backend/testing/workflow_contracts.json", ".github/workflows/**/*.yml", ".github/actions/detect-changes/**", "scripts/pre-push", "scripts/changed-files"]

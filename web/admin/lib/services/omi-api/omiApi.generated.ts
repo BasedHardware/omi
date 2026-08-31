@@ -1207,12 +1207,14 @@ export interface ConversationCreateResponse {
 
 export interface ConversationFinalizationStatusResponse {
   attempt_count: number;
+  fanout_status?: "pending" | "leased" | "completed" | "fenced" | "unknown";
   job_id: string;
   meeting_treatment_eligible?: boolean;
   retryable: boolean;
   status: string;
   task_retry_count: number;
   terminal: boolean;
+  terminal_outcome?: "success" | "failure" | "stale" | "unknown";
 }
 
 export interface ConversationLinkActionItemSpec {

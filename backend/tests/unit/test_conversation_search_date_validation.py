@@ -893,6 +893,8 @@ def test_finalization_status_endpoint_exposes_retryable_durable_state():
         'attempt_count': 2,
         'task_retry_count': 1,
         'meeting_treatment_eligible': False,
+        'terminal_outcome': 'unknown',
+        'fanout_status': 'unknown',
     }
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),

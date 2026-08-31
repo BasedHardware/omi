@@ -72,6 +72,14 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: MCP_OAUTH_CLIENTS_JSON
+    pusher:
+      capabilities:
+      - conversation.finalize.persisted
+      - memory.canonical.mutate
+      values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
+      env:
+        MEMORY_ENABLED:
+          value: 'on'
     config_map:
       name: prod-omi-backend-config
       entries:
@@ -100,7 +108,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: dg-nova-3,modulate-velma-2,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
