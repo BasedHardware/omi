@@ -445,14 +445,23 @@ class TestCreateActionItemDateValidation:
         assert "Error" in result
         assert "Invalid due_at format" in result
 
-    def test_no_due_date_defaults_to_24h(self):
-        """No due date should default to 24h from now."""
+    def test_no_due_date_stays_undated(self):
+        """A task the user never dated must be written with no due date.
+
+        Inventing ``now + 24h`` put it in neither the overdue nor the due-today
+        bucket any reader uses, so "remind me to X" followed by "what's on my
+        list" deterministically answered that there was nothing.
+        """
+        action_items_db.create_action_item.reset_mock()
         result = create_action_item_tool(
             description="No due date task",
             due_at=None,
             config=_make_config(),
         )
         assert "in the past" not in result
+        action_items_db.create_action_item.assert_called_once()
+        written = action_items_db.create_action_item.call_args.args[1]
+        assert written.get("due_at") is None, f"expected no invented due date, got {written.get('due_at')!r}"
 
     def test_boundary_23h_ago_accepted(self):
         """Due date 23h ago should be accepted (within 1-day grace)."""

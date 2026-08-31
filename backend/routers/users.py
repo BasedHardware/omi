@@ -1304,7 +1304,7 @@ def get_user_subscription_endpoint(
     # deliberate and load-bearing, not a leftover coercion.
     #
     # Retiring the wire sentinel is a breaking client change and belongs to work item W1
-    # in docs/agents/plan-source-of-truth.md, gated on released tolerant decoders. Do not
+    # in .github/agent-docs/plan-source-of-truth.md, gated on released tolerant decoders. Do not
     # "fix" this to emit None/-1 without that sequence: it silently reinterprets every
     # unlimited plan as a zero allowance on clients already in the field.
     #

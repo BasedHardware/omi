@@ -190,7 +190,7 @@ class TestP5_BYOKProfileFixed:
 
     def test_byok_mostly_openai(self):
         """byok profile should use OpenAI for most features (chat_agent/web_search are exceptions)."""
-        exceptions = {'chat_agent': 'anthropic', 'web_search': 'perplexity', 'wrapped_analysis': 'openrouter'}
+        exceptions = {'web_search': 'perplexity', 'wrapped_analysis': 'openrouter'}
         for feature, (model, provider) in MODEL_QOS_PROFILES['byok'].items():
             if feature in exceptions:
                 assert provider == exceptions[feature], f'byok {feature} expected {exceptions[feature]}, got {provider}'

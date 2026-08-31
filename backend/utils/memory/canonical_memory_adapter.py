@@ -42,7 +42,11 @@ from database.memory_apply_store import (
     tombstone_memory_items_firestore,
     privacy_deletion_receipt_id,
 )
-from database.legal_holds import current_destructive_operation_token, destructive_operation_gate
+from database.legal_holds import (
+    LegalHoldAuthorityUnavailable,
+    current_destructive_operation_token,
+    destructive_operation_gate,
+)
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from database.memory_vector_metadata import canonical_memory_provider_id
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
@@ -1530,7 +1534,11 @@ def write_canonical_external_memory(
     db_client: Any = None,
     review_resolution: Optional[CanonicalReviewResolution] = None,
 ) -> str:
-    """Persist a manual/API/integration memory via the canonical apply path."""
+    """Persist a manual/API/integration memory via the canonical apply path.
+
+    After writer-mode cutover these creates stay admitted as user writes so
+    POST /v3/memories and desktop create_memory do not 503 in ledger mode.
+    """
     if data.get("ledger_schema_version") is not None:
         raise ValueError("knowledge ledger writes require the dedicated ledger authority")
     client = db_client if db_client is not None else default_db_client
@@ -1574,6 +1582,7 @@ def write_canonical_external_memory(
         db_client=client,
         evidence_items=reissued_evidence,
         review_resolution=review_resolution,
+        _direct_user_authority=_DIRECT_USER_LEDGER_WRITE_AUTHORITY,
     )
 
 
@@ -1950,6 +1959,43 @@ def replace_conversation_sourced_memories(
             )
             if item.source_state == SourceState.active and not _item_sourced_from_conversation(item, conversation_id)
         ]
+        if not items and not expected_source_items:
+            # Nothing extracted, and nothing of this conversation's already in
+            # the ledger. Falling through sends an empty write set into
+            # ``replace_conversation_source_firestore``, whose empty-replacement
+            # branch demands an ``explicit_memory_deletion`` token -- a
+            # deliberate rule, because emptying a conversation normally
+            # *retracts* its rows.
+            #
+            # Emptiness alone cannot tell the two callers apart. An explicit
+            # retraction that happens to remove nothing must still be recorded,
+            # advancing the source generation (WS-J delete-privacy contract).
+            # Conversation finalization that simply extracted nothing is an
+            # ordinary outcome owing no record, and holds no gate -- so it died
+            # here with LegalHoldAuthorityUnavailable.
+            #
+            # The gate itself is what distinguishes them, so ask it without
+            # letting the answer be fatal. Holding it means a deliberate
+            # deletion: fall through and record. Not holding it means there is
+            # provably nothing to do and no authority is required.
+            #
+            # This never relaxes the rule: an empty replacement that would
+            # genuinely retract rows has a non-empty ``expected_source_items``,
+            # never reaches here, and is still refused without authority.
+            # ``expected_reactivation_items`` derives from
+            # ``terminal_source_ids``, itself derived from
+            # ``expected_source_items``, so it is necessarily empty here too.
+            try:
+                current_destructive_operation_token(uid, kind="explicit_memory_deletion")
+            except LegalHoldAuthorityUnavailable:
+                return {
+                    "retracted_memory_ids": [],
+                    "committed_memory_ids": [],
+                    "reactivated_memory_ids": [],
+                    "vector_delete_ids": [],
+                    "tombstoned_evidence_ids": [],
+                    "source_generation": observed_control.source_generation,
+                }
         confirmed_control = _read_replacement_control(uid, db_client=client)
         if (
             observed_control.head_commit_id != confirmed_control.head_commit_id

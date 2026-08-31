@@ -309,6 +309,13 @@ env:
         key: OPENROUTER_API_KEY
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+  - name: OMI_FIRESTORE_DATA_PLANE_PROJECT
+    value: "based-hardware"
+  - name: POSTHOG_PROJECT_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: POSTHOG_PROJECT_API_KEY
   - name: GCP_LOCATION
     value: "us-central1"
   - name: HOSTED_PARAKEET_API_URL

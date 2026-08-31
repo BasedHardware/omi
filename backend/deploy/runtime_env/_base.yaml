@@ -17,6 +17,9 @@ environment_shared:
           category: rollout
       values_file: backend/charts/parakeet/{env}_omi_parakeet_values.yaml
     backend-listen:
+      capabilities:
+      - conversation.finalize.persisted
+      - memory.canonical.mutate
       env:
         OMI_LLM_GATEWAY_URL:
           value: http://{env}-omi-llm-gateway.{env}-omi-backend.svc.cluster.local:8080
@@ -125,6 +128,12 @@ environment_shared:
             key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
         GOOGLE_CLOUD_PROJECT:
           value: '{compute_project}'
+        OMI_FIRESTORE_DATA_PLANE_PROJECT:
+          value: '{data_plane_project}'
+        POSTHOG_PROJECT_API_KEY:
+          secret:
+            name: '{env}-omi-backend-secrets'
+            key: POSTHOG_PROJECT_API_KEY
         TWILIO_API_KEY_SID:
           config_map:
             name: '{env}-omi-backend-config'
@@ -272,6 +281,9 @@ environment_shared:
           GCP_LOCATION:
             value: us-central1
       backend:
+        capabilities:
+        - conversation.finalize.persisted
+        - memory.canonical.mutate
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -287,6 +299,15 @@ environment_shared:
             version: latest
           METRICS_SECRET:
             secret: METRICS_SECRET
+            version: latest
+          # Same secret the day3-reengagement-email-job uses to MINT unsubscribe
+          # tokens; this service VERIFIES them at /email/unsubscribe. Bound on
+          # only one side, every unsubscribe link and every RFC 8058 one-click
+          # POST is a neutral 400 — the link is live, correctly addressed, and
+          # silently inert, which is the failure this whole path exists to
+          # prevent. It is here, not only on the job, for that reason.
+          LIFECYCLE_EMAIL_SIGNING_SECRET:
+            secret: LIFECYCLE_EMAIL_SIGNING_SECRET
             version: latest
         env:
           PROMETHEUS_SIDECAR_PORT:
@@ -469,6 +490,9 @@ environment_shared:
             category: memory_rollout
         provisional: true
       backend-sync:
+        capabilities:
+        - conversation.finalize.persisted
+        - memory.canonical.mutate
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -613,6 +637,9 @@ environment_shared:
           SERVICE_ACCOUNT_JSON:
             secret: SERVICE_ACCOUNT_JSON
             version: latest
+          POSTHOG_PROJECT_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
+            version: latest
           PINECONE_API_KEY:
             secret: PINECONE_API_KEY
             version: latest
@@ -750,5 +777,52 @@ environment_shared:
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             value: 'false'
             category: memory_rollout
+        forbidden_env:
+        - HOSTED_PUSHER_API_URL
+      # EXP-001. Ships default-off: both the enable flag and the kill switch
+      # must be set deliberately before a single message is sent.
+      #
+      # LIFECYCLE_EMAIL_SIGNING_SECRET must ALSO be present on the API service,
+      # not just here -- this job mints unsubscribe tokens and the API verifies
+      # them, so a secret configured on only one side produces links that
+      # silently fail to verify.
+      day3-reengagement-email-job:
+        flags:
+          --remove-env-vars: HOSTED_PUSHER_API_URL
+          --task-timeout: 900s
+        secrets:
+          ENCRYPTION_SECRET:
+            secret: ENCRYPTION_SECRET
+            version: latest
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
+          POSTHOG_PROJECT_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
+            version: latest
+          RESEND_API_KEY:
+            secret: RESEND_API_KEY
+            version: latest
+          LIFECYCLE_EMAIL_SIGNING_SECRET:
+            secret: LIFECYCLE_EMAIL_SIGNING_SECRET
+            version: latest
+        env:
+          OMI_ENV_STAGE:
+            value: '{env}'
+            category: runtime_identity
+          GOOGLE_CLOUD_PROJECT:
+            value: '{compute_project}'
+          # The API origin that serves /email/unsubscribe. Set per overlay
+          # (api.omi.me / api.omiapi.com) because it differs by environment.
+          # Not the share origin: unsubscribe is a FastAPI route, and a link
+          # built from the conversation-share host 404s.
+          BASE_API_URL:
+            value: ''
+          DAY3_REENGAGEMENT_EMAIL_ENABLED:
+            value: 'false'
+            category: lifecycle_email
+          DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
+            value: 'false'
+            category: lifecycle_email
         forbidden_env:
         - HOSTED_PUSHER_API_URL

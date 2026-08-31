@@ -1065,6 +1065,7 @@ actor AgentRuntimeProcess {
     sessionID: String,
     turnID: String,
     prompt: String,
+    promptIsSynthetic: Bool = false,
     mode: ExternalSurfaceRunMode
   ) async throws -> ExternalSurfaceRunBinding {
     guard
@@ -1107,6 +1108,7 @@ actor AgentRuntimeProcess {
         sessionId: sessionID,
         turnId: turnID,
         prompt: prompt,
+        promptIsSynthetic: promptIsSynthetic,
         mode: mode
       ),
       expectedKind: .externalSurfaceRunBeginResult,
@@ -1478,6 +1480,7 @@ actor AgentRuntimeProcess {
     sessionId: String,
     turnId: String,
     prompt: String,
+    promptIsSynthetic: Bool = false,
     mode: ExternalSurfaceRunMode
   ) -> [String: Any] {
     var message = protocolEnvelope(
@@ -1489,6 +1492,7 @@ actor AgentRuntimeProcess {
     message["sessionId"] = sessionId
     message["turnId"] = turnId
     message["prompt"] = prompt
+    if promptIsSynthetic { message["promptIsSynthetic"] = true }
     message["mode"] = mode.rawValue
     return message
   }

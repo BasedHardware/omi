@@ -65,6 +65,7 @@ async def test_invalid_sample_rate_closes_with_policy_violation(sample_rate):
         struct.pack('<I', 102) + b'[]',
         struct.pack('<I', 102) + json.dumps({'segments': 'invalid'}).encode(),
         struct.pack('<I', 104) + json.dumps({'conversation_id': 1}).encode(),
+        struct.pack('<I', 104) + json.dumps({'conversation_id': 'conv', 'finalization_result_protocol': True}).encode(),
         struct.pack('<I', 105) + json.dumps({'segment_ids': 'invalid'}).encode(),
     ],
 )
@@ -74,6 +75,51 @@ async def test_malformed_frame_closes_with_unsupported_data(runtime, frame):
     await pusher._websocket_util_trigger(websocket, 'uid', 8000)
 
     assert websocket.close_code == 1003
+
+
+@pytest.mark.asyncio
+async def test_pusher_forwards_finalization_result_protocol_to_worker(runtime, monkeypatch):
+    calls = []
+    tasks = []
+
+    async def process(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    def start(coro, *, name):
+        task = asyncio.create_task(coro, name=name)
+        tasks.append(task)
+        return task
+
+    monkeypatch.setattr(pusher, 'process_conversation_task', process)
+    monkeypatch.setattr(pusher, 'start_background_task', start)
+    websocket = FakeWebSocket(
+        [
+            struct.pack('<I', 104)
+            + json.dumps(
+                {
+                    'conversation_id': 'conv-1',
+                    'language': 'en',
+                    'finalization_job_id': 'job-1',
+                    'dispatch_generation': 2,
+                    'finalization_result_protocol': 2,
+                }
+            ).encode()
+        ]
+    )
+
+    await pusher._websocket_util_trigger(websocket, 'uid', 8000)
+    await asyncio.gather(*tasks)
+
+    assert len(calls) == 1
+    assert calls[0][1]['finalization_result_protocol'] == 2
+
+
+def test_finalization_result_protocol_defaults_to_legacy_and_validates_integer():
+    assert pusher._parse_finalization_result_protocol(None) == 1
+    assert pusher._parse_finalization_result_protocol(2) == 2
+    for value in (True, 0, '2'):
+        with pytest.raises(ValueError, match='finalization_result_protocol'):
+            pusher._parse_finalization_result_protocol(value)
 
 
 def test_bounded_append_reports_and_drops_oldest(monkeypatch):

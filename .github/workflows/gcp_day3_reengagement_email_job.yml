@@ -1,0 +1,245 @@
+name: Deploy Day 3 Re-engagement Email Job to Cloud RUN
+
+# Mirrors gcp_daily_memory_sweep_job.yml, minus the LLM-gateway serving gate and
+# VPC lane probe: this job composes a fixed template and calls Resend, so it
+# makes no model call and has no gateway lane to prove.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select the environment to deploy to'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - prod
+      release_sha:
+        description: 'Exact merged-main SHA with a successful Release Eligibility proof'
+        required: true
+        type: string
+      release_version:
+        description: 'Release version (optional)'
+        required: false
+        default: ''
+
+env:
+  SERVICE: day3-reengagement-email-job
+  SCHEDULER_JOB: day3-reengagement-email-daily
+  SCHEDULER_SERVICE_ACCOUNT: memory-maintenance-scheduler@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+  REGION: us-central1
+
+# Share the development lock with the auto-deploy workflow that writes this Cloud Run job.
+concurrency:
+  group: deploy-cloud-run-day3-reengagement-email-job-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    permissions:
+      actions: 'read'
+      contents: 'read'
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require exact main dispatch ref
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$DISPATCH_REF" != "refs/heads/main" ]]; then
+            echo "::error title=Main-only deployment::Day 3 re-engagement deployment must be dispatched from main." >&2
+            exit 1
+          fi
+
+      - name: Validate Environment Input
+        env:
+          INPUT_ENV: ${{ github.event.inputs.environment }}
+        run: |
+          if [[ "$INPUT_ENV" != "development" && "$INPUT_ENV" != "prod" ]]; then
+            echo "Invalid environment: $INPUT_ENV. Must be 'development' or 'prod'."
+            exit 1
+          fi
+
+      # Retain this until the summary shows it no longer buys enough headroom.
+      - name: Measure runner disk cleanup
+        run: |
+          started_at=$SECONDS
+          free_before=$(df -h / | awk 'NR == 2 { print $4 }')
+          rm -rf /opt/hostedtoolcache
+          free_after=$(df -h / | awk 'NR == 2 { print $4 }')
+          {
+            echo "### Runner disk cleanup"
+            echo "- Duration: $((SECONDS - started_at))s"
+            echo "- Free space: ${free_before} → ${free_after}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout current main for source admission
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify exact admitted main source
+        id: admitted_source
+        env:
+          DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ || "$DEPLOY_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            echo "ERROR: release_sha must be one non-zero, lowercase, full commit SHA." >&2
+            exit 1
+          fi
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          git cat-file -e "${DEPLOY_SHA}^{commit}"
+          if [[ "$DEPLOY_SHA" != "$main_sha" ]]; then
+            echo "ERROR: release_sha must equal the current origin/main SHA; stale or future code may not deploy." >&2
+            exit 1
+          fi
+          proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
+          gh api -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
+            > "$proof_path"
+          python3 .github/scripts/verify_backend_release_admission.py \
+            --sha "$DEPLOY_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --workflow-runs "$proof_path" \
+            --require-first-attempt
+          printf 'admitted_sha=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout admitted source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.admitted_source.outputs.admitted_sha }}
+          fetch-depth: 0
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Login to GCR
+        run: gcloud auth configure-docker
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Compute short SHA
+        id: image-tag
+        run: |
+          # Use checked-out HEAD so the image tag matches the admitted source,
+          # not the workflow-dispatch ref (GITHUB_SHA).
+          echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Python deps for deploy scripts
+        run: python3 -m pip install -q pyyaml
+
+      - name: Build runtime image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./backend/modal/Dockerfile.day3_reengagement_email_job
+          push: false
+          load: true
+          tags: |
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
+          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
+
+      - name: Verify built runtime image before publish
+        run: |
+          image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/modal/Dockerfile.day3_reengagement_email_job \
+            --image "$image"
+
+      - name: Recheck admitted main before image publication
+        env:
+          ADMITTED_SHA: ${{ steps.admitted_source.outputs.admitted_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          [[ "$current_main_sha" == "$ADMITTED_SHA" ]] || {
+            echo "ERROR: main advanced after source admission; refusing stale image publication." >&2
+            exit 1
+          }
+
+      - name: Push verified runtime image
+        run: |
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+
+      - name: Recheck admitted main before Cloud Run deployment
+        env:
+          ADMITTED_SHA: ${{ steps.admitted_source.outputs.admitted_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          [[ "$current_main_sha" == "$ADMITTED_SHA" ]] || {
+            echo "ERROR: main advanced after image publication; refusing stale Cloud Run deployment." >&2
+            exit 1
+          }
+
+      - name: Render runtime env
+        id: runtime-env
+        env:
+          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+        run: |
+          python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} --job day3-reengagement-email-job >> "$GITHUB_OUTPUT"
+
+      - name: Validate backend runtime env before deploy
+        run: |
+          python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          job: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} ${{ steps.runtime-env.outputs.day3_reengagement_email_job_flags }}
+          env_vars: ${{ steps.runtime-env.outputs.day3_reengagement_email_job_env_vars }}
+          secrets: ${{ steps.runtime-env.outputs.day3_reengagement_email_job_secrets }}
+
+      - name: Provision daily Scheduler trigger from admitted source
+        run: |
+          python3 backend/scripts/provision_day3_reengagement_scheduler.py \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" \
+            --scheduler-job "$SCHEDULER_JOB" \
+            --cloud-run-job "$SERVICE" \
+            --service-account "$SCHEDULER_SERVICE_ACCOUNT"
+
+      # If required, use the Cloud Run url output in later steps
+      - name: Show Output
+        run: echo ${{ steps.deploy.outputs.url }}
+
+      - name: Generate deployment summary
+        if: always() && github.event.inputs.environment == 'prod'
+        uses: ./.github/actions/deployment-summary
+        with:
+          environment: ${{ github.event.inputs.environment }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          service: ${{ env.SERVICE }}
+
+      - name: Notify deployment status on Telegram
+        if: always() && github.event.inputs.environment == 'prod'
+        uses: ./.github/actions/deployment-notifier
+        with:
+          environment: ${{ github.event.inputs.environment }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

@@ -264,3 +264,22 @@ def default_models_for_surface(surface: STTServingSurface) -> tuple[str, ...]:
 def canonical_model_config(surface: STTServingSurface) -> str:
     """Return the deployment-safe comma-separated model preference."""
     return ','.join(default_models_for_surface(surface))
+
+
+def provider_for_service(service: object) -> str | None:
+    """Return the provider token a serving ``STTService`` belongs to.
+
+    The inverse of ``provider_for_model_token`` for callers holding a resolved
+    service rather than a configured model string, so a mid-session failover can
+    exclude the provider that just died.
+    """
+    value = getattr(service, 'value', service)
+    if value == 'modulate':
+        return MODULATE_PROVIDER
+    if value == 'soniox':
+        return SONIOX_PROVIDER
+    if value == 'parakeet':
+        return PARAKEET_PROVIDER
+    if value == 'deepgram':
+        return DEEPGRAM_CLOUD_PROVIDER
+    return None

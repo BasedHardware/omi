@@ -10,6 +10,9 @@ environments:
     gcp_project: based-hardware-dev
     gke:
       backend-listen:
+        capabilities:
+        - conversation.finalize.persisted
+        - memory.canonical.mutate
         env:
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
@@ -119,6 +122,12 @@ environments:
               key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
+          OMI_FIRESTORE_DATA_PLANE_PROJECT:
+            value: based-hardware
+          POSTHOG_PROJECT_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: POSTHOG_PROJECT_API_KEY
           TWILIO_API_KEY_SID:
             config_map:
               name: dev-omi-backend-config
@@ -190,6 +199,9 @@ environments:
             category: rollout
         values_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
       pusher:
+        capabilities:
+        - conversation.finalize.persisted
+        - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
           OMI_LLM_GATEWAY_URL:
@@ -211,6 +223,8 @@ environments:
             secret:
               name: dev-omi-backend-secrets
               key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+          MEMORY_ENABLED:
+            value: 'on'
           GITHUB_TOKEN:
             secret:
               name: dev-omi-backend-secrets
@@ -380,6 +394,9 @@ environments:
           --subnet: omi-us-central1-dev-vpc-1-subnet-1
       services:
         backend:
+          capabilities:
+          - conversation.finalize.persisted
+          - memory.canonical.mutate
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -395,6 +412,9 @@ environments:
               version: latest
             METRICS_SECRET:
               secret: METRICS_SECRET
+              version: latest
+            LIFECYCLE_EMAIL_SIGNING_SECRET:
+              secret: LIFECYCLE_EMAIL_SIGNING_SECRET
               version: latest
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
@@ -531,6 +551,9 @@ environments:
               value: dev-v1
               category: memory_rollout
         backend-sync:
+          capabilities:
+          - conversation.finalize.persisted
+          - memory.canonical.mutate
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -979,6 +1002,9 @@ environments:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
               version: latest
@@ -1130,8 +1156,44 @@ environments:
               value: '3'
               category: memory_rollout
             MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
-              value: 'false'
+              value: 'true'
               category: memory_rollout
+          forbidden_env:
+          - HOSTED_PUSHER_API_URL
+        day3-reengagement-email-job:
+          flags:
+            --remove-env-vars: HOSTED_PUSHER_API_URL
+            --task-timeout: 900s
+          secrets:
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
+            RESEND_API_KEY:
+              secret: RESEND_API_KEY
+              version: latest
+            LIFECYCLE_EMAIL_SIGNING_SECRET:
+              secret: LIFECYCLE_EMAIL_SIGNING_SECRET
+              version: latest
+          env:
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware-dev
+            BASE_API_URL:
+              value: https://api.omiapi.com
+            DAY3_REENGAGEMENT_EMAIL_ENABLED:
+              value: 'false'
+              category: lifecycle_email
+            DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
+              value: 'false'
+              category: lifecycle_email
           forbidden_env:
           - HOSTED_PUSHER_API_URL
       workflow_files:
@@ -1143,6 +1205,8 @@ environments:
       - .github/workflows/gcp_frame_request_retention_job.yml
       - .github/workflows/gcp_daily_memory_sweep_job.yml
       - .github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml
+      - .github/workflows/gcp_day3_reengagement_email_job.yml
+      - .github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml
     compute_project: based-hardware-dev
     data_plane_project: based-hardware
     runtime_gcp_project: based-hardware
@@ -1155,6 +1219,9 @@ environments:
     gcp_project: based-hardware
     gke:
       backend-listen:
+        capabilities:
+        - conversation.finalize.persisted
+        - memory.canonical.mutate
         env:
           OMI_LLM_GATEWAY_URL:
             value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
@@ -1264,6 +1331,12 @@ environments:
               key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
+          OMI_FIRESTORE_DATA_PLANE_PROJECT:
+            value: based-hardware
+          POSTHOG_PROJECT_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: POSTHOG_PROJECT_API_KEY
           TWILIO_API_KEY_SID:
             config_map:
               name: prod-omi-backend-config
@@ -1367,6 +1440,14 @@ environments:
             value: '100'
             category: rollout
         values_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
+      pusher:
+        capabilities:
+        - conversation.finalize.persisted
+        - memory.canonical.mutate
+        values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
+        env:
+          MEMORY_ENABLED:
+            value: 'on'
       config_map:
         name: prod-omi-backend-config
         entries:
@@ -1451,6 +1532,9 @@ environments:
             env_var: CLOUD_RUN_VPC_SUBNET
       services:
         backend:
+          capabilities:
+          - conversation.finalize.persisted
+          - memory.canonical.mutate
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -1466,6 +1550,9 @@ environments:
               version: latest
             METRICS_SECRET:
               secret: METRICS_SECRET
+              version: latest
+            LIFECYCLE_EMAIL_SIGNING_SECRET:
+              secret: LIFECYCLE_EMAIL_SIGNING_SECRET
               version: latest
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
@@ -1628,6 +1715,9 @@ environments:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
         backend-sync:
+          capabilities:
+          - conversation.finalize.persisted
+          - memory.canonical.mutate
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -2057,6 +2147,9 @@ environments:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
               version: latest
@@ -2209,12 +2302,49 @@ environments:
               category: memory_rollout
           forbidden_env:
           - HOSTED_PUSHER_API_URL
+        day3-reengagement-email-job:
+          flags:
+            --remove-env-vars: HOSTED_PUSHER_API_URL
+            --task-timeout: 900s
+          secrets:
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
+            RESEND_API_KEY:
+              secret: RESEND_API_KEY
+              version: latest
+            LIFECYCLE_EMAIL_SIGNING_SECRET:
+              secret: LIFECYCLE_EMAIL_SIGNING_SECRET
+              version: latest
+          env:
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            BASE_API_URL:
+              value: https://api.omi.me
+            DAY3_REENGAGEMENT_EMAIL_ENABLED:
+              value: 'false'
+              category: lifecycle_email
+            DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
+              value: 'false'
+              category: lifecycle_email
+          forbidden_env:
+          - HOSTED_PUSHER_API_URL
       workflow_files:
       - .github/workflows/gcp_backend.yml
       - .github/workflows/gcp_notifications_job.yml
       - .github/workflows/gcp_memory_maintenance_job.yml
       - .github/workflows/gcp_frame_request_retention_job.yml
       - .github/workflows/gcp_daily_memory_sweep_job.yml
+      - .github/workflows/gcp_day3_reengagement_email_job.yml
     compute_project: based-hardware
     data_plane_project: based-hardware
     runtime_gcp_project: based-hardware

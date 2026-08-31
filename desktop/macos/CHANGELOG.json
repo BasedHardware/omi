@@ -2,6 +2,50 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.250",
+      "date": "2026-08-31",
+      "changes": [
+        "Fixed push-to-talk replies going silent after an audio device change"
+      ]
+    },
+    {
+      "version": "0.12.249",
+      "date": "2026-08-31",
+      "changes": [
+        "Connecting Calendar now signs you in with Google instead of relying on a Chrome-family browser session, so it works on Safari and Firefox too — and when a connection does fail, Omi tells you what went wrong instead of just \"try again\"",
+        "Stopped ambient proactive notifications when you have no standing watches"
+      ]
+    },
+    {
+      "version": "0.12.248",
+      "date": "2026-08-31",
+      "changes": [
+        "Desktop Chat now shows SQL and search times in your timezone instead of unlabeled UTC"
+      ]
+    },
+    {
+      "version": "0.12.247",
+      "date": "2026-08-31",
+      "changes": [
+        "Added a hold-to-reply hint, reading-time card timing, and voice feedback on proactive notifications (Interject, flag-gated). Hold-⌥ keeps the classification inject through PTT-up so Gemini can accept it when the activity window opens.",
+        "Added a notifications step to onboarding so you're actually asked once, instead of never getting proactive alerts with no way to grant access"
+      ]
+    },
+    {
+      "version": "0.12.246",
+      "date": "2026-08-30",
+      "changes": [
+        "Asking Omi by voice what's on your list now returns tasks you added without a date, and Omi no longer assumes you only speak your Mac's menu-bar language"
+      ]
+    },
+    {
+      "version": "0.12.245",
+      "date": "2026-08-30",
+      "changes": [
+        "Voice turns that get cut off are no longer recorded as finished answers, so Omi stops re-asking what you already said, and a task that fails to save is no longer spoken as saved"
+      ]
+    },
+    {
       "version": "0.12.244",
       "date": "2026-08-30",
       "changes": [

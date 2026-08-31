@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# This is the single backend Python formatter authority for hooks and CI.
+# An exact version keeps local auto-formatting and CI checks convergent.
+readonly BLACK_VERSION="26.5.1"
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: scripts/backend-python-format --write|--check <backend Python files...>
+       scripts/backend-python-format --version
+EOF
+}
+
+if [ "${1:-}" = "--version" ]; then
+  printf '%s\n' "$BLACK_VERSION"
+  exit 0
+fi
+
+mode="${1:-}"
+case "$mode" in
+  --write)
+    black_args=(--line-length 120 --skip-string-normalization)
+    ;;
+  --check)
+    black_args=(--check --line-length 120 --skip-string-normalization)
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac
+shift
+
+# Empty changed-file selections are a normal no-op in hooks and CI.
+if [ "$#" -eq 0 ]; then
+  exit 0
+fi
+
+black_version() {
+  local output
+  output="$("$@" --version 2>/dev/null || true)"
+  if [[ "$output" =~ ^black,\ (version\ )?([^[:space:]]+) ]]; then
+    printf '%s\n' "${BASH_REMATCH[2]}"
+  fi
+}
+
+formatter=()
+if command -v black >/dev/null 2>&1 && [ "$(black_version black)" = "$BLACK_VERSION" ]; then
+  formatter=(black)
+elif command -v python3 >/dev/null 2>&1 && [ "$(black_version python3 -m black)" = "$BLACK_VERSION" ]; then
+  formatter=(python3 -m black)
+elif command -v uvx >/dev/null 2>&1; then
+  # uvx reuses its cache, so a missing or stale global Black fixes itself once
+  # without changing the developer's global environment.
+  formatter=(uvx --from "black==$BLACK_VERSION" black)
+else
+  echo "Backend formatting needs Black $BLACK_VERSION, but the installed tool is missing or stale." >&2
+  echo "Install uv from https://docs.astral.sh/uv/getting-started/installation/ and retry; no global Black install is required." >&2
+  exit 1
+fi
+
+exec "${formatter[@]}" "${black_args[@]}" "$@"

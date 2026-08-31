@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/wals/wal.dart';
 
 /// Pure mapping that the entire sync UI + provider classification depends on.
@@ -116,5 +117,25 @@ void main() {
       expect(back.uploadedAt, 0);
       expect(back.status, WalStatus.miss);
     });
+  });
+
+  test('recording location round-trips for delayed sync', () {
+    final capturedAt = DateTime.utc(2026, 8, 1, 12, 30);
+    final wal = makeWal(status: WalStatus.miss)
+      ..geolocation = Geolocation(
+        latitude: 40.7128,
+        longitude: -74.0060,
+        accuracy: 8.5,
+        time: capturedAt,
+        captureSource: 'current_position',
+      );
+
+    final restored = Wal.fromJson(wal.toJson());
+
+    expect(restored.geolocation?.latitude, 40.7128);
+    expect(restored.geolocation?.longitude, -74.0060);
+    expect(restored.geolocation?.accuracy, 8.5);
+    expect(restored.geolocation?.time, capturedAt);
+    expect(restored.geolocation?.captureSource, 'current_position');
   });
 }

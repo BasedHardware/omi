@@ -127,6 +127,32 @@ class AnalyticsManager {
     PostHogManager.shared.track(event, properties: properties)
   }
 
+  /// Notification-delivery-drop seam: nil in production; tests install a scoped
+  /// capture to observe the real event/payload `NotificationService` emits when
+  /// it drops a notification for lack of authorization.
+  private var notificationDeliveryTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setNotificationDeliveryTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    notificationDeliveryTelemetryCaptureForTests = capture
+  }
+
+  /// Monitoring-duration seam: nil in production; tests install a scoped
+  /// capture to observe the real event names/payloads these methods emit.
+  private var monitoringTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setMonitoringTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    monitoringTelemetryCaptureForTests = capture
+  }
+
+  private func trackMonitoring(_ event: String, properties: [String: Any]) {
+    monitoringTelemetryCaptureForTests?(event, properties)
+    PostHogManager.shared.track(event, properties: properties)
+  }
+
   func setDevicePairingTelemetryCaptureForTests(
     _ capture: (@MainActor (String?, [String: Any], [String: Any]) -> Void)?
   ) {
@@ -347,14 +373,61 @@ class AnalyticsManager {
     )
   }
 
-  // MARK: - Monitoring Events
+  // MARK: - Notification Delivery Events
 
-  func monitoringStarted() {
-    PostHogManager.shared.monitoringStarted()
+  /// A proactive notification was dropped because the app is not authorized to
+  /// show it. See `NotificationDeliveryTelemetry` for the full contract. Never
+  /// call this from a permission-request path — it only observes an existing
+  /// drop, it must never itself trigger the system prompt.
+  func notificationDeliverySkipped(
+    authStatus: NotificationDeliveryTelemetry.AuthStatus,
+    surface: ProactiveNotificationKind
+  ) {
+    let payload = NotificationDeliveryTelemetry.skippedPayload(authStatus: authStatus, surface: surface)
+    notificationDeliveryTelemetryCaptureForTests?(NotificationDeliveryTelemetry.skippedEventName, payload)
+    PostHogManager.shared.track(NotificationDeliveryTelemetry.skippedEventName, properties: payload)
   }
 
-  func monitoringStopped() {
-    PostHogManager.shared.monitoringStopped()
+  // MARK: - Monitoring Events
+
+  func monitoringStarted(sessionID: String) {
+    trackMonitoring(
+      MonitoringTelemetry.startedEventName,
+      properties: MonitoringTelemetry.startedPayload(sessionID: sessionID))
+  }
+
+  func monitoringStopped(summary: MonitoringSummary) {
+    trackMonitoring(
+      MonitoringTelemetry.stoppedEventName,
+      properties: MonitoringTelemetry.stoppedPayload(summary: summary))
+  }
+
+  /// Emits the missing `Monitoring Stopped` for a session recovered from disk
+  /// at launch (crash or quit — see `MonitoringSessionRecovery`). Shares the
+  /// `Monitoring Stopped` event name with a live stop; `duration_source`
+  /// (`recovered_clean` / `recovered_heartbeat`) is what distinguishes a
+  /// recovered row in analysis.
+  func monitoringSessionRecovered(_ outcome: MonitoringSessionRecovery.Outcome) {
+    trackMonitoring(
+      MonitoringTelemetry.stoppedEventName,
+      properties: MonitoringTelemetry.recoveredStoppedPayload(outcome))
+  }
+
+  /// Recovers a monitoring session that never got to emit its live
+  /// `Monitoring Stopped` — either the app quit (`applicationWillTerminate`
+  /// stamped `endedAt`/`endReason` synchronously; there is no synchronous
+  /// PostHog flush available at terminate time) or crashed outright (no
+  /// stamp at all; the last heartbeat is the only evidence). Call once at
+  /// launch, adjacent to `detectAndReportCrash()`.
+  ///
+  /// Ownership is enforced in the store, not here: a rewind-only process reads
+  /// nil and writes nothing, so this is a no-op there without needing its own
+  /// launch-mode check. See `MonitoringSessionDefaultsStore.shared`.
+  func recoverMonitoringSessionIfNeeded() {
+    guard let record = MonitoringSessionDefaultsStore.shared.load() else { return }
+    let outcome = MonitoringSessionRecovery.recover(record, now: Date())
+    monitoringSessionRecovered(outcome)
+    MonitoringSessionDefaultsStore.shared.clear()
   }
 
   // MARK: - Recording Events
@@ -1392,11 +1465,15 @@ class AnalyticsManager {
     assistantId: String,
     surface: String,
     dismissalKind: NotificationDismissalKind,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    attention: InterjectAttention? = nil
   ) {
     if let suggestionIdentity {
       var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
       properties["dismissal_kind"] = dismissalKind.rawValue
+      if let attention {
+        properties["attention"] = attention.rawValue
+      }
       captureSuggestionAssistantTelemetryForTests(
         "Notification Dismissed",
         properties: properties
@@ -1408,6 +1485,43 @@ class AnalyticsManager {
       assistantId: assistantId,
       surface: surface,
       dismissalKind: dismissalKind,
+      suggestionIdentity: suggestionIdentity,
+      attention: attention
+    )
+  }
+
+  func notificationHovered(
+    notificationId: String,
+    assistantId: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    if let suggestionIdentity {
+      captureSuggestionAssistantTelemetryForTests(
+        "Notification Hovered",
+        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      )
+    }
+    PostHogManager.shared.notificationHovered(
+      notificationId: notificationId,
+      assistantId: assistantId,
+      suggestionIdentity: suggestionIdentity
+    )
+  }
+
+  func suggestionFeedbackRecorded(
+    verb: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    if let suggestionIdentity {
+      var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      properties["verb"] = verb
+      captureSuggestionAssistantTelemetryForTests(
+        "Suggestion Feedback Recorded",
+        properties: properties
+      )
+    }
+    PostHogManager.shared.suggestionFeedbackRecorded(
+      verb: verb,
       suggestionIdentity: suggestionIdentity
     )
   }
@@ -1481,13 +1595,26 @@ class AnalyticsManager {
     PostHogManager.shared.track("floating_bar_ptt_started", properties: props)
   }
 
-  /// Track when push-to-talk ends and sends (or discards) transcript
-  func floatingBarPTTEnded(mode: String, hadTranscript: Bool, transcriptLength: Int) {
-    let props: [String: Any] = [
+  /// Track when push-to-talk ends and sends (or discards) transcript.
+  ///
+  /// `had_transcript` does NOT mean "text exists". On the realtime-hub path the
+  /// client commits raw audio and never sees a transcript, so the property means
+  /// **the turn was committed for an answer**. Only the STT cascade can report a
+  /// real length; the hub passes `nil` rather than a literal, because a property
+  /// that is a fake `0` on most events silently poisons every aggregate built on
+  /// it. Read admitted-vs-rejected audio distributions from
+  /// `ptt_audio_capture_lifecycle`, which carries the real measurements.
+  ///
+  /// The wire property names are deliberately unchanged: existing dashboards and
+  /// the PTT quality baseline join on them.
+  func floatingBarPTTEnded(mode: String, committed: Bool, transcriptLength: Int?) {
+    var props: [String: Any] = [
       "mode": mode,
-      "had_transcript": hadTranscript,
-      "transcript_length": transcriptLength,
+      "had_transcript": committed,
     ]
+    if let transcriptLength {
+      props["transcript_length"] = transcriptLength
+    }
     PostHogManager.shared.track("floating_bar_ptt_ended", properties: props)
   }
 

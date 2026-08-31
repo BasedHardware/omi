@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
@@ -14,6 +15,7 @@ typedef SyncFilesUploader = Future<UploadFilesResult> Function(
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
   bool claimLiveCapture,
+  Geolocation? geolocation,
 });
 typedef FairUseStatusLoader = Future<Map<String, dynamic>?> Function();
 
@@ -93,6 +95,7 @@ class SyncUploadGate {
     UploadProgressCallback? onUploadProgress,
     String? conversationId,
     bool claimLiveCapture = false,
+    Geolocation? geolocation,
   }) async {
     await _uploadMutex.acquire();
     try {
@@ -121,6 +124,7 @@ class SyncUploadGate {
           onUploadProgress: onUploadProgress,
           conversationId: conversationId,
           claimLiveCapture: claimLiveCapture,
+          geolocation: geolocation,
         );
         _limiter.clear();
         return result;

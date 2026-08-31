@@ -2736,39 +2736,49 @@ def _apply_candidate(
         reason = candidate.authority.ledger_reason
     if effective_operation == "amend":
         assert target is not None
-        memory_id = amend_fact(
-            uid,
-            target.memory_id,
-            candidate.content,
-            provenance=provenance,
-            write_reason=reason,
-            slot=candidate.slot,
-            subject_scope=candidate.subject_scope,
-            subject_entity_id=candidate.subject_entity_id,
-            valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
-            db_client=db_client,
-            required_source_item=target,
-        )
+        try:
+            memory_id = amend_fact(
+                uid,
+                target.memory_id,
+                candidate.content,
+                provenance=provenance,
+                write_reason=reason,
+                slot=candidate.slot,
+                subject_scope=candidate.subject_scope,
+                subject_entity_id=candidate.subject_entity_id,
+                valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+                db_client=db_client,
+                required_source_item=target,
+            )
+        except ValueError as exc:
+            if "unsupported knowledge ledger slot" not in str(exc):
+                raise
+            return None, "unknown_slot"
         return memory_id, None
 
-    write = LedgerWrite(
-        kind=MemoryKind.trigger if candidate.kind == "trigger" else MemoryKind.fact,
-        content=candidate.content,
-        provenance=provenance,
-        write_reason=reason,
-        subject_scope=candidate.subject_scope,
-        subject_entity_id=candidate.subject_entity_id,
-        slot=candidate.slot,
-        trigger_condition=candidate.trigger_condition,
-        # A completed-day replay must derive identical mutation metadata.  The
-        # ledger otherwise defaults ``valid_from`` to wall-clock ``now`` and a
-        # crash after canonical apply would produce a different operation ID.
-        valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
-        # Inference-backed rows stay out of the user-asserted profile path.
-        user_asserted=candidate.authority == SweepAuthority.direct_user_statement,
-        supersedes=([target.memory_id] if effective_operation == "repair" and target is not None else []),
-    )
-    return save_ledger_write(uid, write, db_client=db_client, required_source_item=target), None
+    try:
+        write = LedgerWrite(
+            kind=MemoryKind.trigger if candidate.kind == "trigger" else MemoryKind.fact,
+            content=candidate.content,
+            provenance=provenance,
+            write_reason=reason,
+            subject_scope=candidate.subject_scope,
+            subject_entity_id=candidate.subject_entity_id,
+            slot=candidate.slot,
+            trigger_condition=candidate.trigger_condition,
+            # A completed-day replay must derive identical mutation metadata.  The
+            # ledger otherwise defaults ``valid_from`` to wall-clock ``now`` and a
+            # crash after canonical apply would produce a different operation ID.
+            valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+            # Inference-backed rows stay out of the user-asserted profile path.
+            user_asserted=candidate.authority == SweepAuthority.direct_user_statement,
+            supersedes=([target.memory_id] if effective_operation == "repair" and target is not None else []),
+        )
+        return save_ledger_write(uid, write, db_client=db_client, required_source_item=target), None
+    except ValueError as exc:
+        if "unsupported knowledge ledger slot" not in str(exc):
+            raise
+        return None, "unknown_slot"
 
 
 def _blocked_output(
@@ -2941,6 +2951,10 @@ def run_daily_memory_sweep(
                 )
             except SweepAuthoritativeQueryUnavailable:
                 return _blocked_output(normalized_uid, "canonical_occupant_query_unavailable")
+            except ValueError as exc:
+                if "unsupported knowledge ledger slot" not in str(exc):
+                    raise
+                memory_id, skip_reason = None, "unknown_slot"
             if skip_reason:
                 skipped_count += 1
                 try:

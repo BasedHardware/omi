@@ -363,6 +363,13 @@ env:
   - name: GOOGLE_CLOUD_PROJECT
     # Template substitutes runtimeGcpProjectId (chart default = compute project).
     value: "based-hardware-dev"
+  - name: OMI_FIRESTORE_DATA_PLANE_PROJECT
+    value: "based-hardware"
+  - name: POSTHOG_PROJECT_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: POSTHOG_PROJECT_API_KEY
   - name: GCP_LOCATION
     value: "us-central1"
   - name: TWILIO_AUTH_TOKEN

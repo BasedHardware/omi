@@ -2247,6 +2247,7 @@ async function main(): Promise<void> {
             sessionId: request.sessionId,
             turnId: request.turnId,
             prompt: request.prompt,
+            promptIsSynthetic: request.promptIsSynthetic === true,
             mode: request.mode,
             clientId,
             requestId,

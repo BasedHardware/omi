@@ -103,6 +103,9 @@ export interface ExternalSurfaceRunBeginMessage extends ProtocolEnvelope {
   sessionId: string;
   turnId: string;
   prompt: string;
+  /** The prompt is an internal instruction, not user speech: it drives the run
+   *  but must never be journaled as the user's turn. */
+  promptIsSynthetic?: boolean;
   mode: "ask" | "act";
 }
 

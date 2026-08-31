@@ -240,7 +240,22 @@ describe('Windows JIT runtime authority', () => {
     incomplete.complete = false
     incomplete.failureReason = 'query_failed'
     const { runtime } = makeRuntime('enabled', incomplete)
-    expect((await runtime.admit({ appName: 'Code' }, '2026-08-24')).kind).toBe('suppressed')
+    const admission = await runtime.admit({ appName: 'Code' }, '2026-08-24')
+    expect(admission).toEqual({
+      kind: 'suppressed',
+      reason: 'authoritative_snapshot_unavailable'
+    })
+    expect(runtime.shouldSuppressLegacyInsight()).toBe(true)
+    expect(runtime.isAuthoritativeEnabled()).toBe(false)
+  })
+
+  it('suppresses a complete empty watchlist instead of ambient fallback', async () => {
+    const empty = snapshot()
+    empty.rows = []
+    const { runtime } = makeRuntime('enabled', empty)
+    const admission = await runtime.admit({ appName: 'Code' }, '2026-08-24')
+    expect(admission).toEqual({ kind: 'suppressed', reason: 'empty_watchlist' })
+    expect(runtime.shouldSuppressLegacyInsight()).toBe(true)
   })
 
   it('keeps the prior ledger receipt when a torn cumulative page is received', async () => {
@@ -272,10 +287,18 @@ describe('Windows JIT runtime authority', () => {
       failureReason: null
     })
     now = 30_101
-    expect((await runtime.admit({ appName: 'Code' }, '2026-08-24')).kind).toBe('suppressed')
+    const tornAdmission = await runtime.admit({ appName: 'Code' }, '2026-08-24')
+    // Trigger snapshot is sufficient: the standing watch still evaluates. The
+    // first visit already claimed the day, so this is a budget suppress, not a
+    // snapshot failure and not a return to Insight.
+    expect(tornAdmission).toEqual({
+      kind: 'suppressed',
+      reason: 'planned_budget_or_duplicate'
+    })
     expect(db.prepare('SELECT projected_count FROM jit_ledger_snapshot_receipt').get()).toEqual({
       projected_count: 0
     })
+    expect(runtime.shouldSuppressLegacyInsight()).toBe(true)
   })
 
   it('routes an ambiguous planned trigger through one server-reserved nano triage', async () => {
@@ -397,6 +420,7 @@ describe('Windows JIT runtime authority', () => {
     expect((await runtime.admit({ appName: 'Code' }, '2026-08-24')).kind).toBe('suppressed')
     expect(runtime.pinConversationKeyframe(42, 'agent-conversation-1')).toBe(false)
     expect(runtime.markAmbientFrameTemporary(42)).toBe(false)
+    expect(runtime.shouldSuppressLegacyInsight()).toBe(true)
     vi.restoreAllMocks()
   })
 

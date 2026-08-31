@@ -237,7 +237,7 @@ do not hand-edit those paths to match a specific machine.
 ### User MCP Servers & Skills (Apps page)
 User-managed MCP servers (~/.omi/mcp.json, incl. native OAuth) and skills
 (`~/.omi/skills/<slug>/SKILL.md`), fully local and fail-open. Contract and
-runtime wiring: [`docs/agents/desktop-user-extensions.md`](../../docs/agents/desktop-user-extensions.md).
+runtime wiring: [`.github/agent-docs/desktop-user-extensions.md`](../../.github/agent-docs/desktop-user-extensions.md).
 
 ### Known Limitations
 - Firestore has no collection group indexes for `source` field

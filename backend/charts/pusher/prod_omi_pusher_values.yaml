@@ -108,6 +108,7 @@ ingress:
 envFrom:
   - configMapRef:
       name: prod-omi-backend-config
+runtimeConfigMapName: prod-omi-backend-config
 
 env:
   - name: BUCKET_SPEECH_PROFILES
@@ -139,6 +140,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+  - name: MEMORY_ENABLED
+    value: "on"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
