@@ -276,16 +276,6 @@ extension PostHogManager {
     track("Signed Out")
   }
 
-  // MARK: - Monitoring Events
-
-  func monitoringStarted() {
-    track("Monitoring Started")
-  }
-
-  func monitoringStopped() {
-    track("Monitoring Stopped")
-  }
-
   // MARK: - Recording Events
 
   func transcriptionStarted() {
