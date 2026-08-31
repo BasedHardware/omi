@@ -26,6 +26,7 @@ class FakeSocket:
     def __init__(self, dead: bool = False):
         self._dead = dead
         self.finished = False
+        self.sent: list[bytes] = []
 
     @property
     def is_connection_dead(self) -> bool:
@@ -34,6 +35,12 @@ class FakeSocket:
     @property
     def death_reason(self) -> Optional[str]:
         return 'modulate error: Internal server error' if self._dead else None
+
+    def send(self, audio: bytes) -> bool:
+        if self._dead:
+            return False
+        self.sent.append(audio)
+        return True
 
     def finish(self) -> None:
         self.finished = True
@@ -144,3 +151,66 @@ async def test_failover_is_bounded_so_a_flapping_chain_cannot_loop(monkeypatch):
         return_value=(STTService.soniox, 'en', 'soniox'),
     ):
         assert await receiver._failover_stt_socket() is False
+
+
+@pytest.mark.asyncio
+async def test_failover_adopts_a_replacement_installed_by_the_other_observer(monkeypatch):
+    """The death monitor and the send path race to the same death; the loser of
+    the failover lock must adopt the winner's healthy socket, not rebuild again."""
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
+    receiver.stt_socket = FakeSocket(dead=False)
+
+    assert await receiver._failover_stt_socket() is True
+    receiver._create_stt_socket.assert_not_called()
+
+
+def _receiver_with_flowing_audio(monkeypatch: Any, *, primary: Any, replacement: Any):
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=replacement)
+    receiver.stt_socket = primary
+    host = receiver.host
+    host.state.fair_use_dg_budget_exhausted = False
+    host.state.fair_use_track_dg_usage = False
+    host.state.dg_usage_ms_pending = 0
+    host.request.sample_rate = 16000
+    host.request.websocket = MagicMock(send_json=AsyncMock(), close=AsyncMock())
+    host.client_device_context.platform = 'ios'
+    return receiver
+
+
+@pytest.mark.asyncio
+async def test_a_death_observed_by_the_audio_send_path_fails_over_not_terminates(monkeypatch):
+    """The regression behind the 2026-08-31 outage hours: the send path observes
+    a provider death on the very next audio chunk — before the 1s death-monitor
+    poll — and used to terminate there, so the monitor's failover (#12459) never
+    fired on a session with audio flowing (3,110 terminations, zero failovers in
+    30 minutes). The flush must fail over and deliver the buffered audio to the
+    replacement socket in the same call."""
+    healthy = FakeSocket(dead=False)
+    receiver = _receiver_with_flowing_audio(monkeypatch, primary=FakeSocket(dead=True), replacement=healthy)
+    buffer = bytearray(b'synthetic-pcm')
+
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language',
+        return_value=(STTService.soniox, 'en', 'soniox'),
+    ):
+        await receiver._flush_stt_buffer(buffer, force=True)
+
+    assert receiver.stt_socket is healthy
+    assert healthy.sent == [b'synthetic-pcm']
+    assert len(buffer) == 0
+    assert receiver.host.state.stt_terminal_failure is False
+    receiver.host.request.websocket.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_the_audio_send_path_still_terminates_once_the_chain_is_exhausted(monkeypatch):
+    receiver = _receiver_with_flowing_audio(
+        monkeypatch, primary=FakeSocket(dead=True), replacement=FakeSocket(dead=False)
+    )
+    buffer = bytearray(b'synthetic-pcm')
+
+    with patch('routers.listen.receiver.get_stt_service_for_language', return_value=(None, None, None)):
+        await receiver._flush_stt_buffer(buffer, force=True)
+
+    assert receiver.host.state.stt_terminal_failure is True
+    receiver.host.request.websocket.close.assert_awaited_once()
