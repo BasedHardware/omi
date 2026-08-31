@@ -26,6 +26,11 @@ _KNOWN_FAILURE_REASONS = frozenset(
         'connection_lost',
         'send_failed',
         'socket_unavailable',
+        # Typed in-stream provider rejections (utils.stt.soniox): a provider
+        # that accepted the upgrade and then answered an error frame.
+        'soniox_account_state',
+        'soniox_idle_timeout',
+        'soniox_rotation',
     }
 )
 _FAILURE_PHASE_BY_REASON = {
@@ -33,7 +38,26 @@ _FAILURE_PHASE_BY_REASON = {
     'connection_lost': 'connection',
     'socket_unavailable': 'connection',
     'send_failed': 'send',
+    # A typed in-stream rejection is the provider closing a connection it had
+    # accepted. The bounded phase vocabulary has no 'serve' bucket, and 'send'
+    # would claim our send failed, so 'connection' is the truthful bucket.
+    'soniox_account_state': 'connection',
+    'soniox_idle_timeout': 'connection',
+    'soniox_rotation': 'connection',
 }
+_CIRCUIT_OPENING_REASONS = frozenset(
+    {
+        # 402 organization_balance_exhausted: the provider still ACCEPTS the
+        # WebSocket upgrade but refuses to serve ANY stream, so the
+        # connect-time failure counter provably never accumulates under
+        # reconnect load (each dying session's replacement connects fine and
+        # calls record_success). Same mechanism record_serve_failure exists
+        # for. The other typed shapes are session-scoped — an idle-timeout is
+        # this session's VAD pattern and a 413 rotation serves fine on a fresh
+        # connection — so they must not bench the provider for everyone.
+        'soniox_account_state',
+    }
+)
 
 # Terminal reasons that are evidence about the *provider* while it was serving
 # audio. ``initialization_failed`` happens at connect time, where the selection
@@ -91,6 +115,50 @@ def live_stt_socket_is_dead(stt_socket: Any) -> bool:
         return True
 
 
+def live_stt_terminal_reason(stt_socket: Any, fallback: str) -> str:
+    """Prefer a socket's typed provider rejection over the observing path's fallback.
+
+    Every observer of a dead socket (death monitor, send path) knows only its
+    own vantage point ('connection_lost', 'send_failed'); the socket knows why
+    the provider actually refused to serve. Providers that answer typed
+    in-stream error frames (Soniox) latch that reason at the frame; this keeps
+    it bounded and lets every terminal funnel report it instead of collapsing
+    a named provider rejection back to generic connection loss.
+    """
+
+    try:
+        typed = getattr(stt_socket, 'typed_death_reason', None)
+    except Exception:
+        return fallback
+    return typed if typed in _KNOWN_FAILURE_REASONS else fallback
+
+
+def note_typed_provider_death(stt_socket: Any, provider: str | None) -> bool:
+    """Open the selection circuit when a socket died by provider-level rejection.
+
+    A 402 ``organization_balance_exhausted`` stream is served by NO session
+    while the provider keeps accepting connects, so the mid-session failover
+    path moves each dying session to the next provider and the session
+    SURVIVES — which is exactly why the death would otherwise stay invisible
+    to selection: the surviving session never runs the terminal path that
+    feeds the circuit, and the next new session is handed right back to the
+    provider that refuses to serve it. Observing the typed rejection at the
+    failover seam gives selection the same one-cooldown skip it already gets
+    from a serve-time death. Session-scoped reasons (idle timeout, rotation)
+    are deliberately ignored here: they are evidence about one session, not
+    the provider.
+    """
+
+    try:
+        typed = getattr(stt_socket, 'typed_death_reason', None)
+    except Exception:
+        return False
+    if typed not in _CIRCUIT_OPENING_REASONS:
+        return False
+    _open_serving_provider_circuit(typed, provider)
+    return True
+
+
 def _open_serving_provider_circuit(bounded_reason: str, provider: str | None) -> None:
     """Open the process-local selection circuit of the provider that died serving.
 
@@ -132,7 +200,7 @@ async def terminate_live_stt_session(
     session.stt_terminal_failure = True
     session.close_code = LIVE_STT_FAILURE_CLOSE_CODE
     bounded_reason = _bounded_reason(reason)
-    if bounded_reason in _SERVE_FAILURE_REASONS:
+    if bounded_reason in _SERVE_FAILURE_REASONS or bounded_reason in _CIRCUIT_OPENING_REASONS:
         # A provider that died while serving audio is terminal evidence for
         # this session, but selection only learns from connect-time outcomes:
         # the next reconnect's successful *connect* would call
@@ -141,6 +209,8 @@ async def terminate_live_stt_session(
         # reconnecting clients skip straight to a healthy fallback for the
         # cooldown, instead of being handed back to the provider that just
         # died on them (connect -> die -> reconnect -> die under an outage).
+        # A typed account-state rejection (402) is the same evidence with a
+        # name: the provider accepts connects and refuses every stream.
         _open_serving_provider_circuit(bounded_reason, failure.provider)
     try:
         record_live_stt_failure(
@@ -246,7 +316,7 @@ async def send_live_stt_audio(
         return False
 
     if live_stt_socket_is_dead(stt_socket):
-        await _recoverable_failure('connection_lost')
+        await _recoverable_failure(live_stt_terminal_reason(stt_socket, 'connection_lost'))
         return False
 
     try:

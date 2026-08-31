@@ -139,8 +139,8 @@ def _fallback_failure_reason(error: BaseException) -> str:
     if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
         return 'timeout'
     detail = str(error).lower()
-    if 'limit' in detail or 'quota' in detail:
-        return 'quota'
+    if 'limit' in detail or 'quota' in detail or 'exhausted' in detail or 'balance' in detail:
+        return 'quota'  # incl. Soniox 402 'organization_balance_exhausted'
     return 'provider_5xx'
 
 

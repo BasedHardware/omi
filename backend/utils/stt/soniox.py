@@ -23,10 +23,46 @@ logger = logging.getLogger(__name__)
 SONIOX_SERVICE_NAME: Final = 'soniox'
 SONIOX_WS_URL: Final = os.getenv('SONIOX_WS_URL', 'wss://stt-rt.soniox.com/transcribe-websocket')
 SONIOX_MODEL: Final = os.getenv('SONIOX_MODEL', 'stt-rt-v5')
-# Soniox closes any socket that receives neither audio nor a keepalive for 20s.
+# Soniox closes any socket that receives neither audio nor keepalive for 20s.
 # VAD gating routinely holds audio back for longer than that, so idle sockets die
 # as 408 request_timeout unless we fill the gap ourselves.
 SONIOX_KEEPALIVE_SECONDS: Final = 10.0
+
+# Typed in-stream rejection reasons, mapped off the provider's own error frame
+# (``error_code`` + ``error_type``). Prod 2026-08-30/31 (backend-listen):
+# 400 invalid_request "No audio received" (~42/30m), 402
+# organization_balance_exhausted (~7/30m), 413 max_duration_reached (~3/30m)
+# all surfaced as one free-text ERROR signature, indistinguishable in metrics
+# and in the terminal-failure reason vocabulary.
+SONIOX_DEATH_IDLE_TIMEOUT: Final = 'soniox_idle_timeout'
+SONIOX_DEATH_ACCOUNT_STATE: Final = 'soniox_account_state'
+SONIOX_DEATH_ROTATION: Final = 'soniox_rotation'
+
+
+def soniox_death_reason(error_code: Any, error_type: Any) -> str:
+    """Bound a Soniox in-stream error frame to a typed death reason.
+
+    The raw provider text stays on the death latch for logs; this mapping is
+    what the bounded terminal-failure vocabulary consumes, so a new provider
+    error shape degrades to ``connection_lost`` rather than growing a new
+    metric cardinality per message.
+    """
+    error = str(error_type or '').strip().lower()
+    if error == 'organization_balance_exhausted':
+        return SONIOX_DEATH_ACCOUNT_STATE
+    try:
+        code = int(error_code)
+    except (TypeError, ValueError):
+        return 'connection_lost'
+    if code == 400:
+        # "No audio received": the idle watchdog fired. The socket's keepalive
+        # covers the no-client-audio case; this shape arrives when VAD gating
+        # withheld real audio for the whole window.
+        return SONIOX_DEATH_IDLE_TIMEOUT
+    if code == 413:
+        # Documented rotation: open a new WebSocket. The failover path does.
+        return SONIOX_DEATH_ROTATION
+    return 'connection_lost'
 
 
 class SafeSonioxSocket(STTSocket):
@@ -53,6 +89,9 @@ class SafeSonioxSocket(STTSocket):
         self._dead = False
         self._closed = False
         self._death_reason: Optional[str] = None
+        # Typed, bounded death reason (e.g. SONIOX_DEATH_ACCOUNT_STATE) for the
+        # terminal-failure vocabulary; None until the socket dies.
+        self._typed_death_reason: Optional[str] = None
         self._lock = threading.Lock()
         self._send_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=2000)
         self._done_event = asyncio.Event()
@@ -70,11 +109,17 @@ class SafeSonioxSocket(STTSocket):
     def death_reason(self) -> Optional[str]:
         return self._death_reason
 
-    def _mark_dead(self, reason: str) -> None:
+    @property
+    def typed_death_reason(self) -> Optional[str]:
+        """Bounded reason for the terminal-failure vocabulary (None = untyped)."""
+        return self._typed_death_reason
+
+    def _mark_dead(self, reason: str, typed_reason: Optional[str] = None) -> None:
         with self._lock:
             if not self._dead:
                 self._dead = True
                 self._death_reason = reason
+                self._typed_death_reason = typed_reason
 
     def send(self, data: bytes) -> bool:
         with self._lock:
@@ -166,9 +211,20 @@ class SafeSonioxSocket(STTSocket):
                     continue
                 if msg.get('error_code'):
                     err = f"{msg.get('error_code')} {msg.get('error_type', '')} {msg.get('error_message', '')}".strip()
-                    logger.error(f'Soniox streaming error: {err}')
+                    typed = soniox_death_reason(msg.get('error_code'), msg.get('error_type'))
+                    if typed == SONIOX_DEATH_ACCOUNT_STATE:
+                        # The provider evaluated the account and refused to
+                        # serve: a provider fault, and the dominant signal an
+                        # on-call needs during a balance outage.
+                        logger.error(f'Soniox streaming error: {err}')
+                    else:
+                        # Idle-timeout and documented rotation are the
+                        # protocol answering how the session was used, not a
+                        # provider fault; failing to discriminate kept this the
+                        # top backend-listen error signature with no signal.
+                        logger.warning('Soniox stream closed: %s', err)
                     self._done_event.set()
-                    self._mark_dead(f'soniox error: {err}')
+                    self._mark_dead(f'soniox error: {err}', typed_reason=typed)
                     break
 
                 tokens: List[Any] = msg.get('tokens') or []

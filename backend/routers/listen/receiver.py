@@ -46,7 +46,9 @@ from utils.stt.live_failure import (
     flush_live_stt_buffer,
     live_stt_initialization_failure,
     live_stt_socket_is_dead,
+    live_stt_terminal_reason,
     live_stt_upstream_failure,
+    note_typed_provider_death,
     send_live_stt_audio,
     terminate_live_stt_session,
 )
@@ -521,6 +523,12 @@ class ListenReceiver:
             self._stt_failed_providers.add(dead_provider)
         if len(self._stt_failed_providers) > MAX_STT_FAILOVERS:
             return False
+        # A provider-level typed rejection (Soniox 402 balance-exhausted) is
+        # fleet-level evidence the failover would otherwise swallow: the session
+        # survives on the next provider, so the terminal path that normally
+        # feeds the selection circuit never runs for it, and the NEXT session is
+        # handed straight back to the provider that refuses every stream.
+        note_typed_provider_death(self.stt_socket, dead_provider)
 
         service, language, model = get_stt_service_for_language(
             self.host.language,
@@ -589,7 +597,7 @@ class ListenReceiver:
                     self.host.request.websocket,
                     self.host.state,
                     failure=live_stt_upstream_failure(self._serving_provider()),
-                    reason='connection_lost',
+                    reason=live_stt_terminal_reason(socket, 'connection_lost'),
                     platform=self.host.client_device_context.platform,
                 )
                 return
