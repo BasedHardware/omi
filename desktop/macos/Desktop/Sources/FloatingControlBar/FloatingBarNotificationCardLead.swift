@@ -7,6 +7,8 @@ import SwiftUI
 /// learns not to shout the Settings category louder than the actual content.
 struct FloatingBarNotificationCardLead: View {
   let copy: ProactiveNotificationCopy.CardLines
+  var messageLineLimit: Int = 3
+  var footer: String? = nil
 
   var body: some View {
     HStack(alignment: .top, spacing: OmiSpacing.md) {
@@ -47,9 +49,15 @@ struct FloatingBarNotificationCardLead: View {
           Text(detail)
             .scaledFont(size: OmiType.body)
             .foregroundColor(.white.opacity(0.78))
-            .lineLimit(3)
+            .lineLimit(messageLineLimit)
             .lineSpacing(1.5)
             .fixedSize(horizontal: false, vertical: true)
+        }
+        if let footer, !footer.isEmpty {
+          Text(footer)
+            .scaledFont(size: OmiType.micro, weight: .medium)
+            .foregroundColor(.white.opacity(0.45))
+            .lineLimit(1)
         }
       }
     }

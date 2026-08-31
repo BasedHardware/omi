@@ -43,7 +43,8 @@ enum JITProactivityAgentAuthority {
 
 enum JITProactivityOutputPolicy {
   static func decode(_ text: String, lane: JITProactivityLane) throws -> ContextDirectorDecision {
-    let decision = try JSONDecoder().decode(ContextDirectorDecision.self, from: Data(text.utf8)).clamped()
+    let raw = try JSONDecoder().decode(ContextDirectorDecision.self, from: Data(text.utf8))
+    let decision = raw.clamped()
     let allowed =
       lane == .planned
       ? ["insight", "silence"]

@@ -1024,7 +1024,7 @@ struct DesktopHomeView: View {
     let plugin = ProactiveAssistantsPlugin.shared
     if !AssistantSettings.shared.screenAnalysisEnabled, plugin.isMonitoring {
       log("DesktopHomeView: Stopping screen analysis after server settings sync")
-      plugin.stopMonitoring()
+      plugin.stopMonitoring(reason: .settingsSync)
     }
     restorePersistedCaptureServices(reason: "settings sync")
   }

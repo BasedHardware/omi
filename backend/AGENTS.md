@@ -64,13 +64,13 @@ backend/
     llm/                  #   LLM orchestration (14 files): chat processing, conversation post-processing,
                           #   memory extraction, persona management, proactive notifications, goal tracking,
                           #   app generation, fair-use classification, usage tracking
-      clients.py          #     Model instances: OpenAI (Luna/Nano), Anthropic (claude-sonnet-4-6),
+      clients.py          #     Model instances: OpenAI (Luna/Nano), leftover Anthropic (desktop),
                           #     OpenRouter (gemini-flash), with prompt caching and usage callbacks
     stt/                  #   Speech-to-text (7 files): Parakeet/Modulate and explicit self-hosted Deepgram streaming, VAD gating, speech profiles,
                           #   pre-recorded batch transcription, speaker embeddings
     conversations/        #   Conversation lifecycle (6 files): ingestion, memory extraction, action items,
                           #   merge, post-processing, search
-    retrieval/            #   RAG pipeline (25+ files): agentic RAG via Claude with 18 tool types —
+    retrieval/            #   RAG pipeline (25+ files): agentic RAG via gateway Luna (gpt-5.6-luna) with 18 tool types —
                           #   action items, calendar, Gmail, Apple Health, conversations, memories,
                           #   screen activity, files, Perplexity web search, notifications, etc.
     other/                #   Storage (GCS), auth dependencies, timeout middleware, Hume emotion detection

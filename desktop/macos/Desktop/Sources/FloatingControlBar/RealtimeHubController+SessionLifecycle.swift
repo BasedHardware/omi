@@ -733,7 +733,8 @@ extension RealtimeHubController {
     if live.supportsInputTranscriptionLanguage, !candidates.isEmpty {
       live.setInputTranscriptionLanguage(candidates.count == 1 ? candidates[0] : turnEarlyVerdictCode)
     }
-    live.beginInputTurn(
+    beginLiveInputTurn(
+      live,
       turnID: pending.turnID,
       responseID: pending.responseID,
       interrupting: pending.interrupting)
@@ -1413,7 +1414,8 @@ extension RealtimeHubController {
       return
     }
     if let live = session {
-      live.beginInputTurn(
+      beginLiveInputTurn(
+        live,
         turnID: pending.turnID,
         responseID: pending.responseID,
         interrupting: false)
@@ -1489,7 +1491,8 @@ extension RealtimeHubController {
     if live.supportsInputTranscriptionLanguage, !candidates.isEmpty {
       live.setInputTranscriptionLanguage(candidates.count == 1 ? candidates[0] : turnEarlyVerdictCode)
     }
-    live.beginInputTurn(
+    beginLiveInputTurn(
+      live,
       turnID: pending.turnID,
       responseID: pending.responseID,
       interrupting: pending.interrupting)

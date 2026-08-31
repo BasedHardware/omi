@@ -444,6 +444,37 @@ def test_backend_service_deploys_remove_retired_canonical_memory_env_vars():
         assert f'--remove-env-vars={retired}' in job_flags, f'memory-maintenance-job for {env} must strip {retired}'
 
 
+def _deploy_backend_stack_step_flags(step_id: str) -> str:
+    action = Path(__file__).resolve().parents[3] / '.github/actions/deploy-backend-stack/action.yml'
+    text = action.read_text(encoding='utf-8')
+    marker = f'id: {step_id}\n'
+    start = text.index(marker)
+    flags_key = text.index('flags: >-', start)
+    env_key = text.index('env_vars:', flags_key)
+    return text[flags_key:env_key]
+
+
+def test_backend_integration_deploy_pins_mcp_serving_capacity():
+    # Live prod backend-integration was maxScale=25, minScale=1, concurrency=300
+    # on 1 CPU. ChatGPT openai-mcp POSTs then 503 with "no available instance"
+    # because I/O-bound MCP work does not trip CPU scale-out. Pin scale-out
+    # here only; do not copy onto backend / backend-sync.
+    integration_flags = _deploy_backend_stack_step_flags('deploy-backend-integration')
+    backend_flags = _deploy_backend_stack_step_flags('deploy-backend')
+    sync_flags = _deploy_backend_stack_step_flags('deploy-backend-sync')
+    for flag in (
+        '--cpu=2',
+        '--memory=2Gi',
+        '--concurrency=40',
+        '--min-instances=3',
+        '--max-instances=50',
+        '--no-cpu-throttling',
+    ):
+        assert flag in integration_flags, flag
+        assert flag not in backend_flags, flag
+        assert flag not in sync_flags, flag
+
+
 VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
 
 

@@ -553,11 +553,19 @@ final class AppStatePermissionProbeTests: XCTestCase {
     let target = await model.firstUnaskedStepAwaitingCurrentProbes(from: .automation) { key in
       probedKeys.append(key)
       await Task.yield()
-      model.appState.hasAutomationPermission = true
+      // Each probe answers only its own permission, so a step is skipped only
+      // after its own probe is awaited — the automation grant must not leak a
+      // skip past the notifications step.
+      switch key {
+      case "automation": model.appState.hasAutomationPermission = true
+      case "notifications": model.appState.hasNotificationPermission = true
+      default: break
+      }
     }
 
-    XCTAssertEqual(probedKeys, ["automation"])
+    XCTAssertEqual(probedKeys, ["automation", "notifications"])
     XCTAssertEqual(target, .shortcutOpen)
     XCTAssertEqual(model.autoState, .on)
+    XCTAssertEqual(model.notifState, .on)
   }
 }
