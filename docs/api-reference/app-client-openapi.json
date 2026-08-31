@@ -14474,6 +14474,12 @@
       "GoogleCalendarEvent": {
         "description": "Response model for a Google Calendar event.",
         "properties": {
+          "all_day": {
+            "default": false,
+            "description": "True when the event has a date but no time",
+            "title": "All Day",
+            "type": "boolean"
+          },
           "attendee_emails": {
             "default": [],
             "description": "List of attendee email addresses",
@@ -14491,6 +14497,12 @@
             },
             "title": "Attendees",
             "type": "array"
+          },
+          "description": {
+            "default": "",
+            "description": "Event description, truncated for transport",
+            "title": "Description",
+            "type": "string"
           },
           "end_time": {
             "description": "Event end time",
@@ -14514,6 +14526,12 @@
             ],
             "description": "Link to open event in Google Calendar",
             "title": "Html Link"
+          },
+          "location": {
+            "default": "",
+            "description": "Event location",
+            "title": "Location",
+            "type": "string"
           },
           "start_time": {
             "description": "Event start time",
@@ -34615,7 +34633,7 @@
             "schema": {
               "default": 20,
               "description": "Maximum number of events to return",
-              "maximum": 100,
+              "maximum": 500,
               "minimum": 1,
               "title": "Max Results",
               "type": "integer"
