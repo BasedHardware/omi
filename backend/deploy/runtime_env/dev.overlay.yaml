@@ -45,6 +45,9 @@ overlay:
           value: 'true'
           category: rollout
     pusher:
+      capabilities:
+      - conversation.finalize.persisted
+      - memory.canonical.mutate
       values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
       env:
         OMI_LLM_GATEWAY_URL:
@@ -66,6 +69,8 @@ overlay:
           secret:
             name: dev-omi-backend-secrets
             key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+        MEMORY_ENABLED:
+          value: 'on'
         GITHUB_TOKEN:
           secret:
             name: dev-omi-backend-secrets

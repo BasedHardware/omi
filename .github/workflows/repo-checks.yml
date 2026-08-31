@@ -52,6 +52,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
 
+      - name: Install runtime environment validator dependency
+        run: uv pip install --system pyyaml==6.0.1
+
       - name: Set up Java for manifest-selected Firestore checks
         uses: actions/setup-java@v5
         with:
@@ -123,6 +126,9 @@ jobs:
           version: "0.11.13"
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
+
+      - name: Install runtime environment validator dependency
+        run: uv pip install --system pyyaml==6.0.1
 
       - name: Set up Java for manifest-selected Firestore checks
         uses: actions/setup-java@v5

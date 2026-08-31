@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-08-30 (provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance)
+> Last updated: 2026-08-30 (provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -312,6 +312,15 @@ dispatch flag is enabled, Cloud Tasks wakes the worker using only the opaque
 job id and generation. `pending_conversation_requests` remains a low-latency
 reconnect aid, not the durable source of truth.
 
+Pusher is therefore a canonical-memory mutation host, not only an audio relay.
+The deployable-to-capability roster in
+`backend/scripts/runtime_env_capability_contracts.py` declares every host that
+can run persisted finalization. Runtime-manifest validation rejects a missing,
+unknown, or disabled memory mode for those hosts, and Pusher repeats the same
+static admission check at process startup before it serves traffic or starts
+background work. A deploy that omits `MEMORY_ENABLED=on` is invalid even when
+its image, readiness probe, and WebSocket protocol are otherwise healthy.
+
 Before a job can become `completed`, the finalizer atomically claims a durable
 fanout boundary with a persistent idempotency key. It passes that key to the
 integration endpoint and records `fanout_status=completed` only after the
@@ -435,6 +444,38 @@ declared on both backend-listen and Cloud Run backend.
 
 See [Listen finalization jobs](./listen_finalization_jobs.mdx) for configuration,
 replay, metrics, and the operational runbook.
+
+### 2.2 Pusher release qualification
+
+Image readiness is not finalization readiness. Development promotion records an
+identity-bound receipt containing the source SHA, immutable image digest,
+qualified contract fingerprint, rendered chart fingerprint, live Deployment
+configuration, Deployment generation, and every ready Pusher pod identity. It
+then sends the committed PCM fixture through the public authenticated
+`/v4/listen` route and requires all three semantic observations from the same
+capture: the expected transcript, an opcode-104 durable handoff attributable to
+the candidate Pusher workload, and terminal completed-conversation readback.
+`NOT_RUN`, missing, stale, contradictory, or identity-mismatched evidence is a
+failed qualification.
+
+Production promotion consumes that exact development receipt and immutable
+digest; it does not rebuild the image. Before ordinary production mutation, a
+separately protected isolated canary pairs a one-replica listener with a
+one-replica candidate Pusher and routes the listener only to that Pusher. The
+same authenticated real-audio probe must complete through the candidate and
+produce its own identity-bound receipt. Canary resources are removed on both
+success and failure. The normal rollout records a new live receipt after Helm
+converges. Automatic rollback remains disabled until a previous release has an
+explicit image, configuration, schema, and protocol compatibility attestation;
+failure stops promotion instead of guessing that the previous revision is safe.
+
+Finalization failures emit only the bounded
+`omi_capture_finalization_failures_total{reason}` counter. Allowed reasons are
+`memory_fence`, `memory_config`, `provider`, `stale`, and `processing`; raw
+exceptions, user IDs, conversation IDs, and transcript content are excluded.
+The production alert treats `memory_fence` or `memory_config` as an immediate
+stop-the-line signal because they indicate that a finalization host cannot
+honor its declared canonical-memory capability.
 
 ## 3. Disconnect Path
 

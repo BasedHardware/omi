@@ -139,6 +139,8 @@ class Stack:
         rest_finalization_race_parties: int = 0,
         recording_session_mode: str = 'dual_write',
         recording_lifecycle_fault: dict[str, str] | None = None,
+        memory_enabled: str | None = 'on',
+        finalization_worker_memory_enabled: str | None = 'on',
     ):
         if finalization_mode not in {'inline', 'cloud_tasks'}:
             raise ValueError(f'unsupported finalization mode: {finalization_mode}')
@@ -172,6 +174,8 @@ class Stack:
         )
         self.recording_session_mode = recording_session_mode
         self.recording_lifecycle_fault = recording_lifecycle_fault
+        self.memory_enabled = memory_enabled
+        self.finalization_worker_memory_enabled = finalization_worker_memory_enabled
         self.recording_lifecycle_retry_file = self.state_dir / 'release-recording-lifecycle-retry'
         self.redis_port = _free_port()
         self.backend_port = _free_port()
@@ -220,6 +224,7 @@ class Stack:
                 'HOSTED_PARAKEET_API_URL': f'http://127.0.0.1:{self.parakeet_port}',
                 'STT_SERVICE_MODELS': 'parakeet',
                 'TRIAL_PAYWALL_ENABLED': 'false',
+                'CONVERSATION_APPS_OPT_IN_ONLY': 'true',
                 'LISTEN_FINALIZATION_DISPATCH_MODE': self.finalization_mode,
                 'RECORDING_SESSION_MODE': self.recording_session_mode,
                 'OMI_STACK_STATE_DIR': str(self.state_dir),
@@ -229,6 +234,8 @@ class Stack:
                 'PYTHONUNBUFFERED': '1',
             }
         )
+        if self.memory_enabled is not None:
+            env['MEMORY_ENABLED'] = self.memory_enabled
         if self.finalization_mode == 'cloud_tasks':
             handler_url = self.finalization_handler_url
             env.update(
@@ -357,6 +364,12 @@ class Stack:
                     '--port',
                     str(self.finalization_worker_port),
                 ],
+                extra_env=(
+                    {'MEMORY_ENABLED': self.finalization_worker_memory_enabled}
+                    if self.finalization_worker_memory_enabled is not None
+                    else None
+                ),
+                unset_env=('MEMORY_ENABLED',) if self.finalization_worker_memory_enabled is None else (),
             )
             _wait_for_port(
                 self.finalization_worker_port,
@@ -512,6 +525,14 @@ class Stack:
                 'language': 'en',
                 'private_cloud_sync_enabled': True,
                 'data_protection_level': 'standard',
+                # A desktop-entitled principal must traverse immediate
+                # processing; Free desktop deliberately defers enrichment to
+                # first-open and would never reach the finalization fence.
+                'subscription': {
+                    'plan': 'operator',
+                    'status': 'active',
+                    'current_period_end': int((datetime.now(timezone.utc) + timedelta(days=30)).timestamp()),
+                },
                 # This gauntlet exercises the English-only Parakeet stub. Make
                 # the user's single-language choice explicit so selection
                 # requests English rather than multi-language auto-detection.
@@ -1274,12 +1295,8 @@ async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
     completed_conversation = stack.conversation(uid, conversation_id)
     if not completed_conversation or completed_conversation.get('status') != 'completed':
         raise StackFailure('restarted-listener delivery did not complete the user-visible conversation')
-    if (
-        not process_events[0].get('persisted')
-        or not process_events[0].get('force_process')
-        or not process_events[0].get('defer_derived_effects')
-    ):
-        raise StackFailure('REST finalization lost its persisted processing and extraction policy')
+    if len(_provider_events(stack, conversation_id, 'memory', 'completed')) != 1:
+        raise StackFailure('REST finalization did not pass the real memory fence exactly once')
     if len(_provider_events(stack, conversation_id, 'integration', 'completed')) != 1:
         raise StackFailure('REST finalization did not complete durable integration fanout exactly once')
 
@@ -1430,6 +1447,8 @@ async def _integration_retry_preserves_processed_conversation(stack: Stack) -> N
         raise StackFailure('integration retry changed the durable fanout idempotency key')
     if len(_provider_events(stack, conversation_id, 'process', 'completed')) != 1:
         raise StackFailure('fanout retry re-ran completed conversation processing')
+    if len(_provider_events(stack, conversation_id, 'memory', 'completed')) != 2:
+        raise StackFailure('integration retry did not replay idempotent memory replacement behind the real fence')
     if len(_provider_events(stack, conversation_id, 'integration', 'controlled_failure')) != 1:
         raise StackFailure('controlled integration failure was not observed exactly once')
     if len(_provider_events(stack, conversation_id, 'integration', 'completed')) != 1:
@@ -1445,6 +1464,29 @@ async def _integration_retry_preserves_processed_conversation(stack: Stack) -> N
     expected_fanout_key_hash = sha256(fanout_key.encode('utf-8')).hexdigest()
     if len(integration_attempts) != 2 or fanout_key_hashes != {expected_fanout_key_hash}:
         raise StackFailure('integration retry did not preserve one idempotency key across both delivery attempts')
+
+
+async def _memory_fence_blocks_durable_finalization(stack: Stack) -> None:
+    """The real unset parser/fence must fail before the memory provider leaf."""
+
+    uid = 'stack-cloud-memory-fence'
+    conversation_id = str(uuid.uuid4())
+    task = await _cloud_task_for_clean_desktop_close(stack, uid, conversation_id)
+    first = await stack.deliver_finalization_task(task, retry_count=0)
+    if first != (500, {'status': 'retry'}):
+        raise StackFailure(f'unset memory fence did not keep finalization retryable: {first}')
+    job = _one_job(stack, uid, conversation_id)
+    conversation = stack.conversation(uid, conversation_id)
+    if job.get('status') != 'queued' or not conversation or conversation.get('status') != 'completed':
+        raise StackFailure('memory fence did not preserve completed processing plus retryable durable fanout')
+    if _provider_events(stack, conversation_id, 'memory', 'completed'):
+        raise StackFailure('memory provider leaf ran before the real memory fence admitted it')
+    worker_log = stack.children['finalization-worker'].log_path.read_text(encoding='utf-8')
+    expected = 'persisted conversation finalization failed failure=processing_failed reason=memory_fence'
+    if expected not in worker_log:
+        raise StackFailure('memory fence failure did not emit its bounded diagnostic reason')
+    if uid in worker_log or conversation_id in worker_log:
+        raise StackFailure('memory fence failure diagnostic exposed user or conversation identity')
 
 
 async def _stale_processing_orphan_reconciled(stack: Stack) -> None:
@@ -1668,6 +1710,8 @@ def _run_stack_scenario(
     rest_finalization_race_parties: int = 0,
     recording_session_mode: str = 'dual_write',
     recording_lifecycle_fault: dict[str, str] | None = None,
+    memory_enabled: str | None = 'on',
+    finalization_worker_memory_enabled: str | None = 'on',
     scenario: Callable[[Stack], Any],
 ) -> None:
     stack = Stack(
@@ -1679,6 +1723,8 @@ def _run_stack_scenario(
         rest_finalization_race_parties=rest_finalization_race_parties,
         recording_session_mode=recording_session_mode,
         recording_lifecycle_fault=recording_lifecycle_fault,
+        memory_enabled=memory_enabled,
+        finalization_worker_memory_enabled=finalization_worker_memory_enabled,
     )
     try:
         stack.start()
@@ -1763,6 +1809,13 @@ def main() -> int:
             finalization_mode='cloud_tasks',
             finalizer_failures={'integration': 1},
             scenario=_integration_retry_preserves_processed_conversation,
+        )
+        _run_stack_scenario(
+            state_dir / 'cloud-memory-fence',
+            finalization_mode='cloud_tasks',
+            finalizer_failures=None,
+            finalization_worker_memory_enabled=None,
+            scenario=_memory_fence_blocks_durable_finalization,
         )
         _run_stack_scenario(
             state_dir / 'cloud-stale-orphan',
