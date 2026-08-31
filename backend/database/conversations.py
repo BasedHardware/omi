@@ -18,7 +18,7 @@ from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
+from .firestore_index_registry import MCP_CONVERSATION_CARD_QUERY_SPECS, STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
@@ -46,6 +46,25 @@ _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
 _PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES = 512 * 1024
 _PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
 _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
+_MCP_CONVERSATION_CARD_FIELD_PATHS = (
+    'id',
+    'discarded',
+    'created_at',
+    'started_at',
+    'finished_at',
+    'language',
+    'is_locked',
+    'data_protection_level',
+    'user_title',
+    'structured.title',
+    'structured.overview',
+    'structured.category',
+    'structured.emoji',
+)
+_MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS = _MCP_CONVERSATION_CARD_FIELD_PATHS + (
+    'transcript_segments',
+    'transcript_segments_compressed',
+)
 
 
 def get_conversation_ids(uid: str) -> List[str]:
@@ -759,6 +778,81 @@ def get_conversations_without_photos(
         pass
     conversations = [conversation for conversation in conversations if conversation is not None]
     return conversations
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_mcp_conversation_cards(
+    uid: str,
+    limit: int,
+    offset: int,
+    *,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[List[str]] = None,
+    firestore_client: Any = None,
+) -> List[Dict[str, Any]]:
+    """Return the transcript-free Firestore projection used by hosted MCP lists."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    collection = client.collection('users').document(uid).collection(conversations_collection)
+    query_spec = MCP_CONVERSATION_CARD_QUERY_SPECS[(bool(categories), start_date is not None, end_date is not None)]
+    query = query_spec.build(
+        collection,
+        {
+            'discarded': False,
+            'status': 'completed',
+            'categories': categories,
+            'start_date': start_date,
+            'end_date': end_date,
+        },
+        field_filter_factory=FieldFilter,
+    )
+    query = (
+        query.order_by('created_at', direction=firestore.Query.DESCENDING)
+        .select(list(_MCP_CONVERSATION_CARD_FIELD_PATHS))
+        .limit(limit)
+        .offset(offset)
+    )
+    conversations: List[Dict[str, Any]] = []
+    for doc in query.stream():
+        conversation = _document_data_with_revision(doc)
+        if conversation is None:
+            continue
+        conversation.setdefault('id', doc.id)
+        conversations.append(conversation)
+    return conversations
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_mcp_conversations_by_id(
+    uid: str,
+    conversation_ids: List[str],
+    *,
+    include_transcript: bool,
+    include_discarded: bool = False,
+    firestore_client: Any = None,
+) -> List[Dict[str, Any]]:
+    """Return MCP card fields, optionally with transcript blobs, without photos or other result payloads."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
+    doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
+    field_paths = _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else _MCP_CONVERSATION_CARD_FIELD_PATHS
+    docs = client.get_all(doc_refs, field_paths=list(field_paths))
+    conversations_by_id: Dict[str, Dict[str, Any]] = {}
+    for doc in docs:
+        if not doc.exists:
+            continue
+        data = _document_data_with_revision(doc)
+        if data is None:
+            continue
+        if data.get('discarded') and not include_discarded:
+            continue
+        data.setdefault('id', doc.id)
+        conversations_by_id[str(data['id'])] = data
+    return [
+        conversations_by_id[str(conversation_id)]
+        for conversation_id in conversation_ids
+        if str(conversation_id) in conversations_by_id
+    ]
 
 
 def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: bool = True):
