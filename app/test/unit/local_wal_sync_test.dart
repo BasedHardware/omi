@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
@@ -306,6 +307,32 @@ void main() {
       expect(batch.map((wal) => wal.timerStart), historical.take(5).map((wal) => wal.timerStart));
     });
 
+    test('historical WALs with different recording locations are never uploaded as one conversation batch', () {
+      const now = 2000000000;
+      final firstCapture = Geolocation(
+        latitude: 40.7128,
+        longitude: -74.0060,
+        time: DateTime.utc(2033, 5, 18, 3, 30),
+        captureSource: 'current_position',
+      );
+      final secondCapture = Geolocation(
+        latitude: 34.0522,
+        longitude: -118.2437,
+        time: DateTime.utc(2033, 5, 18, 4, 30),
+        captureSource: 'current_position',
+      );
+      final wals = [
+        Wal(timerStart: now - 7 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60, geolocation: firstCapture),
+        Wal(timerStart: now - 7 * 60 * 60 - 60, codec: BleAudioCodec.opus, seconds: 60, geolocation: firstCapture),
+        Wal(timerStart: now - 8 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60, geolocation: secondCapture),
+      ];
+
+      final batch = nextSyncUploadBatch(wals, now);
+
+      expect(batch, hasLength(2));
+      expect(batch.every((wal) => identical(wal.geolocation, firstCapture)), isTrue);
+    });
+
     test('a conversation too large for one batch does not claim a manifest', () {
       const now = 2000000000;
       final oversized = List.generate(
@@ -410,6 +437,43 @@ void main() {
       sync.markFrameSynced(FrameSyncKey.fromIndex(3));
       expect(sync.testFrameSynced[3], false); // Not this one
       expect(sync.testFrameSynced[259], true); // This one (last match)
+    });
+
+    test('each finalized WAL owns an independent location snapshot', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final location = Geolocation(
+        latitude: 40.7128,
+        longitude: -74.006,
+        time: DateTime.utc(2026, 8, 1, 12),
+        captureSource: 'current_position',
+      );
+      sync.setSessionGeolocation(location);
+      location.latitude = 41.0;
+
+      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])));
+      await sync.finalizeCurrentSession();
+
+      sync.onFrameCaptured(WalFrame(payload: [2], syncKey: FrameSyncKey([2])));
+      await sync.finalizeCurrentSession();
+
+      expect(sync.testWals, hasLength(2));
+      expect(sync.testWals[0].geolocation?.latitude, 40.7128);
+      expect(sync.testWals[1].geolocation?.latitude, 40.7128);
+
+      sync.testWals[0].geolocation!.latitude = 42.0;
+      expect(sync.testWals[1].geolocation?.latitude, 40.7128);
+    });
+
+    test('cleared session location is not inherited by external WALs', () async {
+      sync.setSessionGeolocation(
+        Geolocation(latitude: 40.7128, longitude: -74.006, time: DateTime.utc(2026, 8, 1, 12)),
+      );
+      sync.setSessionGeolocation(null);
+
+      final wal = Wal(timerStart: DateTime.now().millisecondsSinceEpoch ~/ 1000, codec: BleAudioCodec.opus, seconds: 1);
+      await sync.addExternalWal(wal);
+
+      expect(wal.geolocation, isNull);
     });
   });
 

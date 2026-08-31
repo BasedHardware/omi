@@ -89,6 +89,57 @@ for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
 for _outcome in ('requeued', 'enqueue_failed'):
     OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
 
+JIT_ROLLOUT_DECISION_TOTAL = Counter(
+    'jit_rollout_decision_total',
+    'JIT admission decisions by bounded labels; never labeled by UID',
+    ['effective', 'reason', 'stage', 'error_class'],
+)
+
+JIT_ROLLOUT_DECISION_LATENCY_SECONDS = Histogram(
+    'jit_rollout_decision_latency_seconds',
+    'Wall time to resolve a JIT admission decision',
+    ['stage'],
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5),
+)
+
+JIT_WRITER_MODE_TRANSITION_TOTAL = Counter(
+    'jit_writer_mode_transition_total',
+    'Canonical writer-mode transitions; never labeled by UID',
+    ['from_mode', 'to_mode'],
+)
+
+JIT_FIRST_OPEN_TOTAL = Counter(
+    'jit_first_open_total',
+    'First-open obligation claim, complete, and fail events; never labeled by UID',
+    ['event', 'effect'],
+)
+
+
+def record_jit_rollout_decision(
+    *,
+    effective: str,
+    reason: str,
+    stage: str,
+    error_class: str,
+    latency_ms: int,
+) -> None:
+    JIT_ROLLOUT_DECISION_TOTAL.labels(
+        effective=effective,
+        reason=reason,
+        stage=stage,
+        error_class=error_class,
+    ).inc()
+    JIT_ROLLOUT_DECISION_LATENCY_SECONDS.labels(stage=stage).observe(max(0, latency_ms) / 1000.0)
+
+
+def record_jit_writer_mode_transition(*, from_mode: str, to_mode: str) -> None:
+    JIT_WRITER_MODE_TRANSITION_TOTAL.labels(from_mode=from_mode, to_mode=to_mode).inc()
+
+
+def record_jit_first_open(*, event: str, effect: str) -> None:
+    JIT_FIRST_OPEN_TOTAL.labels(event=event, effect=effect).inc()
+
+
 OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_client_journey_accepted_total',
     'Accepted client-segmented product journeys by bounded journey and client kind',

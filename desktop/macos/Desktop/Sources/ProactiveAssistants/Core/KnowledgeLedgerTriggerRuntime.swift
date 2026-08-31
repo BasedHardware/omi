@@ -239,6 +239,11 @@ enum KnowledgeLedgerTriggerWatchlistRuntime {
       // safely proves no-match. An unevaluable or quarantined entry leaves
       // planned authority unresolved and must not purchase another lane.
       nextLane = .none
+    } else if sortedEntries.isEmpty {
+      // A complete empty watchlist is suppress, not ambient spend. Ambient is
+      // the cheap fallback after standing triggers miss, not a default when
+      // the user has none.
+      nextLane = .none
     } else {
       nextLane = .ambientFallback
     }

@@ -62,7 +62,7 @@ def test_save_playbook_happy_path(monkeypatch):
         captured.update(uid=uid, description=description, body=body, db_client=db_client)
         return "mem_new_playbook"
 
-    monkeypatch.setattr(tools, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(tools, "get_data_plane_firestore_client", lambda: "db")
     monkeypatch.setattr(tools, "write_playbook", fake_write_playbook)
 
     result = tools.save_playbook.invoke(
@@ -81,7 +81,7 @@ def test_save_playbook_rejects_oversize_description_and_body(monkeypatch):
     def fail_if_called(*_args, **_kwargs):
         pytest.fail("oversize playbook writes must never reach the ledger verb")
 
-    monkeypatch.setattr(tools, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(tools, "get_data_plane_firestore_client", lambda: "db")
     monkeypatch.setattr(tools, "write_playbook", fail_if_called)
 
     oversize_description = "x" * (tools.MAX_SAVE_PLAYBOOK_DESCRIPTION_CHARACTERS + 1)
@@ -109,7 +109,7 @@ def test_save_playbook_rejects_blank_input_and_missing_uid(monkeypatch):
 
 
 def test_save_playbook_reports_ledger_governance_rejection_without_crashing(monkeypatch):
-    monkeypatch.setattr(tools, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(tools, "get_data_plane_firestore_client", lambda: "db")
 
     def rejecting_write_playbook(*_args, **_kwargs):
         raise ValueError("playbook body exceeds the ledger limit")
@@ -131,7 +131,7 @@ def test_create_standing_trigger_happy_path(monkeypatch):
         captured.update(uid=uid, description=description, condition=condition, arguments=arguments, db_client=db_client)
         return "mem_new_trigger"
 
-    monkeypatch.setattr(tools, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(tools, "get_data_plane_firestore_client", lambda: "db")
     monkeypatch.setattr(tools, "create_trigger", fake_create_trigger)
 
     result = tools.create_standing_trigger.invoke(
@@ -151,6 +151,37 @@ def test_create_standing_trigger_happy_path(monkeypatch):
         "prompt": "Tell the user Jane emailed about the contract.",
     }
     assert captured["condition"]["keywords"] == ["contract", "jane"]
+
+
+def test_create_standing_trigger_writes_through_the_data_plane_client(monkeypatch):
+    """Creates must land where the desktop snapshot reads (same #12402 split).
+
+    desktop-backend compute is based-hardware-dev; ledger rows live on
+    based-hardware. A compute-plane default would look like a successful
+    create while the watchlist stayed empty.
+    """
+    captured = {}
+    data_plane = object()
+    compute_plane = object()
+
+    def fake_create_trigger(uid, description, condition, *, provenance, arguments, db_client, prior_memory_id=None):
+        captured.update(db_client=db_client)
+        return "mem_new_trigger"
+
+    monkeypatch.setattr(tools, "get_data_plane_firestore_client", lambda: data_plane)
+    monkeypatch.setattr(tools, "create_trigger", fake_create_trigger)
+
+    result = tools.create_standing_trigger.invoke(
+        {
+            "description": "Tell the user Jane emailed about the contract.",
+            "condition": {"keywords": ["jane", "contract"]},
+        },
+        config=CONFIG,
+    )
+
+    assert result.startswith("Standing trigger created")
+    assert captured["db_client"] is data_plane
+    assert captured["db_client"] is not compute_plane
 
 
 def test_create_standing_trigger_rejects_embedding_selector(monkeypatch):
@@ -226,7 +257,7 @@ def test_create_standing_trigger_created_row_is_visible_to_desktop_watchlist(mon
         captured.update(condition=condition, arguments=arguments)
         return "mem_new_trigger"
 
-    monkeypatch.setattr(tools, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(tools, "get_data_plane_firestore_client", lambda: "db")
     monkeypatch.setattr(tools, "create_trigger", fake_create_trigger)
 
     tools.create_standing_trigger.invoke(
@@ -348,7 +379,7 @@ def test_close_fact_happy_path(monkeypatch):
         captured.update(uid=uid, memory_id=memory_id, db_client=db_client)
         return fact.model_copy(update={"status": MemoryItemStatus.superseded, "valid_to": NOW})
 
-    monkeypatch.setattr(tools, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(tools, "get_data_plane_firestore_client", lambda: "db")
     monkeypatch.setattr(tools, "read_canonical_memory_item", lambda uid, memory_id, *, db_client: fact)
     monkeypatch.setattr(tools, "close_ledger_fact", fake_close)
 
@@ -377,7 +408,7 @@ def test_close_fact_rejects_foreign_owned_row(monkeypatch):
     def fail_if_called(*_args, **_kwargs):
         pytest.fail("a foreign-owned row must never be closed")
 
-    monkeypatch.setattr(tools, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(tools, "get_data_plane_firestore_client", lambda: "db")
     monkeypatch.setattr(tools, "read_canonical_memory_item", lambda uid, memory_id, *, db_client: foreign)
     monkeypatch.setattr(tools, "close_ledger_fact", fail_if_called)
 
@@ -392,7 +423,7 @@ def test_close_fact_rejects_non_fact_and_non_primary_rows(monkeypatch):
     def fail_if_called(*_args, **_kwargs):
         pytest.fail("only an owner-scoped primary-user fact may be closed")
 
-    monkeypatch.setattr(tools, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(tools, "get_data_plane_firestore_client", lambda: "db")
     monkeypatch.setattr(tools, "close_ledger_fact", fail_if_called)
 
     monkeypatch.setattr(tools, "read_canonical_memory_item", lambda uid, memory_id, *, db_client: playbook_kind)
@@ -424,7 +455,7 @@ def test_close_fact_double_close_is_a_safe_error_not_a_crash(monkeypatch):
         assert call_count["n"] == 1
         return _fact().model_copy(update={"status": MemoryItemStatus.superseded, "valid_to": NOW})
 
-    monkeypatch.setattr(tools, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(tools, "get_data_plane_firestore_client", lambda: "db")
     monkeypatch.setattr(tools, "read_canonical_memory_item", read_once_then_gone)
     monkeypatch.setattr(tools, "close_ledger_fact", fail_if_called_twice)
 
@@ -441,7 +472,7 @@ def test_close_fact_ledger_race_is_reported_as_a_safe_error(monkeypatch):
     def racing_close(*_args, **_kwargs):
         raise ValueError("ledger row was already closed at a different valid_to")
 
-    monkeypatch.setattr(tools, "get_firestore_client", lambda: "db")
+    monkeypatch.setattr(tools, "get_data_plane_firestore_client", lambda: "db")
     monkeypatch.setattr(tools, "read_canonical_memory_item", lambda uid, memory_id, *, db_client: _fact())
     monkeypatch.setattr(tools, "close_ledger_fact", racing_close)
 

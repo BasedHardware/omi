@@ -9970,4 +9970,9 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'L\'emmagatzematge del Pendant és ple i encara està en mode de gravació, així que l\'àudio desat no es pot transferir. Prem el botó del Pendant per aturar la gravació i torna a sincronitzar.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'No enregistrat ($count)';
+  }
 }

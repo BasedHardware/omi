@@ -205,9 +205,17 @@ def _empty_stream():
     return gen()
 
 
-def test_soniox_is_streaming_only_and_off_by_default():
+def test_soniox_serves_streaming_only_and_backs_velma_there():
+    """Soniox was opt-in while it was being trialled; it is now the streaming fallback.
+
+    The batch path still has no Soniox client, so it must stay absent from the
+    non-streaming surfaces however the streaming chain is ordered.
+    """
     assert provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.STREAMING)
     assert not provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.PRERECORDED)
     assert not provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.PTT)
-    for surface in STTServingSurface:
+
+    streaming = default_models_for_surface(STTServingSurface.STREAMING)
+    assert streaming.index('soniox') == streaming.index('modulate-velma-2') + 1
+    for surface in (STTServingSurface.PRERECORDED, STTServingSurface.PTT):
         assert 'soniox' not in default_models_for_surface(surface)

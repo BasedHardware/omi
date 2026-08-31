@@ -151,7 +151,7 @@ enum Ink {
     /// picked in System Settings was the obvious choice and it is the wrong one: macOS ships Purple
     /// as an accent, so on that machine every selection ring, checkbox, toggle and link in this app
     /// renders purple — and purple is off-brand everywhere in this product (`INV-UI-1`,
-    /// `docs/product/invariants/brand-ui.md`). Nothing here can fix that at the call site, because
+    /// `product/invariants/brand-ui.md`). Nothing here can fix that at the call site, because
     /// the hue is not knowable here; the only fix is to stop reading it. A colour that is on brand
     /// on most machines and off brand on the rest is not a palette, it is a coin flip.
     ///

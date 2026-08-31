@@ -10,6 +10,7 @@ pipeline invariants, and hermetic tests do **not** prove deployed-backend contin
 | Gate | What it covers | What it does **not** cover |
 | --- | --- | --- |
 | **Hermetic pipeline E2E** (`testing/e2e/test_canonical_memory_pipeline.py`) | capture→consolidate→promote→read, archive excluded from default reads, surface default-access matrix, projection fail-closed without legacy bleed | Deployed revision identity, prod IAM/index deltas, live LLM consolidation |
+| **Listen/Pusher durable finalization gauntlet** (`testing/listen_pusher_stack`) | Real persisted-conversation processing transition, fanout lease, `MEMORY_ENABLED` parser/fence, post-fence provider leaf, and an unset-fence negative path | Provider output quality, production config identity, inline protocol scenarios' mocked memory path |
 | **Gauntlet `--self-check`** | Required files, `canonical_memory_pipeline` workflow registration, suite/nonce wiring in `memory-continuity-gauntlet.py` | Any memory write or HTTP probe |
 | **Live gauntlet** (`memory-continuity-gauntlet.sh` with `ADMIN_KEY` + reachable backend) | Structural `/v3/memories` probes per suite on a running backend | Full Gate 2 synthetic matrix or Gate 3 prod activation |
 | **Gate 2 dev-cloud proof** (`v3_dev_cloud_proof.py` + deployed branch revision) | Multi-user synthetic matrix, indexes, IAM, auth, rollback on dev-cloud | Local hermetic fakes; not production activation |

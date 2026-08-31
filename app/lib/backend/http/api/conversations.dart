@@ -231,6 +231,31 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
+/// Fetch calendar events in [start, end] that have no recorded conversation.
+/// Returns capture-gap rows (never conversations), or an empty list on error.
+Future<List<CalendarCaptureGap>> getCalendarCaptureGaps({
+  required DateTime start,
+  required DateTime end,
+}) async {
+  final url =
+      '${Env.apiBaseUrl}v1/calendar/capture-gaps?start=${start.toUtc().toIso8601String()}&end=${end.toUtc().toIso8601String()}';
+  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  if (response == null) return [];
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return (jsonDecode(body) as List<dynamic>)
+        .map(
+          (row) => CalendarCaptureGap.fromGenerated(
+            wire.GeneratedCalendarCaptureGap.fromJson(row as Map<String, dynamic>),
+          ),
+        )
+        .toList();
+  }
+  // 400 means no connected calendar — nothing was captured, so nothing to show.
+  debugPrint('getCalendarCaptureGaps: ${response.statusCode} - ${response.body}');
+  return [];
+}
+
 Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
@@ -594,6 +619,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
   bool claimLiveCapture = false,
+  Geolocation? geolocation,
 }) async {
   String? captureManifest;
   if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
@@ -606,7 +632,10 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   var response = await makeMultipartApiCall(
     url: url,
     files: files,
-    headers: {if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest},
+    headers: {
+      if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
+      if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
+    },
     onUploadProgress: onUploadProgress,
   );
 

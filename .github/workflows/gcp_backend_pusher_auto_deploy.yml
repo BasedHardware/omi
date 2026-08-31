@@ -21,7 +21,19 @@ on:
       - 'backend/scripts/verify_pusher_live_deployment_gate.py'
       - 'backend/scripts/verify_pusher_dev_observability.py'
       - 'backend/scripts/verify_pusher_promotion_evidence.py'
+      - 'backend/scripts/pusher_release_receipt.py'
+      - 'backend/scripts/pusher_semantic_probe.py'
+      - 'backend/scripts/pusher_prod_canary.py'
+      - 'backend/scripts/verify_pusher_live_alert_route.py'
+      - 'backend/scripts/runtime_env_capability_contracts.py'
+      - 'backend/scripts/runtime_env_validation/**'
+      - 'backend/scripts/validate-backend-runtime-env.py'
+      - 'backend/deploy/runtime_env/**'
+      - 'backend/scripts/firebase_release_probe_token.py'
+      - 'backend/testing/release_fixtures/transcription-release-probe.json'
+      - 'backend/testing/release_fixtures/transcription-release-probe.wav'
       - '.github/workflows/gcp_backend_pusher_auto_deploy.yml'
+      - '.github/workflows/gcp_backend_pusher.yml'
 
 # Share the development pusher lock with manual deployments.
 concurrency:
@@ -62,6 +74,27 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+
+      - name: Validate Pusher runtime capability admission before publishing
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/validate-backend-runtime-env.py --env "${{ vars.ENV }}"
+
+      - name: Verify live finalization alert route before publishing
+        env:
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$GRAFANA_TOKEN"
+          printf '%s' "$GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url https://monitor.omiapi.com \
+            --token-file "$token_file" \
+            --phase prepublish
 
       - name: Build and Push Docker image
         run: |
@@ -119,38 +152,85 @@ jobs:
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher
 
-      - name: Record successful development Pusher qualification
+      - name: Record exact live development Pusher deployment receipt
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
+          python3 backend/scripts/pusher_release_receipt.py record-live \
+            --environment "${{ vars.ENV }}" \
+            --namespace "${{ vars.ENV }}-omi-backend" \
+            --repository "$PUSHER_IMAGE_REPOSITORY" \
+            --digest "$PUSHER_IMAGE_DIGEST" \
+            --source-sha "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output pusher-dev-deployment-receipt.json
 
-          Path("pusher-dev-qualification.json").write_text(
-              json.dumps(
-                  {
-                      "schema_version": 1,
-                      "environment": "development",
-                      "image_digest": os.environ["PUSHER_IMAGE_DIGEST"],
-                      "image_repository": os.environ["PUSHER_IMAGE_REPOSITORY"],
-                      "run_id": int(os.environ["GITHUB_RUN_ID"]),
-                      "source_sha": os.environ["GITHUB_SHA"],
-                      "workflow": "gcp_backend_pusher_auto_deploy.yml",
-                  },
-                  sort_keys=True,
-              )
-              + "\n",
-              encoding="utf-8",
-          )
-          PY
+      - name: Verify deployed development finalization telemetry and alert route
+        env:
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-postrollout-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$GRAFANA_TOKEN"
+          printf '%s' "$GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url https://monitor.omiapi.com \
+            --token-file "$token_file" \
+            --phase postrollout \
+            --attempts 12
+
+      - name: Probe deployed development Pusher finalization semantics
+        env:
+          FIREBASE_SIGNER_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -m pip install -q websockets==12.0
+          token_file="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-token.XXXXXX")"
+          signer_file="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-signer.XXXXXX")"
+          cleanup() {
+            rm -f "$token_file" "$signer_file"
+            unset FIREBASE_SIGNER_CREDENTIALS
+          }
+          trap cleanup EXIT
+          if [[ -z "$FIREBASE_SIGNER_CREDENTIALS" ]]; then
+            echo "Development Pusher semantic probe requires the existing GCP_CREDENTIALS Firebase signer." >&2
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SIGNER_CREDENTIALS" > "$signer_file"
+          python3 backend/scripts/firebase_release_probe_token.py \
+            --secret-project "${{ vars.GCP_PROJECT_ID }}" \
+            --firebase-project based-hardware \
+            --signer-credentials-file "$signer_file" \
+            --token-output "$token_file"
+          rm -f "$signer_file"
+          python3 backend/scripts/pusher_semantic_probe.py \
+            --api-url https://api.omiapi.com \
+            --bearer-token-file "$token_file" \
+            --deployment-receipt pusher-dev-deployment-receipt.json \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --namespace "${{ vars.ENV }}-omi-backend" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output pusher-dev-semantic-probe.json
+
+      - name: Record development Pusher qualification evidence
+        run: |
+          python3 backend/scripts/pusher_release_receipt.py record-qualification \
+            --deployment-receipt pusher-dev-deployment-receipt.json \
+            --semantic-probe-evidence pusher-dev-semantic-probe.json \
+            --output pusher-dev-qualification.json
 
       - name: Upload development Pusher qualification
         uses: actions/upload-artifact@v7
         with:
           name: pusher-dev-qualification
-          path: pusher-dev-qualification.json
+          path: |
+            pusher-dev-qualification.json
+            pusher-dev-deployment-receipt.json
+            pusher-dev-semantic-probe.json
           if-no-files-found: error
           retention-days: 30
 
       - name: Show Output
-        run: echo "Pusher deployed to development environment"
+        run: echo "Pusher deployed and semantically qualified in development; production still requires a protected attributable-canary receipt"

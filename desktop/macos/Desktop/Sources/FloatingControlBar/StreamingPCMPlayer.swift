@@ -92,6 +92,29 @@ struct StreamingPCMPlaybackProgress: Equatable, Sendable {
   var isIdle: Bool { remainingBufferCount == 0 }
 }
 
+/// Keeps non-I/O audio units ready for the largest render slice macOS may ask
+/// them to process after an output-route or sample-rate change.
+///
+/// CoreAudio can retain a route-specific `maximumFramesToRender` when an
+/// `AVAudioEngine` graph is rebuilt. A later 512-frame render against a stale
+/// 480-frame ceiling fails with `kAudioUnitErr_TooManyFramesToProcess`; the
+/// player remains nominally running, but no `.dataPlayedBack` callback arrives.
+/// Apple documents 4096 frames as the safe capacity for non-I/O units. This
+/// must be applied while render resources are deallocated.
+enum StreamingPCMRenderCapacity {
+  static let minimumFrames: AUAudioFrameCount = 4096
+
+  @discardableResult
+  static func configure(units: [AUAudioUnit]) -> [AUAudioFrameCount] {
+    units.map { unit in
+      if !unit.renderResourcesAllocated, unit.maximumFramesToRender < minimumFrames {
+        unit.maximumFramesToRender = minimumFrames
+      }
+      return unit.maximumFramesToRender
+    }
+  }
+}
+
 private final class DeferredConfigurationRecoveryAction: @unchecked Sendable {
   let action: () -> Void
 
@@ -180,6 +203,8 @@ final class StreamingPCMPlayer: @unchecked Sendable {
   /// Number of PCM buffers still awaiting a physical completion. This is
   /// queue metadata only; it contains no audio content.
   var scheduledBufferCount: Int { playbackQueue.scheduledBufferCount }
+  /// Bounded render metadata for diagnostics and regression verification.
+  private(set) var renderCapacities: [AUAudioFrameCount] = []
   var onPlaybackScheduled: ((Int) -> Void)?
   /// Called once for every valid physical `.dataPlayedBack` completion,
   /// including non-final buffers. `onPlaybackIdle` remains final-only.
@@ -192,6 +217,7 @@ final class StreamingPCMPlayer: @unchecked Sendable {
       commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)!
     engine.attach(player)
     engine.connect(player, to: engine.mainMixerNode, format: format)
+    configureRenderCapacity()
     // Output-level tap for the notch speaking animation. Tapping the mixer
     // (not enqueue-time RMS) keeps the visual in sync with what is audibly
     // playing rather than leading it by the scheduled-queue depth. The tap
@@ -259,9 +285,18 @@ final class StreamingPCMPlayer: @unchecked Sendable {
     engine.stop()
     engine.disconnectNodeOutput(player)
     engine.connect(player, to: engine.mainMixerNode, format: format)
+    configureRenderCapacity()
     _ = ensureRunning()
     for buffer in buffersToReplay {
       schedule(buffer)
+    }
+  }
+
+  private func configureRenderCapacity() {
+    renderCapacities = StreamingPCMRenderCapacity.configure(
+      units: [player.auAudioUnit, engine.mainMixerNode.auAudioUnit])
+    if renderCapacities.contains(where: { $0 < StreamingPCMRenderCapacity.minimumFrames }) {
+      log("StreamingPCMPlayer: render capacity remained below 4096 frames: \(renderCapacities)")
     }
   }
 

@@ -9983,4 +9983,9 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Ο αποθηκευτικός χώρος του Pendant είναι πλήρης και βρίσκεται ακόμα σε λειτουργία εγγραφής, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την εγγραφή και μετά συγχρονίστε ξανά.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Δεν καταγράφηκε ($count)';
+  }
 }

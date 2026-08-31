@@ -9856,4 +9856,9 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'พื้นที่จัดเก็บของ Pendant เต็มและยังอยู่ในโหมดบันทึกเสียง จึงไม่สามารถถ่ายโอนเสียงที่บันทึกไว้ได้ กดปุ่มของ Pendant เพื่อหยุดการบันทึก แล้วซิงค์อีกครั้ง';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'ไม่ได้บันทึก ($count)';
+  }
 }

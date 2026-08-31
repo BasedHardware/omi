@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 from google.api_core.exceptions import AlreadyExists
 from google.cloud import tasks_v2
 
-from utils.cloud_tasks import DISPATCH_DEADLINE_SECONDS
+from utils.cloud_tasks import DISPATCH_DEADLINE_SECONDS, SYNC_JOB_TASK_PAYLOAD_KEYS
 
 from .events import write_event
 
@@ -77,26 +77,9 @@ class CloudTasksRecorder:
             raise RuntimeError('Sync task body is not valid JSON') from error
         if not isinstance(body, dict):
             raise RuntimeError('Sync task body must be a JSON object')
-        expected_keys = {
-            'schema_version',
-            'job_id',
-            'uid',
-            'raw_blob_paths',
-            'source',
-            'should_lock',
-            'conversation_id',
-            'client_device_id',
-            'client_platform',
-            'enqueued_at',
-            'lane',
-            'capture_time_trust',
-            'recording_age_seconds',
-            'content_id',
-            'ledger_fence_mode',
-        }
         task_id = body.get('job_id')
         if (
-            set(body) != expected_keys
+            set(body) != SYNC_JOB_TASK_PAYLOAD_KEYS
             or not isinstance(task_id, str)
             or not task_id
             or not isinstance(body.get('raw_blob_paths'), list)

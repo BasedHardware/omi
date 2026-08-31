@@ -342,11 +342,15 @@ def test_finalization_status_exposes_retry_and_terminal_state(monkeypatch):
         'attempt_count': 2,
         'task_retry_count': 0,
         'meeting_treatment_eligible': False,
+        'terminal_outcome': 'unknown',
+        'fanout_status': 'unknown',
     }
 
     job['status'] = 'dead_letter'
     job['task_retry_count'] = 3
     job['meeting_treatment_eligible'] = True
+    job['terminal_outcome'] = 'failure'
+    job['fanout_status'] = 'fenced'
     assert lifecycle_service.get_finalization_status('uid-1', 'conversation-1') == {
         'job_id': 'job-1',
         'status': 'dead_letter',
@@ -355,7 +359,33 @@ def test_finalization_status_exposes_retry_and_terminal_state(monkeypatch):
         'attempt_count': 2,
         'task_retry_count': 3,
         'meeting_treatment_eligible': True,
+        'terminal_outcome': 'failure',
+        'fanout_status': 'fenced',
     }
+
+
+def test_finalization_status_distinguishes_success_from_fenced_completion(monkeypatch):
+    monkeypatch.setattr(
+        lifecycle_service.conversations_db,
+        'get_conversation',
+        lambda uid, conversation_id, **kwargs: {'finalization_job_id': 'job-1'},
+    )
+    job = {
+        'uid': 'uid-1',
+        'conversation_id': 'conversation-1',
+        'status': 'completed',
+        'terminal_outcome': 'stale',
+        'fanout_status': 'fenced',
+    }
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'get_finalization_job', lambda job_id: job)
+
+    status = lifecycle_service.get_finalization_status('uid-1', 'conversation-1')
+
+    assert status is not None
+    assert status['status'] == 'completed'
+    assert status['terminal'] is True
+    assert status['terminal_outcome'] == 'stale'
+    assert status['fanout_status'] == 'fenced'
 
 
 def test_byok_live_session_uses_pusher_even_when_platform_jobs_use_cloud_tasks(monkeypatch):
@@ -1364,6 +1394,54 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
         capture_arrival.assert_not_called()
     else:
         capture_arrival.assert_called_once_with('uid-1', **expected_intent_kwargs)
+
+
+@pytest.mark.anyio
+async def test_async_finalizer_records_degraded_redis_location_fallback(monkeypatch):
+    conversation = SimpleNamespace(id='conversation-1', status=ConversationStatus.completed, language='en')
+    fallback = MagicMock()
+    resolved = MagicMock()
+    integrations = AsyncMock(return_value=[])
+    monkeypatch.setattr(persisted_finalizer, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(
+        persisted_finalizer.conversations_db,
+        'get_conversation',
+        lambda *args, **kwargs: {'id': 'conversation-1', 'status': ConversationStatus.completed.value},
+    )
+    monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
+    monkeypatch.setattr(
+        persisted_finalizer,
+        'get_cached_user_geolocation',
+        lambda uid: {'latitude': 37.7749, 'longitude': -122.4194},
+    )
+    monkeypatch.setattr(persisted_finalizer, 'record_fallback', fallback)
+    monkeypatch.setattr(persisted_finalizer, 'async_resolve_geolocation', AsyncMock(return_value=resolved))
+    monkeypatch.setattr(
+        persisted_finalizer.lifecycle_service,
+        'claim_finalization_fanout',
+        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+    )
+    monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *args: True)
+    monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
+    monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
+
+    await persisted_finalizer.finalize_persisted_conversation(
+        'uid-1',
+        'conversation-1',
+        finalization_job_id='job-1',
+        dispatch_generation=2,
+        lease_epoch=3,
+    )
+
+    fallback.assert_called_once_with(
+        component='conversation_finalization',
+        from_mode='conversation_snapshot',
+        to_mode='redis_user_cache',
+        reason='other',
+        outcome='degraded',
+        log=persisted_finalizer.logger,
+    )
+    assert conversation.geolocation is resolved
 
 
 @pytest.mark.anyio
