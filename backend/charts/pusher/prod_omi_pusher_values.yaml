@@ -108,6 +108,7 @@ ingress:
 envFrom:
   - configMapRef:
       name: prod-omi-backend-config
+runtimeConfigMapName: prod-omi-backend-config
 
 env:
   - name: BUCKET_SPEECH_PROFILES

@@ -14,6 +14,7 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     validate_listen_finalization_dispatch_contract as _validate_listen_finalization_dispatch_contract,
 )
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
+from scripts.runtime_env_capability_contracts import validate_conversation_finalization_capabilities  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
     _fetch_live_cloud_run_state,
@@ -741,6 +742,7 @@ def validate_runtime_env(
 
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    errors.extend(validate_conversation_finalization_capabilities(env, env_config))
     errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(validate_parakeet_admission_contract(env, env_config))
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))

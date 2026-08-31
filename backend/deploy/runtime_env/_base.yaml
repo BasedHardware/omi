@@ -17,6 +17,9 @@ environment_shared:
           category: rollout
       values_file: backend/charts/parakeet/{env}_omi_parakeet_values.yaml
     backend-listen:
+      capabilities:
+      - conversation.finalize.persisted
+      - memory.canonical.mutate
       env:
         OMI_LLM_GATEWAY_URL:
           value: http://{env}-omi-llm-gateway.{env}-omi-backend.svc.cluster.local:8080
@@ -278,6 +281,9 @@ environment_shared:
           GCP_LOCATION:
             value: us-central1
       backend:
+        capabilities:
+        - conversation.finalize.persisted
+        - memory.canonical.mutate
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -484,6 +490,9 @@ environment_shared:
             category: memory_rollout
         provisional: true
       backend-sync:
+        capabilities:
+        - conversation.finalize.persisted
+        - memory.canonical.mutate
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET

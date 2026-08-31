@@ -2111,10 +2111,55 @@ def test_ledger_writer_mode_skips_eager_extraction(monkeypatch):
     )
     inner = MagicMock(side_effect=AssertionError('extraction must not run under ledger writer mode'))
     monkeypatch.setattr(process_conversation, '_extract_memories_inner', inner)
+    admitted = []
+
+    class _MemoryService:
+        def __init__(self, *, db_client):
+            pass
+
+        def ensure_canonical_mutation_ready(self, uid):
+            admitted.append(uid)
+
+    monkeypatch.setattr(process_conversation, 'MemoryService', _MemoryService)
 
     process_conversation.extract_memories('uid-ledger', _ledger_gate_conversation('conv-ledger'))
 
+    assert admitted == ['uid-ledger']
     inner.assert_not_called()
+
+
+def test_canonical_provider_degradation_emits_bounded_finalization_reason(monkeypatch):
+    recorded = []
+    monkeypatch.setattr(process_conversation, 'record_finalization_failure', recorded.append)
+    monkeypatch.setattr(process_conversation, 'record_fallback', lambda **_fields: None)
+
+    result = process_conversation._canonical_extraction_unavailable(
+        SimpleNamespace(id='conversation-1'),
+        process_conversation.PATH_CANONICAL,
+        RuntimeError('private provider response'),
+    )
+
+    assert result.count == 0
+    assert recorded == [process_conversation.FinalizationFailureReason.provider]
+
+
+def test_memory_capability_fence_precedes_sweep_owned_writer_short_circuit(monkeypatch):
+    sweep_mode = MagicMock(side_effect=AssertionError('writer mode must not bypass static capability admission'))
+    monkeypatch.setattr(process_conversation, '_sweep_owned_writer_mode', sweep_mode)
+
+    class _MemoryService:
+        def __init__(self, *, db_client):
+            pass
+
+        def ensure_canonical_mutation_ready(self, uid):
+            raise RuntimeError('static memory admission failed')
+
+    monkeypatch.setattr(process_conversation, 'MemoryService', _MemoryService)
+
+    with pytest.raises(RuntimeError, match='static memory admission failed'):
+        process_conversation.extract_memories('uid-ledger', _ledger_gate_conversation('conv-ledger'))
+
+    sweep_mode.assert_not_called()
 
 
 def test_compatibility_writer_mode_still_runs_eager_extraction(monkeypatch):

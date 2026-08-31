@@ -429,6 +429,21 @@ PAGE_CLASS_JOURNEY_RULES = {
 }
 
 
+def test_memory_admission_failure_pages_on_the_first_bounded_runtime_error():
+    """A systemic memory fence/config error has no safe nonzero rate."""
+    uid = "omi-capture-finalization-memory-fence"
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[uid]
+        query = rule["data"][0]["model"]["expr"]
+        assert 'omi_capture_finalization_failures_total{reason=~"memory_fence|memory_config"}' in query, export_name
+        assert "[5m]" in query and "or vector(0)" in query, export_name
+        assert rule["for"] == "0s", export_name
+        assert rule["labels"]["severity"] == "critical", export_name
+        assert rule["labels"]["impact"] == "user-experience", export_name
+        assert rule["noDataState"] == "Alerting", export_name
+        assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
+
+
 def test_page_class_journey_rules_cover_the_capture_outage_fingerprint():
     """Every Core Features journey tile has a page-class rule behind it."""
     for export_name, rules in _all_rule_exports().items():

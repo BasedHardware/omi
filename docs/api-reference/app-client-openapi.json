@@ -7675,6 +7675,18 @@
             "title": "Attempt Count",
             "type": "integer"
           },
+          "fanout_status": {
+            "default": "unknown",
+            "enum": [
+              "pending",
+              "leased",
+              "completed",
+              "fenced",
+              "unknown"
+            ],
+            "title": "Fanout Status",
+            "type": "string"
+          },
           "job_id": {
             "title": "Job Id",
             "type": "string"
@@ -7699,6 +7711,17 @@
           "terminal": {
             "title": "Terminal",
             "type": "boolean"
+          },
+          "terminal_outcome": {
+            "default": "unknown",
+            "enum": [
+              "success",
+              "failure",
+              "stale",
+              "unknown"
+            ],
+            "title": "Terminal Outcome",
+            "type": "string"
           }
         },
         "required": [
