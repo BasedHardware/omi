@@ -56,6 +56,10 @@ def _make_chat_client():
     gateway_client.file_chat_feature_header = MagicMock(return_value={})
     gateway_client.get_file_chat_gateway_async_client = MagicMock()
     gateway_client.get_file_chat_gateway_sync_client = MagicMock()
+    # chat_file's gateway-lane degrade (e6b545c1b8) imports this guard by name;
+    # without it on the stub the real module fails at import and every test in
+    # this file errors at setup. False keeps the degrade branch inert here.
+    gateway_client.is_gateway_model_not_found = MagicMock(return_value=False)
 
     # wire_common_stubs replaces chat_file with a MagicMock; this suite needs the real module,
     # because the defect lives in its PIL and provider error handling.
