@@ -139,9 +139,10 @@ DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = 
     # error frame hands the stream to Soniox rather than ending it (#12459), which
     # is what the second slot is for. Deepgram stays last so a BYOK user still
     # resolves a `dg-*` model — dropping it would strip them of Deepgram entirely.
-    # Parakeet is not listed: streaming Parakeet is English-only and live sessions
-    # are overwhelmingly auto-detect, so it was never selected here.
-    STTServingSurface.STREAMING: ('modulate-velma-2', 'soniox', 'dg-nova-3'),
+    # Parakeet stays last rather than being dropped: a client can ask for it by
+    # name (`?stt_service=parakeet`), and that preference is only honorable while
+    # the model is listed here.
+    STTServingSurface.STREAMING: ('modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet'),
     # Batch work is queued, so Parakeet's bounded GPU means waiting rather than the
     # user-visible failure it causes on the streaming surface. Prefer the self-hosted
     # provider here and keep Velma as the overflow.

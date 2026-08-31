@@ -50,7 +50,7 @@ def test_excluding_the_dead_provider_selects_the_next_one():
     """The whole point of the exclusion: never reselect what just died."""
     with patch.dict(
         'os.environ',
-        {'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,dg-nova-3', 'SONIOX_API_KEY': 'k'},
+        {'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,dg-nova-3,parakeet', 'SONIOX_API_KEY': 'k'},
     ), patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2', 'soniox', 'dg-nova-3']):
         first, _, _ = get_stt_service_for_language('en')
         assert first == STTService.modulate
