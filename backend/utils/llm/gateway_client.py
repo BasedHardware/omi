@@ -116,6 +116,29 @@ def is_gateway_transport_status_code(status_code: object) -> bool:
     return isinstance(status_code, int) and status_code in GATEWAY_TRANSPORT_STATUS_CODES
 
 
+def is_gateway_route_absent(error: object) -> bool:
+    """Whether a gateway failure means the deployed gateway has no such route.
+
+    A gateway older than its caller answers an unknown path with Starlette's
+    bare ``{"detail": "Not Found"}``. A gateway that owns the route answers a
+    real rejection with an OpenAI-shaped ``{"error": {...}}`` body -- and
+    ``model_not_found`` is also a 404. So the *body*, not the status, is what
+    separates "server predates client" from "server rejected this request";
+    treating every 404 as route-absence would silently swallow lane
+    misconfiguration.
+    """
+    if not isinstance(error, httpx.HTTPStatusError):
+        return False
+    if error.response.status_code != 404:
+        return False
+    try:
+        body: object = error.response.json()
+    except Exception:
+        # A non-JSON 404 is not something this gateway's error path can emit.
+        return True
+    return not (isinstance(body, Mapping) and isinstance(body.get('error'), Mapping))
+
+
 def _as_json_dict(value: object) -> JsonDict | None:
     return cast(JsonDict, value) if isinstance(value, dict) else None
 
