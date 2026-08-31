@@ -257,6 +257,61 @@ def _export_photo_manifest(
     return result
 
 
+def _yield_conversations_and_photos(uid: str, photo_spool: IO[str]) -> Iterator[str]:
+    yield '  "conversations": [\n'
+    first = True
+    photo_count = 0
+    for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
+        if conv is None:
+            continue
+        if not first:
+            yield ",\n"
+        first = False
+        yield "    " + json.dumps(conv, default=_json_default, indent=4)
+        # Do not trust the marker alone: legacy conversations may have a
+        # photo subcollection without ``has_photos``.
+        conversation_id = str(conv.get("id") or "")
+        if conversation_id:
+            for photo in conversations_db.get_conversation_photos(uid, conversation_id) or []:
+                if not isinstance(photo, Mapping):
+                    continue
+                if photo_count:
+                    photo_spool.write(",\n")
+                photo_spool.write("    ")
+                json.dump(
+                    _export_photo_manifest(uid, conversation_id, photo, require_bytes=False),
+                    photo_spool,
+                    default=_json_default,
+                    indent=4,
+                )
+                photo_count += 1
+    yield "\n  ],\n"
+    return photo_count
+
+
+def _yield_task_data(uid: str) -> Iterator[str]:
+    yield '  "task_data": {\n'
+    task_export_sections = [
+        (collection_name, _iter_user_subcollection(uid, collection_name)) for collection_name in TASK_EXPORT_COLLECTIONS
+    ]
+    task_export_sections.extend(
+        (
+            export_name,
+            _iter_user_nested_subcollection(uid, parent_collection_name, child_collection_name),
+        )
+        for export_name, parent_collection_name, child_collection_name in TASK_NESTED_EXPORT_COLLECTIONS
+    )
+    task_export_sections.extend(
+        (collection_name, _iter_user_subcollection(uid, collection_name))
+        for collection_name in MEMORY_SWEEP_EXPORT_COLLECTIONS
+    )
+    for index, (collection_name, records) in enumerate(task_export_sections):
+        yield f"    {json.dumps(collection_name)}: "
+        yield from _yield_json_array(records)
+        yield ",\n" if index < len(task_export_sections) - 1 else "\n"
+    yield "  },\n"
+
+
 def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iterator[str]:
     yield "{\n"
 
@@ -267,35 +322,14 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
     # while conversations stream so account size cannot turn export into an
     # unbounded resident list.
     photo_spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+", encoding="utf-8")
-    photo_count = 0
     try:
-        yield '  "conversations": [\n'
-        first = True
-        for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
-            if conv is None:
-                continue
-            if not first:
-                yield ",\n"
-            first = False
-            yield "    " + json.dumps(conv, default=_json_default, indent=4)
-            # Do not trust the marker alone: legacy conversations may have a
-            # photo subcollection without ``has_photos``.
-            conversation_id = str(conv.get("id") or "")
-            if conversation_id:
-                for photo in conversations_db.get_conversation_photos(uid, conversation_id) or []:
-                    if not isinstance(photo, Mapping):
-                        continue
-                    if photo_count:
-                        photo_spool.write(",\n")
-                    photo_spool.write("    ")
-                    json.dump(
-                        _export_photo_manifest(uid, conversation_id, photo, require_bytes=False),
-                        photo_spool,
-                        default=_json_default,
-                        indent=4,
-                    )
-                    photo_count += 1
-        yield "\n  ],\n"
+        generator = _yield_conversations_and_photos(uid, photo_spool)
+        while True:
+            try:
+                yield next(generator)
+            except StopIteration as e:
+                photo_count = e.value
+                break
 
         if photo_count:
             yield '  "conversation_photo_manifest": [\n'

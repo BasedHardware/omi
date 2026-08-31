@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "hash": "88993717752d1c6f",
+    "reason": "Used in N+1 data export query, explicitly bounds collection group to single parent via document path range.",
+    "query_id": "perf-export-n-plus-1",
+    "owner": "jules",
+    "expires_on": "2026-12-31"
+  }
+]
