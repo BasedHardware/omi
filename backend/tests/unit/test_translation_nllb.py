@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+import json
 import pytest
 
 from config.translation import TranslationProvider, resolve_translation_profile
@@ -25,6 +26,7 @@ from utils.translation_core.providers import (
     TranslationProviderChain,
     TranslationProviderError,
 )
+from llm_gateway.gateway.vertex_wire import _json_schema_to_vertex_response_schema
 
 
 def test_config_preserves_exact_ordered_provider_policy():
@@ -537,3 +539,12 @@ def test_gemini_adapter_wraps_sdk_failures_as_typed_provider_errors():
 
     assert raised.value.provider == TranslationProvider.google
     assert raised.value.reason == 'other'
+
+
+def test_gemini_translation_batch_schema_is_inlined_for_vertex():
+    schema = GeminiTranslationBatch.model_json_schema()
+    converted = _json_schema_to_vertex_response_schema(schema)
+    dumped = json.dumps(converted)
+    assert '$ref' not in dumped
+    assert '$defs' not in dumped
+    assert converted['properties']['translations']['items']['type'] == 'object'

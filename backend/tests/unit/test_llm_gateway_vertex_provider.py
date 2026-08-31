@@ -5,6 +5,7 @@ import time
 
 import httpx
 import pytest
+from pydantic import BaseModel
 
 from llm_gateway.gateway import providers as provider_module
 from llm_gateway.gateway.auth import ServiceCaller
@@ -422,9 +423,17 @@ def test_vertex_response_schema_inlines_nested_translation_json_schema():
     """Nested Pydantic json_schema must not be copied into Vertex responseSchema.
 
     Vertex responseSchema is an OpenAPI subset. JSON Schema $defs/$ref is the
-    400 that made omi:auto:translation 100% InvalidArgument.
+    400 that made omi:auto:translation 100% InvalidArgument. Local models match
+    GeminiTranslationBatch / GeminiTranslationItem so this stays a cheap unit
+    test (importing translation providers pulls langchain into call-phase CPU).
     """
-    from utils.translation_core.providers import GeminiTranslationBatch
+
+    class GeminiTranslationItem(BaseModel):
+        text: str
+        detected_language: str
+
+    class GeminiTranslationBatch(BaseModel):
+        translations: list[GeminiTranslationItem]
 
     schema = GeminiTranslationBatch.model_json_schema()
     assert '$defs' in schema
