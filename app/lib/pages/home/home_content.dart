@@ -157,7 +157,10 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
         }
         final tasksByConversation = _tasksByConversation(tasksProvider);
         final summary = _summariesByDate[_dateKey(day)];
-        final topInset = MediaQuery.paddingOf(context).top + kToolbarHeight;
+        // Home extends its body behind the app bar, and Scaffold folds the app
+        // bar's height into the body's top padding for exactly this — adding
+        // kToolbarHeight on top of it double-counts the toolbar.
+        final topInset = MediaQuery.paddingOf(context).top;
         final isNewUser = convoProvider.conversations.isEmpty &&
             !convoProvider.isLoadingConversations &&
             !convoProvider.isFetchingConversations &&
@@ -207,12 +210,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                 SliverList(
                   delegate: SliverChildBuilderDelegate(
                     childCount: highlights.length,
-                    (context, index) => _buildEntry(
-                      highlights[index],
-                      tasksByConversation,
-                      tasksProvider,
-                      showTopDivider: index > 0,
-                    ),
+                    (context, index) => _buildEntry(highlights[index], tasksByConversation, tasksProvider),
                   ),
                 ),
                 if (shortOnes.isNotEmpty) SliverToBoxAdapter(child: _buildShortConversationsToggle(shortOnes.length)),
@@ -272,14 +270,12 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     Map<String, List<ActionItemWithMetadata>> tasksByConversation,
     ActionItemsProvider tasksProvider, {
     bool dimmed = false,
-    bool showTopDivider = true,
   }) {
     return DayTimelineEntry(
       key: ValueKey(conversation.id),
       conversation: conversation,
       tasks: tasksByConversation[conversation.id] ?? const [],
       dimmed: dimmed,
-      showTopDivider: showTopDivider,
       onTap: () => _openConversation(conversation),
       onToggleTask: (task) => tasksProvider.updateActionItemState(task, !task.completed),
     );

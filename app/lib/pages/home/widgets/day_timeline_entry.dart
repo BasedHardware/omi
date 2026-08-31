@@ -16,7 +16,6 @@ class DayTimelineEntry extends StatelessWidget {
     required this.onTap,
     required this.onToggleTask,
     this.dimmed = false,
-    this.showTopDivider = true,
   });
 
   final ServerConversation conversation;
@@ -27,10 +26,6 @@ class DayTimelineEntry extends StatelessWidget {
   /// Short and discarded conversations render quieter than the day's real ones.
   final bool dimmed;
 
-  /// The first row of a day sits directly under the header, where a rule would
-  /// read as a box around the headline rather than as a list separator.
-  final bool showTopDivider;
-
   static const double _timeColumnWidth = 58;
 
   @override
@@ -38,14 +33,8 @@ class DayTimelineEntry extends StatelessWidget {
     final startedAt = (conversation.startedAt ?? conversation.createdAt).toLocal();
     final durationSeconds = conversation.getDurationInSeconds();
 
-    // The rule is inset on the left to line up with the time column and runs to
-    // the screen edge on the right, so the day reads as one continuous list.
-    return Container(
-      margin: const EdgeInsets.only(left: 24),
-      decoration: showTopDivider
-          ? BoxDecoration(border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.06))))
-          : null,
-      padding: const EdgeInsets.fromLTRB(0, 15, 24, 16),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

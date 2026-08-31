@@ -57,7 +57,7 @@ class DayHeader extends StatelessWidget {
     final summary = headline?.trim();
 
     final content = Padding(
-      padding: EdgeInsets.fromLTRB(24, topInset + 4, 16, 20),
+      padding: EdgeInsets.fromLTRB(24, topInset, 16, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -102,7 +102,7 @@ class DayHeader extends StatelessWidget {
     // With a map the header is a place, not a caption: give it room to read as
     // one instead of a strip behind two lines of text.
     return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: topInset + math.min(190, MediaQuery.sizeOf(context).height * 0.22)),
+      constraints: BoxConstraints(minHeight: topInset + math.min(96, MediaQuery.sizeOf(context).height * 0.11)),
       child: Stack(
         children: [
           Positioned.fill(child: _DayMapBackdrop(key: ValueKey(day), points: points, tileProvider: tileProvider)),
