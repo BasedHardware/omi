@@ -371,6 +371,24 @@ by `(uid, conversation_id, finalization_revision)`. A task is a named,
 at-least-once wake-up only; duplicate delivery, reconnect replay, and manual
 reconciliation must first acquire the Firestore lease.
 
+If reconciliation supersedes a queued or expired lease, it increments
+`dispatch_generation` and enqueues the newer generation. Once both sides
+negotiate result protocol `2`, any already-delivered live callback or Cloud Task
+carrying the old generation is acknowledged and dropped: the live session
+removes its pending request, and the durable task for the newer generation owns
+recovery. Returning an old-generation rejection as a retryable error would
+replay the same fenced payload indefinitely without consuming an attempt. The
+pusher callback includes the rejected generation only when the listener
+advertises result protocol `2` in opcode 104.
+Either deployment order is data-safe: a v2 pusher talking to a legacy listener
+retains the pre-fix non-terminal response shape, while a v2 listener talking to
+a legacy pusher leaves the no-generation response on its bounded timeout path.
+Mixed versions therefore retain the pre-fix retry behavior; rollout is complete
+only after both backend-listen and pusher use protocol v2. Once both sides use
+v2, the listener compares the rejected generation with its current pending
+entry before dropping it, preventing a delayed generation-1 response from
+deleting a newer generation-2 request.
+
 ```mermaid
 stateDiagram-v2
     [*] --> queued: persisted conversation + platform key
