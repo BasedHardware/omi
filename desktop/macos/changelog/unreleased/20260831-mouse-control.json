@@ -1,0 +1,3 @@
+{
+  "change": "Mouse control holds modifiers the way a real keyboard does, so cmd-click works in Chrome, VS Code and Slack; drag and scroll now take modifiers too, and a drag holds long enough for a drop target to accept it"
+}

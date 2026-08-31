@@ -134,6 +134,7 @@ enum CuaToolCatalog {
           "to_y": number("Where the drag ends."),
           "frame": string("Frame id from screenshot. Defaults to the most recent frame."),
           "button": enumeration(["left", "right", "middle"], "Mouse button. Defaults to left."),
+          "modifiers": string("Held modifiers, e.g. \"option\" to copy instead of move."),
         ],
         required: ["from_x", "from_y", "to_x", "to_y"])),
     CuaTool(
@@ -146,6 +147,7 @@ enum CuaToolCatalog {
           "frame": string("Frame id from screenshot. Defaults to the most recent frame."),
           "dx": integer("Horizontal scroll in lines."),
           "dy": integer("Vertical scroll in lines."),
+          "modifiers": string("Held modifiers, e.g. \"cmd\" to zoom."),
         ],
         required: ["x", "y"])),
     CuaTool(
@@ -454,20 +456,21 @@ enum CuaToolCatalog {
     }
   }
 
+  /// Parsed modifiers, or nil when the caller named something that is not one.
+  /// Absent is an empty set, which is not the same as unparseable.
+  private static func modifierFlags(_ args: CuaArguments) -> CGEventFlags? {
+    guard let modifiers = args.string("modifiers") else { return [] }
+    return CuaKeyMap.flags(from: modifiers)
+  }
+
   private static func click(_ args: CuaArguments) async -> CuaToolResult {
     guard let point = resolvePoint(args, xKey: "x", yKey: "y") else {
       return .error("click needs x and y.")
     }
     let button = CuaInputSynth.Button(rawValue: args.string("button") ?? "left") ?? .left
     let count = args.int("count") ?? 1
-    let flags: CGEventFlags
-    if let modifiers = args.string("modifiers") {
-      guard let parsed = CuaKeyMap.flags(from: modifiers) else {
-        return .error("\(modifiers) is not a modifier list.")
-      }
-      flags = parsed
-    } else {
-      flags = []
+    guard let flags = modifierFlags(args) else {
+      return .error("\(args.string("modifiers") ?? "") is not a modifier list.")
     }
     return await perform("Clicked at (\(Int(point.x)), \(Int(point.y)))") {
       CuaInputSynth.click(at: point, button: button, count: count, flags: flags)
@@ -488,8 +491,11 @@ enum CuaToolCatalog {
       let end = resolvePoint(args, xKey: "to_x", yKey: "to_y")
     else { return .error("drag needs from_x, from_y, to_x and to_y.") }
     let button = CuaInputSynth.Button(rawValue: args.string("button") ?? "left") ?? .left
+    guard let flags = modifierFlags(args) else {
+      return .error("\(args.string("modifiers") ?? "") is not a modifier list.")
+    }
     return await perform("Dragged to (\(Int(end.x)), \(Int(end.y)))") {
-      CuaInputSynth.drag(from: start, to: end, button: button)
+      CuaInputSynth.drag(from: start, to: end, button: button, flags: flags)
     }
   }
 
@@ -500,8 +506,11 @@ enum CuaToolCatalog {
     let dx = args.int("dx") ?? 0
     let dy = args.int("dy") ?? 0
     guard dx != 0 || dy != 0 else { return .error("scroll needs a non-zero dx or dy.") }
+    guard let flags = modifierFlags(args) else {
+      return .error("\(args.string("modifiers") ?? "") is not a modifier list.")
+    }
     return await perform("Scrolled \(dx), \(dy)") {
-      CuaInputSynth.scroll(at: point, deltaX: dx, deltaY: dy)
+      CuaInputSynth.scroll(at: point, deltaX: dx, deltaY: dy, flags: flags)
     }
   }
 

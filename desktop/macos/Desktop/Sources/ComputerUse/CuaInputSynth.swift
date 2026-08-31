@@ -20,6 +20,10 @@ enum CuaInputSynth {
   /// gesture is a dozen events.
   private static let pressInterval: TimeInterval = 0.02
 
+  /// How long a drag holds the button still at each end. Long enough for a drop
+  /// target to begin tracking, short enough that a drag is not perceptibly slow.
+  private static let dragHoldInterval: TimeInterval = 0.12
+
   private static func source() -> CGEventSource? {
     CGEventSource(stateID: .hidSystemState)
   }
@@ -86,7 +90,34 @@ enum CuaInputSynth {
   /// being expressed as separate clicks: that field is what AppKit reads to tell
   /// a double click from two clicks, and two plain clicks 20ms apart are two
   /// plain clicks no matter how close together they are.
+  /// Hold real modifier keys around a gesture.
+  ///
+  /// Setting `flags` on a mouse event is enough for AppKit, and not enough for
+  /// Chromium — every Electron app, VS Code and Slack included — which tracks
+  /// modifier state from the key events themselves. A flags-only cmd+click
+  /// arrives there as a plain click, which is how a "open in new tab" becomes a
+  /// navigation. `key` already presses them for exactly this reason; a click,
+  /// a drag and a scroll need the same treatment.
+  private static func holdingModifiers(_ flags: CGEventFlags, _ body: () -> Void) {
+    let held = modifierKeyCodes.filter { flags.contains($0.0) }
+    guard !held.isEmpty else { return body() }
+    var pressed: CGEventFlags = []
+    for (flag, keyCode) in held {
+      pressed.insert(flag)
+      postKey(keyCode, down: true, flags: pressed)
+    }
+    body()
+    for (flag, keyCode) in held.reversed() {
+      pressed.remove(flag)
+      postKey(keyCode, down: false, flags: pressed)
+    }
+  }
+
   static func click(at point: CGPoint, button: Button = .left, count: Int = 1, flags: CGEventFlags = []) {
+    holdingModifiers(flags) { postClick(at: point, button: button, count: count, flags: flags) }
+  }
+
+  private static func postClick(at point: CGPoint, button: Button, count: Int, flags: CGEventFlags) {
     moveCursor(to: point)
     // Let the move be seen before the press. Tracking areas, hover states and
     // menu highlighting all update on the move, and an app that has not yet
@@ -118,6 +149,14 @@ enum CuaInputSynth {
     from start: CGPoint, to end: CGPoint, button: Button = .left, steps: Int = 12,
     flags: CGEventFlags = []
   ) {
+    holdingModifiers(flags) {
+      postDrag(from: start, to: end, button: button, steps: steps, flags: flags)
+    }
+  }
+
+  private static func postDrag(
+    from start: CGPoint, to end: CGPoint, button: Button, steps: Int, flags: CGEventFlags
+  ) {
     moveCursor(to: start)
     Thread.sleep(forTimeInterval: pressInterval)
     let post = { (type: CGEventType, point: CGPoint) in
@@ -130,7 +169,10 @@ enum CuaInputSynth {
       event.post(tap: .cghidEventTap)
     }
     post(button.downType, start)
-    Thread.sleep(forTimeInterval: pressInterval)
+    // A press released or moved too quickly is a click, not the start of a drag.
+    // Finder, list reordering and every drag-and-drop target wait for the press
+    // to settle before they begin tracking, so a 20ms hold loses the gesture.
+    Thread.sleep(forTimeInterval: dragHoldInterval)
     let stepCount = min(max(steps, 1), 60)
     for step in 1...stepCount {
       let progress = CGFloat(step) / CGFloat(stepCount)
@@ -141,6 +183,9 @@ enum CuaInputSynth {
           y: start.y + (end.y - start.y) * progress))
       Thread.sleep(forTimeInterval: pressInterval / 2)
     }
+    // The drop target highlights on the last move; releasing in the same turn
+    // drops on whatever it had tracked before.
+    Thread.sleep(forTimeInterval: dragHoldInterval)
     post(button.upType, end)
   }
 
@@ -152,7 +197,15 @@ enum CuaInputSynth {
   /// only animate continuous scrolls, so "scroll down 10" moved a page by
   /// nothing in exactly the apps a model is most likely to be reading.
   static func scroll(at point: CGPoint, deltaX: Int, deltaY: Int, flags: CGEventFlags = []) {
+    holdingModifiers(flags) { postScroll(at: point, deltaX: deltaX, deltaY: deltaY, flags: flags) }
+  }
+
+  private static func postScroll(at point: CGPoint, deltaX: Int, deltaY: Int, flags: CGEventFlags) {
     moveCursor(to: point)
+    // Same reason a click waits: a scroll is delivered to the view under the
+    // pointer as the app understands it, so scrolling before the move has been
+    // processed scrolls whatever was under the old point.
+    Thread.sleep(forTimeInterval: pressInterval)
     let steps = max(abs(deltaX), abs(deltaY))
     guard steps > 0 else { return }
     let stepX = deltaX == 0 ? 0 : (deltaX > 0 ? 1 : -1)

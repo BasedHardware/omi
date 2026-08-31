@@ -106,6 +106,24 @@ final class CuaPermissionAndScriptTests: XCTestCase {
     XCTAssertTrue(result.failure?.contains("did not finish") ?? false)
   }
 
+  /// The bug this replaces: `drag` and `scroll` took no modifiers at all, so
+  /// option-drag to copy, shift-drag to constrain, and cmd-scroll to zoom were
+  /// unreachable however the model asked for them.
+  func testDragAndScrollAcceptModifiers() throws {
+    for name in ["drag", "scroll", "click"] {
+      let tool = try XCTUnwrap(CuaToolCatalog.tools.first { $0.name == name })
+      let properties = try XCTUnwrap(tool.inputSchema["properties"] as? [String: Any])
+      XCTAssertNotNil(properties["modifiers"], "\(name) should accept modifiers")
+    }
+  }
+
+  /// A modifier list the keyboard does not have is a refusal, while no list at
+  /// all is simply no modifiers — the two must not collapse into each other.
+  func testAnUnknownModifierListIsRejectedButAnAbsentOneIsNot() {
+    XCTAssertNil(CuaKeyMap.flags(from: "hyper+meta"))
+    XCTAssertEqual(CuaKeyMap.flags(from: "cmd+shift"), [.maskCommand, .maskShift])
+  }
+
   /// The bug this replaces: `list_windows` read the window list through
   /// `SCShareableContent`, which is Screen Recording territory, but declared no
   /// permission. Without the grant the call threw, `try?` swallowed it, and the
