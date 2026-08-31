@@ -23,7 +23,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'none'},
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
         uploads++;
         return UploadFilesResult.queued('job-1');
       },
@@ -43,7 +43,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'throttle'},
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
         uploads++;
         return UploadFilesResult.queued('job-after-expiry');
       },
@@ -63,7 +63,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => null,
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
         uploads++;
         return UploadFilesResult.queued('unexpected');
       },
@@ -82,7 +82,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'future_stage'},
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
         uploads++;
         return UploadFilesResult.queued('unexpected');
       },
@@ -95,8 +95,10 @@ void main() {
   });
 
   test('legacy unclassified rateLimit state never blocks admission or becomes fair use offline', () async {
-    SharedPreferencesUtil()
-        .saveInt('syncRateLimitedUntilMs', DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch);
+    SharedPreferencesUtil().saveInt(
+      'syncRateLimitedUntilMs',
+      DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+    );
     SharedPreferencesUtil().saveString('syncRateLimitedReason', 'rateLimit');
     var statusCalls = 0;
     var uploads = 0;
@@ -106,7 +108,7 @@ void main() {
         statusCalls++;
         throw Exception('offline');
       },
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
         uploads++;
         return UploadFilesResult.queued('legacy-cleared');
       },
@@ -129,7 +131,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'restrict'},
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
         uploads++;
         return UploadFilesResult.queued('unexpected');
       },
@@ -154,7 +156,7 @@ void main() {
         statusCalls++;
         return response.future;
       },
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async =>
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async =>
           UploadFilesResult.queued('job'),
     );
 
@@ -174,7 +176,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'none'},
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async =>
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async =>
           UploadFilesResult.queued('job'),
     );
 
@@ -189,12 +191,9 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => null,
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
         uploads++;
-        throw SyncRateLimitedException(
-          kind: SyncRateLimitKind.backendCapacity,
-          retryAfterSeconds: 40 * 24 * 60 * 60,
-        );
+        throw SyncRateLimitedException(kind: SyncRateLimitKind.backendCapacity, retryAfterSeconds: 40 * 24 * 60 * 60);
       },
     );
 
@@ -219,7 +218,7 @@ void main() {
         statusCalls++;
         return {'stage': 'none'};
       },
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
         uploads++;
         throw SyncRateLimitedException(kind: SyncRateLimitKind.fairUse, retryAfterSeconds: 30 * 24 * 60 * 60);
       },
@@ -243,7 +242,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => null,
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
         claims.add(claimLiveCapture);
         return UploadFilesResult.queued('job');
       },
