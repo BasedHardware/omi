@@ -254,6 +254,25 @@ class AccountView:
     chat_cost_usd_limit: Optional[float]
 
 
+def listening_is_throttled(limit_seconds: Optional[int], used_seconds: int) -> bool:
+    """True only when a finite listening cap is exhausted. Unlimited is never throttled."""
+    if limit_seconds is None:
+        return False
+    return used_seconds >= limit_seconds
+
+
+def skip_unlimited_listening_reset(limit_seconds: Optional[int], force: bool) -> bool:
+    """Do not zero minutes on unlimited plans unless the operator passed --force."""
+    return limit_seconds is None and not force
+
+
+_UNLIMITED_LISTENING_SKIP_MESSAGE = (
+    "listening throttled: no (unlimited)\n"
+    "skip reset-month: minutes used do not throttle this plan. "
+    "Pass --force to goodwill-zero anyway."
+)
+
+
 @dataclass(frozen=True)
 class ChatQuotaAuditRecord:
     """Durable audit trail for a chat-quota reset. Same sanitization as minutes."""
@@ -741,9 +760,17 @@ def _print_usage(
     print(f"listening limit:     {limit_min_s}")
     print(f"listening remaining: {remaining_s}")
     print(f"listening used of limit: {pct_s}")
+    listening_throttled = listening_is_throttled(limit_seconds, used)
+    print(f"listening throttled: {'yes' if listening_throttled else 'no'}")
+    if limit_seconds is None:
+        print("listening reset: skip (unlimited; not throttled). Use reset-month --force only for goodwill.")
     print(f"chat used:      {chat_questions} questions")
     print(f"chat limit:     {chat_limit_s}")
     print(f"chat remaining: {chat_remaining_s}")
+    if chat_limit is None:
+        print("chat included exhausted: n/a (unlimited)")
+    else:
+        print(f"chat included exhausted: {'yes' if chat_questions >= chat_limit else 'no'}")
     if view.chat_cost_usd_limit is not None:
         print(f"chat cost cap:  ${view.chat_cost_usd_limit:g} (architect unit; questions still shown above)")
     print(f"fair-use:       {fair_use_s}")
@@ -797,7 +824,11 @@ def cmd_reset_month(args: argparse.Namespace) -> int:
     uid, email = resolve_uid(uid=args.uid, email=args.email)
     client = _firestore_client()
     now = datetime.now(timezone.utc)
-    plan_name, _limit = resolve_plan_and_limit(uid)
+    view = resolve_account_view(uid)
+    plan_name = view.plan_name
+    if skip_unlimited_listening_reset(view.listening_limit_seconds, bool(getattr(args, "force", False))):
+        print(_UNLIMITED_LISTENING_SKIP_MESSAGE)
+        return 2
     docs = fetch_monthly_hourly_docs(client, uid, now.year, now.month)
     reset_plan = build_reset_plan(docs)
 
@@ -963,10 +994,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_reset = sub.add_parser(
         "reset-month",
-        help="Zero current-month transcription_seconds. DRY-RUN by default.",
+        help="Zero current-month transcription_seconds. DRY-RUN by default. Refuses unlimited/unthrottled plans unless --force.",
     )
     _add_target_args(p_reset)
     _add_reset_flags(p_reset)
+    p_reset.add_argument(
+        "--force",
+        action="store_true",
+        help="Goodwill-zero listening minutes even when the plan is unlimited (not throttled).",
+    )
     p_reset.set_defaults(func=cmd_reset_month)
 
     p_chat = sub.add_parser(

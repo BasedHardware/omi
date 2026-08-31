@@ -45,11 +45,12 @@ cd backend
 python -m scripts.admin.reset_transcription_usage show --uid <UID>
 python -m scripts.admin.reset_transcription_usage show --email user@example.com
 
-# 2) Dry-run listening reset (default — writes nothing):
+# 2) Dry-run listening reset (default — writes nothing).
+#    Refuses unlimited plans (Operator/Architect/Neo listening) unless --force:
 python -m scripts.admin.reset_transcription_usage reset-month --uid <UID> \
     --reason "goodwill: silent open-mic burn"
 
-# 3) Apply listening reset:
+# 3) Apply listening reset (finite cap only, or --force on unlimited):
 python -m scripts.admin.reset_transcription_usage reset-month --uid <UID> \
     --reason "goodwill: silent open-mic burn" --apply --operator "you@"
 
@@ -67,6 +68,11 @@ questions `0` for that UTC month (`get_monthly_chat_usage`).
 
 ## Safety
 
+- **`show` prints `listening throttled: yes/no`.** Unlimited listening is
+  never throttled. Do **not** `reset-month` those accounts just because used
+  minutes look large. `reset-month` exits 2 on unlimited plans unless
+  `--force` (goodwill-zero anyway). Chat is separate: `chat included exhausted`
+  is the included-allowance line; paid overage plans are not hard-cut.
 - **Dry-run by default.** `reset-month` and `reset-chat-month` print
   before/after and exit without writing unless `--apply` is passed.
 - **`--reason` is required** (audited).

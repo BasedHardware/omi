@@ -28,9 +28,11 @@ from scripts.admin.reset_transcription_usage import (  # noqa: E402
     build_parser,
     build_reset_plan,
     chat_questions_from_doc,
+    listening_is_throttled,
     llm_usage_doc_id_in_utc_month,
     month_label,
     seconds_to_minutes,
+    skip_unlimited_listening_reset,
     _print_usage,
     _sanitized_audit_payload,
 )
@@ -540,6 +542,8 @@ def test_show_printout_includes_listening_and_chat(capsys) -> None:
     assert "chat used:      12 questions" in out
     assert "chat limit:     30 questions" in out
     assert "chat remaining: 18 questions" in out
+    assert "listening throttled: no" in out
+    assert "chat included exhausted: no" in out
     assert "GET /v1/admin/fair-use/user/uid-123" in out
 
 
@@ -565,3 +569,51 @@ def test_show_printout_prefers_fair_use_stage_when_present(capsys) -> None:
     assert "fair-use:       stage=off" in out
     assert "chat limit:     unlimited" in out
     assert "listening limit:     unlimited" in out
+    assert "listening throttled: no" in out
+    assert "listening reset: skip (unlimited; not throttled)" in out
+    assert "chat included exhausted: n/a (unlimited)" in out
+
+
+def test_listening_is_throttled_only_when_finite_cap_exhausted() -> None:
+    assert listening_is_throttled(None, 1_000_000) is False
+    assert listening_is_throttled(18000, 17999) is False
+    assert listening_is_throttled(18000, 18000) is True
+    assert listening_is_throttled(18000, 18001) is True
+
+
+def test_skip_unlimited_listening_reset_requires_force() -> None:
+    assert skip_unlimited_listening_reset(None, force=False) is True
+    assert skip_unlimited_listening_reset(None, force=True) is False
+    assert skip_unlimited_listening_reset(18000, force=False) is False
+
+
+def test_reset_month_parser_accepts_force() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["reset-month", "--uid", "abc", "--reason", "goodwill"])
+    assert args.force is False
+    args = parser.parse_args(["reset-month", "--uid", "abc", "--reason", "goodwill", "--force"])
+    assert args.force is True
+
+
+def test_show_printout_marks_exhausted_free_listening(capsys) -> None:
+    view = AccountView(
+        plan_name="Free",
+        status="active",
+        listening_limit_seconds=18000,
+        chat_questions_limit=30,
+        chat_cost_usd_limit=None,
+    )
+    usage = MonthlyUsage(used_seconds=18000, document_count=1, top_buckets=())
+    _print_usage(
+        "uid-123",
+        None,
+        view,
+        usage,
+        "2026-07",
+        chat_questions=30,
+        fair_use_stage=None,
+    )
+    out = capsys.readouterr().out
+    assert "listening throttled: yes" in out
+    assert "chat included exhausted: yes" in out
+    assert "listening reset: skip" not in out
