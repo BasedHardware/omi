@@ -778,6 +778,15 @@ export interface BulkMoveConversationsResponse {
   status: string;
 }
 
+export interface CalendarCaptureGap {
+  coverage?: string;
+  end_time: string;
+  event_id: string;
+  start_time: string;
+  status?: string;
+  title: string;
+}
+
 export interface CalendarEventLink {
   attendee_emails?: Array<string>;
   attendees?: Array<string>;
@@ -4768,6 +4777,7 @@ export interface OmiApiSchemas {
   "BulkAssignSegmentsRequest": BulkAssignSegmentsRequest;
   "BulkMoveConversationsRequest": BulkMoveConversationsRequest;
   "BulkMoveConversationsResponse": BulkMoveConversationsResponse;
+  "CalendarCaptureGap": CalendarCaptureGap;
   "CalendarEventLink": CalendarEventLink;
   "CalendarMeetingContext": CalendarMeetingContext;
   "CalendarOnboardingResetResponse": CalendarOnboardingResetResponse;
@@ -6012,6 +6022,16 @@ export interface OmiApiPaths {
         "200": AppSubscriptionCancelResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/calendar/capture-gaps": {
+    get: {
+      operationId: "get_calendar_capture_gaps_v1_calendar_capture_gaps_get";
+      responses: {
+        "200": Array<CalendarCaptureGap>;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -11062,6 +11082,28 @@ export async function cancel_app_subscription_v1_apps__app_id__subscription_dele
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_calendar_capture_gaps_v1_calendar_capture_gaps_get(query: { start: string, end: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<CalendarCaptureGap>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/calendar/capture-gaps`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
@@ -18222,4 +18264,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 432 client methods generated.
+// Total: 433 client methods generated.

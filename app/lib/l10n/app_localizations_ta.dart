@@ -9983,4 +9983,9 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant-இன் சேமிப்பகம் நிரம்பிவிட்டது, அது இன்னும் பதிவு பயன்முறையில் உள்ளது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant-இன் பொத்தானை அழுத்தி, பின்னர் மீண்டும் ஒத்திசைக்கவும்.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'பதிவு செய்யப்படவில்லை ($count)';
+  }
 }

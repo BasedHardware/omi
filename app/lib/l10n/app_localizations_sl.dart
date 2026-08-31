@@ -9944,4 +9944,9 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pomnilnik Pendanta je poln in je še vedno v načinu snemanja, zato shranjenega zvoka ni mogoče prenesti. Pritisnite gumb na Pendantu, da ustavite snemanje, nato znova sinhronizirajte.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Ni posneto ($count)';
+  }
 }

@@ -44,6 +44,9 @@ overlay:
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
           category: rollout
+        GOOGLE_CALENDAR_AUTO_LINK_ENABLED:
+          value: 'true'
+          category: rollout
     pusher:
       capabilities:
       - conversation.finalize.persisted
