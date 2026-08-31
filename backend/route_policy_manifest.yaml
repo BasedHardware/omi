@@ -2652,3 +2652,55 @@ routes:
       deprecation:
         state: active
       owner: backend
+  # Reached from a mail client, never from the app: identity is the signed
+  # unsubscribe token, so there is no session to authenticate. POST is the RFC
+  # 8058 one-click target named by List-Unsubscribe-Post.
+  - route_type: http
+    method: GET
+    path: /email/unsubscribe
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - public
+        placement: none
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: shared_public
+      visibility: public_undocumented
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  # Reached from a mail client, never from the app: identity is the signed
+  # unsubscribe token, so there is no session to authenticate. POST is the RFC
+  # 8058 one-click target named by List-Unsubscribe-Post.
+  - route_type: http
+    method: POST
+    path: /email/unsubscribe
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - public
+        placement: none
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: shared_public
+      visibility: public_undocumented
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
