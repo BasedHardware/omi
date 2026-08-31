@@ -139,6 +139,27 @@ def is_gateway_route_absent(error: object) -> bool:
     return not (isinstance(body, Mapping) and isinstance(body.get('error'), Mapping))
 
 
+def is_gateway_model_not_found(error: object) -> bool:
+    """Whether an OpenAI-compatible gateway rejected an unknown lane id.
+
+    The OpenAI SDK exposes the gateway's ``error.code`` as ``error.code``;
+    direct-provider file 404s have the same HTTP status but no
+    ``model_not_found`` code. Keep that distinction closed so deploy skew can
+    degrade without misclassifying a genuinely deleted attachment.
+    """
+    if getattr(error, 'status_code', None) != 404:
+        return False
+    if getattr(error, 'code', None) == 'model_not_found':
+        return True
+    body = getattr(error, 'body', None)
+    if not isinstance(body, Mapping):
+        return False
+    if body.get('code') == 'model_not_found':
+        return True
+    nested_error = body.get('error')
+    return isinstance(nested_error, Mapping) and nested_error.get('code') == 'model_not_found'
+
+
 def _as_json_dict(value: object) -> JsonDict | None:
     return cast(JsonDict, value) if isinstance(value, dict) else None
 
