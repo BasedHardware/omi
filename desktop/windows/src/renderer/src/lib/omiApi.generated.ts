@@ -1340,6 +1340,35 @@ export interface ConversationSuggestedAppsResponse {
   suggested_apps: Array<App>;
 }
 
+export interface ConversationSyncConflictResponse {
+  client_mutation_id: string;
+  code: "base_revision_mismatch" | "mutation_id_reused" | "revision_unavailable";
+  conversation?: ConversationSyncState | null;
+  conversation_id: string;
+  status?: "conflict";
+}
+
+export interface ConversationSyncMutationRequest {
+  base_revision: string;
+  client_mutation_id: string;
+  operation: SetConversationTitleOperation | SetConversationStarredOperation;
+}
+
+export interface ConversationSyncMutationResponse {
+  client_mutation_id: string;
+  conversation: ConversationSyncState;
+  conversation_id: string;
+  status?: "ok";
+}
+
+export interface ConversationSyncState {
+  folder_id?: string | null;
+  revision: string;
+  starred?: boolean;
+  title?: string | null;
+  visibility?: ConversationVisibility;
+}
+
 export interface ConversationTestPromptResponse {
   summary: string;
 }
@@ -3580,6 +3609,16 @@ export interface SetConversationEventsStateRequest {
   values: Array<boolean>;
 }
 
+export interface SetConversationStarredOperation {
+  starred: boolean;
+  type?: "set_starred";
+}
+
+export interface SetConversationTitleOperation {
+  title: string;
+  type?: "set_title";
+}
+
 export interface SetDefaultPaymentMethodRequest {
   method: string;
 }
@@ -4846,6 +4885,10 @@ export interface OmiApiSchemas {
   "ConversationStatus": ConversationStatus;
   "ConversationStatusResponse": ConversationStatusResponse;
   "ConversationSuggestedAppsResponse": ConversationSuggestedAppsResponse;
+  "ConversationSyncConflictResponse": ConversationSyncConflictResponse;
+  "ConversationSyncMutationRequest": ConversationSyncMutationRequest;
+  "ConversationSyncMutationResponse": ConversationSyncMutationResponse;
+  "ConversationSyncState": ConversationSyncState;
   "ConversationTestPromptResponse": ConversationTestPromptResponse;
   "ConversationTopicRequest": ConversationTopicRequest;
   "ConversationTopicResponse": ConversationTopicResponse;
@@ -5152,6 +5195,8 @@ export interface OmiApiSchemas {
   "SendShareEmailResponse": SendShareEmailResponse;
   "SetConversationActionItemsStateRequest": SetConversationActionItemsStateRequest;
   "SetConversationEventsStateRequest": SetConversationEventsStateRequest;
+  "SetConversationStarredOperation": SetConversationStarredOperation;
+  "SetConversationTitleOperation": SetConversationTitleOperation;
   "SetDefaultPaymentMethodRequest": SetDefaultPaymentMethodRequest;
   "SetUserLanguageRequest": SetUserLanguageRequest;
   "SetUserWebhookUrlRequest": SetUserWebhookUrlRequest;
@@ -6453,6 +6498,17 @@ export interface OmiApiPaths {
         "200": ConversationMutationResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/mutations": {
+    post: {
+      operationId: "apply_conversation_sync_mutation_v1_conversations__conversation_id__mutations_post";
+      responses: {
+        "200": ConversationSyncMutationResponse;
+        "401": void;
+        "409": ConversationSyncConflictResponse;
         "422": HTTPValidationError;
       };
     };
@@ -11972,6 +12028,27 @@ export async function move_conversation_to_folder_v1_conversations__conversation
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function apply_conversation_sync_mutation_v1_conversations__conversation_id__mutations_post(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ConversationSyncMutationRequest, init?: OmiApiClientInit): Promise<ConversationSyncMutationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/mutations`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
     headers: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
@@ -18264,4 +18341,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 433 client methods generated.
+// Total: 434 client methods generated.

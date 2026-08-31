@@ -20,6 +20,7 @@ from utils import encryption
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from .firestore_index_registry import MCP_CONVERSATION_CARD_QUERY_SPECS, STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
+from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
 from utils.other.storage import list_audio_chunks
@@ -75,46 +76,6 @@ def get_conversation_ids(uid: str) -> List[str]:
     """
     coll = db.collection('users').document(uid).collection(conversations_collection)
     return [doc.id for doc in coll.select([]).stream()]
-
-
-def _ensure_timezone_aware(dt: datetime) -> datetime:
-    """
-    Ensure a datetime object is timezone-aware.
-    If naive, assume UTC timezone.
-    """
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt
-
-
-def _firestore_revision_datetime(value: Any) -> Optional[datetime]:
-    """Normalize Firestore snapshot metadata to an aware API datetime.
-
-    The production client exposes ``DatetimeWithNanoseconds`` (a datetime
-    subclass), while Firestore emulators and fakes may expose protobuf-like
-    ``seconds``/``nanos`` values. Keep that SDK variation at the database
-    boundary so response models always receive the same public type.
-    """
-    if isinstance(value, datetime):
-        return _ensure_timezone_aware(value)
-
-    to_datetime = getattr(value, 'ToDatetime', None)
-    if callable(to_datetime):
-        try:
-            return _ensure_timezone_aware(to_datetime(tzinfo=timezone.utc))
-        except (TypeError, ValueError, OverflowError):
-            return None
-
-    try:
-        seconds = getattr(value, 'seconds')
-        nanos = getattr(value, 'nanos')
-        if isinstance(seconds, str) and isinstance(nanos, str):
-            timestamp = float(f'{seconds}.{nanos}')
-        else:
-            timestamp = float(seconds) + (float(nanos) / 1_000_000_000)
-        return datetime.fromtimestamp(timestamp, tz=timezone.utc)
-    except (AttributeError, IndexError, TypeError, ValueError, OverflowError):
-        return None
 
 
 # *********************************
@@ -343,7 +304,7 @@ def _document_data_with_revision(document) -> Optional[Dict[str, Any]]:
     data = document.to_dict()
     if data is None:
         return None
-    revision = _firestore_revision_datetime(getattr(document, 'update_time', None))
+    revision = firestore_revision_datetime(getattr(document, 'update_time', None))
     if revision is not None:
         data['updated_at'] = revision
     return data
@@ -1537,7 +1498,7 @@ def get_action_items(
     for conversation in conversations:
         conversation_id = conversation['id']
         conversation_title = conversation.get('structured', {}).get('title', 'Untitled')
-        conversation_created_at = _ensure_timezone_aware(conversation['created_at'])
+        conversation_created_at = ensure_timezone_aware(conversation['created_at'])
 
         raw_items = conversation.get('structured', {}).get('action_items', [])
 
@@ -1564,9 +1525,9 @@ def get_action_items(
 
             # Ensure timezone awareness for action item dates
             if created_at is not None:
-                created_at = _ensure_timezone_aware(created_at)
+                created_at = ensure_timezone_aware(created_at)
             if completed_at is not None:
-                completed_at = _ensure_timezone_aware(completed_at)
+                completed_at = ensure_timezone_aware(completed_at)
 
             # Fallback to conversation created_at if dates are missing
             if created_at is None:

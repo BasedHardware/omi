@@ -1,6 +1,6 @@
 from datetime import datetime
 from collections.abc import Mapping
-from typing import Dict, List, Literal, Optional
+from typing import Annotated, Dict, List, Literal, Optional, Union
 import uuid
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -31,6 +31,11 @@ __all__ = [
     'Conversation',
     'ConversationFinalizationStatusResponse',
     'ConversationMutationResponse',
+    'ConversationSyncConflictResponse',
+    'ConversationSyncOperation',
+    'ConversationSyncMutationRequest',
+    'ConversationSyncMutationResponse',
+    'ConversationSyncState',
     'ConversationPostProcessing',
     'CreateConversation',
     'CreateConversationResponse',
@@ -41,6 +46,8 @@ __all__ = [
     'MergeConversationsResponse',
     'PluginResult',
     'SearchRequest',
+    'SetConversationStarredOperation',
+    'SetConversationTitleOperation',
     'TranscriptMatchSnippet',
     'SharedConversationChatHistoryMessage',
     'SharedConversationChatRequest',
@@ -318,6 +325,74 @@ class ConversationMutationResponse(BaseModel):
 
     status: str
     conversation: Conversation
+
+
+class SetConversationTitleOperation(BaseModel):
+    """User-owned title mutation carried by the durable sync endpoint."""
+
+    model_config = {'extra': 'forbid'}
+
+    type: Literal['set_title'] = 'set_title'
+    title: str = Field(min_length=1, max_length=256, strict=True)
+
+
+class SetConversationStarredOperation(BaseModel):
+    """User-owned starred mutation carried by the durable sync endpoint."""
+
+    model_config = {'extra': 'forbid'}
+
+    type: Literal['set_starred'] = 'set_starred'
+    starred: bool = Field(strict=True)
+
+
+ConversationSyncOperation = Annotated[
+    Union[SetConversationTitleOperation, SetConversationStarredOperation],
+    Field(discriminator='type'),
+]
+
+
+class ConversationSyncMutationRequest(BaseModel):
+    """One immutable client intent against a known canonical revision."""
+
+    model_config = {'extra': 'forbid'}
+
+    client_mutation_id: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]*$',
+        strict=True,
+    )
+    base_revision: datetime
+    operation: ConversationSyncOperation
+
+
+class ConversationSyncState(BaseModel):
+    """Compact canonical projection needed to settle an optimistic mutation."""
+
+    revision: datetime
+    title: Optional[str] = None
+    starred: bool = False
+    folder_id: Optional[str] = None
+    visibility: ConversationVisibility = ConversationVisibility.private
+
+
+class ConversationSyncMutationResponse(BaseModel):
+    """Durable response replayed byte-for-byte for one mutation id."""
+
+    status: Literal['ok'] = 'ok'
+    client_mutation_id: str
+    conversation_id: str
+    conversation: ConversationSyncState
+
+
+class ConversationSyncConflictResponse(BaseModel):
+    """Typed immutable conflict recorded for a stale mutation attempt."""
+
+    status: Literal['conflict'] = 'conflict'
+    code: Literal['base_revision_mismatch', 'mutation_id_reused', 'revision_unavailable']
+    client_mutation_id: str
+    conversation_id: str
+    conversation: Optional[ConversationSyncState] = None
 
 
 class CreateConversation(BaseModel):

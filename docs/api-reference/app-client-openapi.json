@@ -8558,6 +8558,169 @@
         "title": "ConversationSuggestedAppsResponse",
         "type": "object"
       },
+      "ConversationSyncConflictResponse": {
+        "description": "Typed immutable conflict recorded for a stale mutation attempt.",
+        "properties": {
+          "client_mutation_id": {
+            "title": "Client Mutation Id",
+            "type": "string"
+          },
+          "code": {
+            "enum": [
+              "base_revision_mismatch",
+              "mutation_id_reused",
+              "revision_unavailable"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "conversation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationSyncState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "conflict",
+            "default": "conflict",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "client_mutation_id",
+          "conversation_id"
+        ],
+        "title": "ConversationSyncConflictResponse",
+        "type": "object"
+      },
+      "ConversationSyncMutationRequest": {
+        "additionalProperties": false,
+        "description": "One immutable client intent against a known canonical revision.",
+        "properties": {
+          "base_revision": {
+            "format": "date-time",
+            "title": "Base Revision",
+            "type": "string"
+          },
+          "client_mutation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Client Mutation Id",
+            "type": "string"
+          },
+          "operation": {
+            "discriminator": {
+              "mapping": {
+                "set_starred": "#/components/schemas/SetConversationStarredOperation",
+                "set_title": "#/components/schemas/SetConversationTitleOperation"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SetConversationTitleOperation"
+              },
+              {
+                "$ref": "#/components/schemas/SetConversationStarredOperation"
+              }
+            ],
+            "title": "Operation"
+          }
+        },
+        "required": [
+          "client_mutation_id",
+          "base_revision",
+          "operation"
+        ],
+        "title": "ConversationSyncMutationRequest",
+        "type": "object"
+      },
+      "ConversationSyncMutationResponse": {
+        "description": "Durable response replayed byte-for-byte for one mutation id.",
+        "properties": {
+          "client_mutation_id": {
+            "title": "Client Mutation Id",
+            "type": "string"
+          },
+          "conversation": {
+            "$ref": "#/components/schemas/ConversationSyncState"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_mutation_id",
+          "conversation_id",
+          "conversation"
+        ],
+        "title": "ConversationSyncMutationResponse",
+        "type": "object"
+      },
+      "ConversationSyncState": {
+        "description": "Compact canonical projection needed to settle an optimistic mutation.",
+        "properties": {
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "revision": {
+            "format": "date-time",
+            "title": "Revision",
+            "type": "string"
+          },
+          "starred": {
+            "default": false,
+            "title": "Starred",
+            "type": "boolean"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/ConversationVisibility",
+            "default": "private"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "ConversationSyncState",
+        "type": "object"
+      },
       "ConversationTestPromptResponse": {
         "properties": {
           "summary": {
@@ -21906,6 +22069,50 @@
           "values"
         ],
         "title": "SetConversationEventsStateRequest",
+        "type": "object"
+      },
+      "SetConversationStarredOperation": {
+        "additionalProperties": false,
+        "description": "User-owned starred mutation carried by the durable sync endpoint.",
+        "properties": {
+          "starred": {
+            "title": "Starred",
+            "type": "boolean"
+          },
+          "type": {
+            "const": "set_starred",
+            "default": "set_starred",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "starred"
+        ],
+        "title": "SetConversationStarredOperation",
+        "type": "object"
+      },
+      "SetConversationTitleOperation": {
+        "additionalProperties": false,
+        "description": "User-owned title mutation carried by the durable sync endpoint.",
+        "properties": {
+          "title": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "set_title",
+            "default": "set_title",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "SetConversationTitleOperation",
         "type": "object"
       },
       "SetDefaultPaymentMethodRequest": {
@@ -39129,6 +39336,113 @@
         "summary": "Move Conversation To Folder",
         "tags": [
           "folders"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/mutations": {
+      "post": {
+        "description": "Apply or exactly replay one durable optimistic conversation mutation.",
+        "operationId": "apply_conversation_sync_mutation_v1_conversations__conversation_id__mutations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationSyncMutationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSyncMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSyncConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Apply Conversation Sync Mutation",
+        "tags": [
+          "conversations"
         ]
       }
     },
