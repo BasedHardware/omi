@@ -49,7 +49,7 @@ PLATFORM_ROUTES = ("viral-metrics", "dau-trends", "retention/posthog", "k-factor
 # panel-for-panel identical without mislabeling desktop data as mobile.
 # (Floating bar is a macOS-only feature; mobile sends no crash telemetry.)
 DESKTOP_ONLY_TITLES = {
-    "Floating bar sessions per user", "Floating bar queries",
+    "Floating bar queries per user", "Floating bar queries",
     "Floating bar notification CTR", "Crash-free rate (today)",
     "Crash-free rate", "Omi Desktop rating — daily",
 }
