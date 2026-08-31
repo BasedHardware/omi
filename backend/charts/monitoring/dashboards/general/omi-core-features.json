@@ -1933,7 +1933,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "100 * sum(rate(omi_client_journey_terminal_total{journey=\"realtime_voice\",outcome=\"success\"}[$__range])) / sum(rate(omi_client_journey_terminal_total{journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__range]))",
+              "expr": "100 * sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__range])) / sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__range]))",
               "refId": "A",
               "instant": true
             }
@@ -1988,7 +1988,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "round(sum(increase(omi_client_journey_accepted_total{journey=\"realtime_voice\"}[$__range])))",
+              "expr": "round(sum(increase(omi_client_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[$__range])))",
               "refId": "A",
               "instant": true
             }
@@ -2051,7 +2051,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "histogram_quantile(0.95, sum by (le) (rate(omi_client_journey_duration_seconds_bucket{journey=\"realtime_voice\",outcome=\"success\"}[$__range])))",
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(omi_client_journey_duration_seconds_bucket{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__range])))",
               "refId": "A",
               "instant": true
             }
@@ -2114,7 +2114,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "round(sum(increase(omi_client_journey_issues_total{journey=\"realtime_voice\"}[$__range])))",
+              "expr": "round(sum(increase(omi_client_journey_issues_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[$__range])))",
               "refId": "A",
               "instant": true
             }
@@ -2169,7 +2169,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum by (outcome) (rate(omi_client_journey_terminal_total{journey=\"realtime_voice\"}[5m]))",
+              "expr": "sum by (outcome) (rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[5m]))",
               "refId": "A",
               "legendFormat": "{{outcome}}"
             }
@@ -2224,7 +2224,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum by (issue_class) (rate(omi_client_journey_issues_total{journey=\"realtime_voice\"}[5m]))",
+              "expr": "sum by (issue_class) (rate(omi_client_journey_issues_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[5m]))",
               "refId": "A",
               "legendFormat": "{{issue_class}}"
             }
@@ -2279,7 +2279,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum by (client_kind) (rate(omi_client_journey_accepted_total{journey=\"realtime_voice\"}[5m]))",
+              "expr": "sum by (client_kind) (rate(omi_client_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[5m]))",
               "refId": "A",
               "legendFormat": "{{client_kind}}"
             }
