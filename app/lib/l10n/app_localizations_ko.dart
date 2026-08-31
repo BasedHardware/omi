@@ -9747,4 +9747,9 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant의 저장 공간이 가득 찼고 아직 녹음 모드이므로 저장된 오디오를 전송할 수 없습니다. Pendant의 버튼을 눌러 녹음을 중지한 다음 다시 동기화하세요.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return '기록되지 않음 ($count)';
+  }
 }

@@ -188,6 +188,9 @@ environments:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
+          GOOGLE_CALENDAR_AUTO_LINK_ENABLED:
+            value: 'true'
+            category: rollout
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
       parakeet:
         env:

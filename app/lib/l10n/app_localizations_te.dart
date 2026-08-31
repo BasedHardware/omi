@@ -9962,4 +9962,9 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant నిల్వ నిండిపోయింది మరియు అది ఇంకా రికార్డింగ్ మోడ్‌లో ఉంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయడం సాధ్యం కాదు. రికార్డింగ్ ఆపడానికి Pendant బటన్‌ను నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'రికార్డ్ కాలేదు ($count)';
+  }
 }

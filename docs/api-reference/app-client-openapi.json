@@ -4961,6 +4961,53 @@
         "title": "BulkMoveConversationsResponse",
         "type": "object"
       },
+      "CalendarCaptureGap": {
+        "description": "An accepted calendar event with no overlapping kept conversation.",
+        "properties": {
+          "coverage": {
+            "default": "not_captured",
+            "description": "Capture coverage verdict",
+            "title": "Coverage",
+            "type": "string"
+          },
+          "end_time": {
+            "description": "Event end time",
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "event_id": {
+            "description": "Google Calendar event ID",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "start_time": {
+            "description": "Event start time",
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "status": {
+            "default": "confirmed",
+            "description": "Calendar event status",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "description": "Event title/summary",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "title",
+          "start_time",
+          "end_time"
+        ],
+        "title": "CalendarCaptureGap",
+        "type": "object"
+      },
       "CalendarEventLink": {
         "description": "Links a conversation to a Google Calendar event.",
         "properties": {
@@ -34689,6 +34736,112 @@
           }
         ],
         "summary": "Get App Subscription"
+      }
+    },
+    "/v1/calendar/capture-gaps": {
+      "get": {
+        "description": "Accepted calendar events in [start, end] with no overlapping non-discarded conversation.\n\nThe honesty surface for the Conversations list (SCA-381): what was booked\nbut never recorded. Read-only against Google Calendar; it never creates or\nmutates conversations. Declined, cancelled, tentative, and all-day / >8h\nblocks are excluded by ``select_capture_gaps``.",
+        "operationId": "get_calendar_capture_gaps_v1_calendar_capture_gaps_get",
+        "parameters": [
+          {
+            "description": "Window start (ISO format, inclusive)",
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "description": "Window start (ISO format, inclusive)",
+              "format": "date-time",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Window end (ISO format, inclusive)",
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "description": "Window end (ISO format, inclusive)",
+              "format": "date-time",
+              "title": "End",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarCaptureGap"
+                  },
+                  "title": "Response Get Calendar Capture Gaps V1 Calendar Capture Gaps Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Calendar Capture Gaps",
+        "tags": [
+          "google_calendar"
+        ]
       }
     },
     "/v1/calendar/google/events": {
