@@ -25,7 +25,9 @@ void main() {
     expect(map.options.initialCameraFit, isNotNull);
     expect(map.options.keepAlive, isTrue);
 
-    final tileLayer = tester.widget<TileLayer>(find.byType(TileLayer));
+    // The basemap plus its street/place-name reference layer.
+    expect(find.byType(TileLayer), findsNWidgets(2));
+    final tileLayer = tester.widget<TileLayer>(find.byType(TileLayer).first);
     expect(tileLayer.keepBuffer, 0);
     expect(tileLayer.panBuffer, 0);
     expect(tileLayer.tileDisplay, isA<InstantaneousTileDisplay>());
@@ -75,6 +77,19 @@ void main() {
     expect(find.text('Oakland'), findsNothing);
   });
 
+  testWidgets('falls back to the day summary pins when conversations have no address', (tester) async {
+    await _pumpHeader(
+      tester,
+      [
+        _conversation('a', latitude: 37.7749, longitude: -122.4194),
+        _conversation('b', latitude: 37.7849, longitude: -122.4094),
+      ],
+      summaryAddresses: ['1 Mission St, San Francisco, CA, USA'],
+    );
+
+    expect(find.text('San Francisco'), findsOneWidget);
+  });
+
   test('collapses a full address to its neighbourhood component', () {
     expect(shortPlaceLabel('1234 Mission St, San Francisco, CA 94110, USA'), 'San Francisco');
     expect(shortPlaceLabel('Mission District, San Francisco, USA'), 'Mission District');
@@ -85,7 +100,11 @@ void main() {
   });
 }
 
-Future<void> _pumpHeader(WidgetTester tester, List<ServerConversation> conversations) async {
+Future<void> _pumpHeader(
+  WidgetTester tester,
+  List<ServerConversation> conversations, {
+  List<String?> summaryAddresses = const [],
+}) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: ThemeData.dark(),
@@ -96,6 +115,7 @@ Future<void> _pumpHeader(WidgetTester tester, List<ServerConversation> conversat
         body: DayHeader(
           day: DateTime(2026, 7, 15),
           conversations: conversations,
+          summaryAddresses: summaryAddresses,
           headline: 'A day worth remembering',
           canGoForward: true,
           onPreviousDay: () {},

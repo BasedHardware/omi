@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:flutter_map/flutter_map.dart';
@@ -15,6 +17,8 @@ class DayHeader extends StatelessWidget {
     required this.day,
     required this.conversations,
     required this.canGoForward,
+    this.summaryAddresses = const [],
+    this.topInset = 0,
     required this.onPreviousDay,
     required this.onNextDay,
     this.headline,
@@ -28,7 +32,16 @@ class DayHeader extends StatelessWidget {
   /// still carry the locations that make up the day's map.
   final List<ServerConversation> conversations;
 
+  /// Addresses the daily summary recorded for the day. Conversations often
+  /// carry coordinates without an address, so the summary is the only place a
+  /// place *name* exists.
+  final List<String?> summaryAddresses;
+
   final bool canGoForward;
+
+  /// Height of the status bar plus the app bar. Home draws the map full-bleed
+  /// under both, so the header's own text starts below them.
+  final double topInset;
   final VoidCallback onPreviousDay;
   final VoidCallback onNextDay;
   final String? headline;
@@ -40,67 +53,62 @@ class DayHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final points = dayLocationPoints(conversations);
-    final place = dayPlaceLabel(conversations);
+    final place = dayPlaceLabel(conversations, summaryAddresses: summaryAddresses);
     final summary = headline?.trim();
 
-    return Stack(
-      children: [
-        if (points.isNotEmpty)
-          Positioned.fill(child: _DayMapBackdrop(key: ValueKey(day), points: points, tileProvider: tileProvider)),
-        Padding(
-          padding: EdgeInsets.fromLTRB(24, 4, 16, points.isEmpty ? 20 : 44),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final content = Padding(
+      padding: EdgeInsets.fromLTRB(24, topInset + 4, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        _DayArrow(icon: Icons.chevron_left_rounded, onTap: onPreviousDay),
-                        Flexible(
-                          child: Text(
-                            dayLabel(context, day),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.6,
-                            ),
-                          ),
-                        ),
-                        _DayArrow(icon: Icons.chevron_right_rounded, onTap: canGoForward ? onNextDay : null),
-                      ],
-                    ),
+              _DayArrow(icon: Icons.chevron_left_rounded, onTap: onPreviousDay),
+              Flexible(
+                child: Text(
+                  dayLabel(context, day),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.6,
                   ),
-                  if (place != null) ...[const SizedBox(width: 8), _PlaceChip(label: place)],
-                ],
+                ),
               ),
-              if (summary != null && summary.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: onHeadlineTap,
-                  child: Text(
-                    summary,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 19, height: 1.35, letterSpacing: -0.2),
-                  ),
-                ),
-              ],
-              if (points.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(
-                  '© OpenStreetMap contributors',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 10),
-                ),
-              ],
+              _DayArrow(icon: Icons.chevron_right_rounded, onTap: canGoForward ? onNextDay : null),
             ],
           ),
-        ),
-      ],
+          if (summary != null && summary.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: onHeadlineTap,
+              child: Text(
+                summary,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 19, height: 1.35, letterSpacing: -0.2),
+              ),
+            ),
+          ],
+          if (place != null) ...[const SizedBox(height: 10), _PlaceLabel(label: place)],
+        ],
+      ),
+    );
+
+    if (points.isEmpty) return content;
+
+    // With a map the header is a place, not a caption: give it room to read as
+    // one instead of a strip behind two lines of text.
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: topInset + math.min(190, MediaQuery.sizeOf(context).height * 0.22)),
+      child: Stack(
+        children: [
+          Positioned.fill(child: _DayMapBackdrop(key: ValueKey(day), points: points, tileProvider: tileProvider)),
+          content,
+        ],
+      ),
     );
   }
 }
@@ -129,11 +137,18 @@ List<LatLng> dayLocationPoints(List<ServerConversation> conversations) {
   return points;
 }
 
-/// Where the day happened: the place that shows up in the most conversations.
-String? dayPlaceLabel(List<ServerConversation> conversations) {
+/// Where the day happened: the place that shows up in the most conversations,
+/// falling back to the day summary's own pins when the conversations only
+/// carried coordinates.
+String? dayPlaceLabel(List<ServerConversation> conversations, {List<String?> summaryAddresses = const []}) {
+  final fromConversations = _mostCommonPlace(conversations.map((c) => c.geolocation?.address));
+  return fromConversations ?? _mostCommonPlace(summaryAddresses);
+}
+
+String? _mostCommonPlace(Iterable<String?> addresses) {
   final counts = <String, int>{};
-  for (final conversation in conversations) {
-    final label = shortPlaceLabel(conversation.geolocation?.address?.decodeString);
+  for (final address in addresses) {
+    final label = shortPlaceLabel(address?.decodeString);
     if (label == null) continue;
     counts[label] = (counts[label] ?? 0) + 1;
   }
@@ -179,41 +194,44 @@ class _DayArrow extends StatelessWidget {
   }
 }
 
-class _PlaceChip extends StatelessWidget {
-  const _PlaceChip({required this.label});
+TileLayer _esriCanvasLayer(String service, TileProvider? tileProvider) {
+  return TileLayer(
+    urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/$service/MapServer/tile/{z}/{y}/{x}',
+    userAgentPackageName: 'me.omi.app',
+    minNativeZoom: 0,
+    maxNativeZoom: 16,
+    keepBuffer: 0,
+    panBuffer: 0,
+    tileDisplay: const TileDisplay.instantaneous(),
+    tileProvider: tileProvider,
+  );
+}
+
+class _PlaceLabel extends StatelessWidget {
+  const _PlaceLabel({required this.label});
 
   final String label;
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 160),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(18),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.5), shape: BoxShape.circle),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 7,
-              height: 7,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 7),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-              ),
-            ),
-          ],
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 13),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -280,18 +298,11 @@ class _DayMapBackdropState extends State<_DayMapBackdrop> {
               onMapReady: _loadTilesAfterLayout,
             ),
             children: [
-              TileLayer(
-                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                subdomains: const ['a', 'b', 'c', 'd'],
-                userAgentPackageName: 'me.omi.app',
-                minNativeZoom: 0,
-                maxNativeZoom: 19,
-                retinaMode: RetinaMode.isHighDensity(context),
-                keepBuffer: 0,
-                panBuffer: 0,
-                tileDisplay: const TileDisplay.instantaneous(),
-                tileProvider: widget.tileProvider,
-              ),
+              // Carto's basemaps now stamp "API KEY REQUIRED" across keyless
+              // tiles; Esri's dark canvas serves the same look without one. Its
+              // street and place names ship as a separate reference layer.
+              _esriCanvasLayer('World_Dark_Gray_Base', widget.tileProvider),
+              _esriCanvasLayer('World_Dark_Gray_Reference', widget.tileProvider),
             ],
           ),
           DecoratedBox(
@@ -300,12 +311,12 @@ class _DayMapBackdropState extends State<_DayMapBackdrop> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 0.55),
-                  Colors.black.withValues(alpha: 0.7),
-                  Colors.black.withValues(alpha: 0.94),
+                  Colors.black.withValues(alpha: 0.2),
+                  Colors.black.withValues(alpha: 0.45),
+                  Colors.black.withValues(alpha: 0.9),
                   Colors.black,
                 ],
-                stops: const [0, 0.45, 0.82, 1],
+                stops: const [0, 0.4, 0.85, 1],
               ),
             ),
           ),

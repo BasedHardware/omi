@@ -817,7 +817,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
               resizeToAvoidBottomInset: false,
-              appBar: selectedIndex == 5 ? null : _buildAppBar(context),
+              // Home draws its day map full-bleed under the status bar and the
+              // app bar; every other tab keeps the app bar as a solid surface.
+              extendBodyBehindAppBar: selectedIndex == 0,
+              appBar: selectedIndex == 5 ? null : _buildAppBar(context, overMap: selectedIndex == 0),
               body: GestureDetector(
                 onTap: () {
                   primaryFocus?.unfocus();
@@ -953,10 +956,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
+  PreferredSizeWidget _buildAppBar(BuildContext context, {bool overMap = false}) {
     return AppBar(
       automaticallyImplyLeading: false,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: overMap ? Colors.transparent : Theme.of(context).colorScheme.surface,
+      // Home's day map runs to the top of the screen behind these controls. The
+      // scrim keeps them legible over the map and fades timeline rows out as
+      // they scroll under it, instead of letting them slide behind the pills.
+      flexibleSpace: overMap
+          ? DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black.withValues(alpha: 0.75), Colors.black.withValues(alpha: 0.0)],
+                ),
+              ),
+            )
+          : null,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
