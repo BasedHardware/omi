@@ -1,0 +1,74 @@
+name: Exact Head Merge Gate Controller
+
+on:
+  # This privileged event is intentional: the controller must come from the
+  # trusted default branch and write a status to the PR head. It never checks
+  # out or executes PR-controlled code or artifacts.
+  pull_request_target:
+    branches: main
+    types: [opened, synchronize, reopened, ready_for_review, edited, labeled, unlabeled]
+  # Reconcile whenever an underlying required workflow starts or finishes. This
+  # invalidates a previously green aggregate during a rerun and lets a repaired
+  # rerun recover without requiring an unrelated PR edit.
+  workflow_run:
+    workflows:
+      - Backend Checks
+      - Backend Emulator Proofs
+      - Backend Hermetic E2E
+      - Backend Unit Tests
+      - Desktop Backend Contracts
+      - Desktop Checks
+      - Desktop Swift CI
+      - Desktop Windows CI
+      - Mobile App Checks
+      - OpenAPI Contract
+      - OpenTofu Development WIF Pilot Validation
+      - OpenTofu Foundation Validation
+      - Public Build Configuration Preflight
+      - Python CLI
+      - Repo Checks
+      - Runtime Image Contracts
+      - Rust SDK
+      - Web Checks
+      - Windows Preflight Portability
+    types: [requested, in_progress, completed]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: pr-merge-gate-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  controller:
+    name: Trusted exact-head controller
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 95
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout trusted default branch controller
+        uses: actions/checkout@v7
+        with:
+          # Keep the script and manifest on the same immutable trusted commit as
+          # this workflow definition, even if main advances while the run queues.
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - name: Evaluate exact-head required CI
+        run: >-
+          python3 .github/scripts/pr_merge_gate.py
+          --repository "$GITHUB_REPOSITORY"
+          --event-file "$GITHUB_EVENT_PATH"
+          --manifest .github/merge-gate-manifest.json
+          --target-url "$TARGET_URL"
+          --timeout-seconds 5400
+          --poll-seconds 30

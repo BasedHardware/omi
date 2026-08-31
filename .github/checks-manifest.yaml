@@ -86,6 +86,11 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "manifest validity and workflow drift guard"
+  - id: exact-head-merge-gate-contract
+    command: ["python3", ".github/scripts/test_pr_merge_gate.py"]
+    triggers: [".github/workflows/**", ".github/MERGE_GATE.md", ".github/merge-gate-manifest.json", ".github/required-branch-policy.json", ".github/scripts/pr_merge_gate.py", ".github/scripts/test_pr_merge_gate.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PRs #11454 and #11832 merged around exact-head red checks; the one protected status must stay trusted, path-complete, and fail closed"
   - id: backend-production-release-vector-guards
     command: ["python3", ".github/scripts/check_release_rings.py"]
     triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/check_release_rings.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]

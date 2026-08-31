@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "branch": "main",
+  "required_status_checks": {
+    "strict": true,
+    "checks": [
+      {
+        "context": "Omi Merge Gate",
+        "source": "github-actions"
+      }
+    ]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": true,
+    "require_last_push_approval": true,
+    "required_approving_review_count": 1,
+    "bypass_pull_request_allowances": {
+      "apps": [],
+      "teams": [],
+      "users": []
+    }
+  },
+  "required_conversation_resolution": true,
+  "ordinary_merge_bypass_allowances": [],
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}

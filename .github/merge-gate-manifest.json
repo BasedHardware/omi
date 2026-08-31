@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "workflows": [
+    {
+      "path": ".github/workflows/backend-checks.yml",
+      "classification": "required",
+      "reason": "Repository-wide backend static contracts use internal diff selection."
+    },
+    {
+      "path": ".github/workflows/backend-emulator-proofs.yml",
+      "classification": "required",
+      "reason": "Memory and database changes require their hermetic emulator proofs.",
+      "paths": ["backend/utils/memory/**", "backend/database/**", "backend/models/memory_apply.py", "backend/models/product_memory.py", "backend/scripts/*_emulator_test.py", "backend/scripts/run-emulator-proofs.sh", "backend/pylock.toml", "firebase.json", "firestore.rules", ".github/workflows/backend-emulator-proofs.yml"]
+    },
+    {
+      "path": ".github/workflows/backend-hermetic-e2e.yml",
+      "classification": "required",
+      "reason": "The workflow has one explicit gate that excludes its named advisory replay job.",
+      "authoritative_job": "Backend Hermetic Merge Gate"
+    },
+    {
+      "path": ".github/workflows/backend-unit-tests.yml",
+      "classification": "required",
+      "reason": "Backend changes must not merge with a red unit suite.",
+      "paths": [".gitignore", "backend/**", "package.json", "package-lock.json", "config/deployment-setting-classification.json", "firestore.indexes.json", ".github/actions/detect-changes/**", ".github/actions/deploy-backend-stack/**", ".github/actions/release-eligibility/action.yml", ".github/actions/transcription-release-candidate-probe/**", ".github/workflows/backend-checks.yml", ".github/workflows/backend-hermetic-e2e.yml", ".github/workflows/backend-unit-tests.yml", ".github/workflows/desktop-checks.yml", ".github/workflows/desktop-swift-ci.yml", ".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml", ".github/workflows/repo-checks.yml", ".github/workflows/release-eligibility.yml", ".github/workflows/desktop_promote_beta.yml", ".github/workflows/desktop_rollback_beta.yml", ".github/workflows/desktop_breakglass_rollout_beta.yml", ".github/workflows/desktop_beta_admission_control.yml", ".github/workflows/desktop_promote_prod.yml", ".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/workflows/gcp_cloud_run_metrics_egress.yml", ".github/workflows/gcp_firestore_indexes.yml", ".github/workflows/gcp_backend*.yml", ".github/workflows/gcp_llm_gateway.yml", ".github/workflows/gcp_memory_maintenance_job.yml", ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml", ".github/workflows/gcp_notifications_job.yml", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_release_eligibility.py", ".github/workflows/sync_ledger_fence_cutover.yml", "scripts/changed-files", "scripts/install-git-hooks.sh", "scripts/pre-push", "scripts/pre-push-singleflight", "scripts/dev-harness/dev_harness/jit_vertex_gateway.py", "scripts/voice-provider-probe.sh"]
+    },
+    {
+      "path": ".github/workflows/desktop-backend-contracts.yml",
+      "classification": "required",
+      "reason": "Desktop/backend boundary changes require contract coverage.",
+      "paths": [".github/workflows/desktop-backend-contracts.yml", "backend/testing/contracts/**", "backend/database/conversations.py", "backend/database/helpers.py", "backend/database/memories.py", "backend/models/**", "backend/test.sh", "backend/utils/encryption.py", "contract_tests/**", "desktop/macos/scripts/desktop-core-harness.sh", "desktop/macos/scripts/desktop-flow-lint.py", "desktop/macos/scripts/desktop_flow_contract.py", "desktop/macos/e2e/**", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", "desktop/macos/Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift", "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift", "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift", "desktop/macos/Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift"]
+    },
+    {
+      "path": ".github/workflows/desktop-checks.yml",
+      "classification": "required",
+      "reason": "Repository-wide desktop agent checks use internal diff selection."
+    },
+    {
+      "path": ".github/workflows/desktop-swift-ci.yml",
+      "classification": "required",
+      "reason": "Repository-wide Swift detection must complete and selected Swift tests must pass."
+    },
+    {
+      "path": ".github/workflows/desktop-windows-ci.yml",
+      "classification": "required",
+      "reason": "Windows changes require typecheck, tests, and package smoke coverage.",
+      "paths": ["desktop/windows/**", ".github/workflows/desktop-windows-ci.yml"]
+    },
+    {
+      "path": ".github/workflows/mobile-app-checks.yml",
+      "classification": "required",
+      "reason": "Repository-wide mobile detection must complete and selected app checks must pass."
+    },
+    {
+      "path": ".github/workflows/openapi-contract.yml",
+      "classification": "required",
+      "reason": "API producers and generated clients must remain synchronized.",
+      "paths": ["backend/**", "docs/api-reference/openapi.json", "docs/api-reference/app-client-openapi.json", "docs/api-reference/integration-public-openapi.json", "app/lib/backend/http/api/**", "app/lib/backend/schema/**", "app/lib/backend/schema/gen/**", "app/lib/models/announcement.dart", "app/lib/models/subscription.dart", "app/lib/models/user_usage.dart", "desktop/windows/src/renderer/src/lib/omiApi.generated.ts", "web/app/src/lib/omiApi.generated.ts", "web/admin/lib/services/omi-api/omiApi.generated.ts", "web/personas-open-source/src/lib/omiApi.generated.ts", "docs/docs.json", ".github/workflows/openapi-contract.yml"]
+    },
+    {
+      "path": ".github/workflows/opentofu-development-wif-pilot-validate.yml",
+      "classification": "required",
+      "reason": "Development WIF infrastructure changes require static validation.",
+      "paths": [".github/scripts/check_opentofu_development_wif_pilot.py", ".github/scripts/test_check_opentofu_development_wif_pilot.py", ".github/workflows/opentofu-development-wif-pilot.yml", ".github/workflows/opentofu-development-wif-pilot-validate.yml", "infrastructure/opentofu/pilots/development-wif-plan/**", "infrastructure/opentofu/probes/development-project-read/**"]
+    },
+    {
+      "path": ".github/workflows/opentofu-foundation-validate.yml",
+      "classification": "required",
+      "reason": "Foundation infrastructure changes require static validation.",
+      "paths": [".github/scripts/check_opentofu_foundation.py", ".github/scripts/test_check_opentofu_foundation.py", ".github/workflows/opentofu-foundation-validate.yml", "infrastructure/opentofu/**"]
+    },
+    {
+      "path": ".github/workflows/pr-declined-comment.yml",
+      "classification": "ignored",
+      "reason": "This pull_request_target workflow runs only after a PR closes and is not CI."
+    },
+    {
+      "path": ".github/workflows/pr-merge-gate.yml",
+      "classification": "ignored",
+      "reason": "The trusted controller cannot wait on its own base-branch workflow run."
+    },
+    {
+      "path": ".github/workflows/public-build-config-preflight.yml",
+      "classification": "required",
+      "reason": "Public build configuration changes require environment preflight.",
+      "paths": [".github/workflows/gcp_admin.yml", ".github/workflows/gcp_app.yml", ".github/workflows/gcp_frontend.yml", ".github/workflows/gcp_personas.yml", ".github/workflows/public-build-config-preflight.yml", ".github/actions/deploy-public-build/**", ".github/actions/prepare-public-build/**", ".github/actions/public-build-candidate-promotion/**", ".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/test_check_public_build_contract.py", "config/public-build-contract.json", "config/public-build-values.json", "config/deployment-setting-classification.json", "web/admin/Dockerfile", "web/app/Dockerfile", "web/frontend/Dockerfile", "web/personas-open-source/Dockerfile", "web/admin/components/public-build-canary.tsx", "web/app/src/components/public-build-canary.tsx", "web/frontend/src/components/public-build-canary.tsx", "web/personas-open-source/src/components/public-build-canary.tsx"]
+    },
+    {
+      "path": ".github/workflows/python-cli-ci.yml",
+      "classification": "required",
+      "reason": "Python CLI changes require their platform matrix.",
+      "paths": ["sdks/python-cli/**", ".github/workflows/python-cli-ci.yml"]
+    },
+    {
+      "path": ".github/workflows/repo-checks.yml",
+      "classification": "required",
+      "reason": "The code lane gates hygiene and formatting; metadata events add a separately selected metadata lane.",
+      "selector_job": "Hygiene",
+      "event_selector_jobs": {
+        "edited": "PR Metadata Preflight",
+        "labeled": "PR Metadata Preflight",
+        "unlabeled": "PR Metadata Preflight"
+      }
+    },
+    {
+      "path": ".github/workflows/runtime_image_contracts.yml",
+      "classification": "required",
+      "reason": "Runtime image inputs require source-closure and import smoke checks.",
+      "paths": ["backend/**", "plugins/**", "Makefile", ".github/workflows/runtime_image_contracts.yml", ".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/gcp_*.yml"]
+    },
+    {
+      "path": ".github/workflows/sdk-rust.yml",
+      "classification": "required",
+      "reason": "Rust SDK changes require format, lint, build, and test coverage.",
+      "paths": ["sdks/rust/**", ".github/workflows/sdk-rust.yml"]
+    },
+    {
+      "path": ".github/workflows/web-checks.yml",
+      "classification": "required",
+      "reason": "Repository-wide web detection must complete and selected lint/build checks must pass."
+    },
+    {
+      "path": ".github/workflows/windows-preflight-portability.yml",
+      "classification": "required",
+      "reason": "Cross-platform preflight changes require native Windows portability coverage.",
+      "paths": [".github/checks-manifest.yaml", ".github/scripts/preflight_runner.py", ".github/scripts/pr_preflight.py", ".github/scripts/run_checks.py", ".github/scripts/test_preflight_runner.py", ".github/scripts/test_run_checks.py", ".github/workflows/windows-preflight-portability.yml", "backend/.python-version", "scripts/pre-push", "scripts/pre-push-singleflight", "scripts/pr-preflight", "scripts/test-pre-push-worktree-fallback.sh"]
+    }
+  ]
+}
