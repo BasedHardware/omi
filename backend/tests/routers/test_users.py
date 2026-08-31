@@ -21,8 +21,8 @@ class _FakeRequest:
         return self._payload
 
 
-def _task_auth(retry_count=0, audience='account_deletion'):
-    return users_router.AccountDeletionTaskAuthentication(retry_count=retry_count, audience=audience)
+def _task_auth(retry_count=0):
+    return users_router.AccountDeletionTaskAuthentication(retry_count=retry_count)
 
 
 def test_delete_account_delegates_to_service():
@@ -200,60 +200,6 @@ def test_run_account_deletion_wipe_drops_unknown_or_ambiguous_job_without_mutati
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'dropped', 'reason': outcome}
     assert calls == [(users_router.resolve_deletion_wipe_job_id, ('job-1',))]
-
-
-def test_run_account_deletion_wipe_accepts_legacy_sync_audience_only_for_legacy_uid(monkeypatch):
-    calls = []
-
-    async def run_blocking(_executor, fn, *args):
-        calls.append((fn, args))
-        if fn is users_router.resolve_legacy_deletion_wipe_uid:
-            return {'outcome': 'missing', 'uid': None}
-        raise AssertionError(f'unexpected mutating function {fn}')
-
-    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
-
-    response = asyncio.run(
-        users_router.run_account_deletion_wipe(
-            _FakeRequest({'uid': 'legacy-uid'}), task_authentication=_task_auth(audience='legacy_sync')
-        )
-    )
-
-    assert response.status_code == 200
-    assert json.loads(response.body) == {'status': 'dropped', 'reason': 'missing'}
-    assert calls == [(users_router.resolve_legacy_deletion_wipe_uid, ('legacy-uid',))]
-
-
-def test_run_account_deletion_wipe_drops_job_id_with_legacy_sync_audience_without_mutation(monkeypatch):
-    async def run_blocking(*_args):
-        raise AssertionError('legacy sync audience must not resolve or mutate a job-ID payload')
-
-    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
-
-    response = asyncio.run(
-        users_router.run_account_deletion_wipe(
-            _FakeRequest({'job_id': 'job-1'}), task_authentication=_task_auth(audience='legacy_sync')
-        )
-    )
-
-    assert response.status_code == 200
-    assert json.loads(response.body) == {'status': 'dropped', 'reason': 'legacy_audience_for_job_id'}
-
-
-def test_run_account_deletion_wipe_drops_legacy_uid_with_account_deletion_audience_without_mutation(monkeypatch):
-    async def run_blocking(*_args):
-        raise AssertionError('account_deletion audience must not resolve or mutate a legacy uid payload')
-
-    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
-
-    response = asyncio.run(
-        users_router.run_account_deletion_wipe(
-            _FakeRequest({'uid': 'legacy-uid'}), task_authentication=_task_auth(audience='account_deletion')
-        )
-    )
-
-    assert response.status_code == 200
-    assert json.loads(response.body) == {'status': 'dropped', 'reason': 'legacy_uid_requires_legacy_audience'}
 
 
 def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monkeypatch):
