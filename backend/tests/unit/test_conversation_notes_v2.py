@@ -83,7 +83,7 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
         def invoke(self, messages):
             captured['messages'] = messages
             return SimpleNamespace(content='''{
-                  "title":"Ash and David Discuss Agent Infrastructure",
+                  "title":"Speaker 1 and Ash Discuss Agent Infrastructure",
                   "overview":"compatibility",
                   "emoji":"🔐",
                   "category":"technology",
@@ -108,6 +108,7 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
     )
 
     assert result.overview == '## Agent operations\n\nAsh runs ~12 long-running agents.'
+    assert re.search(r'(?i)\b(?:speaker[ _]\d+|SPEAKER_\d+)\b', result.title) is None
     assert result.events == []
     assert result.action_items[0].owner_name == 'David'
     assert result.action_items[0].due_certainty == 'tentative'
@@ -117,6 +118,8 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
     assert 'Never normalize or "correct" an uncertain name from general knowledge' in instructions
     assert 'participant email domain corroborates' in instructions
     assert 'fulcradynamics.com corroborates "Fulcra Dynamics" over ASR "Vulcra"' in instructions
+    assert 'NEVER emit diarization placeholders' in instructions
+    assert 'whether or not calendar' in instructions
     assert 'Ash Kalb <ash@fulcradynamics.com>' in prefix.context
 
 
@@ -203,51 +206,40 @@ def test_action_item_new_fields_round_trip():
     assert ActionItem.model_validate_json(item.model_dump_json()) == item
 
 
-def test_notes_without_calendar_context_strip_speaker_placeholders(monkeypatch):
-    from utils.llm import conversation_processing
-    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
-
-    prefix = build_conversation_prompt_prefix(
-        conversation_id='conv-no-cal',
-        transcript='Speaker 1: the budget is late\nSpeaker 0: noted',
-        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
-        timezone_name='America/New_York',
-        language_code='en',
-    )
-    captured = {}
-
-    class Model:
-        def invoke(self, messages):
-            captured['instructions'] = messages[-1].content
-            return SimpleNamespace(content='''{
-                  "title":"Speaker 1 Reviews Budget",
-                  "overview":"Speaker 1 said the budget is late.",
-                  "emoji":"💬",
-                  "category":"work",
-                  "sections":[{"heading":"Budget","body_markdown":"- Speaker 1: budget is late\\n- SPEAKER_00 agreed","source_segment_ids":["s1"]}],
-                  "action_items":[{"description":"Follow up with Speaker 1","owner_name":"Speaker 1","source_segment_ids":["s1"]}],
-                  "events":[]
-                }''')
-
-    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *args, **kwargs: Model())
-    monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
-    result = conversation_processing.get_conversation_notes(
-        prefix,
-        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
-        language_code='en',
-        output_language_code='en',
-        tz='America/New_York',
-        task_intelligence_capture=False,
-    )
+def test_notes_without_calendar_context_strip_speaker_placeholders():
+    from utils.llm.conversation_processing import sanitize_structured_speaker_placeholders
 
     leftover = re.compile(r'(?i)\b(?:speaker[ _]\d+|SPEAKER_\d+)\b')
-    assert leftover.search(result.title) is None
-    assert leftover.search(result.overview) is None
-    assert leftover.search(result.sections[0].body_markdown) is None
-    assert leftover.search(result.action_items[0].description) is None
-    assert result.action_items[0].owner_name is None
-    assert 'Speaker 0' in captured['instructions']
-    assert 'whether or not' in captured['instructions'].lower() or 'calendar' in captured['instructions'].lower()
+    structured = Structured.model_validate(
+        {
+            'title': 'Speaker 1 Reviews Budget',
+            'overview': 'Speaker 1 said the budget is late.',
+            'emoji': '💬',
+            'category': 'work',
+            'sections': [
+                {
+                    'heading': 'Budget',
+                    'body_markdown': '- Speaker 1: budget is late\n- SPEAKER_00 agreed',
+                    'source_segment_ids': ['s1'],
+                }
+            ],
+            'action_items': [
+                {
+                    'description': 'Follow up with Speaker 1',
+                    'owner_name': 'Speaker 1',
+                    'source_segment_ids': ['s1'],
+                }
+            ],
+            'events': [],
+        }
+    )
+    sanitize_structured_speaker_placeholders(structured)
+
+    assert leftover.search(structured.title) is None
+    assert leftover.search(structured.overview) is None
+    assert leftover.search(structured.sections[0].body_markdown) is None
+    assert leftover.search(structured.action_items[0].description) is None
+    assert structured.action_items[0].owner_name is None
 
 
 def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder():

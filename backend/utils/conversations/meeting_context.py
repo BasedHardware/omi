@@ -41,6 +41,9 @@ _CALL_CONTROL_MARKERS = (
     'camera off',
     'camera on',
 )
+_CALL_CONTROL_PATTERN = re.compile(
+    r'(?<!\w)(?:' + '|'.join(re.escape(marker) for marker in _CALL_CONTROL_MARKERS) + r')(?!\w)'
+)
 # A Google Meet tab is titled with the bare meeting code ("Meet - amc-iajq-asx").
 # Once the call is joined the omnibox URL is often scrolled out of the capture, so
 # the title is the only marker left. The code shape keeps this precise.
@@ -71,7 +74,7 @@ def _is_messaging_call_app(app_name: str) -> bool:
 
 def _has_call_control(row: dict[str, Any]) -> bool:
     hay = f'{row.get("windowTitle") or ""} {row.get("ocrText") or ""}'.casefold()
-    return any(re.search(rf'(?<!\w){re.escape(marker)}(?!\w)', hay) for marker in _CALL_CONTROL_MARKERS)
+    return _CALL_CONTROL_PATTERN.search(hay) is not None
 
 
 def _is_conferencing_row(row: dict[str, Any]) -> bool:
@@ -169,7 +172,8 @@ def _split_roster(people: str) -> Iterable[str]:
 def _roster_names(text: str) -> Iterable[str]:
     for raw_line in text.splitlines():
         line = _clean_line(raw_line)
-        if not line:
+        # Roster sentences are short UI chrome, never a 4k-character OCR smear.
+        if not line or len(line) > 200:
             continue
         for pattern in _ROSTER_PATTERNS:
             match = pattern.match(line)
@@ -179,6 +183,8 @@ def _roster_names(text: str) -> Iterable[str]:
 
 
 def _emails(text: str) -> Iterable[str]:
+    if '@' not in text:
+        return
     for match in _EMAIL_PATTERN.finditer(text):
         yield match.group(0).strip('.').casefold()
 
@@ -205,9 +211,9 @@ def _row_identity_signal(text: str, row: Optional[dict[str, Any]] = None) -> int
     score = 0
     if any(True for _ in _roster_names(text)):
         score += 2
-    if _EMAIL_PATTERN.search(text):
+    if '@' in text and _EMAIL_PATTERN.search(text):
         score += 1
-    if row is not None and _has_call_control(row):
+    if row is not None and _is_messaging_call_app(str(row.get('appName') or '')) and _has_call_control(row):
         score += 2
     return score
 
