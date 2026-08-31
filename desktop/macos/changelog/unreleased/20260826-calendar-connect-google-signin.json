@@ -1,3 +1,0 @@
-{
-  "change": "Connecting Calendar now signs you in with Google instead of relying on a Chrome-family browser session, so it works on Safari and Firefox too — and when a connection does fail, Omi tells you what went wrong instead of just \"try again\""
-}
