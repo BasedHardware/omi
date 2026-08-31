@@ -304,13 +304,41 @@ def _verify_ws_auth(authorization: str) -> str:
         return verify_token(token)
     except (InvalidIdTokenError, CertificateFetchError) as e:
         close_code, reason = _get_ws_auth_close(e)
-        logger.error("WebSocket auth failed: code=%s error=%s", close_code, e)
+        _log_ws_auth_rejection(close_code, e)
         raise WebSocketException(code=close_code, reason=reason)
     except WebSocketException:
         raise
     except Exception as e:
         logger.error(f"WebSocket auth error: {e}")
         raise WebSocketException(code=1008, reason="Auth error")
+
+
+def _log_ws_auth_rejection(close_code: int, error: Exception) -> None:
+    """Log a token rejection at the severity its fault origin deserves.
+
+    InvalidIdTokenError means Firebase *evaluated* the client-supplied token
+    and rejected it for a client-side reason — expired, signed by a key Google
+    retired, wrong audience, malformed. The close frame (4001/4004/1008)
+    already tells that client what to do; the rejection is the protocol
+    working, not a server failure. Logging each attempt at ERROR turned the
+    stale-client reconnect population into a top-3 production error
+    signature (backend-listen, GCP 2026-08-30/31: ``Token expired`` up to
+    ×47/30m and ``Certificate for key id … not found`` ×34/30m for a single
+    retired key id), burying real serving faults in the same feed.
+
+    CertificateFetchError is the other fault domain: the server could not
+    fetch Google's public certificates, so it could not even evaluate the
+    token. That is a server fault and stays at ERROR.
+
+    Failure-Class: FC-request-input-rejection-escapes-as-server-fault — a
+    route owns the classification of its own request input; a client-caused
+    token rejection must not be indistinguishable from a serving outage in
+    error metrics. Close codes are unchanged; only severity is classified.
+    """
+    if isinstance(error, CertificateFetchError):
+        logger.error("WebSocket auth failed: code=%s error=%s", close_code, error)
+    else:
+        logger.warning("WebSocket auth rejected: code=%s error=%s", close_code, error)
 
 
 def _get_ws_auth_close(error: Exception) -> 'tuple[int, str]':
