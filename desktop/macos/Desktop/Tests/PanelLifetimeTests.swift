@@ -14,11 +14,13 @@ final class PanelLifetimeTests: XCTestCase {
   override func setUp() async throws {
     _ = PanelSession.dismiss()
     _ = PanelSession.takeChatCards()
+    PanelSession.forgetClosedHistory()
   }
 
   override func tearDown() async throws {
     _ = PanelSession.dismiss()
     _ = PanelSession.takeChatCards()
+    PanelSession.forgetClosedHistory()
   }
 
   private func field(_ label: String, _ value: String) -> CloudConnectorCopyField {
@@ -71,11 +73,13 @@ final class PanelLifetimeTests: XCTestCase {
 
   /// The card's countdown running out has to reach the owner. Left remembered, the panel
   /// returns the next time the user comes back to its context.
-  func testACardThatTimesOutIsForgottenRatherThanRemembered() {
+  func testACardThatTimesOutLeavesTheScreen() {
     let panel = present("Offer", "a@b.c")
     PanelSession.expire(panel)
-    XCTAssertFalse(PanelSession.isPresenting)
-    XCTAssertNil(PanelSession.reopen())
+    XCTAssertFalse(PanelSession.isPresenting, "the countdown takes it down")
+    XCTAssertTrue(
+      PanelSession.canPresentAmbient,
+      "and it no longer holds the screen, which is what still being up would mean")
   }
 
   /// A countdown belongs to the panel that started it. One that fires after the panel was
@@ -94,8 +98,8 @@ final class PanelLifetimeTests: XCTestCase {
     PanelSession.present(
       title: "Fill this form?", subtitle: "7 fields", fields: [field("Email", "a@b.c")],
       grain: .context, origin: .ambient, autoDismissAfter: -1)
-    XCTAssertNil(PanelSession.reopen())
-    XCTAssertFalse(PanelSession.isPresenting)
+    XCTAssertFalse(
+      PanelSession.isPresenting, "showing a card its deadline already outlived is a flash")
   }
 
   /// Four minutes with neither the ✓ nor the ✗ is an answer, and the surface that offered
@@ -142,6 +146,69 @@ final class PanelLifetimeTests: XCTestCase {
     guard case .revised = PanelSession.revise(title: nil, fields: [field("Email", "Euston")])
     else { return XCTFail("an ordinary panel should still be editable") }
     XCTAssertEqual(PanelSession.modelVisibleContent(), "Email: Euston")
+  }
+
+  // MARK: - Bringing a closed panel back
+
+  /// "Close that panel" then "bring it back" is a pair the voice tools offer, and it was
+  /// impossible to complete: closing forgot the panel outright, so reopen had nothing.
+  func testAClosedPanelCanBeBroughtBack() {
+    present("Train Stations", "Euston")
+    XCTAssertTrue(PanelSession.dismiss())
+    XCTAssertEqual(PanelSession.reopen(), 1)
+    XCTAssertTrue(PanelSession.isPresenting)
+    XCTAssertEqual(PanelSession.modelVisibleContent(), "Email: Euston")
+  }
+
+  /// Only the last one, and only once — a second ask with nothing behind it must say so
+  /// rather than resurrecting something older.
+  func testOnlyTheMostRecentlyClosedPanelComesBack() {
+    present("First", "a@b.c")
+    _ = PanelSession.dismiss()
+    present("Second", "c@d.e")
+    _ = PanelSession.dismiss()
+    XCTAssertEqual(PanelSession.reopen(), 1)
+    XCTAssertEqual(PanelSession.modelVisibleContent(), "Email: c@d.e")
+    XCTAssertTrue(PanelSession.dismiss())
+    XCTAssertNotNil(PanelSession.reopen(), "the one just closed is available again")
+    _ = PanelSession.dismiss()
+    _ = PanelSession.reopen()
+    _ = PanelSession.dismiss()
+    _ = PanelSession.reopen()
+    XCTAssertTrue(PanelSession.isPresenting)
+  }
+
+  /// The ✗ means "not now", not "never mention it again": an explicit ask brings it back
+  /// like any other close. The surface that offered it is still told it was declined, so
+  /// the card never re-offers itself — only the user can call it back.
+  func testACardDismissedWithTheCrossComesBackWhenAskedFor() {
+    var declined = false
+    PanelSession.present(
+      title: "Fill this form?", subtitle: "7 fields", fields: [field("Email", "a@b.c")],
+      grain: .context, origin: .ambient, onUserDismiss: { declined = true })
+    XCTAssertTrue(PanelSession.dismiss())
+    XCTAssertEqual(PanelSession.reopen(), 1)
+    XCTAssertEqual(PanelSession.modelVisibleContent(), "Email: a@b.c")
+    XCTAssertFalse(declined, "dismiss() is not the ✗; only the card's own close declines")
+  }
+
+  /// A panel brought back by name is one the user asked for, so it does not run the
+  /// countdown an unanswered offer runs on.
+  func testAnOfferBroughtBackDoesNotExpireAgain() {
+    let panel = PanelSession.present(
+      title: "Fill this form?", subtitle: "7 fields", fields: [field("Email", "a@b.c")],
+      grain: .context, origin: .ambient, autoDismissAfter: -1,
+      ask: CopyCardAsk(placeholder: "…", confirmLabel: "Fill it", onConfirm: { _ in }))
+    PanelSession.expire(panel)
+    XCTAssertFalse(PanelSession.isPresenting)
+    XCTAssertNotNil(PanelSession.reopen())
+    XCTAssertTrue(PanelSession.isPresenting, "an already-passed deadline must not kill it again")
+    XCTAssertFalse(PanelSession.isAsking, "the ✓ was not re-offered")
+  }
+
+  /// Nothing was ever up, so there is nothing to bring back.
+  func testReopeningWithNothingEverShownStillReportsNothing() {
+    XCTAssertNil(PanelSession.reopen())
   }
 
   // MARK: - The transcript queue

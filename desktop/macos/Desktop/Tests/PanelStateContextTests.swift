@@ -14,6 +14,7 @@ final class PanelStateContextTests: XCTestCase {
     await MainActor.run {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
+      PanelSession.forgetClosedHistory()
     }
   }
 
@@ -21,6 +22,7 @@ final class PanelStateContextTests: XCTestCase {
     await MainActor.run {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
+      PanelSession.forgetClosedHistory()
     }
   }
 
@@ -106,6 +108,7 @@ final class PanelPresenceTests: XCTestCase {
     await MainActor.run {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
+      PanelSession.forgetClosedHistory()
     }
   }
 
@@ -113,6 +116,7 @@ final class PanelPresenceTests: XCTestCase {
     await MainActor.run {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
+      PanelSession.forgetClosedHistory()
     }
   }
 

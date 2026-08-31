@@ -10,6 +10,7 @@ final class PanelEdgeCaseTests: XCTestCase {
     await MainActor.run {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
+      PanelSession.forgetClosedHistory()
     }
   }
 
@@ -17,6 +18,7 @@ final class PanelEdgeCaseTests: XCTestCase {
     await MainActor.run {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
+      PanelSession.forgetClosedHistory()
     }
   }
 
@@ -103,11 +105,12 @@ final class PanelEdgeCaseTests: XCTestCase {
     XCTAssertEqual(PanelSession.modelVisibleContent(), "second")
   }
 
-  func testClosingThenReopeningReportsHonestly() {
+  /// Closing reports honestly, and closing twice does not claim a second panel went.
+  /// The panel itself is kept for an explicit "show that again" — see PanelLifetimeTests.
+  func testClosingReportsHonestlyAndOnlyOnce() {
     VoicePanel.present(title: "One", items: items([("", "first")]))
     XCTAssertTrue(VoicePanel.dismiss())
-    XCTAssertNil(VoicePanel.reopen(), "a closed panel is forgotten, not parked")
-    XCTAssertFalse(VoicePanel.dismiss())
+    XCTAssertFalse(VoicePanel.dismiss(), "nothing was on screen the second time")
   }
 }
 

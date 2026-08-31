@@ -16,6 +16,7 @@ final class PanelReviseTests: XCTestCase {
     await MainActor.run {
       _ = PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
+      PanelSession.forgetClosedHistory()
     }
   }
 
@@ -23,6 +24,7 @@ final class PanelReviseTests: XCTestCase {
     await MainActor.run {
       PanelSession.dismiss()
       _ = PanelSession.takeChatCards()
+      PanelSession.forgetClosedHistory()
     }
   }
 

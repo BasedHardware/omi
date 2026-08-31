@@ -108,6 +108,14 @@ enum PanelSession {
   private static let chatRecordLifetime: TimeInterval = 600
 
   private static var remembered: Panel?
+  /// The panel that was last taken down, kept so "bring that back" has something to
+  /// bring back.
+  ///
+  /// Leaving a context only hides a panel, so returning re-presents what is still
+  /// remembered. Closing one deliberately forgot it entirely, which made the pair the
+  /// voice tools offer — close it, show it again — impossible to complete: the model was
+  /// told to call reopen_panel and reopen_panel had nothing left.
+  private static var lastClosed: Panel?
   private static var nextTokenValue = 0
   private static var token = Token(value: 0)
   /// The panel on screen right now, for work that will need to name it later.
@@ -333,11 +341,35 @@ enum PanelSession {
   /// panel, whose content cost a model call the user should not pay twice.
   @discardableResult
   static func reopen() -> Int? {
+    if remembered == nil { restoreLastClosed() }
     guard let panel = remembered else { return nil }
     owner = currentContext()
     show()
     guard case .copy(let copy) = panel.content else { return 1 }
     return copy.fields.count
+  }
+
+  /// Bring back the panel that was closed, as a panel the user has now asked for.
+  ///
+  /// A new token, because `forget` cancelled whatever was filling the old one and work
+  /// from before the close must not land in this. No countdown, because a card asked for
+  /// by name does not expire while they are reading it. And no new transcript record:
+  /// this is the same content the turn that created it already carried, and an edit from
+  /// here starts its own record the way any edit after a write does.
+  private static func restoreLastClosed() {
+    guard var panel = lastClosed else { return }
+    panel.expiresAt = nil
+    panel.origin = .requested
+    if case .copy(var copy) = panel.content {
+      copy.autoDismissAfter = nil
+      copy.ask = nil
+      panel.content = .copy(copy)
+    }
+    remembered = panel
+    lastClosed = nil
+    nextTokenValue += 1
+    token = Token(value: nextTokenValue)
+    startWatching()
   }
 
   /// Takes the panel down for good and stops whatever was filling it in.
@@ -357,9 +389,18 @@ enum PanelSession {
   static func expire(_ expiring: Token) {
     guard expiring == token else { return }
     let ignored = expired
+    // The card's own timer takes its window down before telling us, so this is usually a
+    // no-op — but expiry must leave nothing on screen however it was reached.
+    hideCurrent()
     forget()
     ignored?()
   }
+
+  /// Drop the panel kept for "bring that back".
+  ///
+  /// Only for tests: this is process-wide state, and a suite that closed a panel would
+  /// otherwise hand it to the next one, which then sees a panel it never presented.
+  static func forgetClosedHistory() { lastClosed = nil }
 
   /// Take down a panel only if it is the one described. Used by a surface retiring its
   /// own card without reaching across and closing somebody else's.
@@ -764,6 +805,10 @@ enum PanelSession {
   }
 
   private static func forget() {
+    // Whichever way it went — closed by name, dismissed with the ✗, or its countdown ran
+    // out — this is the panel "bring that back" means. Recorded here rather than at each
+    // of those call sites so none of them can forget to.
+    if remembered != nil { lastClosed = remembered }
     cancelWork?()
     cancelWork = nil
     userDismiss = nil
