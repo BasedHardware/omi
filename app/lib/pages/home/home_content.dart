@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -25,6 +26,21 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+
+/// A day is mostly made of half-minute captures — a stray "yeah, ok" picked up on
+/// the way to lunch. Below this they collapse behind the short-conversations line
+/// instead of each taking a full row.
+const int homeShortConversationFloorSeconds = 120;
+
+/// Seconds below which a conversation collapses on the day timeline.
+///
+/// Nothing is hidden: the collapsed line names how many there are and opens
+/// them. A stricter threshold the user set themselves still wins, and turning on
+/// Show Short Conversations opts out of collapsing entirely.
+int homeShortConversationThreshold({required bool showShortConversations, required int userThreshold}) {
+  if (showShortConversations) return 0;
+  return max(userThreshold, homeShortConversationFloorSeconds);
+}
 
 /// Home is one day at a time: where you were, what the day was about, the
 /// conversations in order, and the tasks each one produced.
@@ -129,15 +145,19 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
       builder: (context, convoProvider, tasksProvider, child) {
         final day = _selectedDay;
         final dayConversations = _conversationsOn(convoProvider, day);
+        final shortThreshold = homeShortConversationThreshold(
+          showShortConversations: convoProvider.showShortConversations,
+          userThreshold: convoProvider.shortConversationThreshold,
+        );
         final highlights = <ServerConversation>[];
         final shortOnes = <ServerConversation>[];
         for (final conversation in dayConversations) {
-          final isShort =
-              conversation.discarded || conversation.getDurationInSeconds() < convoProvider.shortConversationThreshold;
+          final isShort = conversation.discarded || conversation.getDurationInSeconds() < shortThreshold;
           (isShort ? shortOnes : highlights).add(conversation);
         }
         final tasksByConversation = _tasksByConversation(tasksProvider);
         final summary = _summariesByDate[_dateKey(day)];
+        final topInset = MediaQuery.paddingOf(context).top + kToolbarHeight;
         final isNewUser = convoProvider.conversations.isEmpty &&
             !convoProvider.isLoadingConversations &&
             !convoProvider.isFetchingConversations &&
@@ -154,15 +174,19 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           },
           color: Colors.white,
           backgroundColor: const Color(0xFF1F1F25),
+          displacement: topInset + 24,
           child: CustomScrollView(
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              const SliverToBoxAdapter(child: ConversationCaptureWidget()),
+              // The header leads so its map can run full-bleed to the top of the
+              // screen; the live capture card sits under it.
               SliverToBoxAdapter(
                 child: DayHeader(
                   day: day,
+                  topInset: topInset,
                   conversations: dayConversations,
+                  summaryAddresses: summary?.locations.map((location) => location.address).toList() ?? const [],
                   headline: summary?.headline,
                   canGoForward: day.isBefore(_startOfToday()),
                   onPreviousDay: () => _goToDay(DateTime(day.year, day.month, day.day - 1)),
@@ -170,6 +194,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   onHeadlineTap: summary == null ? null : () => _openSummary(summary),
                 ),
               ),
+              const SliverToBoxAdapter(child: ConversationCaptureWidget()),
               if (isNewUser)
                 SliverFillRemaining(
                   hasScrollBody: false,
@@ -182,7 +207,12 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                 SliverList(
                   delegate: SliverChildBuilderDelegate(
                     childCount: highlights.length,
-                    (context, index) => _buildEntry(highlights[index], tasksByConversation, tasksProvider),
+                    (context, index) => _buildEntry(
+                      highlights[index],
+                      tasksByConversation,
+                      tasksProvider,
+                      showTopDivider: index > 0,
+                    ),
                   ),
                 ),
                 if (shortOnes.isNotEmpty) SliverToBoxAdapter(child: _buildShortConversationsToggle(shortOnes.length)),
@@ -242,12 +272,14 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     Map<String, List<ActionItemWithMetadata>> tasksByConversation,
     ActionItemsProvider tasksProvider, {
     bool dimmed = false,
+    bool showTopDivider = true,
   }) {
     return DayTimelineEntry(
       key: ValueKey(conversation.id),
       conversation: conversation,
       tasks: tasksByConversation[conversation.id] ?? const [],
       dimmed: dimmed,
+      showTopDivider: showTopDivider,
       onTap: () => _openConversation(conversation),
       onToggleTask: (task) => tasksProvider.updateActionItemState(task, !task.completed),
     );

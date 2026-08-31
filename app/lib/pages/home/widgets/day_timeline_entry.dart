@@ -16,6 +16,7 @@ class DayTimelineEntry extends StatelessWidget {
     required this.onTap,
     required this.onToggleTask,
     this.dimmed = false,
+    this.showTopDivider = true,
   });
 
   final ServerConversation conversation;
@@ -26,6 +27,10 @@ class DayTimelineEntry extends StatelessWidget {
   /// Short and discarded conversations render quieter than the day's real ones.
   final bool dimmed;
 
+  /// The first row of a day sits directly under the header, where a rule would
+  /// read as a box around the headline rather than as a list separator.
+  final bool showTopDivider;
+
   static const double _timeColumnWidth = 58;
 
   @override
@@ -33,71 +38,72 @@ class DayTimelineEntry extends StatelessWidget {
     final startedAt = (conversation.startedAt ?? conversation.createdAt).toLocal();
     final durationSeconds = conversation.getDurationInSeconds();
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
-        ),
-        padding: const EdgeInsets.only(top: 16, bottom: 16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: _timeColumnWidth,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: Text(
-                  TimeOfDay.fromDateTime(startedAt).format(context),
-                  maxLines: 1,
-                  overflow: TextOverflow.clip,
-                  style: TextStyle(color: Colors.white.withValues(alpha: dimmed ? 0.3 : 0.45), fontSize: 13),
-                ),
+    // The rule is inset on the left to line up with the time column and runs to
+    // the screen edge on the right, so the day reads as one continuous list.
+    return Container(
+      margin: const EdgeInsets.only(left: 24),
+      decoration: showTopDivider
+          ? BoxDecoration(border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.06))))
+          : null,
+      padding: const EdgeInsets.fromLTRB(0, 15, 24, 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: _timeColumnWidth,
+            child: Padding(
+              // Right gap so a long label can never touch the title.
+              padding: const EdgeInsets.only(top: 1, right: 8),
+              child: Text(
+                timelineTimeLabel(context, startedAt),
+                maxLines: 1,
+                overflow: TextOverflow.clip,
+                style: TextStyle(color: Colors.white.withValues(alpha: dimmed ? 0.3 : 0.45), fontSize: 13),
               ),
             ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onTap,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            conversationTitle(context, conversation),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: dimmed ? 0.55 : 1),
-                              fontSize: 17,
-                              fontWeight: FontWeight.w600,
-                              height: 1.25,
-                              letterSpacing: -0.2,
-                            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onTap,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          conversationTitle(context, conversation),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: dimmed ? 0.55 : 1),
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            height: 1.25,
+                            letterSpacing: -0.2,
                           ),
                         ),
-                        if (durationSeconds > 0) ...[
-                          const SizedBox(width: 10),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              formatConversationDuration(durationSeconds),
-                              style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
-                            ),
+                      ),
+                      if (durationSeconds > 0) ...[
+                        const SizedBox(width: 10),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            formatConversationDuration(durationSeconds),
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
                           ),
-                        ],
+                        ),
                       ],
-                    ),
+                    ],
                   ),
-                  for (final task in tasks) _DayTimelineTask(task: task, onToggle: () => onToggleTask(task)),
-                ],
-              ),
+                ),
+                for (final task in tasks) _DayTimelineTask(task: task, onToggle: () => onToggleTask(task)),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -114,7 +120,7 @@ class _DayTimelineTask extends StatelessWidget {
     final due = taskDueLabel(context, task);
 
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.only(top: 20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -171,6 +177,24 @@ String conversationTitle(BuildContext context, ServerConversation conversation) 
   }
   final title = conversation.structured.title.decodeString.trim();
   return title.isNotEmpty ? title : context.l10n.untitledConversation;
+}
+
+/// The start time as the day timeline shows it: "9:02", not "9:02 AM".
+///
+/// The rows are already ordered through the day, so the meridiem only adds
+/// width to the narrowest column on the screen. Locales on a 24-hour clock keep
+/// their own format, which is unambiguous already.
+String timelineTimeLabel(BuildContext context, DateTime at) {
+  final localizations = MaterialLocalizations.of(context);
+  final use24Hour = MediaQuery.maybeOf(context)?.alwaysUse24HourFormat ?? false;
+  final formatted = localizations.formatTimeOfDay(TimeOfDay.fromDateTime(at), alwaysUse24HourFormat: use24Hour);
+  if (use24Hour) return formatted;
+  return formatted
+      .replaceAll(localizations.anteMeridiemAbbreviation, '')
+      .replaceAll(localizations.postMeridiemAbbreviation, '')
+      // Some locales separate the meridiem with a non-breaking or narrow space.
+      .replaceAll(RegExp(r'[\s\u00A0\u202F]+'), ' ')
+      .trim();
 }
 
 String formatConversationDuration(int seconds) {

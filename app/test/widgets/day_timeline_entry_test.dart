@@ -31,6 +31,10 @@ void main() {
 
     expect(find.text('Design crit on the home screen'), findsOneWidget);
     expect(find.text('29m'), findsOneWidget);
+    // The rows already run through the day, so the meridiem is dropped.
+    expect(find.text('11:45'), findsOneWidget);
+    expect(find.textContaining('AM'), findsNothing);
+    expect(find.textContaining('PM'), findsNothing);
     expect(find.text('Share crit notes'), findsOneWidget);
     expect(find.text('Cut the mind map'), findsOneWidget);
     // Past due and still open reads as overdue; a task with no due date has no marker.
