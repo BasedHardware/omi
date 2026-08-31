@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from models.conversation_enums import ConversationStatus
+from models.geolocation import Geolocation
 from routers import conversations as conversations_router
 from utils.conversations import lifecycle as lifecycle_service
 
@@ -88,6 +89,32 @@ def test_rollback_error_does_not_mask_the_original_processing_exception(monkeypa
 
     with pytest.raises(RuntimeError, match='processor crashed'):
         conversations_router.process_in_progress_conversation(request=None, uid='uid1')
+
+
+def test_recording_snapshot_wins_over_redis_location_fallback(monkeypatch, conversation_state):
+    snapshot = Geolocation(latitude=40.7128, longitude=-74.006, capture_source='current_position')
+    conversation = _in_progress_conversation()
+    conversation.geolocation = snapshot
+
+    monkeypatch.setattr(conversations_router, 'retrieve_in_progress_conversation', lambda uid: {'id': conversation.id})
+    monkeypatch.setattr(conversations_router, 'deserialize_conversation', lambda data: conversation)
+    redis_read = MagicMock(side_effect=AssertionError('Redis fallback must not be read for a recording snapshot'))
+    monkeypatch.setattr(conversations_router.redis_db, 'get_cached_user_geolocation', redis_read)
+    monkeypatch.setattr(conversations_router.redis_db, 'get_in_progress_conversation_id', lambda uid: None)
+    monkeypatch.setattr(conversations_router.redis_db, 'remove_in_progress_conversation_id', lambda uid: None)
+    resolve = MagicMock(return_value=snapshot)
+    monkeypatch.setattr(conversations_router, 'resolve_geolocation', resolve)
+
+    def raise_processing(*args, **kwargs):
+        raise RuntimeError('processor crashed')
+
+    monkeypatch.setattr(conversations_router, 'process_conversation', raise_processing)
+
+    with pytest.raises(RuntimeError, match='processor crashed'):
+        conversations_router.process_in_progress_conversation(request=None, uid='uid1')
+
+    resolve.assert_called_once_with(snapshot)
+    redis_read.assert_not_called()
 
 
 def test_deferred_enrichment_renews_processing_lease_during_live_processing(monkeypatch):

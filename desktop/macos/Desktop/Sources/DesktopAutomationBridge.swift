@@ -2496,28 +2496,6 @@ final class DesktopAutomationActionRegistry {
       return bar.automationNotchStateSnapshot
     }
 
-    // Drives the REAL provider failover the quota/auth close handlers call
-    // (failoverToAlternateProvider), then re-warms, so the cross-provider path
-    // can be exercised without waiting for the shared key to actually throttle.
-    register(
-      name: "realtime_failover",
-      summary: "Fail the realtime hub over to the alternate provider via the production path (non-prod).",
-      params: []
-    ) { _ in
-      guard AppBuild.isNonProduction else {
-        return ["error": "realtime_failover is disabled on production bundles"]
-      }
-      let controller = RealtimeHubController.shared
-      let from = controller.effectiveProvider.rawValue
-      let started = controller.failoverToAlternateProvider(reason: "quota")
-      controller.ensureWarm()
-      return [
-        "failover_started": started ? "true" : "false",
-        "from": from,
-        "to": controller.effectiveProvider.rawValue,
-      ]
-    }
-
     register(
       name: "seed_subagents",
       summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
@@ -3599,7 +3577,8 @@ final class DesktopAutomationActionRegistry {
       NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
       return [
         "posted": "navigateToRewindNotes",
-        "expected_tab_index": "\(SidebarNavItem.rewind.rawValue)",
+        "expected_tab_index": "\(SidebarNavItem.conversations.rawValue)",
+        "expected_memory_destination": "\(MemoryHubDestination.rewind.rawValue)",
       ]
     }
 
@@ -3619,6 +3598,7 @@ final class DesktopAutomationActionRegistry {
     registerNotificationActions()
     registerRatingPromptActions()
     registerRemotePromptActions()
+    registerRealtimeHubActions()
     register(
       name: "rewind_settings_snapshot",
       summary: "Return Rewind settings retention and excluded-app counts"
@@ -3730,6 +3710,31 @@ final class DesktopAutomationActionRegistry {
         params["personName"]?.trimmingCharacters(in: .whitespacesAndNewlines)
         ?? "[[MARKER:speaker-naming]] Harness Speaker"
       let segmentIndex = max(0, Int(params["segmentIndex"] ?? "") ?? 0)
+
+      // Raw mode: drive assignSpeakerToSegments with the ids exactly as given,
+      // without resolving the conversation first — the seam that exercises the
+      // local-first fallback for conversations the backend does not have yet.
+      if let rawConversationId = params["rawConversationId"]?.trimmingCharacters(
+        in: .whitespacesAndNewlines), !rawConversationId.isEmpty
+      {
+        let rawSegmentIds = (params["rawSegmentIds"] ?? "").split(separator: ",").map(String.init)
+        guard !rawSegmentIds.isEmpty else { return ["error": "rawSegmentIds required in raw mode"] }
+        guard let person = await appState.createPerson(name: personName) else {
+          return ["error": "failed to create person"]
+        }
+        let assigned = await appState.assignSpeakerToSegments(
+          conversationId: rawConversationId,
+          segmentIds: rawSegmentIds,
+          personId: person.id,
+          isUser: false
+        )
+        return [
+          "raw_mode": "true",
+          "assigned": assigned ? "true" : "false",
+          "conversation_id": rawConversationId,
+          "person_id": person.id,
+        ]
+      }
 
       var conversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
       if conversationId == "latest" || conversationId?.isEmpty != false {

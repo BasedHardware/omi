@@ -5,6 +5,7 @@ import os
 import time
 from collections.abc import Mapping
 from copy import deepcopy
+from openai import AsyncOpenAI, OpenAI
 from typing import Any, TypeVar, cast
 
 import httpx
@@ -52,6 +53,13 @@ GATEWAY_TRANSPORT_STATUS_CODES = frozenset({502, 504})
 StructuredOutput = TypeVar('StructuredOutput', bound=BaseModel)
 JsonDict = dict[str, Any]
 JsonList = list[Any]
+_BYOK_GATEWAY_HEADER_PREFIX = 'X-Omi-Byok-'
+_BYOK_GATEWAY_HEADER_SUFFIX = '-Key'
+
+
+def byok_gateway_header_name(provider: str) -> str:
+    """Envelope header that forwards a user's BYOK key to the gateway."""
+    return f'{_BYOK_GATEWAY_HEADER_PREFIX}{provider.strip().lower()}{_BYOK_GATEWAY_HEADER_SUFFIX}'
 
 
 class PublicSharedConversationChatGatewayUnavailable(Exception):
@@ -106,6 +114,50 @@ class GatewayContextChatOpenAI(ChatOpenAI):
 
 def is_gateway_transport_status_code(status_code: object) -> bool:
     return isinstance(status_code, int) and status_code in GATEWAY_TRANSPORT_STATUS_CODES
+
+
+def is_gateway_route_absent(error: object) -> bool:
+    """Whether a gateway failure means the deployed gateway has no such route.
+
+    A gateway older than its caller answers an unknown path with Starlette's
+    bare ``{"detail": "Not Found"}``. A gateway that owns the route answers a
+    real rejection with an OpenAI-shaped ``{"error": {...}}`` body -- and
+    ``model_not_found`` is also a 404. So the *body*, not the status, is what
+    separates "server predates client" from "server rejected this request";
+    treating every 404 as route-absence would silently swallow lane
+    misconfiguration.
+    """
+    if not isinstance(error, httpx.HTTPStatusError):
+        return False
+    if error.response.status_code != 404:
+        return False
+    try:
+        body: object = error.response.json()
+    except Exception:
+        # A non-JSON 404 is not something this gateway's error path can emit.
+        return True
+    return not (isinstance(body, Mapping) and isinstance(body.get('error'), Mapping))
+
+
+def is_gateway_model_not_found(error: object) -> bool:
+    """Whether an OpenAI-compatible gateway rejected an unknown lane id.
+
+    The OpenAI SDK exposes the gateway's ``error.code`` as ``error.code``;
+    direct-provider file 404s have the same HTTP status but no
+    ``model_not_found`` code. Keep that distinction closed so deploy skew can
+    degrade without misclassifying a genuinely deleted attachment.
+    """
+    if getattr(error, 'status_code', None) != 404:
+        return False
+    if getattr(error, 'code', None) == 'model_not_found':
+        return True
+    body = getattr(error, 'body', None)
+    if not isinstance(body, Mapping):
+        return False
+    if body.get('code') == 'model_not_found':
+        return True
+    nested_error = body.get('error')
+    return isinstance(nested_error, Mapping) and nested_error.get('code') == 'model_not_found'
 
 
 def _as_json_dict(value: object) -> JsonDict | None:
@@ -550,6 +602,167 @@ def generate_image_via_gateway(
     if not isinstance(body, Mapping):
         raise ValueError('gateway image response must be an object')
     return cast('Mapping[str, object]', body)
+
+
+FILE_CHAT_VISION_FEATURE = 'file_chat_vision'
+FILE_CHAT_DOCUMENTS_FEATURE = 'file_chat_documents'
+FILE_CHAT_VISION_AUTO_LANE_ID = feature_auto_lane_id(FILE_CHAT_VISION_FEATURE)
+FILE_CHAT_DOCUMENTS_AUTO_LANE_ID = feature_auto_lane_id(FILE_CHAT_DOCUMENTS_FEATURE)
+OPENAI_EMBEDDINGS_AUTO_LANE_ID = 'omi:auto:openai-embeddings'
+GEMINI_EMBEDDINGS_AUTO_LANE_ID = 'omi:auto:gemini-embeddings'
+EMBEDDINGS_TIMEOUT_SECONDS = 30.0
+_FILE_CHAT_GATEWAY_TIMEOUT_SECONDS = 120.0
+
+_file_chat_gateway_async_client: AsyncOpenAI | None = None
+_file_chat_gateway_sync_client: OpenAI | None = None
+
+
+def file_chat_auto_lane_id(*, pdf: bool) -> str:
+    """The gateway file-chat lane for a request: PDFs take the file-part lane."""
+    return FILE_CHAT_DOCUMENTS_AUTO_LANE_ID if pdf else FILE_CHAT_VISION_AUTO_LANE_ID
+
+
+def _file_chat_gateway_default_headers() -> dict[str, str]:
+    headers = {'X-Omi-Service-Caller': LLM_GATEWAY_CALLER}
+    service_token = get_llm_gateway_service_token()
+    if service_token:
+        headers['Authorization'] = f'Bearer {service_token}'
+    return headers
+
+
+def get_file_chat_gateway_async_client() -> AsyncOpenAI:
+    """Async OpenAI SDK client pointed at the gateway's chat-completions surface.
+
+    The gateway is OpenAI-compatible, so file chat keeps its SDK streaming and
+    typed-error handling (``openai.NotFoundError`` / ``BadRequestError`` map to
+    the gateway's OpenAI-shaped error bodies) while the model call lands in the
+    gateway ledger.
+    """
+    global _file_chat_gateway_async_client
+    if _file_chat_gateway_async_client is None:
+        _file_chat_gateway_async_client = AsyncOpenAI(
+            api_key=get_llm_gateway_service_token() or 'omi-gateway',
+            base_url=f'{get_llm_gateway_base_url()}/v1',
+            default_headers=_file_chat_gateway_default_headers(),
+            timeout=_gateway_timeout(_FILE_CHAT_GATEWAY_TIMEOUT_SECONDS),
+            max_retries=0,
+        )
+    return _file_chat_gateway_async_client
+
+
+def get_file_chat_gateway_sync_client() -> OpenAI:
+    """Sync counterpart of :func:`get_file_chat_gateway_async_client`."""
+    global _file_chat_gateway_sync_client
+    if _file_chat_gateway_sync_client is None:
+        _file_chat_gateway_sync_client = OpenAI(
+            api_key=get_llm_gateway_service_token() or 'omi-gateway',
+            base_url=f'{get_llm_gateway_base_url()}/v1',
+            default_headers=_file_chat_gateway_default_headers(),
+            timeout=_gateway_timeout(_FILE_CHAT_GATEWAY_TIMEOUT_SECONDS),
+            max_retries=0,
+        )
+    return _file_chat_gateway_sync_client
+
+
+def file_chat_feature_header(lane_id: str, *, uid: str | None = None) -> dict[str, str]:
+    """Per-request file-chat headers: feature plus the user the spend belongs to.
+
+    The cached SDK client only carries service auth. Attribution has to go on
+    the request or the gateway ledger row is unattributed.
+    """
+    feature = FILE_CHAT_DOCUMENTS_FEATURE if lane_id == FILE_CHAT_DOCUMENTS_AUTO_LANE_ID else FILE_CHAT_VISION_FEATURE
+    headers = _gateway_usage_headers(feature=feature)
+    if uid:
+        headers[LLM_GATEWAY_USER_UID_HEADER] = uid
+    return headers
+
+
+def _embedding_vectors(body: object) -> list[list[float]]:
+    if not isinstance(body, Mapping):
+        raise ValueError('gateway embeddings response must be an object')
+    data = body.get('data')
+    if not isinstance(data, list) or not data:
+        raise ValueError('gateway embeddings response has no data')
+    vectors: list[list[float]] = []
+    for item in data:
+        embedding = item.get('embedding') if isinstance(item, Mapping) else None
+        if not isinstance(embedding, list) or not embedding:
+            raise ValueError('gateway embeddings response has an empty vector')
+        vectors.append([float(value) for value in embedding])
+    return vectors
+
+
+def invoke_openai_embeddings_gateway(
+    texts: list[str],
+    *,
+    timeout_seconds: float = EMBEDDINGS_TIMEOUT_SECONDS,
+    byok_api_key: str | None = None,
+) -> list[list[float]]:
+    """Sync OpenAI text-embedding-3-large hop through the gateway embeddings lane."""
+    headers = _gateway_headers(feature='openai_embeddings')
+    if byok_api_key:
+        headers[byok_gateway_header_name('openai')] = byok_api_key
+    with httpx.Client(timeout=_gateway_timeout(timeout_seconds)) as client:
+        response = client.post(
+            f'{get_llm_gateway_base_url()}/v1/embeddings',
+            headers=headers,
+            json={'model': OPENAI_EMBEDDINGS_AUTO_LANE_ID, 'input': texts},
+        )
+        response.raise_for_status()
+        body: object = response.json()
+    return _embedding_vectors(body)
+
+
+async def ainvoke_openai_embeddings_gateway(
+    texts: list[str],
+    *,
+    timeout_seconds: float = EMBEDDINGS_TIMEOUT_SECONDS,
+    byok_api_key: str | None = None,
+) -> list[list[float]]:
+    """Async counterpart of :func:`invoke_openai_embeddings_gateway`."""
+    from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
+
+    headers = _gateway_headers(feature='openai_embeddings')
+    if byok_api_key:
+        headers[byok_gateway_header_name('openai')] = byok_api_key
+    async with get_llm_gateway_semaphore():
+        client = get_llm_gateway_client()
+        response = await client.post(
+            f'{get_llm_gateway_base_url()}/v1/embeddings',
+            headers=headers,
+            json={'model': OPENAI_EMBEDDINGS_AUTO_LANE_ID, 'input': texts},
+            timeout=_gateway_timeout(timeout_seconds),
+        )
+        response.raise_for_status()
+        body: object = response.json()
+    return _embedding_vectors(body)
+
+
+def invoke_gemini_embedding_gateway(
+    text: str,
+    *,
+    task_type: str,
+    title: str | None = None,
+    timeout_seconds: float = EMBEDDINGS_TIMEOUT_SECONDS,
+) -> list[float]:
+    """Sync Gemini embedding hop through the gateway (Vertex stays an upstream adapter)."""
+    payload: dict[str, object] = {
+        'model': GEMINI_EMBEDDINGS_AUTO_LANE_ID,
+        'input': [text],
+        'task_type': task_type,
+    }
+    if title:
+        payload['title'] = title
+    with httpx.Client(timeout=_gateway_timeout(timeout_seconds)) as client:
+        response = client.post(
+            f'{get_llm_gateway_base_url()}/v1/embeddings',
+            headers=_gateway_headers(feature='gemini_screen_activity_query_embedding'),
+            json=payload,
+        )
+        response.raise_for_status()
+        body: object = response.json()
+    vectors = _embedding_vectors(body)
+    return vectors[0]
 
 
 def _gateway_usage_headers(*, feature: str | None, platform: str | None = None) -> dict[str, str]:

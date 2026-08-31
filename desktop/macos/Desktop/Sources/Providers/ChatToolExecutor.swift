@@ -469,6 +469,18 @@ class ChatToolExecutor {
         toolCall,
         runID: originatingRunId,
         attemptID: originatingAttemptId,
+        surfaceKind: originatingSurfaceRef?.surfaceKind,
+        expectedOwnerID: expectedOwnerID,
+        api: backendAPIClient)
+
+    // JIT knowledge-ledger tools — generic passthrough to the Python backend's
+    // /v1/agent/execute-tool endpoint. These have no bespoke typed REST route:
+    // the backend re-validates the JIT rollout server-side on every call, so
+    // this client dispatch is UX-only, not an authorization boundary.
+    case .searchKnowledge, .readPlaybook, .searchHistoricalFacts, .getEntityTimelineTool,
+      .savePlaybook, .createStandingTrigger, .closeFact:
+      return await executeAgentLedgerTool(
+        toolCall,
         expectedOwnerID: expectedOwnerID,
         api: backendAPIClient)
 
@@ -1023,7 +1035,8 @@ class ChatToolExecutor {
   static func executeSQL(
     _ args: [String: Any],
     dbQueue: DatabasePool?,
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    timeZone: TimeZone = .current
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
     guard let query = args["query"] as? String, !query.isEmpty else {
@@ -1090,7 +1103,8 @@ class ChatToolExecutor {
           upper: upper,
           parameters: parameters,
           dbQueue: databaseQueue,
-          expectedOwnerID: expectedOwnerID)
+          expectedOwnerID: expectedOwnerID,
+          timeZone: timeZone)
       } else if isInsert || isUpdate || isDelete {
         return try await executeWriteQuery(
           trimmed,
@@ -1196,7 +1210,8 @@ class ChatToolExecutor {
     upper: String,
     parameters: [String],
     dbQueue: DatabasePool,
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    timeZone: TimeZone
   )
     async throws -> String
   {
@@ -1214,7 +1229,7 @@ class ChatToolExecutor {
     let query = finalQuery
     let formatted = try await dbQueue.read { db -> (text: String, count: Int) in
       let rows = try Row.fetchAll(db, sql: query, arguments: StatementArguments(parameters))
-      return SQLQueryResultProjection.format(rows: rows, query: query)
+      return SQLQueryResultProjection.format(rows: rows, query: query, timeZone: timeZone)
     }
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
@@ -1420,11 +1435,9 @@ class ChatToolExecutor {
     }
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
-    // For today (daysAgo=0), upper bound is now; for past days, upper bound is start of today
-    let upperBound =
-      daysAgo == 0
-      ? "datetime('now', 'localtime')"
-      : "datetime('now', 'start of day', 'localtime')"
+    // UTC-vs-UTC: local midnight converted back to UTC so "today" does not shift by offset.
+    let lowerBound = DesktopChatTimestampFormat.SQLDayBounds.startAsUTC(daysAgo: daysAgo)
+    let upperBound = DesktopChatTimestampFormat.SQLDayBounds.exclusiveEndAsUTC(daysAgo: daysAgo)
 
     do {
       let result = try await dbQueue.read { db in
@@ -1433,9 +1446,9 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT appName, COUNT(*) as screenshots, ROUND(COUNT(*) * 10.0 / 60, 1) as minutes,
-                MIN(time(timestamp, 'localtime')) as first_seen, MAX(time(timestamp, 'localtime')) as last_seen
+                MIN(timestamp) AS firstSeenAt, MAX(timestamp) AS lastSeenAt
             FROM screenshots
-            WHERE timestamp >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE timestamp >= \(lowerBound)
                 AND timestamp < \(upperBound)
                 AND appName IS NOT NULL AND appName != ''
             GROUP BY appName ORDER BY screenshots DESC
@@ -1448,7 +1461,7 @@ class ChatToolExecutor {
             SELECT backendId, title, overview, emoji, category, startedAt, finishedAt,
                 ROUND((julianday(finishedAt) - julianday(startedAt)) * 1440, 1) as duration_min
             FROM transcription_sessions
-            WHERE startedAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE startedAt >= \(lowerBound)
                 AND startedAt < \(upperBound)
                 AND deleted = 0 AND discarded = 0
             ORDER BY startedAt DESC
@@ -1459,7 +1472,7 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT backendId, description, completed, priority, createdAt FROM action_items
-            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE createdAt >= \(lowerBound)
                 AND createdAt < \(upperBound)
                 AND deleted = 0
             ORDER BY createdAt DESC
@@ -1470,7 +1483,7 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT status, appOrSite, description, durationSeconds FROM focus_sessions
-            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE createdAt >= \(lowerBound)
                 AND createdAt < \(upperBound)
             ORDER BY createdAt DESC
             """)
@@ -1480,7 +1493,7 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT backendId, content, category, source FROM memories
-            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE createdAt >= \(lowerBound)
                 AND createdAt < \(upperBound)
                 AND deleted = 0
             ORDER BY createdAt DESC
@@ -1491,7 +1504,7 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT appName, currentActivity, contextSummary FROM observations
-            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE createdAt >= \(lowerBound)
                 AND createdAt < \(upperBound)
             ORDER BY createdAt DESC
             LIMIT 20
@@ -1529,10 +1542,16 @@ class ChatToolExecutor {
             let name = app["appName"] as? String ?? "Unknown"
             let minutes = app["minutes"] as? Double ?? 0
             let screenshots = Self.rowInt(app["screenshots"]) ?? 0
-            let firstSeen = app["first_seen"] as? String ?? ""
-            let lastSeen = app["last_seen"] as? String ?? ""
+            let timeZone = TimeZone.current
+            let firstSeen =
+              DesktopChatTimestampFormat.formatSQLCell(
+                column: "firstSeenAt", value: app["firstSeenAt"], timeZone: timeZone) ?? ""
+            let lastSeen =
+              DesktopChatTimestampFormat.formatSQLCell(
+                column: "lastSeenAt", value: app["lastSeenAt"], timeZone: timeZone) ?? ""
+            let window = firstSeen.isEmpty && lastSeen.isEmpty ? "" : " \(firstSeen)–\(lastSeen)"
             out +=
-              "- **\(name)**: \(minutes) min (\(screenshots) captures, \(firstSeen)–\(lastSeen))\n"
+              "- **\(name)**: \(minutes) min (\(screenshots) captures,\(window))\n"
           }
           if apps.count > 20 { out += "- ...and \(apps.count - 20) more apps\n" }
         }
@@ -1687,9 +1706,7 @@ class ChatToolExecutor {
       log("Tool semantic_search: vector returned \(vectorResults.count) results")
 
       // Filter by similarity threshold and fetch screenshot details
-      let dateFormatter = DateFormatter()
-      dateFormatter.dateStyle = .medium
-      dateFormatter.timeStyle = .short
+      let displayTimeZone = TimeZone.current
 
       var lines: [String] = []
       var sources = [APIClient.ToolSource]()
@@ -1709,7 +1726,8 @@ class ChatToolExecutor {
         }
 
         count += 1
-        let dateStr = dateFormatter.string(from: screenshot.timestamp)
+        let dateStr = DesktopChatTimestampFormat.userFacing(
+          screenshot.timestamp, timeZone: displayTimeZone)
         let windowTitle = screenshot.windowTitle ?? ""
         let titlePart = windowTitle.isEmpty ? "" : " - \(windowTitle)"
         lines.append(
@@ -2081,7 +2099,7 @@ class ChatToolExecutor {
         // Same drag-to-grant mechanic as Full Disk Access. macOS pre-registers
         // the row here, but the card still walks the user to the right toggle —
         // and re-adds the app if the row was removed via tccutil or a reset.
-        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+        Task { await PermissionDragGuidance.presentDragToGrantHelper(for: .screenRecording) }
         try? await Task.sleep(nanoseconds: 2_000_000_000)
         guard
           isPermissionAuthorizationCurrent(
@@ -2213,7 +2231,7 @@ class ChatToolExecutor {
           authorizationSnapshot: authorizationSnapshot)
         // Same drag-to-grant mechanic as Screen Recording: drop the app into the
         // Full Disk Access list to add and enable it in one gesture.
-        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+        Task { await PermissionDragGuidance.presentDragToGrantHelper(for: .fullDiskAccess) }
         try? await Task.sleep(nanoseconds: 3_000_000_000)
         guard
           isPermissionAuthorizationCurrent(
@@ -3122,16 +3140,38 @@ class ChatToolExecutor {
 
   // MARK: - Backend RAG Tools
 
+  /// The model-visible failure envelope for a tool that did not succeed.
+  ///
+  /// `relay-tool-result.ts` treats `ok:false` (or an `error` key) as canonical and
+  /// flips the invocation outcome to `failed`. Returning prose instead left a failed
+  /// write indistinguishable from a successful one, which is how "I've added that"
+  /// was spoken over a write that never landed.
+  static func toolFailureEnvelope(code: String, message: String) -> String {
+    let payload: [String: Any] = ["ok": false, "error": ["code": code, "message": message]]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "{\"ok\":false,\"error\":{\"code\":\"\(code)\"}}"
+    }
+    return json
+  }
+
   private static func executeBackendTool(
     _ toolCall: ToolCall,
     runID: String?,
     attemptID: String?,
+    surfaceKind: String?,
     expectedOwnerID: String?,
     api: APIClient
   ) async -> String {
     let args = toolCall.arguments
 
+    func backendFailureEnvelope(_ response: APIClient.ToolResponse) -> String {
+      toolFailureEnvelope(code: "backend_tool_failed", message: response.resultText)
+    }
+
     func annotated(_ response: APIClient.ToolResponse) async -> String {
+      if response.isError { return backendFailureEnvelope(response) }
       let sources: [APIClient.ToolSource]
       if let typedSources = response.sources {
         sources = typedSources
@@ -3165,30 +3205,46 @@ class ChatToolExecutor {
 
       switch toolCall.name {
       case "get_conversations":
+        let isRealtimeVoice = RealtimeConversationToolProjection.applies(to: surfaceKind)
+        let limit =
+          isRealtimeVoice
+          ? RealtimeConversationToolProjection.requestLimit(args["limit"])
+          : args["limit"] as? Int ?? 20
         let resp = try await api.toolGetConversations(
           startDate: validatedStartDate,
           endDate: validatedEndDate,
-          limit: args["limit"] as? Int ?? 20,
+          limit: limit,
           offset: args["offset"] as? Int ?? 0,
-          includeTranscript: args["include_transcript"] as? Bool ?? true,
+          includeTranscript: isRealtimeVoice ? false : args["include_transcript"] as? Bool ?? true,
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
+        if isRealtimeVoice {
+          return RealtimeConversationToolProjection.makeResult(resp, limit: limit)
+        }
         return await annotated(resp)
 
       case "search_conversations":
         guard let query = args["query"] as? String, !query.isEmpty else {
           return "Error: query is required"
         }
+        let isRealtimeVoice = RealtimeConversationToolProjection.applies(to: surfaceKind)
+        let limit =
+          isRealtimeVoice
+          ? RealtimeConversationToolProjection.requestLimit(args["limit"])
+          : args["limit"] as? Int ?? 5
         let resp = try await api.toolSearchConversations(
           query: query,
           startDate: validatedStartDate,
           endDate: validatedEndDate,
-          limit: args["limit"] as? Int ?? 5,
-          includeTranscript: args["include_transcript"] as? Bool ?? true,
+          limit: limit,
+          includeTranscript: isRealtimeVoice ? false : args["include_transcript"] as? Bool ?? true,
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
+        if isRealtimeVoice {
+          return RealtimeConversationToolProjection.makeResult(resp, limit: limit)
+        }
         return await annotated(resp)
 
       case "get_memories":
@@ -3267,7 +3323,7 @@ class ChatToolExecutor {
                 authorizationSnapshot: currentOwnerAuthorizationSnapshot)
             })
         else { return authorizedOwnerChangedResult() }
-        return resp.resultText
+        return resp.isError ? backendFailureEnvelope(resp) : resp.resultText
 
       case "update_action_item":
         guard let itemId = resolveActionItemID(args) else {
@@ -3297,7 +3353,7 @@ class ChatToolExecutor {
                 authorizationSnapshot: currentOwnerAuthorizationSnapshot)
             })
         else { return authorizedOwnerChangedResult() }
-        return resp.resultText
+        return resp.isError ? backendFailureEnvelope(resp) : resp.resultText
 
       case "create_calendar_event":
         guard let rawTitle = args["title"] as? String else {
@@ -3327,13 +3383,44 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
-        return resp.resultText
+        return resp.isError ? backendFailureEnvelope(resp) : resp.resultText
 
       default:
         return "Unknown backend tool: \(toolCall.name)"
       }
     } catch {
       log("Backend tool error (\(toolCall.name)): \(error)")
+      return toolFailureEnvelope(
+        code: "backend_tool_unreachable",
+        message: "Error calling backend: \(error.localizedDescription)")
+    }
+  }
+
+  /// Generic passthrough for the JIT-gated knowledge-ledger tools (search_knowledge,
+  /// read_playbook, search_historical_facts, get_entity_timeline_tool, save_playbook,
+  /// create_standing_trigger, close_fact). Unlike the typed `/v1/tools/*` routes above,
+  /// these share one backend contract — `POST /v1/agent/execute-tool` with
+  /// `{tool_name, params}` — so there is no bespoke per-tool Swift wrapper. The backend
+  /// re-validates the JIT rollout for `tool_name` on every call regardless of whether the
+  /// manifest advertised it, so this dispatch is a UX convenience, not an authorization
+  /// decision.
+  private static func executeAgentLedgerTool(
+    _ toolCall: ToolCall,
+    expectedOwnerID: String?,
+    api: APIClient
+  ) async -> String {
+    do {
+      let resp = try await api.executeAgentTool(
+        toolName: toolCall.name,
+        params: toolCall.arguments,
+        expectedOwnerId: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+      if let error = resp.error, !error.isEmpty {
+        return "Error: \(error)"
+      }
+      return resp.result ?? ""
+    } catch {
+      log("Agent ledger tool error (\(toolCall.name)): \(error)")
       return "Error calling backend: \(error.localizedDescription)"
     }
   }

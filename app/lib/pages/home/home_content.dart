@@ -431,8 +431,6 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                 showAppBar: false,
                 showShareButton: false,
                 trackOpenEvent: false,
-                autoRebuildIfEmpty: false,
-                hideRebuildButtonWhenEmpty: true,
                 initialZoom: 0.6,
               ),
             ),

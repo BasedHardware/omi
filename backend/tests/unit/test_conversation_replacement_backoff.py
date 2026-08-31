@@ -179,3 +179,56 @@ def test_caller_owning_an_outer_loop_keeps_immediate_rounds(monkeypatch):
 
     assert injector.calls == 3
     assert sleeps == []
+
+
+def test_conversation_yielding_no_memories_is_a_noop_not_a_deletion(monkeypatch):
+    """A conversation that extracts nothing must not enter the deletion boundary.
+
+    Prod regression (2026-08-28 -> 08-30): #12084 began requiring an
+    ``explicit_memory_deletion`` gate token for any empty replacement, because
+    an empty replacement normally *removes* a conversation's rows. Conversation
+    finalization holds no such gate, so a conversation that simply produced no
+    memories raised ``LegalHoldAuthorityUnavailable`` and returned 500. It ran
+    at a 74% failure rate on ``/v1/conversations/from-segments`` for two days.
+
+    With no extracted items and no prior rows for the conversation, there is
+    nothing to write and nothing to retract, so the call must resolve as a
+    no-op without reaching the destructive path at all.
+    """
+
+    db = _extraction_db()
+    injector = _install_injector(monkeypatch, conflicts=0)
+
+    result = replace_conversation_sourced_memories(UID, CONVERSATION_ID, [], db_client=db)
+
+    assert result["committed_memory_ids"] == []
+    assert result["retracted_memory_ids"] == []
+    assert result["reactivated_memory_ids"] == []
+    # The destructive boundary was never reached, so no gate was ever needed.
+    assert injector.calls == 0
+    # And the account's control state is untouched.
+    assert db.docs[f"users/{UID}/memory_state/apply_control"]["source_generation"] == 1
+
+
+def test_empty_replacement_over_existing_rows_still_demands_the_gate(monkeypatch):
+    """The compliance rule itself must survive the no-op shortcut.
+
+    This is the other half of the fix: emptying a conversation that *does* have
+    canonical rows genuinely retracts them, so it must still be refused without
+    ``explicit_memory_deletion`` authority. Only the provably-nothing-to-do case
+    returns early.
+    """
+
+    from database.legal_holds import LegalHoldAuthorityUnavailable
+
+    db = _extraction_db()
+    items = _extracted_items()
+    replace_conversation_sourced_memories(UID, CONVERSATION_ID, items, db_client=db)
+    assert db.docs[f"users/{UID}/memory_items/{items[0]['id']}"]["status"] == MemoryItemStatus.active.value
+
+    # Same conversation, now extracting nothing: this removes the row above.
+    with pytest.raises(LegalHoldAuthorityUnavailable):
+        replace_conversation_sourced_memories(UID, CONVERSATION_ID, [], db_client=db)
+
+    # Fail-closed: the row survives the refused deletion.
+    assert db.docs[f"users/{UID}/memory_items/{items[0]['id']}"]["status"] == MemoryItemStatus.active.value

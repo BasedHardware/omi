@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -184,7 +185,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.errorWithMessage(e.toString())), backgroundColor: Colors.red),
+          SnackBar(content: Text(context.l10n.errorWithMessage(readableError(e))), backgroundColor: Colors.red),
         );
       }
     } finally {

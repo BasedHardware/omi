@@ -9933,4 +9933,9 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant atmintis pilna ir jis vis dar įrašymo režime, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite iš naujo.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Neįrašyta ($count)';
+  }
 }

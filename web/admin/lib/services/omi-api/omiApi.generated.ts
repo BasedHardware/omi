@@ -778,6 +778,15 @@ export interface BulkMoveConversationsResponse {
   status: string;
 }
 
+export interface CalendarCaptureGap {
+  coverage?: string;
+  end_time: string;
+  event_id: string;
+  start_time: string;
+  status?: string;
+  title: string;
+}
+
 export interface CalendarEventLink {
   attendee_emails?: Array<string>;
   attendees?: Array<string>;
@@ -1207,12 +1216,14 @@ export interface ConversationCreateResponse {
 
 export interface ConversationFinalizationStatusResponse {
   attempt_count: number;
+  fanout_status?: "pending" | "leased" | "completed" | "fenced" | "unknown";
   job_id: string;
   meeting_treatment_eligible?: boolean;
   retryable: boolean;
   status: string;
   task_retry_count: number;
   terminal: boolean;
+  terminal_outcome?: "success" | "failure" | "stale" | "unknown";
 }
 
 export interface ConversationLinkActionItemSpec {
@@ -1463,6 +1474,30 @@ export interface CreateTaskResponse {
   error?: string | null;
   external_task_id?: string | null;
   success: boolean;
+}
+
+export interface CsatConfigResponse {
+  body: string;
+  comment_max_score: number;
+  enabled: boolean;
+  question_threshold: number;
+  refer_cta_text: string;
+  revision: number;
+  thank_you_text: string;
+  title: string;
+}
+
+export interface CsatRatingReceipt {
+  created: boolean;
+  id: string;
+}
+
+export interface CsatRatingRequest {
+  app_version?: string;
+  comment?: string | null;
+  platform: string;
+  revision?: number;
+  score: number;
 }
 
 export interface CustomerPortalSessionResponse {
@@ -2128,7 +2163,11 @@ export interface GenerateWrappedResponse {
 }
 
 export interface Geolocation {
+  accuracy?: number | null;
   address?: string | null;
+  altitude?: number | null;
+  capture_source?: "current_position" | "last_known_position" | "manual" | "integration" | null;
+  captured_at?: string | null;
   google_place_id?: string | null;
   latitude: number;
   location_type?: string | null;
@@ -2136,7 +2175,11 @@ export interface Geolocation {
 }
 
 export interface GeolocationInput {
+  accuracy?: number | null;
   address?: string | null;
+  altitude?: number | null;
+  capture_source?: "current_position" | "last_known_position" | "manual" | "integration" | null;
+  captured_at?: string | null;
   google_place_id?: string | null;
   latitude: number;
   location_type?: string | null;
@@ -2290,11 +2333,14 @@ export interface GoalUpdate {
 }
 
 export interface GoogleCalendarEvent {
+  all_day?: boolean;
   attendee_emails?: Array<string>;
   attendees?: Array<string>;
+  description?: string;
   end_time: string;
   event_id: string;
   html_link?: string | null;
+  location?: string;
   start_time: string;
   title: string;
 }
@@ -4731,6 +4777,7 @@ export interface OmiApiSchemas {
   "BulkAssignSegmentsRequest": BulkAssignSegmentsRequest;
   "BulkMoveConversationsRequest": BulkMoveConversationsRequest;
   "BulkMoveConversationsResponse": BulkMoveConversationsResponse;
+  "CalendarCaptureGap": CalendarCaptureGap;
   "CalendarEventLink": CalendarEventLink;
   "CalendarMeetingContext": CalendarMeetingContext;
   "CalendarOnboardingResetResponse": CalendarOnboardingResetResponse;
@@ -4818,6 +4865,9 @@ export interface OmiApiSchemas {
   "CreatePerson": CreatePerson;
   "CreateTaskRequest": CreateTaskRequest;
   "CreateTaskResponse": CreateTaskResponse;
+  "CsatConfigResponse": CsatConfigResponse;
+  "CsatRatingReceipt": CsatRatingReceipt;
+  "CsatRatingRequest": CsatRatingRequest;
   "CustomerPortalSessionResponse": CustomerPortalSessionResponse;
   "DailySummariesResponse": DailySummariesResponse;
   "DailySummaryActionItem": DailySummaryActionItem;
@@ -5976,6 +6026,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/calendar/capture-gaps": {
+    get: {
+      operationId: "get_calendar_capture_gaps_v1_calendar_capture_gaps_get";
+      responses: {
+        "200": Array<CalendarCaptureGap>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/calendar/google/events": {
     get: {
       operationId: "list_google_calendar_events_v1_calendar_google_events_get";
@@ -6633,6 +6693,26 @@ export interface OmiApiPaths {
         "200": ConversationStatusResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/csat/config": {
+    get: {
+      operationId: "get_csat_config_v1_csat_config_get";
+      responses: {
+        "200": CsatConfigResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/csat/ratings": {
+    post: {
+      operationId: "submit_csat_rating_v1_csat_ratings_post";
+      responses: {
+        "201": CsatRatingReceipt;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -11015,6 +11095,28 @@ export async function cancel_app_subscription_v1_apps__app_id__subscription_dele
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_calendar_capture_gaps_v1_calendar_capture_gaps_get(query: { start: string, end: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<CalendarCaptureGap>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/calendar/capture-gaps`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function list_google_calendar_events_v1_calendar_google_events_get(query: { time_min?: string | null, time_max?: string | null, q?: string | null, max_results?: number }, header: { X_App_Platform?: string, X_App_Version?: string, X_App_Build?: string | null, authorization?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<Array<GoogleCalendarEvent>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/calendar/google/events`;
@@ -12317,6 +12419,49 @@ export async function set_conversation_visibility_v1_conversations__conversation
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_csat_config_v1_csat_config_get(query: { platform?: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CsatConfigResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/csat/config`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function submit_csat_rating_v1_csat_ratings_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CsatRatingRequest, init?: OmiApiClientInit): Promise<CsatRatingReceipt> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/csat/ratings`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -17589,7 +17734,7 @@ export async function create_sync_capture_manifest_v2_sync_capture_manifest_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, X_Omi_Sync_Capture_Manifest?: string | null, authorization?: string }, body: FormData, init?: OmiApiClientInit): Promise<void> {
+export async function sync_local_files_v2_v2_sync_local_files_post(query: { conversation_id?: string }, header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, X_Request_ID?: string | null, X_Cloud_Trace_Context?: string | null, X_Omi_Sync_Capture_Manifest?: string | null, X_Omi_Conversation_Geolocation?: string | null, authorization?: string }, body: FormData, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files`;
   const _params = query ? Object.entries(query)
@@ -17607,6 +17752,7 @@ export async function sync_local_files_v2_v2_sync_local_files_post(query: { conv
       ...(header.X_Request_ID !== undefined ? { "X-Request-ID": String(header.X_Request_ID) } : {}),
       ...(header.X_Cloud_Trace_Context !== undefined ? { "X-Cloud-Trace-Context": String(header.X_Cloud_Trace_Context) } : {}),
       ...(header.X_Omi_Sync_Capture_Manifest !== undefined ? { "X-Omi-Sync-Capture-Manifest": String(header.X_Omi_Sync_Capture_Manifest) } : {}),
+      ...(header.X_Omi_Conversation_Geolocation !== undefined ? { "X-Omi-Conversation-Geolocation": String(header.X_Omi_Conversation_Geolocation) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
     },
     body: body,
@@ -18118,4 +18264,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 430 client methods generated.
+// Total: 433 client methods generated.

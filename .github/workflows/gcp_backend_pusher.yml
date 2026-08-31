@@ -144,13 +144,20 @@ jobs:
           EXPECTED_WORKFLOW_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/gcp_backend_pusher_auto_deploy.yml" --jq .id)"
           gh run download "$QUALIFICATION_RUN_ID" -n pusher-dev-qualification --dir "$QUALIFICATION_DIR"
           mapfile -t EVIDENCE_FILES < <(find "$QUALIFICATION_DIR" -type f -name pusher-dev-qualification.json -print)
+          mapfile -t DEPLOYMENT_RECEIPTS < <(find "$QUALIFICATION_DIR" -type f -name pusher-dev-deployment-receipt.json -print)
           if [[ "${#EVIDENCE_FILES[@]}" -ne 1 ]]; then
             echo "Expected exactly one Pusher development qualification artifact." >&2
             exit 1
           fi
+          if [[ "${#DEPLOYMENT_RECEIPTS[@]}" -ne 1 ]]; then
+            echo "Expected exactly one exact live Pusher development deployment receipt." >&2
+            exit 1
+          fi
           DEV_PUSHER_REPOSITORY="gcr.io/based-hardware-dev/pusher"
           python3 backend/scripts/verify_pusher_promotion_evidence.py \
+            --phase qualification \
             --evidence "${EVIDENCE_FILES[0]}" \
+            --deployment-receipt "${DEPLOYMENT_RECEIPTS[0]}" \
             --run-json "$QUALIFICATION_DIR/run.json" \
             --expected-digest "$REQUESTED_DIGEST" \
             --expected-repository "$DEV_PUSHER_REPOSITORY" \
@@ -175,6 +182,11 @@ jobs:
           {
             echo "PUSHER_DEV_IMAGE_REPOSITORY=$DEV_PUSHER_REPOSITORY"
             echo "PUSHER_IMAGE_DIGEST=$REQUESTED_DIGEST"
+            echo "PUSHER_QUALIFICATION_EVIDENCE=${EVIDENCE_FILES[0]}"
+            echo "PUSHER_QUALIFICATION_DEPLOYMENT_RECEIPT=${DEPLOYMENT_RECEIPTS[0]}"
+            echo "PUSHER_QUALIFICATION_RUN_JSON=$QUALIFICATION_DIR/run.json"
+            echo "PUSHER_QUALIFICATION_WORKFLOW_ID=$EXPECTED_WORKFLOW_ID"
+            echo "PUSHER_QUALIFICATION_RUN_ID=$QUALIFICATION_RUN_ID"
           } >> "$GITHUB_ENV"
 
       - name: Google Auth
@@ -220,6 +232,34 @@ jobs:
 
       - name: Login to GCR
         run: gcloud auth configure-docker
+
+      - name: Validate Pusher runtime capability admission before publishing
+        if: env.SERVICE == 'pusher'
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/validate-backend-runtime-env.py --env "${{ vars.ENV }}"
+
+      - name: Verify live finalization alert route before publishing
+        if: env.SERVICE == 'pusher'
+        env:
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$GRAFANA_TOKEN"
+          case "${{ vars.ENV }}" in
+            dev|development) grafana_url=https://monitor.omiapi.com ;;
+            prod) grafana_url=https://monitor.omi.me ;;
+            *) echo "Unsupported Grafana environment." >&2; exit 1 ;;
+          esac
+          printf '%s' "$GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url "$grafana_url" \
+            --token-file "$token_file" \
+            --phase prepublish
 
       - name: Set up Docker Buildx
         if: env.SERVICE == 'llm-gateway' || github.event.inputs.environment != 'prod'
@@ -325,6 +365,187 @@ jobs:
           python3 backend/scripts/verify_pusher_config_references.py \
             --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend --render-only
 
+      - name: Create isolated proposed production Pusher ConfigMap
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        env:
+          ACCOUNT_DELETION_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.account_deletion_handler_url }}
+          CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
+          ENVIRONMENT: ${{ vars.ENV }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          MCP_AUTHORIZATION_SERVER_URL: ${{ vars.MCP_AUTHORIZATION_SERVER_URL }}
+          MCP_OAUTH_CHATGPT_CLIENT_ID: ${{ vars.MCP_OAUTH_CHATGPT_CLIENT_ID }}
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CHATGPT_REDIRECT_URIS }}
+          MCP_OAUTH_CLAUDE_CLIENT_ID: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_ID }}
+          MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
+          MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
+          MCP_OAUTH_PUBLIC_CLIENT_ID: ${{ vars.MCP_OAUTH_PUBLIC_CLIENT_ID }}
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS: ${{ vars.MCP_OAUTH_PUBLIC_REDIRECT_URIS }}
+          MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
+          RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
+          REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
+          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
+          STT_SERVICE_MODELS: dg-nova-3,modulate-velma-2,parakeet
+          SYNC_TASKS_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_handler_url }}
+          SYNC_TASKS_INVOKER_SA: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_invoker_sa }}
+          TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
+          TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
+          TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
+          TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
+          X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
+          X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
+        run: |
+          set -euo pipefail
+          PUSHER_CANARY_CONFIG="prod-omi-backend-config-canary-${GITHUB_RUN_ID}"
+          PUSHER_CANARY="prod-omi-pusher-canary-${GITHUB_RUN_ID}"
+          LISTENER_CANARY="prod-omi-listener-canary-${GITHUB_RUN_ID}"
+          {
+            echo "PUSHER_CANARY_CONFIG=$PUSHER_CANARY_CONFIG"
+            echo "PUSHER_CANARY=$PUSHER_CANARY"
+            echo "LISTENER_CANARY=$LISTENER_CANARY"
+          } >> "$GITHUB_ENV"
+          CONFIG_MAP_NAME_OVERRIDE="$PUSHER_CANARY_CONFIG" backend/scripts/deploy-backend-config.sh
+
+      - name: Create isolated production Pusher and listener canary
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q pyyaml websockets==12.0
+          test -n "$PUSHER_CANARY" -a -n "$LISTENER_CANARY" -a -n "$PUSHER_CANARY_CONFIG"
+          helm -n prod-omi-backend upgrade --install "$PUSHER_CANARY" ./backend/charts/pusher \
+            -f ./backend/charts/pusher/prod_omi_pusher_values.yaml \
+            --set-string "fullnameOverride=$PUSHER_CANARY" \
+            --set autoscaling.enabled=false \
+            --set replicaCount=1 \
+            --set ingress.enabled=false \
+            --set-json podDisruptionBudget=null \
+            --set-string "service.backendConfig=$PUSHER_CANARY-backend-config" \
+            --set-json 'service.annotations={}' \
+            --set-string "runtimeConfigMapName=$PUSHER_CANARY_CONFIG" \
+            --set-string "image.repository=$PUSHER_IMAGE_REPOSITORY" \
+            --set-string "image.digest=$PUSHER_IMAGE_DIGEST" \
+            --set-string image.tag= \
+            --set-string image.pullPolicy=IfNotPresent
+          # The isolated canary is exactly one replica with HPA disabled; this
+          # covers the committed per-pod startup budget without inheriting the
+          # fourteen-wave timeout required by the shared 40-pod release.
+          kubectl -n prod-omi-backend rollout status "deployment/$PUSHER_CANARY" --timeout=900s
+          python3 backend/scripts/pusher_release_receipt.py record-live \
+            --environment prod \
+            --namespace prod-omi-backend \
+            --repository "$PUSHER_IMAGE_REPOSITORY" \
+            --digest "$PUSHER_IMAGE_DIGEST" \
+            --source-sha "$CHECKED_OUT_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --release-name "$PUSHER_CANARY" \
+            --isolated-canary \
+            --config-map-name "$PUSHER_CANARY_CONFIG" \
+            --output pusher-prod-canary-deployment-receipt.json
+          python3 backend/scripts/pusher_prod_canary.py create-listener \
+            --namespace prod-omi-backend \
+            --source-deployment prod-omi-backend-listen \
+            --source-service prod-omi-backend-listen \
+            --name "$LISTENER_CANARY" \
+            --pusher-url "http://$PUSHER_CANARY.prod-omi-backend.svc.cluster.local:8080" \
+            --output pusher-prod-canary-listener-receipt.json
+
+      - name: Exercise isolated production Pusher finalization semantics
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-pusher-prod-canary-token.XXXXXX")"
+          port_forward_log="$(mktemp "$RUNNER_TEMP/omi-pusher-prod-canary-forward.XXXXXX")"
+          cleanup_probe() {
+            rm -f "$token_file" "$port_forward_log"
+            if [[ -n "${port_forward_pid:-}" ]]; then kill "$port_forward_pid" 2>/dev/null || true; fi
+          }
+          trap cleanup_probe EXIT
+          python3 backend/scripts/firebase_release_probe_token.py \
+            --secret-project "${{ vars.GCP_PROJECT_ID }}" \
+            --firebase-project based-hardware \
+            --token-output "$token_file"
+          kubectl -n prod-omi-backend port-forward "service/$LISTENER_CANARY" 18080:8080 \
+            >"$port_forward_log" 2>&1 &
+          port_forward_pid=$!
+          ready=false
+          for _ in $(seq 1 30); do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:18080/health >/dev/null; then
+              ready=true
+              break
+            fi
+            if ! kill -0 "$port_forward_pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [[ "$ready" != true ]]; then
+            echo "Isolated listener port-forward did not become healthy." >&2
+            exit 1
+          fi
+          python3 backend/scripts/pusher_semantic_probe.py \
+            --api-url http://127.0.0.1:18080 \
+            --allow-local-http \
+            --bearer-token-file "$token_file" \
+            --deployment-receipt pusher-prod-canary-deployment-receipt.json \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --namespace prod-omi-backend \
+            --run-id "$GITHUB_RUN_ID" \
+            --output pusher-prod-canary-semantic-probe.json
+          python3 backend/scripts/pusher_prod_canary.py record-canary \
+            --semantic-evidence pusher-prod-canary-semantic-probe.json \
+            --pusher-receipt pusher-prod-canary-deployment-receipt.json \
+            --listener-receipt pusher-prod-canary-listener-receipt.json \
+            --qualification-deployment-receipt "$PUSHER_QUALIFICATION_DEPLOYMENT_RECEIPT" \
+            --source-sha "$CHECKED_OUT_SHA" \
+            --digest "$PUSHER_IMAGE_DIGEST" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output pusher-prod-canary-evidence.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > pusher-prod-canary-run.json
+          EXPECTED_CANARY_WORKFLOW_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/gcp_backend_pusher.yml" --jq .id)"
+          python3 backend/scripts/verify_pusher_promotion_evidence.py \
+            --phase canary \
+            --evidence "$PUSHER_QUALIFICATION_EVIDENCE" \
+            --deployment-receipt "$PUSHER_QUALIFICATION_DEPLOYMENT_RECEIPT" \
+            --canary-evidence pusher-prod-canary-evidence.json \
+            --canary-deployment-receipt pusher-prod-canary-deployment-receipt.json \
+            --canary-semantic-evidence pusher-prod-canary-semantic-probe.json \
+            --canary-run-json pusher-prod-canary-run.json \
+            --run-json "$PUSHER_QUALIFICATION_RUN_JSON" \
+            --expected-digest "$PUSHER_IMAGE_DIGEST" \
+            --expected-repository "$PUSHER_DEV_IMAGE_REPOSITORY" \
+            --expected-workflow-id "$PUSHER_QUALIFICATION_WORKFLOW_ID" \
+            --expected-run-id "$PUSHER_QUALIFICATION_RUN_ID" \
+            --expected-canary-workflow-id "$EXPECTED_CANARY_WORKFLOW_ID" \
+            --expected-canary-run-id "$GITHUB_RUN_ID"
+
+      - name: Upload protected production Pusher canary evidence
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        uses: actions/upload-artifact@v7
+        with:
+          name: pusher-prod-canary-evidence
+          path: |
+            pusher-prod-canary-evidence.json
+            pusher-prod-canary-deployment-receipt.json
+            pusher-prod-canary-listener-receipt.json
+            pusher-prod-canary-semantic-probe.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Remove isolated production Pusher canary
+        if: always() && env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        run: |
+          set +e
+          cleanup_failed=0
+          if [[ ! "${LISTENER_CANARY:-}" =~ ^prod-omi-listener-canary-[1-9][0-9]*$ ]] || \
+             [[ ! "${PUSHER_CANARY:-}" =~ ^prod-omi-pusher-canary-[1-9][0-9]*$ ]] || \
+             [[ ! "${PUSHER_CANARY_CONFIG:-}" =~ ^prod-omi-backend-config-canary-[1-9][0-9]*$ ]]; then
+            echo "Canary names were not initialized to this workflow run; refusing broad cleanup." >&2
+            exit 1
+          fi
+          kubectl -n prod-omi-backend delete service "$LISTENER_CANARY" --ignore-not-found=true --wait=true || cleanup_failed=1
+          kubectl -n prod-omi-backend delete deployment "$LISTENER_CANARY" --ignore-not-found=true --wait=true || cleanup_failed=1
+          helm -n prod-omi-backend uninstall "$PUSHER_CANARY" --wait || cleanup_failed=1
+          kubectl -n prod-omi-backend delete configmap "$PUSHER_CANARY_CONFIG" --ignore-not-found=true --wait=true || cleanup_failed=1
+          exit "$cleanup_failed"
+
       - name: Apply non-secret pusher runtime config
         if: env.SERVICE == 'pusher'
         env:
@@ -344,7 +565,7 @@ jobs:
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
           STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
-          STT_SERVICE_MODELS: dg-nova-3,modulate-velma-2,parakeet
+          STT_SERVICE_MODELS: modulate-velma-2,soniox,dg-nova-3,parakeet
           SYNC_TASKS_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_handler_url }}
           SYNC_TASKS_INVOKER_SA: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_invoker_sa }}
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
@@ -413,6 +634,67 @@ jobs:
             fi
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher
           fi
+
+      - name: Record exact live production Pusher deployment receipt
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        run: |
+          python3 backend/scripts/pusher_release_receipt.py record-live \
+            --environment "${{ vars.ENV }}" \
+            --namespace "${{ vars.ENV }}-omi-backend" \
+            --repository "$PUSHER_IMAGE_REPOSITORY" \
+            --digest "$PUSHER_IMAGE_DIGEST" \
+            --source-sha "$CHECKED_OUT_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output pusher-prod-deployment-receipt.json
+
+      - name: Reverify live finalization alert route after production rollout
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        env:
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-final-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$GRAFANA_TOKEN"
+          printf '%s' "$GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url https://monitor.omi.me \
+            --token-file "$token_file" \
+            --phase postrollout \
+            --attempts 12
+
+      - name: Verify final production Pusher matches the canary-qualified candidate
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        run: |
+          EXPECTED_CANARY_WORKFLOW_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/gcp_backend_pusher.yml" --jq .id)"
+          python3 backend/scripts/verify_pusher_promotion_evidence.py \
+            --phase final \
+            --evidence "$PUSHER_QUALIFICATION_EVIDENCE" \
+            --deployment-receipt "$PUSHER_QUALIFICATION_DEPLOYMENT_RECEIPT" \
+            --canary-evidence pusher-prod-canary-evidence.json \
+            --canary-deployment-receipt pusher-prod-canary-deployment-receipt.json \
+            --canary-semantic-evidence pusher-prod-canary-semantic-probe.json \
+            --canary-run-json pusher-prod-canary-run.json \
+            --final-deployment-receipt pusher-prod-deployment-receipt.json \
+            --expected-final-repository "$PUSHER_IMAGE_REPOSITORY" \
+            --run-json "$PUSHER_QUALIFICATION_RUN_JSON" \
+            --expected-digest "$PUSHER_IMAGE_DIGEST" \
+            --expected-repository "$PUSHER_DEV_IMAGE_REPOSITORY" \
+            --expected-workflow-id "$PUSHER_QUALIFICATION_WORKFLOW_ID" \
+            --expected-run-id "$PUSHER_QUALIFICATION_RUN_ID" \
+            --expected-canary-workflow-id "$EXPECTED_CANARY_WORKFLOW_ID" \
+            --expected-canary-run-id "$GITHUB_RUN_ID"
+
+      - name: Upload exact live production Pusher deployment receipt
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        uses: actions/upload-artifact@v7
+        with:
+          name: pusher-prod-deployment-receipt
+          path: pusher-prod-deployment-receipt.json
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Verify LLM Gateway serving data plane
         if: env.SERVICE == 'llm-gateway'

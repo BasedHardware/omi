@@ -175,6 +175,45 @@ describe("desktop tool policy", () => {
     expect(granted.decision).toBe("allow");
   });
 
+  it("allows the JIT knowledge-ledger read tools without dispatch", () => {
+    for (const toolName of ["search_knowledge", "read_playbook", "search_historical_facts", "get_entity_timeline_tool"]) {
+      const result = evaluateDesktopToolPolicy({
+        toolName,
+        selectedBundles: ["desktop.context.local_read"],
+      });
+
+      expect(result.decision, toolName).toBe("allow");
+      expect(result.requiredBundles, toolName).toEqual(["desktop.context.local_read"]);
+      expect(result.descriptor.approvalPolicy, toolName).toBe("allow");
+      expect(result.descriptor.readOnly, toolName).toBe(true);
+    }
+  });
+
+  it("classifies the JIT knowledge-ledger write verbs as approved memory writes, like create_memory", () => {
+    for (const toolName of ["save_playbook", "create_standing_trigger", "close_fact"]) {
+      const result = evaluateDesktopToolPolicy({
+        toolName,
+        selectedBundles: ["desktop.memories.write"],
+        userExplicitMutation: true,
+      });
+
+      expect(result.requiredBundles, toolName).toEqual(["desktop.memories.write"]);
+      expect(result.decision, toolName).toBe("dispatch_required");
+      expect(result.descriptor.readOnly, toolName).toBe(false);
+      expect(result.descriptor.approvalPolicy, toolName).toBe("user_approval");
+    }
+  });
+
+  it("denies the JIT knowledge-ledger write verbs when the memory-write bundle is not selected", () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: "save_playbook",
+      selectedBundles: [],
+    });
+
+    expect(result.decision).toBe("deny");
+    expect(result.reason).toContain("Missing selected bundle");
+  });
+
   it("honors scoped allow grants without broadening other sensitive requests", () => {
     const nowMs = 1_000;
     const granted = evaluateDesktopToolPolicy({

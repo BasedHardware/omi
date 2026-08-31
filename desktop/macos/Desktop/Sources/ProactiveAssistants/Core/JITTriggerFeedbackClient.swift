@@ -7,6 +7,16 @@ enum JITTriggerFeedbackAction: String, Codable, Sendable {
   case snooze
   case disable
   case missedOrLate = "missed_or_late"
+
+  var interjectVerb: InterjectFeedbackVerb {
+    switch self {
+    case .useful: return .useful
+    case .falsePositive: return .falsePositive
+    case .snooze: return .snooze
+    case .disable: return .disable
+    case .missedOrLate: return .missed
+    }
+  }
 }
 
 /// Opaque identifiers carried from a planned trigger to its notification

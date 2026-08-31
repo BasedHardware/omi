@@ -245,7 +245,6 @@ class TestModelQosProfiles:
         """Each profile should have features across expected providers."""
         for profile_name, profile in MODEL_QOS_PROFILES.items():
             providers = {provider for _model, provider in profile.values()}
-            assert 'anthropic' in providers, f'{profile_name} missing Anthropic models'
             assert 'perplexity' in providers, f'{profile_name} missing Perplexity models'
             assert 'openrouter' in providers, f'{profile_name} should have OpenRouter (wrapped_analysis)'
         # OpenAI-based profiles must have OpenAI provider
@@ -286,6 +285,9 @@ class TestModelQosProfiles:
             'persona_clone',
             'persona_chat_premium',
             'desktop_proactive_reasoning',
+            'file_chat_vision',
+            'file_chat_documents',
+            'chat_agent',
         }
         nano_features = {
             'conv_app_select',
@@ -312,7 +314,7 @@ class TestModelQosProfiles:
         assert premium['onboarding'] == ('gemini-2.5-flash-lite', 'gemini')
         assert premium['app_integration'] == ('gemini-2.5-flash-lite', 'gemini')
         assert premium['trends'] == ('gemini-2.5-flash-lite', 'gemini')
-        assert premium['chat_agent'] == ('claude-sonnet-4-6', 'anthropic')
+        assert premium['chat_agent'] == ('gpt-5.6-luna', 'openai')
         assert premium['web_search'] == ('sonar-pro', 'perplexity')
 
     def test_max_profile_model_variants(self):
@@ -322,7 +324,6 @@ class TestModelQosProfiles:
         expected = {
             'gpt-5.6-luna',
             'gpt-5-nano',
-            'claude-sonnet-4-6',
             'gemini-2.5-flash-lite',
             'gemini-3-flash-preview',
             'sonar-pro',
@@ -358,9 +359,9 @@ class TestGetModel:
     def test_pinned_feature_ignores_profile(self):
         assert get_model('fair_use') == 'gpt-5.6-luna'
 
-    def test_anthropic_feature_returns_model_string(self):
+    def test_chat_agent_returns_luna(self):
         model = get_model('chat_agent')
-        assert 'claude' in model
+        assert model == 'gpt-5.6-luna'
 
     def test_persona_chat_returns_model_string(self):
         model = get_model('persona_chat')
@@ -582,7 +583,7 @@ class TestGetQosInfo:
 
     def test_provider_classification_correct(self):
         info = get_qos_info()
-        assert info['chat_agent']['provider'] == 'anthropic'
+        assert info['chat_agent']['provider'] == 'openai'
         assert info['web_search']['provider'] == 'perplexity'
         assert info['conv_action_items']['provider'] == 'openai'
         # persona_chat uses direct OpenAI API in both profiles
@@ -595,7 +596,7 @@ class TestGetQosInfo:
     def test_get_provider_matches_profile(self):
         """get_provider() returns the explicit provider from the profile."""
         assert get_provider('conv_action_items') == 'openai'
-        assert get_provider('chat_agent') == 'anthropic'
+        assert get_provider('chat_agent') == 'openai'
         assert get_provider('web_search') == 'perplexity'
         assert get_provider('wrapped_analysis') == 'openrouter'
         assert get_provider('followup') == 'gemini'
@@ -615,8 +616,9 @@ class TestPinnedFeatures:
 class TestProviderClassification:
     """Verify provider routing from profile entries."""
 
-    def test_chat_agent_is_anthropic_only(self):
-        assert 'chat_agent' in _ANTHROPIC_ONLY_FEATURES
+    def test_chat_agent_is_not_anthropic_only(self):
+        assert 'chat_agent' not in _ANTHROPIC_ONLY_FEATURES
+        assert _ANTHROPIC_ONLY_FEATURES == set()
 
     def test_web_search_is_perplexity_only(self):
         assert 'web_search' in _PERPLEXITY_ONLY_FEATURES
@@ -643,9 +645,9 @@ class TestProviderClassification:
 class TestProviderSafetyGuard:
     """Verify get_llm() rejects Anthropic/Perplexity features and cross-provider overrides."""
 
-    def test_get_llm_rejects_anthropic_only_feature(self):
-        with pytest.raises(ValueError, match='Anthropic'):
-            get_llm('chat_agent')
+    def test_get_llm_accepts_chat_agent(self):
+        llm = get_llm('chat_agent')
+        assert hasattr(llm, 'invoke')
 
     def test_get_llm_rejects_perplexity_only_feature(self):
         with pytest.raises(ValueError, match='Perplexity'):
@@ -1018,7 +1020,6 @@ class TestBYOKProfile:
         bk = MODEL_QOS_PROFILES['byok']
         for feature, (model, provider) in bk.items():
             if feature in (
-                'chat_agent',
                 'web_search',
                 'wrapped_analysis',
                 'translation',
@@ -1039,7 +1040,6 @@ class TestBYOKProfile:
         expected = {
             'gpt-5.6-luna',
             'gpt-5-nano',
-            'claude-sonnet-4-6',
             'gemini-2.5-flash-lite',
             'gemini-3-flash-preview',
             'sonar-pro',

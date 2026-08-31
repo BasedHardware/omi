@@ -4961,6 +4961,53 @@
         "title": "BulkMoveConversationsResponse",
         "type": "object"
       },
+      "CalendarCaptureGap": {
+        "description": "An accepted calendar event with no overlapping kept conversation.",
+        "properties": {
+          "coverage": {
+            "default": "not_captured",
+            "description": "Capture coverage verdict",
+            "title": "Coverage",
+            "type": "string"
+          },
+          "end_time": {
+            "description": "Event end time",
+            "format": "date-time",
+            "title": "End Time",
+            "type": "string"
+          },
+          "event_id": {
+            "description": "Google Calendar event ID",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "start_time": {
+            "description": "Event start time",
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "status": {
+            "default": "confirmed",
+            "description": "Calendar event status",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "description": "Event title/summary",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "title",
+          "start_time",
+          "end_time"
+        ],
+        "title": "CalendarCaptureGap",
+        "type": "object"
+      },
       "CalendarEventLink": {
         "description": "Links a conversation to a Google Calendar event.",
         "properties": {
@@ -7675,6 +7722,18 @@
             "title": "Attempt Count",
             "type": "integer"
           },
+          "fanout_status": {
+            "default": "unknown",
+            "enum": [
+              "pending",
+              "leased",
+              "completed",
+              "fenced",
+              "unknown"
+            ],
+            "title": "Fanout Status",
+            "type": "string"
+          },
           "job_id": {
             "title": "Job Id",
             "type": "string"
@@ -7699,6 +7758,17 @@
           "terminal": {
             "title": "Terminal",
             "type": "boolean"
+          },
+          "terminal_outcome": {
+            "default": "unknown",
+            "enum": [
+              "success",
+              "failure",
+              "stale",
+              "unknown"
+            ],
+            "title": "Terminal Outcome",
+            "type": "string"
           }
         },
         "required": [
@@ -9426,6 +9496,111 @@
           "success"
         ],
         "title": "CreateTaskResponse",
+        "type": "object"
+      },
+      "CsatConfigResponse": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "comment_max_score": {
+            "title": "Comment Max Score",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "question_threshold": {
+            "title": "Question Threshold",
+            "type": "integer"
+          },
+          "refer_cta_text": {
+            "title": "Refer Cta Text",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "thank_you_text": {
+            "title": "Thank You Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "title",
+          "body",
+          "thank_you_text",
+          "refer_cta_text",
+          "question_threshold",
+          "comment_max_score",
+          "revision"
+        ],
+        "title": "CsatConfigResponse",
+        "type": "object"
+      },
+      "CsatRatingReceipt": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "created"
+        ],
+        "title": "CsatRatingReceipt",
+        "type": "object"
+      },
+      "CsatRatingRequest": {
+        "properties": {
+          "app_version": {
+            "default": "",
+            "title": "App Version",
+            "type": "string"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "revision": {
+            "default": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "score": {
+            "title": "Score",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "platform",
+          "score"
+        ],
+        "title": "CsatRatingRequest",
         "type": "object"
       },
       "CustomerPortalSessionResponse": {
@@ -13349,6 +13524,18 @@
       },
       "Geolocation": {
         "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
           "address": {
             "anyOf": [
               {
@@ -13359,6 +13546,46 @@
               }
             ],
             "title": "Address"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude"
+          },
+          "capture_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "current_position",
+                  "last_known_position",
+                  "manual",
+                  "integration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Source"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "google_place_id": {
             "anyOf": [
@@ -13405,6 +13632,18 @@
       "GeolocationInput": {
         "description": "Released wire contract for coordinates accepted at legacy API boundaries.\n\nBounds are enforced before any value is cached, geocoded, or persisted. Keeping\nthis transport shape broad preserves clients released before the bound contract\nexisted, while ``Geolocation`` remains the only usable server-side value.",
         "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
           "address": {
             "anyOf": [
               {
@@ -13415,6 +13654,46 @@
               }
             ],
             "title": "Address"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude"
+          },
+          "capture_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "current_position",
+                  "last_known_position",
+                  "manual",
+                  "integration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Source"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "google_place_id": {
             "anyOf": [
@@ -14369,6 +14648,12 @@
       "GoogleCalendarEvent": {
         "description": "Response model for a Google Calendar event.",
         "properties": {
+          "all_day": {
+            "default": false,
+            "description": "True when the event has a date but no time",
+            "title": "All Day",
+            "type": "boolean"
+          },
           "attendee_emails": {
             "default": [],
             "description": "List of attendee email addresses",
@@ -14386,6 +14671,12 @@
             },
             "title": "Attendees",
             "type": "array"
+          },
+          "description": {
+            "default": "",
+            "description": "Event description, truncated for transport",
+            "title": "Description",
+            "type": "string"
           },
           "end_time": {
             "description": "Event end time",
@@ -14409,6 +14700,12 @@
             ],
             "description": "Link to open event in Google Calendar",
             "title": "Html Link"
+          },
+          "location": {
+            "default": "",
+            "description": "Event location",
+            "title": "Location",
+            "type": "string"
           },
           "start_time": {
             "description": "Event start time",
@@ -34441,6 +34738,112 @@
         "summary": "Get App Subscription"
       }
     },
+    "/v1/calendar/capture-gaps": {
+      "get": {
+        "description": "Accepted calendar events in [start, end] with no overlapping non-discarded conversation.\n\nThe honesty surface for the Conversations list (SCA-381): what was booked\nbut never recorded. Read-only against Google Calendar; it never creates or\nmutates conversations. Declined, cancelled, tentative, and all-day / >8h\nblocks are excluded by ``select_capture_gaps``.",
+        "operationId": "get_calendar_capture_gaps_v1_calendar_capture_gaps_get",
+        "parameters": [
+          {
+            "description": "Window start (ISO format, inclusive)",
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "description": "Window start (ISO format, inclusive)",
+              "format": "date-time",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Window end (ISO format, inclusive)",
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "description": "Window end (ISO format, inclusive)",
+              "format": "date-time",
+              "title": "End",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarCaptureGap"
+                  },
+                  "title": "Response Get Calendar Capture Gaps V1 Calendar Capture Gaps Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Calendar Capture Gaps",
+        "tags": [
+          "google_calendar"
+        ]
+      }
+    },
     "/v1/calendar/google/events": {
       "get": {
         "description": "List Google Calendar events within a time range.\n\nUsed by the event picker UI when manually linking a conversation to a calendar event.",
@@ -34510,7 +34913,7 @@
             "schema": {
               "default": 20,
               "description": "Maximum number of events to return",
-              "maximum": 100,
+              "maximum": 500,
               "minimum": 1,
               "title": "Max Results",
               "type": "integer"
@@ -40816,6 +41219,180 @@
         "summary": "Set Conversation Visibility",
         "tags": [
           "conversations"
+        ]
+      }
+    },
+    "/v1/csat/config": {
+      "get": {
+        "operationId": "get_csat_config_v1_csat_config_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "platform",
+            "required": false,
+            "schema": {
+              "default": "macos",
+              "title": "Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsatConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Csat Config",
+        "tags": [
+          "csat"
+        ]
+      }
+    },
+    "/v1/csat/ratings": {
+      "post": {
+        "operationId": "submit_csat_rating_v1_csat_ratings_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CsatRatingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsatRatingReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Submit Csat Rating",
+        "tags": [
+          "csat"
         ]
       }
     },
@@ -63838,6 +64415,22 @@
                 }
               ],
               "title": "X-Omi-Sync-Capture-Manifest"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Conversation-Geolocation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Conversation-Geolocation"
             }
           },
           {

@@ -104,7 +104,8 @@ let package = Package(
       resources: [
         .process("GoogleService-Info.plist"),
         // Bundles everything under Resources/ (incl. *_logo.png brand marks,
-        // signin_bg.png, Resources/Fonts/*.ttf — Geist / Geist Mono — and
+        // signin_bg.png, provider-native VoicePhrases/*.wav, Resources/Fonts/*.ttf —
+        // Geist / Geist Mono — and
         // Resources/Fonts/*.otf — Open Runde, the glass display face — and
         // Resources/Sounds/*.m4a, the generated onboarding cinematic audio).
         // NOTE: SwiftPM caches the resource manifest, so new files added to

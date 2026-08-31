@@ -276,16 +276,6 @@ extension PostHogManager {
     track("Signed Out")
   }
 
-  // MARK: - Monitoring Events
-
-  func monitoringStarted() {
-    track("Monitoring Started")
-  }
-
-  func monitoringStopped() {
-    track("Monitoring Stopped")
-  }
-
   // MARK: - Recording Events
 
   func transcriptionStarted() {
@@ -690,13 +680,19 @@ extension PostHogManager {
       ])
   }
 
-  func desktopRatingSubmitted(rating: Int) {
+  func desktopRatingSubmitted(rating: Int, revision: Int? = nil) {
+    var properties: [String: Any] = [
+      "rating": rating,
+      "trigger": "third_question",
+    ]
+    // The prompt revision the client saw, so copy experiments are separable.
+    // The comment NEVER travels to PostHog — Firestore only, admin-only read.
+    if let revision {
+      properties["revision"] = revision
+    }
     track(
       "Desktop Rating Submitted",
-      properties: [
-        "rating": rating,
-        "trigger": "third_question",
-      ])
+      properties: properties)
   }
 
   // MARK: - Rewind Events (Desktop-specific)
@@ -1049,7 +1045,8 @@ extension PostHogManager {
     assistantId: String,
     surface: String,
     dismissalKind: NotificationDismissalKind,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    attention: InterjectAttention? = nil
   ) {
     var properties = notificationProperties(
       notificationId: notificationId,
@@ -1058,10 +1055,35 @@ extension PostHogManager {
       surface: surface
     )
     properties["dismissal_kind"] = dismissalKind.rawValue
+    if let attention {
+      properties["attention"] = attention.rawValue
+    }
     appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Dismissed",
       properties: properties)
+  }
+
+  func notificationHovered(
+    notificationId: String,
+    assistantId: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    var properties: [String: Any] = [
+      "notification_id": notificationId,
+      "assistant_id": assistantId,
+    ]
+    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
+    track("Notification Hovered", properties: properties)
+  }
+
+  func suggestionFeedbackRecorded(
+    verb: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    var properties: [String: Any] = ["verb": verb]
+    appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
+    track("Suggestion Feedback Recorded", properties: properties)
   }
 
   private func notificationProperties(

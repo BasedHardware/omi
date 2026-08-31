@@ -358,8 +358,7 @@ enum ViewExporter {
             appState: topBarAppState,
             memoriesViewModel: topBarMemories,
             tasksStore: topBarTasks,
-            sinceDate: Date(),
-            onRewind: {}
+            sinceDate: Date()
           )
           pageContent
         }

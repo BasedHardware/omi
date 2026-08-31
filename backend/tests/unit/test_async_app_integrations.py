@@ -192,6 +192,9 @@ for name in _utils_stubs:
     _install_module(name, module)
 
 sys.modules["utils.conversations"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "conversations")]
+# The real utils.llm package is imported as a package (utils.llm.temporal).
+# A ModuleType stub without __path__ makes that import fail collection.
+sys.modules["utils.llm"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "llm")]
 
 sys.modules["utils.apps"].get_available_apps = MagicMock(return_value=[])
 sys.modules["utils.notifications"].send_notification = MagicMock()
@@ -199,6 +202,17 @@ sys.modules["utils.notifications"].send_notification_async = AsyncMock()
 sys.modules["utils.conversations.factory"].deserialize_conversations = MagicMock(return_value=[])
 sys.modules["utils.conversations.render"].conversations_to_string = MagicMock(return_value="")
 sys.modules["utils.conversations.render"].conversation_to_dict = MagicMock(return_value={})
+
+
+def _stub_redact_conversation_for_integration(conv):
+    redacted = dict(conv)
+    redacted.pop('geolocation', None)
+    return redacted
+
+
+sys.modules["utils.conversations.render"].redact_conversation_for_integration = (
+    _stub_redact_conversation_for_integration
+)
 sys.modules["utils.conversations.render"].populate_speaker_names = MagicMock()
 sys.modules["utils.conversations.render"].populate_folder_names = MagicMock()
 sys.modules["utils.conversations.render"].serialize_datetimes = MagicMock(side_effect=lambda value: value)
@@ -334,6 +348,28 @@ class TestDurableExternalIntegrationFanout:
         journey_factory.assert_called_once_with('app_webhook_delivery', 'mobile_ios')
         attempt.succeed.assert_called_once_with()
         attempt.fail.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_creation_webhook_payload_strips_geolocation(self):
+        app = _make_app('app-1', 'https://app.test/hook')
+        app.triggers_on_conversation_creation.return_value = True
+        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        response = MagicMock(status_code=200)
+        response.json.return_value = {}
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=response)
+
+        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
+            app_integrations, 'get_webhook_client', return_value=client
+        ), patch.object(
+            app_integrations,
+            'conversation_to_dict',
+            return_value={'id': 'conversation-1', 'geolocation': {'latitude': 1.0, 'longitude': 2.0}},
+        ):
+            await app_integrations.trigger_external_integrations('uid-1', conversation)
+
+        payload = client.post.call_args.kwargs['json']
+        assert 'geolocation' not in payload
 
     @pytest.mark.asyncio
     async def test_finalization_delivery_failure_remains_retryable(self):

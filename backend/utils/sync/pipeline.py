@@ -67,6 +67,7 @@ from database.sync_ledger import (
 )
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
+from models.geolocation import Geolocation
 from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
 from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
@@ -126,6 +127,9 @@ from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_w
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
+from utils.sync.telemetry import bounded_exception_type as _bounded_exception_type
+from utils.sync.telemetry import bounded_sync_lane as _bounded_sync_lane
+from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
 from utils.sync.merge_audio import store_partial_merge_survivor_audio
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
@@ -136,7 +140,6 @@ MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
 
 # Valid terminal segment results — a transcript, or audio with no speech. All else is a failure.
 _NON_ERROR_SEGMENT_OUTCOMES = frozenset({TranscriptionOutcome.SUCCESS, TranscriptionOutcome.EXPECTED_SILENCE})
-_SYNC_STT_MODELS = {'nova-3', 'velma-2', 'parakeet'}
 _PARTIAL_RESULT_FENCED_CONVERSATION_IDS = 'fenced_conversation_ids'
 _RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
 _SYNC_FAILURE_REASON_CODES = {
@@ -158,20 +161,6 @@ _SYNC_FAILURE_REASON_CODES = {
     'sync_vad_failed',
     'sync_worker_stale',
 }
-
-
-def _bounded_sync_model(model: str | None) -> str:
-    normalized = (model or '').strip().lower()
-    return normalized if normalized in _SYNC_STT_MODELS else 'unknown'
-
-
-def _bounded_sync_lane(lane: str | None) -> str:
-    return lane if lane in {SyncLane.FRESH.value, SyncLane.BACKFILL.value} else 'unknown'
-
-
-def _bounded_exception_type(error: BaseException) -> str:
-    name = error.__class__.__name__
-    return name if name.replace('_', '').isalnum() and len(name) <= 64 else 'Exception'
 
 
 async def _resolve_fair_use_soft_cap_plan(uid: str):
@@ -799,6 +788,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         conversation=conversation,
         force_process=True,
         is_reprocess=True,
+        bypass_jit_first_open=True,
         persistence_observer=_require_current_conversation_persistence,
     )
 
@@ -1070,6 +1060,7 @@ def process_segment(
     client_platform: Optional[str] = None,
     sync_lane: str = SyncLane.FRESH.value,
     deferred_outcome: dict | None = None,
+    geolocation: Optional[Geolocation] = None,
 ):
     provider = 'unknown'
     model = 'unknown'
@@ -1183,6 +1174,7 @@ def process_segment(
                 private_cloud_sync_enabled=private_cloud_sync_enabled,
                 client_device_id=client_device_id,
                 client_platform=client_platform,
+                geolocation=geolocation,
             )
             created = process_conversation(
                 uid,
@@ -1195,6 +1187,11 @@ def process_segment(
             if private_cloud_sync_enabled:
                 _store_sync_audio_chunk(uid, created.id, timestamp, audio_bytes, data_protection_level)
         else:
+            if geolocation and not closest_memory.get('geolocation'):
+                conversations_db.update_conversation(
+                    uid, closest_memory['id'], {'geolocation': geolocation.model_dump()}
+                )
+                closest_memory['geolocation'] = geolocation.model_dump()
             transcript_segments = [s.model_dump() for s in transcript_segments]
 
             # assign timestamps to each segment
@@ -1658,6 +1655,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     should_lock: bool,
     job_dir: str,
     target_conversation_id: str = None,
+    geolocation: Optional[Geolocation] = None,
     task_mode: bool = False,
     client_device_id: Optional[str] = None,
     client_platform: Optional[str] = None,
@@ -2132,6 +2130,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     client_platform=client_platform,
                     sync_lane=sync_lane,
                     deferred_outcome=deferred_outcome,
+                    geolocation=geolocation,
                 )
                 if ok:
                     # Persist result contributions before the processed marker.

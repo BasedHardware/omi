@@ -11735,5 +11735,14 @@
     "pendantFullSyncBlocked": "Your Pendant's storage is full and it's still in recording mode, so its stored audio can't be transferred. Press the Pendant's button to stop recording, then sync again.",
     "@pendantFullSyncBlocked": {
         "description": "Shown when offline sync stalls because the Limitless Pendant's flash storage is full; a full pendant stays armed in recording mode and serves no stored audio until recording is stopped"
+    },
+    "conversationsNotCapturedCount": "Not captured ({count})",
+    "@conversationsNotCapturedCount": {
+        "description": "Header for the calendar capture-gap group in the conversations list",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

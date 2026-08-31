@@ -84,3 +84,12 @@ def test_backend_database_globals_are_fake_after_app_import(client, fake_firesto
     assert redis_db.r is fake_redis
     assert webhook_health.r is fake_redis
     assert fair_use.redis_client is fake_redis
+
+
+def test_backend_registered_redis_scripts_are_rebound_to_fake(client, fake_redis):
+    """Lua-backed boundaries must not retain the localhost client from import."""
+    import database.redis_db as redis_db
+
+    redis_db._RATE_LIMIT_LUA(keys=['e2e:script-client-guard'], args=[60])
+
+    assert fake_redis.get('e2e:script-client-guard') == b'1'

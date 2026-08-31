@@ -70,7 +70,7 @@ def test_memory_firestore_rules_iam_proof_runner_exists_and_is_read_only():
 
 def test_memory_firestore_rules_iam_doc_references_proof_runner_and_pass_fail_gates():
     root = Path(__file__).resolve().parents[2].parent
-    doc_path = root / "docs" / "epics" / "memory_firestore_iam_deployment.md"
+    doc_path = root / "backend" / "docs" / "epics" / "memory_firestore_iam_deployment.md"
     doc = doc_path.read_text()
 
     assert "python3 backend/scripts/firestore_rules_iam_proof.py" in doc

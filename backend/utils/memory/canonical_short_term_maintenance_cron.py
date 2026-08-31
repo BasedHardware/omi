@@ -36,7 +36,7 @@ from utils.memory.memory_system import (
     CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION,
     CANONICAL_MEMORY_MAINTENANCE_REGISTRY_SCHEMA_VERSION,
 )
-from utils.jit_rollout import JITDecisionStage, resolve_jit_ledger_migration_rollout
+from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout
 from utils.memory.knowledge_ledger_migration import (
     publish_ledger_migration_cutover,
     run_ledger_migration_sweep,
@@ -66,7 +66,7 @@ DEFAULT_GRAPH_BACKFILL_PAGE_SIZE = 5
 GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER = 5
 DEFAULT_GRAPH_BACKFILL_SCAN_SIZE = DEFAULT_GRAPH_BACKFILL_PAGE_SIZE * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER
 MAX_MAINTENANCE_UIDS_PER_RUN = 400
-MAX_LEDGER_MIGRATION_UIDS_PER_RUN = 20
+MAX_LEDGER_MIGRATION_UIDS_PER_RUN = 200
 LEDGER_ROW_AUTHORIZATION_TIMEOUT_SECONDS = 15.0
 EXPIRY_ADJUDICATION_LOOKAHEAD = DEFAULT_SHORT_TERM_TTL / 2
 CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH = "canonical_memory_maintenance_control/seed_cursor"
@@ -286,6 +286,18 @@ def recently_dreamed(uid: str, *, db_client: Any, now: datetime) -> bool:
     if last_dreamed_at is None:
         return False
     return now - last_dreamed_at < DREAMING_MIN_INTERVAL
+
+
+def _is_ledger_writer(uid: str, *, db_client: Any) -> bool:
+    """Ledger-mode accounts own formation via the daily sweep, not dreaming."""
+    try:
+        from models.memory_apply import WriterMode
+        from utils.memory.memory_system import ensure_canonical_apply_control_state
+
+        control = ensure_canonical_apply_control_state(uid, db_client=db_client)
+        return getattr(control, "writer_mode", None) == WriterMode.ledger
+    except Exception:
+        return False
 
 
 def _read_seed_cursor(db_client: Any) -> str:
@@ -524,6 +536,7 @@ class CanonicalShortTermMaintenanceCronSummary:
     skipped_users: int = 0
     skipped_no_short_term: int = 0
     skipped_recently_dreamed: int = 0
+    skipped_ledger_writer: int = 0
     dreamed_users: int = 0
     flex_deferred: bool = False
     recurrence_candidates_total: int = 0
@@ -689,6 +702,12 @@ def run_universal_short_term_maintenance(
             summary.skipped_users += 1
             completed_uids.add(uid)
             logger.info("canonical_short_term_maintenance_cron: uid=%s skipped_reason=recently_dreamed", uid)
+            continue
+        if _is_ledger_writer(uid, db_client=client):
+            summary.skipped_ledger_writer += 1
+            summary.skipped_users += 1
+            completed_uids.add(uid)
+            logger.info("canonical_short_term_maintenance_cron: uid=%s skipped_reason=writer_mode_ledger", uid)
             continue
         promotion_llm_invoke = promotion_flex.llm_invoke_for_uid(uid)
         try:
@@ -870,6 +889,7 @@ def run_universal_short_term_maintenance(
     logger.info(
         "canonical_short_term_maintenance_cron: done run_id=%s user_count=%d routed_total=%d "
         "promoted_total=%d dreamed_users=%d skipped_no_short_term=%d skipped_recently_dreamed=%d "
+        "skipped_ledger_writer=%d "
         "flex_deferred=%s expiry_urgent_users=%d expiry_urgent_items=%d "
         "expired_active_candidates_total=%d "
         "expired_without_terminal_disposition_total=%d expired_with_recorded_disposition_total=%d "
@@ -882,6 +902,7 @@ def run_universal_short_term_maintenance(
         summary.dreamed_users,
         summary.skipped_no_short_term,
         summary.skipped_recently_dreamed,
+        summary.skipped_ledger_writer,
         summary.flex_deferred,
         summary.expiry_urgent_users,
         summary.expiry_urgent_items,
@@ -930,7 +951,7 @@ async def run_canonical_short_term_maintenance_cron(
     def fresh_rollout_authorizer(uid: str) -> Callable[..., bool]:
         def authorize(*_context: str) -> bool:
             future = asyncio.run_coroutine_threadsafe(
-                resolve_jit_ledger_migration_rollout(
+                resolve_jit_rollout(
                     uid,
                     stage=JITDecisionStage.INGRESS,
                     force_refresh=True,
@@ -954,7 +975,7 @@ async def run_canonical_short_term_maintenance_cron(
     # Resolving the whole page up front leaves later accounts holding stale
     # permission while earlier accounts scan and mutate.
     for uid in candidate_uids:
-        decision = await resolve_jit_ledger_migration_rollout(
+        decision = await resolve_jit_rollout(
             uid,
             stage=JITDecisionStage.INGRESS,
             force_refresh=True,

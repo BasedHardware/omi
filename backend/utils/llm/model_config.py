@@ -71,6 +71,9 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'memory_l2': ('gpt-5.6-luna', 'openai'),
     'memory_l2_flex': ('gpt-5.6-luna', 'openai'),
     'chat_responses': ('gpt-5.6-luna', 'openai'),
+    'file_chat_vision': ('gpt-5.6-luna', 'openai'),
+    'file_chat_documents': ('gpt-5.6-luna', 'openai'),
+    'chat_agent': ('gpt-5.6-luna', 'openai'),
     'chat_extraction': ('gpt-5.6-luna', 'openai'),
     'chat_graph': ('gpt-5.6-luna', 'openai'),
     'goals': ('gpt-5.6-luna', 'openai'),
@@ -100,7 +103,6 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'trends': ('gemini-2.5-flash-lite', 'gemini'),
     'translation': ('gemini-2.5-flash-lite', 'gemini'),
     'screen_frame_judge': ('gemini-2.5-flash-lite', 'gemini'),
-    'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
     'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
     'web_search': ('sonar-pro', 'perplexity'),
 }
@@ -127,7 +129,8 @@ _byok_profile_name = 'byok'
 _byok_profile = MODEL_QOS_PROFILES[_byok_profile_name]
 
 # Features that can't go through get_llm() (non-ChatOpenAI providers).
-_ANTHROPIC_ONLY_FEATURES = {'chat_agent'}
+# chat_agent is OpenAI/Luna via get_llm(); the Anthropic Messages path is not a chat lane.
+_ANTHROPIC_ONLY_FEATURES: set[str] = set()
 _PERPLEXITY_ONLY_FEATURES = {'web_search'}
 
 

@@ -5,12 +5,18 @@ on:
     branches: main
   pull_request:
     branches: main
+  # A later backend/docs commit must not make the last path-selected Desktop
+  # Swift verdict look current. Run against default-branch HEAD every day at an
+  # off-round UTC minute; the selector treats this as a full health event.
+  schedule:
+    - cron: "17 5 * * *"
   # Recovery hatch. `plan-desktop-release.py` requires this workflow's checks on the
   # exact source SHA, so any interruption — the workflow being disabled, a run cancelled
   # by concurrency, an infrastructure blip — leaves that SHA permanently unreleasable:
   # push events do not replay, and neither a force-push nor a PR close/reopen produces a
   # run for a commit already on main. Manual dispatch is the only way to re-mint the
-  # evidence without an unrelated commit.
+  # evidence without an unrelated commit. Manual dispatch is path-independent so
+  # it still compiles a HEAD whose final commit only touched another component.
   workflow_dispatch:
 
 concurrency:

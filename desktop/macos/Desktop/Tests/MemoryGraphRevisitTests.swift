@@ -18,7 +18,7 @@ final class MemoryGraphRevisitTests: XCTestCase {
     // model at all. Both the canonical destination and legacy fallback must use
     // the persistent, container-owned instance.
     XCTAssertTrue(hub.contains("graphViewModel: viewModelContainer.memoryGraphViewModel"))
-    XCTAssertTrue(hub.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
+    XCTAssertTrue(hub.contains("MemoryGraphPage(\n        viewModel: viewModelContainer.memoryGraphViewModel"))
     XCTAssertTrue(hub.contains("switch destination"))
     // Static wiring tripwire: the shell owns the hub's placement, and the hub is
     // a full-bleed destination — the readable-width cap belongs to the pages
@@ -37,33 +37,28 @@ final class MemoryGraphRevisitTests: XCTestCase {
   func testMemoryHubDestinationMenuHasStableRoutes() {
     XCTAssertEqual(
       MemoryHubDestination.allCases,
-      [.memories, .conversations, .brainMap, .activity]
+      [.memories, .conversations, .brainMap, .activity, .rewind]
     )
     // Storage identity, pinned: these raw values are persisted, so the enum may not be reordered.
     // Reading order is a different list and lives with the control that presents it — see
     // `ChatFirstDestinationParityTests.testTheActivityChipRowOffersEveryHubPageAndNothingElse`.
-    XCTAssertEqual(MemoryHubDestination.activity.title, "Brain")
+    XCTAssertEqual(MemoryHubDestination.activity.title, "Activity")
     XCTAssertEqual(MemoryHubDestination.memories.title, "Memories")
     XCTAssertEqual(MemoryHubDestination.conversations.title, "Conversations")
     XCTAssertEqual(MemoryHubDestination.brainMap.title, "Brain Map")
+    XCTAssertEqual(MemoryHubDestination.rewind.title, "Rewind")
     XCTAssertEqual(MemoryHubDestination(rawValue: 1), .conversations)
+    XCTAssertEqual(MemoryHubDestination(rawValue: 4), .rewind)
     XCTAssertEqual(
       MemoryHubDestination.destination(for: .conversations),
       .conversations
-    )
-    XCTAssertEqual(
-      MemoryHubDestination.destination(
-        for: .conversations,
-        requestedRawValue: MemoryHubDestination.brainMap.rawValue
-      ),
-      .brainMap
     )
     XCTAssertNil(MemoryHubDestination.destination(for: .tasks))
   }
 
   /// The hover menu these three tests used to cover is gone, and so is
   /// `MemoryDropdownInteractionState` — its hover-generation machinery had no other caller. The
-  /// Memory hub's four destinations are now selected by Activity's chip row; that contract is held
+  /// Memory hub's five destinations are now selected by Brain's section row; that contract is held
   /// by `ChatFirstDestinationParityTests.testTheActivityChipRowOffersEveryHubPageAndNothingElse`
   /// and `TopNavigationBarLayoutTests`.
   func testTopNavigationUsesCompactPillSpacing() {

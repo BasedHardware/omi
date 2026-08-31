@@ -3,7 +3,7 @@
 Start here:
 
 1. **Product fit** — read [`PRODUCT.md`](PRODUCT.md) and the
-   [product invariant registry](docs/product/invariants/).
+   [product invariant registry](product/invariants/).
 2. **How to contribute** — follow the full guide:
    [Contribution Guide](https://docs.omi.me/doc/developer/Contribution)
    (source: [`docs/doc/developer/Contribution.mdx`](docs/doc/developer/Contribution.mdx)).

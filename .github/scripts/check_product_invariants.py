@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Require PRs that touch locked product-invariant paths to name the invariant ID.
 
-Parses docs/product/invariants/*.md (except README). For each locked invariant
+Parses product/invariants/*.md (except README). For each locked invariant
 with path globs, if any changed file matches a glob and the invariant's PR rule
 requires naming the ID, the PR body must contain that ID (e.g. INV-CHAT-1).
 
@@ -17,7 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-INVARIANT_DIR = Path("docs/product/invariants")
+INVARIANT_DIR = Path("product/invariants")
 ID_RE = re.compile(r"^#\s+(INV-[A-Z0-9]+(?:-\*|(?:-\d+)+))", re.MULTILINE)
 STATUS_RE = re.compile(r"^\*\*Status:\*\*\s*(\w+)", re.MULTILINE | re.IGNORECASE)
 # A glob may carry a trailing note, e.g. ``path/**`` (retired: ...).
@@ -479,7 +479,7 @@ def main() -> int:
 
     print("FAIL: PR touches locked product invariant paths but does not name the invariant ID(s).")
     print("Add them under 'Product invariants affected' in the PR body.")
-    print("Registry: docs/product/invariants/")
+    print("Registry: product/invariants/")
     for hit in still_missing:
         print(f"  Missing: {hit['id']} — {len(hit['matched_files'])} changed file(s) under {len(hit.get('matched_by_glob') or {})} glob(s)")
     print("\nWhat these invariants require, and why each applies:")

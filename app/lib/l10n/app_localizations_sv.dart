@@ -9917,4 +9917,9 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Lagringen på din Pendant är full och den är fortfarande i inspelningsläge, så det lagrade ljudet kan inte överföras. Tryck på Pendantens knapp för att stoppa inspelningen och synkronisera sedan igen.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Inte fångat ($count)';
+  }
 }

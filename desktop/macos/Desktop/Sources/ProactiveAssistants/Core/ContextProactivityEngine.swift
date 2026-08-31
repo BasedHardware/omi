@@ -42,11 +42,13 @@ struct ContextDirectorDecision: Codable, Equatable, Sendable {
     ).trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  func clamped() -> ContextDirectorDecision {
-    ContextDirectorDecision(
+  func clamped(copyBudget: InterjectCopyBudget.Limits? = nil) -> ContextDirectorDecision {
+    let titleLimit = InterjectCopyBudget.clampedTitleLimit(copyBudget?.titleLimit ?? 120)
+    let messageLimit = InterjectCopyBudget.clampedMessageLimit(copyBudget?.messageLimit ?? 600)
+    return ContextDirectorDecision(
       decision: decision,
-      title: String(Self.strippingInlineRefs(title).prefix(120)),
-      message: String(Self.strippingInlineRefs(message).prefix(600)),
+      title: String(Self.strippingInlineRefs(title).prefix(titleLimit)),
+      message: String(Self.strippingInlineRefs(message).prefix(messageLimit)),
       reasoning: String(reasoning.prefix(1_200)),
       bucketEntryRefs: bucketEntryRefs.prefix(20).map { String($0.prefix(200)) },
       factIDs: factIDs.prefix(20).map { String($0.prefix(200)) },
@@ -441,6 +443,7 @@ actor ContextProactivityEngine {
     // must agree, and a mid-visit flag flip must not desynchronize them. With
     // the flag off, schema and prompt are byte-identical to the pre-hop build.
     let retrievalHopEnabled = await MainActor.run { ContextBucketsFeature.isRetrievalHopEnabled }
+    let interjectCopyBudgets = await MainActor.run { InterjectFeature.isEnabled }
     if !retrievalHopEnabled {
       let diag = await MainActor.run {
         "enabled=\(ContextBucketsFeature.isEnabled) nonprod=\(AppBuild.isNonProduction) env=\(ProcessInfo.processInfo.environment["OMI_FORCE_BUCKET_RETRIEVAL"] ?? "unset")"
@@ -448,7 +451,9 @@ actor ContextProactivityEngine {
       log("ForcedLookupDebug: retrieval hop DISABLED (\(diag))")
     }
     let prompt = ContextProactivityPromptBuilder.directorStablePrompt(
-      snapshot: snapshot, allowLookup: retrievalHopEnabled)
+      snapshot: snapshot,
+      allowLookup: retrievalHopEnabled,
+      includeInterjectCopyBudgets: interjectCopyBudgets)
     let envSignal = await MainActor.run {
       EnvironmentalSpeakerAnalyzer.analyze(segments: LiveTranscriptMonitor.shared.segments)
     }
@@ -567,9 +572,10 @@ actor ContextProactivityEngine {
           state: "failed")
         return
       }
-      let firstDecision = try JSONDecoder().decode(
-        ContextDirectorDecision.self, from: Data(result.content.utf8)
-      ).clamped()
+      let firstRaw = try JSONDecoder().decode(
+        ContextDirectorDecision.self, from: Data(result.content.utf8))
+      let firstDecision = firstRaw.clamped(
+        copyBudget: interjectCopyBudgets ? InterjectCopyBudget.limits(for: firstRaw.decision) : nil)
       var decision = firstDecision
       var retrievedRefAllowlist: Set<String> = forcedRetrievalAllowlist
       var retrievalProvenance: [String: Any]? = forcedRetrievalProvenance
@@ -589,7 +595,8 @@ actor ContextProactivityEngine {
           imageData: currentFrame.jpegData,
           cacheKey: cacheKey,
           fence: fence,
-          authorizationSnapshot: authorizationSnapshot)
+          authorizationSnapshot: authorizationSnapshot,
+          includeInterjectCopyBudgets: interjectCopyBudgets)
         // A failed, empty, or gated hop keeps the first decision untouched:
         // retrieval may upgrade a decision, never lose one.
         decision = ContextDirectorRetrievalHop.finalDecision(
@@ -982,8 +989,16 @@ actor ContextProactivityEngine {
           message: nil, state: "suppressed")
         return
       }
-      let message = String(candidate.message.prefix(600))
-      let title = String(message.prefix(120))
+      let interjectCopyBudgets = await MainActor.run { InterjectFeature.isEnabled }
+      let insightBudget = InterjectCopyBudget.limits(for: "insight")
+      let messageLimit =
+        interjectCopyBudgets
+        ? InterjectCopyBudget.clampedMessageLimit(insightBudget.messageLimit) : 600
+      let titleLimit =
+        interjectCopyBudgets
+        ? InterjectCopyBudget.clampedTitleLimit(insightBudget.titleLimit) : 120
+      let message = String(candidate.message.prefix(messageLimit))
+      let title = String(message.prefix(titleLimit))
       try await store.completeDelivery(
         id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
         message: message, state: "model_completed")
@@ -1115,7 +1130,8 @@ actor ContextProactivityEngine {
     imageData: Data?,
     cacheKey: String,
     fence: ContextVisitFence,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    includeInterjectCopyBudgets: Bool = false
   ) async -> RetrievalHopOutcome {
     func abandoned(_ items: [ContextRetrievedItem], failure: String?) -> RetrievalHopOutcome {
       RetrievalHopOutcome(
@@ -1157,9 +1173,11 @@ actor ContextProactivityEngine {
         maxCompletionTokens: 800,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
-      let decision = try JSONDecoder().decode(
-        ContextDirectorDecision.self, from: Data(result.content.utf8)
-      ).clamped()
+      let hopRaw = try JSONDecoder().decode(
+        ContextDirectorDecision.self, from: Data(result.content.utf8))
+      let decision = hopRaw.clamped(
+        copyBudget: includeInterjectCopyBudgets
+          ? InterjectCopyBudget.limits(for: hopRaw.decision) : nil)
       return RetrievalHopOutcome(
         decision: decision,
         allowedRefs: Set(items.map(\.ref)),

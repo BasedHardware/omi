@@ -507,6 +507,7 @@ def create_trigger(
     *,
     provenance: LedgerProvenance,
     prior_memory_id: Optional[str] = None,
+    arguments: Optional[Dict[str, Any]] = None,
     db_client: Any = None,
 ) -> str:
     return save_ledger_write(
@@ -518,6 +519,7 @@ def create_trigger(
             provenance=provenance,
             write_reason=LedgerWriteReason.standing_trigger,
             supersedes=[prior_memory_id] if prior_memory_id else [],
+            arguments=arguments or {},
         ),
         db_client=db_client,
     )

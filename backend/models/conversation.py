@@ -392,6 +392,8 @@ class ConversationFinalizationStatusResponse(BaseModel):
     attempt_count: int
     task_retry_count: int
     meeting_treatment_eligible: bool = False
+    terminal_outcome: Literal['success', 'failure', 'stale', 'unknown'] = 'unknown'
+    fanout_status: Literal['pending', 'leased', 'completed', 'fenced', 'unknown'] = 'unknown'
 
 
 # MIGRATE: For backward compatibility with the old memories routes and app

@@ -48,6 +48,14 @@ export interface QueryMessage extends ProtocolEnvelope {
    * x-omi-reasoning-effort header; never interpreted by the runtime.
    */
   reasoningEffort?: string;
+  /**
+   * Per-turn client-computed capability flag: true when the desktop's JIT
+   * knowledge-ledger rollout is enabled for the current user. This is a UX
+   * gate only — the backend independently re-checks entitlement on every
+   * `/v1/agent/execute-tool` call, so an absent or stale value only affects
+   * which tools the model is offered, never authorization.
+   */
+  jitKnowledgeToolsEnabled?: boolean;
 }
 
 export interface QueryAttachment {
@@ -95,6 +103,9 @@ export interface ExternalSurfaceRunBeginMessage extends ProtocolEnvelope {
   sessionId: string;
   turnId: string;
   prompt: string;
+  /** The prompt is an internal instruction, not user speech: it drives the run
+   *  but must never be journaled as the user's turn. */
+  promptIsSynthetic?: boolean;
   mode: "ask" | "act";
 }
 

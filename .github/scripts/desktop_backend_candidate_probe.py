@@ -36,7 +36,13 @@ MAX_CHAT_SECONDS = 70
 MAX_FIRST_EVENT_SECONDS = 20
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 CONTRACT_PATTERN = re.compile(r"^[1-9][0-9]{0,5}$")
-REAL_GEMINI_PROVIDER_ROUTES = frozenset({"vertex_ai", "ai_studio", "ai_studio_byok"})
+REAL_GEMINI_PROVIDER_ROUTES = frozenset({"vertex_ai", "ai_studio", "ai_studio_byok", "llm_gateway"})
+# `llm_gateway` is the route the desktop proxy stamps on X-Omi-Provider for
+# company-paid Gemini traffic since #12337 routed it through the LLM gateway
+# (backend/utils/llm/desktop_gemini_gateway.py proxy_company_paid_via_gateway).
+# The gateway's desktop-vertex lanes pin the Vertex provider with no fallbacks
+# (backend/llm_gateway/gateway/config_loader.py), so the hop is still real
+# Gemini-on-Vertex; stub and unknown routes stay rejected fail-closed.
 
 
 class ProbeError(RuntimeError):

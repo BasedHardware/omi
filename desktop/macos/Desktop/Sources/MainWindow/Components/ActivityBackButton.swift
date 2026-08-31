@@ -26,7 +26,7 @@ struct ActivityBackButton: View {
       HStack(spacing: 5) {
         Image(systemName: "chevron.left")
           .scaledFont(size: OmiType.micro, weight: .semibold)
-        Text("Brain")
+        Text("Memories")
           .scaledFont(size: OmiType.caption, weight: .semibold)
       }
       .foregroundStyle(GlassShell.controlLabel(isProminent: isHovering))
@@ -36,8 +36,8 @@ struct ActivityBackButton: View {
     }
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
-    .help("Back to Brain")
-    .accessibilityLabel("Back to Brain")
+    .help("Back to Memories")
+    .accessibilityLabel("Back to Memories")
     .accessibilityIdentifier("activity-back-button")
   }
 }

@@ -108,6 +108,7 @@ ingress:
 envFrom:
   - configMapRef:
       name: prod-omi-backend-config
+runtimeConfigMapName: prod-omi-backend-config
 
 env:
   - name: BUCKET_SPEECH_PROFILES
@@ -139,6 +140,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+  - name: MEMORY_ENABLED
+    value: "on"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -285,7 +288,7 @@ env:
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
-    value: "dg-nova-3,modulate-velma-2,parakeet"
+    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
