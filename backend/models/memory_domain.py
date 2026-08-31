@@ -22,7 +22,7 @@ a memory layer.
 **Short-term / Long-term / Archive** — The three product lifecycle layers stored in the
 unified Memories store, distinguished by the ``layer`` field on each record.
 
-Non-layer concepts (see §1.1 / §1.3 in ``docs/memory/domain_model.md``):
+Non-layer concepts (see §1.1 / §1.3 in ``backend/docs/memory/domain_model.md``):
 
 - ``context_only`` is **not** a tier or layer — normalize to ``layer=archive`` or a
   non-default processing outcome.

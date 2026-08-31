@@ -66,6 +66,7 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
+from utils.metrics import record_jit_first_open
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
@@ -1994,6 +1995,7 @@ def process_conversation(
     defer_memory_extraction: bool = False,
     defer_derived_effects: bool = False,
     derived_effects_observer: Callable[[Callable[[], None]], None] | None = None,
+    bypass_jit_first_open: bool = False,
 ) -> Conversation:
     if app_usage_attribution is None:
         app_usage_attribution = (
@@ -2085,6 +2087,9 @@ def process_conversation(
     # force_process=True). Paid desktop plans (Operator / Architect), BYOK users, and all
     # non-desktop sources are processed normally here. force_process / is_reprocess — the lazy
     # trigger and manual reprocess — bypass this so the enrichment actually runs.
+    # force_process does not bypass JIT first-open: Flutter create and macOS
+    # finalize need it to still defer folders/apps when rollout admits. Explicit
+    # "run everything now" paths pass bypass_jit_first_open=True.
     if (
         not force_process
         and not is_reprocess
@@ -2139,12 +2144,14 @@ def process_conversation(
     # conversation source. We create the durable obligation before omitting a
     # single effect; authority/Firestore failure preserves full-eager behavior.
     jit_defer_expensive = False
-    if not force_process and not is_reprocess and not discarded:
+    if not bypass_jit_first_open and not is_reprocess and not discarded:
         source_value = getattr(conversation.source, 'value', conversation.source)
         first_open_plan = resolve_authorized_first_open_plan(uid=uid, source=str(source_value))
         if first_open_plan.defer_derived_work:
             try:
                 jit_defer_expensive = conversations_db.initialize_first_open_work(uid, conversation.id)
+                if jit_defer_expensive:
+                    record_jit_first_open(event='claim', effect='obligation')
             except Exception as error:
                 logger.warning(
                     'JIT first-open initialization failed; using eager path uid=%s conv=%s: %s',
@@ -2152,6 +2159,10 @@ def process_conversation(
                     conversation.id,
                     error,
                 )
+                try:
+                    record_jit_first_open(event='fail', effect='obligation')
+                except Exception:
+                    pass
 
     # Wrap every post-persistence derived effect so the durable finalizer can
     # defer the bundle until it transactionally claims ownership (#10468 r5).

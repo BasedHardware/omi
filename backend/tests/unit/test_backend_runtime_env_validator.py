@@ -1884,16 +1884,13 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
 
 
 @pytest.mark.parametrize('env', ['dev', 'prod'])
-def test_memory_maintenance_job_contract_rejects_daily_sweep_and_posthog_bindings(env, tmp_path):
+def test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog(env, tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     job = manifest['environments'][env]['cloud_run']['jobs']['memory-maintenance-job']
     job['env']['MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED'] = {'value': 'true'}
     job['env']['POSTHOG_HOST'] = {'value': 'https://app.posthog.com'}
-    job['secrets']['POSTHOG_PROJECT_API_KEY'] = {
-        'secret': 'POSTHOG_PROJECT_API_KEY',
-        'version': 'latest',
-    }
+    del job['secrets']['POSTHOG_PROJECT_API_KEY']
     path = tmp_path / 'runtime_env.yaml'
     write_yaml(path, manifest)
 
@@ -1901,7 +1898,40 @@ def test_memory_maintenance_job_contract_rejects_daily_sweep_and_posthog_binding
     messages = {error.message for error in errors}
     assert 'env MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED belongs only on daily-memory-sweep-job' in messages
     assert 'env POSTHOG_HOST belongs only on daily-memory-sweep-job' in messages
-    assert 'secret POSTHOG_PROJECT_API_KEY belongs only on daily-memory-sweep-job' in messages
+    assert 'missing secret POSTHOG_PROJECT_API_KEY; ledger drain evaluates jit-processing-v1' in messages
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_jit_admission_surfaces_require_posthog_and_listen_data_plane(env):
+    validator = load_validator()
+    assert validator.validate_runtime_env(env=env) == []
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    environment = manifest['environments'][env]
+    listen_env = environment['gke']['backend-listen']['env']
+    expected_data_plane = 'based-hardware'
+    assert listen_env['OMI_FIRESTORE_DATA_PLANE_PROJECT']['value'] == expected_data_plane
+    assert listen_env['POSTHOG_PROJECT_API_KEY']['secret']['key'] == 'POSTHOG_PROJECT_API_KEY'
+    maintenance_secrets = environment['cloud_run']['jobs']['memory-maintenance-job']['secrets']
+    assert maintenance_secrets['POSTHOG_PROJECT_API_KEY'] == {
+        'secret': 'POSTHOG_PROJECT_API_KEY',
+        'version': 'latest',
+    }
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_jit_admission_surface_omission_fails_compose(env, tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    listen_env = manifest['environments'][env]['gke']['backend-listen']['env']
+    del listen_env['POSTHOG_PROJECT_API_KEY']
+    del listen_env['OMI_FIRESTORE_DATA_PLANE_PROJECT']
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env=env, manifest_path=path)
+    messages = {error.message for error in errors}
+    assert 'missing secret POSTHOG_PROJECT_API_KEY; live finalization evaluates jit-processing-v1' in messages
+    assert "OMI_FIRESTORE_DATA_PLANE_PROJECT must be 'based-hardware'" in messages
 
 
 @pytest.mark.parametrize('env', ['dev', 'prod'])

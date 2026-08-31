@@ -210,7 +210,11 @@ export function isNotificationSnoozed(now: number = Date.now()): boolean {
  *  can never disagree about whether a toast could appear. `assistantId` is
  *  accepted for symmetry with `notifyProactive` and a future per-assistant master;
  *  today the gate is global. */
-export function notificationsActive(_assistantId: string, now: number = Date.now()): boolean {
+export function notificationsActive(assistantId: string, now: number = Date.now()): boolean {
+  // JIT admission consumes the visit for the Insight pipeline, not only the
+  // toast. When the rollout is effective, Insight.isEnabled() must go false so
+  // Gemini is not purchased behind a suppressed notification.
+  if (assistantId === 'insight' && jitLegacyAmbientGate?.()) return false
   const settings = getAppSettings()
   if (isNotificationSnoozed(now)) return false
   if (!settings.notificationsEnabled) return false

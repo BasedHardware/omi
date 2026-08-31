@@ -98,7 +98,8 @@ from utils.conversations.calendar_linking import (
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
 from utils.retrieval.tools.calendar_tools import get_google_calendar_event
 from utils.retrieval.tools.google_utils import refresh_google_token
-from utils.conversations.location import get_google_maps_location
+from utils.conversations.location import resolve_geolocation
+from utils.observability.fallback import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -308,10 +309,20 @@ def process_in_progress_conversation(
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
 
     # Geolocation
-    geolocation = redis_db.get_cached_user_geolocation(uid)
-    if geolocation:
-        geolocation = Geolocation(**geolocation)
-        conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+    if conversation.geolocation:
+        conversation.geolocation = resolve_geolocation(conversation.geolocation)
+    else:
+        geolocation = redis_db.get_cached_user_geolocation(uid)
+        if geolocation:
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='conversation_snapshot',
+                to_mode='redis_user_cache',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+            conversation.geolocation = resolve_geolocation(Geolocation(**geolocation))
 
     if not lifecycle_service.admit_processing(uid, conversation.id):
         latest = _get_valid_conversation_by_id(uid, conversation.id)
@@ -483,6 +494,7 @@ def reprocess_conversation(
         conversation,
         force_process=True,
         is_reprocess=True,
+        bypass_jit_first_open=True,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(
@@ -950,7 +962,7 @@ def delete_conversation(
     background_tasks: BackgroundTasks,
     # TODO(Q8-gated): ratified default is cascade=true — NOT flipped; needs explicit owner sign-off
     # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
-    # docs/memory/domain_model.md §Delete/privacy matrix.
+    # backend/docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):

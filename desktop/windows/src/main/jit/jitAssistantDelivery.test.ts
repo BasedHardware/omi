@@ -240,4 +240,28 @@ describe('ambient agent-turn prompt', () => {
     expect(prompt).not.toContain('\u0000')
     expect(prompt.split('\n')).toHaveLength(1)
   })
+
+  it('does not admit ambient after legacy fallback', async () => {
+    const admitAmbient = vi.fn()
+    const runtime = fakeRuntime({
+      observationForFrame: async (f: RewindFrame) => ({ appName: f.app }),
+      admit: async () => ({ kind: 'legacy_fallback', reason: 'rollout_disabled_or_unknown' }),
+      admitAmbient
+    })
+    const assistant = new WindowsJitAssistant(runtime, () => T0)
+    expect(await assistant.analyze(frame())).toBeNull()
+    expect(admitAmbient).not.toHaveBeenCalled()
+  })
+
+  it('does not admit ambient on an empty complete watchlist', async () => {
+    const admitAmbient = vi.fn()
+    const runtime = fakeRuntime({
+      observationForFrame: async (f: RewindFrame) => ({ appName: f.app }),
+      admit: async () => ({ kind: 'suppressed', reason: 'empty_watchlist' }),
+      admitAmbient
+    })
+    const assistant = new WindowsJitAssistant(runtime, () => T0)
+    expect(await assistant.analyze(frame())).toBeNull()
+    expect(admitAmbient).not.toHaveBeenCalled()
+  })
 })

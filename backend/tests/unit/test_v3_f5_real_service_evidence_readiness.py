@@ -50,7 +50,7 @@ def _approved_config(module, **overrides):
             "firestore index state",
             "audit read log metadata",
         ),
-        oracle_review_artifact="docs/operational/memory_readiness_evidence_markers.md#f4-before-f5-real-service-evidence-2026-06-20",
+        oracle_review_artifact="backend/docs/operational/memory_readiness_evidence_markers.md#f4-before-f5-real-service-evidence-2026-06-20",
     )
     kwargs.update(overrides)
     return module.EvidenceRunConfig(**kwargs)
@@ -241,7 +241,7 @@ def test_docs_test_runner_and_parent_readiness_link_f5_preparation():
     assert "memory-V3-F5 real-service read-only evidence preparation" in f5_script
     assert "build_evidence_report" in f5_utils
     assert "default-NOT_RUN" in f5_script
-    evidence_markers = (root / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text(
+    evidence_markers = (root / "backend" / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text(
         encoding="utf-8"
     )
     assert "memory-V3-F5 real-service read-only evidence preparation" in evidence_markers

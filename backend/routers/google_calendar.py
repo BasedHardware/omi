@@ -37,6 +37,9 @@ class GoogleCalendarEvent(BaseModel):
     start_time: datetime = Field(description="Event start time")
     end_time: datetime = Field(description="Event end time")
     html_link: Optional[str] = Field(default=None, description="Link to open event in Google Calendar")
+    location: str = Field(default='', description="Event location")
+    description: str = Field(default='', description="Event description, truncated for transport")
+    all_day: bool = Field(default=False, description="True when the event has a date but no time")
 
 
 def _get_google_calendar_token(uid: str) -> tuple[str, Dict[str, Any]]:
@@ -62,6 +65,9 @@ def _event_to_response(event: Dict[str, Any]) -> Optional[GoogleCalendarEvent]:
 
     attendee_names, attendee_emails = extract_attendees(event)
 
+    start_raw = event.get('start') or {}
+    all_day = isinstance(start_raw, dict) and 'date' in start_raw and 'dateTime' not in start_raw
+
     return GoogleCalendarEvent(
         event_id=event.get('id', ''),
         title=event.get('summary', 'Untitled Event'),
@@ -70,6 +76,9 @@ def _event_to_response(event: Dict[str, Any]) -> Optional[GoogleCalendarEvent]:
         start_time=start_time,
         end_time=end_time,
         html_link=event.get('htmlLink'),
+        location=(event.get('location') or '')[:200],
+        description=(event.get('description') or '')[:300],
+        all_day=all_day,
     )
 
 
@@ -82,7 +91,9 @@ async def list_google_calendar_events(
     time_min: Optional[datetime] = Query(None, description="Minimum time for events (ISO format)"),
     time_max: Optional[datetime] = Query(None, description="Maximum time for events (ISO format)"),
     q: Optional[str] = Query(None, description="Search query to filter events"),
-    max_results: int = Query(20, ge=1, le=100, description="Maximum number of events to return"),
+    # Ceiling raised from 100 for the desktop connector import, which reads a
+    # year of history in one pass; Google's own list cap is 2500.
+    max_results: int = Query(20, ge=1, le=500, description="Maximum number of events to return"),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
     x_app_build: Optional[str] = Header(None, alias='X-App-Build'),
