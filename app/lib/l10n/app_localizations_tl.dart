@@ -10009,4 +10009,14 @@ class AppLocalizationsTl extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Hindi na-record ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count maikling usapan',
+    );
+    return '$_temp0';
+  }
 }

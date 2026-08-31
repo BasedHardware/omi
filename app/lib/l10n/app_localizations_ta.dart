@@ -9988,4 +9988,15 @@ class AppLocalizationsTa extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'பதிவு செய்யப்படவில்லை ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count சிறு உரையாடல்கள்',
+      one: '1 சிறு உரையாடல்',
+    );
+    return '$_temp0';
+  }
 }

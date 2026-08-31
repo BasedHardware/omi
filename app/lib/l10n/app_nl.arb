@@ -3235,5 +3235,6 @@
     "prerecordedTranscript": "Vooraf opgenomen",
     "pendantRecordingSyncBlocked": "Je Pendant is nog aan het opnemen, dus de opgeslagen audio kan niet worden overgezet. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer opnieuw.",
     "pendantFullSyncBlocked": "De opslag van je Pendant is vol en hij staat nog in de opnamemodus, dus de opgeslagen audio kan niet worden overgedragen. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer daarna opnieuw.",
-    "conversationsNotCapturedCount": "Niet opgenomen ({count})"
+    "conversationsNotCapturedCount": "Niet opgenomen ({count})",
+    "shortConversationsCount": "{count, plural, =1{1 kort gesprek} other{{count} korte gesprekken}}"
 }

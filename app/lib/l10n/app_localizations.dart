@@ -18464,6 +18464,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not captured ({count})'**
   String conversationsNotCapturedCount(int count);
+
+  /// Collapsed group of the day’s short conversations on the home timeline
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 short conversation} other{{count} short conversations}}'**
+  String shortConversationsCount(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

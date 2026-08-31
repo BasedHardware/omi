@@ -3270,5 +3270,6 @@
     "prerecordedTranscript": "Предзапись",
     "pendantRecordingSyncBlocked": "Pendant всё ещё ведёт запись, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова.",
     "pendantFullSyncBlocked": "Память Pendant заполнена, и он всё ещё в режиме записи, поэтому сохранённое аудио нельзя передать. Нажмите кнопку Pendant, чтобы остановить запись, затем синхронизируйте снова.",
-    "conversationsNotCapturedCount": "Не записано ({count})"
+    "conversationsNotCapturedCount": "Не записано ({count})",
+    "shortConversationsCount": "{count, plural, =1{1 короткий разговор} other{Короткие разговоры: {count}}}"
 }

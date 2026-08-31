@@ -3235,5 +3235,6 @@
     "prerecordedTranscript": "บันทึกไว้ล่วงหน้า",
     "pendantRecordingSyncBlocked": "Pendant ยังบันทึกอยู่ จึงไม่สามารถถ่ายโอนเสียงที่จัดเก็บไว้ได้ กดปุ่มของ Pendant เพื่อหยุดบันทึก แล้วซิงค์อีกครั้ง",
     "pendantFullSyncBlocked": "พื้นที่จัดเก็บของ Pendant เต็มและยังอยู่ในโหมดบันทึกเสียง จึงไม่สามารถถ่ายโอนเสียงที่บันทึกไว้ได้ กดปุ่มของ Pendant เพื่อหยุดการบันทึก แล้วซิงค์อีกครั้ง",
-    "conversationsNotCapturedCount": "ไม่ได้บันทึก ({count})"
+    "conversationsNotCapturedCount": "ไม่ได้บันทึก ({count})",
+    "shortConversationsCount": "{count, plural, other{การสนทนาสั้น {count} รายการ}}"
 }

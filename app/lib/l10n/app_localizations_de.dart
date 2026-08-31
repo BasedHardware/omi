@@ -10001,4 +10001,15 @@ class AppLocalizationsDe extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nicht erfasst ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kurze Unterhaltungen',
+      one: '1 kurze Unterhaltung',
+    );
+    return '$_temp0';
+  }
 }

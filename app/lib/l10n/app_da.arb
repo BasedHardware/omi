@@ -3253,5 +3253,6 @@
     "prerecordedTranscript": "Forudoptaget",
     "pendantRecordingSyncBlocked": "Din Pendant optager stadig, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser igen.",
     "pendantFullSyncBlocked": "Din Pendants lager er fuldt, og den er stadig i optagetilstand, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser derefter igen.",
-    "conversationsNotCapturedCount": "Ikke optaget ({count})"
+    "conversationsNotCapturedCount": "Ikke optaget ({count})",
+    "shortConversationsCount": "{count, plural, =1{1 kort samtale} other{{count} korte samtaler}}"
 }

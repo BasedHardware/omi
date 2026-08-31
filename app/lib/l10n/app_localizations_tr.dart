@@ -9930,4 +9930,14 @@ class AppLocalizationsTr extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Kaydedilmedi ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kısa konuşma',
+    );
+    return '$_temp0';
+  }
 }

@@ -9942,4 +9942,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nav ierakstīts ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Īsas sarunas: $count',
+      one: '1 īsa saruna',
+    );
+    return '$_temp0';
+  }
 }

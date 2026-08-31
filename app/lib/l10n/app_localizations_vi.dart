@@ -9913,4 +9913,14 @@ class AppLocalizationsVi extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Không được ghi âm ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cuộc trò chuyện ngắn',
+    );
+    return '$_temp0';
+  }
 }

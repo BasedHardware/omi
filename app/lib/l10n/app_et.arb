@@ -3235,5 +3235,6 @@
     "prerecordedTranscript": "Eelsalvestatud",
     "pendantRecordingSyncBlocked": "Pendant salvestab endiselt, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja sünkrooni uuesti.",
     "pendantFullSyncBlocked": "Pendanti mälu on täis ja see on endiselt salvestusrežiimis, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja seejärel sünkrooni uuesti.",
-    "conversationsNotCapturedCount": "Salvestamata ({count})"
+    "conversationsNotCapturedCount": "Salvestamata ({count})",
+    "shortConversationsCount": "{count, plural, =1{1 lühike vestlus} other{{count} lühikest vestlust}}"
 }

@@ -10801,5 +10801,6 @@
     "prerecordedTranscript": "Unaprijed snimljeno",
     "pendantRecordingSyncBlocked": "Pendant još uvijek snima, pa se pohranjeni zvuk ne može prenijeti. Pritisnite dugme na Pendantu da zaustavite snimanje, zatim ponovo sinhronizujte.",
     "pendantFullSyncBlocked": "Memorija Pendanta je puna i još uvijek je u režimu snimanja, pa se pohranjeni zvuk ne može prenijeti. Pritisnite dugme na Pendantu da zaustavite snimanje, a zatim ponovo sinhronizujte.",
-    "conversationsNotCapturedCount": "Nije snimljeno ({count})"
+    "conversationsNotCapturedCount": "Nije snimljeno ({count})",
+    "shortConversationsCount": "{count, plural, =1{1 kratak razgovor} other{Kratki razgovori: {count}}}"
 }

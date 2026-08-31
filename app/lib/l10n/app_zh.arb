@@ -3257,5 +3257,6 @@
     "prerecordedTranscript": "预录",
     "pendantRecordingSyncBlocked": "Pendant 仍在录音，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。",
     "pendantFullSyncBlocked": "Pendant 的存储空间已满，且仍处于录音模式，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。",
-    "conversationsNotCapturedCount": "未记录 ({count})"
+    "conversationsNotCapturedCount": "未记录 ({count})",
+    "shortConversationsCount": "{count, plural, other{{count} 段简短对话}}"
 }

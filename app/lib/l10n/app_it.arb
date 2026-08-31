@@ -3235,5 +3235,6 @@
     "prerecordedTranscript": "Preregistrato",
     "pendantRecordingSyncBlocked": "Il Pendant sta ancora registrando, quindi l'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo.",
     "pendantFullSyncBlocked": "La memoria del Pendant è piena ed è ancora in modalità registrazione, quindi l'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo.",
-    "conversationsNotCapturedCount": "Non registrato ({count})"
+    "conversationsNotCapturedCount": "Non registrato ({count})",
+    "shortConversationsCount": "{count, plural, =1{1 conversazione breve} other{{count} conversazioni brevi}}"
 }

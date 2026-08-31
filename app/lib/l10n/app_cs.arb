@@ -3213,5 +3213,6 @@
     "prerecordedTranscript": "Předem nahráno",
     "pendantRecordingSyncBlocked": "Pendant stále nahrává, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu nahrávání zastavte a poté synchronizujte znovu.",
     "pendantFullSyncBlocked": "Úložiště Pendantu je plné a stále je v režimu nahrávání, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu zastavte nahrávání a poté znovu synchronizujte.",
-    "conversationsNotCapturedCount": "Nezaznamenáno ({count})"
+    "conversationsNotCapturedCount": "Nezaznamenáno ({count})",
+    "shortConversationsCount": "{count, plural, =1{1 krátká konverzace} other{Krátké konverzace: {count}}}"
 }

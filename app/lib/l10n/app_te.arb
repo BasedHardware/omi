@@ -10801,5 +10801,6 @@
     "prerecordedTranscript": "ముందుగా రికార్డ్ చేసినది",
     "pendantRecordingSyncBlocked": "Pendant ఇంకా రికార్డ్ చేస్తోంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయలేము. రికార్డింగ్ ఆపడానికి Pendant బటన్ నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.",
     "pendantFullSyncBlocked": "Pendant నిల్వ నిండిపోయింది మరియు అది ఇంకా రికార్డింగ్ మోడ్‌లో ఉంది, కాబట్టి నిల్వ చేసిన ఆడియోను బదిలీ చేయడం సాధ్యం కాదు. రికార్డింగ్ ఆపడానికి Pendant బటన్‌ను నొక్కి, ఆపై మళ్లీ సింక్ చేయండి.",
-    "conversationsNotCapturedCount": "రికార్డ్ కాలేదు ({count})"
+    "conversationsNotCapturedCount": "రికార్డ్ కాలేదు ({count})",
+    "shortConversationsCount": "{count, plural, =1{1 చిన్న సంభాషణ} other{{count} చిన్న సంభాషణలు}}"
 }

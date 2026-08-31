@@ -3235,5 +3235,6 @@
     "prerecordedTranscript": "Išankstinis įrašas",
     "pendantRecordingSyncBlocked": "Pendant vis dar įrašinėja, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite dar kartą.",
     "pendantFullSyncBlocked": "Pendant atmintis pilna ir jis vis dar įrašymo režime, todėl išsaugoto garso perkelti negalima. Paspauskite Pendant mygtuką, kad sustabdytumėte įrašymą, tada sinchronizuokite iš naujo.",
-    "conversationsNotCapturedCount": "Neįrašyta ({count})"
+    "conversationsNotCapturedCount": "Neįrašyta ({count})",
+    "shortConversationsCount": "{count, plural, =1{1 trumpas pokalbis} other{Trumpi pokalbiai: {count}}}"
 }

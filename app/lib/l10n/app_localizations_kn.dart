@@ -9950,4 +9950,15 @@ class AppLocalizationsKn extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'ದಾಖಲಾಗಿಲ್ಲ ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಚಿಕ್ಕ ಸಂಭಾಷಣೆಗಳು',
+      one: '1 ಚಿಕ್ಕ ಸಂಭಾಷಣೆ',
+    );
+    return '$_temp0';
+  }
 }

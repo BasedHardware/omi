@@ -9919,4 +9919,15 @@ class AppLocalizationsCs extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nezaznamenáno ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Krátké konverzace: $count',
+      one: '1 krátká konverzace',
+    );
+    return '$_temp0';
+  }
 }

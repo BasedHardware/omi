@@ -9752,4 +9752,14 @@ class AppLocalizationsKo extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return '기록되지 않음 ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '짧은 대화 $count개',
+    );
+    return '$_temp0';
+  }
 }

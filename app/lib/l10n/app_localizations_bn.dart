@@ -9923,4 +9923,15 @@ class AppLocalizationsBn extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'রেকর্ড করা হয়নি ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি সংক্ষিপ্ত কথোপকথন',
+      one: '১টি সংক্ষিপ্ত কথোপকথন',
+    );
+    return '$_temp0';
+  }
 }

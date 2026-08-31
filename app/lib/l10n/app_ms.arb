@@ -3235,5 +3235,6 @@
     "prerecordedTranscript": "Pra-rakam",
     "pendantRecordingSyncBlocked": "Pendant masih merakam, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.",
     "pendantFullSyncBlocked": "Storan Pendant penuh dan ia masih dalam mod rakaman, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.",
-    "conversationsNotCapturedCount": "Tidak dirakam ({count})"
+    "conversationsNotCapturedCount": "Tidak dirakam ({count})",
+    "shortConversationsCount": "{count, plural, other{{count} perbualan pendek}}"
 }

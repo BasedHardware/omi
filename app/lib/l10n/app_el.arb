@@ -3235,5 +3235,6 @@
     "prerecordedTranscript": "Προηχογραφημένο",
     "pendantRecordingSyncBlocked": "Το Pendant εξακολουθεί να ηχογραφεί, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την ηχογράφηση και συγχρονίστε ξανά.",
     "pendantFullSyncBlocked": "Ο αποθηκευτικός χώρος του Pendant είναι πλήρης και βρίσκεται ακόμα σε λειτουργία εγγραφής, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την εγγραφή και μετά συγχρονίστε ξανά.",
-    "conversationsNotCapturedCount": "Δεν καταγράφηκε ({count})"
+    "conversationsNotCapturedCount": "Δεν καταγράφηκε ({count})",
+    "shortConversationsCount": "{count, plural, =1{1 σύντομη συνομιλία} other{{count} σύντομες συνομιλίες}}"
 }

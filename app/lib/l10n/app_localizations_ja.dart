@@ -9749,4 +9749,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return '未記録 ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '短い会話 $count 件',
+    );
+    return '$_temp0';
+  }
 }
