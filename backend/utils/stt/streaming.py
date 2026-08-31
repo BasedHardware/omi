@@ -110,6 +110,29 @@ def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
     raise ValueError(f'connection fallback is not defined for a {primary_service.value} primary')
 
 
+def open_provider_selection_circuit(provider: str | None, *, reason: str) -> bool:
+    """Open a provider's process-local selection circuit after a serve-time death.
+
+    Selection normally learns from connect-time outcomes alone, so a provider
+    that accepts the upgrade and dies while serving audio is invisible to it:
+    the next reconnect's successful connect resets the failure counter. The
+    live-session terminal path calls this so reconnecting clients skip the
+    provider that just died for one cooldown window. Returns whether a known
+    provider's circuit was opened; unknown provider names are tolerated
+    (same shapes metrics accept) and simply report ``False``.
+    """
+    if not provider:
+        return False
+    try:
+        service = STTService(provider)
+    except ValueError:
+        return False
+    circuit = _circuit_for_primary(service)
+    logger.warning('Opening %s selection circuit after serve-time death reason=%s', provider, reason)
+    circuit.record_serve_failure()
+    return True
+
+
 def _fallback_failure_reason(error: BaseException) -> str:
     """Classify why a fallback provider could not serve, for the next leg's telemetry."""
     if isinstance(error, (asyncio.TimeoutError, TimeoutError)):

@@ -35,6 +35,12 @@ _FAILURE_PHASE_BY_REASON = {
     'send_failed': 'send',
 }
 
+# Terminal reasons that are evidence about the *provider* while it was serving
+# audio. ``initialization_failed`` happens at connect time, where the selection
+# helper's threshold logic already sees it, and ``socket_unavailable`` is local
+# state (no socket exists), not provider behavior.
+_SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed'})
+
 
 class LiveSTTSession(Protocol):
     active: bool
@@ -85,6 +91,26 @@ def live_stt_socket_is_dead(stt_socket: Any) -> bool:
         return True
 
 
+def _open_serving_provider_circuit(bounded_reason: str, provider: str | None) -> None:
+    """Open the process-local selection circuit of the provider that died serving.
+
+    Deliberately cheap and fail-open: the terminal close of the client session
+    must never be delayed or failed by circuit bookkeeping. Imported lazily
+    because ``utils.stt.streaming`` imports the socket implementations this
+    module classifies, so a module-level import would be circular.
+    """
+    try:
+        from utils.stt.streaming import open_provider_selection_circuit
+
+        open_provider_selection_circuit(provider, reason=bounded_reason)
+    except Exception as error:  # noqa: BLE001 — telemetry-adjacent bookkeeping must not fail the terminal path
+        logger.warning(
+            'Unable to open selection circuit after serve-time death provider=%s error_type=%s',
+            bounded_provider(provider),
+            type(error).__name__,
+        )
+
+
 async def terminate_live_stt_session(
     websocket: LiveSTTClientSocket,
     session: LiveSTTSession,
@@ -106,6 +132,16 @@ async def terminate_live_stt_session(
     session.stt_terminal_failure = True
     session.close_code = LIVE_STT_FAILURE_CLOSE_CODE
     bounded_reason = _bounded_reason(reason)
+    if bounded_reason in _SERVE_FAILURE_REASONS:
+        # A provider that died while serving audio is terminal evidence for
+        # this session, but selection only learns from connect-time outcomes:
+        # the next reconnect's successful *connect* would call
+        # ``record_success`` and reset the counter, so serve-time deaths never
+        # reach the threshold. Open the serving provider's circuit here so
+        # reconnecting clients skip straight to a healthy fallback for the
+        # cooldown, instead of being handed back to the provider that just
+        # died on them (connect -> die -> reconnect -> die under an outage).
+        _open_serving_provider_circuit(bounded_reason, failure.provider)
     try:
         record_live_stt_failure(
             provider=failure.provider,
