@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
+import re
 
 import pytest
 
@@ -200,3 +201,78 @@ def test_action_item_new_fields_round_trip():
         due_certainty='tentative',
     )
     assert ActionItem.model_validate_json(item.model_dump_json()) == item
+
+
+def test_notes_without_calendar_context_strip_speaker_placeholders(monkeypatch):
+    from utils.llm import conversation_processing
+    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+
+    prefix = build_conversation_prompt_prefix(
+        conversation_id='conv-no-cal',
+        transcript='Speaker 1: the budget is late\nSpeaker 0: noted',
+        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+        timezone_name='America/New_York',
+        language_code='en',
+    )
+    captured = {}
+
+    class Model:
+        def invoke(self, messages):
+            captured['instructions'] = messages[-1].content
+            return SimpleNamespace(content='''{
+                  "title":"Speaker 1 Reviews Budget",
+                  "overview":"Speaker 1 said the budget is late.",
+                  "emoji":"💬",
+                  "category":"work",
+                  "sections":[{"heading":"Budget","body_markdown":"- Speaker 1: budget is late\\n- SPEAKER_00 agreed","source_segment_ids":["s1"]}],
+                  "action_items":[{"description":"Follow up with Speaker 1","owner_name":"Speaker 1","source_segment_ids":["s1"]}],
+                  "events":[]
+                }''')
+
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *args, **kwargs: Model())
+    monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
+    result = conversation_processing.get_conversation_notes(
+        prefix,
+        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+        language_code='en',
+        output_language_code='en',
+        tz='America/New_York',
+        task_intelligence_capture=False,
+    )
+
+    leftover = re.compile(r'(?i)\b(?:speaker[ _]\d+|SPEAKER_\d+)\b')
+    assert leftover.search(result.title) is None
+    assert leftover.search(result.overview) is None
+    assert leftover.search(result.sections[0].body_markdown) is None
+    assert leftover.search(result.action_items[0].description) is None
+    assert result.action_items[0].owner_name is None
+    assert 'Speaker 0' in captured['instructions']
+    assert 'whether or not' in captured['instructions'].lower() or 'calendar' in captured['instructions'].lower()
+
+
+def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder():
+    from utils.conversations.meeting_context import context_from_screen_activity
+    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+
+    context = context_from_screen_activity(
+        [
+            {
+                'appName': 'Telegram',
+                'windowTitle': 'Alice Chen',
+                'ocrText': 'Mute\nEnd Call\nVideo',
+            }
+        ],
+        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 8, 18, 14, 30, tzinfo=timezone.utc),
+    )
+    assert context is not None
+    prefix = build_conversation_prompt_prefix(
+        conversation_id='conv-telegram',
+        transcript='Speaker 1: the flight is at noon\n',
+        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+        timezone_name='America/New_York',
+        language_code='en',
+        calendar_context=context,
+    )
+    assert 'Alice Chen' in prefix.context
+    assert 'Speaker 1:' not in prefix.context
