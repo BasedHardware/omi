@@ -106,6 +106,27 @@ final class CuaPermissionAndScriptTests: XCTestCase {
     XCTAssertTrue(result.failure?.contains("did not finish") ?? false)
   }
 
+  /// The bug this replaces: `list_windows` read the window list through
+  /// `SCShareableContent`, which is Screen Recording territory, but declared no
+  /// permission. Without the grant the call threw, `try?` swallowed it, and the
+  /// tool answered "No matching windows" — an empty desk rather than a missing
+  /// permission, which a model acts on as if it were true.
+  @MainActor
+  func testListingWindowsNeedsTheSameGrantAsCapturing() {
+    let gate = gate(missing: [.screenRecording])
+    XCTAssertEqual(gate.refusal(needs: [.screenRecording]), .missingPermission(.screenRecording))
+    XCTAssertTrue(CuaToolCatalog.tools.contains { $0.name == "list_windows" })
+  }
+
+  /// A script that drives another app blocks on an unapproved Automation grant
+  /// exactly as it blocks on a dialog, so the timeout has to name both.
+  func testTheTimeoutNamesAutomationAndNotOnlyADialog() {
+    let result = CuaAppleScript.run("delay 30", timeout: 1)
+    let failure = result.failure ?? ""
+    XCTAssertTrue(failure.contains("Automation"))
+    XCTAssertTrue(failure.contains("dialog"))
+  }
+
   /// The script reaches osascript as a file, so a quote or a newline in it is
   /// script text and never a second argument.
   func testScriptTextWithQuotesAndNewlinesSurvives() {

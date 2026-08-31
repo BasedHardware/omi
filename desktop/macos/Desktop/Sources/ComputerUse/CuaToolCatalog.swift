@@ -281,6 +281,12 @@ enum CuaToolCatalog {
   }
 
   private static func listWindows(_ args: CuaArguments) async -> CuaToolResult {
+    // SCShareableContent is Screen Recording territory. Without the grant it
+    // throws and the window list comes back empty, which reads to a model as an
+    // empty desk rather than a missing permission — so it acts on the lie.
+    if let refusal = await refusal(needs: [.screenRecording]) {
+      return .error(refusal.message)
+    }
     var windows = await CuaScreenObserver.windows()
     if let filter = args.string("app")?.lowercased() {
       windows = windows.filter {

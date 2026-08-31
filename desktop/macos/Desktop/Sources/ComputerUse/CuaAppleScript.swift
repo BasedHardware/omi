@@ -96,7 +96,7 @@ enum CuaAppleScript {
       return Result(
         output: "",
         failure:
-          "The script did not finish within \(Int(timeout))s and was stopped. A script that opens a dialog waits for a click that no one is there to make."
+          "The script did not finish within \(Int(timeout))s and was stopped. A script that drives another app waits here when Automation has not been approved for it — check System Settings ▸ Privacy & Security ▸ Automation — and a script that opens a dialog waits for a click that no one is there to make."
       )
     }
 
