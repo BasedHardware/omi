@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -50,10 +50,13 @@ from utils.stt.live_failure import (
     send_live_stt_audio,
     terminate_live_stt_session,
 )
+from config.stt_provider_policy import provider_for_service
+from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.streaming import (
     STTService,
     connect_stt_socket_with_fallback,
     deepgram_fallback_model,
+    get_stt_service_for_language,
     make_stream_callback,
     modulate_is_configured_fallback,
     parakeet_is_configured_fallback,
@@ -84,6 +87,8 @@ logger = logging.getLogger(__name__)
 # Cadence for the frame-independent provider-death monitor (#10028). Short enough
 # to terminate a zombie "Listening" session promptly, far below ws_receive_timeout.
 STT_DEATH_POLL_INTERVAL_SECONDS = 1.0
+# Chain depth is 3 (velma/soniox/deepgram); allow walking it once, not looping.
+MAX_STT_FAILOVERS = 2
 
 # Longest frame the Opus format can carry, in milliseconds.
 OPUS_MAX_FRAME_MS = 120
@@ -123,6 +128,10 @@ class ListenReceiver:
         self.channel_configs = channel_configs
         self.channel_id_to_index = channel_id_to_index
         self.stt_socket: Any = None
+        # Providers whose socket already died this session; a failover must not
+        # reselect one, or a dead primary would be chosen again immediately.
+        self._stt_failed_providers: set[str] = set()
+        self._stt_rebuild: Optional[Tuple[Any, Any, int]] = None
         self.stt_sockets_multi: List[Any] = [None] * len(channel_configs)
         self.multi_opus_decoders: List[Any] = [None] * len(channel_configs)
         self.channel_mix_buffers: List[bytearray] = [bytearray() for _ in channel_configs]
@@ -461,6 +470,9 @@ class ListenReceiver:
             self.stt_socket = (
                 GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough) if self.vad_gate else raw
             )
+            # Retained so a mid-session failover can rebuild the socket against the
+            # next provider without re-deriving the callbacks or the gate.
+            self._stt_rebuild = (parakeet_callback, modulate_callback, request.sample_rate)
             self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
             return True
         except Exception as error:
@@ -473,6 +485,78 @@ class ListenReceiver:
                 platform=self.host.client_device_context.platform,
             )
             return False
+
+    async def _failover_stt_socket(self) -> bool:
+        """Move a live session onto the next provider after its socket died.
+
+        Modulate accepts the WebSocket and only then sends an error frame, so its
+        outages land mid-session where ``connect_stt_socket_with_fallback`` — which
+        only runs at connect time — cannot help. Without this the chain is inert
+        against the failure it exists for: during the 2026-08-30 outage Velma failed
+        82% of sessions while Soniox and Deepgram served zero.
+
+        Single-channel only. Multi-channel holds several sockets whose segments are
+        stitched by channel, so swapping one mid-stream needs its own design.
+        """
+        rebuild = getattr(self, '_stt_rebuild', None)
+        if rebuild is None or self.host.is_multi_channel or self.host.use_custom_stt:
+            return False
+        if not self.host.state.active or self.host.state.stt_terminal_failure:
+            return False
+
+        dead_provider = provider_for_service(self.host.stt_service)
+        if dead_provider:
+            self._stt_failed_providers.add(dead_provider)
+        if len(self._stt_failed_providers) > MAX_STT_FAILOVERS:
+            return False
+
+        service, language, model = get_stt_service_for_language(
+            self.host.language,
+            multi_lang_enabled=self.host.multi_lang_enabled,
+            exclude=frozenset(self._stt_failed_providers),
+        )
+        if service is None:
+            return False
+
+        parakeet_callback, modulate_callback, sample_rate = rebuild
+        previous = self.stt_socket
+        self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
+        try:
+            raw = await self._create_stt_socket(
+                parakeet_callback,
+                sample_rate,
+                modulate_callback=modulate_callback,
+            )
+        except Exception:
+            logger.exception('STT failover connect raised')
+            return False
+        if raw is None:
+            return False
+        # A provider can accept the upgrade and reject the stream ~150ms later;
+        # treating that as a heal would report recovery for a session that is
+        # already dead again.
+        if not await fallback_socket_is_serving(raw):
+            close_rejected_socket(raw)
+            return False
+
+        passthrough = self.host.stt_service == STTService.modulate
+        self.stt_socket = (
+            GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough) if self.vad_gate else raw
+        )
+        record_fallback(
+            component='stt_live_session',
+            from_mode=dead_provider or 'unknown',
+            to_mode=service.value,
+            reason='connection_lost',
+            outcome='recovered',
+        )
+        logger.info(f'STT failover mid-session: {dead_provider} -> {service.value}')
+        if previous is not None:
+            try:
+                previous.finish()
+            except Exception:
+                logger.warning('Failed to close the STT socket that died before failover')
+        return True
 
     async def _monitor_stt_death(self) -> None:
         """Terminate the client session promptly when the provider STT socket dies.
@@ -487,6 +571,8 @@ class ListenReceiver:
         while self.host.state.active and not self.host.state.stt_terminal_failure:
             socket = self.stt_socket
             if socket is not None and live_stt_socket_is_dead(socket):
+                if await self._failover_stt_socket():
+                    continue
                 await terminate_live_stt_session(
                     self.host.request.websocket,
                     self.host.state,
