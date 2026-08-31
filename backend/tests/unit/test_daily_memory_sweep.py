@@ -1297,6 +1297,7 @@ def test_returned_payload_expiry_keeps_content_free_tombstone_and_blocks_replay(
 def test_user_export_includes_both_candidate_stages_and_model_receipts(monkeypatch):
     monkeypatch.setattr(data_export, "get_user_profile", lambda _uid: {})
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", lambda *_args, **_kwargs: ())
+    monkeypatch.setattr(data_export.conversations_db, "iter_all_conversation_photos", lambda *_args, **_kwargs: ())
     monkeypatch.setattr(data_export, "get_people", lambda _uid: ())
     monkeypatch.setattr(data_export, "get_standalone_action_items", lambda *_args, **_kwargs: ())
     monkeypatch.setattr(data_export.chat_db, "iter_all_messages", lambda *_args, **_kwargs: ())
