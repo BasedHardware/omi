@@ -1180,19 +1180,34 @@ class MemoriesViewModel: ObservableObject {
     await loadMemories()
   }
 
-  /// One-time cache reconcile. The local SQLite cache can diverge from the
-  /// backend (the source of truth): stale categories after the server-side
-  /// category cleanup, plus "orphan" rows whose backendId no longer exists on
-  /// the backend. This re-pulls every backend memory (fixing categories via the
-  /// normal upsert) and soft-deletes synced local rows the backend no longer
-  /// has. Local-only unsynced memories are preserved. Runs once per user.
-  private func reconcileCacheIfNeeded() async {
+  /// Reconcile the local SQLite cache against the backend, the source of truth.
+  ///
+  /// The cache diverges two ways: stale categories after the server-side category
+  /// cleanup, and "orphan" rows whose backendId no longer exists because the
+  /// memory was deleted somewhere else. Re-pulling fixes categories through the
+  /// normal upsert; pruning fixes orphans, and is the only thing that makes a
+  /// delete performed on another device take effect here.
+  ///
+  /// Pruning is scoped, not blanket. The earlier version pulled the default scope
+  /// and then refused to prune, because pruning a default-scope pull would delete
+  /// Archive rows the endpoint omits by design. The fix is to make the pull cover
+  /// what the prune claims: `includeArchive` widens it to every tier, so the
+  /// keep-set and `MemoryLayerScope.allIncludingArchive` describe the same
+  /// population. `softDeleteSyncedOrphans` only touches rows with a non-nil
+  /// backendId, so local-only memories that were never synced are never pruned.
+  ///
+  /// Absence is only authoritative when the pull was complete, so a truncated or
+  /// empty result prunes nothing and leaves the cache as it found it.
+  ///
+  /// Runs once per launch rather than once per user: a delete on another device
+  /// can happen at any time, so a permanent one-shot latch would converge the
+  /// cache once and then let it drift again for the life of the install.
+  func reconcileCacheIfNeeded() async {
     let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-    let reconcileKey = "memoriesCacheReconcile_v2_defaultScopeNoPrune_\(userId)"
 
-    guard !UserDefaults.standard.bool(forKey: reconcileKey) else { return }
+    guard !Self.reconciledUserIDsThisLaunch.contains(userId) else { return }
 
-    log("MemoriesViewModel: Starting one-time cache reconcile for user \(userId)")
+    log("MemoriesViewModel: Starting cache reconcile for user \(userId)")
 
     var cursor: String? = nil
     let batchSize = 500
@@ -1202,7 +1217,7 @@ class MemoriesViewModel: ObservableObject {
     do {
       var truncated = false
       while true {
-        let page = try await APIClient.shared.getMemoriesPage(
+        let page = try await fetchReconcilePage(
           limit: batchSize,
           cursor: cursor,
           authorizationSnapshot: authorizationSnapshot)
@@ -1221,25 +1236,29 @@ class MemoriesViewModel: ObservableObject {
         cursor = nextCursor
       }
 
-      // Guard against pruning on a partial/failed pull: only reconcile when the
-      // backend actually returned memories. An empty result here would otherwise
-      // wrongly delete the entire local cache.
+      // A truncated pull saw only part of the backend, so absence proves nothing.
+      // Leave the cache alone and retry on the next launch.
+      guard !truncated else {
+        log("MemoriesViewModel: Cache reconcile skipped pruning because the list was truncated")
+        return
+      }
+
+      // An empty result is far more likely to be a failed or unauthorized read
+      // than a genuinely empty account, and pruning against it would tombstone
+      // the entire local cache. Treat it as no evidence rather than as absence.
       guard !backendIds.isEmpty else {
         log("MemoriesViewModel: Cache reconcile skipped pruning (no backend memories returned)")
         return
       }
 
-      // The current API does not return authoritative tier-scope/completeness metadata.
-      // Fail closed: sync returned default-scope rows, but do not prune orphans until the
-      // backend can prove this page set is complete for an explicit scope. This preserves
-      // Archive rows when the default endpoint omits them by design.
-      // A truncated pull is incomplete, so do not mark reconcile as done.
-      guard !truncated else {
-        log("MemoriesViewModel: Cache reconcile did not mark completion because the list was truncated")
-        return
+      let pruned = try await MemoryStorage.shared.softDeleteSyncedOrphans(
+        keepingBackendIds: backendIds,
+        within: .allIncludingArchive
+      )
+      Self.reconciledUserIDsThisLaunch.insert(userId)
+      if pruned > 0 {
+        log("MemoriesViewModel: Cache reconcile pruned \(pruned) memories deleted on another device")
       }
-      UserDefaults.standard.set(true, forKey: reconcileKey)
-      log("MemoriesViewModel: Cache reconcile skipped orphan pruning because backend completeness is unknown")
 
       await loadTagCountsFromDatabase()
       await loadMemories()
@@ -1247,6 +1266,31 @@ class MemoriesViewModel: ObservableObject {
       logError("MemoriesViewModel: Cache reconcile failed (will retry next launch)", error: error)
     }
   }
+
+  /// Reconcile's server page read. Injectable so the prune contract can be tested
+  /// without a network: the guards that decide whether absence is authoritative
+  /// are the risky part of this function, not the transport.
+  var reconcilePageFetch: ((Int, String?, RuntimeOwnerAuthorizationSnapshot?) async throws -> APIClient.MemoryListPage)?
+
+  private func fetchReconcilePage(
+    limit: Int,
+    cursor: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> APIClient.MemoryListPage {
+    if let reconcilePageFetch {
+      return try await reconcilePageFetch(limit, cursor, authorizationSnapshot)
+    }
+    // Archive is included so the pulled population matches the scope the prune
+    // claims below; a default-scope pull would read Archive rows as absent.
+    return try await APIClient.shared.getMemoriesPage(
+      limit: limit,
+      cursor: cursor,
+      includeArchive: true,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  /// Reconcile runs once per launch per user; see `reconcileCacheIfNeeded`.
+  private static var reconciledUserIDsThisLaunch: Set<String> = []
 
   /// One-time background sync for the backend default memory scope.
   /// Archive requires an explicit backend contract before desktop syncs or reconciles it.
@@ -1584,6 +1628,10 @@ class MemoriesViewModel: ObservableObject {
       rawBackendOffset = max(0, rawBackendOffset - 1)
     } catch {
       logError("Failed to delete memory", error: error)
+      // Restoring the row without saying why is indistinguishable from the delete
+      // being ignored: the memory vanishes, comes back seconds later, and the user
+      // is told nothing. Every other mutation on this model reports its failure.
+      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryDeletion)
       do {
         try await MemoryStorage.shared.restoreMemory(surfacedId: memory.id)
       } catch {
