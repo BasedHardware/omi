@@ -1311,7 +1311,7 @@ def build_capability_groups_response(
     id_to_title: Dict[Any, Any] = {c['id']: c['title'] for c in capabilities}
 
     ordered_keys: List[Any] = [c['id'] for c in capabilities]
-    for key in grouped_apps.keys():
+    for key in grouped_apps:
         if key not in ordered_keys:
             ordered_keys.append(key)
 
@@ -1431,7 +1431,7 @@ def build_capability_category_groups_response(
     id_to_title: Dict[str, str] = {c['id']: c['title'] for c in master_categories}
 
     ordered_keys: List[str] = [c['id'] for c in master_categories]
-    for key in grouped_apps.keys():
+    for key in grouped_apps:
         if key not in ordered_keys:
             ordered_keys.append(key)
 
