@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/action_items/widgets/task_completion_circle.dart';
 import 'package:omi/pages/home/widgets/day_timeline_entry.dart';
