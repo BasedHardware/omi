@@ -50,7 +50,7 @@ def _approved_config(module, **overrides):
             "firestore index state",
             "audit read log metadata",
         ),
-        oracle_review_artifact="docs/operational/memory_readiness_evidence_markers.md#f4-before-f5-real-service-evidence-2026-06-20",
+        oracle_review_artifact="backend/docs/operational/memory_readiness_evidence_markers.md#f4-before-f5-real-service-evidence-2026-06-20",
     )
     kwargs.update(overrides)
     return module.EvidenceRunConfig(**kwargs)

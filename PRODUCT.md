@@ -3,7 +3,7 @@
 Short north star for humans and agents. Read this before proposing features or
 landing PRs that change product behavior. Engineering standards live in
 [`AGENTS.md`](AGENTS.md). Locked product rules live in
-[`docs/product/invariants/`](docs/product/invariants/).
+[`product/invariants/`](product/invariants/).
 
 ## Principles
 
@@ -26,9 +26,9 @@ landing PRs that change product behavior. Engineering standards live in
 ## Proposed universal memory lifecycle
 
 The enforceable design note is
-[`INV-MEM-4`](docs/product/invariants/memory-promotion-authority.md), together
+[`INV-MEM-4`](product/invariants/memory-promotion-authority.md), together
 with the universal-authority rule in
-[`INV-MEM-5`](docs/product/invariants/universal-memory-task-authority.md). Both
+[`INV-MEM-5`](product/invariants/universal-memory-task-authority.md). Both
 remain `proposed` for the required seven-day unchanged period.
 
 All new memory intake starts as broad Short-term capture. Maintenance gives
@@ -52,13 +52,13 @@ retain their existing data without a bulk backfill. They are not a second
 mutation authority: all new intake and every mutation use canonical apply,
 privacy, lineage, graph, and outbox rules. The complete convergence and removal
 ledger lives in
-[`docs/epics/universal_memory_task_convergence.md`](docs/epics/universal_memory_task_convergence.md).
+[`backend/docs/epics/universal_memory_task_convergence.md`](backend/docs/epics/universal_memory_task_convergence.md).
 
 ## Before you build
 
 - Large or ambiguous features start as a GitHub issue
   ([Contribution guide](docs/doc/developer/Contribution.mdx)).
-- Check the [invariant registry](docs/product/invariants/) for locked rules that
+- Check the [invariant registry](product/invariants/) for locked rules that
   apply to your change.
 - A product rule without a guard surface is taste advice, not a locked
   invariant.
@@ -69,5 +69,5 @@ ledger lives in
 ## Maintainer operating rule
 
 When declining a PR for direction or taste, either cite an existing invariant
-by ID or open a `proposed` invariant in `docs/product/invariants/` the same
+by ID or open a `proposed` invariant in `product/invariants/` the same
 week. Tribal “no” becomes written law.

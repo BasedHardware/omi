@@ -157,7 +157,7 @@ checks:
     reason: "every AGENTS.md is loaded into agent context; budgets ratchet down, never up"
   - id: agent-doc-references
     command: ["python3", ".github/scripts/check_agent_doc_references.py"]
-    triggers: ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "PRODUCT.md", "docs/agents/**", ".github/scripts/check_agent_doc_references.py"]
+    triggers: ["AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "PRODUCT.md", ".github/agent-docs/**", ".github/scripts/check_agent_doc_references.py"]
     lanes: ["local", "ci"]
     reason: "agents cannot tell a stale pointer from a live one; CLAUDE.md and the desktop/app guides had shipped dead paths"
   - id: agent-doc-claims
@@ -192,7 +192,7 @@ checks:
     reason: "advisory size checks plus oversized package-map baseline ratchet"
   - id: product-invariant-checker-tests
     command: ["python3", ".github/scripts/test_check_product_invariants.py"]
-    triggers: [".github/scripts/check_product_invariants.py", ".github/scripts/test_check_product_invariants.py", "docs/product/invariants/**", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/check_product_invariants.py", ".github/scripts/test_check_product_invariants.py", "product/invariants/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "locked invariant citation enforcement must keep rejecting an uncited path match"
   - id: pr-preflight-contract-tests
@@ -769,7 +769,7 @@ checks:
     reason: "#10163 mutation-tests branch bypass and GITHUB_SHA image mislabeling"
   - id: production-data-plane-routing
     command: ["python3", ".github/scripts/test_check_mobile_production_routing.py"]
-    triggers: ["codemagic.yaml", "app/lib/env/dev_env.dart", "app/lib/env/prod_env.dart", "app/lib/main.dart", "app/lib/utils/environment_detector.dart", "desktop/macos/Desktop/Sources/AppBuild.swift", "desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift", "desktop/macos/Desktop/Sources/GoogleService-Info*.plist", "backend/charts/**", ".github/workflows/**", "docs/runbooks/desktop-backend-cloud-run-ownership.md", ".github/scripts/check-mobile-production-routing.py", ".github/scripts/test_check_mobile_production_routing.py", ".github/checks-manifest.yaml"]
+    triggers: ["codemagic.yaml", "app/lib/env/dev_env.dart", "app/lib/env/prod_env.dart", "app/lib/main.dart", "app/lib/utils/environment_detector.dart", "desktop/macos/Desktop/Sources/AppBuild.swift", "desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift", "desktop/macos/Desktop/Sources/GoogleService-Info*.plist", "backend/charts/**", ".github/workflows/**", "backend/docs/runbooks/desktop-backend-cloud-run-ownership.md", ".github/scripts/check-mobile-production-routing.py", ".github/scripts/test_check_mobile_production_routing.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "INV-DATA-1 mutation-tests every production-family mobile and desktop routing authority and rejects retired GKE desktop-backend ownership"
   - id: desktop-backend-release-boundary

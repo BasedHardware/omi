@@ -7,7 +7,7 @@
 ## Product invariants affected
 
 <!-- Name locked invariant IDs this PR touches (e.g. INV-CHAT-1), or "none".
-     Registry: docs/product/invariants/ — required when changing paths listed
+     Registry: product/invariants/ — required when changing paths listed
      on a locked invariant. -->
 
 ## How it was verified
