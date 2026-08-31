@@ -18,6 +18,7 @@ from config.stt_provider_policy import (
     SONIOX_PROVIDER,
     provider_for_service,
 )
+from routers.listen.receiver import MAX_STT_FAILOVERS, ListenReceiver
 from utils.stt.streaming import STTService, get_stt_service_for_language
 
 
@@ -68,8 +69,6 @@ def test_excluding_every_provider_selects_nothing():
 
 
 def _receiver_with_dead_socket(monkeypatch: Any, *, replacement: Any):
-    from routers.listen.receiver import ListenReceiver
-
     host = MagicMock()
     host.is_multi_channel = False
     host.use_custom_stt = False
@@ -137,8 +136,6 @@ async def test_multi_channel_sessions_do_not_failover(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_failover_is_bounded_so_a_flapping_chain_cannot_loop(monkeypatch):
-    from routers.listen.receiver import MAX_STT_FAILOVERS
-
     receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
     receiver._stt_failed_providers = {f'p{i}' for i in range(MAX_STT_FAILOVERS + 1)}
 
