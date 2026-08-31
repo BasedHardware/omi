@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk replies going silent after an audio device change"
+}
