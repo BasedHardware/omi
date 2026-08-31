@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:collection/collection.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -34,6 +35,15 @@ class SharedPreferencesUtil {
   /// Plain prefs mirror for in-tree native readers (Android background socket).
   static const String _nativeAuthTokenPrefsKey = 'nativeAuthToken';
 
+  static bool _mirrorNativeAuthToken = false;
+
+  static const int _duplicateKeychainItem = -25299;
+
+  static const IOSOptions _anyAccessibilityIos = IOSOptions(accessibility: null);
+  static const MacOsOptions _anyAccessibilityMacOs = MacOsOptions(accessibility: null);
+
+  static Future<void> _secureQueue = Future<void>.value();
+
   factory SharedPreferencesUtil() {
     return _instance;
   }
@@ -43,8 +53,9 @@ class SharedPreferencesUtil {
   String get deviceIdHash => _preferences?.getString('deviceIdHash') ?? '';
   set deviceIdHash(String value) => _preferences?.setString('deviceIdHash', value);
 
-  static Future<void> init({FlutterSecureStorage? secureStorage}) async {
+  static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
+    _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
     if (secureStorage != null) {
       _secureStorage = secureStorage;
       _testSecureFallback = null;
@@ -88,7 +99,8 @@ class SharedPreferencesUtil {
     try {
       final existingSecure = await _readSecureAuthToken();
       if ((existingSecure == null || existingSecure.isEmpty) && legacyToken != null && legacyToken.isNotEmpty) {
-        await _writeSecureAuthToken(legacyToken);
+        final persisted = await _writeSecureAuthToken(legacyToken);
+        if (!persisted) return;
       }
       if (legacyToken != null) {
         await prefs.remove('authToken');
@@ -101,19 +113,54 @@ class SharedPreferencesUtil {
     }
   }
 
+  static Future<T?> _runSecure<T extends Object>(String op, Future<T?> Function() action) {
+    final result = Completer<T?>();
+    _secureQueue = _secureQueue.then((_) async {
+      try {
+        result.complete(await action());
+      } catch (e, stack) {
+        Logger.debug('Secure storage $op failed: $e');
+        Logger.debug('Stack: $stack');
+        result.complete(null);
+      }
+    });
+    return result.future;
+  }
+
+  static bool _isDuplicateKeychainItem(PlatformException e) =>
+      e.details == _duplicateKeychainItem || (e.message?.contains('$_duplicateKeychainItem') ?? false);
+
   static Future<String?> _readSecureAuthToken() async {
     final fallback = _testSecureFallback;
     if (fallback != null) return fallback[_authTokenSecureKey];
-    return _secureStorage?.read(key: _authTokenSecureKey);
+    final storage = _secureStorage;
+    if (storage == null) return null;
+    return _runSecure<String>('read', () => storage.read(key: _authTokenSecureKey));
   }
 
-  static Future<void> _writeSecureAuthToken(String value) async {
+  static Future<bool> _writeSecureAuthToken(String value) async {
     final fallback = _testSecureFallback;
     if (fallback != null) {
       fallback[_authTokenSecureKey] = value;
-      return;
+      return true;
     }
-    await _secureStorage?.write(key: _authTokenSecureKey, value: value);
+    final storage = _secureStorage;
+    if (storage == null) return false;
+    final wrote = await _runSecure<bool>('write', () async {
+      try {
+        await storage.write(key: _authTokenSecureKey, value: value);
+      } on PlatformException catch (e) {
+        if (!_isDuplicateKeychainItem(e)) rethrow;
+        await storage.delete(
+          key: _authTokenSecureKey,
+          iOptions: _anyAccessibilityIos,
+          mOptions: _anyAccessibilityMacOs,
+        );
+        await storage.write(key: _authTokenSecureKey, value: value);
+      }
+      return true;
+    });
+    return wrote ?? false;
   }
 
   static Future<void> _deleteSecureAuthToken() async {
@@ -121,7 +168,17 @@ class SharedPreferencesUtil {
     if (fallback != null) {
       fallback.remove(_authTokenSecureKey);
     } else {
-      await _secureStorage?.delete(key: _authTokenSecureKey);
+      final storage = _secureStorage;
+      if (storage != null) {
+        await _runSecure<bool>('delete', () async {
+          await storage.delete(
+            key: _authTokenSecureKey,
+            iOptions: _anyAccessibilityIos,
+            mOptions: _anyAccessibilityMacOs,
+          );
+          return true;
+        });
+      }
     }
     await _syncNativeAuthToken('');
   }
@@ -131,7 +188,7 @@ class SharedPreferencesUtil {
   static Future<void> _syncNativeAuthToken(String value) async {
     final prefs = _preferences;
     if (prefs == null) return;
-    if (value.isEmpty) {
+    if (value.isEmpty || !_mirrorNativeAuthToken) {
       await prefs.remove(_nativeAuthTokenPrefsKey);
     } else {
       await prefs.setString(_nativeAuthTokenPrefsKey, value);

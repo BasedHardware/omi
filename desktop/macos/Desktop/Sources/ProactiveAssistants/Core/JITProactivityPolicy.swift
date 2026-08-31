@@ -23,10 +23,36 @@ enum JITAmbientNanoTriage: Equatable, Sendable {
 struct JITProactivityFlags: Equatable, Sendable {
   let rollout: JITProactivityRolloutState
   let killSwitch: JITProactivityRolloutState
+  /// The backend's own admission verdict from `/v1/jit/rollout-decision`.
+  /// Servers that predate the field leave it absent; the rollout +
+  /// kill-switch pair remains the fallback derivation.
+  let effective: JITProactivityRolloutState
+  /// Whether the decision response carried `kill_switch` at all. An absent
+  /// field is wire compatibility, not an unknown-off veto; a present
+  /// `unknown` still fails closed.
+  let killSwitchPresent: Bool
 
-  /// Only a complete, known-good pair activates the additive lane.
+  init(
+    rollout: JITProactivityRolloutState,
+    killSwitch: JITProactivityRolloutState,
+    effective: JITProactivityRolloutState = .unknown,
+    killSwitchPresent: Bool = true
+  ) {
+    self.rollout = rollout
+    self.killSwitch = killSwitch
+    self.effective = effective
+    self.killSwitchPresent = killSwitchPresent
+  }
+
+  /// The server-computed `effective` verdict owns admission: the client must
+  /// not re-derive a stricter verdict from the raw flags. The complete,
+  /// known-good rollout + kill-switch pair remains the fallback for servers
+  /// that predate `effective`, and unknown still fails closed.
   var permitsNewLane: Bool {
-    rollout == .enabled && killSwitch == .disabled
+    if effective == .enabled { return true }
+    if effective == .disabled { return false }
+    guard rollout == .enabled else { return false }
+    return killSwitch == .disabled || !killSwitchPresent
   }
 }
 
@@ -86,10 +112,14 @@ enum JITProactivityPolicy {
   ) -> JITProactivityDecision {
     guard flags.permitsNewLane else {
       let reason: String
-      switch (flags.rollout, flags.killSwitch) {
-      case (_, .enabled): reason = "kill_switch"
-      case (.unknown, _), (_, .unknown): reason = "rollout_unknown"
-      default: reason = "rollout_disabled"
+      if flags.killSwitch == .enabled {
+        reason = "kill_switch"
+      } else if flags.rollout == .unknown || (flags.killSwitch == .unknown && flags.killSwitchPresent) {
+        // Only a `kill_switch` the server actually sent can report as
+        // unknown; an absent field is compatibility, not an unknown state.
+        reason = "rollout_unknown"
+      } else {
+        reason = "rollout_disabled"
       }
       return .legacyContextBucketFallback(reason: reason)
     }

@@ -877,3 +877,73 @@ describe("RunToolCapabilityBroker spawn-time tool policy", () => {
     }
   });
 });
+
+describe("RunToolCapabilityBroker JIT knowledge-ledger gate", () => {
+  const LEDGER_TOOLS = [
+    "search_knowledge",
+    "read_playbook",
+    "search_historical_facts",
+    "get_entity_timeline_tool",
+    "save_playbook",
+    "create_standing_trigger",
+    "close_fact",
+  ];
+
+  it("keeps the ledger tools out of the authorized allowlist by default", () => {
+    const { store, session, run, attempt } = fixture("coordinator");
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+
+    for (const toolName of LEDGER_TOOLS) {
+      expect(capability.allowedToolNames, toolName).not.toContain(toolName);
+    }
+    expectCode(
+      () => broker.authorize({
+        capabilityRef: capability.capabilityRef,
+        invocationId: "ledger-gate-off-1",
+        runId: run.runId,
+        attemptId: attempt.attemptId,
+        activeOwnerId: session.ownerId,
+        toolName: "search_knowledge",
+        toolInput: { query: "release checklist" },
+      }),
+      "tool_not_allowed",
+    );
+    store.close();
+  });
+
+  it("authorizes the ledger tools once the run's admitted metadata carries the JIT gate", () => {
+    const { store, session, run, attempt } = fixture("coordinator");
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "save a playbook", metadata: { jitKnowledgeToolsEnabled: true } }),
+      run.runId,
+    ]);
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+
+    for (const toolName of LEDGER_TOOLS) {
+      expect(capability.allowedToolNames, toolName).toContain(toolName);
+    }
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "ledger-gate-on-1",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "search_knowledge",
+      toolInput: { query: "release checklist" },
+    });
+    expect(authorized.canonicalToolName).toBe("search_knowledge");
+    store.close();
+  });
+});

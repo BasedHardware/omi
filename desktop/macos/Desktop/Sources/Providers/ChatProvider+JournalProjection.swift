@@ -161,6 +161,7 @@ extension ChatProvider {
       durableToolReferences,
       ChatCitationProvenanceRegistry.references(
         fromToolCallBlocks: messages[index].contentBlocks))
+    messages[index].applyAuthoritativeTerminalAnswer(queryText)
     messages[index].applySelectedSourceFallback(
       selectedReferences: selectedReferences,
       requestedSources: requestedSources,

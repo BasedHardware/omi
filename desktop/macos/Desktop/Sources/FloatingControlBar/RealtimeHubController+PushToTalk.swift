@@ -62,7 +62,7 @@ extension RealtimeHubController {
             ownerID: interruptedTurn.ownerID,
             userText: interruptedTurn.userText,
             assistantText: interruptedTurn.assistantText,
-            interrupted: true,
+            terminal: .interruptedByBargeIn,
             idempotencyKey: interruptedTurn.idempotencyKey,
             acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID) ?? false
         }
@@ -449,7 +449,8 @@ extension RealtimeHubController {
       // PTT-up can beat asynchronous context preparation. Queue begin before
       // commit on the session transport so Gemini always has activityStart and
       // OpenAI always has an immutable event identity.
-      s.beginInputTurn(
+      beginLiveInputTurn(
+        s,
         turnID: turnID,
         responseID: voiceResponseID,
         interrupting: reducerInterruptsPreviousTurn)

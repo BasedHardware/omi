@@ -108,6 +108,19 @@ finally:
     if _remove_python_multipart_stub:
         sys.modules.pop('python_multipart', None)
 
+from fastapi import HTTPException
+
+
+class MemoryBackingStoreUnavailable(HTTPException):
+    """Stand-in for the real type: this module imports the router under stubs."""
+
+    def __init__(self, detail, *, stream):
+        super().__init__(status_code=503, detail=detail)
+        self.stream = stream
+
+
+mem_mod.MemoryBackingStoreUnavailable = MemoryBackingStoreUnavailable
+
 
 def _call(limit, offset):
     service = MagicMock()
@@ -155,10 +168,8 @@ def test_blank_cursor_falls_back_to_offset_read_when_cursor_secret_missing():
     MEMORY_V3_GET_ENABLED is unused on the route. A blank ``?cursor=`` must not
     skip the first-page fallback, or MEMORY_ENABLED=on still 503s list.
     """
-    from fastapi import HTTPException
-
     service = MagicMock()
-    service.read_page.side_effect = HTTPException(status_code=503, detail="Memory cursor unavailable")
+    service.read_page.side_effect = MemoryBackingStoreUnavailable("Memory cursor unavailable", stream="cursor")
     service.read.return_value = []
     scope_request = types.SimpleNamespace(device_scope='all', client_device_id=None)
     with (
@@ -209,10 +220,8 @@ def test_first_page_falls_back_to_offset_read_when_canonical_scan_unavailable():
     The offset ``read`` path does not use the scan, so the first page must be
     served from ``read`` instead of failing the whole list endpoint.
     """
-    from fastapi import HTTPException
-
     service = MagicMock()
-    service.read_page.side_effect = HTTPException(status_code=503, detail="Canonical memory unavailable")
+    service.read_page.side_effect = MemoryBackingStoreUnavailable("Canonical memory unavailable", stream="canonical")
     service.read.return_value = ['memory-from-offset-read']
 
     result = _get_first_page(service)
@@ -232,10 +241,8 @@ def test_first_page_falls_back_to_offset_read_when_historical_scan_unavailable()
     match that index, and could serve the page — so this detail must fall back
     like the other two scan failures instead of failing the list endpoint.
     """
-    from fastapi import HTTPException
-
     service = MagicMock()
-    service.read_page.side_effect = HTTPException(status_code=503, detail="Historical memory unavailable")
+    service.read_page.side_effect = MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical")
     service.read.return_value = ['memory-from-offset-read']
 
     result = _get_first_page(service)
@@ -254,10 +261,8 @@ def test_first_page_falls_back_to_offset_read_when_scan_row_budget_is_exhausted(
     The walk now stops at the scan row budget; the offset ``read`` path does not
     walk suppressed rows, so the first page must fall back to it.
     """
-    from fastapi import HTTPException
-
     service = MagicMock()
-    service.read_page.side_effect = HTTPException(status_code=503, detail=mem_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL)
+    service.read_page.side_effect = MemoryBackingStoreUnavailable("Memory scan budget exceeded", stream="historical")
     service.read.return_value = ['memory-from-offset-read']
 
     result = _get_first_page(service)
@@ -267,9 +272,57 @@ def test_first_page_falls_back_to_offset_read_when_scan_row_budget_is_exhausted(
     service.read.assert_called_once()
 
 
-def test_first_page_propagates_unrelated_503_detail():
-    from fastapi import HTTPException
+def test_first_page_falls_back_on_typed_unavailable_regardless_of_detail():
+    """A new or renamed detail on the typed exception must still degrade."""
+    service = MagicMock()
+    service.read_page.side_effect = MemoryBackingStoreUnavailable("Brand new backing-store message", stream="canonical")
+    service.read.return_value = ['memory-from-offset-read']
 
+    result = _get_first_page(service)
+
+    assert result == ['memory-from-offset-read']
+    service.read.assert_called_once()
+
+
+def test_first_page_does_not_match_unavailable_detail_strings():
+    """The 2026-08-17 outage class: a matching string on a plain 503 is not enough."""
+    import pytest
+
+    service = MagicMock()
+    service.read_page.side_effect = HTTPException(status_code=503, detail="Historical memory unavailable")
+
+    with pytest.raises(HTTPException) as exc_info:
+        _get_first_page(service)
+
+    assert exc_info.value.detail == "Historical memory unavailable"
+    service.read.assert_not_called()
+
+
+def test_first_page_fallback_records_degraded_firestore_read():
+    service = MagicMock()
+    service.read_page.side_effect = MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical")
+    service.read.return_value = []
+    recorded = []
+
+    def _record(**kwargs):
+        recorded.append(kwargs)
+
+    with patch.object(mem_mod, 'record_fallback', _record):
+        _get_first_page(service)
+
+    assert recorded == [
+        {
+            'component': 'firestore_read',
+            'from_mode': 'cursor_page',
+            'to_mode': 'offset_read',
+            'reason': 'other',
+            'outcome': 'degraded',
+            'log': mem_mod.logger,
+        }
+    ]
+
+
+def test_first_page_propagates_unrelated_503_detail():
     import pytest
 
     service = MagicMock()
@@ -284,8 +337,6 @@ def test_first_page_propagates_unrelated_503_detail():
 
 
 def test_first_page_propagates_non_503_errors():
-    from fastapi import HTTPException
-
     import pytest
 
     service = MagicMock()

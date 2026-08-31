@@ -7,6 +7,8 @@ struct SpeakerBubbleView: View {
   let isUser: Bool
   var personName: String? = nil
   var onSpeakerTapped: (() -> Void)? = nil
+  var onTimestampTapped: (() -> Void)? = nil
+  var isTimestampPlayable = false
 
   /// Get speaker color based on speaker ID
   private var bubbleColor: Color {
@@ -109,10 +111,27 @@ struct SpeakerBubbleView: View {
           }
         }
 
-        // Timestamp
-        Text(formatTime(segment.start))
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
+        // Capture transcripts reuse their existing timestamps as precise
+        // playback controls. Other conversation sources keep the ordinary
+        // read-only timestamp without acquiring capture-specific chrome.
+        if let onTimestampTapped {
+          Button(action: onTimestampTapped) {
+            HStack(spacing: OmiSpacing.xxs) {
+              Image(systemName: "play.circle")
+              Text(formatTime(segment.start))
+            }
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(isTimestampPlayable ? Ink.primary : Ink.secondary)
+          }
+          .buttonStyle(.plain)
+          .disabled(!isTimestampPlayable)
+          .help(isTimestampPlayable ? "Play from this moment" : "Timestamped playback is still preparing")
+          .accessibilityLabel("Play transcript from \(formatTime(segment.start))")
+        } else {
+          Text(formatTime(segment.start))
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+        }
       }
 
       if isUser {

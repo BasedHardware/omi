@@ -569,7 +569,6 @@ import XCTest
         rms: 0,
         turnAudioSeconds: 1.2,
         voicedAudioSeconds: nil,
-        isNearZero: true,
         judgeable: true)
 
       let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())

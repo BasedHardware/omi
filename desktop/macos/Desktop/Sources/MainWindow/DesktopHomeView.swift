@@ -98,6 +98,7 @@ struct DesktopHomeView: View {
   /// Whether we're currently viewing the settings page
   private var isInSettings: Bool {
     selectedIndex == SidebarNavItem.settings.rawValue
+      || selectedIndex == SidebarNavItem.permissions.rawValue
   }
 
   private var homeOwnsItsPanels: Bool { !useLegacyHomeDesign }
@@ -110,12 +111,18 @@ struct DesktopHomeView: View {
   @ViewBuilder
   private var authEntryShell: some View {
     if authState.isRestoringAuth {
-      Color.clear
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // No ground of its own: the shell's glass is already under this.
-        .onAppear {
-          log("DesktopHomeView: Showing auth loading splash")
+      TransparentWindowStatusPanel {
+        VStack(spacing: OmiSpacing.md) {
+          ProgressView()
+            .controlSize(.small)
+            .tint(Ink.secondary)
+          Text("Restoring your session…")
+            .inkStyle(.prose, color: Ink.secondary)
         }
+      }
+      .onAppear {
+        log("DesktopHomeView: Showing auth loading splash")
+      }
     } else if authState.sessionPhase == .recoveryRequired {
       SessionRecoveryView()
         .onAppear {
@@ -127,7 +134,16 @@ struct DesktopHomeView: View {
           log("DesktopHomeView: Showing SignInView (not signed in)")
         }
     } else if shouldSkipOnboarding() {
-      Color.clear.onAppear {
+      TransparentWindowStatusPanel {
+        VStack(spacing: OmiSpacing.md) {
+          ProgressView()
+            .controlSize(.small)
+            .tint(Ink.secondary)
+          Text("Finishing setup…")
+            .inkStyle(.prose, color: Ink.secondary)
+        }
+      }
+      .onAppear {
         log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
         appState.hasCompletedOnboarding = true
       }
@@ -332,29 +348,30 @@ struct DesktopHomeView: View {
           mainContentWithLifecycle
 
           if !viewModelContainer.isInitialLoadComplete {
-            VStack(spacing: OmiSpacing.xxl) {
-              if let nsImage = Self.heroLogoImage {
-                Image(nsImage: nsImage)
-                  .resizable()
-                  .scaledToFit()
-                  .frame(width: 72, height: 72)
-                  .scaleEffect(logoPulse ? 1.08 : 1.0)
-                  .opacity(logoPulse ? 1.0 : 0.7)
-                  .omiAnimation(
-                    .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
-                    value: logoPulse
-                  )
-                  .onAppear { logoPulse = true }
+            TransparentWindowStatusPanel {
+              VStack(spacing: OmiSpacing.xxl) {
+                if let nsImage = Self.heroLogoImage {
+                  Image(nsImage: nsImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 72, height: 72)
+                    .scaleEffect(logoPulse ? 1.08 : 1.0)
+                    .opacity(logoPulse ? 1.0 : 0.7)
+                    .omiAnimation(
+                      .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+                      value: logoPulse
+                    )
+                    .onAppear { logoPulse = true }
+                }
+
+                Text(viewModelContainer.initStatusMessage)
+                  .inkStyle(.prose, color: Ink.secondary)
+
+                ProgressView()
+                  .scaleEffect(0.8)
+                  .tint(Ink.secondary)
               }
-
-              Text(viewModelContainer.initStatusMessage)
-                .inkStyle(.prose, color: Ink.secondary)
-
-              ProgressView()
-                .scaleEffect(0.8)
-                .tint(Ink.secondary)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .transition(.opacity.animation(OmiMotion.gated(.easeOut(duration: 0.3))))
           }
 
@@ -638,8 +655,7 @@ struct DesktopHomeView: View {
   /// chrome and stays bar-less — the Memory atlas is the same: it has its
   /// own back affordance and header, so the redundant top bar hides while it's open.
   private var showsTopBar: Bool {
-    guard !useLegacyHomeDesign, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
-    return item != .permissions
+    !useLegacyHomeDesign && SidebarNavItem(rawValue: selectedIndex) != nil
   }
 
   /// Reference instant for the top bar's "new since you were last here" counts.
@@ -1008,7 +1024,7 @@ struct DesktopHomeView: View {
     let plugin = ProactiveAssistantsPlugin.shared
     if !AssistantSettings.shared.screenAnalysisEnabled, plugin.isMonitoring {
       log("DesktopHomeView: Stopping screen analysis after server settings sync")
-      plugin.stopMonitoring()
+      plugin.stopMonitoring(reason: .settingsSync)
     }
     restorePersistedCaptureServices(reason: "settings sync")
   }
@@ -1131,14 +1147,17 @@ struct DesktopHomeView: View {
   /// names. This is the sole root adapter between those callers and typed
   /// Chat-first navigation.
   private func navigateToLegacyDestination(_ item: SidebarNavItem) {
-    if item == .rewind, OMIApp.launchMode != .rewind {
-      memoryDestinationRawValue = MemoryHubDestination.rewind.rawValue
+    if item == .permissions {
+      selectedSettingsSection = .permissions
       if usesChatFirstShell {
-        chatFirstNavigation.selectPrimary(.memories)
+        chatFirstNavigation.selectMore(.settings)
       } else {
-        selectedIndex = SidebarNavItem.conversations.rawValue
+        selectedIndex = SidebarNavItem.settings.rawValue
       }
       return
+    }
+    if let destination = MemoryHubDestination.destination(for: item) {
+      memoryDestinationRawValue = destination.rawValue
     }
     if usesChatFirstShell {
       chatFirstNavigation.selectLegacyDestination(item)
@@ -1409,7 +1428,6 @@ struct DesktopHomeView: View {
       // so the page is one object rather than a panel with its nav stranded on the wallpaper.
       PageGlassLane(
         selectedIndex: selectedIndex,
-        memoryDestinationRawValue: memoryDestinationRawValue,
         homeOwnsItsPanels: homeOwnsItsPanels
       ) {
         HStack(spacing: 0) {
@@ -1454,15 +1472,17 @@ struct DesktopHomeView: View {
 
 private struct ChatFirstCapabilityLoadingView: View {
   var body: some View {
-    VStack(spacing: OmiSpacing.md) {
-      ProgressView()
-        .controlSize(.small)
-        .tint(Ink.secondary)
-      Text("Preparing Omi…")
-        .inkStyle(.prose, color: Ink.secondary)
+    TransparentWindowStatusPanel {
+      VStack(spacing: OmiSpacing.md) {
+        ProgressView()
+          .controlSize(.small)
+          .tint(Ink.secondary)
+        Text("Preparing Omi…")
+          .inkStyle(.prose, color: Ink.secondary)
+      }
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    // No ground: this renders inside the shell's glass while the cohort settles.
+    // The main window is transparent and the destination shell has not mounted yet. This loading
+    // card therefore owns its ground rather than assuming a window-scale surface underneath it.
     .accessibilityElement(children: .combine)
     .accessibilityLabel("Preparing Omi")
   }
@@ -1551,23 +1571,15 @@ private struct PageContentView: View {
           memoriesViewModel: viewModelContainer.memoriesViewModel,
           taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
-      case 1:
-        ConversationsDestinationView(
+      case SidebarNavItem.conversations.rawValue,
+        SidebarNavItem.memories.rawValue,
+        SidebarNavItem.rewind.rawValue:
+        MemoryHubPage(
           appState: appState,
           viewModelContainer: viewModelContainer,
-          memoryDestinationRawValue: $memoryDestinationRawValue
+          memoriesViewModel: viewModelContainer.memoriesViewModel,
+          destinationRawValue: $memoryDestinationRawValue
         )
-      case 3:
-        // Same rule as the hub's Memories destination: the readable-width
-        // cap yields while the detail panel is open so the panel takes new
-        // space instead of eating the list's column.
-        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
-          .frame(
-            maxWidth: viewModelContainer.memoriesViewModel.selectedMemory == nil
-              ? MemoryHubLayoutPolicy.readableContentWidth : .infinity,
-            maxHeight: .infinity
-          )
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
       case 4:
         constrainedListPage(
           TasksPage(
@@ -1576,10 +1588,9 @@ private struct PageContentView: View {
             chatProvider: viewModelContainer.chatProvider,
             onOpenRewindEvidence: { screenshotID in
               RewindCitationFocusState.shared.request(screenshotID)
+              memoryDestinationRawValue = MemoryHubDestination.rewind.rawValue
               selectedTabIndex = SidebarNavItem.rewind.rawValue
             }))
-      case 7:
-        RewindPage(appState: appState)
       case 8:
         constrainedListPage(
           AppsPage(
@@ -1587,15 +1598,13 @@ private struct PageContentView: View {
             appState: appState,
             connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
             handlesAutomationPresentations: viewModelContainer.isInitialLoadComplete))
-      case 9:
+      case SidebarNavItem.settings.rawValue, SidebarNavItem.permissions.rawValue:
         SettingsPage(
           appState: appState,
           selectedSection: $selectedSettingsSection,
           highlightedSettingId: $highlightedSettingId,
           chatProvider: viewModelContainer.chatProvider
         )
-      case 10:
-        PermissionsPage(appState: appState)
       default:
         QueryShellHome(
           viewModel: viewModelContainer.dashboardViewModel,
@@ -1622,6 +1631,13 @@ struct ConversationsPageHost: View {
   /// this value only seeds selection when a link fetched a record that is not
   /// present in the current page.
   var initialConversation: ServerConversation? = nil
+  /// Optional source-specific behavior carried into the canonical detail.
+  /// These values never select a second browser or detail presentation.
+  var initialCaptureMomentTimestamp: TimeInterval? = nil
+  var onCaptureFocusResolved: ((Bool) -> Void)? = nil
+  var onDiscussInChat: ((ServerConversation) -> Void)? = nil
+  var onOpenLinkedTask: ((String) -> Void)? = nil
+  var onSelectionChanged: ((ServerConversation?) -> Void)? = nil
   @State private var selectedConversation: ServerConversation? = nil
   @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
 
@@ -1638,7 +1654,11 @@ struct ConversationsPageHost: View {
       appState: appState,
       selectedConversation: $selectedConversation,
       brainDestination: brainDestination,
-      onSelectBrainDestination: onSelectBrainDestination
+      onSelectBrainDestination: onSelectBrainDestination,
+      initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
+      onCaptureFocusResolved: onCaptureFocusResolved,
+      onDiscussInChat: onDiscussInChat,
+      onOpenLinkedTask: onOpenLinkedTask
     )
     .frame(
       maxWidth: brainDestination != nil || usesAvailableWidth
@@ -1656,9 +1676,13 @@ struct ConversationsPageHost: View {
       if let initialConversation {
         selectedConversation = initialConversation
       }
+      onSelectionChanged?(selectedConversation)
     }
     .onChange(of: initialConversation?.id) { _, _ in
       selectedConversation = initialConversation
+    }
+    .onChange(of: selectedConversation?.id) { _, _ in
+      onSelectionChanged?(selectedConversation)
     }
   }
 }

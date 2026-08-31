@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import runpy
@@ -543,6 +544,31 @@ async def test_worker_retries_processing_failure_before_final_attempt(monkeypatc
     retryable.assert_called_once_with('job-1', 1, 1, 'processing_failed')
 
 
+@pytest.mark.anyio
+async def test_worker_acknowledges_stale_generation_without_cloud_task_retry(monkeypatch, caplog):
+    # Reconciliation has already enqueued the newer generation. Retrying this
+    # old named task would return stale_generation forever without claiming an
+    # attempt or making progress.
+    caplog.set_level(logging.INFO, logger=finalization_router.__name__)
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
+    monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
+    monkeypatch.setattr(jobs_db, 'claim_finalization_job', lambda *args, **kwargs: {'status': 'stale_generation'})
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'job_id': 'job-1', 'dispatch_generation': 1}), task_retry_count=2
+    )
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'dropped', 'reason': 'stale_generation'}
+    assert any(
+        record.levelno == logging.INFO
+        and record.getMessage()
+        == 'listen finalization stale generation task acknowledged job=job-1 dispatch_generation=1'
+        for record in caplog.records
+    )
+
+
 def test_final_failed_attempt_records_client_failure_after_dead_letter(monkeypatch):
     job = {
         'created_at': datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -1066,6 +1092,55 @@ async def test_pusher_tells_the_live_session_a_dead_lettered_job_is_terminal(mon
         'conversation_id': 'conversation-1',
         'error': 'job_dead_letter',
         'terminal': True,
+    }
+
+
+@pytest.mark.anyio
+async def test_legacy_pusher_result_keeps_stale_generation_response_backward_compatible(monkeypatch):
+    websocket = _PusherWebSocket()
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'stale_generation', 'lease_epoch': None, 'attempt_count': 0},
+    )
+
+    await pusher_finalization.process_conversation_task(
+        'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
+    )
+
+    assert json.loads(websocket.sent[0][4:]) == {
+        'conversation_id': 'conversation-1',
+        'error': 'job_stale_generation',
+        'terminal': False,
+    }
+
+
+@pytest.mark.anyio
+async def test_v2_pusher_result_includes_rejected_generation(monkeypatch):
+    websocket = _PusherWebSocket()
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'stale_generation', 'lease_epoch': None, 'attempt_count': 0},
+    )
+
+    await pusher_finalization.process_conversation_task(
+        'uid-1',
+        'conversation-1',
+        'en',
+        websocket,
+        finalization_job_id='job-1',
+        dispatch_generation=3,
+        finalization_result_protocol=2,
+    )
+
+    assert json.loads(websocket.sent[0][4:]) == {
+        'conversation_id': 'conversation-1',
+        'error': 'job_stale_generation',
+        'dispatch_generation': 3,
+        'terminal': False,
     }
 
 

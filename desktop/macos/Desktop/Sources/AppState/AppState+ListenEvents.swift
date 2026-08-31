@@ -516,7 +516,7 @@ extension AppState {
         stopTranscription()
       }
       Task { @MainActor in
-        ProactiveAssistantsPlugin.shared.stopMonitoring()
+        ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .paywall)
       }
 
     case "translating":

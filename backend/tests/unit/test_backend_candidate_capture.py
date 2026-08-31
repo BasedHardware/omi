@@ -7,6 +7,7 @@ import pytest
 os.environ.setdefault('TYPESENSE_API_KEY', 'test-key-not-real')
 
 from models.candidate import CandidateRecord, CandidateStatus
+from models.conversation_enums import ConversationSource
 from models.task_intelligence import TaskWorkflowControl
 from utils.conversations import process_conversation
 from utils.task_intelligence.backend_capture import BackendCaptureSignals, adapt_backend_capture
@@ -54,10 +55,12 @@ def _action(
     )
 
 
-def _conversation(*actions):
+def _conversation(*actions, source=ConversationSource.desktop):
+    """Desktop by default: this file covers the surface that still proposes Candidates."""
     return SimpleNamespace(
         id='conversation-1',
         is_locked=False,
+        source=source,
         structured=SimpleNamespace(action_items=list(actions)),
     )
 
@@ -447,6 +450,7 @@ def test_wake_word_adjudication_logs_question_descope_and_task_omission_without_
 def test_save_action_items_runs_wake_adjudication_even_when_extractor_returned_no_items(monkeypatch):
     conversation = SimpleNamespace(
         id='conversation-1',
+        source=ConversationSource.desktop,
         structured=SimpleNamespace(action_items=[]),
     )
     prepare = SimpleNamespace(calls=0)
@@ -712,6 +716,85 @@ def test_extraction_only_proposes_and_never_accepts_or_writes_a_task(monkeypatch
             },
         }
     ]
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        ConversationSource.omi,
+        ConversationSource.phone,
+        ConversationSource.phone_call,
+        ConversationSource.apple_watch,
+        ConversationSource.sdcard,
+    ],
+)
+def test_non_desktop_conversation_writes_tasks_and_never_proposes(monkeypatch, source):
+    """A client with no Suggested surface gets tasks, not proposals that expire unseen."""
+    monkeypatch.setattr(
+        conversation_capture.candidate_service,
+        'create_candidate',
+        lambda *a, **kw: pytest.fail('a client with no Suggested surface must not be proposed to'),
+    )
+    monkeypatch.setattr(
+        process_conversation.conversation_capture,
+        'prepare_wake_word_capture_gate',
+        lambda *a, **kw: pytest.fail('wake adjudication belongs to the Candidate path'),
+    )
+    monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *a: [])
+    monkeypatch.setattr(process_conversation.action_items_db, 'delete_action_items_for_conversation', lambda *a: 0)
+    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *a: None)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *a, **kw: None)
+    monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **event: None)
+    written = []
+
+    def create_batch(uid, action_items_data, **kwargs):
+        written.extend(action_items_data)
+        return [f'action-item-{index}' for index, _ in enumerate(action_items_data)]
+
+    monkeypatch.setattr(process_conversation.action_items_db, 'create_action_items_batch', create_batch)
+
+    process_conversation._save_action_items(
+        'user-1',
+        _conversation(
+            _action('Send the budget', capture_kind='clear_commitment', capture_owner='user'),
+            _action('Call the dentist', capture_kind='explicit_command', capture_owner='user'),
+            source=source,
+        ),
+    )
+
+    assert [item['description'] for item in written] == ['Send the budget', 'Call the dentist']
+    assert {item['conversation_id'] for item in written} == {'conversation-1'}
+    assert {item['source'] for item in written} == {'conversation'}
+
+
+def test_non_desktop_reprocess_replaces_the_conversations_previous_tasks(monkeypatch):
+    deleted = []
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'get_action_items_by_conversation',
+        lambda *a: [{'id': 'stale-1'}],
+    )
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'delete_action_items_for_conversation',
+        lambda uid, conversation_id: deleted.append(conversation_id),
+    )
+    monkeypatch.setattr(process_conversation, 'delete_action_item_vectors_batch', lambda uid, ids: deleted.extend(ids))
+    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *a: None)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *a, **kw: None)
+    monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **event: None)
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'create_action_items_batch',
+        lambda uid, data, **kw: ['action-item-0'],
+    )
+
+    process_conversation._save_action_items(
+        'user-1',
+        _conversation(_action('Send the budget'), source=ConversationSource.phone),
+    )
+
+    assert deleted == ['stale-1', 'conversation-1']
 
 
 def test_off_mode_still_only_proposes_and_never_reaches_a_writer(monkeypatch):

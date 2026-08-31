@@ -30,7 +30,11 @@ import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
 import database.screen_activity as screen_activity_db
-from database.vector_db import find_similar_action_items
+from database.vector_db import (
+    find_similar_action_items,
+    upsert_action_item_vectors_batch,
+    delete_action_item_vectors_batch,
+)
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
 from utils.conversations.transcript_chunks import build_transcript_chunks
@@ -121,6 +125,7 @@ from utils.other.hume import (
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
+from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
@@ -291,6 +296,16 @@ def _primary_user_name(uid: str) -> Optional[str]:
     return raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else None
 
 
+def _proposes_task_candidates(conversation: Any) -> bool:
+    """Whether this conversation's action items become Candidates instead of tasks.
+
+    Desktop has a Suggested surface to review them on. Every other client — phone,
+    pendant, watch — has none, so a proposal there is invisible and expires unseen:
+    what the extractor admits is a task.
+    """
+    return getattr(conversation, 'source', None) == ConversationSource.desktop
+
+
 def _get_structured(
     uid: str,
     language_code: str,
@@ -300,7 +315,7 @@ def _get_structured(
     conversation_id: Optional[str] = None,
 ) -> Tuple[Structured, bool]:
     try:
-        task_intelligence_capture = conversation_capture.capture_enabled(uid)
+        task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
         user_language = users_db.get_user_language_preference(uid) or language_code
@@ -1589,15 +1604,85 @@ def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> No
     send_notification(user_id, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
-    """Propose a conversation's extracted action items as Candidates.
+def _write_action_items(uid: str, conversation: Conversation):
+    """Write the extracted items as tasks, replacing whatever this conversation wrote before."""
+    if not conversation.structured.action_items:
+        return
 
-    INVARIANT I1: nothing here writes an ``action_item``. Extraction produces
-    suggestions only; a task exists when the user says so. The items also stay
-    on ``conversation.structured``, which is what the summary view renders and
-    what its "Add to Tasks" button acts on.
+    now = datetime.now(timezone.utc)
+    is_locked = conversation.is_locked
+    action_items_data: List[Dict[str, Any]] = [
+        {
+            'description': action_item.description,
+            'completed': action_item.completed,
+            'created_at': action_item.created_at or now,
+            'updated_at': action_item.updated_at or now,
+            'due_at': action_item.due_at,
+            'completed_at': action_item.completed_at,
+            'conversation_id': conversation.id,
+            'is_locked': is_locked,
+            **conversation_capture.canonical_conversation_fields(action_item, conversation),
+        }
+        for action_item in conversation.structured.action_items
+    ]
+
+    old_ids = [item['id'] for item in action_items_db.get_action_items_by_conversation(uid, conversation.id)]
+    if old_ids:
+        delete_action_item_vectors_batch(uid, old_ids)
+    action_items_db.delete_action_items_for_conversation(uid, conversation.id)
+
+    action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+    logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
+
+    emit_product_event(
+        uid=uid,
+        event='Task Extracted',
+        properties={
+            'task_count': len(action_item_ids),
+            'conversation_id': conversation.id,
+            'task_source': 'transcript',
+            'persistence_path': 'action_items',
+        },
+    )
+
+    for idx, action_item in enumerate(conversation.structured.action_items):
+        if action_item.due_at and idx < len(action_item_ids):
+            send_action_item_data_message(
+                user_id=uid,
+                action_item_id=action_item_ids[idx],
+                description=action_item.description,
+                due_at=action_item.due_at.isoformat(),
+            )
+
+    created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
+
+    def _run_auto_sync():
+        asyncio.run(auto_sync_action_items_batch(uid, created_items))
+
+    submit_with_context(postprocess_executor, _run_auto_sync)
+
+    upsert_action_item_vectors_batch(
+        uid,
+        [
+            {'action_item_id': aid, 'description': data['description']}
+            for aid, data in zip(action_item_ids, action_items_data)
+        ],
+    )
+
+
+def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
+    """Persist a conversation's extracted action items.
+
+    Desktop conversations propose Candidates for its Suggested surface. Everywhere
+    else the conservative extraction prompt is the filter — it admits explicit
+    commands and the few real commitments, or nothing — and what it admits is
+    written as a task.
     """
     if not conversation.structured:
+        return
+
+    if not _proposes_task_candidates(conversation):
+        _write_action_items(uid, conversation)
         return
 
     try:

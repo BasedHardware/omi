@@ -116,6 +116,50 @@ def is_gateway_transport_status_code(status_code: object) -> bool:
     return isinstance(status_code, int) and status_code in GATEWAY_TRANSPORT_STATUS_CODES
 
 
+def is_gateway_route_absent(error: object) -> bool:
+    """Whether a gateway failure means the deployed gateway has no such route.
+
+    A gateway older than its caller answers an unknown path with Starlette's
+    bare ``{"detail": "Not Found"}``. A gateway that owns the route answers a
+    real rejection with an OpenAI-shaped ``{"error": {...}}`` body -- and
+    ``model_not_found`` is also a 404. So the *body*, not the status, is what
+    separates "server predates client" from "server rejected this request";
+    treating every 404 as route-absence would silently swallow lane
+    misconfiguration.
+    """
+    if not isinstance(error, httpx.HTTPStatusError):
+        return False
+    if error.response.status_code != 404:
+        return False
+    try:
+        body: object = error.response.json()
+    except Exception:
+        # A non-JSON 404 is not something this gateway's error path can emit.
+        return True
+    return not (isinstance(body, Mapping) and isinstance(body.get('error'), Mapping))
+
+
+def is_gateway_model_not_found(error: object) -> bool:
+    """Whether an OpenAI-compatible gateway rejected an unknown lane id.
+
+    The OpenAI SDK exposes the gateway's ``error.code`` as ``error.code``;
+    direct-provider file 404s have the same HTTP status but no
+    ``model_not_found`` code. Keep that distinction closed so deploy skew can
+    degrade without misclassifying a genuinely deleted attachment.
+    """
+    if getattr(error, 'status_code', None) != 404:
+        return False
+    if getattr(error, 'code', None) == 'model_not_found':
+        return True
+    body = getattr(error, 'body', None)
+    if not isinstance(body, Mapping):
+        return False
+    if body.get('code') == 'model_not_found':
+        return True
+    nested_error = body.get('error')
+    return isinstance(nested_error, Mapping) and nested_error.get('code') == 'model_not_found'
+
+
 def _as_json_dict(value: object) -> JsonDict | None:
     return cast(JsonDict, value) if isinstance(value, dict) else None
 

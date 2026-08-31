@@ -95,11 +95,7 @@ struct SidebarView: View {
                         }
                       }
                     }
-                    MemoryHubDestination.applySidebarSelection(
-                      item,
-                      selectedIndex: &selectedIndex,
-                      memoryDestinationRawValue: &memoryDestinationRawValue
-                    )
+                    MemoryHubDestination.apply(item, to: &selectedIndex, hub: &memoryDestinationRawValue)
                     AnalyticsManager.shared.tabChanged(tabName: item.title)
                   },
                   onToggle: {
@@ -130,7 +126,7 @@ struct SidebarView: View {
                         }
                       }
                     }
-                    selectedIndex = item.rawValue
+                    MemoryHubDestination.apply(item, to: &selectedIndex, hub: &memoryDestinationRawValue)
                     AnalyticsManager.shared.tabChanged(tabName: item.title)
                   },
                   onToggle: {
@@ -157,7 +153,7 @@ struct SidebarView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
                       setPageLoading(for: item, loading: false)
                     }
-                    selectedIndex = item.rawValue
+                    MemoryHubDestination.apply(item, to: &selectedIndex, hub: &memoryDestinationRawValue)
                     AnalyticsManager.shared.tabChanged(tabName: item.title)
                   },
                   onTap: {
@@ -169,7 +165,7 @@ struct SidebarView: View {
                         setPageLoading(for: item, loading: false)
                       }
                     }
-                    selectedIndex = item.rawValue
+                    MemoryHubDestination.apply(item, to: &selectedIndex, hub: &memoryDestinationRawValue)
                     AnalyticsManager.shared.tabChanged(tabName: item.title)
                   }
                 )

@@ -2,6 +2,73 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.248",
+      "date": "2026-08-31",
+      "changes": [
+        "Desktop Chat now shows SQL and search times in your timezone instead of unlabeled UTC"
+      ]
+    },
+    {
+      "version": "0.12.247",
+      "date": "2026-08-31",
+      "changes": [
+        "Added a hold-to-reply hint, reading-time card timing, and voice feedback on proactive notifications (Interject, flag-gated). Hold-⌥ keeps the classification inject through PTT-up so Gemini can accept it when the activity window opens.",
+        "Added a notifications step to onboarding so you're actually asked once, instead of never getting proactive alerts with no way to grant access"
+      ]
+    },
+    {
+      "version": "0.12.246",
+      "date": "2026-08-30",
+      "changes": [
+        "Asking Omi by voice what's on your list now returns tasks you added without a date, and Omi no longer assumes you only speak your Mac's menu-bar language"
+      ]
+    },
+    {
+      "version": "0.12.245",
+      "date": "2026-08-30",
+      "changes": [
+        "Voice turns that get cut off are no longer recorded as finished answers, so Omi stops re-asking what you already said, and a task that fails to save is no longer spoken as saved"
+      ]
+    },
+    {
+      "version": "0.12.244",
+      "date": "2026-08-30",
+      "changes": [
+        "Stopped proactive chat rows from repeating the category (Focus, Insight, Memory) above the same word in the body"
+      ]
+    },
+    {
+      "version": "0.12.243",
+      "date": "2026-08-30",
+      "changes": [
+        "Startup timing is measured and reported again, from real process start, and no longer calls every clean launch a crash"
+      ]
+    },
+    {
+      "version": "0.12.242",
+      "date": "2026-08-29",
+      "changes": [
+        "Fixed chat responses sometimes stopping before the complete answer appeared",
+        "Unified conversation, task, app, and settings navigation around one familiar UI, with working transcript playback and durable attach-to-chat conversation references",
+        "Chat can now save playbooks, standing watches, and durable facts to your knowledge ledger",
+        "Fixed onboarding permission guidance so working access is never requested twice, Omi returns to the foreground after a successful drag, and the draggable app icon and arrow are easier to spot"
+      ]
+    },
+    {
+      "version": "0.12.241",
+      "date": "2026-08-29",
+      "changes": [
+        "Fixed just-in-time proactive triggers never syncing on launch because the trigger snapshot download waited for a screen-capture context visit; signed-in startups now reconcile the snapshot directly"
+      ]
+    },
+    {
+      "version": "0.12.240",
+      "date": "2026-08-29",
+      "changes": [
+        "Fixed just-in-time proactive triggers never activating for admitted accounts because the app ignored the server's rollout verdict and blocked its snapshot download on an unrelated sync step"
+      ]
+    },
+    {
       "version": "0.12.239",
       "date": "2026-08-29",
       "changes": [
