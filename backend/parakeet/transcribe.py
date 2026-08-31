@@ -8,7 +8,8 @@ import httpx
 import numpy as np
 from langdetect import detect as _langdetect_detect_raw  # type: ignore[reportUnknownVariableType]  # langdetect ships partial type info
 from langdetect.lang_detect_exception import LangDetectException
-from speaker_math import cosine_distance as cosine_distance, select_speaker_cluster
+from scipy.cluster.hierarchy import fcluster, linkage
+from speaker_math import SPEAKER_CLUSTERING_MAX_SPEAKERS, cosine_distance as cosine_distance
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +184,12 @@ def _transcribe_via_gpu_worker(file_path: str) -> Dict[str, Any]:
 
 
 def transcribe_file_v2(
-    file_path: str, gpu_result: Optional[Dict[str, Any]] = None, diarize: bool = True
+    file_path: str,
+    gpu_result: Optional[Dict[str, Any]] = None,
+    diarize: bool = True,
+    num_speakers: Optional[int] = None,
+    min_speakers: Optional[int] = None,
+    max_speakers: Optional[int] = None,
 ) -> Dict[str, Any]:
     if gpu_result is not None:
         base: Dict[str, Any] = _transcribe_from_gpu_result(gpu_result)
@@ -191,7 +197,9 @@ def transcribe_file_v2(
         base = transcribe_file(file_path)
 
     if diarize:
-        base = _diarize_segments(file_path, base)
+        base = _diarize_segments(
+            file_path, base, num_speakers=num_speakers, min_speakers=min_speakers, max_speakers=max_speakers
+        )
     else:
         for seg in base["segments"]:
             seg["speaker"] = "SPEAKER_0"
@@ -202,6 +210,14 @@ def transcribe_file_v2(
 
 SPEAKER_EMBEDDING_URL: str = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
 MIN_SEGMENT_DURATION = 0.6
+
+# Average-linkage AHC cuts the dendrogram on cophenetic merge height — the mean
+# distance between two whole clusters. The online path's SPEAKER_CLUSTERING_THRESHOLD
+# bounds a different quantity, the distance from one embedding to one drifting
+# centroid, so its value does not transfer. Measured on the VoxConverse test subset
+# (backend/tests/container/voxconverse): 0.55 cuts 3+ speaker DER from 0.174 to 0.130
+# while leaving 1-2 speaker DER unchanged, and every value in 0.40-0.55 beats 0.60.
+SPEAKER_AHC_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_AHC_THRESHOLD", "0.55"))
 
 
 def detect_language_from_text(text: str) -> str:
@@ -250,57 +266,153 @@ def _transcribe_nim(file_path: str) -> Dict[str, Any]:
         raise
 
 
-def _diarize_segments(file_path: str, base: Dict[str, Any]) -> Dict[str, Any]:
+def _diarize_segments(
+    file_path: str,
+    base: Dict[str, Any],
+    num_speakers: Optional[int] = None,
+    min_speakers: Optional[int] = None,
+    max_speakers: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Label every segment with a speaker using offline agglomerative clustering.
+
+    Embeddings for all eligible segments are collected first, then partitioned in
+    a single pass. Clustering the whole file at once makes the partition
+    independent of segment order; the previous online centroid matching could not
+    be, because each match folded the segment into a running mean. Those centroids
+    drifted as noisy segments merged, so a third speaker arriving late was absorbed
+    into whichever centroid had drifted nearest instead of opening its own cluster.
+    """
+    segments: List[Dict[str, Any]] = base["segments"]
+
     if not SPEAKER_EMBEDDING_URL and not has_builtin_embedding():
-        for seg in base["segments"]:
+        for seg in segments:
             seg["speaker"] = "SPEAKER_0"
         return base
 
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
 
-    centroids: List[Any] = []
-    counts: List[int] = []
+    # SPEAKER_0 is the floor for every segment: anything too short to embed, and
+    # any failure below, keeps it unless clustering resolves something better.
+    for seg in segments:
+        seg["speaker"] = "SPEAKER_0"
 
-    for seg in base["segments"]:
-        seg_dur = seg["end"] - seg["start"]
-        if seg_dur < MIN_SEGMENT_DURATION:
-            seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
+    embeddings: List[Any] = []
+    embedded_indices: List[int] = []
+
+    for index, seg in enumerate(segments):
+        if seg["end"] - seg["start"] < MIN_SEGMENT_DURATION:
             continue
 
         try:
             seg_wav = _extract_segment_wav(audio_bytes, seg["start"], seg["end"])
             if len(seg_wav) < 1000:
-                seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
                 continue
 
-            emb = _get_embedding(seg_wav)
-            if emb is None:
-                seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
+            vector = _embedding_vector(_get_embedding(seg_wav))
+            if vector is None:
                 continue
 
-            best_i, create_new, _, capped = select_speaker_cluster(emb, centroids)
-            if not create_new:
-                if capped:
-                    # Standalone image: log is the cap telemetry (no shared
-                    # fallback helper here). Keep the miss out of the running
-                    # mean so the centroid keeps representing its own speaker.
-                    logger.warning(f"Speaker cap ({len(centroids)}) reached; merging miss into SPEAKER_{best_i}")
-                else:
-                    n = counts[best_i]
-                    centroids[best_i] = (centroids[best_i] * n + emb) / (n + 1)
-                    counts[best_i] = n + 1
-                seg["speaker"] = f"SPEAKER_{best_i}"
-            else:
-                centroids.append(emb)
-                counts.append(1)
-                seg["speaker"] = f"SPEAKER_{best_i}"
-
+            embeddings.append(vector)
+            embedded_indices.append(index)
         except Exception as e:
             logger.warning(f"Diarization failed for segment {seg['start']:.1f}-{seg['end']:.1f}: {e}")
-            seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
 
+    if not embeddings:
+        return base
+
+    try:
+        labels = _cluster_embeddings(embeddings, num_speakers, min_speakers, max_speakers)
+    except Exception as e:
+        logger.warning(f"Speaker clustering failed; every segment stays SPEAKER_0: {e}")
+        return base
+
+    _assign_speaker_labels(segments, embedded_indices, labels)
     return base
+
+
+def _embedding_vector(embedding: Any) -> Optional[Any]:
+    """Flatten an embedding into a finite, non-zero 1-D vector, or None."""
+    if embedding is None:
+        return None
+
+    vector = np.asarray(embedding, dtype=np.float32).reshape(-1)
+    if vector.size == 0 or not bool(np.all(np.isfinite(vector))):
+        return None
+    if float(np.linalg.norm(vector)) <= 0.0:
+        # Cosine distance is undefined against a zero vector: scipy returns NaN
+        # for the pair, which propagates through linkage into every cluster.
+        return None
+    return vector
+
+
+def _cluster_embeddings(
+    embeddings: List[Any],
+    num_speakers: Optional[int],
+    min_speakers: Optional[int],
+    max_speakers: Optional[int],
+) -> List[int]:
+    """Partition embeddings with average-linkage AHC over cosine distance."""
+    total = len(embeddings)
+    if total == 1:
+        # linkage() requires at least two observations.
+        return [0]
+
+    if num_speakers is not None and (min_speakers is not None or max_speakers is not None):
+        logger.warning(f"num_speakers={num_speakers} takes precedence over min_speakers/max_speakers")
+
+    tree = linkage(np.vstack(embeddings), method="average", metric="cosine")
+
+    if num_speakers is not None:
+        return _cut_to_count(tree, num_speakers, total)
+
+    labels = [int(label) for label in fcluster(tree, t=SPEAKER_AHC_THRESHOLD, criterion="distance")]
+    found = len(set(labels))
+
+    if min_speakers is not None and found < min_speakers:
+        labels = _cut_to_count(tree, min_speakers, total)
+        found = len(set(labels))
+
+    # An explicit max_speakers is the caller's ceiling. Without one, the
+    # configured cap still bounds the partition, as it did for the online path.
+    ceiling = max_speakers if max_speakers is not None else SPEAKER_CLUSTERING_MAX_SPEAKERS
+    if found > ceiling:
+        labels = _cut_to_count(tree, ceiling, total)
+
+    return labels
+
+
+def _cut_to_count(tree: Any, count: int, total: int) -> List[int]:
+    """Cut the dendrogram into `count` clusters, clamped to [1, total]."""
+    bounded = max(1, min(count, total))
+    return [int(label) for label in fcluster(tree, t=bounded, criterion="maxclust")]
+
+
+def _assign_speaker_labels(segments: List[Dict[str, Any]], embedded_indices: List[int], labels: List[int]) -> None:
+    """Write SPEAKER_N onto every segment, renumbered by first appearance.
+
+    scipy's cluster ids are arbitrary, so they are renumbered in order of first
+    appearance: SPEAKER_0 is the first voice heard. That is what the online path
+    produced and what downstream speaker identification reads.
+    """
+    ordinals: Dict[int, int] = {}
+    for label in labels:
+        if label not in ordinals:
+            ordinals[label] = len(ordinals)
+
+    speaker_by_segment: Dict[int, int] = {index: ordinals[label] for index, label in zip(embedded_indices, labels)}
+    centers = [(segments[index]["start"] + segments[index]["end"]) / 2.0 for index in embedded_indices]
+
+    for index, seg in enumerate(segments):
+        if index in speaker_by_segment:
+            seg["speaker"] = f"SPEAKER_{speaker_by_segment[index]}"
+            continue
+
+        # Too short to embed: inherit from the nearest clustered segment in time,
+        # rather than from whichever speaker happened to be created most recently.
+        center = (seg["start"] + seg["end"]) / 2.0
+        nearest = min(range(len(centers)), key=lambda k: abs(centers[k] - center))
+        seg["speaker"] = f"SPEAKER_{speaker_by_segment[embedded_indices[nearest]]}"
 
 
 def _extract_segment_wav(wav_bytes: bytes, start: float, end: float) -> bytes:

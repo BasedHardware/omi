@@ -243,10 +243,24 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
 async def transcribe_v2(
     file: UploadFile = File(...),
     diarize: bool = Form(True),
+    num_speakers: Optional[int] = Form(None, gt=0),
+    min_speakers: Optional[int] = Form(None, gt=0),
+    max_speakers: Optional[int] = Form(None, gt=0),
 ) -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None and not gpu_worker.is_ready:
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
+    if min_speakers is not None and max_speakers is not None and min_speakers > max_speakers:
+        REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
+        return JSONResponse(
+            status_code=422,
+            content={"detail": f"min_speakers ({min_speakers}) cannot exceed max_speakers ({max_speakers})"},
+        )
+    speaker_bounds: Dict[str, Optional[int]] = {
+        "num_speakers": num_speakers,
+        "min_speakers": min_speakers,
+        "max_speakers": max_speakers,
+    }
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     ACTIVE_BATCH.inc()
@@ -275,14 +289,20 @@ async def transcribe_v2(
                 Dict[str, Any],
                 await loop.run_in_executor(
                     _diarize_pool,
-                    cast(Any, functools.partial(transcribe_file_v2, file_path, gpu_result=gpu_result, diarize=diarize)),
+                    cast(
+                        Any,
+                        functools.partial(
+                            transcribe_file_v2, file_path, gpu_result=gpu_result, diarize=diarize, **speaker_bounds
+                        ),
+                    ),
                 ),
             )
         else:
             result = cast(
                 Dict[str, Any],
                 await loop.run_in_executor(
-                    _diarize_pool, cast(Any, functools.partial(transcribe_file_v2, file_path, diarize=diarize))
+                    _diarize_pool,
+                    cast(Any, functools.partial(transcribe_file_v2, file_path, diarize=diarize, **speaker_bounds)),
                 ),
             )
         return result
