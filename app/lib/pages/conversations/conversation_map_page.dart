@@ -55,14 +55,13 @@ List<ConversationMapGroup> buildConversationMapGroups(Iterable<ServerConversatio
   located.sort((a, b) => a.$1.id.compareTo(b.$1.id));
   final grouped = <({LatLng anchor, List<LatLng> points, List<ServerConversation> conversations})>[];
   for (final (conversation, point) in located) {
-    final group = grouped
-        .cast<({LatLng anchor, List<LatLng> points, List<ServerConversation> conversations})?>()
-        .firstWhere(
-          (candidate) => candidate!.points.every(
-            (member) => _mapDistance.as(LengthUnit.Meter, member, point) <= _mapClusterDistanceMeters,
-          ),
-          orElse: () => null,
-        );
+    final group =
+        grouped.cast<({LatLng anchor, List<LatLng> points, List<ServerConversation> conversations})?>().firstWhere(
+              (candidate) => candidate!.points.every(
+                (member) => _mapDistance.as(LengthUnit.Meter, member, point) <= _mapClusterDistanceMeters,
+              ),
+              orElse: () => null,
+            );
     if (group == null) {
       grouped.add((anchor: point, points: [point], conversations: [conversation]));
     } else {
@@ -220,8 +219,8 @@ class _ConversationMapPageState extends State<ConversationMapPage> {
                           button: true,
                           label: group.conversations.length == 1
                               ? (group.conversations.single.structured.title.isEmpty
-                                    ? context.l10n.untitledConversation
-                                    : group.conversations.single.structured.title)
+                                  ? context.l10n.untitledConversation
+                                  : group.conversations.single.structured.title)
                               : '${group.conversations.length} ${context.l10n.conversations}',
                           child: GestureDetector(
                             key: ValueKey('conversation_map_marker_${group.membershipKey}'),

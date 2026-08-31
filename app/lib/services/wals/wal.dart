@@ -239,9 +239,8 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
-      originalStorage: json['original_storage'] != null
-          ? WalStorage.values.asNameMap()[json['original_storage']]
-          : null,
+      originalStorage:
+          json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       conversationId: json['conversation_id'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
