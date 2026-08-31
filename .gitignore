@@ -285,3 +285,9 @@ htmlcov/
 # cannot quietly commit a second lockfile.
 pnpm-lock.yaml
 pnpm-workspace.yaml
+
+# On-prem realm: the file the deployment RUNS is chosen by copying an example (ADR-0082), exactly like
+# the env files. Committing it would put "which realm is live" back in the repository — which is how the
+# chart came to ship the DEV realm, with omi-test/testuser, on the installation we document as prod.
+deploy/onprem/keycloak/omi-realm.json
+deploy/onprem/helm/omi-oss/files/omi-realm.json

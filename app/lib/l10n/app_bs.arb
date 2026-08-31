@@ -10781,6 +10781,7 @@
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
     "accountCutoverOpenStore": "Otevřít obchod",
+    "signInWithSSO": "Prijavite se sa SSO",
     "chatScopeToday": "Danas",
     "chatScopeThisWeek": "Ove sedmice",
     "chatScopeAbout": "O: {title}",

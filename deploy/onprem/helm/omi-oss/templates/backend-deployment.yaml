@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        {{- include "omi-oss.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+      annotations:
+        # Roll the pods when the environment changes. BOTH sources, because `envFrom` is resolved when the
+        # pod starts: without a checksum the pod spec is unchanged, nothing restarts, and `helm upgrade`
+        # reports "deployed" while the running process keeps the old value. The comment here used to say
+        # Secret changes were "picked up on next start anyway" — measured false: adding METRICS_SECRET
+        # updated the Secret and the pod went on answering 401 (BACKLOG L43). There is no next start.
+        checksum/config: {{ include (print $.Template.BasePath "/backend-configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/backend-secret.yaml") . | sha256sum }}
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        # Block startup until the replica set has a writable primary, so the store's transactions work
+        # on the first request instead of crash-looping while mongo-rs-init runs (§6.1).
+        - name: wait-for-mongo-rs
+          image: {{ .Values.mongo.image }}
+          imagePullPolicy: {{ .Values.mongo.imagePullPolicy }}
+          env:
+            - name: MONGO_HOST
+              value: {{ include "omi-oss.mongoHost" . | quote }}
+          command:
+            - bash
+            - -c
+            - |
+              set -eu
+              echo "waiting for mongo replica-set primary at ${MONGO_HOST}..."
+              until mongosh --quiet --host "${MONGO_HOST}" --eval 'db.hello().isWritablePrimary' 2>/dev/null | grep -q true; do
+                sleep 3
+              done
+              echo "mongo primary ready."
+      containers:
+        - name: backend
+          image: {{ include "omi-oss.image" (dict "root" . "image" .Values.backend.image) }}
+          imagePullPolicy: {{ .Values.backend.imagePullPolicy }}
+          # Same entrypoint as compose.base: create the runtime temp dirs, then exec uvicorn.
+          command:
+            - sh
+            - -c
+            - mkdir -p _temp _samples _segments _speech_profiles && exec uvicorn main:app --host 0.0.0.0 --port 8080 --loop uvloop
+          envFrom:
+            - configMapRef:
+                name: backend-env
+            - secretRef:
+                name: backend-secret
+          ports:
+            - name: http
+              containerPort: 8080
+          # Boot can take tens of seconds; gate readiness/liveness behind a generous startup probe.
+          startupProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 5
+          {{- with .Values.backend.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

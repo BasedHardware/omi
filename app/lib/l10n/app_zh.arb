@@ -3237,6 +3237,7 @@
     "accountCutoverMigrationInProgressMessage": "您的账户正在迁移。产品功能将暂停，直到迁移完成。",
     "accountCutoverMigrationRollbackMessage": "账户迁移回滚后处于维护状态。部分较新的数据可能被隔离。",
     "accountCutoverOpenStore": "打开应用商店",
+    "signInWithSSO": "通过 SSO 登录",
     "chatScopeToday": "今天",
     "chatScopeThisWeek": "本周",
     "chatScopeAbout": "关于：{title}",

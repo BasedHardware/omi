@@ -8,7 +8,11 @@ import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/auth/clear_deleted_account_session.dart';
 
+import '../helpers/test_env.dart';
+
 void main() {
+  setUp(ensureTestEnv);
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('account deletion invalidates late refresh and clears provider state before storage', () async {

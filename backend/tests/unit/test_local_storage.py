@@ -33,27 +33,46 @@ def test_local_storage_round_trip_and_http_url(monkeypatch: pytest.MonkeyPatch, 
     assert (storage_root / 'speech-profiles' / 'user-1' / 'speech profile.wav').read_bytes() == b'voice-bytes'
 
 
-def test_production_storage_helper_returns_reachable_local_url(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_production_storage_helper_writes_through_the_object_store(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Re-expressed on the neutral seam (ADR-0032/0087).
+
+    Upstream asserts that the harness makes `upload_profile_audio` return a URL served from the local
+    root. Here the helper goes through the object-store port instead, and the URL it returns is a
+    SIGNED one, because this is the user's voice (ADR-0087) — a permanent public link is exactly what
+    that decision removed. The property worth keeping is the same: the production helper writes where
+    the configured storage says, and hands back a URL for what it just wrote.
+    """
+    from tests.object_store_fakes import FakeObjectStore
+
     _configure(monkeypatch, tmp_path)
     source = tmp_path / 'profile.wav'
     source.write_bytes(b'profile-audio')
-    monkeypatch.setattr(storage_helpers, 'storage_client', None)
+    store = FakeObjectStore()
+    monkeypatch.setattr(storage_helpers, '_object_store', lambda: store)
     monkeypatch.setattr(storage_helpers, 'speech_profiles_bucket', 'speech-profiles')
+    # The signed URL is Redis-cached by key; this test is about the write and the URL, not the cache.
+    monkeypatch.setattr(storage_helpers, 'get_cached_signed_url', lambda _key: None)
+    monkeypatch.setattr(storage_helpers, 'cache_signed_url', lambda *_a, **_k: None)
 
     url = storage_helpers.upload_profile_audio(str(source), 'user-1')
 
-    assert url == 'http://127.0.0.1:8000/_local/storage/speech-profiles/user-1/speech_profile.wav'
-    assert (tmp_path / 'harness/services/storage/speech-profiles/user-1/speech_profile.wav').read_bytes() == (
-        b'profile-audio'
-    )
+    assert store.get_bytes('speech-profiles', 'user-1/speech_profile.wav') == b'profile-audio'
+    assert url and 'user-1/speech_profile.wav' in url
 
 
 def test_static_production_url_does_not_resolve_cloud_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv('OMI_LOCAL_STORAGE_ROOT', raising=False)
     monkeypatch.setattr(storage_helpers, 'app_thumbnails_bucket', 'app-thumbnails')
+    # Same property, our seam: the credentialed client lives behind the GCS adapter and is built
+    # lazily, so deriving a static URL must never reach it. `public_url` composes from the configured
+    # endpoint, which is what keeps this true.
+    from utils.object_store.adapters import gcs as gcs_adapter
+
     monkeypatch.setattr(
-        storage_helpers,
-        '_get_storage_client',
+        gcs_adapter,
+        '_storage_client',
         lambda: pytest.fail('static URL generation must not construct a credentialed storage client'),
     )
 

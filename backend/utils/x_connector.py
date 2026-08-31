@@ -41,6 +41,7 @@ from utils.memory.promotion_flex import PromotionFlexDeferred, PromotionFlexRunR
 from utils.observability.fallback import record_fallback
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.executors import db_executor, run_blocking
+import database.x_sync_registry as x_sync_registry
 from utils.log_sanitizer import sanitize
 from utils import social
 from utils.integration_telemetry import (
@@ -204,17 +205,17 @@ def _store_tokens(uid: str, token_resp: Dict, handle: Optional[str] = None, x_us
 
 
 def _register_user(uid: str) -> None:
+    # Route the write through the neutral store-port boundary (cubic 10887 D3) instead of the raw db
+    # facade; keep the non-fatal wrapper so a registry hiccup never breaks the connect flow.
     try:
-        db.collection(_REGISTRY_COLLECTION).document(uid).set(
-            {'uid': uid, 'updated_at': datetime.now(timezone.utc)}, merge=True
-        )
+        x_sync_registry.register_sync_user(uid)
     except Exception as e:
         logger.warning(f'x_connector: failed to register user {uid} for sync: {e}')
 
 
 def _unregister_user(uid: str) -> None:
     try:
-        db.collection(_REGISTRY_COLLECTION).document(uid).delete()
+        x_sync_registry.unregister_sync_user(uid)
     except Exception as e:
         logger.warning(f'x_connector: failed to unregister user {uid}: {e}')
 
@@ -646,7 +647,9 @@ async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
     """Incrementally sync every connected X user. Errors are isolated per user;
     a slow/failed account never blocks the others."""
     try:
-        uids = [d.id for d in db.collection(_REGISTRY_COLLECTION).stream()]
+        # Offload the synchronous store read to db_executor; running it inline would block the event
+        # loop (and every other async task) for the duration of the query.
+        uids = await run_blocking(db_executor, x_sync_registry.list_sync_user_ids)
     except Exception as e:
         logger.error(f'x_connector: sync job could not list users: {e}')
         return {'users': 0, 'synced': 0, 'new_posts': 0}

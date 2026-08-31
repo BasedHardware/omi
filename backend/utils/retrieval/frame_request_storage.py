@@ -10,23 +10,39 @@ from __future__ import annotations
 
 import hashlib
 import os
-from typing import Any
+from utils.object_store.errors import ObjectNotFound
+from utils.other import storage as _storage
+from utils.other.storage import owner_storage_write_gate
 
-from utils.other.storage import _get_storage_client, owner_storage_write_gate
+
+def _object_store():
+    """The active object store, read through ``utils.other.storage`` rather than bound by import.
+
+    One seam, one patch point: ``owner_storage_write_gate`` decides whether to fence by asking
+    ``utils.other.storage._object_store()`` what is active. If this module bound that function at
+    import time, a test that injects a fake there would move the writes but not the gate, and the
+    fence would try to reach a real provider from a hermetic test.
+    """
+
+    return _storage._object_store()
+
 
 TEMPORARY_STORAGE_PREFIX = "temporary-"
 PERMANENT_STORAGE_PREFIX = "permanent-"
 
 
-def _bucket(*, permanent: bool) -> Any:
+def _bucket(*, permanent: bool) -> str:
     # Temporary and conversation-lifetime objects deliberately use different
     # buckets. The temporary bucket is lifecycle-backed; the permanent bucket
     # must have no object-expiration rule.
+    #
+    # Returns the bucket NAME: every access below goes through the object-store port (ADR-0032), so
+    # these two tiers work on GCS or on any S3-compatible backend a self-host configures.
     env_name = "BUCKET_FRAME_REQUESTS" if permanent else "BUCKET_FRAME_REQUESTS_TEMPORARY"
     bucket_name = (os.getenv(env_name) or "").strip()
     if not bucket_name:
         raise RuntimeError(f"{env_name} is not configured")
-    return _get_storage_client().bucket(bucket_name)
+    return bucket_name
 
 
 def _is_permanent(storage_id: str) -> bool:
@@ -55,26 +71,25 @@ def upload_frame_request_pixels(uid: str, storage_id: str, data: bytes, content_
     if not storage_id.startswith(TEMPORARY_STORAGE_PREFIX):
         raise ValueError("new frame uploads must use temporary storage")
     bucket = _bucket(permanent=False)
-    blob = bucket.blob(_object_name(uid, storage_id))
-    with owner_storage_write_gate(uid, bucket):
-        blob.upload_from_string(data, content_type=content_type)
+    with owner_storage_write_gate(uid):
+        _object_store().put(bucket, _object_name(uid, storage_id), data, content_type=content_type)
 
 
 def delete_frame_request_pixels(uid: str, storage_id: str) -> None:
     try:
-        _bucket(permanent=_is_permanent(storage_id)).blob(_object_name(uid, storage_id)).delete()
-    except Exception as exc:
-        # GCS NotFound is safe during an idempotent cleanup, while all other
-        # errors remain visible to the deletion fence.
-        if exc.__class__.__name__ in {"NotFound", "NotFoundError"}:
-            return
-        raise
+        _object_store().delete(_bucket(permanent=_is_permanent(storage_id)), _object_name(uid, storage_id))
+    except ObjectNotFound:
+        # A missing object is safe during an idempotent cleanup, while all other
+        # errors remain visible to the deletion fence. Upstream matched the GCS
+        # exception by class NAME because it had one backend; the port raises one
+        # neutral type, so the intent survives a change of backend.
+        return
 
 
 def download_frame_request_pixels(uid: str, storage_id: str) -> bytes:
     """Read owner-authorized pixels from their declared storage tier."""
 
-    return bytes(_bucket(permanent=_is_permanent(storage_id)).blob(_object_name(uid, storage_id)).download_as_bytes())
+    return bytes(_object_store().get_bytes(_bucket(permanent=_is_permanent(storage_id)), _object_name(uid, storage_id)))
 
 
 def copy_frame_request_pixels_to_permanent(uid: str, temporary_storage_id: str, permanent_storage_id: str) -> None:
@@ -84,9 +99,13 @@ def copy_frame_request_pixels_to_permanent(uid: str, temporary_storage_id: str, 
         raise ValueError("promotion destination must be permanent")
     source_bucket = _bucket(permanent=_is_permanent(temporary_storage_id))
     destination_bucket = _bucket(permanent=True)
-    source = source_bucket.blob(_object_name(uid, temporary_storage_id))
-    with owner_storage_write_gate(uid, destination_bucket):
-        source_bucket.copy_blob(source, destination_bucket, new_name=_object_name(uid, permanent_storage_id))
+    with owner_storage_write_gate(uid):
+        _object_store().copy(
+            source_bucket,
+            _object_name(uid, temporary_storage_id),
+            destination_bucket,
+            _object_name(uid, permanent_storage_id),
+        )
 
 
 def delete_frame_request_pixels_for_user(uid: str, storage_ids: list[str]) -> int:
@@ -111,11 +130,11 @@ def delete_all_frame_request_pixels_for_user(uid: str) -> int:
             continue
         bucket = _bucket(permanent=permanent)
         prefix = f'frame-requests/{uid}/'
-        blobs = list(bucket.list_blobs(prefix=prefix))
-        for blob in blobs:
-            blob.delete()
+        store = _object_store()
+        for info in store.list(bucket, prefix):
+            store.delete(bucket, info.key)
             deleted += 1
-        remaining = list(bucket.list_blobs(prefix=prefix))
+        remaining = store.list(bucket, prefix)
         if remaining:
             raise RuntimeError(f'frame-request purge left {len(remaining)} objects under {prefix}')
     return deleted

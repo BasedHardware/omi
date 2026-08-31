@@ -1859,6 +1859,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get signInWithGoogle => 'התחבר עם Google';
 
   @override
+  String get signInWithSSO => 'התחבר עם SSO';
+
+  @override
   String get byContinuingAgree => 'בהמשך, אתה מסכים ל-';
 
   @override

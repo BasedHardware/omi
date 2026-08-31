@@ -97,7 +97,7 @@ def test_parakeet_deploy_workflow_selects_environment_owned_values_file():
     assert './backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE }}_values.yaml' in workflow
 
 
-@pytest.mark.parametrize('dockerfile_name', ['Dockerfile', 'Dockerfile.nim'])
+@pytest.mark.parametrize('dockerfile_name', ['Dockerfile', 'Dockerfile.oss'])
 def test_parakeet_pod_runs_one_uvicorn_process_for_its_gpu(dockerfile_name):
     dockerfile = (ROOT / 'backend' / 'parakeet' / dockerfile_name).read_text(encoding='utf-8')
 

@@ -21,6 +21,7 @@ from llm_gateway.gateway.accounting import (
     openai_usage_from_sse_payload,
 )
 from llm_gateway.gateway.accounting_sink import schedule_attempt_trace
+from llm_gateway.gateway.providers import DEFAULT_OPENAI_BASE_URL, OPENAI_BASE_URL_ENV_VAR
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.credentials import (
@@ -345,7 +346,12 @@ async def create_image_generation(request: Request, caller: ServiceAuthDependenc
         )
     try:
         response = await _get_image_generation_client().post(
-            'https://api.openai.com/v1/images/generations',
+            # Same base as every chat call on this provider. It used to be the literal
+            # https://api.openai.com/v1/... while OpenAICompatibleChatCompletionProvider resolved
+            # `base_url or os.getenv(OPENAI_BASE_URL)` — one provider, two behaviours, and this is the
+            # one a product feature reaches (app icon generation), so an on-prem deployment sent the
+            # prompt to OpenAI whatever it had configured (BACKLOG L4).
+            f'{os.getenv(OPENAI_BASE_URL_ENV_VAR, DEFAULT_OPENAI_BASE_URL).rstrip("/")}/images/generations',
             headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
             json=request_body,
         )

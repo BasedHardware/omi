@@ -1,0 +1,24 @@
+# MetalLB address pool for a real bare-metal k0s node (phase B3), the counterpart to metallb-pool.yaml
+# (which uses the Kind docker subnet). This is a LAN range the operator OWNS — a single free address on
+# the node's L2 network, so the Envoy Gateway edge gets a stable IP that the OIDC issuer host + TLS SAN
+# are pinned to. Change the address to a free IP on your LAN before applying.
+#
+# Apply AFTER installing MetalLB; it backs the chart's ingress.service.type=LoadBalancer +
+# ingress.loadBalancerIP (values-k0s.yaml).
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: omi-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 192.168.100.190/32
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: omi-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - omi-pool

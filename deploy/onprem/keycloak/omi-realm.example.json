@@ -1,0 +1,60 @@
+{
+  "realm": "omi",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "clients": [
+    {
+      "clientId": "omi-app",
+      "name": "Omi mobile app (Auth Code + PKCE)",
+      "description": "Public client for the additive OIDC Flutter login (ADR-0038). System-browser Auth Code + PKCE; custom-scheme redirect.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["omiauth:/oidc-callback", "omiauth:/*"],
+      "webOrigins": ["+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "omiauth:/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "omi-backend-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "omi-backend",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "omi-backend-admin",
+      "name": "Backend admin API (service account)",
+      "description": "Admin-API service-account client (OIDC_ADMIN_* in backend.env). PLACEHOLDER secret CHANGE_ME + realm-management view-users: regenerate this AND OIDC_ADMIN_CLIENT_SECRET before exposing Keycloak.",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "secret": "CHANGE_ME"
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-omi-backend-admin",
+      "enabled": true,
+      "serviceAccountClientId": "omi-backend-admin",
+      "clientRoles": { "realm-management": ["view-users", "manage-users"] }
+    }
+  ]
+}

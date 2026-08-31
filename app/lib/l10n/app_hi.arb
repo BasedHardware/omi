@@ -3216,6 +3216,7 @@
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
     "accountCutoverOpenStore": "स्टोर खोलें",
+    "signInWithSSO": "SSO के साथ साइन इन करें",
     "chatScopeToday": "आज",
     "chatScopeThisWeek": "इस सप्ताह",
     "chatScopeAbout": "इसके बारे में: {title}",

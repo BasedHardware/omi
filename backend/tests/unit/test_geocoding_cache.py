@@ -11,8 +11,25 @@ Verifies that:
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from models.geolocation import Geolocation
 from utils.conversations.location import get_google_maps_location
+
+
+@pytest.fixture(autouse=True)
+def _configured_api_key(monkeypatch):
+    """Every API-path test below needs a configured key to be meaningful.
+
+    The module now returns None before any request when GOOGLE_MAPS_API_KEY is unset or blank: it used
+    to read the key without checking it, so an unconfigured deployment still sent the user's exact
+    coordinates to maps.googleapis.com and waited for the 403 (see
+    tests/unit/test_geocode_requires_a_key.py). These tests exercise cache and response handling, i.e.
+    the behaviour of a deployment that DOES use Google Maps, so the key is set here rather than
+    weakening the guard. `test_cache_hit_no_api_key_needed` clears the environment itself and still
+    holds — a cache hit needs no key, which is now true by construction rather than by accident.
+    """
+    monkeypatch.setenv('GOOGLE_MAPS_API_KEY', 'test-key')
 
 
 class TestCacheKeyPrecision:

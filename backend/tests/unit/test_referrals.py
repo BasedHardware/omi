@@ -127,6 +127,25 @@ def test_dev_referral_opens_signup_against_the_dev_backend(monkeypatch):
     assert response.headers['location'] == f'https://app.omi.me/login?referral={code}&environment=dev'
 
 
+def _bind_profile(monkeypatch, module, *, created_at=None, on_read=None):
+    """Point the module's `get_auth_provider` at a stub returning one UserProfile.
+
+    Replaces three `monkeypatch.setattr(module.firebase_admin.auth, 'get_user', ...)` calls. The router
+    now reads the account's creation time through the neutral port (`UserProfile.created_at`, epoch ms,
+    populated from Firebase's user_metadata.creation_timestamp or Keycloak's createdTimestamp), so
+    patching the Firebase SDK reached nothing — and, more to the point, tied a product rule about
+    account age to one backend. `on_read` lets a caller assert the profile is NOT read at all.
+    """
+    from utils.auth.ports import UserProfile
+
+    def get_user_profile(uid):
+        if on_read is not None:
+            return on_read(uid)
+        return UserProfile(uid=uid, created_at=created_at)
+
+    monkeypatch.setattr(module, 'get_auth_provider', lambda: SimpleNamespace(get_user_profile=get_user_profile))
+
+
 def test_referral_claim_grants_trial_only_to_a_fresh_authenticated_account(monkeypatch):
     monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
     code = create_referral_code('referrer-123')
@@ -135,11 +154,9 @@ def test_referral_claim_grants_trial_only_to_a_fresh_authenticated_account(monke
     events = []
 
     with _loaded_referrals_router() as referrals:
-        monkeypatch.setattr(
-            referrals.firebase_admin.auth,
-            'get_user',
-            lambda _uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=now_ms)),
-        )
+        # Through the neutral auth port, not firebase_admin.auth: the router reads the account's
+        # creation time off UserProfile.created_at (epoch ms), which both adapters populate.
+        _bind_profile(monkeypatch, referrals, created_at=now_ms)
         monkeypatch.setattr(
             referrals,
             'claim_referral_trial',
@@ -165,11 +182,7 @@ def test_referral_claim_marks_an_existing_authenticated_account_ineligible(monke
     events = []
 
     with _loaded_referrals_router() as referrals:
-        monkeypatch.setattr(
-            referrals.firebase_admin.auth,
-            'get_user',
-            lambda _uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=old_ms)),
-        )
+        _bind_profile(monkeypatch, referrals, created_at=old_ms)
         monkeypatch.setattr(
             referrals,
             'claim_referral_trial',
@@ -205,11 +218,7 @@ def test_referral_claim_emits_ineligible_reason(monkeypatch, uid, referrer_uid, 
 
     with _loaded_referrals_router() as referrals:
         events = []
-        monkeypatch.setattr(
-            referrals.firebase_admin.auth,
-            'get_user',
-            lambda _uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=now_ms)),
-        )
+        _bind_profile(monkeypatch, referrals, created_at=now_ms)
         monkeypatch.setattr(referrals, 'claim_referral_trial', lambda *_args, **_kwargs: (False, reason))
         monkeypatch.setattr(referrals, 'emit_posthog_event', lambda *event: events.append(event))
         response = referrals.claim_referral(referrals.ReferralClaimRequest(code=code), uid)
@@ -228,8 +237,9 @@ def test_referral_claim_rejects_an_invalid_code_before_loading_the_user(monkeypa
     monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
 
     with _loaded_referrals_router() as referrals:
-        get_user = lambda _uid: pytest.fail('invalid referral must not load the user')
-        monkeypatch.setattr(referrals.firebase_admin.auth, 'get_user', get_user)
+        _bind_profile(
+            monkeypatch, referrals, on_read=lambda _uid: pytest.fail('invalid referral must not load the user')
+        )
 
         with pytest.raises(HTTPException) as error:
             referrals.claim_referral(referrals.ReferralClaimRequest(code='invalid'), 'new-user')
@@ -295,6 +305,25 @@ def test_referral_link_returns_sanitized_unavailable_response_when_signing_fails
     assert 'signing' not in error.value.detail
 
 
+def _exchange_provider(*, uid, is_new_user):
+    """A provider whose IdP exchange reports this identity, and whose profile has a name already.
+
+    `display_name` present means the route skips its profile-update branch, which is not what these two
+    tests are about. The provider is a stub rather than the shared FakeAuthProvider because these
+    assertions pin the exact uid the referral is credited to, and the fake derives its uid from the
+    bearer.
+    """
+    from utils.auth.ports import IdpIdentity, UserProfile
+
+    return SimpleNamespace(
+        exchange_idp_credential=lambda _provider, _id_token, _access_token=None: IdpIdentity(
+            uid=uid, is_new_user=is_new_user
+        ),
+        get_user_profile=lambda _uid: UserProfile(uid=uid, display_name='Already Named'),
+        mint_custom_token=lambda _uid: 'custom-token',
+    )
+
+
 @pytest.mark.asyncio
 async def test_new_user_auth_redeems_captured_referral(monkeypatch):
     monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
@@ -303,19 +332,6 @@ async def test_new_user_auth_redeems_captured_referral(monkeypatch):
     claims = []
     events = []
 
-    class Response:
-        status_code = 200
-        text = ''
-
-        @staticmethod
-        def json():
-            return {'localId': 'new-user', 'isNewUser': True}
-
-    class Client:
-        @staticmethod
-        async def post(*_args, **_kwargs):
-            return Response()
-
     def claim(referred_uid, referrer_uid, *, is_new_user):
         claims.append((referred_uid, referrer_uid, is_new_user))
         return True, 'granted'
@@ -323,11 +339,15 @@ async def test_new_user_auth_redeems_captured_referral(monkeypatch):
     async def run_inline(_executor, function, *args, **kwargs):
         return function(*args, **kwargs)
 
-    monkeypatch.setattr(auth, 'get_auth_client', lambda: Client())
+    # Through the neutral port, not the Firebase REST client. Upstream reads `isNewUser` off the
+    # signInWithIdp response body; that block is the one this fork replaced with
+    # `adapter.exchange_idp_credential`, so the flag now travels as `IdpIdentity.is_new_user`. Stubbing
+    # `get_auth_client` reached nothing after the migration — the request never goes out from here.
+    provider = _exchange_provider(uid='new-user', is_new_user=True)
+    monkeypatch.setattr(auth, 'get_auth_provider', lambda: provider)
     monkeypatch.setattr(auth, 'claim_referral_trial', claim)
     monkeypatch.setattr(auth, 'emit_posthog_event', lambda *event: events.append(event))
     monkeypatch.setattr(auth, 'run_blocking', run_inline)
-    monkeypatch.setattr(auth.firebase_admin.auth, 'create_custom_token', lambda _uid: b'custom-token', raising=False)
 
     token = await auth._generate_custom_token('google', 'provider-token', referral_code=referral_code)
 
@@ -345,26 +365,13 @@ async def test_existing_user_auth_does_not_redeem_referral(monkeypatch):
     referral_code = create_referral_code('referrer-123')
     claims = []
 
-    class Response:
-        status_code = 200
-        text = ''
-
-        @staticmethod
-        def json():
-            return {'localId': 'existing-user', 'isNewUser': False}
-
-    class Client:
-        @staticmethod
-        async def post(*_args, **_kwargs):
-            return Response()
-
     async def run_inline(_executor, function, *args, **kwargs):
         return function(*args, **kwargs)
 
-    monkeypatch.setattr(auth, 'get_auth_client', lambda: Client())
+    provider = _exchange_provider(uid='existing-user', is_new_user=False)
+    monkeypatch.setattr(auth, 'get_auth_provider', lambda: provider)
     monkeypatch.setattr(auth, 'claim_referral_trial', lambda *args, **kwargs: claims.append((args, kwargs)))
     monkeypatch.setattr(auth, 'run_blocking', run_inline)
-    monkeypatch.setattr(auth.firebase_admin.auth, 'create_custom_token', lambda _uid: b'custom-token', raising=False)
 
     await auth._generate_custom_token('google', 'provider-token', referral_code=referral_code)
 

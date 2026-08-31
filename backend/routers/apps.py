@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
 from utils.executors import (
+    auth_idp_executor,
     critical_executor,
     db_executor,
     llm_executor,
@@ -149,6 +150,10 @@ from utils.social import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
+
+# Federated social sign-in as seen across auth backends: Firebase provider ids ('*.com') and the
+# conventional Keycloak IdP aliases. Used to decide whether a Twitter link needs an explicit persona.
+_FEDERATED_SOCIAL_PROVIDERS = {'google.com', 'apple.com', 'google', 'apple'}
 
 
 class AppSelectOption(PydanticBaseModel):
@@ -1699,9 +1704,13 @@ async def verify_twitter_ownership_tweet(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Get provider info from Firebase
-    user_info = auth.get_user(uid)
-    provider_data = [p.provider_id for p in user_info.provider_data]
+    # Neutral auth port: get_user returns a UserProfile whose ``providers`` are already provider-id
+    # strings (was a Firebase UserRecord with ``.provider_data`` objects). Offload the blocking lookup
+    # (Firebase Admin, or two OIDC HTTP round-trips) so it does not stall the event loop (cubic 10887 C3).
+    # Profile lookup does a synchronous IdP HTTP call (Keycloak Admin API under OIDC); run it on the
+    # dedicated auth_idp_executor so a slow IdP cannot starve critical_executor's bearer-verification
+    # workers (cubic review PR 10887, review 4939247683).
+    provider_data = (await run_blocking(auth_idp_executor, auth.get_user, uid)).providers
 
     # Verify handle
     if handle.startswith('@'):
@@ -1711,7 +1720,11 @@ async def verify_twitter_ownership_tweet(
     persona = None
     res = await verify_latest_tweet(username, handle)
     if res['verified']:
-        if not ('google.com' in provider_data or 'apple.com' in provider_data):
+        # Federated social sign-in surfaces as Firebase provider ids ('google.com'/'apple.com') or, on
+        # OIDC, Keycloak IdP aliases (conventionally 'google'/'apple'). Recognize both so an OIDC user
+        # with a linked Google/Apple identity isn't mistaken for a non-federated user (cubic 10887 C2).
+        federated = any(p in _FEDERATED_SOCIAL_PROVIDERS for p in provider_data)
+        if not federated:
             persona = await upsert_persona_from_twitter_profile(username, handle, uid)
         else:
             if persona_id:
@@ -1751,19 +1764,25 @@ async def migrate_app_owner(
         raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
 
     try:
-        source_claims = await run_blocking(
-            critical_executor, auth.auth.verify_id_token, source_token, check_revoked=True
+        # check_revoked=True bundles a ~10s synchronous OIDC introspection HTTP call into verify_token, so run
+        # it on auth_idp_executor (external IdP I/O), NOT critical_executor — 8 concurrent revocation checks
+        # would otherwise saturate the gate pool shared with fast bearer verification (cubic PR 10887 apps.py:1754).
+        source_principal = await run_blocking(
+            auth_idp_executor, auth.get_auth_provider().verify_token, source_token, check_revoked=True
         )
-        source_user = await run_blocking(critical_executor, auth.get_user, old_id)
+        # The profile lookup is a separate IdP HTTP call → auth_idp_executor too (review 4939247683).
+        source_user = await run_blocking(auth_idp_executor, auth.get_user, old_id)
     except Exception:
         # Invalid/revoked tokens, missing/deleted users, and Admin lookup failures
         # are deliberately indistinguishable to callers. Neither may mutate state.
         raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
 
-    source_uid = source_claims.get('uid')
-    firebase_claims = source_claims.get('firebase')
-    source_provider = firebase_claims.get('sign_in_provider') if isinstance(firebase_claims, dict) else None
-    if source_uid != old_id or source_provider != 'anonymous' or source_user.disabled or source_user.provider_data:
+    # Neutral auth port: verify_token yields a Principal (``provider`` = the sign-in provider) and
+    # get_user a UserProfile (``providers`` = linked provider-id strings). Anonymous + no linked
+    # providers + matching uid is the only eligible source, exactly as with the raw Firebase shapes.
+    source_uid = source_principal.uid
+    source_provider = source_principal.provider
+    if source_uid != old_id or source_provider != 'anonymous' or source_user.disabled or source_user.providers:
         raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
 
     try:

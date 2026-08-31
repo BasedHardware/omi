@@ -1,0 +1,53 @@
+name: omi-oss
+# Omi self-host — SEED (dev-posture + OIDC auth). Same non-hermetic posture as compose.dev.yaml (the
+# backend reaches HOST inference via host.docker.internal for LLM/embeddings), but the backend runs
+# with AUTH_BACKEND=oidc + LOCAL_DEVELOPMENT=false so multiple REAL Keycloak users can drive the API as
+# app clients would — used to seed conversations (deploy/onprem/seed/seed_meld_users.py). NOT hermetic:
+# do not use for the ADR-0001 proof (that is compose.prod.yaml).
+#
+# Bring up the auth profile (keycloak + kc-proxy https + api-proxy) and chat (llm_gateway + qdrant):
+#   ./gen-dev-certs.sh                                           # once: TLS certs for the proxies
+#   docker compose -f compose.seed.yaml --profile auth --profile chat up -d
+#   deploy/onprem/seed/seed_meld_users.py --meld-csv train_sent_emo.csv --per-user 20 --kc-admin-pass "$KC_ADMIN_PASSWORD"
+#     (the seeder logs into /realms/master as admin-cli and defaults --kc-admin-pass to "admin"; keycloak
+#      now takes KC_ADMIN_PASSWORD with no default, so pass the SAME value or every user-mint 401s)
+#
+# backend.env.seed carries the OIDC + host-inference wiring (issuer must equal the token's `iss` =
+# KC_HOSTNAME, default https://localhost:8443/realms/omi).
+include:
+  # Long form: the pins must reach the INCLUDED files, where the `image:` keys live (ADR-0055).
+  - path: compose.base.yaml
+    env_file:
+      - omi.oss.release.env
+      - omi.oss.release.pins
+  - path: compose.selfhost.yaml   # seed drives real users against the on-prem Mongo store (ADR-0046)
+    env_file:
+      - omi.oss.release.env
+      - omi.oss.release.pins
+services:
+  backend:
+    env_file:
+      - ./backend.env.base
+      - ./backend.env.seed
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8080"
+  keycloak:
+    # DEV/seed realm: the seeder (seed_meld_users.py) mints tokens via the omi-test direct-access
+    # client, so the seed posture uses the dev realm variant (cubic review 4909186286 #5).
+    volumes:
+      # The realm this deployment RUNS is a gitignored runtime file, copied from the example for
+      # this environment (ADR-0082) — same rule as the env files. Mounting the committed .example
+      # directly made "which realm is live" a property of the repo, which is how the Helm chart
+      # came to ship the DEV realm (omi-test + testuser) on the prod installation.
+      #   cp keycloak/omi-realm.example.json      keycloak/omi-realm.json   # prod
+      #   cp keycloak/omi-realm.dev.example.json  keycloak/omi-realm.json   # dev
+      # Long syntax for create_host_path:false — a MISSING source must be an error, not a silently
+      # created empty directory that Keycloak imports nothing from. Same reason the chart `fail`s.
+      - type: bind
+        source: ./keycloak/omi-realm.json
+        target: /opt/keycloak/data/import/omi-realm.json
+        read_only: true
+        bind:
+          create_host_path: false

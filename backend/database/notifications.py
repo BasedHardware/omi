@@ -14,10 +14,110 @@ from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
 from ._client import db
 from .cache import get_memory_cache
+from database.store import ensure_id_segment, get_document_store
+from models.other import UnifiedPushEndpoint
+from datetime import datetime, timezone
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# UnifiedPush endpoints (ADR-0011) — the on-prem push counterpart of FCM tokens.
+# Stored at users/{uid}/unifiedpush_endpoints/{device_key} through the neutral store port (so it runs
+# on Mongo/Firestore alike), mirroring the FCM-token subcollection shape one-for-one.
+# ---------------------------------------------------------------------------
+
+
+_UNIFIEDPUSH_COLLECTION = 'unifiedpush_endpoints'
+
+
+def _endpoint_from_doc(doc: Any) -> UnifiedPushEndpoint:
+    d = doc.to_dict() or {}
+    return UnifiedPushEndpoint(
+        url=str(d.get('endpoint', '')),
+        device_key=str(d.get('device_key', '')),
+        time_zone=d.get('time_zone'),
+        p256dh=d.get('p256dh'),
+        auth=d.get('auth'),
+    )
+
+
+def save_endpoint(uid: str, data: Dict[str, Any]) -> None:
+    """Register/replace a UnifiedPush endpoint for one device (keyed by device_key, like fcm_tokens).
+
+    Mirrors the endpoint's ``time_zone`` onto the user doc (parity with ``save_token``) so the
+    daily-summary timezone queries see UnifiedPush-only users too.
+    """
+    # device_key comes from client headers (platform + X-Device-Id-Hash). A '/' would make an invalid
+    # logical path and diverge across backends (Firestore rejects the odd segment count; Mongo would
+    # store it outside the endpoints collection, so get_all_endpoints never finds it). Reject unsafe
+    # segments at the boundary (cubic PR 10887 B1) rather than composing a corrupt path.
+    device_key = ensure_id_segment(str(data.get('device_key') or 'unknown_default'), label='device_key')
+    store = get_document_store()
+    store.set(
+        f'users/{uid}/{_UNIFIEDPUSH_COLLECTION}/{device_key}',
+        {
+            'endpoint': data['endpoint'],
+            'device_key': device_key,
+            'time_zone': data.get('time_zone'),
+            'p256dh': data.get('p256dh'),
+            'auth': data.get('auth'),
+            'created_at': datetime.now(timezone.utc),
+        },
+    )
+    time_zone = data.get('time_zone')
+    if time_zone:
+        store.set(f'users/{uid}', {'time_zone': time_zone}, merge=True)
+
+
+def get_all_endpoints(uid: str) -> List[UnifiedPushEndpoint]:
+    store = get_document_store()
+    return [_endpoint_from_doc(doc) for doc in store.query(f'users/{uid}/{_UNIFIEDPUSH_COLLECTION}')]
+
+
+def remove_bulk_endpoints(urls: List[str]) -> None:
+    """Delete every stored endpoint whose url is in ``urls``, across all users (dead-endpoint cleanup
+    on 404/410). Collection-group scan so a distributor URL retired on one device is purged
+    everywhere it was registered."""
+    if not urls:
+        return
+    dead = set(urls)
+    store = get_document_store()
+    for doc in store.query_group(_UNIFIEDPUSH_COLLECTION):
+        if (doc.to_dict() or {}).get('endpoint') in dead:
+            store.delete(doc.path)
+
+
+def get_users_endpoints_in_timezones(timezones: List[str]) -> List[UnifiedPushEndpoint]:
+    """UnifiedPush endpoints of every user whose ``time_zone`` is in ``timezones`` (daily-summary
+    fan-out parity with the FCM token path).
+
+    The parameter is named after upstream's ``get_users_token_in_timezones``, the FCM sibling this one
+    stands beside: ``_get_users_in_timezone`` picks between the two by backend and calls whichever it
+    got, so two different names for the same argument made the pair unassignable to a single callable
+    type — and the only reason it worked at all was that the call happened to be positional.
+    """
+    if not timezones:
+        return []
+    store = get_document_store()
+    endpoints: List[UnifiedPushEndpoint] = []
+    # ONE collection-group query per chunk, filtered by the endpoint's own ``time_zone`` — not a per-user
+    # fan-out (query users in the tz, then get_all_endpoints per user = N+1 reads on the DB worker every
+    # hour, cubic PR 10887 database/notifications.py:121). save_endpoint writes the endpoint's time_zone
+    # and the user's together (parity), so for a UnifiedPush user they stay in sync; this returns exactly
+    # the matched endpoints, bounded by matches (an index on the group's d.time_zone — provisioned by
+    # reconcile_mongo_indexes — keeps it off a collection scan). A Firestore 'in' rejects >30 values, so
+    # chunk. Per-chunk isolation: one failing timezone chunk must not abort the morning fan-out.
+    unique = list(dict.fromkeys(timezones))
+    for i in range(0, len(unique), 30):
+        try:
+            for doc in store.query_group(_UNIFIEDPUSH_COLLECTION, filters=[('time_zone', 'in', unique[i : i + 30])]):
+                endpoints.append(_endpoint_from_doc(doc))
+        except Exception as e:
+            logger.error(f'UnifiedPush timezone chunk {i // 30} failed (other chunks unaffected): {e}')
+    return endpoints
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -278,76 +378,79 @@ def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str
     return _get_users_in_timezones(timezones, 'id')
 
 
-def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) -> List[Tuple[str, List[str], Any]]:
-    """
-    Get users who should receive daily summary notifications.
+def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) -> List[Tuple[str, Dict[str, Any], Any]]:
+    """Eligible daily-summary users in the given timezones: ``(uid, user_data, time_zone)``.
 
-    This function queries users who:
-    1. Are in one of the provided timezones (where it's currently target_local_hour)
-    2. Have daily_summary_hour_local set to target_local_hour OR have no preference (uses default)
-    3. Have daily_summary_enabled not explicitly set to False
-
-    Args:
-        timezones: List of IANA timezone names where it's currently target_local_hour
-        target_local_hour: The local hour we're sending notifications for (0-23)
-
-    Returns:
-        List of (uid, [tokens], time_zone) tuples.
-    """
+    Queries users who (1) are in one of the timezones (where it is currently ``target_local_hour``),
+    (2) have ``daily_summary_hour_local`` == that hour (or no preference -> default), and (3) have not
+    disabled daily summaries. Backend-NEUTRAL: it returns WHO to notify and their document; the service
+    layer (utils/other/notifications.py) resolves the delivery backend and fetches the recipients —
+    UnifiedPush endpoints via ``get_unifiedpush_endpoints_by_uid`` or FCM tokens via
+    ``get_fcm_tokens_for_users``. This helper must not own delivery policy (cubic PR 10887 #427 / #3)."""
     if not timezones:
         return []
 
-    users: List[Tuple[str, List[str], Any]] = []
-
+    users: List[Tuple[str, Dict[str, Any], Any]] = []
     # 'Where in' query only supports 30 or fewer items in list so we split in chunks
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
 
     for chunk in timezone_chunks:
-        chunk_users: List[Tuple[str, List[str], Any]] = []
+        chunk_users: List[Tuple[str, Dict[str, Any], Any]] = []
         try:
-            # Query users in these timezones
             query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
-
             for user_doc in query.stream():
-                uid = str(user_doc.id)
                 user_data = _typed_doc(user_doc)
-
-                # Check if daily summary is enabled (default: True)
+                # Daily summary enabled (default: True)
                 if user_data.get('daily_summary_enabled') is False:
                     continue
-
-                # Check if user's preferred hour matches target hour
-                # If not set, use default (22 = 10 PM)
+                # Preferred hour matches target (unset -> default 22 = 10 PM)
                 user_hour = user_data.get('daily_summary_hour_local', DEFAULT_DAILY_SUMMARY_HOUR_LOCAL)
                 if user_hour != target_local_hour:
                     continue
-
-                # Collect tokens from subcollection
-                tokens: List[str] = []
-                token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
-                for token_doc in token_docs:
-                    token_data = _typed_doc(token_doc)
-                    token_value = token_data.get('token')
-                    if token_value:
-                        tokens.append(str(token_value))
-
-                # Add legacy token if exists and not already in list
-                legacy_token = user_data.get('fcm_token')
-                if legacy_token and legacy_token not in tokens:
-                    tokens.append(str(legacy_token))
-
-                # Skip users with no tokens
-                if not tokens:
-                    continue
-
-                time_zone = user_data.get('time_zone')
-                chunk_users.append((uid, tokens, time_zone))
-
+                chunk_users.append((str(user_doc.id), user_data, user_data.get('time_zone')))
         except Exception as e:
             logger.error(f"Error querying chunk for daily summary: {e}")
         users.extend(chunk_users)
 
     return users
+
+
+def get_unifiedpush_endpoints_by_uid(timezones: List[str]) -> Dict[str, List[UnifiedPushEndpoint]]:
+    """UnifiedPush endpoints keyed by uid for every user whose ``time_zone`` is in ``timezones``. ONE
+    collection-group query per 30-chunk (not a per-user ``get_all_endpoints`` = N+1). ``save_endpoint``
+    stamps the endpoint's ``time_zone`` with the user's, so the group filter returns exactly the matched
+    users' endpoints. Neutral read — the service decides WHEN to use it (cubic PR 10887 #427)."""
+    by_uid: Dict[str, List[UnifiedPushEndpoint]] = {}
+    if not timezones:
+        return by_uid
+    store = get_document_store()
+    unique = list(dict.fromkeys(timezones))
+    for i in range(0, len(unique), 30):
+        try:
+            for doc in store.query_group(_UNIFIEDPUSH_COLLECTION, filters=[('time_zone', 'in', unique[i : i + 30])]):
+                parts = doc.path.split('/')  # users/{uid}/unifiedpush_endpoints/{device_key}
+                if len(parts) > 1:
+                    by_uid.setdefault(parts[1], []).append(_endpoint_from_doc(doc))
+        except Exception as e:
+            logger.error(f'UnifiedPush timezone chunk {i // 30} failed (other chunks unaffected): {e}')
+    return by_uid
+
+
+def get_fcm_tokens_for_users(users: List[Tuple[str, Dict[str, Any], Any]]) -> Dict[str, List[str]]:
+    """FCM tokens keyed by uid for the given eligible users (subcollection ``fcm_tokens`` + legacy
+    ``user.fcm_token``). Runs in one DB-worker call for the whole batch; neutral read (cubic PR 10887 #427)."""
+    tokens_by_uid: Dict[str, List[str]] = {}
+    for uid, user_data, _tz in users:
+        tokens: List[str] = []
+        for token_doc in db.collection('users').document(uid).collection('fcm_tokens').stream():
+            token_value = _typed_doc(token_doc).get('token')
+            if token_value:
+                tokens.append(str(token_value))
+        legacy_token = user_data.get('fcm_token')  # add legacy token if present and not already listed
+        if legacy_token and legacy_token not in tokens:
+            tokens.append(str(legacy_token))
+        tokens_by_uid[uid] = tokens
+    return tokens_by_uid
 
 
 def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:

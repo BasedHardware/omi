@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
+from config.placeholder_values import validate_configuration_values
 from llm_gateway.gateway.request_context import REQUEST_ID_HEADER, request_id_for, resolve_request_id
 from llm_gateway.gateway.metrics import observe_gateway_config_identity
 from llm_gateway.gateway.accounting_sink import drain_accounting_persistence_tasks
@@ -40,6 +41,11 @@ async def _run_shutdown_cleanup(name: str, cleanup: Callable[[], Awaitable[None]
     except Exception:
         logger.exception('LLM gateway shutdown cleanup failed: %s', name)
 
+
+# The gateway is a separate process with its own env file, and llm_gateway.env.example ships
+# OMI_LLM_GATEWAY_SERVICE_TOKEN=CHANGE_ME and METRICS_SECRET=CHANGE_ME. Gating only the backend
+# would leave half the stack running on a token published in our repository (BACKLOG L49).
+validate_configuration_values()
 
 app = FastAPI(title='Omi LLM Gateway', lifespan=lifespan)
 

@@ -1,0 +1,75 @@
+name: omi-oss
+# Omi self-host — DEV (NOT hermetic; do not use for the ADR-0001 proof). Base services, but:
+#  - `omi` stays non-internal (egress), so the backend can reach an embeddings/LLM endpoint on the
+#    HOST (e.g. host Ollama /v1/embeddings) for RAG — mapped via host.docker.internal;
+#  - the backend API is published on the host (8000) for manual curls / the seed.
+# In PROD none of this applies (compose.prod.yaml): the backend stays internal and inference is an
+# operator service on the `omi` net. See docs studio compose-environments-onprem + D33.
+#   docker compose -f compose.dev.yaml --profile chat up -d
+#   # backend.env (dev): OMI_EMBEDDINGS_BASE_URL=http://host.docker.internal:11434/v1
+include:
+  # Long form: the pins must reach the INCLUDED files, where the `image:` keys live (ADR-0055).
+  - path: compose.base.yaml
+    env_file:
+      - omi.oss.release.env
+      - omi.oss.release.pins
+  - path: compose.selfhost.yaml   # on-prem datastore (Mongo, ADR-0046); dev default is Mongo too
+    env_file:
+      - omi.oss.release.env
+      - omi.oss.release.pins
+services:
+  backend:
+    env_file:
+      - ./backend.env.base
+      - ./backend.env.dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8080"
+  keycloak:
+    # DEV realm: adds the omi-test direct-access client + testuser for the OIDC contract test and
+    # manual SSO login (cubic review 4909186286 #5). Mounted per-environment; prod uses the variant
+    # without test principals.
+    volumes:
+      # The realm this deployment RUNS is a gitignored runtime file, copied from the example for
+      # this environment (ADR-0082) — same rule as the env files. Mounting the committed .example
+      # directly made "which realm is live" a property of the repo, which is how the Helm chart
+      # came to ship the DEV realm (omi-test + testuser) on the prod installation.
+      #   cp keycloak/omi-realm.example.json      keycloak/omi-realm.json   # prod
+      #   cp keycloak/omi-realm.dev.example.json  keycloak/omi-realm.json   # dev
+      # Long syntax for create_host_path:false — a MISSING source must be an error, not a silently
+      # created empty directory that Keycloak imports nothing from. Same reason the chart `fail`s.
+      - type: bind
+        source: ./keycloak/omi-realm.json
+        target: /opt/keycloak/data/import/omi-realm.json
+        read_only: true
+        bind:
+          create_host_path: false
+
+  # Firestore emulator — DEV-ONLY, opt-in (ADR-0046). The on-prem default is Mongo (base); this exists
+  # only so a dev can exercise the Firestore reference adapter locally without Google:
+  #   docker compose -f compose.dev.yaml --profile firestore up -d --build firestore-emulator
+  #   # then in backend.env.dev: STORAGE_BACKEND=firestore + FIRESTORE_EMULATOR_HOST=firestore-emulator:8085
+  # It is NEVER in base/prod: in prod whoever wants Firestore points the env at a real Firestore.
+  # State persists across down/up (entrypoint imports a prior export, exports on graceful shutdown).
+  firestore-emulator:
+    profiles: ["firestore"]
+    build:
+      context: ../../
+      dockerfile: deploy/onprem/firestore-emulator/Dockerfile
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    stop_grace_period: 30s
+    volumes:
+      # Mount at /data (not /data/emulator): firebase clears the export dir by rmdir before writing,
+      # which EBUSYs on a mount point — so it exports to the /data/emulator subdir.
+      - firestore-emulator-data:/data
+    networks: [omi]
+    restart: unless-stopped
+
+volumes:
+  firestore-emulator-data:

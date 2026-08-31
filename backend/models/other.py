@@ -1,7 +1,8 @@
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Iterable, List, Mapping, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SaveFcmTokenRequest(BaseModel):
@@ -11,6 +12,43 @@ class SaveFcmTokenRequest(BaseModel):
 
 class FcmTokenResponse(BaseModel):
     status: str
+
+
+@dataclass
+class UnifiedPushEndpoint:
+    """A registered UnifiedPush delivery endpoint. ``url`` is the distributor POST target; ``p256dh``/
+    ``auth`` are the optional WebPush encryption keys (absent = plaintext POST).
+
+    A value object, so it lives beside its request model rather than in ``database/notifications.py``
+    where it started. That mattered beyond tidiness: the async-blocker scanner counts a call to any name
+    imported from ``database.*`` inside an ``async def`` as blocking I/O, and it is right to — those
+    accessors do hit the database. Constructing this one touches nothing, and the only way to say so is
+    to keep it out of the module whose job is I/O.
+    """
+
+    url: str
+    device_key: str = ''
+    time_zone: Optional[str] = None
+    p256dh: Optional[str] = None
+    auth: Optional[str] = None
+
+
+class SaveUnifiedPushEndpointRequest(BaseModel):
+    endpoint: str
+    time_zone: str
+    # WebPush keys (optional): present when the app registers an encrypted endpoint. They flow through
+    # to storage so the send channel can encrypt the payload (aes128gcm); absent = plaintext POST.
+    p256dh: Optional[str] = None
+    auth: Optional[str] = None
+
+    @model_validator(mode='after')
+    def _both_or_neither_webpush_key(self) -> 'SaveUnifiedPushEndpointRequest':
+        # The send channel encrypts only when BOTH keys are set (utils/push/unifiedpush._encode_for).
+        # A half-registered endpoint (one key) would silently fall back to plaintext, which an app that
+        # sent keys cannot decode. Reject the malformed set at registration (cubic PR 10887 B4).
+        if bool(self.p256dh) != bool(self.auth):
+            raise ValueError('p256dh and auth WebPush keys must be provided together (both or neither)')
+        return self
 
 
 class SendNotificationRequest(BaseModel):

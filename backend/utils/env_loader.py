@@ -4,7 +4,10 @@ Stages select committed template files (``backend/.env.<stage>``) for different
 deployment contexts. Personal secrets live in ``backend/.env``, which always
 loads last and overrides stage defaults.
 
-Set ``OMI_ENV_STAGE`` to one of: ``prod``, ``dev``, ``local``, ``offline``.
+Set ``OMI_ENV_STAGE`` to one of: ``prod``, ``dev``, ``local``, ``offline``, ``selfhost``.
+``selfhost`` is this fork's own stage: a real self-hosted deployment (ADR-0058). It is NOT
+``offline`` — that one means "fake providers" upstream, while a self-hosted stack runs real
+providers that merely happen to be local.
 When unset, only ``backend/.env`` is loaded (production / legacy behavior).
 If ``OMI_ENV_STAGE`` is unset and ``PROVIDER_MODE=offline``, stage ``offline``
 is inferred for harness compatibility.
@@ -22,7 +25,7 @@ from dotenv import dotenv_values, load_dotenv
 
 logger = logging.getLogger(__name__)
 
-VALID_STAGES = frozenset({"prod", "dev", "local", "offline"})
+VALID_STAGES = frozenset({"prod", "dev", "local", "offline", "selfhost"})
 
 # ``local`` uses the existing harness filename for backward compatibility.
 STAGE_ENV_FILENAMES: dict[str, str] = {
@@ -30,6 +33,7 @@ STAGE_ENV_FILENAMES: dict[str, str] = {
     "dev": ".env.dev",
     "local": ".env.local-dev",
     "offline": ".env.offline",
+    "selfhost": ".env.selfhost",
 }
 
 _PROVIDER_SECRET_RE = re.compile(
@@ -43,6 +47,7 @@ class EnvStage(str, Enum):
     DEV = "dev"
     LOCAL = "local"
     OFFLINE = "offline"
+    SELFHOST = "selfhost"
 
 
 def backend_dir() -> Path:
@@ -138,7 +143,15 @@ def load_backend_env(base: Path | None = None) -> list[Path]:
     """Load stage defaults then personal ``backend/.env``. Returns loaded paths.
 
     Precedence (highest first): existing shell/process env, personal ``.env``,
-    stage file defaults. Offline stage never loads provider credentials from disk.
+    stage file defaults.
+
+    On the ``offline`` stage, provider secrets in the **personal** ``.env`` are skipped
+    (``is_provider_secret_key``). The scope is worth stating exactly, because the shorter claim this
+    docstring used to make — "offline never loads provider credentials from disk" — reads as a guarantee it
+    does not give (ADR-0057): the stage file itself is applied unfiltered, and a container that receives its
+    environment from an env-file or a ConfigMap has no ``.env`` on disk at all, so nothing here is what
+    keeps a vendor credential out of the process. Data-sovereignty posture is ``OMI_VENDOR_EGRESS``
+    (``config/vendor_egress.py``); this function is a loader.
 
     When ``OMI_HARNESS_INSTANCE`` is set, the local dev harness has already
     injected a complete child environment — skip all disk loading.

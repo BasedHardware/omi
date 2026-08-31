@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from database import vector_db
 from routers import desktop_screen_crisp
+from tests.vector_store_fakes import PineconeIndexVectorStore
 from utils.other.endpoints import get_current_user_uid
 from utils.retrieval.frame_request_authority import FrameRequestAuthorityDecision
 
@@ -213,11 +214,18 @@ def test_screen_activity_storage_ids_are_device_scoped():
 
 def test_screen_activity_vector_treats_canonical_naive_timestamp_as_utc(monkeypatch):
     upserts = []
+    # Re-expressed on the neutral vector seam: upstream patched the raw Pinecone `index` attribute,
+    # which the vector port removed (ADR-0033/WP4). PineconeIndexVectorStore preserves the assertion
+    # shape by translating port calls back into index.upsert(vectors=..., namespace=...). The env is
+    # set explicitly so is_vector_available() does not depend on ambient configuration.
+    monkeypatch.setenv("PINECONE_API_KEY", "test-key")
+    monkeypatch.setenv("PINECONE_INDEX_NAME", "test-index")
+    # Upstream's: the new owner fence would reach Firestore from a hermetic test.
     monkeypatch.setattr(vector_db, "external_write_fence", lambda *_args, **_kwargs: nullcontext())
     monkeypatch.setattr(
         vector_db,
-        "index",
-        SimpleNamespace(upsert=lambda **kwargs: upserts.append(kwargs)),
+        "_vector_store",
+        lambda: PineconeIndexVectorStore(SimpleNamespace(upsert=lambda **kwargs: upserts.append(kwargs))),
     )
 
     written = vector_db.upsert_screen_activity_vectors(

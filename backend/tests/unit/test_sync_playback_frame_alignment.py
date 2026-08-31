@@ -7,37 +7,30 @@ rejecting an odd-length buffer. The error is deterministic, so every retry
 failed identically and the job then marked playback permanently unavailable.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from pydub import AudioSegment
 
+from tests.object_store_fakes import FakeObjectStore
 from utils.other import storage as storage_mod
 from utils.sync import playback as playback_mod
 
 
-class _FakeNotFound(Exception):
-    """storage_mod.NotFound is patched to this so the mocked blob can 404."""
+def _install_chunks(monkeypatch, chunks: dict) -> FakeObjectStore:
+    """Seed the neutral object store with `{timestamp: pcm_bytes}` and install it on the seam.
 
-    pass
-
-
-def _blob_factory(ext_data_map):
-    def factory(path):
-        blob = MagicMock()
-        for ext, data in ext_data_map.items():
-            if path.endswith(f'.{ext}'):
-                blob.download_as_bytes.return_value = data
-                return blob
-        blob.download_as_bytes.side_effect = _FakeNotFound('not found')
-        return blob
-
-    return factory
-
-
-@pytest.fixture(autouse=True)
-def _mock_storage_client(monkeypatch):
-    monkeypatch.setattr(storage_mod, "storage_client", MagicMock())
+    Upstream faked raw GCS blobs (`storage_client.bucket().blob().download_as_bytes()`), a surface
+    this module no longer has: storage goes through the object-store port (ADR-0032/WP6). Seeding
+    the store instead is also stronger coverage — the real `list_audio_chunks` path resolution and
+    the real download run, and a missing object raises the neutral ObjectNotFound rather than a
+    patched GCS exception.
+    """
+    store = FakeObjectStore()
+    for ts, data in chunks.items():
+        store.put(storage_mod.private_cloud_sync_bucket, f'chunks/uid/conv/{ts:.3f}.bin', data)
+    monkeypatch.setattr(storage_mod, '_object_store', lambda: store)
+    return store
 
 
 def test_pydub_rejects_odd_length_pcm_control():
@@ -46,12 +39,9 @@ def test_pydub_rejects_odd_length_pcm_control():
         AudioSegment(data=b'\x00' * 641, sample_width=2, frame_rate=16000, channels=1)
 
 
-@patch.object(storage_mod, 'NotFound', _FakeNotFound)
-def test_truncated_chunk_is_frame_aligned():
+def test_truncated_chunk_is_frame_aligned(monkeypatch):
     """A chunk stored with a half sample is trimmed to whole PCM16 frames."""
-    bucket = MagicMock()
-    bucket.blob.side_effect = _blob_factory({'bin': b'\x11\x22' * 320 + b'\x33'})
-    storage_mod.storage_client.bucket.return_value = bucket
+    _install_chunks(monkeypatch, {1000.0: b'\x11\x22' * 320 + b'\x33'})
 
     merged = storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0], fill_gaps=False)
 
@@ -59,23 +49,12 @@ def test_truncated_chunk_is_frame_aligned():
     assert merged == b'\x11\x22' * 320
 
 
-@patch.object(storage_mod, 'NotFound', _FakeNotFound)
-def test_truncated_chunk_does_not_byte_shift_later_chunks():
+def test_truncated_chunk_does_not_byte_shift_later_chunks(monkeypatch):
     """The trailing half sample must not push every later chunk off the frame grid."""
-    bucket = MagicMock()
-
-    def factory(path):
-        blob = MagicMock()
-        if path.endswith('1000.000.bin'):
-            blob.download_as_bytes.return_value = b'\x11\x22' * 320 + b'\x33'
-        elif path.endswith('1000.020.bin'):
-            blob.download_as_bytes.return_value = b'\x44\x55' * 320
-        else:
-            blob.download_as_bytes.side_effect = _FakeNotFound('not found')
-        return blob
-
-    bucket.blob.side_effect = factory
-    storage_mod.storage_client.bucket.return_value = bucket
+    _install_chunks(
+        monkeypatch,
+        {1000.0: b'\x11\x22' * 320 + b'\x33', 1000.02: b'\x44\x55' * 320},
+    )
 
     merged = storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0, 1000.02], fill_gaps=False)
 
@@ -85,17 +64,14 @@ def test_truncated_chunk_does_not_byte_shift_later_chunks():
     assert merged.index(b'\x44\x55' * 320) % 2 == 0
 
 
-@patch.object(storage_mod, 'NotFound', _FakeNotFound)
-def test_build_playback_artifact_survives_truncated_chunk():
+def test_build_playback_artifact_survives_truncated_chunk(monkeypatch):
     """The real merge-job path completes instead of raising the retried ValueError.
 
     Only the MP3 encode is stubbed — pydub shells out to ffmpeg, which the unit
     runner does not carry. The call that actually raised in production, the
     AudioSegment construction over the merged buffer, still runs for real.
     """
-    bucket = MagicMock()
-    bucket.blob.side_effect = _blob_factory({'bin': b'\x00\x01' * 16000 + b'\x02'})
-    storage_mod.storage_client.bucket.return_value = bucket
+    _install_chunks(monkeypatch, {1000.0: b'\x00\x01' * 16000 + b'\x02'})
 
     encoded_lengths = []
 

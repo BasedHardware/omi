@@ -8,6 +8,10 @@ Provides shared executors with strict separation (bulkhead pattern):
   to prevent slow LLM retries from blocking DB or auth operations.
 - stripe_executor: Stripe API calls (Subscription.retrieve, etc.). External network I/O
   with unpredictable latency, isolated from everything else.
+- auth_idp_executor: IdP-credential exchange (signInWithIdp REST round-trip). External I/O
+  bulkhead so a slow IdP hop cannot starve critical_executor's request-gating workers.
+- push_crypto_executor: WebPush payload encryption (aes128gcm) for UnifiedPush. CPU-bound
+  bulkhead so a fan-out of encrypted pushes bounds in-flight crypto to its worker count.
 - sync_executor: sync pipeline VAD/STT/segment processing.
 - postprocess_executor: best-effort post-processing (memories, trends, vectors,
   action items, goals, conversation processing, webhook delivery).
@@ -66,6 +70,8 @@ critical_executor = MonitoredThreadPoolExecutor(name="critical", max_workers=8, 
 db_executor = MonitoredThreadPoolExecutor(name="db", max_workers=24, thread_name_prefix="db")
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
+auth_idp_executor = MonitoredThreadPoolExecutor(name="auth_idp", max_workers=4, thread_name_prefix="auth_idp")
+push_crypto_executor = MonitoredThreadPoolExecutor(name="push_crypto", max_workers=8, thread_name_prefix="push_crypto")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
 postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
@@ -76,6 +82,8 @@ _ALL_EXECUTORS = [
     db_executor,
     llm_executor,
     stripe_executor,
+    auth_idp_executor,
+    push_crypto_executor,
     sync_executor,
     postprocess_executor,
     cleanup_executor,

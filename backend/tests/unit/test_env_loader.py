@@ -85,6 +85,42 @@ def test_google_adc_guard_is_inert_outside_local_jit() -> None:
     assert FakeGoogleAuth.default is original
 
 
+def test_the_firebase_fences_stay_off_when_the_auth_port_is_not_firebase() -> None:
+    """The QA flag alone must not arm a Firebase-only fence on an OIDC deployment.
+
+    Everything in `firebase_admin_runtime` monkeypatches the Firebase Admin SDK. With
+    `AUTH_BACKEND=oidc` (ADR-0034) that SDK is not on any path, so arming the fence would import and
+    rewrite a package the process never uses. Upstream ships one provider and gates on the QA flag
+    alone; the second condition is ours, and this is what proves it is wired.
+    """
+
+    from utils.firebase_admin_runtime import _AUTH_MUTATORS, firebase_verify_only_enabled
+
+    class FakeAuth:
+        pass
+
+    class FakeGoogleAuth:
+        @staticmethod
+        def default():
+            return object(), "unchanged"
+
+    for name in _AUTH_MUTATORS:
+        setattr(FakeAuth, name, lambda *_a, **_k: "allowed")
+    adc_original = FakeGoogleAuth.default
+    oidc = {"OMI_JIT_QA_LOCAL_STACK": "1", "AUTH_BACKEND": "oidc"}
+
+    assert not firebase_verify_only_enabled(oidc)
+    assert firebase_verify_only_credential(oidc) is None
+    assert not install_firebase_auth_mutation_guard(oidc, auth_module=FakeAuth)
+    assert FakeAuth.create_user() == "allowed"
+    assert not install_google_adc_guard(oidc, google_auth_module=FakeGoogleAuth)
+    assert FakeGoogleAuth.default is adc_original
+
+    # ... and the Firebase deployment still gets the fence, explicitly and by default.
+    for backend in ({"OMI_JIT_QA_LOCAL_STACK": "1", "AUTH_BACKEND": "firebase"}, {"OMI_JIT_QA_LOCAL_STACK": "1"}):
+        assert firebase_verify_only_enabled(backend)
+
+
 def test_stage_from_env_explicit() -> None:
     assert stage_from_env({"OMI_ENV_STAGE": "dev"}) == "dev"
     assert stage_from_env({"OMI_ENV_STAGE": "LOCAL"}) == "local"

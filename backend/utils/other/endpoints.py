@@ -7,8 +7,9 @@ from typing import Any, Callable, Dict, Optional, TypeVar, cast
 from fastapi import Depends, Header, HTTPException, WebSocketException
 from fastapi import Request
 from starlette.websockets import WebSocket
-from firebase_admin import auth
-from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
+from utils.auth import get_auth_provider, auth_backend_name
+from utils.auth import errors as auth_errors
+from utils.observability.fallback import record_fallback
 import logging
 import redis as redis_pkg
 
@@ -90,7 +91,9 @@ def enforce_account_deletion_ws_access(uid: str) -> None:
 
 
 def get_user(uid: str) -> Any:
-    return auth.get_user(uid)  # type: ignore[reportUnknownVariableType,reportUnknownMemberType]  # firebase_admin auth untyped
+    # Returns the neutral UserProfile (ADR-0034). Callers read .providers (list of provider ids) where
+    # they used to read the Firebase UserRecord's .provider_data.
+    return get_auth_provider().get_user_profile(uid)
 
 
 def verify_token(token: str) -> str:
@@ -104,7 +107,7 @@ def verify_token(token: str) -> str:
         The user's uid
 
     Raises:
-        InvalidIdTokenError: If the token is invalid
+        auth_errors.AuthError: If the token is invalid/expired/revoked (neutral taxonomy, ADR-0034)
     """
     # ADMIN_KEY impersonation: token format is "<ADMIN_KEY><uid>" (kept as-is —
     # this exact concatenation is depended on by this repo's own integration
@@ -127,11 +130,10 @@ def verify_token(token: str) -> str:
             logger.warning('ADMIN_KEY auth used to impersonate uid=%s', impersonated_uid)
             return impersonated_uid
 
-    # Verify Firebase token
+    # Verify through the neutral auth port (AUTH_BACKEND: firebase | oidc)
     try:
-        decoded_token = cast(Any, auth.verify_id_token(token))  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
-        return decoded_token['uid']
-    except InvalidIdTokenError:
+        return get_auth_provider().verify_token(token).uid
+    except auth_errors.InvalidToken:
         # Only honored when no real Firebase credential is configured — every
         # legitimate LOCAL_DEVELOPMENT=true path (hermetic e2e harness, the
         # auth-emulator dev harness) already unsets or never sets these, and
@@ -144,7 +146,25 @@ def verify_token(token: str) -> str:
             or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
             or os.getenv('FIREBASE_AUTH_CREDENTIALS_PATH')
         )
-        if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
+        # The uid-123 dev bypass is a Firebase emulator/harness convenience keyed on
+        # "no Firebase credential present". An OIDC deployment never has a Firebase
+        # credential, so without this backend gate a misconfigured LOCAL_DEVELOPMENT=true
+        # self-host running AUTH_BACKEND=oidc would grant every invalid-token request the
+        # same uid '123'. Restrict the fallback to the Firebase backend so OIDC always
+        # rejects invalid tokens.
+        if auth_backend_name() == 'firebase' and os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
+            # The one fail-open in the auth chain, so it records like one (AGENTS.md fallback contract):
+            # a deployment handing uid '123' to every invalid token used to leave no trace at all
+            # (BACKLOG L14). Per request on purpose — the count IS the signal, and on a dev harness it is
+            # noise nobody scrapes anyway.
+            record_fallback(
+                component='auth',
+                from_mode='invalid_token',
+                to_mode='dev_uid_123',
+                reason='policy',
+                outcome='degraded',
+                log=logger,
+            )
             return '123'
         raise
 
@@ -195,7 +215,10 @@ def get_current_user_uid(
 
     try:
         uid = verify_token(token)
-    except InvalidIdTokenError as e:
+    except auth_errors.AuthError as e:
+        # verify_token surfaces the neutral auth taxonomy (ADR-0034): InvalidToken/ExpiredToken/
+        # RevokedToken/JWKSUnavailable all subclass AuthError. Catch the base so every invalid/expired/
+        # revoked bearer maps to 401 — catching a removed SDK class here 500'd instead.
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
@@ -256,7 +279,8 @@ def get_current_user_uid_no_byok_validation(
 
     try:
         uid = verify_token(token)
-    except InvalidIdTokenError as e:
+    except auth_errors.AuthError as e:
+        # Neutral auth taxonomy (ADR-0034): catch the base so invalid/expired/revoked bearers -> 401.
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
@@ -302,8 +326,8 @@ def _verify_ws_auth(authorization: str) -> str:
     try:
         token = authorization.split(' ')[1]
         return verify_token(token)
-    except (InvalidIdTokenError, CertificateFetchError) as e:
-        close_code, reason = _get_ws_auth_close(e)
+    except auth_errors.AuthError as e:
+        close_code, reason = map_ws_auth_close(e)
         logger.error("WebSocket auth failed: code=%s error=%s", close_code, e)
         raise WebSocketException(code=close_code, reason=reason)
     except WebSocketException:
@@ -313,12 +337,19 @@ def _verify_ws_auth(authorization: str) -> str:
         raise WebSocketException(code=1008, reason="Auth error")
 
 
-def _get_ws_auth_close(error: Exception) -> 'tuple[int, str]':
-    if isinstance(error, RevokedIdTokenError):
+def map_ws_auth_close(error: Exception) -> 'tuple[int, str]':
+    """Shared WebSocket auth close-code mapper (ADR-0034).
+
+    Maps a neutral ``auth_errors.AuthError`` to the client recovery contract: 4001 (refresh the token)
+    for expired / JWKS-unavailable, 4004 (re-login) for revoked, 1008 for anything else. Every WS auth
+    entry point (the ``_verify_ws_auth`` dependency stack AND the first-message auth path used by
+    ``/v4/web/listen``) routes through this so a single close-code policy is applied everywhere.
+    """
+    if isinstance(error, auth_errors.RevokedToken):
         return WS_AUTH_CODE_RELOGIN_REQUIRED, "Token revoked; re-login required"
-    if isinstance(error, CertificateFetchError):
+    if isinstance(error, auth_errors.JWKSUnavailable):
         return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
-    if isinstance(error, ExpiredIdTokenError):
+    if isinstance(error, auth_errors.ExpiredToken):
         return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
 
     message = str(error).lower()
@@ -414,7 +445,7 @@ def _verify_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
 
     Raises:
         ValueError: If message format is invalid
-        InvalidIdTokenError: If token is invalid
+        auth_errors.AuthError: If token is invalid/expired/revoked (neutral taxonomy, ADR-0034)
     """
     if message.get("type") == "websocket.disconnect":
         raise ValueError("Client disconnected")
@@ -662,5 +693,5 @@ def timeit(func: F) -> F:
 
 
 def delete_account(uid: str) -> Dict[str, str]:
-    auth.delete_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+    get_auth_provider().delete_user(uid)
     return {"message": "User deleted"}

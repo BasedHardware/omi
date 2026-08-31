@@ -1528,8 +1528,18 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
     assert result['best_effort_failures'] == []
 
 
-def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monkeypatch):
-    monkeypatch.setattr(account_deletion.vector_db, 'index', None)
+def test_purge_derived_user_data_skips_vectors_when_no_store_is_configured(monkeypatch):
+    """Re-expressed on the neutral gate (ADR-0033).
+
+    This asserted the old contract — reading ``vector_db.index`` and treating "no index" as a
+    *required* failure. That attribute no longer exists (the port replaced it with
+    ``is_vector_available()``), and treating an unconfigured store as a required failure made
+    account deletion impossible: see tests/unit/test_account_deletion_vector_purge_gate.py, which
+    also pins the case this one cannot express here (a store that IS configured but fails must
+    still block). What is kept is the original intent: no delete may be attempted, and the skip
+    must be visible rather than silent.
+    """
+    monkeypatch.setattr(account_deletion.vector_db, 'is_vector_available', lambda: False)
     monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(return_value=['c1']))
     monkeypatch.setattr(account_deletion, '_historical_memory_ids', MagicMock(return_value=['m1']))
     monkeypatch.setattr(account_deletion, 'get_action_item_ids', MagicMock(return_value=['a1']))
@@ -1544,12 +1554,9 @@ def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monke
 
     result = account_deletion.purge_derived_user_data('uid1')
 
-    assert [failure['operation'] for failure in result['required_failures']] == [
-        'conversation_vectors',
-        'transcript_chunk_vectors',
-        'memory_vectors',
-        'action_item_vectors',
-        'screen_activity_vectors',
+    assert result['required_failures'] == []
+    assert [failure['operation'] for failure in result['best_effort_failures']] == [
+        account_deletion.VECTOR_PURGE_SKIPPED
     ]
     account_deletion.delete_conversation_vectors_batch.assert_not_called()
     account_deletion.delete_transcript_chunk_vectors_batch.assert_not_called()

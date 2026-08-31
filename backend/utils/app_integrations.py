@@ -66,6 +66,7 @@ from utils.llm.temporal import current_date_for_uid
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
+from utils.vector.factory import configured_vector_dimension
 import database.conversations as conversations_db
 from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration, serialize_datetimes
 from utils.log_sanitizer import sanitize
@@ -178,6 +179,12 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
     """
     if cached := get_generic_cache(f'get_github_docs_content_{repo}_{path}'):
         return cached
+    # Vendor egress (ADR-0057). AFTER the cache: serving docs already on this box sends nothing anywhere.
+    # None is the fail-soft value the caller already handles (tests/unit/test_omi_product_tool_failsoft.py).
+    from config.vendor_egress import vendor_egress_denied
+
+    if vendor_egress_denied('github_docs', log=logger):
+        return None
     docs_content = {}
     headers = {"Authorization": f"token {os.getenv('GITHUB_TOKEN')}"}
 
@@ -427,7 +434,14 @@ async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearr
 
 # proactive notification
 def _retrieve_contextual_memories(uid: str, user_context):
-    vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
+    # A question embeds normally; a question-less request is a metadata-only search, so the vector is an
+    # all-zeros placeholder — but it must match the configured store dimension or an on-prem store
+    # provisioned for e.g. 1024 rejects the query (cubic PR 10887 E1). Default stays 3072 on cloud.
+    vector = (
+        generate_embedding(user_context.get('question', ''))
+        if user_context.get('question')
+        else [0] * configured_vector_dimension()
+    )
     logger.info(f"query_vectors vector: {vector[:5]}")
 
     date_filters = {}  # not support yet

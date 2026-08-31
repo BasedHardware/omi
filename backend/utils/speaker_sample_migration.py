@@ -13,7 +13,12 @@ from typing import Any, Dict, List
 
 import asyncio
 
-from google.cloud.exceptions import NotFound
+# Not-found comes from the object-store PORT, not from GCS: download_sample_audio ->
+# utils/other/storage.py -> _object_store().get_bytes(), which raises the neutral ObjectNotFound
+# (ADR-0032) under every backend. Catching google.cloud.exceptions.NotFound here was dead code
+# after the port migration, so a permanently missing sample fell into the generic handler and was
+# treated as a TRANSIENT failure: the migration never completed and re-ran on every person read.
+from utils.object_store.errors import ObjectNotFound
 
 from database import users as users_db
 from utils.speaker_sample import (
@@ -91,7 +96,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: Dict[str, Any]) -> D
         for sample_path in samples:
             try:
                 audio_bytes = await run_blocking(storage_executor, download_sample_audio, sample_path)
-            except NotFound:
+            except ObjectNotFound:
                 logger.warning(f"Sample not found in storage, skipping: {sample_path} {uid} {person_id}")
                 # Mark for removal from Firestore (blob already gone)
                 samples_to_delete.append(sample_path)
@@ -214,7 +219,7 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: Dict[str, Any]) -> D
                 sync_executor, extract_embedding_from_bytes, first_sample_audio, "sample.wav"
             )
             new_embedding = embedding.flatten().tolist()
-        except NotFound:
+        except ObjectNotFound:
             # Sample missing - don't advance to v3 to avoid caching stale v1 embedding
             logger.warning(f"First sample not found during v2→v3 migration, skipping: {samples[0]} {uid} {person_id}")
             return person

@@ -189,3 +189,20 @@ def get_flagged_users(stage_filter: Optional[str] = None, limit: int = 100) -> L
         data['id'] = doc.id
         results.append(data)
     return results
+
+
+def lookup_fair_use_event_by_case_ref(case_ref: str) -> Optional[Dict[str, Any]]:
+    """Find a fair-use event by its case reference across all users (collection group).
+
+    Returns the event dict with 'uid' and 'event_id' added, or None if not found. Requires the
+    fair_use_events collection-group index on case_ref.
+    """
+    for doc in db.collection_group('fair_use_events').where('case_ref', '==', case_ref).limit(1).stream():
+        raw: object = doc.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+        path_parts = doc.reference.path.split('/')
+        if len(path_parts) >= 2:
+            data['uid'] = path_parts[1]
+        data['event_id'] = doc.id
+        return data
+    return None

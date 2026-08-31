@@ -65,6 +65,8 @@ class PurgeResult(TypedDict):
 
 ACCOUNT_DELETION_WIPE_COMPLETED = 'Account Deletion Wipe Completed'
 ACCOUNT_DELETION_WIPE_FAILED = 'Account Deletion Wipe Failed'
+# Recorded (best-effort, non-blocking) when a purge is skipped because no vector store is wired.
+VECTOR_PURGE_SKIPPED = 'vector_purge_skipped_no_store'
 
 
 def _historical_memory_ids(uid: str) -> list[str]:
@@ -111,14 +113,41 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         if expected and isinstance(deleted, int) and deleted < expected:
             raise RuntimeError(f'{operation} only deleted {deleted}/{expected} records')
 
-    def require_vector_index(operation: str):
-        if vector_db.index is None:
-            raise RuntimeError(f'Pinecone index not initialized for {operation}')
+    def vector_store_configured(ids: list[str]) -> bool:
+        """Whether there is a vector store to purge these ids from.
+
+        The old guard read ``vector_db.index``, a module attribute the vector port removed
+        (ADR-0033): the AttributeError became a *required* failure on all five purge operations, so
+        no account with any row could ever be wiped. Its intent was right and is kept — a store that
+        is configured but failing must still block the Firestore wipe, because the ids needed to
+        find those vectors are about to be deleted with the Firestore data, and that raise is caught
+        below as a required failure.
+
+        A store that is not configured is a different case. Every write path is gated on this same
+        predicate, so nothing could have been written, and the chart's default install genuinely has
+        no vector store (``chat.enabled: false``, so the configmap renders no QDRANT_*). Blocking
+        there would make account deletion impossible on a posture we ship.
+
+        It is still recorded, once, as a best-effort failure: that does not block erasure, but it
+        keeps the result honest. A deployment that *did* have vectors and later lost its vector
+        configuration would otherwise leave them behind silently — and silence is the one outcome an
+        erasure path must never produce.
+        """
+        if not ids:
+            return False
+        if vector_db.is_vector_available():
+            return True
+        if not any(f['operation'] == VECTOR_PURGE_SKIPPED for f in result['best_effort_failures']):
+            record_failure(
+                'best_effort_failures',
+                VECTOR_PURGE_SKIPPED,
+                RuntimeError('no vector store is configured, so no vectors were purged'),
+            )
+        return False
 
     try:
         conversation_ids = get_conversation_ids(uid)
-        if conversation_ids:
-            require_vector_index('conversation_vectors')
+        if vector_store_configured(conversation_ids):
             delete_conversation_vectors_batch(uid, conversation_ids)
             result['vectors_deleted'] += len(conversation_ids)
     except Exception as e:
@@ -127,8 +156,7 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
 
     try:
         conversation_ids = get_conversation_ids(uid)
-        if conversation_ids:
-            require_vector_index('transcript_chunk_vectors')
+        if vector_store_configured(conversation_ids):
             result['vectors_deleted'] += (
                 delete_transcript_chunk_vectors_batch(uid, conversation_ids, raise_on_failure=True) or 0
             )
@@ -142,8 +170,7 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         # below, while the recursive Firestore wipe removes items, overrides,
         # evidence, journals, and task sidecars under users/{uid}.
         memory_ids = _historical_memory_ids(uid)
-        if memory_ids:
-            require_vector_index('memory_vectors')
+        if vector_store_configured(memory_ids):
             deleted = delete_memory_vectors_batch(uid, memory_ids)
             require_deleted_count('memory_vectors', len(memory_ids), deleted)
             result['vectors_deleted'] += deleted or 0
@@ -153,8 +180,7 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
 
     try:
         action_item_ids = get_action_item_ids(uid)
-        if action_item_ids:
-            require_vector_index('action_item_vectors')
+        if vector_store_configured(action_item_ids):
             delete_action_item_vectors_batch(uid, action_item_ids)
             result['vectors_deleted'] += len(action_item_ids)
     except Exception as e:
@@ -163,8 +189,7 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
 
     try:
         screen_activity_ids = get_screen_activity_ids(uid)
-        if screen_activity_ids:
-            require_vector_index('screen_activity_vectors')
+        if vector_store_configured(screen_activity_ids):
             delete_screen_activity_vectors(uid, screen_activity_ids)
             result['vectors_deleted'] += len(screen_activity_ids)
     except Exception as e:

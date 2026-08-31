@@ -1,0 +1,161 @@
+# On-prem LLM gateway route overrides (D32, ADR-0035).
+# Mounted OVER backend/llm_gateway/config/generated_route_overrides.yaml so the cloud
+# config stays untouched. Every chat/product feature is pinned to the SINGLE local model
+# your OPENAI_BASE_URL (Ollama/vLLM) serves. Change `model:` below to your served model
+# (its /v1/chat/completions name). provider stays `openai` (OpenAI-compatible wire).
+#
+# COVERAGE IS THE POINT (ADR-0067). The gateway synthesises a lane for EVERY configured feature, and a
+# feature with no entry here keeps its **cloud** model/provider from the QoS table — so an omission is not
+# "unconfigured", it is a live route to a vendor through our own gateway. Measured before this file was
+# completed: 8 of 45 configured features were uncovered (6 -> gemini, 1 -> perplexity, 1 -> openrouter),
+# `translation` among them, and they answered 503 invalid_config only because no credentials for those
+# providers exist here. check_oss_llm_gateway_route_coverage.py now ratchets this file against the
+# configured-feature set — which is the right base: comparing it against upstream's own override file
+# (37 entries) reported "37/37 covered" while eight lanes were open.
+#
+# `web_search` is the ONE deliberate omission: it is Perplexity-only, i.e. a search PRODUCT, not an LLM
+# lane. Pinning it to a local chat model would return invented "Web Search Results" complete with a
+# "Sources:" section. Its caller fails soft on a non-200 ("Web search is temporarily unavailable"), which is
+# the honest on-prem answer. The guard's baseline records that decision instead of hiding it.
+# ONE model for every lane, `screen_frame_judge` included. That lane classifies an IMAGE, so the single
+# model has to be vision-capable — the request it sends is already OpenAI-compatible multimodal
+# (`{"type": "image_url", ...}` with a data URI), which Ollama/vLLM accept for such a model. Leaving it
+# out is NOT "we do not use it": per the coverage rule above the lane would keep its cloud model
+# (gemini-2.5-flash-lite) and ship user screenshots to the vendor through this gateway. The feature is
+# default-off upstream (SCREEN_FRAME_EGRESS_ENABLED must be exactly "true"), so the entry only matters
+# for a deployment that turns it on — precisely when getting it wrong would hurt most.
+#
+# The name below is a REFERENCE sized for a low-resource box, not a requirement. Measured on an
+# RTX 5060 Ti (16 GB) against this exact structured-output path, WARM (a cold first call costs several
+# seconds more on every model):
+#
+#   qwen3-vl:8b-instruct  6.1 GB   text 1.0s  vision 1.7s   <- the reference below
+#   qwen2.5vl:7b          6.0 GB   text 0.8s  vision 1.4s   no native tool calls at all
+#   qwen3.5:9b            6.6 GB   text 3.8s  vision 16.2s  the only one doing native tools on BOTH lanes
+#   qwen3-vl:8b           6.1 GB   unusable here: structured VISION output fails, and inconsistently
+#
+# Two things worth knowing before swapping it. Structured output reaches these models two ways — a
+# native tool call, or a json_schema constraint — and LangChain picks the second by default; the
+# reference does native tools on text but NOT on vision, so the vision lane rides json_schema. And a
+# "thinking" variant costs 10-20x for nothing here: same family, same size, 1.7s against 22.8s.
+#
+# Verified end to end, not inferred: `judge_frame()` itself, with the production privacy prompt, against
+# this reference over the OpenAI-compatible wire — 1.4s warm, same verdict on repeat runs, and a caption
+# that read both participant names off the screenshot.
+#
+# One caveat for whoever swaps the model. The VERDICT depends on the prompt at least as much as on the
+# model: the same reference answered `approved_clean` under the production prompt and `rejected /
+# identifiable_person` under a simplified one, on the same image. Changing the model is a policy change
+# for this lane, not only a performance one — re-check what it approves before trusting it.
+#
+generated_route_overrides:
+  - feature: app_generator
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: app_integration
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: chat_agent
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: chat_extraction
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: chat_graph
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: chat_responses
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: conv_action_items
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: conv_app_result
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: conv_app_select
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: conv_discard
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: conv_folder
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: conv_structure
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: daily_summary
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: daily_summary_simple
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: desktop_proactive_extraction
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: desktop_proactive_reasoning
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: external_structure
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  # Chat with an attached file, split by kind. `file_chat_vision` sends the IMAGE itself — same
+  # multimodal shape as screen_frame_judge — so the single served model must be vision-capable;
+  # `file_chat_documents` sends extracted text. Both arrived with upstream's +192 and default to
+  # gpt-5.6-luna/openai in the QoS table, which is a live vendor lane through our own gateway: a
+  # user's attachment would leave the box. Pinned like every other feature.
+  - feature: file_chat_documents
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: file_chat_vision
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: fair_use
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: followup
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: goals
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: goals_advice
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: knowledge_graph
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: learnings
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: memories
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: memory_category
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: memory_conflict
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  # The three *_flex features are long-running extraction calls: the cloud config sets request_timeout_ms:
+  # 900000 (config_loader defaults would otherwise cap them at 30s non-streaming / 120s streaming). On a
+  # locally served model they run at least as long, so preserve the explicit 900s timeout (cubic 10887).
+  - feature: memory_conflict_flex
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+    request_timeout_ms: 900000
+  - feature: memory_l2_flex
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+    request_timeout_ms: 900000
+  - feature: onboarding
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: screen_frame_judge
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: session_titles
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: translation
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: trends
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: wrapped_analysis
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: x_memory_extraction_flex
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+    request_timeout_ms: 900000
+  - feature: memory_l1
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: memory_l2
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: notifications
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: openglass
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: persona_chat
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: persona_chat_premium
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: persona_clone
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: proactive_notification
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: smart_glasses
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  # Arrived with upstream (wake-word adjudication for conversation capture). Upstream routes it to a
+  # cloud model with `reasoning_effort: high`; the option is dropped here because the local
+  # OpenAI-compatible servers do not take it, and an unpinned lane would have kept the CLOUD route.
+  - feature: wake_word_adjudication
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}
+  - feature: what_matters_now
+    primary: {provider: openai, model: qwen3-vl:8b-instruct}

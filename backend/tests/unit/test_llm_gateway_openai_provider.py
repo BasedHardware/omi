@@ -477,3 +477,60 @@ def test_no_provider_normalizer_hardcodes_created():
         if match.start() < fake_start
     ]
     assert offenders == [], f'hardcoded chat.completion `created` outside the test double at line(s): {offenders}'
+
+
+# --- vendor providers must be redirectable too (BACKLOG L4) ----------------------------------------
+
+
+def test_openrouter_and_perplexity_bases_are_overridable(monkeypatch):
+    """Their URLs were hardcoded at the registry call site while the constructor already took a
+    base_url — so a self-hosted deployment could point `openai` at its endpoint and nothing else."""
+    import importlib
+
+    monkeypatch.setenv('OPENROUTER_BASE_URL', 'http://local:8080/v1')
+    monkeypatch.setenv('PERPLEXITY_BASE_URL', 'http://local:8081')
+    from llm_gateway.routers import dependencies
+
+    importlib.reload(dependencies)
+    registry = dependencies.get_provider_registry()
+
+    assert registry._providers['openrouter']._base_url == 'http://local:8080/v1'
+    assert registry._providers['perplexity']._base_url == 'http://local:8081'
+
+
+def test_the_vendor_bases_default_to_the_vendors(monkeypatch):
+    """Legacy principal: unset behaves exactly as before."""
+    import importlib
+
+    for name in ('OPENROUTER_BASE_URL', 'PERPLEXITY_BASE_URL'):
+        monkeypatch.delenv(name, raising=False)
+    from llm_gateway.routers import dependencies
+
+    importlib.reload(dependencies)
+    registry = dependencies.get_provider_registry()
+
+    assert registry._providers['openrouter']._base_url == 'https://openrouter.ai/api/v1'
+    assert registry._providers['perplexity']._base_url == 'https://api.perplexity.ai'
+
+
+def test_the_two_anthropic_copies_move_together(monkeypatch):
+    """There were two independent literals — the provider default and the router constant — so even a
+    patch to one would have left the other pointing at the vendor."""
+    import importlib
+
+    monkeypatch.setenv('ANTHROPIC_BASE_URL', 'http://local:8082/v1')
+    from llm_gateway.gateway import providers as providers_mod
+
+    importlib.reload(providers_mod)
+    from llm_gateway.routers import anthropic_messages
+
+    importlib.reload(anthropic_messages)
+
+    assert providers_mod.ANTHROPIC_BASE_URL_DEFAULT == 'http://local:8082/v1'
+    assert anthropic_messages.ANTHROPIC_MESSAGES_BASE_URL == 'http://local:8082/v1'
+    assert providers_mod.AnthropicMessagesProvider()._base_url == 'http://local:8082/v1'
+
+    monkeypatch.delenv('ANTHROPIC_BASE_URL', raising=False)
+    importlib.reload(providers_mod)
+    importlib.reload(anthropic_messages)
+    assert anthropic_messages.ANTHROPIC_MESSAGES_BASE_URL == 'https://api.anthropic.com/v1'

@@ -20,8 +20,12 @@ body itself had zero behavioral coverage, and the repo has no undefined-name
 linter in the test path.
 
 These tests call the real function and only stub the production seam the
-function itself uses (``utils.other.storage._get_storage_client``), so the
-module-level name binding is exercised for real:
+function itself uses. Upstream stubs ``utils.other.storage._get_storage_client``;
+the object-store port (ADR-0032) removed that raw GCS accessor, so here the seam
+is ``utils.other.storage._object_store`` and the double serves the port's own
+``list(bucket, prefix) -> [ObjectInfo]`` instead of ``bucket().list_blobs()``.
+Same seam, same depth, same thing proven — the module-level name binding is
+exercised for real:
 
 1. with the import present, chunk listing flows through
    ``utils.other.storage.list_audio_chunks`` — real filename parsing, gap
@@ -44,23 +48,24 @@ import database.conversations as conversations_db
 from utils.other import storage as storage_mod
 
 
-def _fake_client(blobs_by_prefix):
-    """GCS client double: bucket().list_blobs(prefix=...) serves canned blobs."""
+def _fake_client(objects_by_prefix):
+    """Object-store double: ``list(bucket, prefix)`` serves canned records (ADR-0032).
 
-    class _Bucket:
-        def list_blobs(self, prefix=None):
-            return blobs_by_prefix.get(prefix, [])
+    Declares the size rather than holding bytes: the assertions turn size into an estimated duration
+    (PCM16 mono 16kHz, 32000 bytes => 1.0s) and one case declares 320000, which there is no reason to
+    allocate.
+    """
 
-    class _Client:
-        def bucket(self, name):
-            return _Bucket()
+    class _Store:
+        def list(self, bucket, prefix):
+            return objects_by_prefix.get(prefix, [])
 
-    return _Client()
+    return _Store()
 
 
 def _blob(path, size):
-    # list_audio_chunks reads .name and .size off each blob
-    return SimpleNamespace(name=path, size=size)
+    # list_audio_chunks reads .key and .size off each record
+    return SimpleNamespace(key=path, size=size)
 
 
 class TestCreateAudioFilesFromChunks:
@@ -72,7 +77,7 @@ class TestCreateAudioFilesFromChunks:
                 _blob('chunks/uid-a/conv-1/1010.000.opus', 32000),
             ],
         }
-        with patch.object(storage_mod, '_get_storage_client', return_value=_fake_client(blobs)):
+        with patch.object(storage_mod, '_object_store', return_value=_fake_client(blobs)):
             files = conversations_db.create_audio_files_from_chunks('uid-a', 'conv-1')
 
         assert len(files) == 1
@@ -93,7 +98,7 @@ class TestCreateAudioFilesFromChunks:
                 _blob('chunks/uid-a/conv-2/2100.000.opus', 32000),
             ],
         }
-        with patch.object(storage_mod, '_get_storage_client', return_value=_fake_client(blobs)):
+        with patch.object(storage_mod, '_object_store', return_value=_fake_client(blobs)):
             files = conversations_db.create_audio_files_from_chunks('uid-a', 'conv-2')
 
         assert len(files) == 2
@@ -102,7 +107,7 @@ class TestCreateAudioFilesFromChunks:
         assert files[0].chunk_timestamps[0] < files[1].chunk_timestamps[0]
 
     def test_no_chunks_returns_empty_list(self):
-        with patch.object(storage_mod, '_get_storage_client', return_value=_fake_client({})):
+        with patch.object(storage_mod, '_object_store', return_value=_fake_client({})):
             assert conversations_db.create_audio_files_from_chunks('uid-a', 'conv-3') == []
 
     def test_batch_blob_timestamps_use_range_start(self):
@@ -115,7 +120,7 @@ class TestCreateAudioFilesFromChunks:
                 _blob('chunks/uid-a/conv-4/3020.000-3030.000.batch.enc', 320000),
             ],
         }
-        with patch.object(storage_mod, '_get_storage_client', return_value=_fake_client(blobs)):
+        with patch.object(storage_mod, '_object_store', return_value=_fake_client(blobs)):
             files = conversations_db.create_audio_files_from_chunks('uid-a', 'conv-4')
 
         assert len(files) == 1
@@ -130,7 +135,7 @@ class TestCreateAudioFilesFromChunks:
                 _blob('chunks/uid-a/conv-5/4000.000.opus', 32000),
             ],
         }
-        with patch.object(storage_mod, '_get_storage_client', return_value=_fake_client(blobs)):
+        with patch.object(storage_mod, '_object_store', return_value=_fake_client(blobs)):
             files = conversations_db.create_audio_files_from_chunks('uid-a', 'conv-5')
 
         assert len(files) == 1
@@ -146,7 +151,7 @@ class TestCreateAudioFilesFromChunks:
                 _blob('chunks/uid-a/conv-6/notes.txt', 100),
             ],
         }
-        with patch.object(storage_mod, '_get_storage_client', return_value=_fake_client(blobs)):
+        with patch.object(storage_mod, '_object_store', return_value=_fake_client(blobs)):
             files = conversations_db.create_audio_files_from_chunks('uid-a', 'conv-6')
 
         assert len(files) == 1

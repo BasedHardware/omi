@@ -11,18 +11,18 @@ import database.vector_db as vector_db
 
 
 def test_query_vectors_by_metadata_returns_empty_without_index(monkeypatch):
-    monkeypatch.setattr(vector_db, 'index', None)
+    monkeypatch.setattr(vector_db, 'is_vector_available', lambda: False)
     result = vector_db.query_vectors_by_metadata('uid1', [0.1, 0.2], [], [], [], [], [], limit=5)
     assert result == []
 
 
 def test_upsert_vector2_is_a_noop_without_index(monkeypatch):
-    monkeypatch.setattr(vector_db, 'index', None)
+    monkeypatch.setattr(vector_db, 'is_vector_available', lambda: False)
     # Must not raise (previously AttributeError on index.upsert).
     assert vector_db.upsert_vector2('uid1', 'conv1', [0.1, 0.2], {'k': 'v'}) is None
 
 
 def test_update_vector_metadata_returns_empty_without_index(monkeypatch):
-    monkeypatch.setattr(vector_db, 'index', None)
+    monkeypatch.setattr(vector_db, 'is_vector_available', lambda: False)
     result = vector_db.update_vector_metadata('uid1', 'conv1', {'k': 'v'})
     assert result == {}

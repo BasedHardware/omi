@@ -1,6 +1,11 @@
 import asyncio
 
-from google.cloud.exceptions import NotFound
+# The object-store port raises its OWN neutral not-found (ADR-0032), not the GCS exception this file
+# used to stub: `download_sample_audio` -> utils/other/storage.py -> _object_store().get_bytes().
+# Stubbing google.cloud.exceptions.NotFound here made every "missing sample" test assert a code path
+# production can no longer take — the migration's `except NotFound` was dead, so a permanently missing
+# sample was classified as a TRANSIENT failure and the person was re-migrated on every read, forever.
+from utils.object_store.errors import ObjectNotFound
 
 import utils.speaker_sample_migration as migration
 
@@ -87,7 +92,7 @@ def test_migrate_deletes_quality_failures_and_updates(monkeypatch):
 
     def fake_download(path):
         if path == "missing.wav":
-            raise NotFound("missing")
+            raise ObjectNotFound("speech-profiles", "missing.wav")
         return b"bytes-" + path.encode("utf-8")
 
     async def fake_verify(audio_bytes, _rate, _expected_text=None):
@@ -154,7 +159,7 @@ def test_migrate_missing_sample_marks_for_deletion(monkeypatch):
 
     def fake_download(path):
         if path == "missing.wav":
-            raise NotFound("missing")
+            raise ObjectNotFound("speech-profiles", "missing.wav")
         return b"bytes-" + path.encode("utf-8")
 
     async def fake_verify(_audio, _rate, _expected_text=None):
@@ -473,7 +478,7 @@ def test_migrate_v2_to_v3_missing_first_sample_skips_update(monkeypatch):
         return person
 
     def fake_download(_path):
-        raise NotFound("missing")
+        raise ObjectNotFound("speech-profiles", "missing.wav")
 
     def fake_update(*_args, **_kwargs):
         updates.append((_args, _kwargs))

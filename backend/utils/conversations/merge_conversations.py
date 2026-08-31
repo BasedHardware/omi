@@ -36,16 +36,16 @@ from utils.other.storage import (
     delete_conversation_audio_files,
     enqueue_conversation_artifact_build,
     list_audio_chunks,
-    _get_storage_client,
     private_cloud_sync_bucket,
 )
+from utils.object_store import get_object_store
 
 try:
     from utils.other.storage import owner_storage_write_gate
 except ImportError:
     # Narrow test-double compatibility for import-isolated merge tests whose
     # storage module predates the owner-write fence.
-    def owner_storage_write_gate(uid: Any, bucket: Any = None) -> Any:
+    def owner_storage_write_gate(uid: Any, store: Any = None) -> Any:
         return nullcontext()
 
 
@@ -530,7 +530,7 @@ def _copy_audio_chunks_for_merge(
     Returns:
         List of AudioFile objects
     """
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    store = get_object_store()
     has_chunks = False
 
     for conv in conversations:
@@ -548,9 +548,8 @@ def _copy_audio_chunks_for_merge(
             # Preserve original filename (handles both single and batch blob naming)
             original_filename = chunk["path"].split("/")[-1]
             new_path = f"chunks/{uid}/{new_conversation_id}/{original_filename}"
-            source_blob = bucket.blob(chunk["path"])
-            with owner_storage_write_gate(uid, bucket):
-                bucket.copy_blob(source_blob, bucket, new_path)
+            with owner_storage_write_gate(uid, store):
+                store.copy(private_cloud_sync_bucket, chunk["path"], private_cloud_sync_bucket, new_path)
 
     # Create AudioFile records from copied chunks
     if has_chunks:

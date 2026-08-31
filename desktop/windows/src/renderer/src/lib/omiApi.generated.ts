@@ -3436,6 +3436,13 @@ export interface SavePayPalPaymentDetailsRequest {
   paypalme_url: string;
 }
 
+export interface SaveUnifiedPushEndpointRequest {
+  auth?: string | null;
+  endpoint: string;
+  p256dh?: string | null;
+  time_zone: string;
+}
+
 export interface ScreenActivityAppSummary {
   count: number;
   first_seen?: string | null;
@@ -5130,6 +5137,7 @@ export interface OmiApiSchemas {
   "ReviewResolutionResponse": ReviewResolutionResponse;
   "SaveFcmTokenRequest": SaveFcmTokenRequest;
   "SavePayPalPaymentDetailsRequest": SavePayPalPaymentDetailsRequest;
+  "SaveUnifiedPushEndpointRequest": SaveUnifiedPushEndpointRequest;
   "ScreenActivityAppSummary": ScreenActivityAppSummary;
   "ScreenActivityRow": ScreenActivityRow;
   "ScreenActivitySummaryResponse": ScreenActivitySummaryResponse;
@@ -9072,6 +9080,16 @@ export interface OmiApiPaths {
       operationId: "update_transcription_preferences_endpoint_v1_users_transcription_preferences_patch";
       responses: {
         "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/unifiedpush-endpoint": {
+    post: {
+      operationId: "save_unifiedpush_endpoint_v1_users_unifiedpush_endpoint_post";
+      responses: {
+        "200": FcmTokenResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -17062,6 +17080,27 @@ export async function update_transcription_preferences_endpoint_v1_users_transcr
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function save_unifiedpush_endpoint_v1_users_unifiedpush_endpoint_post(header: { X_App_Platform?: string, X_Device_Id_Hash?: string, authorization?: string, X_App_Version?: string }, body: SaveUnifiedPushEndpointRequest, init?: OmiApiClientInit): Promise<FcmTokenResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/unifiedpush-endpoint`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,

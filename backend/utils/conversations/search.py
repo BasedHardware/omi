@@ -152,6 +152,24 @@ def _is_typesense_transient_error(exc: BaseException) -> bool:
 _typesense_client: Any | None = None
 
 
+def typesense_configured() -> bool:
+    """True when BOTH halves of the Typesense connection are set.
+
+    Lives here because this module owns the client. Without it, `search_conversations` could only tell a
+    transient failure from "everything else", and "everything else" included the not-configured case: the
+    client was built with ``api_key=None``, the call raised, and the bare re-raise reached FastAPI as a
+    **500**. An on-prem deployment that simply does not run Typesense is a configuration state, not a bug.
+
+    The question is "does this module have a usable client?", and the module has exactly two ways to get
+    one: the env vars, or an injected object on the legacy ``client`` seam (the one the search call itself
+    goes through, :309). Asking only about the env would answer for the wrong seam and reject a caller that
+    supplied its own client — which is how upstream's search suites drive this function.
+    """
+    if not isinstance(client, _LazyTypesenseClient):
+        return True
+    return bool(os.getenv('TYPESENSE_HOST') and os.getenv('TYPESENSE_API_KEY'))
+
+
 def _get_typesense_client() -> Any:
     global _typesense_client
     if _typesense_client is None:
@@ -256,6 +274,12 @@ def search_conversations(
                 'current_page': page,
                 'per_page': per_page,
             }
+        # Checked AFTER the empty-request short-circuit (that answer needs no search engine) and BEFORE
+        # the client is touched: an unconfigured deployment must surface as "search unavailable" (503),
+        # not as the client's own `api_key is not defined` re-raised into a 500. This same call serves the
+        # app's DATE browse, so a 500 here also breaks date filtering.
+        if not typesense_configured():
+            raise ConversationSearchUnavailableError('Typesense is not configured (TYPESENSE_HOST/TYPESENSE_API_KEY)')
 
         filter_by = f'userId:={uid}'
         if not include_discarded:
@@ -320,6 +344,8 @@ def search_conversations(
             'current_page': page,
             'per_page': per_page,
         }
+    except ConversationSearchUnavailableError:
+        raise  # already the right signal; the generic branch below would re-wrap it into a 500
     except Exception as e:
         if _is_typesense_transient_error(e):
             logger.warning(

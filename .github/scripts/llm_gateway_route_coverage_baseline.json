@@ -1,0 +1,3 @@
+{
+  "web_search": "Deliberate: Perplexity-only, a search PRODUCT rather than an LLM lane. Pinning it to the local chat model would return invented 'Web Search Results' with a fabricated 'Sources:' section, which is worse than no web search. utils/retrieval/tools/perplexity_tools.py fails soft on a non-200 ('Web search is temporarily unavailable'), and live the lane answers 503 invalid_config with no perplexity credentials. Revisit if a self-hostable search backend is added."
+}

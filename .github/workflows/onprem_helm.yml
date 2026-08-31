@@ -1,0 +1,62 @@
+# CI gate for the on-prem Helm chart (ADR-0049 A5): render + lint both overlays and enforce image
+# parity with compose. Hermetic — no cluster, no network beyond the action installs. A live kind smoke
+# is intentionally NOT here (too heavy for every PR); run it locally via deploy/onprem/helm/README.md.
+name: onprem-helm
+
+on:
+  pull_request:
+    paths:
+      - "deploy/onprem/helm/**"
+      - "deploy/onprem/compose.base.yaml"
+      - "deploy/onprem/compose.selfhost.yaml"
+      - "deploy/onprem/omi.oss.release.pins"
+      - "deploy/onprem/omi.oss.release.env"
+      - ".github/scripts/check_oss_image_parity.py"
+      - ".github/scripts/check_oss_release.py"
+      - ".github/workflows/onprem_helm.yml"
+
+jobs:
+  chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      # The chart FAILS to render without files/omi-realm.json, on purpose (ADR-0082): a realm is
+      # per-installation and gitignored, and rendering a Keycloak with no realm is the silent success
+      # ADR-0081 closed elsewhere. CI has to supply one the same way an operator does — the example
+      # for the overlay being rendered, dev and prod carrying different principals — and remove it
+      # again before packaging, so the published .tgz never ships someone else's realm.
+      - name: helm lint (dev + prod overlays)
+        run: |
+          install -m 0644 deploy/onprem/keycloak/omi-realm.dev.example.json \
+            deploy/onprem/helm/omi-oss/files/omi-realm.json
+          helm lint deploy/onprem/helm/omi-oss -f deploy/onprem/helm/omi-oss/values-dev.yaml
+          install -m 0644 deploy/onprem/keycloak/omi-realm.example.json \
+            deploy/onprem/helm/omi-oss/files/omi-realm.json
+          helm lint deploy/onprem/helm/omi-oss -f deploy/onprem/helm/omi-oss/values-prod.yaml
+
+      - name: helm template (render both overlays; values.schema.json validates inputs)
+        run: |
+          install -m 0644 deploy/onprem/keycloak/omi-realm.dev.example.json \
+            deploy/onprem/helm/omi-oss/files/omi-realm.json
+          helm template omi deploy/onprem/helm/omi-oss -n omi-dev \
+            -f deploy/onprem/helm/omi-oss/values-dev.yaml > /dev/null
+          install -m 0644 deploy/onprem/keycloak/omi-realm.example.json \
+            deploy/onprem/helm/omi-oss/files/omi-realm.json
+          helm template omi deploy/onprem/helm/omi-oss -n omi-prod \
+            -f deploy/onprem/helm/omi-oss/values-prod.yaml > /dev/null
+
+      - name: image pins (compose + Helm derive from omi.oss.release.pins)
+        run: python3 .github/scripts/check_oss_image_parity.py
+
+      - name: release (appVersion mirrors omi.oss.release.env; no :latest in prod/k0s)
+        run: python3 .github/scripts/check_oss_release.py
+
+      - name: helm package (installable .tgz artifact — ADR-0049 §4.3)
+        run: |
+          rm -f deploy/onprem/helm/omi-oss/files/omi-realm.json
+          helm package deploy/onprem/helm/omi-oss -d /tmp/helm-out

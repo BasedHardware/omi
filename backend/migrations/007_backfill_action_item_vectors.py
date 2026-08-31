@@ -15,8 +15,6 @@ Environment:
     OPENAI_API_KEY: OpenAI API key for embeddings
 """
 
-import firebase_admin
-from firebase_admin import credentials, firestore
 import sys
 import os
 import argparse
@@ -31,33 +29,24 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 from database.vector_db import upsert_action_item_vectors_batch
+from database.store import get_document_store
 import logging
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-try:
-    cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred)
-except ValueError:
-    pass
-except Exception as e:
-    logger.error("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
-    logger.error(e)
-    sys.exit(1)
 
-db = firestore.client()
+def _store():
+    return get_document_store()
 
 
 def get_all_user_ids():
-    users_ref = db.collection('users')
-    return [doc.id for doc in users_ref.stream()]
+    return _store().list_ids('users')
 
 
 def get_user_action_items(uid: str):
-    items_ref = db.collection('users').document(uid).collection('action_items')
     items = []
-    for doc in items_ref.stream():
+    for doc in _store().query(f'users/{uid}/action_items'):
         data = doc.to_dict()
         data['id'] = doc.id
         items.append(data)

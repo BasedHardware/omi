@@ -1,0 +1,919 @@
+"""Dual-backend contract test for the neutral storage port (WP2, ADR-0002/0004).
+
+The SAME assertions run against BOTH adapters — the Firestore reference adapter (against the
+Firestore emulator) and the Mongo adapter (against a real single-node replica set). Parity here is
+the proof that ``database.store`` abstracts the backend rather than leaking one: a domain module
+written to the port behaves identically whichever ``STORAGE_BACKEND`` is configured.
+
+Live services required (both provided by the offline harness — see docs/BACKLOG.md §Handoff):
+  * ``FIRESTORE_EMULATOR_HOST`` — the emulator (image ``omi-oss-firestore-emulator``).
+  * ``MONGO_URI`` — a Mongo replica set (image ``mongo``); transactions require the replica set.
+A backend whose env is absent is skipped, so the file is safe to collect anywhere. It is NOT a
+hermetic unit test (it needs live services) and is not run by ``backend/test.sh``.
+"""
+
+from __future__ import annotations
+
+import os
+import uuid
+from datetime import datetime, timezone
+
+import pytest
+
+from database.store.errors import AlreadyExists, NotFound, PreconditionFailed
+from database.store.records import StoredDocument
+from database.store.sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
+
+
+@pytest.fixture(params=["firestore", "mongo"])
+def store(request):
+    """Yield each configured adapter in turn; skip a backend whose service isn't wired."""
+    backend = request.param
+    if backend == "firestore":
+        if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
+            pytest.skip("FIRESTORE_EMULATOR_HOST not set")
+        from database.store.adapters.firestore import FirestoreDocumentStore
+
+        yield FirestoreDocumentStore()
+        return
+    uri = os.environ.get("MONGO_URI")
+    if not uri:
+        pytest.skip("MONGO_URI not set")
+    from database.store.adapters.mongo import MongoDocumentStore
+
+    # yield + close: MongoDocumentStore owns a MongoClient; a plain return left its pooled connections
+    # open for every parametrized test, accumulating across the suite (cubic review 4939247683).
+    mongo_store = MongoDocumentStore(uri=uri, db_name="omi_contract")
+    try:
+        yield mongo_store
+    finally:
+        mongo_store.close()
+
+
+@pytest.fixture
+def uid() -> str:
+    """A unique user id so tests never collide within a shared backend."""
+    return f"u_{uuid.uuid4().hex}"
+
+
+# --- point ops ---------------------------------------------------------------
+
+
+def test_get_missing_is_absent(store, uid):
+    doc = store.get(f"users/{uid}")
+    assert doc.exists is False
+    assert doc.to_dict() is None
+    assert doc.id == uid
+
+
+def test_set_and_get_roundtrip(store, uid):
+    payload = {"name": "Ada", "n": 3, "ratio": 1.5, "on": True, "tags": ["a", "b"], "nested": {"k": "v"}}
+    store.set(f"users/{uid}", payload)
+    doc = store.get(f"users/{uid}")
+    assert doc.exists is True
+    assert doc.id == uid
+    assert doc.to_dict() == payload
+
+
+def test_set_merge_writes_and_preserves(store, uid):
+    store.set(f"users/{uid}", {"a": 1, "b": 2})
+    store.set(f"users/{uid}", {"b": 20, "c": 3}, merge=True)
+    data = store.get(f"users/{uid}").to_dict()
+    assert data == {"a": 1, "b": 20, "c": 3}
+
+
+def test_set_merge_deep_merges_nested_maps(store, uid):
+    # cubic PR 10887 mongo.py:389: Firestore merge=True deep-merges nested maps to the LEAF; a shallow
+    # replace erased sibling grants (adding a 2nd API-key grant dropped the 1st). Both backends must
+    # preserve siblings at every nesting level.
+    base = f"users/{uid}/state/grants"
+    store.set(base, {"grants": {"c1": {"apps": {"a1": {"keys": {"k1": {"role": "r1"}}}}}}})
+    # merge a sibling consumer, a sibling app under the SAME consumer, and a sibling key under the SAME app
+    store.set(base, {"grants": {"c2": {"apps": {"a2": {"keys": {"k2": {"role": "r2"}}}}}}}, merge=True)
+    store.set(base, {"grants": {"c1": {"apps": {"a3": {"keys": {"k3": {"role": "r3"}}}}}}}, merge=True)
+    store.set(base, {"grants": {"c1": {"apps": {"a1": {"keys": {"k4": {"role": "r4"}}}}}}}, merge=True)
+    got = store.get(base).to_dict()
+    assert got == {
+        "grants": {
+            "c1": {
+                "apps": {
+                    "a1": {"keys": {"k1": {"role": "r1"}, "k4": {"role": "r4"}}},  # k1 survived the k4 merge
+                    "a3": {"keys": {"k3": {"role": "r3"}}},  # a1 survived the a3 merge
+                }
+            },
+            "c2": {"apps": {"a2": {"keys": {"k2": {"role": "r2"}}}}},  # c1 survived the c2 merge
+        }
+    }
+
+
+def test_query_group_excludes_docs_missing_ordered_field(store, uid):
+    # cubic PR 10887 mongo.py:641: Firestore's order_by returns only docs that HAVE the ordered field; a
+    # collection-group query on Mongo must add the same $exists so it doesn't include a doc missing it.
+    # Scope the collection-group query to THIS test's rows (uid as the stage marker) — the group spans all
+    # parents and the doc-ids are reused across invocations, so filter on the unique uid, not a shared value.
+    store.set(f"users/{uid}/fair/x1", {"stage": uid, "updated_at": 2})
+    store.set(f"users/{uid}/fair/x2", {"stage": uid, "updated_at": 1})
+    store.set(f"users/{uid}/fair/x3", {"stage": uid})  # no updated_at -> excluded by an ordered query
+    ids = [
+        d.path.rsplit("/", 1)[1]
+        for d in store.query_group("fair", filters=[("stage", "==", uid)], order_by="updated_at", direction="asc")
+    ]
+    assert ids == ["x2", "x1"]  # x3 (missing the order field) is excluded, both backends
+
+
+def test_set_no_merge_replaces_whole_document(store, uid):
+    store.set(f"users/{uid}", {"a": 1, "b": 2})
+    store.set(f"users/{uid}", {"c": 3})
+    assert store.get(f"users/{uid}").to_dict() == {"c": 3}
+
+
+def test_get_with_read_timeout_returns_document(store, uid):
+    # cubic review 4909186286 #2: get(timeout=) must thread a real read deadline to the backend
+    # (Firestore RPC timeout / Mongo maxTimeMS) without breaking the happy path — a fast read under
+    # the deadline still returns normally on both backends.
+    store.set(f"users/{uid}", {"language": "en"})
+    doc = store.get(f"users/{uid}", timeout=5)
+    assert doc.exists and doc.to_dict() == {"language": "en"}
+
+
+def test_exists(store, uid):
+    assert store.exists(f"users/{uid}") is False
+    store.set(f"users/{uid}", {"a": 1})
+    assert store.exists(f"users/{uid}") is True
+
+
+def test_delete(store, uid):
+    store.set(f"users/{uid}", {"a": 1})
+    store.delete(f"users/{uid}")
+    assert store.exists(f"users/{uid}") is False
+
+
+def test_get_projection(store, uid):
+    store.set(f"users/{uid}", {"language": "en", "secret": "hidden", "n": 1})
+    doc = store.get(f"users/{uid}", fields=["language"])
+    data = doc.to_dict()
+    assert data.get("language") == "en"
+    assert "secret" not in data  # projection excludes unrequested fields
+
+
+# --- update: dotted keys + neutral sentinels ---------------------------------
+
+
+def test_update_dotted_key_merges_nested_map(store, uid):
+    store.set(f"users/{uid}", {"prefs": {"lang": "en", "keep": "me"}})
+    store.update(f"users/{uid}", {"prefs.lang": "it"})
+    assert store.get(f"users/{uid}").to_dict()["prefs"] == {"lang": "it", "keep": "me"}
+
+
+def test_update_delete_sentinel_removes_field(store, uid):
+    store.set(f"users/{uid}", {"a": 1, "b": 2})
+    store.update(f"users/{uid}", {"b": DELETE})
+    assert store.get(f"users/{uid}").to_dict() == {"a": 1}
+
+
+def test_update_missing_raises_not_found(store, uid):
+    # update() requires an existing document (unlike set(), which upserts). Every backend must raise
+    # the neutral NotFound rather than silently no-op — otherwise a caller that updates a
+    # concurrently-deleted doc "succeeds" on one backend and fails on another.
+    with pytest.raises(NotFound):
+        store.update(f"users/{uid}", {"a": 1})
+
+
+def test_update_with_matching_precondition_applies(store, uid):
+    # Optimistic-concurrency precondition (neutral LastUpdateOption): passing the current revision
+    # (``updated_at``) lets the write through on every backend.
+    store.set(f"users/{uid}", {"v": 1})
+    rev = store.get(f"users/{uid}").updated_at
+    store.update(f"users/{uid}", {"v": 2}, if_updated_at=rev)
+    assert store.get(f"users/{uid}").to_dict()["v"] == 2
+
+
+def test_update_with_stale_precondition_raises(store, uid):
+    # A revision that moved since the caller read it must refuse the write with PreconditionFailed on
+    # every backend (Firestore FailedPrecondition / Mongo conditional no-match), leaving data untouched.
+    store.set(f"users/{uid}", {"v": 1})
+    stale = store.get(f"users/{uid}").updated_at
+    store.update(f"users/{uid}", {"v": 2})  # bumps the revision past ``stale``
+    with pytest.raises(PreconditionFailed):
+        store.update(f"users/{uid}", {"v": 3}, if_updated_at=stale)
+    assert store.get(f"users/{uid}").to_dict()["v"] == 2  # refused write did not apply
+
+
+def test_precondition_update_advances_revision_even_under_same_ms_writes(store, uid):
+    # cubic PR 10887 mongo.py:321: Mongo truncates _updated_at to BSON millisecond, so rapid same-doc
+    # precondition updates could stamp an identical revision, letting a stale if_updated_at replay pass
+    # (lost update). Every precondition update must advance the revision STRICTLY past the read value on
+    # both backends (Firestore's update_time is already server-monotonic; the Mongo adapter forces
+    # max(now, if_updated_at + 1ms)). Rapid loop to provoke same-ms collisions.
+    base = f"users/{uid}"
+    store.set(base, {"n": 0})
+    first = store.get(base).updated_at
+    prev = first
+    for i in range(1, 60):
+        store.update(base, {"n": i}, if_updated_at=prev)
+        cur = store.get(base).updated_at
+        assert cur > prev, f"revision not strictly increasing at iter {i}: {prev} -> {cur}"
+        prev = cur
+    # the original (now stale) revision must be rejected — the hole the collision opened
+    with pytest.raises(PreconditionFailed):
+        store.update(base, {"n": 999}, if_updated_at=first)
+
+
+def test_unconditional_writes_advance_revision_even_under_same_ms_writes(store, uid):
+    # cubic PR 10887 mongo.py:161: an UNCONDITIONAL write (full set, merge, update-without-precondition) must
+    # ALSO advance _updated_at strictly. Two such writes in the same BSON millisecond otherwise share a
+    # revision, so a reader's stale if_updated_at token still satisfies the next conditional update — a silent
+    # lost update (repro'd). _rev_stamp closed this only for precondition writes; the repeatable set/merge/
+    # update paths now stamp max(now, prev+1ms) too. Rapid loops provoke same-ms collisions on both backends.
+    base = f"users/{uid}"
+    store.set(base, {"n": 0})
+    first = store.get(base).updated_at
+    prev = first
+    for i in range(1, 50):
+        store.set(base, {"n": i})  # unconditional full-set (pipeline monotonic path)
+        cur = store.get(base).updated_at
+        assert cur > prev, f"full-set revision not strictly increasing at iter {i}: {prev} -> {cur}"
+        prev = cur
+    for i in range(50, 90):
+        store.set(base, {"m": i}, merge=True)  # unconditional merge (operator + bump path)
+        cur = store.get(base).updated_at
+        assert cur > prev, f"merge revision not strictly increasing at iter {i}: {prev} -> {cur}"
+        prev = cur
+    # the original (now stale) token must be rejected: the OCC revision never collided under the rapid writes
+    with pytest.raises(PreconditionFailed):
+        store.update(base, {"n": 999}, if_updated_at=first)
+
+
+def test_delete_with_matching_precondition_applies(store, uid):
+    store.set(f"users/{uid}", {"v": 1})
+    rev = store.get(f"users/{uid}").updated_at
+    store.delete(f"users/{uid}", if_updated_at=rev)
+    assert not store.get(f"users/{uid}").exists
+
+
+def test_delete_with_stale_precondition_raises(store, uid):
+    store.set(f"users/{uid}", {"v": 1})
+    stale = store.get(f"users/{uid}").updated_at
+    store.update(f"users/{uid}", {"v": 2})  # bumps the revision past ``stale``
+    with pytest.raises(PreconditionFailed):
+        store.delete(f"users/{uid}", if_updated_at=stale)
+    assert store.get(f"users/{uid}").exists  # refused delete left the doc in place
+
+
+def test_update_increment_sentinel(store, uid):
+    store.set(f"users/{uid}", {"count": 10})
+    store.update(f"users/{uid}", {"count": Increment(5)})
+    assert store.get(f"users/{uid}").to_dict()["count"] == 15
+
+
+def test_update_array_union_and_remove(store, uid):
+    store.set(f"users/{uid}", {"tags": ["a"]})
+    store.update(f"users/{uid}", {"tags": ArrayUnion(["a", "b"])})  # "a" already present -> not duplicated
+    assert sorted(store.get(f"users/{uid}").to_dict()["tags"]) == ["a", "b"]
+    store.update(f"users/{uid}", {"tags": ArrayRemove(["a"])})
+    assert store.get(f"users/{uid}").to_dict()["tags"] == ["b"]
+
+
+def test_update_server_timestamp_sets_a_datetime(store, uid):
+    store.set(f"users/{uid}", {"a": 1})
+    store.update(f"users/{uid}", {"touched_at": SERVER_TIMESTAMP})
+    assert isinstance(store.get(f"users/{uid}").to_dict()["touched_at"], datetime)
+
+
+def test_created_at_is_immutable_across_updates(store, uid):
+    # cubic PR 10887 #1: ``created_at`` is the document's insert time and must never move on a
+    # later write, while ``updated_at`` advances. Firestore reports ``create_time`` on the snapshot;
+    # the Mongo adapter stamps ``_created_at`` once via ``$setOnInsert``. Both must agree here.
+    store.set(f"users/{uid}", {"v": 1})
+    first = store.get(f"users/{uid}")
+    assert first.created_at is not None
+    store.update(f"users/{uid}", {"v": 2})
+    second = store.get(f"users/{uid}")
+    assert second.created_at == first.created_at  # creation time frozen
+    assert second.updated_at > first.updated_at  # revision advanced
+
+
+# --- collection ops ----------------------------------------------------------
+
+
+def test_query_equality_order_and_limit(store, uid):
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"name": "p1", "team": "x", "rank": 3})
+    store.set(f"{base}/p2", {"name": "p2", "team": "x", "rank": 1})
+    store.set(f"{base}/p3", {"name": "p3", "team": "y", "rank": 2})
+
+    team_x = store.query(base, filters=[("team", "==", "x")])
+    assert {d.id for d in team_x} == {"p1", "p2"}
+
+    ordered = store.query(base, order_by="rank", direction="asc")
+    assert [d.id for d in ordered] == ["p2", "p3", "p1"]
+
+    limited = store.query(base, order_by="rank", direction="asc", limit=1)
+    assert [d.id for d in limited] == ["p2"]
+
+
+def test_query_field_equals_none_matches_present_null_only(store, uid):
+    # Firestore rewrites ``field == None`` to IS_NULL: it matches a document whose field is present AND
+    # null, and NOT one where the field is absent (and ``!= None`` -> IS_NOT_NULL, present-and-not-null).
+    # The Mongo adapter must mirror that — a bare ``$eq: null`` would also match a missing field. Regression:
+    # get_chat_session(app_id=None) queries ``plugin_id == None`` and 500'd on Mongo before the facade mapped
+    # the unary operator and the adapter added the field-exists guard.
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"name": "p1", "plugin_id": None})  # present + null
+    store.set(f"{base}/p2", {"name": "p2", "plugin_id": "x"})  # present + value
+    store.set(f"{base}/p3", {"name": "p3"})  # plugin_id absent
+
+    is_null = store.query(base, filters=[("plugin_id", "==", None)])
+    assert {d.id for d in is_null} == {"p1"}  # present-and-null only; absent p3 excluded
+
+    is_not_null = store.query(base, filters=[("plugin_id", "!=", None)])
+    assert {d.id for d in is_not_null} == {"p2"}  # present-and-not-null; null p1 and absent p3 excluded
+
+
+def test_query_fields_projection(store, uid):
+    # cubic PR 10887 facade:258: a fields projection returns only the requested payload fields (ids-only for
+    # []), so bulk migration reads don't over-fetch every field. Both backends honor it (Mongo find projection
+    # / Firestore .select()).
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"name": "p1", "team": "x", "secret": "s1"})
+    store.set(f"{base}/p2", {"name": "p2", "team": "y", "secret": "s2"})
+
+    projected = {d.id: d.to_dict() for d in store.query(base, fields=["name"])}
+    assert projected == {"p1": {"name": "p1"}, "p2": {"name": "p2"}}  # team/secret NOT fetched
+
+    ids_only = {d.id: d.to_dict() for d in store.query(base, fields=[])}
+    assert ids_only == {"p1": {}, "p2": {}}  # [] is ids-only, not "no projection"
+
+
+def test_query_multi_field_order_by(store, uid):
+    base = f"users/{uid}/people"
+    # Same score for a,b (b created later); c lower score. Primary scoring desc, secondary created_at desc.
+    store.set(f"{base}/a", {"score": 5, "created_at": 100})
+    store.set(f"{base}/b", {"score": 5, "created_at": 200})
+    store.set(f"{base}/c", {"score": 9, "created_at": 50})
+
+    ordered = store.query(base, order_by=[("score", "desc"), ("created_at", "desc")])
+    assert [d.id for d in ordered] == ["c", "b", "a"]
+
+
+def test_query_group_spans_parents(store, uid):
+    # collection-group: the same leaf collection under different parents, plus a different leaf excluded.
+    # A collection-group query scans the whole leaf collection with no parent scope, and the contract
+    # backends persist across runs, so scope by a per-run-unique ``kind`` marker to isolate this run's docs
+    # (cubic PR 10887 test:251).
+    kind = f"a-{uid}"
+    store.set(f"users/{uid}/widgets/w1", {"kind": kind})
+    store.set(f"users/{uid}-other/widgets/w2", {"kind": kind})
+    store.set(f"users/{uid}/gadgets/g1", {"kind": kind})  # different leaf → excluded
+
+    hits = store.query_group("widgets", filters=[("kind", "==", kind)])
+    assert {d.id for d in hits} == {"w1", "w2"}
+    # results carry the full logical path so the caller can recover the parent (uid)
+    assert {d.path for d in hits} == {f"users/{uid}/widgets/w1", f"users/{uid}-other/widgets/w2"}
+
+
+def test_query_group_start_after_keyset(store, uid):
+    # document-name keyset over a collection-group: ordered by full logical path ascending,
+    # resume strictly after the cursor path — the portable form of a Firestore __name__ cursor.
+    # Uses a per-run-unique kind marker so the cross-parent query isolates its own docs across persistent
+    # backends (cubic PR 10887 test:251).
+    kind = f"ks-{uid}"
+    for n in ("w1", "w2", "w3"):
+        store.set(f"users/{uid}/widgets/{n}", {"kind": kind})
+    mine = [f"users/{uid}/widgets/{n}" for n in ("w1", "w2", "w3")]
+
+    paths = sorted(d.path for d in store.query_group("widgets", filters=[("kind", "==", kind)]))
+    assert paths == mine
+
+    after_first = store.query_group("widgets", filters=[("kind", "==", kind)], start_after=mine[0])
+    assert [d.path for d in after_first] == mine[1:]
+
+    page = store.query_group("widgets", filters=[("kind", "==", kind)], start_after=mine[0], limit=1)
+    assert [d.path for d in page] == [mine[1]]
+
+
+def test_query_start_after_without_order_paginates_by_name(store, uid):
+    # cubic PR 10887 A6: start_after with no explicit order_by paginates by document name instead of
+    # raising (the adapters used to index specs[0] on an empty order list).
+    base = f"users/{uid}/people"
+    for doc_id in ("a", "b", "c", "d"):
+        store.set(f"{base}/{doc_id}", {"n": doc_id})
+    got = [d.id for d in store.query(base, start_after={"value": "b", "id": "b"})]
+    assert got == ["c", "d"]  # documents after 'b' by name, no IndexError / cursor-arity error
+
+
+def test_query_group_order_by_with_start_after_is_unsupported(store, uid):
+    # cubic PR 10887 A7: a document-name keyset supplies one cursor position, so it cannot combine with
+    # an explicit order_by (which would need a value per order field). Both adapters reject it rather
+    # than build an invalid cursor.
+    store.set(f"users/{uid}/gadgets/g1", {"kind": "gg", "rank": 1})
+    with pytest.raises(NotImplementedError):
+        store.query_group("gadgets", order_by="rank", start_after=f"users/{uid}/gadgets/g1")
+
+
+def test_query_name_filter_matches_document_ids(store, uid):
+    # cubic PR 10887 #3: a __name__ range filter must match document IDs. Mongo mapped __name__ to a
+    # payload field (d.__name__) that matched nothing -> monthly chat usage undercounted.
+    base = f"users/{uid}/events"
+    for doc_id in ("e1", "e2", "e3"):
+        store.set(f"{base}/{doc_id}", {"n": doc_id})
+    assert {d.id for d in store.query(base, filters=[("__name__", ">=", "e2")])} == {"e2", "e3"}
+
+
+def test_count_with_name_filter_matches_document_ids(store, uid):
+    # cubic PR 10887 firestore.py:277: count() must convert a __name__ id to a DocumentReference like
+    # query() does — Firestore's aggregation rejects a bare __key__ string, so a __name__-filtered count
+    # failed/returned zero. Both backends must return the same count.
+    base = f"users/{uid}/events"
+    for doc_id in ("e1", "e2", "e3"):
+        store.set(f"{base}/{doc_id}", {"n": doc_id})
+    assert store.count(base, filters=[("__name__", ">=", "e2")]) == 2
+
+
+def test_query_name_filter_in_list_matches_document_ids(store, uid):
+    # cubic PR 10887 firestore.py:276: for `in`/`not-in` the __name__ value is a LIST of ids; the
+    # Firestore adapter fed the whole list to one .document() -> TypeError. Each id must become a
+    # DocumentReference. Both backends must select the same rows.
+    base = f"users/{uid}/events"
+    for doc_id in ("e1", "e2", "e3"):
+        store.set(f"{base}/{doc_id}", {"n": doc_id})
+    assert {d.id for d in store.query(base, filters=[("__name__", "in", ["e1", "e3"])])} == {"e1", "e3"}
+
+
+def test_query_group_name_filter_matches_full_path(store, uid):
+    # cubic PR 10887 (firestore query_group __name__): a collection-group __name__ filter matches the
+    # full document path. The Firestore adapter passed the value bare (Firestore needs a
+    # DocumentReference); the neutral facade sends the full path for a group __name__ filter.
+    # A collection-group query spans ALL parents, so use a group name unique to this test (the emulator
+    # / shared Mongo db persist across tests, and a reused group name would see other tests' docs).
+    store.set(f"users/{uid}/namegroup/n1", {"kind": "nm"})
+    store.set(f"users/{uid}/namegroup/n2", {"kind": "nm"})
+    got = {d.id for d in store.query_group("namegroup", filters=[("__name__", "==", f"users/{uid}/namegroup/n1")])}
+    assert got == {"n1"}
+
+
+def test_query_sole_name_order_paginates(store, uid):
+    # cubic PR 10887 #5/#11: order_by __name__ + cursor pages by document name. On Mongo the keyset hit
+    # d.__name__ (never exists) so page 2 was empty (staged_tasks / review_queue legacy scans).
+    base = f"users/{uid}/events"
+    for doc_id in ("a", "b", "c", "d"):
+        store.set(f"{base}/{doc_id}", {"n": doc_id})
+    assert [d.id for d in store.query(base, order_by="__name__", limit=2)] == ["a", "b"]
+    page2 = [d.id for d in store.query(base, order_by="__name__", start_after={"value": "b", "id": "b"})]
+    assert page2 == ["c", "d"]
+
+
+def test_query_multi_field_composite_cursor_paginates(store, uid):
+    # cubic PR 10887 #4: list_review_conflicts orders by impact DESC, created_at DESC, __name__ DESC and
+    # paginates -> the store must support a composite (multi-field) keyset cursor, not reject page 2.
+    base = f"users/{uid}/conflicts"
+    for doc_id, d in [
+        ("c1", {"impact": 3, "created_at": 20}),
+        ("c2", {"impact": 3, "created_at": 10}),
+        ("c3", {"impact": 2, "created_at": 50}),
+        ("c4", {"impact": 3, "created_at": 20}),
+    ]:
+        store.set(f"{base}/{doc_id}", d)
+    order = [("impact", "desc"), ("created_at", "desc"), ("__name__", "desc")]
+    assert [d.id for d in store.query(base, order_by=order)] == ["c4", "c1", "c2", "c3"]
+    page2 = [d.id for d in store.query(base, order_by=order, start_after={"values": [3, 20], "id": "c1"})]
+    assert page2 == ["c2", "c3"]  # strictly after (3,20,c1) in the composite order
+
+
+def test_query_group_name_order_with_cursor_paginates(store, uid):
+    # cubic PR 10887 #2: a __name__ order on a collection group is the implicit doc-name keyset — it must
+    # page, not raise (canonical maintenance cron was stuck at page 1 on Mongo).
+    kind = f"gz-{uid}"  # per-run-unique marker so the cross-parent query isolates this run (cubic test:251)
+    for n in ("g1", "g2", "g3"):
+        store.set(f"users/{uid}/gizmos/{n}", {"kind": kind})
+    mine = sorted(f"users/{uid}/gizmos/{n}" for n in ("g1", "g2", "g3"))
+    page = store.query_group("gizmos", filters=[("kind", "==", kind)], order_by="__name__", start_after=mine[0])
+    assert [d.path for d in page] == mine[1:]
+
+
+def test_query_array_contains(store, uid):
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"name": "p1", "tags": ["persona", "audio"]})
+    store.set(f"{base}/p2", {"name": "p2", "tags": ["chat"]})
+    store.set(f"{base}/p3", {"name": "p3", "tags": ["persona"]})
+
+    hits = store.query(base, filters=[("tags", "array_contains", "persona")])
+    assert {d.id for d in hits} == {"p1", "p3"}
+    assert store.count(base, filters=[("tags", "array_contains", "persona")]) == 2
+
+
+def test_query_array_contains_any(store, uid):
+    # cubic PR 10887 A3: array_contains_any must work on every backend (Mongo raised KeyError before,
+    # crashing the review-queue conflict purge which uses it live).
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"tags": ["a", "b"]})
+    store.set(f"{base}/p2", {"tags": ["c"]})
+    store.set(f"{base}/p3", {"tags": ["d", "e"]})
+    hits = store.query(base, filters=[("tags", "array_contains_any", ["b", "c"])])
+    assert {d.id for d in hits} == {"p1", "p2"}  # p1 shares b, p2 shares c, p3 shares neither
+
+
+def test_query_not_in(store, uid):
+    # cubic PR 10887 A3: not-in must work on every backend (Mongo raised KeyError before).
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"team": "x"})
+    store.set(f"{base}/p2", {"team": "y"})
+    store.set(f"{base}/p3", {"team": "z"})
+    hits = store.query(base, filters=[("team", "not-in", ["y", "z"])])
+    assert {d.id for d in hits} == {"p1"}
+
+
+def test_query_not_equal_and_not_in_exclude_missing_field(store, uid):
+    # cubic PR 10887: Firestore != / not-in exclude docs where the field is ABSENT. Mongo's $ne/$nin
+    # would over-return a missing-field doc without the $exists guard — assert parity on both backends.
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"team": "x"})
+    store.set(f"{base}/p2", {"team": "y"})
+    store.set(f"{base}/p3", {"name": "no-team"})  # no 'team' field at all
+    assert {d.id for d in store.query(base, filters=[("team", "!=", "x")])} == {"p2"}
+    assert {d.id for d in store.query(base, filters=[("team", "not-in", ["x"])])} == {"p2"}
+
+
+def test_query_offset_and_count(store, uid):
+    base = f"users/{uid}/people"
+    for i in range(5):
+        store.set(f"{base}/p{i}", {"name": f"p{i}", "n": i})
+    assert store.count(base) == 5
+    assert store.count(base, filters=[("n", ">=", 3)]) == 2
+    page = store.query(base, order_by="n", direction="asc", offset=1, limit=2)
+    assert [d.to_dict()["n"] for d in page] == [1, 2]
+
+
+@pytest.mark.parametrize("direction", ["asc", "desc"])
+def test_query_keyset_start_after_is_tie_safe(store, uid, direction):
+    base = f"users/{uid}/people"
+    # All share the same order_by value (a tie) so only the id tiebreak keeps paging correct.
+    for pid in ("p1", "p2", "p3", "p4", "p5"):
+        store.set(f"{base}/{pid}", {"rank": 7, "name": pid})
+
+    seen = []
+    cursor = None
+    for _ in range(10):  # bounded; a broken keyset would loop or skip
+        page = store.query(base, order_by="rank", direction=direction, limit=2, start_after=cursor)
+        if not page:
+            break
+        seen.extend(d.id for d in page)
+        last = page[-1]
+        cursor = {"value": last.to_dict()["rank"], "id": last.id}
+
+    assert sorted(seen) == ["p1", "p2", "p3", "p4", "p5"]  # every row visited
+    assert len(seen) == len(set(seen))  # none duplicated across pages
+
+
+@pytest.mark.parametrize("direction", ["asc", "desc"])
+def test_query_explicit_name_tiebreak_pages_consistently(store, uid, direction):
+    # The canonical-graph read pattern: an explicit ``__name__`` (document id) tiebreak field so the
+    # FIRST page shares the paginated pages' total order. Firestore's implicit __name__ is ASC only,
+    # so the adapter must honour the explicit id order (and not double it under start_after). All
+    # rows tie on ``rank``, so the id direction alone determines the sequence — both backends must agree.
+    base = f"users/{uid}/people"
+    for pid in ("p1", "p2", "p3", "p4", "p5"):
+        store.set(f"{base}/{pid}", {"rank": 7, "name": pid})
+
+    order = [("rank", direction), ("__name__", direction)]
+    seen = []
+    cursor = None
+    for _ in range(10):  # bounded; a broken keyset would loop or skip
+        page = store.query(base, order_by=order, limit=2, start_after=cursor)
+        if not page:
+            break
+        seen.extend(d.id for d in page)
+        last = page[-1]
+        cursor = {"value": last.to_dict()["rank"], "id": last.id}
+
+    # First page + cursor pages form one total order (rank tie -> id in the chosen direction).
+    assert seen == sorted(["p1", "p2", "p3", "p4", "p5"], reverse=(direction == "desc"))
+
+
+def test_query_is_scoped_to_the_collection(store, uid):
+    other = f"u_{uuid.uuid4().hex}"
+    store.set(f"users/{uid}/people/p1", {"name": "mine"})
+    store.set(f"users/{other}/people/p1", {"name": "theirs"})
+    result = store.query(f"users/{uid}/people")
+    assert [d.to_dict()["name"] for d in result] == ["mine"]  # never leaks the other user's subcollection
+
+
+def test_get_many_returns_existing_in_id_order(store, uid):
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"name": "p1"})
+    store.set(f"{base}/p3", {"name": "p3"})
+    result = store.get_many(base, ["p1", "p2", "p3"])  # p2 missing
+    assert [d.id for d in result] == ["p1", "p3"]
+    assert all(isinstance(d, StoredDocument) and d.exists for d in result)
+
+
+def test_list_ids(store, uid):
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"name": "p1"})
+    store.set(f"{base}/p2", {"name": "p2"})
+    assert sorted(store.list_ids(base)) == ["p1", "p2"]
+
+
+def test_delete_recursive_removes_document_and_subtree(store, uid):
+    store.set(f"users/{uid}", {"root": True})
+    store.set(f"users/{uid}/people/p1", {"name": "p1"})
+    store.set(f"users/{uid}/people/p2", {"name": "p2"})
+    store.set(f"users/{uid}/integrations/asana", {"token": "t"})
+
+    store.delete_recursive(f"users/{uid}")
+
+    assert store.exists(f"users/{uid}") is False
+    assert store.list_ids(f"users/{uid}/people") == []
+    assert store.list_ids(f"users/{uid}/integrations") == []
+
+
+# --- transactions ------------------------------------------------------------
+
+
+def test_run_transaction_commits_read_modify_write(store, uid):
+    store.set(f"users/{uid}", {"samples": ["s1"]})
+
+    def append_sample(tx):
+        doc = tx.get(f"users/{uid}")
+        samples = list(doc.to_dict()["samples"])
+        samples.append("s2")
+        tx.update(f"users/{uid}", {"samples": samples})
+        return len(samples)
+
+    result = store.run_transaction(append_sample)
+    assert result == 2
+    assert store.get(f"users/{uid}").to_dict()["samples"] == ["s1", "s2"]
+
+
+def test_updated_at_revision_is_populated_and_advances(store, uid):
+    store.set(f"users/{uid}", {"n": 1})
+    first = store.get(f"users/{uid}").updated_at
+    assert isinstance(first, datetime)
+    store.update(f"users/{uid}", {"n": 2})
+    second = store.get(f"users/{uid}").updated_at
+    assert isinstance(second, datetime)
+    assert second >= first  # a later write reports a not-earlier revision
+
+
+def test_create_succeeds_then_conflicts(store, uid):
+    store.create(f"users/{uid}", {"name": "Ada"})
+    assert store.get(f"users/{uid}").to_dict() == {"name": "Ada"}
+    with pytest.raises(AlreadyExists):
+        store.create(f"users/{uid}", {"name": "someone else"})
+    assert store.get(f"users/{uid}").to_dict() == {"name": "Ada"}  # first write is preserved
+
+
+def test_run_transaction_create_succeeds_then_conflicts(store, uid):
+    # tx.create is part of the neutral Transaction contract. A create-if-absent restore path called
+    # it and crashed with AttributeError because the adapters' transaction handles lacked create
+    # (cubic review PR 10887). Both backends must support it with create-if-absent semantics.
+    path = f"users/{uid}/action_items/a1"
+
+    def create_one(tx):
+        tx.create(path, {"description": "restored"})
+
+    store.run_transaction(create_one)
+    assert store.get(path).to_dict() == {"description": "restored"}
+
+    with pytest.raises(AlreadyExists):
+        store.run_transaction(create_one)  # the second create-if-absent conflicts
+    assert store.get(path).to_dict() == {"description": "restored"}  # first write preserved
+
+
+def test_datetime_field_round_trips_timezone_aware(store, uid):
+    # A stored datetime must read back timezone-aware on every backend so callers can compare it to
+    # _now() (aware) without TypeError. PyMongo defaults to naive datetimes — the adapter sets
+    # tz_aware=True (cubic review PR 10887: Mongo finalization/admission stale checks crashed).
+    when = datetime(2026, 8, 12, 9, 30, tzinfo=timezone.utc)
+    store.set(f"users/{uid}", {"lease_expires_at": when})
+    got = store.get(f"users/{uid}").to_dict()["lease_expires_at"]
+    assert got.tzinfo is not None
+    assert got == when
+    # The comparison the callers actually do must not raise (tz-aware vs tz-aware; a naive `got` would
+    # raise TypeError here). Evaluating it is the check — no vacuous membership assert needed.
+    _ = got > datetime.now(timezone.utc)
+
+
+def test_update_nested_field_with_non_identifier_segment(store, uid):
+    # A dotted field-path update whose leaf segment isn't a simple identifier (a raw UUID key id in
+    # grants...keys.<uuid>) must reach the nested field on every backend. Firestore mis-handles a
+    # plain dotted string here and needs the segment as an explicit FieldPath (cubic review PR 10887).
+    key_id = "3f9a1c2b-77d4-4e10-9abc-000000000001"
+    store.set(f"users/{uid}", {"grants": {"keys": {}}})
+    store.update(f"users/{uid}", {f"grants.keys.{key_id}": {"enabled": True}})
+    got = store.get(f"users/{uid}").to_dict()
+    assert got["grants"]["keys"][key_id] == {"enabled": True}
+
+
+def test_query_not_equal_filter_on_present_field(store, uid):
+    # `!=` on a present field must work on every backend: migration 004 discovers conversations with
+    # non-empty action_items via ('structured.action_items', '!=', []), and Mongo lacked the operator
+    # so the on-prem migration found nothing (cubic review PR 10887). (`!=` on a MISSING field diverges
+    # across backends — Firestore excludes it, Mongo $ne includes it — so this only covers present fields.)
+    base = f"users/{uid}/conversations"
+    store.set(f"{base}/c1", {"structured": {"action_items": []}})
+    store.set(f"{base}/c2", {"structured": {"action_items": ["do-x"]}})
+    rows = store.query(base, filters=[("structured.action_items", "!=", [])])
+    assert {doc.id for doc in rows} == {"c2"}
+
+
+def test_query_projection_returns_only_requested_fields(store, uid):
+    store.set(f"users/{uid}/people/p1", {"name": "Ada", "secret": "hidden", "n": 1})
+    (doc,) = store.query(f"users/{uid}/people", fields=["name"])
+    data = doc.to_dict()
+    assert data.get("name") == "Ada"
+    assert "secret" not in data and "n" not in data
+
+
+def test_batch_set_update_delete_commit(store, uid):
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p3", {"name": "to-remove"})
+    batch = store.batch()
+    batch.set(f"{base}/p1", {"name": "Ada", "team": "x"})
+    batch.set(f"{base}/p2", {"name": "Bob", "team": "x"})
+    batch.update(f"{base}/p1", {"team": "y"})
+    batch.delete(f"{base}/p3")
+    batch.commit()
+
+    assert store.get(f"{base}/p1").to_dict() == {"name": "Ada", "team": "y"}
+    assert store.get(f"{base}/p2").to_dict() == {"name": "Bob", "team": "x"}
+    assert store.exists(f"{base}/p3") is False
+
+
+def test_batch_non_merge_set_applies_transforms(store, uid):
+    # cubic PR 10887 A4: a non-merge batch set carrying a neutral transform must apply it — Mongo used
+    # to write only the sentinel-filtered replacement and silently drop the transform (Firestore's
+    # batch translates it natively; direct set already applied it).
+    batch = store.batch()
+    batch.set(f"users/{uid}", {"a": 1, "touched_at": SERVER_TIMESTAMP})
+    batch.commit()
+    doc = store.get(f"users/{uid}").to_dict()
+    assert doc["a"] == 1
+    assert isinstance(doc["touched_at"], datetime)  # the transform survived the batch
+
+
+def test_run_transaction_update_missing_raises_not_found(store, uid):
+    # cubic PR 10887 A5: tx.update on a missing doc must surface the neutral NotFound. Firestore raises
+    # it at COMMIT (after the update() call returns), so the adapter maps it in run_transaction.
+    def txn(tx):
+        tx.update(f"users/{uid}/people/ghost", {"a": 1})
+
+    with pytest.raises(NotFound):
+        store.run_transaction(txn)
+
+
+def test_batch_update_missing_doc_raises_not_found(store, uid):
+    # cubic PR 10887 #9/#11b: a batch update of a never-existing doc must raise the neutral NotFound on
+    # both backends (Mongo bulk_write silently ignored the unmatched update; Firestore leaked its NotFound).
+    batch = store.batch()
+    batch.update(f"users/{uid}/people/ghost", {"a": 1})
+    with pytest.raises(NotFound):
+        batch.commit()
+
+
+def test_update_missing_doc_with_precondition_raises_precondition_failed(store, uid):
+    # cubic PR 10887 (mongo.py:203) — corrected against the reference backend: a precondition
+    # (if_updated_at) update of a missing doc must raise PreconditionFailed, NOT NotFound. Firestore
+    # raises FailedPrecondition for a last-update-time precondition on a missing doc (verified against the
+    # emulator), so both backends and both paths (non-batch _update AND batch) must agree. The Mongo
+    # existence-probe from ADR-0045 wrongly returned NotFound here; this supersedes it. (No precondition
+    # still -> NotFound: test_update_missing_raises_not_found / test_batch_update_missing_doc_raises_not_found.)
+    precond = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    with pytest.raises(PreconditionFailed):
+        store.update(f"users/{uid}/people/ghost", {"a": 1}, if_updated_at=precond)
+    batch = store.batch()
+    batch.update(f"users/{uid}/people/ghost", {"a": 1}, if_updated_at=precond)
+    with pytest.raises(PreconditionFailed):
+        batch.commit()
+
+
+def test_query_order_by_excludes_documents_missing_the_ordered_field(store, uid):
+    # cubic PR 10887 (mongo.py:455): Firestore's order_by returns ONLY docs that have the ordered field;
+    # a doc missing it is excluded. Mongo's sort instead includes it (missing sorts as null/first). Both
+    # backends must agree — the Mongo adapter adds an $exists predicate per ordered field.
+    base = f"users/{uid}/items"
+    store.set(f"{base}/a", {"n": 2})
+    store.set(f"{base}/b", {"n": 1})
+    store.set(f"{base}/c", {"other": 9})  # no ``n`` -> excluded from an order_by('n')
+    ids = [d.path.rsplit("/", 1)[-1] for d in store.query(base, order_by="n", direction="asc")]
+    assert ids == ["b", "a"]
+
+
+def test_batch_create_inserts_and_collides(store, uid):
+    # cubic PR 10887 (review 4909186286 #1): staged-task recovery pairs batch.create (create-if-absent)
+    # with a guarded delete of the staged marker. The neutral WriteBatch had no create, so the migrated
+    # restore path raised AttributeError on the Mongo-backed facade. create must insert when absent and
+    # raise the neutral AlreadyExists on a collision, on both backends.
+    base = f"users/{uid}/action_items"
+    batch = store.batch()
+    batch.create(f"{base}/a1", {"text": "restored"})
+    batch.commit()
+    assert store.get(f"{base}/a1").to_dict() == {"text": "restored"}
+
+    collide = store.batch()
+    collide.create(f"{base}/a1", {"text": "again"})
+    with pytest.raises(AlreadyExists):
+        collide.commit()
+    assert store.get(f"{base}/a1").to_dict() == {"text": "restored"}  # original preserved
+
+
+def test_run_transaction_update_stale_precondition_raises(store, uid):
+    # cubic PR 10887 #11c: a stale if_updated_at inside a transaction must surface PreconditionFailed on
+    # both backends (Firestore leaked FailedPrecondition from commit).
+    store.set(f"users/{uid}", {"v": 1})
+    stale = store.get(f"users/{uid}").updated_at
+    store.update(f"users/{uid}", {"v": 2})  # move the revision past ``stale``
+
+    def txn(tx):
+        tx.update(f"users/{uid}", {"v": 3}, if_updated_at=stale)
+
+    with pytest.raises(PreconditionFailed):
+        store.run_transaction(txn)
+
+
+def test_run_transaction_aborts_on_exception(store, uid):
+    store.set(f"users/{uid}", {"samples": ["s1"]})
+
+    def failing(tx):
+        tx.update(f"users/{uid}", {"samples": ["s1", "s2"]})
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        store.run_transaction(failing)
+
+    # The aborted write must not have been committed.
+    assert store.get(f"users/{uid}").to_dict()["samples"] == ["s1"]
+
+
+def test_a_query_inside_a_transaction_runs_inside_it(store, uid):
+    """``tx.query`` is part of the neutral Transaction contract (BACKLOG L24).
+
+    Upstream reads collections inside `@firestore.transactional` bodies — the idempotency-key de-dup in
+    `database/action_items.py`, the relationship detach in `goals.py`, the photo probe in
+    `conversation_finalization_jobs.py` — via `query.stream(transaction=tx)`. The facade ACCEPTED that
+    parameter and IGNORED it, so on Mongo those reads ran outside the session entirely.
+
+    What "inside it" means differs per backend and the contract can only promise the part both give:
+    the rows a transaction reads are the committed state it is working from. It deliberately does NOT
+    assert that the read is visible to the transaction's own later writes, nor that reading a row locks
+    it — measured, those differ (Firestore refuses read-after-write outright and takes a lock; Mongo
+    allows read-after-write and takes none). See ADR-0070.
+    """
+    store.set(f"users/{uid}/action_items/a1", {"key": "k1", "done": False})
+    store.set(f"users/{uid}/action_items/a2", {"key": "k2", "done": False})
+
+    def read_in_tx(tx):
+        rows = tx.query(
+            f"users/{uid}/action_items",
+            filters=[("key", "==", "k1")],
+        )
+        return [row.id for row in rows]
+
+    assert store.run_transaction(read_in_tx) == ["a1"]
+
+
+def test_a_transactional_query_sees_a_row_written_before_the_transaction(store, uid):
+    """The de-dup case in one line: a row committed a moment earlier must be found, or the read that is
+    supposed to prevent a duplicate does not see the thing it is checking for."""
+
+    def create_then_read(tx):
+        return [row.id for row in tx.query(f"users/{uid}/action_items", filters=[("key", "==", "k9")])]
+
+    assert store.run_transaction(create_then_read) == []
+
+    store.set(f"users/{uid}/action_items/a9", {"key": "k9", "done": False})
+    assert store.run_transaction(create_then_read) == ["a9"]
+
+
+def test_a_batch_that_fails_a_precondition_applies_NOTHING_across_collections(store, uid):
+    """A batch is all-or-nothing, even when its writes span two collections (BACKLOG L25).
+
+    Two callers depend on this and say so in their own comments. `database/chat.py::delete_messages`
+    queues the message deletes (with preconditions) and the `chat_sessions` counter updates in ONE batch,
+    and its except branch reads "The batch is atomic, so re-query before applying any decrement".
+    `database/staged_tasks.py` queues the action-item create plus the guarded staged-row delete and says
+    "Firestore rejects the atomic batch instead of deleting the newer record".
+
+    Measured before this test existed: on Mongo the commit grouped by collection and applied one group at
+    a time, so the FIRST group landed and the second raised — the message was deleted and its counter
+    never decremented (permanent drift), and the action item was created while the staged row stayed
+    forever (AlreadyExists on every later pass). Firestore applied nothing, as the callers assume.
+    """
+    from database.store.errors import PreconditionFailed
+
+    store.set(f"users/{uid}/messages/m1", {"text": "hello"})
+    store.set(f"users/{uid}/chat_sessions/s1", {"message_count": 1})
+    stale_revision = store.get(f"users/{uid}/chat_sessions/s1").updated_at
+
+    # Somebody else touches the SESSION after we read it — the race the callers guard against.
+    store.update(f"users/{uid}/chat_sessions/s1", {"message_count": 5})
+
+    batch = store.batch()
+    batch.delete(f"users/{uid}/messages/m1")
+    batch.update(f"users/{uid}/chat_sessions/s1", {"message_count": 0}, if_updated_at=stale_revision)
+    with pytest.raises(PreconditionFailed):
+        batch.commit()
+
+    # Neither half applied: the delete is the destructive one, and it is queued FIRST.
+    assert store.get(f"users/{uid}/messages/m1").exists, 'the message was deleted by a batch that failed'
+    assert store.get(f"users/{uid}/chat_sessions/s1").to_dict()["message_count"] == 5

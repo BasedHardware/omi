@@ -3193,6 +3193,7 @@
     "accountCutoverMigrationInProgressMessage": "Tu cuenta se está migrando. Las funciones del producto están en pausa hasta que termine la migración.",
     "accountCutoverMigrationRollbackMessage": "Tu cuenta está en mantenimiento tras una reversión de migración. Algunos datos más recientes pueden quedar retenidos.",
     "accountCutoverOpenStore": "Abrir tienda",
+    "signInWithSSO": "Iniciar sessió amb SSO",
     "chatScopeToday": "Avui",
     "chatScopeThisWeek": "Aquesta setmana",
     "chatScopeAbout": "Sobre: {title}",

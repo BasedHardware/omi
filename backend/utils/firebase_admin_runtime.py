@@ -1,4 +1,17 @@
-"""Runtime fences for Firebase Admin in isolated local QA stacks."""
+"""Runtime fences for Firebase Admin in isolated local QA stacks.
+
+This module is the one place allowed to name ``firebase_admin.auth`` outside the auth adapter
+(``.github/scripts/auth_boundary_baseline.json``), and the exception is not a concession: everything
+here FENCES that SDK rather than calling it for authentication. It replaces twenty named
+``firebase_admin.auth`` mutators with a raiser and denies ADC discovery, so a local dogfood stack
+cannot write to the real Firebase project. There is no OIDC equivalent of "disable Firebase's
+create_user" to port it to; the neutral form of this fence is not running Firebase at all.
+
+It stays neutral by staying inert. Every entry point returns before importing anything Google unless
+BOTH ``OMI_JIT_QA_LOCAL_STACK=1`` and the auth port is on its Firebase adapter — the second condition
+is ours (upstream has one provider, so it gates on the QA flag alone, and on ``AUTH_BACKEND=oidc``
+that would import and monkeypatch an SDK the process never uses).
+"""
 
 from __future__ import annotations
 
@@ -29,9 +42,30 @@ _AUTH_MUTATORS = frozenset(
 )
 
 
+def _auth_backend_is_firebase(environ: Mapping[str, str] | None = None) -> bool:
+    """Whether the configured auth provider is the Firebase adapter (ADR-0034).
+
+    Everything in this module fences the *Firebase Admin SDK*: it replaces named
+    ``firebase_admin.auth`` mutators and denies ADC discovery. On a deployment whose auth port is
+    the OIDC adapter there is no Firebase to fence, and arming the guard would import and monkeypatch
+    an SDK the process never uses. Upstream has one provider so it gates on the QA flag alone; here
+    the flag says "local QA stack", which is not the same question as "is this Firebase".
+
+    Read through the same env the rest of the module reads, and via the factory's own name/default so
+    the two cannot drift.
+    """
+
+    from utils.auth.factory import DEFAULT_AUTH_BACKEND
+
+    source = os.environ if environ is None else environ
+    return (source.get("AUTH_BACKEND") or "").strip().lower() in {"", DEFAULT_AUTH_BACKEND}
+
+
 def firebase_verify_only_enabled(environ: Mapping[str, str] | None = None) -> bool:
     source = os.environ if environ is None else environ
-    return source.get("OMI_JIT_QA_LOCAL_STACK", "").strip() == "1"
+    if source.get("OMI_JIT_QA_LOCAL_STACK", "").strip() != "1":
+        return False
+    return _auth_backend_is_firebase(environ)
 
 
 def firebase_verify_only_credential(environ: Mapping[str, str] | None = None) -> Any | None:

@@ -1045,7 +1045,10 @@ class HistoricalMemoryAdapter:
         """
         failures: List[str] = []
         if delete_vector:
-            if required and getattr(vector_db, "index", None) is None:
+            # `is_vector_available()`, not the removed module-level `index` (ADR-0033): `getattr` on a
+            # deleted attribute is always None, so this guard raised 503 on EVERY explicit privacy
+            # deletion, on every backend. Found by test_universal_memory_service after the +30 merge.
+            if required and not vector_db.is_vector_available():
                 raise HTTPException(status_code=503, detail="Historical memory privacy cleanup unavailable")
             try:
                 delete_memory_vector(uid, memory_id)

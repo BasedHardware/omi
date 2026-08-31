@@ -500,5 +500,12 @@ def rebuild_atom_keyword_index(uid: str, *, db_client: Any = None) -> AtomKeywor
 
 
 def typesense_configured() -> bool:
-    """Return True when Typesense env vars are present."""
-    return bool(os.getenv("TYPESENSE_HOST") and os.getenv("TYPESENSE_API_KEY"))
+    """Return True when Typesense env vars are present.
+
+    Delegates to the module that owns the client so there is ONE definition. This predicate had zero
+    callers for its whole life -- written for exactly the "skip when unconfigured" case and never wired --
+    which is how an unconfigured deployment ended up 500ing conversation search.
+    """
+    from utils.conversations.search import typesense_configured as _configured
+
+    return _configured()

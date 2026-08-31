@@ -854,6 +854,16 @@ class SharedPreferencesUtil {
     }
   }
 
+  // OIDC refresh token (ADR-0038) — legacy plaintext slot only. The token is a long-lived replay
+  // credential and now lives in platform secure storage (OidcAuthService); this prefs key survives
+  // solely to migrate an already-signed-in session. Exposed as read + clear (NO public setter, so
+  // nothing can persist a refresh token to plaintext). The read and the clear are separate on
+  // purpose: the migration must scrub the plaintext ONLY after the secure write succeeds, otherwise
+  // a failed write would discard the only copy and strand the session.
+  String getLegacyOidcRefreshToken() => getString('oidcRefreshToken');
+
+  void clearLegacyOidcRefreshToken() => saveString('oidcRefreshToken', '');
+
   int get tokenExpirationTime => getInt('tokenExpirationTime');
 
   set tokenExpirationTime(int value) => saveInt('tokenExpirationTime', value);
@@ -878,6 +888,7 @@ class SharedPreferencesUtil {
     final ownerUid = uid;
     if (ownerUid.isNotEmpty) _scopeLegacyUserData(ownerUid);
     authToken = '';
+    clearLegacyOidcRefreshToken();
     tokenExpirationTime = 0;
     uid = '';
     email = '';

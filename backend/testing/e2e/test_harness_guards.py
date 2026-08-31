@@ -65,11 +65,16 @@ def test_network_guard_blocks_sendto_three_arg_form():
 
 
 def test_backend_storage_client_is_fake_after_app_import(client):
-    """The backend storage module should hold the fake GCS client, not google's real client."""
-    from fakes.storage import FakeStorageClient
-    import utils.other.storage as storage_helpers
+    """The active object-store backend must hold the fake GCS client, not google's real one.
 
-    assert isinstance(storage_helpers._get_storage_client(), FakeStorageClient)
+    Storage now goes through the object-store port (ADR-0032): the default ``gcs`` adapter builds its
+    client lazily via ``storage.Client`` — which ``patch_google_storage`` swapped for the filesystem
+    fake — so the seam to assert is the adapter's ``_storage_client()``, not the retired
+    ``utils.other.storage._get_storage_client``."""
+    from fakes.storage import FakeStorageClient
+    from utils.object_store.adapters.gcs import _storage_client
+
+    assert isinstance(_storage_client(), FakeStorageClient)
 
 
 def test_backend_database_globals_are_fake_after_app_import(client, fake_firestore, fake_redis):

@@ -9,6 +9,7 @@ from pydub import AudioSegment
 
 from database.redis_db import set_speech_profile_duration, get_speech_profile_duration
 from database.users import set_user_speaker_embedding
+from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
 from utils.other.storage import (
     upload_profile_audio,
@@ -123,14 +124,36 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     set_speech_profile_duration(uid, duration)
 
     # Extract and store speaker embedding for user identification in listen sessions
+    _store_speaker_embedding(uid, file_path)
+
+    return {"url": url}
+
+
+def _store_speaker_embedding(uid: str, file_path: str) -> bool:
+    """Extract the enrolled voice's embedding and store it. Returns whether it landed.
+
+    The failure is deliberately not fatal — the profile audio is already uploaded, and refusing the whole
+    request would throw away a good upload over a recoverable step. But without the embedding, speaker
+    matching can never fire for this user: they finished enrolment, the endpoint answered 200, and the
+    feature is simply off for them forever. That is a silent, per-user, permanent loss of a capability, and
+    it used to be one `logger.error` (BACKLOG L20).
+    """
     try:
         embedding = extract_embedding(file_path)
         set_user_speaker_embedding(uid, embedding.flatten().tolist())
         logger.info(f"Speech profile: stored speaker embedding for {uid}")
+        return True
     except Exception as e:
         logger.error(f"Speech profile: failed to extract/store speaker embedding for {uid}: {e}")
-
-    return {"url": url}
+        record_fallback(
+            component='speaker',
+            from_mode='enrolled',
+            to_mode='no_embedding',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        return False
 
 
 # ******************************************************

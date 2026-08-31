@@ -220,24 +220,37 @@ _app_cache = None
 
 
 def _install_hermetic_privacy_projection_fakes() -> None:
-    """Confirm deletion at provider boundaries the hermetic stack does not run."""
+    """Confirm deletion at provider boundaries the hermetic stack does not run.
+
+    Re-expressed on the neutral vector seam (ADR-0033): upstream installs a Pinecone-shaped
+    ``FakeVectorIndex`` on the module-level ``vector_db.index``, which the port removed — reads and
+    writes go through ``_vector_store()`` and the availability gate. The equivalent here installs the
+    port-shaped ``FakeVectorStore`` at those two seams, so the deletion path below runs for real
+    instead of being skipped for want of a provider.
+    """
     import database.vector_db as vector_db
     import utils.memory.atom_keyword_index as atom_keyword_index
-    from fakes.vector_search import DeterministicEmbeddings, FakeVectorIndex
+    from fakes.vector_search import DeterministicEmbeddings, FakeVectorStore
 
-    if vector_db.index is None:
-        embeddings = DeterministicEmbeddings()
-        vector_db.embeddings = embeddings
-        vector_db.index = FakeVectorIndex(embeddings)
+    import utils.vector as vector_pkg
+    import utils.vector.factory as vector_factory
+
+    embeddings = DeterministicEmbeddings()
+    vector_db.embeddings = embeddings
+    hermetic_store = FakeVectorStore(embeddings)
+    # The factory, not `vector_db._vector_store`: that is the seam `install_vector_search_fakes` uses
+    # for a per-test store, and overriding the accessor itself would shadow it — the writes would land
+    # in this session-wide store while the test inspected its own, empty one (measured, on
+    # test_canonical_memory_pipeline).
+    vector_pkg.get_vector_store = lambda: hermetic_store
+    vector_factory.get_vector_store = lambda: hermetic_store
+    vector_db.is_vector_available = lambda: True
 
     real_vector_delete = vector_db.delete_canonical_memory_vectors
 
     def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> bool:
-        # Tests that install an in-memory Pinecone index still exercise its
-        # real deletion path. With no index, the hermetic provider is absent,
-        # so absence is already confirmed without weakening production code.
-        if vector_db.index is None:
-            return True
+        # The in-memory store is always installed above, so the real deletion path always runs — the
+        # `index is None` branch upstream keeps for "no provider configured" has no counterpart here.
         return real_vector_delete(uid, memory_id)
 
     def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client=None) -> bool:

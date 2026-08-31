@@ -10781,6 +10781,7 @@
     "accountCutoverMigrationInProgressMessage": "حسابك قيد الترحيل. ميزات المنتج متوقفة مؤقتًا حتى انتهاء الترحيل.",
     "accountCutoverMigrationRollbackMessage": "حسابك قيد الصيانة بعد التراجع عن الترحيل. قد تُعزل بعض البيانات الأحدث.",
     "accountCutoverOpenStore": "فتح المتجر",
+    "signInWithSSO": "SSO کے ساتھ سائن ان کریں",
     "chatScopeToday": "آج",
     "chatScopeThisWeek": "اس ہفتے",
     "chatScopeAbout": "{title} کے بارے میں",

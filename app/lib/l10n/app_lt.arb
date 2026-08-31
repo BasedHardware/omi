@@ -3215,6 +3215,7 @@
     "accountCutoverMigrationInProgressMessage": "Twoje konto jest migrowane. Funkcje produktu są wstrzymane do końca migracji.",
     "accountCutoverMigrationRollbackMessage": "Twoje konto jest w trybie konserwacji po cofnięciu migracji. Nowsze dane mogą zostać odizolowane.",
     "accountCutoverOpenStore": "Otwórz sklep",
+    "signInWithSSO": "Prisijungti su SSO",
     "chatScopeToday": "Šiandien",
     "chatScopeThisWeek": "Šią savaitę",
     "chatScopeAbout": "Apie: {title}",

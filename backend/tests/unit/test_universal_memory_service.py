@@ -2212,7 +2212,9 @@ def test_required_historical_cleanup_keeps_content_when_vector_delete_fails(serv
 def test_required_historical_cleanup_requires_initialized_vector_authority(service_mod, monkeypatch):
     delete_content = MagicMock()
     delete_vector = MagicMock()
-    monkeypatch.setattr(service_mod.vector_db, "index", None)
+    # The port replaced the module-level ``index`` with the availability gate (ADR-0033): "no vector
+    # authority" is `is_vector_available()` False, and the 503 below is what must still happen.
+    monkeypatch.setattr(service_mod.vector_db, "is_vector_available", lambda: False)
     monkeypatch.setattr(service_mod, "delete_memory_vector", delete_vector)
     monkeypatch.setattr(service_mod.memories_db, "delete_memory", delete_content)
 
@@ -2231,7 +2233,7 @@ def test_required_historical_cleanup_requires_initialized_vector_authority(servi
 
 def test_required_historical_cleanup_deletes_vector_before_content(service_mod, monkeypatch):
     events = []
-    monkeypatch.setattr(service_mod.vector_db, "index", object())
+    monkeypatch.setattr(service_mod.vector_db, "is_vector_available", lambda: True)
     monkeypatch.setattr(service_mod, "delete_memory_vector", lambda *_args: events.append("vector"))
     monkeypatch.setattr(
         service_mod.memories_db,

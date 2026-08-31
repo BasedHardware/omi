@@ -4,8 +4,9 @@ import json
 import math
 import uuid
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
-from firebase_admin import messaging, auth
+from firebase_admin import messaging
 import database.notifications as notification_db
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from database.redis_db import (
@@ -16,6 +17,18 @@ from database.redis_db import (
 )
 from database.auth import get_user_from_uid
 from utils.notification_text import to_plain_text
+from utils.auth import get_auth_provider
+
+# NOTE: ``utils.push.unifiedpush`` and ``database.notifications.UnifiedPushEndpoint`` are imported
+# function-locally at their use sites (below), NOT here. This is a deliberate deviation from the
+# top-level-import rule for two reasons: (1) it lazy-loads the UnifiedPush transport stack (httpx +
+# http_ece webpush crypto) only when PUSH_NOTIFICATION_BACKEND=unifiedpush is actually used; and (2) the
+# import-isolation tests (``load_module_fresh('utils.notifications', stubs)`` in test_push_backend_disabled
+# / test_notification_async_boundaries / test_notification_token_cleanup / test_notifications_cluster_c)
+# load this module against a MINIMAL stub set that does not provide the push package — a module-level
+# import breaks them (cubic PR 10887 notifications.py:236; hoisting reverted for these reasons).
+from utils.push.base import DISABLED, UNIFIEDPUSH, PushMessage
+from utils.push.selector import resolve_push_backend
 from .llm.notifications import (
     generate_notification_message,
     generate_credit_limit_notification,
@@ -27,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_user(uid: str) -> Any:
-    return auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+    return get_auth_provider().get_user_profile(uid)  # UserProfile: .display_name / .email etc.
 
 
 # iOS bundle ID for APNs
@@ -145,9 +158,32 @@ def _build_message(
     )
 
 
+_FCM_SEND_EACH_LIMIT = 500  # Firebase rejects send_each() with more than 500 messages
+
+
 def _send_messages(messages: List[messaging.Message]) -> Any:
-    """Send one FCM batch through the synchronous Firebase Admin SDK."""
-    return cast(Any, messaging.send_each(messages))  # type: ignore[reportUnknownMemberType]
+    """Send FCM messages through the synchronous Firebase Admin SDK, batching at Firebase's 500-per-
+    send_each cap. Returns a response whose ``.responses`` concatenates every batch's results, in
+    token order, so ``_collect_send_results`` sees each one (universal for all senders, not just BYOK)."""
+    if len(messages) <= _FCM_SEND_EACH_LIMIT:
+        return cast(Any, messaging.send_each(messages))  # type: ignore[reportUnknownMemberType]
+    responses: List[Any] = []
+    for start in range(0, len(messages), _FCM_SEND_EACH_LIMIT):
+        batch = messages[start : start + _FCM_SEND_EACH_LIMIT]
+        try:
+            responses.extend(cast(Any, messaging.send_each(batch)).responses)
+        except Exception as e:
+            # A whole-batch send_each failure must NOT abort the remaining batches (parity with
+            # send_bulk_notification's per-batch isolation). Emit a failure response per message so the
+            # index->token alignment in _collect_send_results holds; a non-permanent error is logged,
+            # not treated as an invalid token.
+            logger.error(f'FCM send_each batch failed ({len(batch)} messages): {e}')
+            # Mark these as a WHOLE-BATCH failure, not per-token verdicts. Reusing the batch exception ``e``
+            # (which may carry a permanent-looking code) made _collect_send_results invalidate EVERY token
+            # in the batch — a transient send_each outage would then delete every recipient's token (cubic
+            # PR 10887 notifications.py:173). Only individual BatchResponse errors may invalidate a token.
+            responses.extend(SimpleNamespace(success=False, exception=None, batch_failed=True) for _ in batch)
+    return SimpleNamespace(responses=responses)
 
 
 def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[str]]:
@@ -158,6 +194,10 @@ def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[s
     for idx, result in enumerate(response.responses):
         if result.success:
             success_count += 1
+        elif getattr(result, 'batch_failed', False):
+            # Whole-batch send_each failure (already logged in _send_messages). Not a per-token verdict,
+            # so never invalidate the token — a transient outage must not delete every recipient.
+            continue
         elif result.exception:
             error_code = getattr(result.exception, 'code', None)
             if error_code in PERMANENT_FAILURE_CODES:
@@ -169,6 +209,19 @@ def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[s
     return success_count, invalid_tokens
 
 
+def _to_push_message(
+    tag: str,
+    notification: Optional[messaging.Notification] = None,
+    data: Optional[Dict[str, Any]] = None,
+    is_background: bool = False,
+    priority: str = 'normal',
+) -> PushMessage:
+    """Translate the FCM-shaped send arguments into a backend-neutral PushMessage."""
+    title: Optional[str] = cast(Any, notification).title if notification else None
+    body: Optional[str] = cast(Any, notification).body if notification else None
+    return PushMessage(tag=tag, title=title, body=body, data=data, is_background=is_background, priority=priority)
+
+
 def _send_to_user(
     user_id: str,
     tag: str,
@@ -177,8 +230,21 @@ def _send_to_user(
     is_background: bool = False,
     priority: str = 'normal',
     tokens: Optional[List[str]] = None,
+    push_backend: Optional[str] = None,
 ) -> int:
-    """Send a message to all user's devices using batch send. Returns count of successful sends."""
+    """Send a message to all user's devices using batch send. Returns count of successful sends.
+
+    ``push_backend`` lets a caller that already resolved the backend (e.g. the daily-summary fan-out) pass
+    it in, so an invalid PUSH_NOTIFICATION_BACKEND records its fallback ONCE per operation instead of once
+    per recipient (cubic PR 10887 other/notifications.py:58), mirroring send_bulk_notification.
+    """
+    backend = push_backend or resolve_push_backend()
+    if backend == DISABLED:
+        return 0
+    if backend == UNIFIEDPUSH:
+        from utils.push import unifiedpush as _up  # lazy: see module-top note
+
+        return _up.send_to_user(user_id, _to_push_message(tag, notification, data, is_background, priority))
     if tokens is None:
         tokens = notification_db.get_all_tokens(user_id)
     if not tokens:
@@ -190,18 +256,23 @@ def _send_to_user(
 
     try:
         response = _send_messages(messages)
-        success_count, invalid_tokens = _collect_send_results(response, tokens)
-
-        # Remove invalid tokens in bulk
-        if invalid_tokens:
-            notification_db.remove_bulk_tokens(invalid_tokens)
-
-        logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
-        return success_count
-
     except Exception as e:
         logger.error(f'FCM batch send error: {e}')
         return 0
+
+    success_count, invalid_tokens = _collect_send_results(response, tokens)
+
+    # Invalid-token cleanup must NOT change the delivered count: a remove_bulk_tokens failure after a
+    # confirmed delivery would otherwise zero success_count and release BYOK's 24h dedupe lock (which
+    # gates on the count), re-alerting on the next error. Isolate it.
+    if invalid_tokens:
+        try:
+            notification_db.remove_bulk_tokens(invalid_tokens)
+        except Exception as e:
+            logger.error(f'Invalid-token cleanup failed (delivery unaffected): {e}')
+
+    logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
+    return success_count
 
 
 async def _send_to_user_async(
@@ -214,6 +285,13 @@ async def _send_to_user_async(
     tokens: Optional[List[str]] = None,
 ) -> int:
     """Async boundary for the synchronous token store and Firebase Admin SDK."""
+    backend = resolve_push_backend()
+    if backend == DISABLED:
+        return 0
+    if backend == UNIFIEDPUSH:
+        from utils.push import unifiedpush as _up  # lazy: see module-top note
+
+        return await _up.send_to_user_async(user_id, _to_push_message(tag, notification, data, is_background, priority))
     if tokens is None:
         tokens = await run_blocking(db_executor, notification_db.get_all_tokens, user_id)
     if not tokens:
@@ -224,27 +302,54 @@ async def _send_to_user_async(
 
     try:
         response = await run_blocking(postprocess_executor, _send_messages, messages)
-        success_count, invalid_tokens = _collect_send_results(response, tokens)
-
-        if invalid_tokens:
-            await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
-
-        logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
-        return success_count
     except Exception as e:
         logger.error(f'FCM batch send error: {e}')
         return 0
 
+    success_count, invalid_tokens = _collect_send_results(response, tokens)
+
+    # Mirror the sync path (B5): isolate invalid-token cleanup so a remove_bulk_tokens failure AFTER a
+    # confirmed delivery does not get caught above and zero success_count (which gates BYOK's 24h dedupe
+    # lock) — the async path was still running cleanup inside the shared try (cubic review 4939247683).
+    if invalid_tokens:
+        try:
+            await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
+        except Exception as e:
+            logger.error(f'Invalid-token cleanup failed (delivery unaffected): {e}')
+
+    logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
+    return success_count
+
 
 def send_notification(
-    user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None, tokens: Optional[List[str]] = None
+    user_id: str,
+    title: str,
+    body: str,
+    data: Optional[Dict[str, Any]] = None,
+    tokens: Optional[List[str]] = None,
+    push_backend: Optional[str] = None,
 ) -> None:
-    """Send notification to all user's devices. Optionally pass pre-fetched tokens to avoid DB lookup."""
+    """Send notification to all user's devices. Optionally pass pre-fetched tokens to avoid DB lookup and
+    a pre-resolved ``push_backend`` to record any fallback once per operation (see _send_to_user)."""
     logger.info(f'send_notification to user {user_id}')
     body = to_plain_text(body)
     tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)
-    _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
+    _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens, push_backend=push_backend)
+
+
+def send_user_notification(user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None) -> int:
+    """Send a visible notification and return how many devices were reached.
+
+    Same delivery as ``send_notification`` (routed through the active push backend), but returns the
+    successful-send count for callers that gate on delivery confirmation — e.g. the BYOK
+    error-notification dedupe lock, which is released when nothing was delivered so the next error
+    can retry.
+    """
+    body = to_plain_text(body)
+    tag = _generate_notification_tag(user_id, title, body, data)
+    notification = messaging.Notification(title=title, body=body)
+    return _send_to_user(user_id, tag, notification=notification, data=data)
 
 
 async def send_notification_async(
@@ -365,8 +470,46 @@ def send_training_data_submitted_notification(user_id: str) -> None:
     logger.info(f"Training data submitted notification sent to user {user_id}")
 
 
-async def send_bulk_notification(user_tokens: List[str], title: str, body: str) -> None:
-    """Send notification to multiple users in batches."""
+def _as_unifiedpush_endpoints(recipients: List[Any]) -> List[Any]:
+    """Normalize recipients to ``UnifiedPushEndpoint`` so a caller passing bare URL strings — the
+    pre-key-set recipient shape — still delivers instead of failing inside ``send_bulk``.
+
+    A module function, not four lines inline in ``send_bulk_notification``: the constructor is imported
+    from ``database.notifications``, and the async-blocker scanner counts every call to a name from
+    ``database.*`` inside an ``async def`` as blocking I/O. Here it is right to: those accessors do hit
+    the database. This one does not — it builds a value object and touches nothing — and saying so by
+    giving it its own synchronous function is more honest than an inline exception would be.
+    """
+    from models.other import UnifiedPushEndpoint
+
+    return [r if isinstance(r, UnifiedPushEndpoint) else UnifiedPushEndpoint(url=r) for r in recipients]
+
+
+async def send_bulk_notification(
+    user_tokens: List[str], title: str, body: str, push_backend: Optional[str] = None
+) -> None:
+    """Send notification to multiple users in batches.
+
+    ``push_backend`` lets a caller that already resolved the backend (e.g. the daily-summary fan-out,
+    which resolves it to pick the recipient-fetch fn) pass it in, so the config-typo fallback is
+    recorded once per operation instead of twice (cubic review 4939247683).
+    """
+    backend = push_backend or resolve_push_backend()
+    if backend == DISABLED:
+        return
+    if backend == UNIFIEDPUSH:
+        # In unifiedpush mode the caller gathers endpoints (not FCM tokens) as the recipients.
+        from utils.push import unifiedpush as _up  # lazy: see module-top note
+
+        endpoints = _as_unifiedpush_endpoints(user_tokens)
+        tag = _generate_tag(f"bulk:{title}:{to_plain_text(body)}")
+        # Same error boundary as the FCM path below: a dead-endpoint cleanup failure inside send_bulk
+        # must not abort the whole notification job (cubic review 4939247683).
+        try:
+            await _up.send_bulk(endpoints, PushMessage(tag=tag, title=title, body=to_plain_text(body)))
+        except Exception as e:
+            logger.error(f'UnifiedPush bulk send error: {e}')
+        return
     try:
         batch_size = 500
         num_batches = math.ceil(len(user_tokens) / batch_size)
@@ -393,10 +536,22 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str) 
             run_blocking(postprocess_executor, send_batch, user_tokens[i * batch_size : (i + 1) * batch_size])
             for i in range(num_batches)
         ]
-        results = await asyncio.gather(*tasks)
+        # return_exceptions: one raising chunk must not discard every OTHER chunk's invalid-token
+        # cleanup. send_batch calls messaging.send_each with no try of its own for a <=500 chunk, and
+        # firebase-admin validates all messages before sending, so a single malformed message raises
+        # for the whole chunk; without this the exception propagated to the outer handler below and
+        # remove_bulk_tokens never ran, leaving the dead tokens to be retried on every future send.
+        # The sibling daily-summary fan-out (utils/other/notifications.py) already does this.
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Remove invalid tokens
-        invalid_tokens = [token for _, batch_invalid in results for token in batch_invalid]
+        invalid_tokens: List[str] = []
+        for index, result in enumerate(results):
+            if isinstance(result, BaseException):
+                logger.error(f'Bulk notification chunk {index} failed: {result}')
+                continue
+            _response, batch_invalid = result
+            invalid_tokens.extend(batch_invalid)
         if invalid_tokens:
             logger.error(f"Removing {len(invalid_tokens)} invalid tokens")
             await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
@@ -560,12 +715,10 @@ def send_important_conversation_message(user_id: str, conversation_id: str):
         user_id: The user's Firebase UID
         conversation_id: ID of the completed conversation
     """
-    tokens = notification_db.get_all_tokens(user_id)
-    if not tokens:
-        logger.info(f"No notification tokens found for user {user_id} for important conversation notification")
-        return
-
-    # FCM data values must be strings
+    # Route through the selected push backend via _send_to_user (like the sibling data-message
+    # senders). A get_all_tokens (FCM) precheck here returned early for UnifiedPush-only users, so
+    # the sync push was silently skipped for them (cubic review PR 10887); _send_to_user already
+    # handles empty FCM tokens and the UnifiedPush-endpoint case internally.
     data = {
         'type': 'important_conversation',
         'conversation_id': conversation_id,

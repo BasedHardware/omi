@@ -140,7 +140,7 @@ def test_timezone_token_read_runs_off_loop_and_returns_tokens() -> None:
             notification_db.get_users_token_in_timezones = blocking_read
 
             result = await _assert_loop_responsive_while_worker_waits(
-                notifications._get_users_in_timezone('08:00'),
+                notifications._get_users_in_timezone('08:00', 'fcm'),  # FCM backend -> token fetch path
                 entered,
                 release,
             )

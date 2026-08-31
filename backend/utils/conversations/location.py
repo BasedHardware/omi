@@ -30,7 +30,15 @@ def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geol
     except Exception as e:
         logging.warning('Failed to read geocode cache error_type=%s', type(e).__name__)
 
-    key = os.getenv('GOOGLE_MAPS_API_KEY')
+    key = (os.getenv('GOOGLE_MAPS_API_KEY') or '').strip()
+    if not key:
+        # No key configured -> do not call out at all. The key was read and interpolated without ever
+        # being checked, so an unconfigured deployment still sent the user's exact coordinates to
+        # maps.googleapis.com and waited for the 403. That is a zero-configuration egress of location
+        # data on a posture whose whole premise is that no user data leaves (ADR-0001), and the
+        # bridged network of ADR-0048 does not stop it. Callers already treat None as "unresolved".
+        logger.info('GOOGLE_MAPS_API_KEY not configured, skipping reverse geocoding')
+        return None
     url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={latitude},{longitude}&key={key}"
     try:
         response = httpx.get(url, timeout=10.0)
@@ -108,7 +116,15 @@ async def async_get_google_maps_location(latitude: float, longitude: float) -> O
     except Exception as e:
         logging.warning('Failed to read geocode cache error_type=%s', type(e).__name__)
 
-    key = os.getenv('GOOGLE_MAPS_API_KEY')
+    key = (os.getenv('GOOGLE_MAPS_API_KEY') or '').strip()
+    if not key:
+        # No key configured -> do not call out at all. The key was read and interpolated without ever
+        # being checked, so an unconfigured deployment still sent the user's exact coordinates to
+        # maps.googleapis.com and waited for the 403. That is a zero-configuration egress of location
+        # data on a posture whose whole premise is that no user data leaves (ADR-0001), and the
+        # bridged network of ADR-0048 does not stop it. Callers already treat None as "unresolved".
+        logger.info('GOOGLE_MAPS_API_KEY not configured, skipping reverse geocoding')
+        return None
     try:
         async with get_maps_semaphore():
             client = get_maps_client()
@@ -177,7 +193,15 @@ async def async_get_google_maps_city(latitude: float, longitude: float) -> Optio
     except Exception as error:
         logger.warning('Failed to read city geocode cache error_type=%s', type(error).__name__)
 
-    key = os.getenv('GOOGLE_MAPS_API_KEY')
+    key = (os.getenv('GOOGLE_MAPS_API_KEY') or '').strip()
+    if not key:
+        # No key configured -> do not call out at all. The key was read and interpolated without ever
+        # being checked, so an unconfigured deployment still sent the user's exact coordinates to
+        # maps.googleapis.com and waited for the 403. That is a zero-configuration egress of location
+        # data on a posture whose whole premise is that no user data leaves (ADR-0001), and the
+        # bridged network of ADR-0048 does not stop it. Callers already treat None as "unresolved".
+        logger.info('GOOGLE_MAPS_API_KEY not configured, skipping reverse geocoding')
+        return None
     try:
         async with get_maps_semaphore():
             response = await get_maps_client().get(

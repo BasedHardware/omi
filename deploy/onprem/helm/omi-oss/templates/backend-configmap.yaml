@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-env
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+data:
+  # Plain env mirror of backend.env.base (values.backend.env).
+  {{- range $k, $v := .Values.backend.env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+  # Derived from the in-cluster mongo service — seeds the replica set at the same stable member host.
+  MONGO_URI: "mongodb://{{ include "omi-oss.mongoHost" . }}:27017/?replicaSet={{ .Values.mongo.replicaSetName }}"
+  # Canonical memory intake (BACKLOG L33). Declared EXPLICITLY in both states: unset,
+  # rollout_mode_env_value() returns `off` and EVERY memory write answers 503 "Service temporarily
+  # unavailable" while readiness stays green — a product feature silenced by an implicit default, which
+  # is the worst shape. Writing it either way makes the choice visible in `kubectl get cm`.
+  # `on` needs the memory-maintenance CronJob (scheduledJobs.memoryMaintenance) or the outbox never
+  # drains and a memory never gets its projection/vector.
+  MEMORY_ENABLED: {{ ternary "on" "off" .Values.backend.memory.enabled | quote }}
+  # The maintenance work's OWN switch, defaulting to false in code: with it off the hourly job returns
+  # early reporting zero users and zero errors — a green tick that drained nothing.
+  MEMORY_CANONICAL_MAINTENANCE_ENABLED: {{ .Values.backend.memory.enabled | quote }}
+  {{- if and .Values.chat.enabled .Values.chat.llmGateway.enabled }}
+  # chat LLM gateway (D32, ADR-0035): the backend emits omi:auto:<feature> LANE ids and ONLY the
+  # gateway resolves them to a model, so this wiring is what keeps chat off the built-in cloud model
+  # table. ALLOW_PROD_FEATURE_MODE is upstream's interlock: gateway feature-mode is blocked outside
+  # dev/local unless explicitly acknowledged, and OMI_ENV_STAGE=selfhost is a real runtime (ADR-0059).
+  OMI_LLM_GATEWAY_FEATURE_MODE: "gateway"
+  OMI_LLM_GATEWAY_URL: "http://llm-gateway:9080"
+  OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: "true"
+  {{- end }}
+  {{- if .Values.chat.enabled }}
+  # chat profile: on-prem vector store (Qdrant) instead of Pinecone (ADR-0033). Collections are
+  # auto-created at QDRANT_VECTOR_DIM on first upsert.
+  VECTOR_STORE_BACKEND: "qdrant"
+  QDRANT_URL: "http://qdrant:6333"
+  QDRANT_VECTOR_DIM: {{ .Values.chat.vectorDim | quote }}
+  {{- end }}
+  {{- if .Values.search.enabled }}
+  # TYPESENSE_PROTOCOL matters: the client defaults to **https** (utils/conversations/search.py:155), so
+  # an in-cluster service on plain HTTP must say so or every call fails TLS. The key is in the Secret.
+  TYPESENSE_HOST: "typesense"
+  TYPESENSE_HOST_PORT: "8108"
+  TYPESENSE_PROTOCOL: "http"
+  MEMORY_TYPESENSE_COLLECTION: "canonical_memory_atoms"
+  {{- end }}
+  {{- if .Values.objstore.enabled }}
+  # objstore profile: on-prem S3 object store (RustFS) instead of GCS (ADR-0032). S3_PUBLIC_ENDPOINT is
+  # required for public object URLs (the s3 adapter has no fallback); the credentials live in the Secret.
+  OBJECT_STORE_BACKEND: "s3"
+  S3_ENDPOINT: "http://rustfs:9000"
+  S3_PUBLIC_ENDPOINT: {{ .Values.objstore.publicEndpoint | quote }}
+  {{- range $k, $v := .Values.objstore.buckets }}
+  BUCKET_{{ $k }}: {{ $v | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.push.enabled }}
+  # push profile: on-prem UnifiedPush via ntfy instead of FCM (ADR-0011/0041). The backend POSTs to ntfy
+  # internally; only the path of a registered endpoint is used (no egress).
+  PUSH_NOTIFICATION_BACKEND: "unifiedpush"
+  UNIFIEDPUSH_INTERNAL_BASE_URL: "http://ntfy:80"
+  {{- end }}
+  {{- with (include "omi-oss.apiHostname" .) }}
+  # The MCP protected-resource identity (BACKLOG L48). Unset, the code default is upstream's OWN endpoint
+  # (https://api.omi.me/v1/mcp/sse, database/mcp_oauth.py), so this deployment's discovery document names
+  # OUR authorization server and UPSTREAM's URL as the resource — an MCP client would ask our IdP for a
+  # token audienced to Omi's cloud. Declared outside the auth profile on purpose: the API's public
+  # identity is not an auth concern, and a firebase-backed self-host would advertise it just the same.
+  # Emitted only when a hostname can be derived; "https:///v1/mcp/sse" would be worse than the default.
+  MCP_RESOURCE_URL: "{{ . }}/v1/mcp/sse"
+  # The base of every referral link this deployment's users share (utils/referrals.py). Unset, the code
+  # default is upstream's OWN host (https://omi.me), so a self-hosted user inviting a colleague would
+  # hand out a link into Omi's cloud — the same class as MCP_RESOURCE_URL above, and the same fix.
+  # Note what this does NOT reach: `REFERRAL_SIGNUP_URL` is a module constant pinned to
+  # https://app.omi.me/login, so the page a referral code lands on is still upstream's. That is
+  # upstream's product surface, not configuration, and it is recorded rather than patched here.
+  REFERRAL_PUBLIC_BASE_URL: "{{ . }}"
+  {{- end }}
+  {{- if .Values.auth.enabled }}
+  # auth profile: OIDC (Keycloak) instead of Firebase (ADR-0034). OIDC_ISSUER is the public HTTPS issuer
+  # (token `iss`); OIDC_JWKS_URL is the INTERNAL keycloak endpoint (keys fetched in-cluster, no edge
+  # hairpin) — the two are deliberately decoupled.
+  AUTH_BACKEND: "oidc"
+  OIDC_ISSUER: "{{ include "omi-oss.authHostname" . }}/realms/omi"
+  OIDC_JWKS_URL: "http://keycloak:8090/realms/omi/protocol/openid-connect/certs"
+  OIDC_AUDIENCE: {{ .Values.auth.audience | quote }}
+  {{- end }}
+  {{- if .Values.inference.enabled }}
+  # inference profile: external OpenAI-compatible endpoint(s), OUTSIDE the cluster (ADR-0035). Keys live
+  # in the Secret. Empty base URLs are omitted so the cloud defaults stand.
+  {{- with .Values.inference.openai.baseUrl }}
+  OPENAI_BASE_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.inference.embeddings.baseUrl }}
+  OMI_EMBEDDINGS_BASE_URL: {{ . | quote }}
+  OMI_EMBEDDINGS_MODEL: {{ $.Values.inference.embeddings.model | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.inference.inCluster.enabled }}
+  # in-cluster inference (GPU pods): each enabled service auto-wires its HOSTED_*_API_URL so the backend
+  # reaches STT/diarization/translation in-cluster instead of an external endpoint (LLM+embeddings stay external).
+  {{- range $name, $svc := .Values.inference.inCluster.services }}
+  {{- if $svc.enabled }}
+  {{- range $k, $v := $svc.backendEnv }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
+  {{- end }}

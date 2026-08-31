@@ -240,6 +240,62 @@ def get_direct_anthropic_client(*, byok_api_key: str | None = None) -> anthropic
     return anthropic_client._default_client()
 
 
+# On-prem embeddings (ADR-0035, WP5). Embeddings are the one hard-cloud inference gap: by default
+# they hit OpenAI text-embedding-3-large, but an operator can point them at any OpenAI-compatible
+# endpoint (Ollama / vLLM / TEI) that serves /v1/embeddings via OMI_EMBEDDINGS_BASE_URL — the same
+# endpoint can serve chat, so one Ollama URL covers both. The embedding model's dimension MUST equal
+# the vector store's (e.g. nomic-embed-text=768, mxbai-embed-large=1024); a fresh vector store is
+# required when switching away from the 3072-dim default.
+EMBEDDINGS_BASE_URL_ENV_VAR = 'OMI_EMBEDDINGS_BASE_URL'
+EMBEDDINGS_MODEL_ENV_VAR = 'OMI_EMBEDDINGS_MODEL'
+EMBEDDINGS_API_KEY_ENV_VAR = 'OMI_EMBEDDINGS_API_KEY'
+_DEFAULT_EMBEDDINGS_MODEL = 'text-embedding-3-large'
+
+
+def _embeddings_base_url() -> str:
+    """The configured on-prem embeddings endpoint, or '' for cloud OpenAI."""
+    return os.getenv(EMBEDDINGS_BASE_URL_ENV_VAR, '').strip().rstrip('/')
+
+
+def embeddings_model() -> str:
+    """Which embeddings model is configured (ADR-0035).
+
+    Public, unlike its ``_embeddings_*`` siblings, because it is a question other modules legitimately
+    ask: the vector adapter records it against a collection it creates, and the factory crosses it
+    against the collections that already exist (ADR-0086). It was named with an underscore anyway, so
+    those callers were reaching into another module's privates to ask something perfectly ordinary.
+    """
+    return os.getenv(EMBEDDINGS_MODEL_ENV_VAR, '').strip() or _DEFAULT_EMBEDDINGS_MODEL
+
+
+def _embeddings_ctor_kwargs() -> Dict[str, Any]:
+    """Extra OpenAIEmbeddings kwargs. When an on-prem endpoint is configured every client
+    construction (default and BYOK) is pinned to it, so no embedding call escapes to the cloud.
+    check_embedding_ctx_length=False is required: with the default True, LangChain sends token-id
+    arrays rather than strings, which OpenAI-compatible servers like Ollama reject."""
+    base_url = _embeddings_base_url()
+    if not base_url:
+        return {}
+    # Local servers ignore the key, but the OpenAI client requires a non-empty one.
+    api_key = os.getenv(EMBEDDINGS_API_KEY_ENV_VAR, '').strip() or 'not-set'
+    return {'base_url': base_url, 'api_key': api_key, 'check_embedding_ctx_length': False}
+
+
+# Char cap for the LOCAL embeddings path. check_embedding_ctx_length=False (required for Ollama) disables
+# LangChain's built-in over-context splitting, so an over-length input is sent whole and the server rejects
+# it — long memories then fail to embed/index (cubic PR 10887 clients.py:264). A char cap restores
+# length-safety in an Ollama-compatible way (no token-id arrays). Default ~32000 chars ≈ 8k tokens (bge-m3/
+# nomic context); the operator sets OMI_EMBEDDINGS_MAX_INPUT_CHARS to their model's real window.
+_DEFAULT_EMBEDDINGS_MAX_INPUT_CHARS = 32000
+
+
+def _local_embed_char_cap() -> int:
+    raw = os.getenv('OMI_EMBEDDINGS_MAX_INPUT_CHARS', '').strip()
+    if raw.isdigit() and int(raw) > 0:
+        return int(raw)
+    return _DEFAULT_EMBEDDINGS_MAX_INPUT_CHARS
+
+
 _gateway_embeddings_route_absent_warned = False
 
 
@@ -266,13 +322,52 @@ def _warn_gateway_embeddings_route_absent(operation: str) -> None:
 class _OpenAIEmbeddingsProxy:
     """Transparent proxy for OpenAIEmbeddings that uses BYOK OpenAI when set."""
 
-    __slots__ = ('_model', '_default', '_ctor_kwargs')
+    __slots__ = ('_model_factory', '_ctor_kwargs_factory', '_model_cached', '_default', '_ctor_kwargs_cached')
     _METHODS_TO_WRAP = {'embed_documents', 'aembed_documents', 'embed_query', 'aembed_query'}
 
-    def __init__(self, model: str, default: Optional[OpenAIEmbeddings], ctor_kwargs: Dict[str, Any]):
-        object.__setattr__(self, '_model', model)
+    def __init__(
+        self,
+        model_factory: Callable[[], str],
+        default: Optional[OpenAIEmbeddings],
+        ctor_kwargs_factory: Callable[[], Dict[str, Any]],
+    ):
+        # model + ctor_kwargs are resolved lazily (call-time, memoized) rather than snapshotted at
+        # import: an env change between import and first embedding call must be honored, and no env
+        # is read for a process that never embeds.
+        object.__setattr__(self, '_model_factory', model_factory)
+        object.__setattr__(self, '_ctor_kwargs_factory', ctor_kwargs_factory)
+        object.__setattr__(self, '_model_cached', None)
         object.__setattr__(self, '_default', default)
-        object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
+        object.__setattr__(self, '_ctor_kwargs_cached', None)
+
+    @property
+    def _model(self) -> str:
+        cached = self._model_cached
+        if cached is None:
+            cached = self._model_factory()
+            object.__setattr__(self, '_model_cached', cached)
+        return cached
+
+    @property
+    def _ctor_kwargs(self) -> Dict[str, Any]:
+        cached = self._ctor_kwargs_cached
+        if cached is None:
+            cached = self._ctor_kwargs_factory()
+            object.__setattr__(self, '_ctor_kwargs_cached', cached)
+        return cached
+
+    def _cap_local_input(self, value: Any) -> Any:
+        """On the LOCAL endpoint path (check_embedding_ctx_length disabled for Ollama), cap input length so
+        an over-context string is not sent whole and rejected (cubic PR 10887 clients.py:264). No-op on the
+        cloud path, where LangChain's own ctx-length handling applies."""
+        if self._ctor_kwargs.get('check_embedding_ctx_length') is not False:
+            return value
+        cap = _local_embed_char_cap()
+        if isinstance(value, str):
+            return value[:cap]
+        if isinstance(value, list):
+            return [t[:cap] if isinstance(t, str) else t for t in value]
+        return value
 
     def _default_client(self) -> OpenAIEmbeddings:
         default = self._default
@@ -283,7 +378,12 @@ class _OpenAIEmbeddingsProxy:
 
     def _resolve(self) -> OpenAIEmbeddings:
         byok = get_byok_key('openai')
-        if byok:
+        # A configured on-prem endpoint pins every construction to itself: its own key
+        # (OMI_EMBEDDINGS_API_KEY) already lives in _ctor_kwargs['api_key']. In that mode BYOK must
+        # not pass a second api_key — that raises "multiple values for keyword argument 'api_key'" —
+        # and there is no cloud egress to send a user key to anyway, so the endpoint credential wins
+        # and BYOK falls through to the pinned default client.
+        if byok and 'api_key' not in self._ctor_kwargs:
             cache_key = f"emb:{self._model}:{_hash_key(byok)}"
             inst = _openai_cache.get(cache_key)
             if inst is None:
@@ -387,6 +487,7 @@ class _OpenAIEmbeddingsProxy:
             except Exception as e:
                 self._reraise_unless_route_absent(e, 'embed_query')
         inst = self._resolve()
+        text = self._cap_local_input(text)
         try:
             return inst.embed_query(text)
         except Exception as e:
@@ -404,6 +505,7 @@ class _OpenAIEmbeddingsProxy:
             except Exception as e:
                 self._reraise_unless_route_absent(e, 'embed_documents')
         inst = self._resolve()
+        texts = self._cap_local_input(texts)
         try:
             return inst.embed_documents(texts)
         except Exception as e:
@@ -421,6 +523,7 @@ class _OpenAIEmbeddingsProxy:
             except Exception as e:
                 self._reraise_unless_route_absent(e, 'aembed_query')
         inst = self._resolve()
+        text = self._cap_local_input(text)
         try:
             return await inst.aembed_query(text)
         except Exception as e:
@@ -438,6 +541,7 @@ class _OpenAIEmbeddingsProxy:
             except Exception as e:
                 self._reraise_unless_route_absent(e, 'aembed_documents')
         inst = self._resolve()
+        texts = self._cap_local_input(texts)
         try:
             return await inst.aembed_documents(texts)
         except Exception as e:
@@ -456,6 +560,18 @@ class _OpenAIEmbeddingsProxy:
         if name.startswith('a'):
 
             async def _wrapped_async(*args, **kwargs):
+                # Cap on the local endpoint path whether the input arrives positionally OR as a keyword
+                # (cubic PR 10887 clients.py:416). NOTE: all four names in _METHODS_TO_WRAP are now
+                # defined explicitly on this class, and __getattr__ only runs when normal lookup fails —
+                # so this wrapper is a belt to the explicit methods' braces, not the thing that caps.
+                # Upstream's +192 added the explicit async pair and the cap went missing with it; the
+                # test that caught it is tests/unit/test_embeddings_local_input_cap.py.
+                if args:
+                    args = (self._cap_local_input(args[0]), *args[1:])
+                elif 'text' in kwargs:
+                    kwargs = {**kwargs, 'text': self._cap_local_input(kwargs['text'])}
+                elif 'texts' in kwargs:
+                    kwargs = {**kwargs, 'texts': self._cap_local_input(kwargs['texts'])}
                 try:
                     return await attr(*args, **kwargs)
                 except Exception as e:
@@ -894,9 +1010,9 @@ llm_mini = _LazyClientProxy(_create_legacy_llm_mini)
 # Embeddings, parser, utilities
 # ---------------------------------------------------------------------------
 embeddings = _OpenAIEmbeddingsProxy(
-    model="text-embedding-3-large",
+    model_factory=embeddings_model,
     default=None,
-    ctor_kwargs={},
+    ctor_kwargs_factory=_embeddings_ctor_kwargs,
 )
 parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
 
@@ -934,6 +1050,16 @@ def gemini_embed_query(text: str) -> List[float]:
     key keeps the thin direct AI Studio path — the gateway Vertex adapter
     fail-closes BYOK — and FEATURE_MODE=off keeps the legacy direct path.
     """
+    if _embeddings_base_url():
+        # On-prem: screen-activity queries use the same local OpenAI-compatible endpoint as every
+        # other embedding, so there is no Google egress. The desktop app must be configured to the
+        # same model/endpoint so its RETRIEVAL_DOCUMENT vectors align with these query vectors.
+        # First, because it is the only branch that reaches nobody: everything below is Google.
+        return generate_embedding(text)
+    # Upstream's, verbatim. Our `record_direct_exception_surface(..., reason='out_of_scope')` used to
+    # sit here because this surface had NO gateway lane and went direct; upstream has now built one
+    # (`invoke_gemini_embedding_gateway`), so the exception it recorded no longer exists. What stays
+    # direct is BYOK and FEATURE_MODE=off, both of which are deliberate rather than a gap.
     byok_key = get_byok_key('gemini')
     if _embeddings_gateway_mode() and not byok_key:
         try:

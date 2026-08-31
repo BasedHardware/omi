@@ -9,6 +9,7 @@ from pydub import AudioSegment  # pydub is untyped
 from utils.executors import storage_executor, run_blocking
 from utils.http_client import get_stt_client
 from utils.log_sanitizer import sanitize
+from utils.observability.fallback import record_fallback
 from utils.other.storage import (
     get_profile_audio_if_exists,
     get_additional_profile_recordings,
@@ -25,6 +26,35 @@ def _get_speech_profile_api_url() -> str:
     if not url:
         raise ValueError('HOSTED_SPEECH_PROFILE_API_URL environment variable not set')
     return url
+
+
+def _unattributed(segments: List[Dict[str, Any]], reason: str) -> List[Dict[str, Any]]:
+    """Give up on speaker identity for this conversation, and say so on the counter.
+
+    Returning "not the user, no person" for every segment keeps post-processing alive, which is the right
+    trade: a conversation without attribution beats a conversation that fails to save. But it used to be an
+    `info` line and nothing else, so a matcher that had been down for a week looked exactly like a week of
+    conversations that genuinely had no known speaker in them.
+
+    Both twins route their fail-open through here so the two copies cannot drift apart on what they report.
+    """
+    record_fallback(
+        component='speaker',
+        from_mode='speech_profile_match',
+        to_mode='unattributed',
+        reason=reason,
+        outcome='degraded',
+        log=logger,
+    )
+    return [{'is_user': False, 'person_id': None}] * len(segments)
+
+
+def _reason_for_status(status_code: int) -> str:
+    if status_code == 429:
+        return 'provider_429'
+    if status_code >= 500:
+        return 'provider_5xx'
+    return 'other'
 
 
 def _validate_segment_matches(result: object, segments: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
@@ -57,7 +87,6 @@ def get_speech_profile_matching_predictions(
     uid: str, audio_file_path: str, segments: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     logger.info('get_speech_profile_matching_predictions')
-    default = [{'is_user': False, 'person_id': None}] * len(segments)
     with open(audio_file_path, 'rb') as audio_f:
         files = [
             ('audio_file', (os.path.basename(audio_file_path), audio_f, 'audio/wav')),
@@ -71,7 +100,7 @@ def get_speech_profile_matching_predictions(
 
     if response.status_code != 200:
         logger.info(f'get_speech_profile_matching_predictions {sanitize(response.text)}')
-        return default
+        return _unattributed(segments, _reason_for_status(response.status_code))
     try:
         result = response.json()
         logger.info(f'get_speech_profile_matching_predictions {sanitize(result)}')
@@ -82,10 +111,10 @@ def get_speech_profile_matching_predictions(
         # Malformed/empty response shape: fall back to per-segment default so
         # callers that index matches[i] do not crash conversation post-processing.
         logger.info('get_speech_profile_matching_predictions malformed response shape, using default')
-        return default
+        return _unattributed(segments, 'malformed_doc')
     except Exception as e:
         logger.info(f'get_speech_profile_matching_predictions {str(e)}')
-        return default
+        return _unattributed(segments, 'malformed_doc')
 
 
 def _read_file(path: str) -> bytes:
@@ -101,7 +130,6 @@ async def async_get_speech_profile_matching_predictions(
     file_data = await run_blocking(storage_executor, _read_file, audio_file_path)
 
     files = {'audio_file': (os.path.basename(audio_file_path), file_data, 'audio/wav')}
-    default = [{'is_user': False, 'person_id': None}] * len(segments)
 
     try:
         client = get_stt_client()
@@ -112,11 +140,11 @@ async def async_get_speech_profile_matching_predictions(
         )
     except Exception as e:
         logger.error(f'async_get_speech_profile_matching_predictions HTTP error: {e}')
-        return default
+        return _unattributed(segments, 'timeout' if isinstance(e, httpx.TimeoutException) else 'other')
 
     if response.status_code != 200:
         logger.info(f'async_get_speech_profile_matching_predictions {sanitize(response.text)}')
-        return default
+        return _unattributed(segments, _reason_for_status(response.status_code))
     try:
         result = response.json()
         logger.info(f'async_get_speech_profile_matching_predictions {sanitize(result)}')
@@ -127,10 +155,10 @@ async def async_get_speech_profile_matching_predictions(
         # Malformed/empty response shape: fall back to per-segment default so
         # callers that index matches[i] do not crash conversation post-processing.
         logger.info('async_get_speech_profile_matching_predictions malformed response shape, using default')
-        return default
+        return _unattributed(segments, 'malformed_doc')
     except Exception as e:
         logger.info(f'async_get_speech_profile_matching_predictions {str(e)}')
-        return default
+        return _unattributed(segments, 'malformed_doc')
 
 
 def get_speech_profile_expanded(uid: str) -> Optional[str]:

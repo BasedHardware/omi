@@ -457,3 +457,39 @@ class TestStreamSessionBuiltinEmbedding:
 
         http_mock.assert_called_once()
         np.testing.assert_array_equal(result, http_emb)
+
+
+class TestVadUnavailable:
+    """The VAD is fetched from github AT RUNTIME, and failing to get it degrades silently (BACKLOG L23).
+
+    `_get_vad_model` calls `torch.hub.load('snakers4/silero-vad')`, i.e. a clone from github.com when the
+    process first needs it. Our inference services run on the INTERNAL compose network, so that call
+    cannot succeed — and the exception was swallowed into a `logger.warning`. The consequence is not
+    "no VAD": `_is_speech` returns True for every chunk when the model is missing, so silence-based
+    endpointing is off and every chunk is treated as speech.
+
+    This is the sidecar, which does not ship the backend package — so no `record_fallback` here. It has
+    its own prometheus registry (`prometheus_client` is in parakeet/requirements.txt), and that is where
+    the count belongs.
+    """
+
+    def test_a_failed_load_is_counted_and_says_what_it_costs(self, caplog):
+        import logging
+
+        before = sh.VAD_UNAVAILABLE_TOTAL._value.get()
+        with caplog.at_level(logging.ERROR):
+            assert sh._get_vad_model() is None
+
+        assert sh.VAD_UNAVAILABLE_TOTAL._value.get() == before + 1
+        assert 'every chunk' in caplog.text.lower(), 'the log must name the consequence, not just the error'
+
+    def test_every_chunk_counts_as_speech_without_a_vad(self):
+        """The fail-open, pinned: this is why a silent failure matters. Endpointing stops working and the
+        stream just keeps going."""
+
+        class _NoVadSession:
+            _vad = None
+            _sr = 16000
+            _speech_threshold = 0.5
+
+        assert sh.StreamSession._run_vad(_NoVadSession(), b'\x00\x00' * 512) is True

@@ -1,57 +1,43 @@
+"""Frame-request pixels use two separate tiers, over the neutral object-store port (ADR-0032).
+
+Upstream's version of this test injected a fake GCS *client* and asserted on ``bucket.copy_blob``.
+The port removed that shape — ``frame_request_storage`` now names buckets and calls
+``put``/``copy``/``delete`` — so the assertions are re-expressed against the in-memory
+``FakeObjectStore``. What is being proven is unchanged, and it is the thing that matters here: an
+upload lands in the TEMPORARY bucket, promotion copies it into the PERMANENT one under a different
+object name, and the delete removes the temporary object. The tiers must stay separate because the
+temporary bucket is lifecycle-backed and the permanent one must have no expiration rule.
+"""
+
+import utils.other.storage as storage
+from tests.object_store_fakes import FakeObjectStore
 from utils.retrieval import frame_request_storage
 
 
-class _Blob:
-    def __init__(self, name):
-        self.name = name
-        self.uploads = []
-        self.deleted = 0
-
-    def upload_from_string(self, data, content_type=None):
-        self.uploads.append((data, content_type))
-
-    def delete(self):
-        self.deleted += 1
-
-    def download_as_bytes(self):
-        return self.name.encode()
-
-
-class _Bucket:
-    def __init__(self, name):
-        self.name = name
-        self.blobs = {}
-        self.copies = []
-
-    def blob(self, name):
-        return self.blobs.setdefault(name, _Blob(name))
-
-    def copy_blob(self, source, destination, new_name):
-        self.copies.append((source.name, destination.name, new_name))
-
-
-class _Storage:
-    def __init__(self):
-        self.buckets = {}
-
-    def bucket(self, name):
-        return self.buckets.setdefault(name, _Bucket(name))
-
-
 def test_upload_delete_and_promotion_use_separate_buckets(monkeypatch):
-    storage = _Storage()
+    store = FakeObjectStore()
     monkeypatch.setenv("BUCKET_FRAME_REQUESTS", "permanent")
     monkeypatch.setenv("BUCKET_FRAME_REQUESTS_TEMPORARY", "temporary")
-    monkeypatch.setattr(frame_request_storage, "_get_storage_client", lambda: storage)
+    # One patch point: the module reads the store through `utils.other.storage`, and so does the
+    # owner write gate, so this single injection moves both.
+    monkeypatch.setattr(storage, "_object_store", lambda: store)
 
     frame_request_storage.upload_frame_request_pixels("uid", "temporary-1", b"jpg", "image/jpeg")
+    temporary_key = frame_request_storage._object_name("uid", "temporary-1")
+    permanent_key = frame_request_storage._object_name("uid", "permanent-1")
+
+    assert [info.key for info in store.list("temporary", "frame-requests/uid/")] == [temporary_key]
+    assert store.get_bytes("temporary", temporary_key) == b"jpg"
+    assert not store.list("permanent", "frame-requests/uid/")
+
     frame_request_storage.copy_frame_request_pixels_to_permanent("uid", "temporary-1", "permanent-1")
+
+    # Promoted into the OTHER bucket, under a different object name, with the pixels intact.
+    assert [info.key for info in store.list("permanent", "frame-requests/uid/")] == [permanent_key]
+    assert permanent_key != temporary_key
+    assert store.get_bytes("permanent", permanent_key) == b"jpg"
+
     frame_request_storage.delete_frame_request_pixels("uid", "temporary-1")
 
-    assert len(storage.buckets["temporary"].blobs) == 1
-    source_name, destination_bucket, destination_name = storage.buckets["temporary"].copies[0]
-    assert source_name.startswith("frame-requests/uid/")
-    assert destination_bucket == "permanent"
-    assert destination_name.startswith("frame-requests/uid/")
-    assert destination_name != source_name
-    assert next(iter(storage.buckets["temporary"].blobs.values())).deleted == 1
+    assert not store.list("temporary", "frame-requests/uid/")
+    assert store.exists("permanent", permanent_key)

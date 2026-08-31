@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DEBUG-ONLY. Lets debug builds trust a user-installed CA so an on-prem self-signed
+     HTTPS issuer (e.g. a local Keycloak) can be exercised end-to-end. Cleartext stays
+     disabled. Release/prod builds never include this file (system trust anchors only). -->
+<network-security-config>
+    <!-- cleartext stays permitted (the app already sets usesCleartextTraffic="true" for the
+         on-prem http backend); this config ONLY adds user-CA trust for a self-signed HTTPS
+         issuer. OIDC's https-only rule is enforced in Dart (_allowInsecureConnections), not here. -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+            <certificates src="user"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>

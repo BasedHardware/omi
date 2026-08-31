@@ -3215,6 +3215,7 @@
     "accountCutoverMigrationInProgressMessage": "Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.",
     "accountCutoverMigrationRollbackMessage": "Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.",
     "accountCutoverOpenStore": "Avaa kauppa",
+    "signInWithSSO": "Logi sisse SSO'iga",
     "chatScopeToday": "Täna",
     "chatScopeThisWeek": "Sel nädalal",
     "chatScopeAbout": "Teave: {title}",

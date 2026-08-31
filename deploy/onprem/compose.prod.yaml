@@ -1,0 +1,44 @@
+name: omi-oss
+# Omi self-host — PROD. On-prem = LOCAL services on a BRIDGED `omi` network (ADR-0048): the host may reach
+# the internet for image/dep/model provisioning and the operator's LLM/embeddings host; data sovereignty
+# is guaranteed by CONFIGURATION (every port bound to a local backend), not by network isolation. (Not an
+# air-gapped posture — ADR-0001's no-egress line was an acceptance idea, not a deployment mandate; dropped
+# here per ADR-0048.) Expose the API only via the TLS proxies (`--profile auth`). No implicit default:
+# always pass -f (there is no docker-compose.yml).
+#   docker compose -f compose.prod.yaml [--profile auth|chat|…] up -d
+include:
+  # Long form so the third-party image pins reach the INCLUDED files (ADR-0055): variables passed here
+  # interpolate inside compose.base/selfhost, which is where every `image:` lives. A service declared in
+  # THIS file would NOT see them.
+  - path: compose.base.yaml
+    env_file:
+      - omi.oss.release.env
+      - omi.oss.release.pins
+  - path: compose.selfhost.yaml   # on-prem datastore (Mongo, ADR-0046); the cloud posture omits this
+    env_file:
+      - omi.oss.release.env
+      - omi.oss.release.pins
+
+services:
+  backend:
+    env_file:
+      - ./backend.env.base
+      - ./backend.env.prod
+  keycloak:
+    # PROD realm: no direct-access test client/user (cubic review 4909186286 #5). The realm JSON is
+    # mounted per-environment (base intentionally omits it) so test principals never reach prod.
+    volumes:
+      # The realm this deployment RUNS is a gitignored runtime file, copied from the example for
+      # this environment (ADR-0082) — same rule as the env files. Mounting the committed .example
+      # directly made "which realm is live" a property of the repo, which is how the Helm chart
+      # came to ship the DEV realm (omi-test + testuser) on the prod installation.
+      #   cp keycloak/omi-realm.example.json      keycloak/omi-realm.json   # prod
+      #   cp keycloak/omi-realm.dev.example.json  keycloak/omi-realm.json   # dev
+      # Long syntax for create_host_path:false — a MISSING source must be an error, not a silently
+      # created empty directory that Keycloak imports nothing from. Same reason the chart `fail`s.
+      - type: bind
+        source: ./keycloak/omi-realm.json
+        target: /opt/keycloak/data/import/omi-realm.json
+        read_only: true
+        bind:
+          create_host_path: false

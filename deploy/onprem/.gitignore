@@ -1,0 +1,22 @@
+# Operator-generated TLS material (never commit private keys) and local compose env.
+certs/
+.env
+
+# Real per-environment env files carry secrets — never commit them. The `*.example` templates ARE
+# committed (they are the source of truth for the structure). `*.env` (root) covers the old single
+# files; these patterns cover the split base/dev/prod files (which don't end in `.env`).
+backend.env.*
+llm_gateway.env.*
+!backend.env.*.example
+!llm_gateway.env.*.example
+# Exact negation: llm_gateway.env.example has no middle segment, so `llm_gateway.env.*.example` (which
+# needs one, like backend.env.base.example) does not re-include it. Without this it stays ignored (cubic 10887).
+!llm_gateway.env.example
+
+# The release (ADR-0054) is SOURCE, not operator config: the repo-wide `*.env` rule would swallow it, so
+# re-include it here (a deeper .gitignore wins). A guard asserts the file is tracked — an untracked
+# omi.oss.release.env would make the release silently local to one machine.
+!omi.oss.release.env
+
+# GCP service-account key for the cloud posture (compose.prod.cloud mounts ./secrets/gcp-sa.json).
+secrets/

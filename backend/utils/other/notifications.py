@@ -2,7 +2,7 @@
 # async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 import asyncio
 from datetime import datetime, time, timedelta
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from utils.executors import db_executor, postprocess_executor, run_blocking
 
@@ -15,6 +15,8 @@ from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
+from utils.push.base import DISABLED, UNIFIEDPUSH
+from utils.push.selector import resolve_push_backend
 from utils.webhooks import day_summary_webhook
 import database.daily_summaries as daily_summaries_db
 import logging
@@ -50,20 +52,48 @@ async def send_daily_summary_notification() -> None:
         # Group timezones by their current local hour
         timezones_by_hour = _get_timezones_grouped_by_hour()
 
-        for target_hour, timezones in timezones_by_hour.items():
-            # Get users in those timezones who want notifications at this hour
-            users = await _get_users_for_daily_summary(timezones, target_hour)
+        # Resolve the delivery backend ONCE here (utils/service layer), not inside the database helper: the
+        # DB layer reads persistence but must not own delivery policy (cubic PR 10887 #427 / #3). The DB
+        # returns eligible users neutrally; THIS layer picks the recipient reader for the resolved backend
+        # and composes the fan-out. Resolving once also records an invalid-backend fallback once, not per
+        # user (cubic other/notifications.py:58).
+        backend = resolve_push_backend()
 
-            if users:
-                logger.info(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
-                await _send_bulk_summary_notification(users)
+        for target_hour, timezones in timezones_by_hour.items():
+            # Eligible users (uid, user_data, time_zone) — backend-neutral
+            users = await _get_users_for_daily_summary(timezones, target_hour)
+            if not users:
+                continue
+            # Fetch recipients for the resolved backend (UnifiedPush endpoints keyed by uid, or FCM tokens)
+            # and shape every eligible user for the sender — including those with NO recipient.
+            #
+            # The fan-out used to keep only deliverable users, but the per-user path both CREATES the
+            # summary (create_daily_summary below) and delivers it, so a user without a recipient never
+            # got a summary generated at all and /v1/users/daily-summaries — which the app reads — stayed
+            # empty for them. The daily summary is a persisted product artifact; gating its creation on
+            # push deliverability is wrong in any posture, and on-prem it is the normal case
+            # (PUSH_NOTIFICATION_BACKEND=disabled is first-class, ADR-0011).
+            #
+            # Delivery for those users is already a safe no-op: _send_to_user returns 0 for DISABLED and
+            # for an empty token list, so nothing is sent and nothing fans out to anyone else.
+            recipients_by_uid = await _recipients_by_uid(users, timezones, backend)
+            fan_out = [(uid, recipients_by_uid.get(uid, []), tz) for uid, _user_data, tz in users]
+            if fan_out:
+                deliverable = sum(1 for _uid, recipients, _tz in fan_out if recipients)
+                logger.info(
+                    f"Daily summary for {len(fan_out)} users at local hour {target_hour} "
+                    f"({deliverable} with a deliverable recipient, backend={backend})"
+                )
+                await _send_bulk_summary_notification(fan_out, backend)
 
     except Exception as e:
         logger.error(f"Error sending daily summary: {e}")
         return None
 
 
-async def _get_users_for_daily_summary(timezones: List[str], target_hour: int) -> List[Tuple[str, List[str], Any]]:
+async def _get_users_for_daily_summary(
+    timezones: List[str], target_hour: int
+) -> List[Tuple[str, Dict[str, Any], Any]]:  # (uid, user_data, time_zone) — neutral
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
     chunk_results = await asyncio.gather(
         *[
@@ -72,6 +102,21 @@ async def _get_users_for_daily_summary(timezones: List[str], target_hour: int) -
         ]
     )
     return [user for chunk in chunk_results for user in chunk]
+
+
+async def _recipients_by_uid(
+    users: List[Tuple[str, Dict[str, Any], Any]], timezones: List[str], backend: str
+) -> Dict[str, List[Any]]:
+    """Recipients keyed by uid for the resolved delivery backend — the service-layer delivery-policy
+    decision (cubic PR 10887 #427). UnifiedPush: one batched collection-group read by timezone; FCM: the
+    users' subcollection tokens + legacy field. Both are neutral DB reads run on the DB worker."""
+    if backend == DISABLED:
+        # No branch existed for it, so `disabled` fell through to the FCM read below: a full token read,
+        # every hour, for a transport that will never deliver. Nothing to fetch, so fetch nothing.
+        return {}
+    if backend == UNIFIEDPUSH:
+        return await run_blocking(db_executor, notification_db.get_unifiedpush_endpoints_by_uid, timezones)
+    return await run_blocking(db_executor, notification_db.get_fcm_tokens_for_users, users)
 
 
 def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
@@ -86,7 +131,7 @@ def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
     return timezones_by_hour
 
 
-def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
+def _send_summary_notification(user_data: Tuple[Any, ...], push_backend: Optional[str] = None) -> None:
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None
 
@@ -203,15 +248,23 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
 
     tokens = user_data[1] if len(user_data) > 1 else None
     send_notification(
-        uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
+        uid,
+        daily_summary_title,
+        summary_body,
+        NotificationMessage.get_message_as_dict(ai_message),
+        tokens=tokens,
+        push_backend=push_backend,
     )
 
 
-async def _send_bulk_summary_notification(users: List[Tuple[Any, ...]]) -> None:
+async def _send_bulk_summary_notification(users: List[Tuple[Any, ...]], push_backend: Optional[str] = None) -> None:
     _BATCH_SIZE = 8
     for i in range(0, len(users), _BATCH_SIZE):
         batch = users[i : i + _BATCH_SIZE]
-        tasks = [run_blocking(postprocess_executor, _send_summary_notification, user_tokens) for user_tokens in batch]
+        tasks = [
+            run_blocking(postprocess_executor, _send_summary_notification, user_tokens, push_backend)
+            for user_tokens in batch
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for j, result in enumerate(results):
             if isinstance(result, Exception):
@@ -233,21 +286,30 @@ async def send_daily_notification() -> None:
 
 
 async def _send_notification_for_time(target_time: str, title: str, body: str) -> Any:
-    user_in_time_zone = await _get_users_in_timezone(target_time)
+    # Resolve the push backend ONCE per operation and carry it into both the recipient fetch and the
+    # dispatch, so a PUSH_NOTIFICATION_BACKEND typo records its fallback once, not twice (review 4939247683).
+    backend = resolve_push_backend()
+    user_in_time_zone = await _get_users_in_timezone(target_time, backend)
     if not user_in_time_zone:
         logger.info("No users found in time zone")
         return None
-    await send_bulk_notification(user_in_time_zone, title, body)
+    await send_bulk_notification(user_in_time_zone, title, body, push_backend=backend)
     return user_in_time_zone
 
 
-async def _get_users_in_timezone(target_time: str) -> Any:
+async def _get_users_in_timezone(target_time: str, backend: str) -> Any:
     timezones_in_time = _get_timezones_at_time(target_time)
     timezone_chunks = [timezones_in_time[i : i + 30] for i in range(0, len(timezones_in_time), 30)]
-    chunk_results = await asyncio.gather(
-        *[run_blocking(db_executor, notification_db.get_users_token_in_timezones, chunk) for chunk in timezone_chunks]
+    # send_bulk_notification treats its list as endpoints in UnifiedPush mode, so gather endpoints (not
+    # FCM tokens) as the recipients there — a UnifiedPush deployment has no tokens, so the morning
+    # notification would otherwise reach nobody (cubic PR 10887 B2).
+    fetch = (
+        notification_db.get_users_endpoints_in_timezones
+        if backend == UNIFIEDPUSH
+        else notification_db.get_users_token_in_timezones
     )
-    return [token for chunk in chunk_results for token in chunk]
+    chunk_results = await asyncio.gather(*[run_blocking(db_executor, fetch, chunk) for chunk in timezone_chunks])
+    return [recipient for chunk in chunk_results for recipient in chunk]
 
 
 def _get_timezones_at_time(target_time: str) -> List[str]:

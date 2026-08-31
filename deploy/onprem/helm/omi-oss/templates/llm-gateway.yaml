@@ -1,0 +1,157 @@
+{{- if and .Values.chat.enabled .Values.chat.llmGateway.enabled }}
+{{- /*
+On-prem chat LLM gateway (D32, ADR-0035) — the Helm mirror of compose's `llm_gateway` service.
+
+Why it must exist at all: the backend never speaks a model name. It sends an `omi:auto:<feature>` LANE
+id, and only this service resolves a lane to a concrete model before forwarding OpenAI-compatibly to
+the operator's endpoint. A plain Ollama/vLLM therefore CANNOT be the target of OMI_LLM_GATEWAY_URL.
+Without this workload the backend falls back to its built-in cloud model table (gpt-*, gemini via
+Vertex, openrouter, perplexity) — three of whose providers have no base-URL override at all — which is
+exactly the parity gap this closes.
+
+It runs the SAME image as the backend (the gateway ships inside it), so there is no extra image to
+build, push or version: it inherits the release tag like every other workload (ADR-0054).
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-gateway-routes
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: llm-gateway
+data:
+  # Rendered FROM files/generated_route_overrides.yaml — the same file compose bind-mounts (ADR-0081).
+  # This list used to be declared a second time, by hand, in values.yaml under `chat.llmGateway.features`,
+  # with a comment asking the two to be kept in step. They were not: the chart held 4 lanes while compose
+  # held 44, and on the live k0s release 41 of 45 lanes did not serve. A parity that has to be remembered
+  # is a parity that drifts, so there is now one declaration and the chart reads it.
+  #
+  # What the chart still decides is the MODEL: `chat.llmGateway.model` replaces whatever the file pins, so
+  # a k8s operator serving something other than the file's default does not have to edit a shared file.
+  # Everything else — which lanes exist, and their per-feature request_timeout_ms — comes from the file.
+  generated_route_overrides.yaml: |
+    generated_route_overrides:
+    {{- $file := .Files.Get "files/generated_route_overrides.yaml" | fromYaml }}
+    {{- $lanes := $file.generated_route_overrides | default list }}
+    {{- if not $lanes }}
+    {{-   fail "files/generated_route_overrides.yaml declared no lanes — an empty ConfigMap would leave every feature on its CLOUD model (ADR-0067)" }}
+    {{- end }}
+    {{- range $lanes }}
+      - feature: {{ .feature }}
+        primary: {provider: openai, model: {{ $.Values.chat.llmGateway.model | quote }}}
+      {{- with .request_timeout_ms }}
+        request_timeout_ms: {{ . }}
+      {{- end }}
+    {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-gateway
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: llm-gateway
+spec:
+  selector:
+    app.kubernetes.io/component: llm-gateway
+    app.kubernetes.io/part-of: omi-oss
+  ports:
+    - name: http
+      port: 9080
+      targetPort: 9080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-gateway
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: llm-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: llm-gateway
+      app.kubernetes.io/part-of: omi-oss
+  template:
+    metadata:
+      labels:
+        {{- include "omi-oss.labels" . | nindent 8 }}
+        app.kubernetes.io/component: llm-gateway
+      annotations:
+        # Roll the pod when the lane map changes, the same way the backend rolls on its configmap.
+        # Checksummed from the VALUES that generate the routes, not from this template: the ConfigMap
+        # lives in this same file, so including it here would recurse.
+        checksum/routes: {{ toYaml .Values.chat.llmGateway | sha256sum }}
+        # And on the Secret it reads OPENAI_API_KEY / the service token / METRICS_SECRET from — same
+        # reason as the backend: envFrom-style values are bound at pod start, so a Secret-only change
+        # applies to nothing until something rolls the pod.
+        checksum/secret: {{ include (print $.Template.BasePath "/backend-secret.yaml") . | sha256sum }}
+        # ALSO roll on a Secret change. Found live: the service token and OPENAI_API_KEY come from
+        # backend-secret via secretKeyRef, which is read once at container start — so changing either
+        # left the old pod running with the stale value, and the gateway answered 503 invalid_config
+        # while `helm upgrade` reported success. A different template file, so no recursion.
+        checksum/secret: {{ include (print $.Template.BasePath "/backend-secret.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: llm-gateway
+          image: {{ include "omi-oss.image" (dict "root" . "image" .Values.backend.image) }}
+          imagePullPolicy: {{ .Values.backend.imagePullPolicy }}
+          command: ["sh", "-c", "exec uvicorn llm_gateway.main:app --host 0.0.0.0 --port 9080 --loop uvloop"]
+          ports:
+            - containerPort: 9080
+          env:
+            # The operator's OpenAI-compatible endpoint — the same values the backend uses for the
+            # inference profile, so there is one place to configure the LLM.
+            - name: OPENAI_BASE_URL
+              value: {{ required "chat.llmGateway needs inference.openai.baseUrl (the operator's endpoint)" .Values.inference.openai.baseUrl | quote }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: OPENAI_API_KEY
+                  optional: true
+            # Shared with the backend: a mismatch is a 401 'invalid service authentication' on every
+            # chat turn, which surfaces to the user as a canned apology rather than an error.
+            - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            # The gateway has its OWN /metrics with the same bearer check, so without this its counters
+            # are unreachable (401). Optional: unset keeps the endpoint shut, which is the default.
+            - name: METRICS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: METRICS_SECRET
+                  optional: true
+          volumeMounts:
+            - name: routes
+              mountPath: /app/llm_gateway/config/generated_route_overrides.yaml
+              subPath: generated_route_overrides.yaml
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.chat.llmGateway.resources | nindent 12 }}
+      volumes:
+        - name: routes
+          configMap:
+            name: llm-gateway-routes
+{{- end }}

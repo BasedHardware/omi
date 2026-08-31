@@ -776,3 +776,40 @@ def test_ledger_drain_scales_uid_page_without_raising_per_user_mutation_budget()
 
     assert cron.MAX_LEDGER_MIGRATION_UIDS_PER_RUN == 200
     assert MAX_LEDGER_MIGRATION_MUTATIONS_PER_RUN == 100
+
+
+def test_the_graph_enrichment_call_injects_its_db_client(monkeypatch):
+    """The cron must pass `db_client` to `run_enrichment` — that kwarg is what keeps a raw Firestore
+    client out of the runtime path (BACKLOG L12).
+
+    `scripts/enrich_historical_memory_graph.py:356` reads
+    `db_client = db_client or _firestore_client(project=firestore_project)`, i.e. it CONSTRUCTS a raw
+    `firestore.Client` when the caller does not inject one. That module is imported by this cron, so it is
+    runtime code by import — the ADR-0023 premise that `scripts/` is not deployed does not hold for it —
+    and the guards excluded the whole directory. Dropping this kwarg would therefore reopen a no-Google
+    violation that CI could not see.
+
+    Asserting on the CALL, not on the import graph: a static check cannot tell whether the raw path is
+    reachable, and this is the one condition that makes it unreachable.
+    """
+    _enable(monkeypatch)
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV, "true")
+    captured = {}
+
+    def _capture(**kwargs):
+        captured.update(kwargs)
+        return {"outcomes": {"committed": 0}}
+
+    monkeypatch.setattr(cron, "run_enrichment", _capture)
+    monkeypatch.setattr(
+        cron,
+        "run_canonical_short_term_maintenance",
+        lambda uid, **_kw: cron.CanonicalShortTermMaintenanceReport(uid=uid),
+    )
+
+    injected = object()
+    cron.run_universal_short_term_maintenance(db_client=injected, now=NOW, uid_inventory=lambda _db, _limit: ["uid-a"])
+
+    assert captured, 'the graph-enrichment branch did not run: this test would prove nothing'
+    assert 'db_client' in captured, 'run_enrichment was called without db_client: raw Firestore is back'
+    assert captured['db_client'] is injected

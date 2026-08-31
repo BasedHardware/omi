@@ -284,7 +284,12 @@ def get_messages(
             file: Dict[str, Any] = _typed_doc(doc)
             files[file['id']] = file
 
-    # Attach files to messages
+    # Attach files to messages. The thumbnail is stored as an object KEY and signed here, where the
+    # records leave the database, so every consumer downstream gets a fetchable URL without knowing it
+    # (ADR-0087). Legacy rows hold a full URL and pass through untouched.
+    from utils.other.storage import resolve_chat_file_thumbnails
+
+    resolve_chat_file_thumbnails(list(files.values()))
     for message in messages:
         message['files'] = [files[file_id] for file_id in message.get('files_id', []) if file_id in files]
 
@@ -592,14 +597,17 @@ def get_chat_files(uid: str, files_id: Optional[List[str]] = None) -> List[Dict[
     if files_id is None:
         files_id = []
 
+    # Thumbnails are stored as object KEYS and signed on the way out (ADR-0087) — same as get_messages.
+    from utils.other.storage import resolve_chat_file_thumbnails
+
     # If no specific files requested, return all
     if len(files_id) == 0:
-        return [_typed_doc(doc) for doc in files_ref.stream()]
+        return resolve_chat_file_thumbnails([_typed_doc(doc) for doc in files_ref.stream()])
 
     # Firestore IN operator supports max 30 values, so chunk the queries
     if len(files_id) <= 30:
         files_ref = files_ref.where(filter=FieldFilter('id', 'in', files_id))
-        return [_typed_doc(doc) for doc in files_ref.stream()]
+        return resolve_chat_file_thumbnails([_typed_doc(doc) for doc in files_ref.stream()])
 
     # Chunk into batches of 30
     results: List[Dict[str, Any]] = []
@@ -609,11 +617,15 @@ def get_chat_files(uid: str, files_id: Optional[List[str]] = None) -> List[Dict[
         chunk_ref = chunk_ref.where(filter=FieldFilter('id', 'in', chunk))
         results.extend([_typed_doc(doc) for doc in chunk_ref.stream()])
 
-    return results
+    return resolve_chat_file_thumbnails(results)
 
 
 def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: int = 10) -> List[Dict[str, Any]]:
-    """Get the most recent chat files ordered by created_at descending, optionally filtered by file IDs"""
+    """Get the most recent chat files ordered by created_at descending, optionally filtered by file IDs.
+
+    Thumbnails are resolved on the way out, same as get_chat_files (ADR-0087)."""
+    from utils.other.storage import resolve_chat_file_thumbnails
+
     files_ref = db.collection('users').document(uid).collection('files')
 
     if files_id is None:
@@ -622,14 +634,14 @@ def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: i
     # If no specific files requested, return most recent files
     if len(files_id) == 0:
         files_ref = files_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
-        return [_typed_doc(doc) for doc in files_ref.stream()]
+        return resolve_chat_file_thumbnails([_typed_doc(doc) for doc in files_ref.stream()])
 
     # If specific files requested, filter by them first
     # Firestore IN operator supports max 30 values
     if len(files_id) <= 30:
         files_ref = files_ref.where(filter=FieldFilter('id', 'in', files_id))
         files_ref = files_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
-        return [_typed_doc(doc) for doc in files_ref.stream()]
+        return resolve_chat_file_thumbnails([_typed_doc(doc) for doc in files_ref.stream()])
 
     # Chunk into batches of 30 if more than 30 files
     results: List[Dict[str, Any]] = []
@@ -644,7 +656,7 @@ def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: i
     # never TypeError-compares against the tz-aware Firestore datetimes and sinks to the bottom of the
     # descending sort (same class as the review-queue tz sentinel in #9571).
     results.sort(key=lambda x: x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
-    return results[:limit]
+    return resolve_chat_file_thumbnails(results[:limit])
 
 
 def delete_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:

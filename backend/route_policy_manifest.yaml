@@ -29,6 +29,35 @@ routes:
       deprecation:
         state: active
       owner: backend
+  # UnifiedPush endpoint registration: the on-prem twin of the FCM token route, for a deployment
+  # that ships no Google push path (ADR-0011/0041). Declared reviewed rather than added to the
+  # legacy baseline — that baseline is for routes that predate the manifest, and this one does not.
+  - route_type: http
+    method: POST
+    path: /v1/users/unifiedpush-endpoint
+    policy:
+      review_status: reviewed
+      auth:
+        # The dependency is `auth.get_current_user_uid`. Named for the token the upstream deployment
+        # issues; on-prem the auth port swaps the issuer (ADR-0034) without changing what the route
+        # requires, which is a bearer identity for the calling user.
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
   - route_type: http
     method: GET
     path: /v1/jit/knowledge-ledger/mirror-snapshot

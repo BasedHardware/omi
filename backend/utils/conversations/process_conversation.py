@@ -2455,6 +2455,14 @@ def _send_important_conversation_notification_if_needed(uid: str, conversation: 
 def process_user_emotion(uid: str, language_code: str, conversation: Conversation, urls: List[str]) -> None:
     logger.info(f'process_user_emotion conversation.id= {conversation.id}')
 
+    # Vendor egress (ADR-0057). Gated here as well as inside the client, and BEFORE the task row: the
+    # client's refusal takes the `"error" in ok` path below, which returns without ever moving the task out
+    # of PROCESSING — one orphan row per conversation, forever.
+    from config.vendor_egress import vendor_egress_denied
+
+    if vendor_egress_denied('hume_prosody', log=logger):
+        return
+
     # save task
     now = datetime.now()
     task = Task(
@@ -2467,8 +2475,22 @@ def process_user_emotion(uid: str, language_code: str, conversation: Conversatio
     )
     tasks_db.create(task.dict())
 
-    # emotion
-    ok = get_hume().request_user_expression_mersurement(urls)
+    # emotion. The task id is minted into a signed callback token BEFORE the submission, because it is
+    # the only identifier of ours that exists at this point -- Hume chooses the job id and only returns it
+    # in the response. The callback route refuses anything not carrying it (BACKLOG L42).
+    from utils.other.hume_callback_token import HumeCallbackTokenError, mint as mint_hume_callback_token
+
+    try:
+        callback_token = mint_hume_callback_token(task.id)
+    except HumeCallbackTokenError as error:
+        # Skip the measurement rather than raise. The only caller wraps this in `except Exception` and
+        # marks the whole conversation's postprocessing FAILED, so letting a signing error escape would
+        # trade a working conversation for an optional emotion reading. Unreachable while
+        # ENCRYPTION_SECRET is mandatory at boot -- which is exactly why it must not be load-bearing.
+        logger.error(f"Cannot sign the Hume callback, skipping expression measurement: {error}")
+        return
+
+    ok = get_hume().request_user_expression_mersurement(urls, callback_token=callback_token)
     if "error" in ok:
         err = ok["error"]
         logger.error(err)
@@ -2488,7 +2510,7 @@ def process_user_emotion(uid: str, language_code: str, conversation: Conversatio
 
 
 def process_user_expression_measurement_callback(
-    provider: str, request_id: str, callback: HumeJobCallbackModel
+    provider: str, request_id: str, callback: HumeJobCallbackModel, expected_task_id: str
 ) -> None:
     support_providers = [TaskActionProvider.HUME]
     if provider not in support_providers:
@@ -2509,6 +2531,13 @@ def process_user_expression_measurement_callback(
         return
 
     task = Task(**task_data)
+
+    # The signed callback token names ONE submission. A caller holding a valid token for their own job
+    # must not be able to steer the result of somebody else's by sending that job's id in the body: the
+    # token proves the callback is ours, this proves it is THIS one's (BACKLOG L42).
+    if task.id != expected_task_id:
+        logger.warning(f"Callback token does not name this task. Action: {task_action}, Request ID: {request_id}")
+        return
 
     # Update
     task_status = task.status

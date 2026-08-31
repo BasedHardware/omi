@@ -237,6 +237,11 @@ def wire_common_stubs(install) -> SimpleNamespace:
     storage = install('utils.other.storage', ModuleType('utils.other.storage'))
     storage.get_syncing_file_temporal_signed_url = MagicMock(return_value='https://example.test/audio.wav')
     storage.schedule_syncing_temporal_file_deletion = MagicMock()
+    # The upload routes store the object KEY and mint the URL for the response (ADR-0087). The stub
+    # returns the value unchanged: these suites are about the routes' control flow, not about signing,
+    # and a stub that silently lacked the name failed the route with an AttributeError instead.
+    storage.upload_multi_chat_files = MagicMock(return_value={})
+    storage.resolve_chat_thumbnail = MagicMock(side_effect=lambda stored: stored)
     chat_file = install('utils.other.chat_file', ModuleType('utils.other.chat_file'))
     chat_file.FileChatTool = MagicMock()
     # routers.chat imports this name; the stub must carry it or the module fails to load. A local

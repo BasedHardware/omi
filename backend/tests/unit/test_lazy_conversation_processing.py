@@ -48,6 +48,10 @@ class TestShouldDeferDesktopProcessing:
             mod = _stub(name)
             if name == 'database._client':
                 mod.db = MagicMock()
+                # subscription.py imports this at module level; expose it on the stub so the fresh
+                # subscription exec resolves without pulling the real client. The sibling
+                # get_firestore_client stub went away with upstream's import cleanup (#11303) — it is no
+                # longer imported there, so stubbing it would only describe a dependency that is gone.
                 mod.get_customer_firestore_client = MagicMock(return_value=MagicMock())
             elif name == 'database.redis_db':
                 mod.get_generic_cache = MagicMock(return_value=None)

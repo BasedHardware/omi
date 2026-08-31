@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
-import firebase_admin.auth
 from pydantic import BaseModel
 
 from database.referrals import claim_referral_trial
+from utils.auth import get_auth_provider
 from utils.other import endpoints as auth
 from utils.referrals import (
     REFERRAL_COOKIE_MAX_AGE_SECONDS,
@@ -75,8 +75,11 @@ def claim_referral(
     except ReferralCodeError as error:
         raise HTTPException(status_code=404, detail='Referral link not found') from error
 
-    user = firebase_admin.auth.get_user(uid)
-    creation_timestamp = getattr(getattr(user, 'user_metadata', None), 'creation_timestamp', None)
+    # Through the neutral auth port (ADR-0034), not firebase_admin.auth: the account-creation time is
+    # already a neutral scalar on UserProfile (epoch ms, populated from Firebase's
+    # user_metadata.creation_timestamp or Keycloak's createdTimestamp), added for the desktop trial
+    # paywall. Reading the Firebase UserRecord here would have made the referral trial Firebase-only.
+    creation_timestamp = get_auth_provider().get_user_profile(uid).created_at
     claimed, reason = claim_referral_trial(
         uid,
         referrer_uid,

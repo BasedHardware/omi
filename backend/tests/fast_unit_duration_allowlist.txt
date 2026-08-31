@@ -328,3 +328,49 @@ tests/unit/test_chat_file_upload_unsupported.py::test_heic_photo_is_rejected_as_
 tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
 tests/unit/test_llm_gateway_embeddings_route.py::test_embeddings_success_returns_openai_shape_and_records_accounting
 tests/unit/test_llm_gateway_vertex_provider.py::test_gateway_registry_uses_native_vertex_for_gemini
+
+# --- on-prem port (PR #10887) -------------------------------------------------------------------
+# The dominant cause is the one the header already names: under file isolation the FIRST test of a
+# file pays that process's whole import graph. Each entry below is the first test of a file this PR
+# adds, and every one of them is hermetic — no network, no sleeps, no real services.
+# Baked tiktoken encodings: the assertion is cheap, loading the encodings to make it is not.
+tests/unit/test_tiktoken_baked_encodings.py::test_tiktoken_baked_encodings_cover_usage
+# First test of a file that imports the BYOK notification path. It lands right on the line (measured
+# 1.02s against the CI ceiling of 1.00s), which is exactly the case the guard cannot judge for itself:
+# contention stall cycles are charged to the process, so the same work drifts either side of the bound.
+tests/unit/test_byok_llm_notifications.py::test_handle_llm_error_notifies_actionable_byok_error
+# The vector boot-check files: both first-tests import the factory, the adapters and the namespace
+# state store. Measured 1.07s and 1.03s against the 1.00s ceiling — over it, and close enough that
+# which of the two trips first depends on machine load.
+tests/unit/test_vector_dimension_crosscheck.py::test_agreement_is_silent
+tests/unit/test_vector_namespace_model.py::test_the_boot_check_reports_a_swapped_model
+# First test of a file that imports the subscription/paywall stack to read an account's created_at.
+tests/unit/test_trial_paywall_created_at.py::test_trial_expiry_reads_created_at_and_fires_for_old_accounts
+# Measured over the ceiling on CI's runner, not ours: their machine is slower per-CPU, so the set of
+# first-tests that clear 1.00s differs from what a local run shows. These three came from the CI log.
+tests/unit/test_selfhost_stage_contract.py::test_the_gateway_interlock_treats_selfhost_as_a_real_runtime
+tests/unit/test_selfhost_stage_contract.py::test_promotion_flex_fails_closed_on_selfhost
+tests/unit/test_vector_upsert_chunking.py::test_qdrant_needs_no_chunking_and_gets_none
+# The one test that pays the source walk. Excluding build scratch and caching the result took this
+# file from six tests at ~7s each to one at ~1.5s, but reading every .py under backend/ (~2k files)
+# is genuinely that on CI's hardware, and the cache means exactly one test is charged for it.
+tests/unit/test_runtime_reachable_scripts.py::test_the_reachable_set_is_what_the_source_says
+# First test of a file that imports the MCP router graph to read its discovery document.
+tests/unit/test_mcp_resource_identity.py::test_the_document_reports_the_configured_resource
+# First test of a file that imports the notification stack (FCM + UnifiedPush channels).
+tests/unit/test_notifications_cluster_c.py::test_send_bulk_notification_unifiedpush_cleanup_failure_does_not_propagate
+# First test of a file that imports the vendor-egress gate and the clients it fronts.
+tests/unit/test_vendor_egress_gate.py::test_github_docs_content_returns_none_when_denied
+# Drives the real upload routes through the app, so it pays the full FastAPI app import.
+tests/unit/test_chat_thumbnail_urls.py::test_the_upload_routes_resolve_before_responding
+# First test of a file that imports the conversation pipeline to mint and verify a callback token.
+tests/unit/test_hume_callback_authenticity.py::test_a_valid_token_cannot_steer_another_users_job
+# First test of a file that imports the scheduled-job runner and its whole dependency graph.
+tests/unit/test_onprem_scheduled_jobs.py::test_the_runner_never_initialises_firebase
+# These two are the exception to the header's rule: they ARE codebase scans, which the header says to
+# mark `slow` rather than list here. Marked `slow` they would stop running altogether — the only CI
+# unit lane is `not integration and not slow` (backend/scripts/run-unit-ci.sh) and nothing else runs
+# the slow set, so the mark would drop the coverage instead of relocating it. They stay in the lane,
+# and the cost is declared here rather than hidden behind a mark nobody executes.
+tests/unit/test_transactional_bodies_have_no_side_effects.py::test_the_scan_finds_the_transactional_bodies_it_claims_to
+tests/unit/test_transactional_bodies_have_no_side_effects.py::test_no_transactional_body_reaches_outside_the_store
