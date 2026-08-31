@@ -261,7 +261,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => null,
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
         now = now.add(const Duration(milliseconds: 1250));
         return UploadFilesResult.queued('job-telemetry');
       },
@@ -293,7 +293,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => null,
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
         now = now.add(const Duration(milliseconds: 500));
         throw const SocketException('secret host and path');
       },
@@ -331,7 +331,7 @@ void main() {
     final gate = SyncUploadGate(
       limiter: limiter,
       fairUseStatusLoader: () async => null,
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async =>
+      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async =>
           UploadFilesResult.queued('job-after-telemetry-failure'),
       telemetryEmitter: (_, __) => throw StateError('analytics unavailable'),
     );

@@ -135,6 +135,7 @@ class _NullSocketCaptureProvider extends CaptureProvider {
     required String language,
     required bool force,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
   }) async =>
       null;
@@ -152,6 +153,7 @@ class _CountingSocketCaptureProvider extends CaptureProvider {
     required String language,
     required bool force,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
   }) async {
     openCalls++;
