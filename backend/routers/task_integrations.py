@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from models.shared import StatusResponse
 import os
 import secrets
-import ast
+import json
 from datetime import datetime, timedelta, timezone
 import httpx
 
@@ -109,7 +109,7 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
         return None
 
     try:
-        state_data = ast.literal_eval(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
+        state_data = json.loads(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
         return state_data
     except Exception as e:
         logger.error(f"Error parsing state data: {e}")
@@ -275,7 +275,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     # Store state mapping in Redis with expiry
     state_key = f"oauth_state:{state_token}"
     state_data = {'uid': uid, 'app_key': app_key, 'created_at': datetime.now(timezone.utc).isoformat()}
-    redis_db.r.setex(state_key, OAUTH_STATE_EXPIRY, str(state_data))
+    redis_db.r.setex(state_key, OAUTH_STATE_EXPIRY, json.dumps(state_data))
 
     if app_key == 'todoist':
         client_id = os.getenv('TODOIST_CLIENT_ID')
