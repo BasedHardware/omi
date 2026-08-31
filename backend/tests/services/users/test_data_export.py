@@ -726,3 +726,77 @@ def test_legacy_conversation_photo_without_any_bytes_reference_exports_metadata(
 
     assert manifest["bytes_available"] is False
     assert manifest["bytes_unavailable_reason"] == "no_retained_bytes_reference"
+
+def test_export_photo_manifest_require_bytes_missing_reference():
+    with pytest.raises(
+        data_export.PortabilityExportIncomplete, match="retained image bytes reference is missing or malformed"
+    ):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "base64": "", "storage_id": ""},
+            require_bytes=True,
+        )
+
+
+def test_export_photo_manifest_malformed_inline_bytes_type():
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="retained inline image bytes are malformed"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "base64": 123},
+            require_bytes=True,
+        )
+
+
+def test_export_photo_manifest_malformed_inline_bytes_encoding():
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="retained inline image bytes are malformed"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "base64": "invalid base64!"},
+            require_bytes=True,
+        )
+
+
+def test_export_photo_manifest_valid_inline_bytes():
+    import base64
+
+    valid_base64 = base64.b64encode(b"test pixels").decode("ascii")
+    manifest = data_export._export_photo_manifest(
+        "uid1",
+        "conv-1",
+        {"id": "photo-1", "base64": valid_base64},
+        require_bytes=True,
+    )
+    assert manifest["bytes_available"] is True
+    assert manifest["bytes_base64"] == valid_base64
+
+
+def test_export_photo_manifest_empty_storage_object(monkeypatch):
+    monkeypatch.setattr(data_export, "download_frame_request_pixels", MagicMock(return_value=b""))
+    with pytest.raises(data_export.PortabilityExportIncomplete, match="retained image object is empty"):
+        data_export._export_photo_manifest(
+            "uid1",
+            "conv-1",
+            {"id": "photo-1", "storage_id": "storage-1"},
+            require_bytes=True,
+        )
+    data_export.download_frame_request_pixels.assert_called_once_with("uid1", "storage-1")
+
+
+def test_export_photo_manifest_valid_storage_object(monkeypatch):
+    monkeypatch.setattr(
+        data_export, "download_frame_request_pixels", MagicMock(return_value=b"test pixels from storage")
+    )
+    manifest = data_export._export_photo_manifest(
+        "uid1",
+        "conv-1",
+        {"id": "photo-1", "storage_id": "storage-1"},
+        require_bytes=True,
+    )
+    assert manifest["bytes_available"] is True
+    import base64
+
+    assert manifest["bytes_base64"] == base64.b64encode(b"test pixels from storage").decode("ascii")
+    data_export.download_frame_request_pixels.assert_called_once_with("uid1", "storage-1")
