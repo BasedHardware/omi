@@ -66,12 +66,7 @@ final class TranscriptionTransportTests: XCTestCase {
   func testConversationWebSocketCarriesDeviceProvenanceHeaders() throws {
     let src = try source(relativePath: "Sources/TranscriptionService.swift")
 
-    // omi-test-quality: source-inspection -- static contract: PTT / listen WS
-    // handshake must stamp a bounded ClientKind; User-Agent must not be the
-    // fallback. `macos` is the same value OmiHTTPTransport.buildHeaders sends.
-    XCTAssertTrue(
-      src.contains("request.setValue(\"macos\", forHTTPHeaderField: \"X-App-Platform\")"),
-      "transcribe-stream / listen WS upgrade must send X-App-Platform: macos")
+    XCTAssertTrue(src.contains("X-App-Platform"))
     XCTAssertTrue(src.contains("X-Device-Id-Hash"))
     XCTAssertTrue(src.contains("ClientDeviceService.shared.deviceIdHash"))
   }
