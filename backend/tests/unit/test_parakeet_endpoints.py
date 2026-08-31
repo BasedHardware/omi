@@ -346,16 +346,25 @@ class TestV2TranscribeEndpoint:
             resp = client.post("/v2/transcribe", files={"file": ("test.wav", b"fake", "audio/wav")}, data=data)
         return resp, mock_v2
 
-    def test_v2_forwards_speaker_constraints_to_the_transcriber(self):
+    def test_v2_forwards_speaker_bounds_to_the_transcriber(self):
         resp, mock_v2 = self._post_v2_with_mocked_transcriber(
-            {"diarize": "true", "num_speakers": "3", "min_speakers": "2", "max_speakers": "5"}
+            {"diarize": "true", "min_speakers": "2", "max_speakers": "5"}
         )
 
         assert resp.status_code == 200
         kwargs = mock_v2.call_args.kwargs
-        assert kwargs["num_speakers"] == 3
         assert kwargs["min_speakers"] == 2
         assert kwargs["max_speakers"] == 5
+        assert kwargs["num_speakers"] is None
+
+    def test_v2_forwards_an_exact_speaker_count_to_the_transcriber(self):
+        resp, mock_v2 = self._post_v2_with_mocked_transcriber({"diarize": "true", "num_speakers": "3"})
+
+        assert resp.status_code == 200
+        kwargs = mock_v2.call_args.kwargs
+        assert kwargs["num_speakers"] == 3
+        assert kwargs["min_speakers"] is None
+        assert kwargs["max_speakers"] is None
 
     def test_v2_omitted_speaker_constraints_arrive_as_none(self):
         resp, mock_v2 = self._post_v2_with_mocked_transcriber({"diarize": "true"})
@@ -376,6 +385,17 @@ class TestV2TranscribeEndpoint:
         )
         assert resp.status_code == 422
         assert "min_speakers" in resp.json()["detail"]
+
+    def test_v2_rejects_num_speakers_combined_with_bounds(self):
+        app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v2/transcribe",
+            files={"file": ("test.wav", b"fake", "audio/wav")},
+            data={"diarize": "true", "num_speakers": "3", "max_speakers": "5"},
+        )
+        assert resp.status_code == 422
+        assert "num_speakers" in resp.json()["detail"]
 
     def test_v2_rejects_non_positive_speaker_counts(self):
         app, mod, _, _ = _make_app_with_mocks(gpu_ready=True)

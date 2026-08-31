@@ -256,6 +256,15 @@ async def transcribe_v2(
             status_code=422,
             content={"detail": f"min_speakers ({min_speakers}) cannot exceed max_speakers ({max_speakers})"},
         )
+    if num_speakers is not None and (min_speakers is not None or max_speakers is not None):
+        # An exact count and a range are contradictory requests. Rejecting is
+        # consistent with min > max above; silently preferring one would leave the
+        # caller believing a bound they set was honoured.
+        REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "num_speakers cannot be combined with min_speakers or max_speakers"},
+        )
     speaker_bounds: Dict[str, Optional[int]] = {
         "num_speakers": num_speakers,
         "min_speakers": min_speakers,
