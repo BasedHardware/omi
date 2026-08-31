@@ -1,0 +1,3 @@
+{
+  "change": "Stop meeting notes from labeling Telegram (and other native messaging-app) calls as Speaker 1 when the other party's name is on the call window."
+}

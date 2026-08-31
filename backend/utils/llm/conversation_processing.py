@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
@@ -1116,6 +1117,39 @@ def render_sections_markdown(sections: List[Any]) -> str:
     return '\n\n'.join(rendered)
 
 
+# Diarization placeholders are transcript machinery, not people. Prompt wording alone
+# does not hold — v2 already forbade "Speaker 1 said that" and still leaked the token.
+_SPEAKER_PLACEHOLDER_RE = re.compile(r'(?i)\b(?:speaker[ _]\d+|SPEAKER_\d+)\b:?[ \t]*')
+
+
+def strip_speaker_placeholders(text: str) -> str:
+    """Drop leftover Speaker N / SPEAKER_00 tokens rather than inventing a name."""
+    if not text:
+        return text
+    cleaned = _SPEAKER_PLACEHOLDER_RE.sub('', text)
+    cleaned = re.sub(r'[^\S\n]+', ' ', cleaned)
+    cleaned = re.sub(r' *\n *', '\n', cleaned)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned.strip()
+
+
+def sanitize_structured_speaker_placeholders(structured: Structured) -> Structured:
+    """Strip diarization placeholders from every user-visible notes field."""
+    structured.title = strip_speaker_placeholders(structured.title)
+    structured.overview = strip_speaker_placeholders(structured.overview)
+    for section in structured.sections:
+        section.heading = strip_speaker_placeholders(section.heading)
+        section.body_markdown = strip_speaker_placeholders(section.body_markdown)
+    for item in structured.action_items:
+        item.description = strip_speaker_placeholders(item.description)
+        if item.owner_name:
+            cleaned_owner = strip_speaker_placeholders(item.owner_name)
+            item.owner_name = cleaned_owner or None
+        if item.context:
+            item.context = strip_speaker_placeholders(item.context)
+    return structured
+
+
 # Whole-transcript structuring produces the title and summary a conversation cannot be finalized
 # without, so like the test-prompt summary above it must not inherit the shared gateway transport
 # deadline (15s to first response byte), which is sized for background feature calls. In prod on
@@ -1179,6 +1213,11 @@ NOTE BODY — WRITE FOR SKIMMING, NOT FOR READING
 - Lead each bullet with the specific: the name, number, product, or decision. Never open a
   bullet with narration such as "They discussed", "The conversation turned to", or
   "Speaker 1 said that". Attribute inline only when who-said-it is the point.
+- NEVER emit diarization placeholders (`Speaker 0`, `Speaker 1`, `Speaker 2`, `SPEAKER_00`)
+  in the title, overview, section bullets, or action items, whether or not calendar or
+  screen context exists. Use a real person name only when it appears in meeting-identity
+  metadata or is already a non-placeholder transcript label. If identity is unknown,
+  write the fact without a speaker label.
 - No preamble, no scene-setting, no wrap-up bullet restating the section.
 - Merge overlapping points instead of restating them across sections.
 - Headings are short noun phrases (2-5 words), specific to this conversation.
@@ -1256,6 +1295,7 @@ DATE CONTEXT
     projected_overview = render_sections_markdown(structured.sections)
     if projected_overview:
         structured.overview = projected_overview
+    sanitize_structured_speaker_placeholders(structured)
     return structured
 
 
