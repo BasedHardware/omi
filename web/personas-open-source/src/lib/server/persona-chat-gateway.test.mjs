@@ -133,5 +133,8 @@ test('missing gateway URL or service token fails closed before a request is sent
 test('personaLaneForIdentity returns the correct lane for valid and null identities', () => {
   assert.equal(personaLaneForIdentity(null), 'omi:auto:persona-chat');
   assert.equal(personaLaneForIdentity(undefined), 'omi:auto:persona-chat');
-  assert.equal(personaLaneForIdentity({ uid: 'test-user' }), 'omi:auto:persona-chat-premium');
+  assert.equal(
+    personaLaneForIdentity({ uid: 'test-user' }),
+    'omi:auto:persona-chat-premium',
+  );
 });
