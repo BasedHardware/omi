@@ -197,6 +197,29 @@ private final class PendingRecoveryActions: @unchecked Sendable {
 }
 
 final class StreamingPCMPlayerLevelTests: XCTestCase {
+  func testRenderCapacityRaisesRouteChanged480FrameNodeAbove512FrameDeviceSlice() {
+    let engine = AVAudioEngine()
+    let player = AVAudioPlayerNode()
+    engine.attach(player)
+    engine.connect(player, to: engine.mainMixerNode, format: nil)
+    player.auAudioUnit.maximumFramesToRender = 480
+    engine.mainMixerNode.auAudioUnit.maximumFramesToRender = 480
+
+    let capacities = StreamingPCMRenderCapacity.configure(
+      units: [player.auAudioUnit, engine.mainMixerNode.auAudioUnit])
+
+    XCTAssertEqual(capacities, [4096, 4096])
+    XCTAssertGreaterThanOrEqual(player.auAudioUnit.maximumFramesToRender, 512)
+    XCTAssertGreaterThanOrEqual(engine.mainMixerNode.auAudioUnit.maximumFramesToRender, 512)
+  }
+
+  func testStreamingPlayerConfiguresSafeRenderCapacityBeforePlaybackStarts() {
+    let player = StreamingPCMPlayer(sampleRate: 24000)
+    defer { player.stop() }
+
+    XCTAssertEqual(player.renderCapacities, [4096, 4096])
+  }
+
   func testRmsLevelMeasuresSignalAndBoundsToOne() throws {
     let format = try XCTUnwrap(
       AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 24000, channels: 1, interleaved: false))
