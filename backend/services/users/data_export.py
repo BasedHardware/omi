@@ -7,6 +7,8 @@ from datetime import datetime
 from itertools import chain
 from typing import IO, Any, Callable, Iterable, Iterator, Mapping, Sequence, cast
 
+from google.cloud.firestore_v1 import FieldFilter
+
 from database import chat as chat_db
 from database import conversations as conversations_db
 from database import _client as database_client
@@ -174,16 +176,27 @@ def _iter_user_nested_subcollection(
 ) -> Iterator[Mapping[str, Any]]:
     """Stream user-visible records nested below one user-owned collection."""
 
-    parents = database_client.db.collection('users').document(uid).collection(parent_collection_name)
-    for parent_snapshot in parents.stream():
-        for child_snapshot in parent_snapshot.reference.collection(child_collection_name).stream():
-            payload = child_snapshot.to_dict()
-            if not isinstance(payload, dict):
-                continue
-            row = dict(payload)
-            row.setdefault('id', child_snapshot.id)
-            row['parent_id'] = parent_snapshot.id
-            yield row
+    parent_path = database_client.db.collection('users').document(uid).collection(parent_collection_name).path
+    start_key = database_client.db.document(f'{parent_path}/ ')
+    end_key = database_client.db.document(f'{parent_path}/\uf8ff')
+
+    query = (
+        database_client.db.collection_group(child_collection_name)
+        .where(filter=FieldFilter('__name__', '>=', start_key))
+        .where(filter=FieldFilter('__name__', '<=', end_key))
+    )
+
+    for child_snapshot in query.stream():
+        payload = child_snapshot.to_dict()
+        if not isinstance(payload, dict):
+            continue
+        row = dict(payload)
+        row.setdefault('id', child_snapshot.id)
+
+        # Snapshot path example: users/{uid}/{parent_collection}/{parent_id}/{child_collection}/{child_id}
+        path_parts = child_snapshot.reference.path.split('/')
+        row['parent_id'] = path_parts[-3]
+        yield row
 
 
 def _export_photo_manifest(

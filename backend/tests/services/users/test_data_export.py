@@ -507,16 +507,23 @@ def test_iter_user_data_export_does_not_call_list_export(monkeypatch):
 def test_nested_task_export_carries_owning_parent_id(monkeypatch):
     child = MagicMock(id='event-1')
     child.to_dict.return_value = {'kind': 'progress'}
-    parent = MagicMock(id='workstream-1')
-    parent.reference.collection.return_value.stream.return_value = [child]
-    parent_collection = MagicMock()
-    parent_collection.stream.return_value = [parent]
+    child.reference.path = 'users/uid1/workstreams/workstream-1/events/event-1'
+
+    mock_db = MagicMock()
+    mock_query = MagicMock()
+    mock_query.where.return_value = mock_query
+    mock_query.stream.return_value = [child]
+    mock_db.collection_group.return_value = mock_query
+
     user_document = MagicMock()
+    parent_collection = MagicMock()
+    parent_collection.path = 'users/uid1/workstreams'
     user_document.collection.return_value = parent_collection
+
     users_collection = MagicMock()
     users_collection.document.return_value = user_document
-    mock_db = MagicMock()
     mock_db.collection.return_value = users_collection
+
     monkeypatch.setattr(data_export.database_client, 'db', mock_db)
 
     records = list(_REAL_ITER_USER_NESTED_SUBCOLLECTION('uid1', 'workstreams', 'events'))
@@ -525,7 +532,7 @@ def test_nested_task_export_carries_owning_parent_id(monkeypatch):
     mock_db.collection.assert_called_once_with('users')
     users_collection.document.assert_called_once_with('uid1')
     user_document.collection.assert_called_once_with('workstreams')
-    parent.reference.collection.assert_called_once_with('events')
+    mock_db.collection_group.assert_called_once_with('events')
 
 
 def test_iter_user_data_export_skips_none_conversations_and_formats_arrays(monkeypatch):
