@@ -103,6 +103,7 @@ finally:
 
 import json
 
+
 def test_consume_uses_atomic_getdel_not_get_then_delete():
     fake_r = MagicMock()
     fake_r.getdel.return_value = json.dumps({'uid': 'u1', 'app_key': 'a1'}).encode()
