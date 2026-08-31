@@ -158,6 +158,13 @@ beforehand races the pusher's own registration write, and losing that race in
 the other direction would delete a recording that had just become
 referenceable.
 
+When the private-cloud flush writes `audio_files` onto a conversation that a
+mid-session delete removes between the flush's existence read and its commit,
+`update_conversation` reports the owner as gone (returns `False`) instead of
+raising: the flush then takes the same stop-syncing path as any other deleted
+owner rather than surfacing `404 No document to update` as an ERROR on every
+remaining flush of the session.
+
 ## Capture-device provenance
 
 Every capture client with WebSocket-upgrade header support sends
