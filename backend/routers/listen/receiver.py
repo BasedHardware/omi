@@ -43,6 +43,7 @@ from utils.subscription import request_has_llm_byok_key
 from utils.executors import db_executor, run_blocking
 from utils.transcribe_decisions import should_skip_custom_stt_postprocessing
 from utils.stt.live_failure import (
+    MAX_STT_FAILOVERS,
     flush_live_stt_buffer,
     live_stt_initialization_failure,
     live_stt_socket_is_dead,
@@ -87,8 +88,6 @@ logger = logging.getLogger(__name__)
 # Cadence for the frame-independent provider-death monitor (#10028). Short enough
 # to terminate a zombie "Listening" session promptly, far below ws_receive_timeout.
 STT_DEATH_POLL_INTERVAL_SECONDS = 1.0
-# Chain depth is 3 (velma/soniox/deepgram); allow walking it once, not looping.
-MAX_STT_FAILOVERS = 2
 
 # Longest frame the Opus format can carry, in milliseconds.
 OPUS_MAX_FRAME_MS = 120
