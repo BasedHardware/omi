@@ -486,7 +486,20 @@ def _get_structured(
                 trusted_wake_word_markers=has_wake_word_marker,
             )
         if discarded:
-            return Structured(emoji=random.choice(['🧠', '🎉'])), True
+            # Calendar overlap outranks discard (SCA-381): a scrap recorded
+            # inside a booked meeting is evidence, never noise. Only a positive
+            # overlap hit keeps it; a disconnected calendar, a missing token, or
+            # a failed lookup leaves the discard verdict standing.
+            if _calendar_overlap_retains_conversation(uid, main_conv.started_at, main_conv.finished_at):
+                logger.info(
+                    'Calendar overlap overrides discard for uid=%s conversation=%s window=[%s, %s]',
+                    uid,
+                    getattr(conversation, 'id', '?'),
+                    main_conv.started_at,
+                    main_conv.finished_at,
+                )
+            else:
+                return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         conv_started_at = cast(datetime, main_conv.started_at)
@@ -1902,6 +1915,37 @@ def _meeting_context_from_redis_mapping(uid: str, conversation: Any) -> Optional
     except Exception as exc:
         logger.error('Error retrieving mapped meeting context for conversation %s: %s', conversation_id, exc)
         return None
+
+
+def _calendar_overlap_retains_conversation(
+    uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
+) -> bool:
+    """Whether a non-declined calendar meeting overlaps [started_at, finished_at].
+
+    The discard override's only source of truth (SCA-381): stored meeting intent
+    in `users/{uid}/meetings` first (a cheap Firestore read, no provider
+    traffic), then a read-only Google Calendar lookup restricted to events the
+    user has not declined or cancelled. Fails closed to False on every error —
+    the override must never keep a conversation *because* a lookup failed, and
+    must never fail the conversation itself. No writes in this path.
+    """
+    if not isinstance(started_at, datetime) or not isinstance(finished_at, datetime):
+        return False
+
+    try:
+        tolerance = timedelta(minutes=MEETING_SEARCH_TOLERANCE_MINUTES)
+        records = calendar_db.get_meetings_in_time_range(uid, started_at - tolerance, finished_at + tolerance)
+        if select_overlapping_meeting(records, started_at=started_at, finished_at=finished_at) is not None:
+            return True
+    except Exception as exc:
+        logger.error('Error reading stored meetings for discard override uid=%s: %s', uid, exc)
+
+    try:
+        linked = asyncio.run(get_overlapping_calendar_event(uid, started_at, finished_at, require_accepted=True))
+        return linked is not None
+    except Exception as exc:
+        logger.error('Error reading Google Calendar for discard override uid=%s: %s', uid, exc)
+        return False
 
 
 def _meeting_context_from_time_overlap(
