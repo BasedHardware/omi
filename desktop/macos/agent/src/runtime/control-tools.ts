@@ -289,7 +289,13 @@ const sendAgentMessageSchema = strictObject({
   // Optional so a voice follow-up can continue the work in progress without
   // knowing an id. `resolveContinuationSessionId` supplies it.
   sessionId: z.string().min(1).optional(),
-  originSurfaceKind: originSurfaceKindSchema,
+  // A routing fact, not authority — the kernel re-resolves the caller's own
+  // persisted session and that wins. It had no default, so a surface that
+  // sensibly does not ask a *speaking user* which surface they are on failed
+  // validation on every call: the voice model called this correctly, got the
+  // same opaque error every time, and apologised for "an issue sending that
+  // command to the background agent".
+  originSurfaceKind: originSurfaceKindSchema.default("agent_control"),
   ownerId: z.string().min(1).optional(),
   prompt: z.string().min(1),
   mode: runModeSchema.default("ask"),
@@ -650,13 +656,27 @@ function resolveContinuationSessionId(
   ownerId: string,
   now: number = Date.now(),
 ): string | undefined {
-  const [candidate] = context.kernel.listSessions({ ownerId, status: "open", limit: 1 });
-  if (!candidate) return undefined;
-  const lastActivity = candidate.session.lastActivityAtMs ?? candidate.session.createdAtMs;
-  if (typeof lastActivity === "number" && now - lastActivity > CONTINUATION_RECENCY_MS) {
-    return undefined;
+  // Leaf sessions only. The owner's genuinely most recent session is the
+  // coordinator's own — the chat or voice surface asking the question — so a
+  // plain "most recent" resolves the caller to itself: the follow-up was
+  // accepted, ran in the chat session, and the agent actually driving the
+  // browser never heard it. The work handed off is a leaf, and its session is
+  // what "carry on" refers to.
+  const candidates = context.kernel.listSessions({
+    ownerId,
+    status: "open",
+    executionRole: "leaf",
+    limit: 4,
+  });
+  for (const candidate of candidates) {
+    if (candidate.session.sessionId === context.callerSessionId) continue;
+    const lastActivity = candidate.session.lastActivityAtMs ?? candidate.session.createdAtMs;
+    if (typeof lastActivity === "number" && now - lastActivity > CONTINUATION_RECENCY_MS) {
+      break;
+    }
+    return candidate.session.sessionId;
   }
-  return candidate.session.sessionId;
+  return undefined;
 }
 
 function controlRunRecovery(
