@@ -132,6 +132,7 @@ class ListenReceiver:
         # reselect one, or a dead primary would be chosen again immediately.
         self._stt_failed_providers: set[str] = set()
         self._stt_rebuild: Optional[Tuple[Any, Any, int]] = None
+        self._stt_failover_lock = asyncio.Lock()
         self.stt_sockets_multi: List[Any] = [None] * len(channel_configs)
         self.multi_opus_decoders: List[Any] = [None] * len(channel_configs)
         self.channel_mix_buffers: List[bytearray] = [bytearray() for _ in channel_configs]
@@ -497,7 +498,18 @@ class ListenReceiver:
 
         Single-channel only. Multi-channel holds several sockets whose segments are
         stitched by channel, so swapping one mid-stream needs its own design.
+
+        Serialized: the death monitor and the audio send path can observe the same
+        death within milliseconds of each other, and the loser of the lock must
+        adopt the winner's replacement instead of burning another chain slot on a
+        second rebuild.
         """
+        async with self._stt_failover_lock:
+            if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
+                return True
+            return await self._rebuild_stt_socket_locked()
+
+    async def _rebuild_stt_socket_locked(self) -> bool:
         rebuild = getattr(self, '_stt_rebuild', None)
         if rebuild is None or self.host.is_multi_channel or self.host.use_custom_stt:
             return False
@@ -656,34 +668,44 @@ class ListenReceiver:
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
         request = self.host.request
-        socket_dead = self.stt_socket is not None and live_stt_socket_is_dead(self.stt_socket)
-        decision = decide_stt_buffer_flush(
-            buffer_len=len(buffer),
-            flush_size=stt_buffer_flush_size(request.sample_rate),
-            force=force,
-            socket_dead=socket_dead,
-            socket_available=self.stt_socket is not None,
-            fair_use_dg_budget_exhausted=self.host.state.fair_use_dg_budget_exhausted,
-            fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
-            sample_rate=request.sample_rate,
-        )
-        if not decision.should_flush:
-            return
-        if self.host.state.fair_use_dg_budget_exhausted:
-            buffer.clear()
-            return
-        outbound_audio = bytes(buffer)
-        sent = await flush_live_stt_buffer(
-            request.websocket,
-            self.host.state,
-            stt_socket=self.stt_socket,
-            buffer=buffer,
-            provider=self._serving_provider(),
-            platform=self.host.client_device_context.platform,
-        )
-        if sent:
-            self._capture('capture_outbound_stt', outbound_audio)
-            self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
+        # Bounded retry, not a single attempt: when the send path fails over to
+        # the next provider the chunk is reported unsent with the buffer intact,
+        # and it must reach the replacement socket now — the next client chunk
+        # may be a VAD-gated silence away. `_failover_stt_socket` enforces
+        # MAX_STT_FAILOVERS, so the bound here is a backstop, not the limit.
+        for _ in range(MAX_STT_FAILOVERS + 2):
+            socket_dead = self.stt_socket is not None and live_stt_socket_is_dead(self.stt_socket)
+            decision = decide_stt_buffer_flush(
+                buffer_len=len(buffer),
+                flush_size=stt_buffer_flush_size(request.sample_rate),
+                force=force,
+                socket_dead=socket_dead,
+                socket_available=self.stt_socket is not None,
+                fair_use_dg_budget_exhausted=self.host.state.fair_use_dg_budget_exhausted,
+                fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
+                sample_rate=request.sample_rate,
+            )
+            if not decision.should_flush:
+                return
+            if self.host.state.fair_use_dg_budget_exhausted:
+                buffer.clear()
+                return
+            outbound_audio = bytes(buffer)
+            sent = await flush_live_stt_buffer(
+                request.websocket,
+                self.host.state,
+                stt_socket=self.stt_socket,
+                buffer=buffer,
+                provider=self._serving_provider(),
+                platform=self.host.client_device_context.platform,
+                attempt_failover=self._failover_stt_socket,
+            )
+            if sent:
+                self._capture('capture_outbound_stt', outbound_audio)
+                self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
+                return
+            if self.host.state.stt_terminal_failure:
+                return
 
     async def _handle_multi_channel_audio(self, data: bytes) -> int:
         request = self.host.request
