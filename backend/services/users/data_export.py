@@ -290,27 +290,7 @@ def _yield_conversations_and_photos(uid: str, photo_spool: IO[str]) -> Iterator[
 
 
 def _yield_task_data(uid: str) -> Iterator[str]:
-    yield '  "task_data": {\n'
-    task_export_sections = [
-        (collection_name, _iter_user_subcollection(uid, collection_name)) for collection_name in TASK_EXPORT_COLLECTIONS
-    ]
-    task_export_sections.extend(
-        (
-            export_name,
-            _iter_user_nested_subcollection(uid, parent_collection_name, child_collection_name),
-        )
-        for export_name, parent_collection_name, child_collection_name in TASK_NESTED_EXPORT_COLLECTIONS
-    )
-    task_export_sections.extend(
-        (collection_name, _iter_user_subcollection(uid, collection_name))
-        for collection_name in MEMORY_SWEEP_EXPORT_COLLECTIONS
-    )
-    for index, (collection_name, records) in enumerate(task_export_sections):
-        yield f"    {json.dumps(collection_name)}: "
-        yield from _yield_json_array(records)
-        yield ",\n" if index < len(task_export_sections) - 1 else "\n"
-    yield "  },\n"
-
+    yield from _yield_task_data(uid)
 
 def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iterator[str]:
     yield "{\n"
@@ -432,27 +412,7 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str]) -> Iter
     )
     yield ",\n"
 
-    yield '  "task_data": {\n'
-    task_export_sections = [
-        (collection_name, _iter_user_subcollection(uid, collection_name)) for collection_name in TASK_EXPORT_COLLECTIONS
-    ]
-    task_export_sections.extend(
-        (
-            export_name,
-            _iter_user_nested_subcollection(uid, parent_collection_name, child_collection_name),
-        )
-        for export_name, parent_collection_name, child_collection_name in TASK_NESTED_EXPORT_COLLECTIONS
-    )
-    task_export_sections.extend(
-        (collection_name, _iter_user_subcollection(uid, collection_name))
-        for collection_name in MEMORY_SWEEP_EXPORT_COLLECTIONS
-    )
-    for index, (collection_name, records) in enumerate(task_export_sections):
-        yield f"    {json.dumps(collection_name)}: "
-        yield from _yield_json_array(records)
-        yield ",\n" if index < len(task_export_sections) - 1 else "\n"
-    yield "  },\n"
-
+    yield from _yield_task_data(uid)
     yield '  "chat_messages": [\n'
     first = True
     for msg in cast(Iterable[Mapping[str, Any]], chat_db.iter_all_messages(uid)):
