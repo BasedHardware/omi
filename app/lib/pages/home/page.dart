@@ -1179,11 +1179,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   );
                 },
               ),
-              // Settings button - always visible
+              // Settings button - always visible. Bordered for the same reason as
+              // the battery/connect pills: it sits over home's day map.
               Container(
                 width: 36,
                 height: 36,
-                decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1F1F25),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+                ),
                 child: IconButton(
                   padding: EdgeInsets.zero,
                   icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
