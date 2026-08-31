@@ -831,9 +831,11 @@ export interface RuntimeFailurePayload {
 }
 
 /// One concrete model identity observed serving this turn's completions.
-/// `model` is the SERVED model from the provider's response stream (e.g. the
-/// gateway lane's resolved upstream), falling back to the requested id only
-/// when the response carried none. Deduplicated per turn by the adapter.
+/// `model` is ONLY the SERVED model from the provider's response stream (e.g.
+/// the gateway lane's resolved upstream, pi-ai's `responseModel`). A response
+/// that names no model produces NO event — the requested id is an alias and
+/// must never be presented as the served model (#11521). Deduplicated per
+/// turn by the adapter; `requestedModel` is context, not attribution.
 export interface ModelUsedMessage extends QueryScopedOutbound {
   type: "model_used";
   model: string;
