@@ -43,8 +43,38 @@ def _decode_redis_value(raw: Union[bytes, str]) -> str:
     return raw.decode('utf-8') if isinstance(raw, bytes) else raw
 
 
+class _SafeFallbackVisitor(ast.NodeVisitor):
+    def generic_visit(self, node: ast.AST) -> Any:
+        raise ValueError()
+
+    def visit_Expression(self, node: ast.Expression) -> Any:
+        return self.visit(node.body)
+
+    def visit_Dict(self, node: ast.Dict) -> Any:
+        return {self.visit(k): self.visit(v) for k, v in zip(node.keys, node.values) if k is not None}
+
+    def visit_List(self, node: ast.List) -> Any:
+        return [self.visit(elt) for elt in node.elts]
+
+    def visit_Tuple(self, node: ast.Tuple) -> Any:
+        return tuple(self.visit(elt) for elt in node.elts)
+
+    def visit_Set(self, node: ast.Set) -> Any:
+        return {self.visit(elt) for elt in node.elts}
+
+    def visit_Constant(self, node: ast.Constant) -> Any:
+        return node.value
+
+    def visit_UnaryOp(self, node: ast.UnaryOp) -> Any:
+        if isinstance(node.op, (ast.UAdd, ast.USub)):
+            operand = self.visit(node.operand)
+            if isinstance(operand, (int, float)):
+                return operand if isinstance(node.op, ast.UAdd) else -operand
+        raise ValueError()
+
+
 def _deserialize_cache_value(raw: Union[bytes, str, None]) -> Any:
-    """Deserialize a Redis cache value using JSON, with legacy literal_eval fallback."""
+    """Deserialize a Redis cache value using JSON, with safe fallback for legacy Python literals."""
     if raw is None:
         return None
     text = _decode_redis_value(raw)
@@ -52,8 +82,9 @@ def _deserialize_cache_value(raw: Union[bytes, str, None]) -> Any:
         return json.loads(text)
     except (TypeError, ValueError, json.JSONDecodeError):
         try:
-            return ast.literal_eval(text)
-        except (ValueError, SyntaxError):
+            tree = ast.parse(text, mode='eval')
+            return _SafeFallbackVisitor().visit(tree)
+        except Exception:
             return text
 
 
