@@ -12,6 +12,23 @@ import XCTest
 /// enabled is the one case that falls back to a native system banner so the
 /// notification is never fully silenced.
 final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
+  /// Runtime owner authorization is process-wide and fails closed on an
+  /// out-of-band `authUserId` write, staying revoked for every later suite in
+  /// the xctest process. The two owner-seeding tests below therefore establish
+  /// their owner through the production transition boundary, and restore runs
+  /// in `tearDown` rather than a `defer` so a failed assertion cannot leave the
+  /// authority revoked for whatever runs next.
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture?
+
+  override func setUp() async throws {
+    ownerFixture = await RuntimeOwnerAuthorityTestFixture()
+  }
+
+  override func tearDown() async throws {
+    await ownerFixture?.restore()
+    ownerFixture = nil
+  }
+
   func testPreviewsAndBarEnabledShowsPreviewWithNoForcedBanner() {
     XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
@@ -157,6 +174,119 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       "muted in-bar preview must keep a banner surface so director delivery is visible")
   }
 
+  func testMutedJITNoticeUsesSystemBannerUntilTheUserTapsIt() {
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: false,
+        floatingBarEnabled: true,
+        deliverSystemBanner: false),
+      "a muted preview must not bypass the user's preference for JIT feedback")
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
+        previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false),
+      "the muted JIT preview still owes a visible system-banner surface")
+  }
+
+  @MainActor
+  func testTappedMutedJITBannerRoutesOpaqueContextToPersistentFeedbackDetail() throws {
+    let context = JITTriggerFeedbackContext(
+      ownerID: "owner-jit-banner",
+      eventID: JITProactivityReservation.identifier("event", "jit-banner"),
+      triggerMemoryID: "memory-jit-banner",
+      accountGeneration: 4,
+      triggerRevision: 7)
+    XCTAssertEqual(
+      NotificationService.openAction(
+        assistantId: "context-director",
+        title: "A useful reminder",
+        jitFeedbackContext: context),
+      .openJITDetail,
+      "a tapped JIT system banner must open the detail card, not only record analytics")
+
+    let userInfo: [AnyHashable: Any] = [
+      "omi.jit.feedback.v1": [
+        "owner_id": context.ownerID,
+        "event_id": context.eventID,
+        "trigger_memory_id": context.triggerMemoryID,
+        "account_generation": context.accountGeneration,
+        "trigger_revision": context.triggerRevision,
+      ]
+    ]
+    XCTAssertEqual(
+      NotificationService.jitFeedbackContext(from: userInfo),
+      context,
+      "the system banner must carry only the opaque, owner-fenced feedback join keys")
+    XCTAssertEqual(
+      JITTriggerFeedbackActionRouter.visibleActions,
+      [.useful, .falsePositive, .snooze, .disable, .missedOrLate],
+      "the persistent detail route must retain every explicit feedback action")
+  }
+
+  @MainActor
+  func testSystemBannerTapPresentsOwnerFencedPersistentJITCardWithAllActions() throws {
+    let defaults = UserDefaults.standard
+    let authKey = DefaultsKey.authUserId.rawValue
+    let overrideKey = DefaultsKey.automationOwnerOverride.rawValue
+    let priorAuth = defaults.object(forKey: authKey)
+    let priorOverride = defaults.object(forKey: overrideKey)
+    let priorOwner = RuntimeOwnerIdentity.currentOwnerId()
+    let owner = "owner-jit-banner-route-\(UUID().uuidString)"
+    defer {
+      if let priorAuth { defaults.set(priorAuth, forKey: authKey) } else { defaults.removeObject(forKey: authKey) }
+      if let priorOverride {
+        defaults.set(priorOverride, forKey: overrideKey)
+      } else {
+        defaults.removeObject(forKey: overrideKey)
+      }
+      RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: priorOwner)
+    }
+
+    defaults.set(owner, forKey: authKey)
+    defaults.removeObject(forKey: overrideKey)
+    RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: owner)
+    let context = JITTriggerFeedbackContext(
+      ownerID: owner,
+      eventID: JITProactivityReservation.identifier("event", "jit-banner-route"),
+      triggerMemoryID: "memory-jit-banner-route",
+      accountGeneration: 5,
+      triggerRevision: 9)
+    let userInfo: [AnyHashable: Any] = [
+      "omi.jit.feedback.v1": [
+        "owner_id": context.ownerID,
+        "event_id": context.eventID,
+        "trigger_memory_id": context.triggerMemoryID,
+        "account_generation": context.accountGeneration,
+        "trigger_revision": context.triggerRevision,
+      ]
+    ]
+    var presented: (String, String, String, JITTriggerFeedbackContext, Bool)?
+    let service = NotificationService(
+      registerWithSystemNotificationCenter: false,
+      jitDetailPresenter: { ownerID, title, message, _, feedbackContext, _, isPersistent in
+        presented = (
+          ownerID,
+          title,
+          message,
+          feedbackContext,
+          isPersistent
+        )
+      })
+
+    XCTAssertTrue(
+      service.routeJITDetailCard(
+        title: "A useful reminder",
+        message: "The release is waiting on review.",
+        userInfo: userInfo))
+    XCTAssertEqual(presented?.0, owner)
+    XCTAssertEqual(presented?.1, "A useful reminder")
+    XCTAssertEqual(presented?.2, "The release is waiting on review.")
+    XCTAssertEqual(presented?.3, context)
+    XCTAssertEqual(presented?.4, true)
+    XCTAssertEqual(
+      JITTriggerFeedbackActionRouter.visibleActions,
+      [.useful, .falsePositive, .snooze, .disable, .missedOrLate])
+  }
+
   /// Behavioral guard for the category taxonomy: the director's real entry point must
   /// refuse a delivery whose category toggle is off. A "suggest" decision is a generic
   /// tip, which the taxonomy files under Insight. Every upstream gate is pinned open
@@ -166,11 +296,9 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   /// `presentContextDirectorNotification` makes this call return `.queued` from the
   /// banner path instead of `.suppressed`, failing the test.
   @MainActor
-  func testDirectorDeliveryWithDisabledCategoryToggleIsSuppressedAtTheEntryPoint() throws {
+  func testDirectorDeliveryWithDisabledCategoryToggleIsSuppressedAtTheEntryPoint() async throws {
     let defaults = UserDefaults.standard
     let pinnedKeys = [
-      DefaultsKey.authUserId.rawValue,
-      DefaultsKey.automationOwnerOverride.rawValue,
       NotificationService.masterEnabledDefaultsKey,
       NotificationService.frequencyDefaultsKey,
       DefaultsKey.desktopIsPaywalled.rawValue,
@@ -192,8 +320,8 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     }
 
     let owner = "owner-category-gate-\(UUID().uuidString)"
-    defaults.set(owner, forKey: DefaultsKey.authUserId.rawValue)
-    defaults.removeObject(forKey: DefaultsKey.automationOwnerOverride.rawValue)
+    let fixture = try XCTUnwrap(ownerFixture)
+    await fixture.establish(authOwnerID: owner)
     defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
     defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
     defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)
@@ -228,11 +356,9 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   /// host cannot perform, failing the test; with the gate present they return
   /// before any surface and leave the presentation ledger untouched.
   @MainActor
-  func testGoalAndMeetingProducersHonorTheirCategoryTogglesAtTheSharedBoundary() throws {
+  func testGoalAndMeetingProducersHonorTheirCategoryTogglesAtTheSharedBoundary() async throws {
     let defaults = UserDefaults.standard
     let pinnedKeys = [
-      DefaultsKey.authUserId.rawValue,
-      DefaultsKey.automationOwnerOverride.rawValue,
       NotificationService.masterEnabledDefaultsKey,
       NotificationService.frequencyDefaultsKey,
       DefaultsKey.desktopIsPaywalled.rawValue,
@@ -256,8 +382,8 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     }
 
     let owner = "owner-producer-gate-\(UUID().uuidString)"
-    defaults.set(owner, forKey: DefaultsKey.authUserId.rawValue)
-    defaults.removeObject(forKey: DefaultsKey.automationOwnerOverride.rawValue)
+    let fixture = try XCTUnwrap(ownerFixture)
+    await fixture.establish(authOwnerID: owner)
     defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
     defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
     defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)

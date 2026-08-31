@@ -695,6 +695,7 @@ actor AgentBridge {
   private var synchronizedRuntimeAuthorityEpoch: UInt64?
   private var synchronizedRuntimeAuthorityOwnerID: String?
   private var activeRequestId: String?
+  private var realtimeChatLaneInterrupt = RealtimeChatLaneInterruptBinding()
   private var lastKnownQuota: OwnerBoundQuota?
   private var tokenRefreshTask: Task<Void, Never>?
   private var tokenRefreshTaskID: UUID?
@@ -1698,7 +1699,16 @@ actor AgentBridge {
 
     let requestId = UUID().uuidString
     activeRequestId = requestId
-    defer { activeRequestId = nil }
+    defer {
+      realtimeChatLaneInterrupt.finishRequest(requestId)
+      if let current = activeRequestId {
+        realtimeChatLaneInterrupt.finishRequest(current)
+        activeRequestId = nil
+      }
+    }
+    guard realtimeChatLaneInterrupt.beginRequest(requestId) else {
+      throw BridgeError.stopped
+    }
 
     let bridgeOutputTracker = BridgeOutputTracker()
     let trackedTextDelta: TextDeltaHandler = { delta in
@@ -1770,7 +1780,11 @@ actor AgentBridge {
         throw BridgeError.authMissing
       }
       let retryRequestId = UUID().uuidString
+      realtimeChatLaneInterrupt.finishRequest(requestId)
       activeRequestId = retryRequestId
+      guard realtimeChatLaneInterrupt.beginRequest(retryRequestId) else {
+        throw BridgeError.stopped
+      }
       return try await runtime.query(
         clientId: clientId,
         requestId: retryRequestId,
@@ -1795,10 +1809,38 @@ actor AgentBridge {
     }
   }
 
+  func bindRealtimeChatLaneInterrupt(_ identity: String) {
+    realtimeChatLaneInterrupt.bind(identity)
+  }
+
+  func unbindRealtimeChatLaneInterrupt(_ identity: String) {
+    realtimeChatLaneInterrupt.unbind(identity)
+  }
+
   func interrupt(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async {
     guard let requestId = activeRequestId else { return }
+    await interrupt(
+      requestId: requestId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  func interruptRealtimeChatLane(
+    identity: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async {
+    guard let requestId = realtimeChatLaneInterrupt.requestInterrupt(identity) else { return }
+    await interrupt(
+      requestId: requestId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  private func interrupt(
+    requestId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async {
+    guard activeRequestId == requestId else { return }
     guard let authorization = try? resolveAuthorization(authorizationSnapshot) else { return }
     await runtime.interrupt(
       clientId: clientId,

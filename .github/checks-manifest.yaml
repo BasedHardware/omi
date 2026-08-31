@@ -324,6 +324,11 @@ checks:
     triggers: [".github/scripts/check_runner_cost_policy.py", ".github/scripts/test_check_runner_cost_policy.py"]
     lanes: ["local", "ci"]
     reason: "runner cost-policy fixtures must keep rejecting the paid larger-runner label"
+  - id: windows-sync-pr-retirement-contract
+    command: ["python3", ".github/scripts/test_retire_superseded_sync_prs.py"]
+    triggers: [".github/workflows/desktop_windows_release.yml", ".github/scripts/retire_superseded_sync_prs.py", ".github/scripts/test_retire_superseded_sync_prs.py"]
+    lanes: ["local", "ci"]
+    reason: "#10727: the Windows release sync-PR cleanup must retain the current PR, only close same-repo release/windows-v* heads, and never block the release"
   - id: telegram-deployment-notifier
     command: ["bash", ".github/actions/deployment-notifier/test-check-configuration.sh"]
     triggers: [".github/actions/deployment-notifier/**", ".github/checks-manifest.yaml"]
@@ -399,6 +404,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/scripts/scan_async_blockers.py"]
     lanes: ["local", "ci"]
     reason: "backend Python changed"
+  - id: legacy-memory-surface-ratchet
+    command: ["python3", "backend/scripts/legacy_memory_surface_inventory.py", "--check-ratchet", "--base-ref", "{base}"]
+    triggers: ["backend/scripts/legacy_memory_surface_inventory.py", "backend/scripts/legacy_memory_surface_baseline.json", "backend/tests/unit/test_legacy_memory_surface_inventory.py", "backend/utils/conversations/process_conversation.py", "backend/utils/conversations/merge_conversations.py", "backend/utils/sync/pipeline.py", "backend/utils/memory/*.py", "backend/jobs/short_term_lifecycle_worker.py", "backend/modal/memory_maintenance_job.py", "backend/routers/conversations.py", "backend/routers/developer.py", "backend/routers/listen/conversations.py", "backend/routers/mcp.py", "backend/routers/mcp_sse.py", "backend/routers/memory_admin.py", "backend/routers/users.py", "backend/database/product_memory_items.py", "backend/database/users.py", "backend/runtime_images.json", "backend/utils/llm/ai_user_profile.py", "backend/deploy/runtime_env/*.yaml", "backend/scripts/memory-continuity-gauntlet.py", "backend/scripts/validate_memory_maintenance_scheduler.py", "desktop/macos/Desktop/Sources/ProactiveAssistants/**/*.swift", "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift", "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift", "desktop/windows/src/main/assistants/**/*.ts", "desktop/windows/src/main/agentKernel/desktopChatPrompt.ts", "desktop/windows/src/main/ipc/mainChatPersonalization.ts", "desktop/windows/src/main/ipc/db.ts", ".github/workflows/gcp_memory_maintenance_job*.yml"]
+    lanes: ["local", "ci"]
+    reason: "Gate F legacy memory surfaces may shrink during the JIT-processing migration but must not gain new source or deployment references"
   - id: backend-datetime-sort-sentinel-ratchet
     command: ["python3", "backend/scripts/check_datetime_sort_sentinel_ratchet.py"]
     triggers: ["backend/**/*.py", "backend/scripts/check_datetime_sort_sentinel_ratchet.py"]

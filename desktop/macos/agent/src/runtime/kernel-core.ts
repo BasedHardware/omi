@@ -180,6 +180,13 @@ interface ActiveExecution {
   sessionId: string;
 }
 
+function externalSurfacePromptIsSynthetic(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== "object") return false;
+  const external = (metadata as Record<string, unknown>).externalSurface;
+  if (!external || typeof external !== "object") return false;
+  return (external as Record<string, unknown>).promptIsSynthetic === true;
+}
+
 export class KernelCore {
   protected readonly store: AgentStore;
   protected readonly registry: AdapterRegistry;
@@ -427,7 +434,11 @@ export class KernelCore {
         prompt: input.prompt,
         mode: input.mode,
         metadata: {
-          externalSurface: { authority: "swift_realtime", turnId },
+          externalSurface: {
+            authority: "swift_realtime",
+            turnId,
+            ...(input.promptIsSynthetic === true ? { promptIsSynthetic: true } : {}),
+          },
         },
       });
       run = accepted.run;
@@ -586,7 +597,14 @@ export class KernelCore {
         : `agent_spawn:${input.invocationId}`,
       pillId,
       ...(producerTurnId ? { producerRunId: run.runId, producerTurnId } : {}),
-      userText: typeof runInput.prompt === "string" ? runInput.prompt : "",
+      // A synthetic authorization prompt drove this run but is not something the
+      // user said. Empty user text makes the journal skip the user row entirely
+      // rather than attributing an internal instruction to the user.
+      userText: externalSurfacePromptIsSynthetic(runMetadata)
+        ? ""
+        : typeof runInput.prompt === "string"
+          ? runInput.prompt
+          : "",
       assistantText: "I started a background agent for that.",
       objective,
       title,
@@ -1134,6 +1152,7 @@ export class KernelCore {
               runId: accepted.run.runId,
               attemptId: attempt.attemptId,
               toolCapabilityRef: toolCapability.capabilityRef,
+              builtInToolPolicy: toolCapability.builtInToolPolicy,
               binding: handle,
               prompt: effectivePromptBlocks ?? [{ type: "text", text: effectivePrompt }],
               mode: input.mode ?? "ask",

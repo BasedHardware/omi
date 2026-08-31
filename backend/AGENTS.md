@@ -64,13 +64,13 @@ backend/
     llm/                  #   LLM orchestration (14 files): chat processing, conversation post-processing,
                           #   memory extraction, persona management, proactive notifications, goal tracking,
                           #   app generation, fair-use classification, usage tracking
-      clients.py          #     Model instances: OpenAI (Luna/Nano), Anthropic (claude-sonnet-4-6),
+      clients.py          #     Model instances: OpenAI (Luna/Nano), leftover Anthropic (desktop),
                           #     OpenRouter (gemini-flash), with prompt caching and usage callbacks
     stt/                  #   Speech-to-text (7 files): Parakeet/Modulate and explicit self-hosted Deepgram streaming, VAD gating, speech profiles,
                           #   pre-recorded batch transcription, speaker embeddings
     conversations/        #   Conversation lifecycle (6 files): ingestion, memory extraction, action items,
                           #   merge, post-processing, search
-    retrieval/            #   RAG pipeline (25+ files): agentic RAG via Claude with 18 tool types —
+    retrieval/            #   RAG pipeline (25+ files): agentic RAG via gateway Luna (gpt-5.6-luna) with 18 tool types —
                           #   action items, calendar, Gmail, Apple Health, conversations, memories,
                           #   screen activity, files, Perplexity web search, notifications, etc.
     other/                #   Storage (GCS), auth dependencies, timeout middleware, Hume emotion detection
@@ -119,17 +119,16 @@ backend-sync (main.py, Cloud Run)
   ├── ──────► Cloud Tasks queue `account-deletion` ──► POST /v1/users/account-deletion-wipes/run (OIDC, same service)
   └── ──────► Cloud Tasks queue `conversation-finalization` ──► POST /v1/conversation-finalization-jobs/run (OIDC, same service)
 
-notifications-job (modal/job.py)  [cron]
-memory-maintenance-job (modal/memory_maintenance_job.py)  [cron]
+Cron jobs: notifications (`modal/job.py`), memory maintenance (`modal/memory_maintenance_job.py`), and frame retention (`modal/frame_request_retention_job.py`).
 ```
 
-Helm charts: `backend/charts/{backend-listen,backend-secrets,deepgram-self-hosted,diarizer,llm-gateway,monitoring,nllb-translation,parakeet,pusher,vad}/`.
+Helm charts: `backend/charts/`.
 
-Serving STT provider/surface policy and canonical model order are owned exclusively by `config/stt_provider_policy.py`; deployment values are validated against it.
+STT provider/surface policy and model order live in `config/stt_provider_policy.py`; deployment validates it.
 
 - **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Live STT prefers Deepgram (`DEEPGRAM_API_KEY`), falling back to Modulate then Parakeet; self-hosted Deepgram replaces the hosted endpoint when `DEEPGRAM_SELF_HOSTED_*` is set (`utils/stt/streaming.py`). Calls NLLB translation when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected (`utils/translation.py`).
 - **hosted MCP OAuth** (`routers/mcp_sse.py`) — Provider-neutral OAuth for `/v1/mcp/sse`. Configure public or confidential clients with `MCP_OAUTH_CLIENTS_JSON`; allowlist the exact connector callback URI from the provider. The temporary `MCP_OAUTH_CHATGPT_*` envs still define the legacy confidential ChatGPT test client, and `MCP_OAUTH_PUBLIC_*` can expose a no-secret PKCE public client. Also set `MCP_AUTHORIZATION_SERVER_URL`, optional `MCP_RESOURCE_URL`, and token TTL env vars.
-- **llm-gateway** (`llm_gateway/main.py`) — Internal FastAPI service for Omi-managed LLM auto lanes. Called by backend with service auth for `omi:auto:*` chat-completions routes; not exposed to clients. Public shared-conversation chat uses only the dedicated `omi:auto:public-shared-conversation-chat` lane and returns unavailable on every gateway fault.
+- **llm-gateway** (`llm_gateway/main.py`) — Internal FastAPI service for Omi-managed LLM auto lanes. Called by backend with service auth for `omi:auto:*` chat-completions routes; not exposed to clients. Public shared-conversation chat uses only the dedicated `omi:auto:public-shared-conversation-chat` lane and returns unavailable on every gateway fault. Also owns the `/v1/embeddings` surface and the company-paid desktop-Vertex lanes (see `docs/llm/model_endpoint_inventory.yaml`).
 - Conversation notes v2 is independently dogfood-gated by `CONVERSATION_NOTES_V2_ENABLED`, `CONVERSATION_APPS_OPT_IN_ONLY`, `CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED`, and `CONVERSATION_OCR_CONTEXT_ENABLED`; all runtime-manifest defaults stay off until promoted.
 - Meeting identity reaches the summarization prompt through `utils/conversations/meeting_context.resolve_meeting_context`, called before `_get_structured`. Sources, best first: stored calendar-backed meeting (exact `redis_db` conversation→meeting mapping, else a time-overlap query over `users/{uid}/meetings`) → `calendar_meeting_context` on the create request → overlapping Google Calendar event (read-only) → stored on-device screen-derived identity → server-side conferencing-window OCR. Every layer degrades to no context; none may fail the conversation. The stored-meeting layer is on by default with `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` as its kill switch. Calendar **write-back** stays behind `GOOGLE_CALENDAR_AUTO_LINK_ENABLED` and still runs only after summarization.
 - `users/{uid}/meetings` is populated only through `POST /v1/calendar/meetings`. The macOS client writes flag-gated EventKit identity as `system_calendar` and minimum on-device OCR-derived identity as `screen_activity` before conversation processing; the resolver always ranks a real calendar event above `screen_activity`.

@@ -13,6 +13,7 @@ actually import and call the real production functions to verify:
 """
 
 import asyncio
+import json
 import os
 import sys
 import types
@@ -430,19 +431,34 @@ def _get_agentic_module():
         "create_chart_tool",
         "get_screen_activity_tool",
         "search_screen_activity_tool",
+        "look_at_frame_tool",
         "save_user_preference_tool",
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
+        "get_entity_timeline_tool",
+        "search_knowledge",
+        "read_playbook",
+        "search_historical_facts",
+        "save_playbook",
+        "create_standing_trigger",
+        "close_fact_tool",
     ]
+    # ``close_fact_tool`` is the module attribute (matching the import
+    # statement in agentic.py), but the real LangChain tool overrides its
+    # runtime name to "close_fact" (see @tool("close_fact") in
+    # knowledge_ledger_write_tools.py). Mock the divergence explicitly so the
+    # stubbed CORE_TOOLS carries the same name the real JIT gating keys off.
+    tool_name_overrides = {"close_fact_tool": "close_fact"}
     for name in tool_names:
         mock_tool = MagicMock()
-        mock_tool.name = name
+        mock_tool.name = tool_name_overrides.get(name, name)
         # Add args_schema for _convert_tools to work
         mock_schema = MagicMock()
         mock_schema.schema.return_value = {"properties": {"query": {"type": "string"}}, "required": ["query"]}
         mock_tool.args_schema = mock_schema
         mock_tool.description = f"Mock tool: {name}"
         setattr(tools_pkg, name, mock_tool)
+    tools_pkg.frame_request_runtime_config = MagicMock(return_value={})
 
     # Stub sub-modules
     _stub_module("utils.retrieval.tools.preference_tools")
@@ -666,10 +682,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_26_tools():
-    """CORE_TOOLS must contain exactly 26 tools (web search is now a built-in server tool)."""
+def test_core_tools_has_34_tools():
+    """CORE_TOOLS includes the three JIT-gated ledger write verbs; web search remains server-built-in."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 26, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 26"
+    assert len(agentic_mod.CORE_TOOLS) == 34, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 34"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -692,9 +708,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 27
-    assert len(tools_b) == 26
-    assert len(agentic_mod.CORE_TOOLS) == 26, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 35
+    assert len(tools_b) == 34
+    assert len(agentic_mod.CORE_TOOLS) == 34, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -728,9 +744,17 @@ def test_core_tools_order_matches_exports():
         "create_chart_tool",
         "get_screen_activity_tool",
         "search_screen_activity_tool",
+        "look_at_frame_tool",
         "save_user_preference_tool",
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
+        "get_entity_timeline_tool",
+        "search_knowledge",
+        "read_playbook",
+        "search_historical_facts",
+        "save_playbook",
+        "create_standing_trigger",
+        "close_fact",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
@@ -751,38 +775,96 @@ def test_core_tools_not_accidentally_duplicated():
 # ---------------------------------------------------------------------------
 
 
-def test_convert_tools_produces_valid_anthropic_schemas():
-    """
-    _convert_tools should produce valid Anthropic tool schemas from CORE_TOOLS,
-    filtering out the 'config' parameter and preserving tool order.
-    """
+def _openai_tool_name(schema: dict) -> str:
+    return schema.get('function', {}).get('name') or schema.get('name')
+
+
+def test_convert_tools_produces_valid_openai_schemas():
+    """_convert_tools produces OpenAI chat-completions function schemas from CORE_TOOLS."""
     agentic_mod = _get_agentic_module()
 
     tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
 
-    # +1 for web_search server tool
-    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 1, "Should produce one schema per tool + web_search"
+    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS), "Should produce one schema per core tool"
     assert len(tool_registry) == len(agentic_mod.CORE_TOOLS), "Should register all client tools"
+    assert all(schema.get('type') != 'web_search_20260209' for schema in tool_schemas)
 
-    # First schema should be web_search server tool
-    assert tool_schemas[0]["type"] == "web_search_20260209"
-
-    for schema in tool_schemas[1:]:  # Skip web_search server tool
-        assert "name" in schema, "Schema must have a name"
-        assert "description" in schema, "Schema must have a description"
-        assert "input_schema" in schema, "Schema must have input_schema"
-        # Config parameter should be filtered out
-        props = schema["input_schema"].get("properties", {})
-        assert "config" not in props, f"Tool {schema['name']} should not expose 'config' parameter"
-        # Core tools should NOT have defer_loading
-        assert "defer_loading" not in schema, f"Core tool {schema['name']} should not have defer_loading"
+    for schema in tool_schemas:
+        function = schema['function']
+        assert schema['type'] == 'function'
+        assert function['name']
+        assert 'description' in function
+        assert 'parameters' in function
+        props = function['parameters'].get('properties', {})
+        assert 'config' not in props, f"Tool {function['name']} should not expose 'config' parameter"
+        assert 'defer_loading' not in schema, f"Core tool {function['name']} should not have defer_loading"
 
 
-def test_convert_tools_defers_app_tools():
+def test_entity_timeline_is_registered_with_schema_and_display_status():
+    """The timeline tool is a stable core tool across schema, registry, and UI status."""
+    agentic_mod = _get_agentic_module()
+
+    timeline_tool = next(tool for tool in agentic_mod.CORE_TOOLS if tool.name == "get_entity_timeline_tool")
+    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+
+    timeline_schema = next(schema for schema in tool_schemas if _openai_tool_name(schema) == timeline_tool.name)
+    raw_schema = timeline_tool.args_schema.schema()
+    assert timeline_schema["function"]["parameters"]["properties"] == raw_schema["properties"]
+    assert timeline_schema["function"]["parameters"]["required"] == raw_schema["required"]
+    assert tool_registry[timeline_tool.name] is timeline_tool
+    assert agentic_mod.get_tool_display_name(timeline_tool.name) == "Reviewing entity timeline"
+
+
+def test_knowledge_ledger_tools_are_registered_with_progressive_disclosure_names():
+    """Ledger search and body retrieval stay in the stable cached tool prefix."""
+    agentic_mod = _get_agentic_module()
+
+    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+    schema_names = {_openai_tool_name(schema) for schema in tool_schemas}
+    for name, display in (
+        ("search_knowledge", "Searching current knowledge"),
+        ("read_playbook", "Reading playbook"),
+        ("search_historical_facts", "Searching historical facts"),
+    ):
+        assert name in schema_names
+        assert name in tool_registry
+        assert agentic_mod.get_tool_display_name(name) == display
+
+
+def test_historical_fact_tool_is_registered_after_policy_ratification():
+    """The agent owns explicit history retrieval; rejected rows remain opt-in audit data."""
+    agentic_mod = _get_agentic_module()
+
+    tool = next(tool for tool in agentic_mod.CORE_TOOLS if tool.name == "search_historical_facts")
+    assert "search_historical_facts" in agentic_mod.STANDARD_TOOL_NAMES
+    assert agentic_mod.get_tool_display_name(tool.name) == "Searching historical facts"
+
+
+def test_ledger_write_verbs_are_registered_as_jit_only_with_display_names():
+    """The three dormant ledger write verbs are wired as JIT-gated chat tools.
+
+    ``close_fact_tool`` is the Python identifier this stub mocks under; the
+    real tool's runtime name is ``close_fact`` (see JIT_ONLY_TOOL_NAMES in
+    ``utils/retrieval/agentic.py``), matching how ``look_at_frame_tool`` is
+    mocked here under its identifier while its real name is ``look_at_frame``.
     """
-    App tools should be marked with defer_loading=True and tool_search_tool
-    should be added when app tools are present.
-    """
+    agentic_mod = _get_agentic_module()
+
+    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+    schema_names = {_openai_tool_name(schema) for schema in tool_schemas}
+    for name, display in (
+        ("save_playbook", "Saving playbook"),
+        ("create_standing_trigger", "Creating standing trigger"),
+        ("close_fact", "Closing fact"),
+    ):
+        assert name in schema_names
+        assert name in tool_registry
+        assert name in agentic_mod.JIT_ONLY_TOOL_NAMES
+        assert agentic_mod.get_tool_display_name(name) == display
+
+
+def test_convert_tools_exposes_app_tools_directly():
+    """Live chat-agent lane exposes app tools by name; no Anthropic tool_search."""
     agentic_mod = _get_agentic_module()
 
     mock_app_tool = MagicMock()
@@ -794,19 +876,10 @@ def test_convert_tools_defers_app_tools():
 
     tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS, [mock_app_tool])
 
-    # Should have web_search + tool_search_tool + core tools + 1 app tool
-    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 3  # +1 web_search, +1 search tool, +1 app tool
-
-    # First should be web_search server tool
-    assert tool_schemas[0]["type"] == "web_search_20260209"
-    # Second should be tool_search_tool
-    assert tool_schemas[1]["type"] == "tool_search_tool_regex_20251119"
-
-    # Last should be the deferred app tool
-    assert tool_schemas[-1]["name"] == "custom_weather_app"
-    assert tool_schemas[-1]["defer_loading"] is True
-
-    # Registry should include all tools
+    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 1
+    assert all(schema.get('type') == 'function' for schema in tool_schemas)
+    assert _openai_tool_name(tool_schemas[-1]) == "custom_weather_app"
+    assert "defer_loading" not in tool_schemas[-1]
     assert "custom_weather_app" in tool_registry
 
 
@@ -819,8 +892,7 @@ def test_convert_tools_preserves_core_tool_order():
 
     tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
 
-    # Skip web_search server tool (first element) when checking core tool order
-    schema_names = [s["name"] for s in tool_schemas[1:]]
+    schema_names = [_openai_tool_name(s) for s in tool_schemas]
     core_names = [t.name for t in agentic_mod.CORE_TOOLS]
     assert schema_names == core_names, "Tool schema order must match CORE_TOOLS order"
 
@@ -1278,6 +1350,86 @@ def test_platform_section_appended_on_langsmith_path(monkeypatch):
     assert "<user_platform>" in prompt and "Windows PC" in prompt
 
     assert fn("uid_test", platform=None) == "RENDERED PROMPT"
+
+
+def test_jit_conversation_retrieval_prompt_is_default_off_and_byte_stable():
+    chat_mod = _get_chat_module()
+    fn = chat_mod._get_agentic_qa_prompt
+    gate_mod = _load_module_from_file(
+        "utils.retrieval.tools.conversation_jit_gate",
+        BACKEND_DIR / "utils" / "retrieval" / "tools" / "conversation_jit_gate.py",
+    )
+
+    _set_user(chat_mod, "TestUser", "UTC")
+    baseline = fn("uid_test")
+
+    assert gate_mod.append_jit_conversation_retrieval_prompt(baseline, enabled=False) == baseline
+    assert "<jit_conversation_retrieval>" not in baseline
+
+
+def test_enabled_jit_prompt_requires_bounded_summary_triage_reformulation_and_hydration():
+    chat_mod = _get_chat_module()
+    fn = chat_mod._get_agentic_qa_prompt
+    gate_mod = _load_module_from_file(
+        "utils.retrieval.tools.conversation_jit_gate",
+        BACKEND_DIR / "utils" / "retrieval" / "tools" / "conversation_jit_gate.py",
+    )
+
+    _set_user(chat_mod, "TestUser", "UTC")
+    prompt = gate_mod.append_jit_conversation_retrieval_prompt(fn("uid_test"), enabled=True)
+    section = prompt[prompt.index("<jit_conversation_retrieval>") :]
+    normalized_section = " ".join(section.split())
+
+    golden = json.loads(
+        (BACKEND_DIR / "testing/jit_processing/fixtures/retrieval_golden_set.json").read_text(encoding="utf-8")
+    )
+    categories = {case["category"] for case in golden["cases"]}
+    golden_shape_markers = {
+        "literal": "literal query",
+        "paraphrased": "semantic paraphrase",
+        "entity": "person/entity query",
+        "temporal": "date-only",
+        "multi-conversation": "at most four bounded summary searches in parallel",
+        "ambiguous-person": "person name is ambiguous",
+        "not-found": 'Before returning "not found", reformulate once',
+    }
+    assert categories == set(golden_shape_markers)
+
+    for required_contract in (
+        "Triage summaries before transcripts",
+        *golden_shape_markers.values(),
+        "hydrate only the relevant conversation IDs",
+        "at most 24 transcript segments",
+        "released [index] inline syntax",
+        "structured evidence envelope",
+        "degrade honestly when evidence is missing or partial",
+    ):
+        assert required_contract in normalized_section
+
+
+def test_enabled_jit_prompt_is_appended_on_langsmith_path(monkeypatch):
+    chat_mod = _get_chat_module()
+    fn = chat_mod._get_agentic_qa_prompt
+    gate_mod = _load_module_from_file(
+        "utils.retrieval.tools.conversation_jit_gate",
+        BACKEND_DIR / "utils" / "retrieval" / "tools" / "conversation_jit_gate.py",
+    )
+
+    _set_user(chat_mod, "TestUser", "UTC")
+    prompts_mod = sys.modules["utils.observability.langsmith_prompts"]
+    cached = MagicMock()
+    cached.template_text = "TEMPLATE"
+    cached.prompt_name = "test-prompt"
+    cached.prompt_commit = "abc123"
+    cached.source = "langsmith"
+    monkeypatch.setattr(prompts_mod, "get_agentic_system_prompt_template", MagicMock(return_value=cached))
+    monkeypatch.setattr(prompts_mod, "render_prompt", MagicMock(return_value="RENDERED PROMPT"))
+
+    prompt = gate_mod.append_jit_conversation_retrieval_prompt(fn("uid_test", platform="macos"), enabled=True)
+
+    assert prompt.startswith("RENDERED PROMPT\n\n<user_platform>")
+    assert prompt.index("</user_platform>") < prompt.index("<jit_conversation_retrieval>")
+    assert prompt.endswith("</jit_conversation_retrieval>")
 
 
 # ---------------------------------------------------------------------------

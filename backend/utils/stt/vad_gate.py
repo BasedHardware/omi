@@ -24,7 +24,11 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
+from utils.metrics import (
+    OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL,
+    OMI_VAD_GATE_AUDIO_SECONDS_TOTAL,
+    OMI_VAD_GATE_SESSIONS_TOTAL,
+)
 from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
 from utils.stt.vad import (
@@ -214,6 +218,13 @@ class VADStreamingGate:
         self._speech_ms_total: float = 0.0
         self._speech_ms_delta: float = 0.0
 
+        # Prometheus accounting only advances once pre-roll audio has a final
+        # outcome, so buffered silence cannot be counted as skipped and later sent.
+        self._prometheus_bytes_sent = 0
+        self._prometheus_bytes_skipped = 0
+        if self.mode in ('active', 'shadow'):
+            OMI_VAD_GATE_SESSIONS_TOTAL.labels(mode=self.mode).inc()
+
     def activate(self) -> None:
         """Switch from shadow to active mode (used after speech profile completes).
 
@@ -356,12 +367,14 @@ class VADStreamingGate:
         if self.mode == 'shadow':
             self._bytes_sent += len(pcm_data)
             self._last_send_wall_time = wall_time
-            return GateOutput(
+            output = GateOutput(
                 audio_to_send=pcm_data,
                 should_finalize=False,
                 state=self._state,
                 is_speech=is_speech,
             )
+            self._record_prometheus_audio()
+            return output
 
         # Active mode: state machine
         prev_state = self._state
@@ -378,7 +391,28 @@ class VADStreamingGate:
                 self._audio_cursor_ms,
             )
 
+        self._record_prometheus_audio()
         return output
+
+    def _record_prometheus_audio(self) -> None:
+        """Record newly finalized sent/skipped audio without double-counting pre-roll."""
+        if self.mode not in ('active', 'shadow'):
+            return
+        bytes_per_second = self._sample_width * self.channels * self.sample_rate
+
+        sent_delta = self._bytes_sent - self._prometheus_bytes_sent
+        if sent_delta:
+            OMI_VAD_GATE_AUDIO_SECONDS_TOTAL.labels(outcome='sent', mode=self.mode).inc(sent_delta / bytes_per_second)
+            self._prometheus_bytes_sent = self._bytes_sent
+
+        pending_bytes = sum(len(chunk) for chunk in self._pre_roll)
+        skipped_bytes = max(0, self._bytes_received - self._bytes_sent - pending_bytes)
+        skipped_delta = skipped_bytes - self._prometheus_bytes_skipped
+        if skipped_delta:
+            OMI_VAD_GATE_AUDIO_SECONDS_TOTAL.labels(outcome='skipped', mode=self.mode).inc(
+                skipped_delta / bytes_per_second
+            )
+            self._prometheus_bytes_skipped = skipped_bytes
 
     def _update_state(self, pcm_data: bytes, is_speech: bool, wall_time: float) -> GateOutput:
         """State machine transition logic."""

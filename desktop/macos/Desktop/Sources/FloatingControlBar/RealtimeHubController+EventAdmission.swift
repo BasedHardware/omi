@@ -44,4 +44,29 @@ extension RealtimeHubController {
       return false
     }
   }
+
+  /// Non-production manager-harness facts. These describe ownership and
+  /// admission only; they deliberately omit turn IDs, context payload, and
+  /// provider text so a failed physical-path probe is diagnosable without
+  /// exposing user content.
+  func automationPTTInputDiagnostics() -> [String: String] {
+    let requirement = voiceSessionContext(for: currentOwnerScope)
+    let preparation: String
+    if reconnectAudioBuffer != nil {
+      preparation = "buffered"
+    } else if admittedInputTurnID != nil {
+      preparation = "admitted"
+    } else {
+      preparation = "none"
+    }
+    return [
+      "ptt_admission": pttAdmission == .immediate ? "immediate" : "capture_and_buffer",
+      "ptt_input_preparation": preparation,
+      "ptt_rebind_attempts": "\(reconnectAudioBuffer?.rebindAttempts ?? 0)",
+      "ptt_binding_matches_requirement":
+        (requirement.isResolved && requirement.snapshotFreshnessIdentity == sessionVoiceContextFreshnessIdentity)
+        ? "true" : "false",
+      "ptt_handoff_pending": pendingSessionRefreshReason ?? "none",
+    ]
+  }
 }

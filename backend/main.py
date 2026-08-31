@@ -4,9 +4,15 @@ import logging
 import os
 
 from utils.env_loader import firebase_admin_options, load_backend_env
+from utils.firebase_admin_runtime import (
+    firebase_verify_only_credential,
+    install_firebase_auth_mutation_guard,
+    install_google_adc_guard,
+)
 from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
+install_google_adc_guard()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,6 +25,7 @@ from starlette.staticfiles import StaticFiles
 from database.google_credentials import prepare_google_credentials
 
 prepare_google_credentials()
+install_firebase_auth_mutation_guard()
 
 from routers import (
     chat,
@@ -76,9 +83,11 @@ from routers import (
     desktop_agent_vm,
     desktop_chat,
     desktop_core,
+    desktop_prompts,
     desktop_proxy,
     desktop_realtime,
     desktop_screen_crisp,
+    frame_requests,
     referrals,
     desktop_tts_updates,
     scores,
@@ -90,6 +99,10 @@ from routers import (
     conversation_finalization,
     public_shared_conversation_chat,
     screen_frames,
+    jit_ledger_snapshot,
+    csat,
+    jit_rollout,
+    email_preferences,
 )
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -97,6 +110,7 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
+from utils.jit_rollout import close_posthog_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.executors import (
     drain_background_tasks,
@@ -121,7 +135,10 @@ validate_stripe_price_ids()
 
 _auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
 _firebase_admin_options = firebase_admin_options()
-if _auth_emulator_host:
+_verify_only_credential = firebase_verify_only_credential()
+if _verify_only_credential is not None:
+    firebase_admin.initialize_app(_verify_only_credential, options=_firebase_admin_options)
+elif _auth_emulator_host:
     for _adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON", "FIREBASE_AUTH_CREDENTIALS_PATH"):
         os.environ.pop(_adc_key, None)
     _firebase_project_id = (
@@ -184,6 +201,9 @@ app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
 app.include_router(referrals.router)
+app.include_router(csat.router)
+app.include_router(email_preferences.router)
+app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
 
@@ -230,14 +250,18 @@ app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
 app.include_router(task_recommendations.router)
+app.include_router(jit_ledger_snapshot.router)
+app.include_router(jit_rollout.router)
 app.include_router(desktop_core.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
 app.include_router(desktop_proxy.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
+app.include_router(frame_requests.router)
 app.include_router(desktop_tts_updates.router)
 app.include_router(screen_frames.router)
+jit_rollout.validate_jit_rollout_contract(app)
 
 
 methods_timeout = {
@@ -417,6 +441,7 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
+    close_posthog_control_plane()
     stop_metrics_sidecar_server()
 
 

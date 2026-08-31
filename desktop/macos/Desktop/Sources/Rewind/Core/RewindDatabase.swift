@@ -23,6 +23,14 @@ actor RewindDatabase {
   /// Path to the running flag file (used to detect unclean shutdown)
   private var runningFlagPath: String?
 
+  /// Whether the *previous* session ended uncleanly, latched at the first
+  /// observation in this process. `.omi_running` is created at the end of
+  /// `performInitialization()`, so the answer stops being observable once the
+  /// database opens — and any of the lazily-initializing storage actors can get
+  /// there first. That race is why `App Startup Timing` reported
+  /// `had_unclean_shutdown = true` on ~every sample.
+  private var uncleanShutdownVerdict: Bool?
+
   /// The user ID this database is configured for (nil = not yet configured → "anonymous")
   private var configuredUserId: String?
 
@@ -332,6 +340,10 @@ actor RewindDatabase {
     initializationTask = nil
     runningFlagPath = nil
     openedForUserId = nil
+    // The database identity is being torn down, so the latched verdict no longer
+    // describes anything. The next performInitialization() makes a fresh
+    // authoritative observation for whichever user it opens.
+    uncleanShutdownVerdict = nil
     initGeneration += 1
     poolEpoch += 1
     log("RewindDatabase: Closed database (generation \(initGeneration), pool epoch \(poolEpoch))")
@@ -383,9 +395,17 @@ actor RewindDatabase {
   }
 
   /// Check if the previous session ended with an unclean shutdown (crash, force quit, etc.)
+  ///
+  /// Order-independent: whoever observes first latches the verdict for the whole
+  /// process, and `performInitialization()` latches it before it writes this
+  /// session's own running flag. A later caller therefore reads the previous
+  /// session's state, not this one's.
   func hadUncleanShutdown() -> Bool {
+    if let uncleanShutdownVerdict { return uncleanShutdownVerdict }
     let flagPath = userBaseDirectory().appendingPathComponent(".omi_running").path
-    return FileManager.default.fileExists(atPath: flagPath)
+    let verdict = FileManager.default.fileExists(atPath: flagPath)
+    uncleanShutdownVerdict = verdict
+    return verdict
   }
 
   /// Initialize the database with migrations.
@@ -471,6 +491,13 @@ actor RewindDatabase {
     // Detect unclean shutdown: if the running flag file exists, the previous launch
     // didn't exit cleanly (crash, force quit, power loss)
     let previousCrashed = FileManager.default.fileExists(atPath: flagPath)
+    // This is the authoritative, user-scoped observation and it happens before
+    // this session's flag is written below. Latch it here so a startup-timing
+    // reader that arrives after the database opened still reports the previous
+    // session, whatever order the storage actors initialized in.
+    if uncleanShutdownVerdict == nil {
+      uncleanShutdownVerdict = previousCrashed
+    }
     if previousCrashed {
       log("RewindDatabase: Unclean shutdown detected (running flag exists)")
     }
@@ -569,6 +596,23 @@ actor RewindDatabase {
       throw CancellationError()
     }
 
+    // Migrate BEFORE publishing the pool. `initialize()` treats
+    // `dbQueue != nil && openedForUserId == targetUser` as "already
+    // initialized", so publishing first and then throwing out of the schema
+    // ladder would latch a half-migrated schema in permanently: every later
+    // initialize() returns early and every caller is handed a pool whose
+    // tables do not match the code. Leaving both unset means the next
+    // initialize() retries the migration from the top.
+    do {
+      try migrate(
+        activeQueue,
+        ownerID: expectedUserId,
+        legacyOwnerFallback: migratedLegacyOwnerID)
+    } catch {
+      try? activeQueue.close()
+      throw error
+    }
+
     dbQueue = activeQueue
     // Bump the pool epoch on every (re)open so storage actors that cached the
     // previous pool revalidate and drop it — recovery may have replaced the
@@ -579,8 +623,6 @@ actor RewindDatabase {
     poolEpoch += 1
     openedForUserId = expectedUserId
     consecutiveQueryIOErrors = 0
-
-    try migrate(activeQueue, legacyOwnerFallback: migratedLegacyOwnerID)
 
     // After unclean shutdown, do a cheap schema sanity check (not a full DB scan).
     // PRAGMA quick_check scans the ENTIRE database regardless of the (N) argument
@@ -1145,7 +1187,13 @@ actor RewindDatabase {
 
   // MARK: - Migrations
 
-  private func migrate(_ queue: DatabasePool, legacyOwnerFallback: String? = nil) throws {
+  /// `ownerID` is passed explicitly because migration now runs *before* `openedForUserId` is
+  /// published, so the owner-scoped migrations cannot read it back off the actor.
+  private func migrate(
+    _ queue: DatabasePool,
+    ownerID: String? = nil,
+    legacyOwnerFallback: String? = nil
+  ) throws {
     var migrator = DatabaseMigrator()
 
     // Migration 1: Create screenshots table
@@ -2568,7 +2616,7 @@ actor RewindDatabase {
       }
     }
 
-    let contextBucketOwnerID = openedForUserId ?? targetUserId()
+    let contextBucketOwnerID = ownerID ?? openedForUserId ?? targetUserId()
     ContextBucketSchema.registerMigration(
       on: &migrator,
       defaults: .standard,
@@ -2583,6 +2631,16 @@ actor RewindDatabase {
       try Self.installScreenActivitySyncStateSchema(db)
     }
 
+    // Ledger fields are an additive mirror only. Legacy rows remain intact and
+    // fail closed in the prompt projection until a canonical payload refreshes
+    // their metadata.
+    migrator.registerMigration("addMemoryLedgerMetadata") { db in
+      try Self.addMemoryColumnIfMissing(db, name: "ledgerMetadataJson", type: .text)
+    }
+
+    Self.registerMemoryLedgerEvidenceMigrations(on: &migrator)
+    JITTriggerMirrorSchema.registerMigration(on: &migrator)
+    KnowledgeLedgerMirrorStagingSchema.registerMigration(on: &migrator)
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
@@ -2602,6 +2660,34 @@ actor RewindDatabase {
         ON screenshots(screenActivitySyncState, id)
         WHERE screenActivitySyncState IN (0, 1)
         """)
+  }
+
+  /// Registers the evidence columns separately so an upgrade from a populated
+  /// pre-evidence table exercises the same path as the production migrator.
+  static func registerMemoryLedgerEvidenceMigrations(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addMemoryLedgerEvidence") { db in
+      try Self.addMemoryColumnIfMissing(db, name: "ledgerEvidenceJson", type: .text)
+    }
+    migrator.registerMigration("addMemoryLedgerEvidenceRevision") { db in
+      try Self.addMemoryColumnIfMissing(db, name: "ledgerEvidenceRevision", type: .datetime)
+    }
+  }
+
+  /// A dogfood or QA machine can already carry one of these columns from an earlier build of the
+  /// same branch, where the migration ran under a different identifier. A bare `ADD COLUMN` there
+  /// fails with "duplicate column name" and kills the whole ladder, so probe the table first —
+  /// the same guard `KnowledgeLedgerMirrorStagingSchema` uses.
+  static func addMemoryColumnIfMissing(
+    _ db: Database,
+    name: String,
+    type: Database.ColumnType
+  ) throws {
+    guard try db.columns(in: "memories").contains(where: { $0.name == name }) == false else {
+      return
+    }
+    try db.alter(table: "memories") { t in
+      t.add(column: name, type)
+    }
   }
 
   // MARK: - OCR Precision Reduction Migration

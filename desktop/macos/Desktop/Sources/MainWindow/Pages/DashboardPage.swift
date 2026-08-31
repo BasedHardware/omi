@@ -236,16 +236,10 @@ struct DashboardPage: View {
   @State private var dismissedKnowsTaskIDs: Set<String> = []
   @State private var homeAskFocusPolicy = HomeAskFocusPolicy()
   @Binding var selectedIndex: Int
-  @State private var citedConversation: ServerConversation? = nil
   @State private var selectedCatalogApp: OmiApp?
   @State private var selectedImportConnector: ImportConnector?
   @State private var selectedExportDestination: MemoryExportDestination?
-  @State private var isShowingAppsPopup = false
-  @State private var appsPopupAcceptsInput = false
   @State private var homeConnectSheetAcceptsInput = false
-  @State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports
-  @State private var appsPopupPresentationID = UUID()
-  @State private var isLoadingCitation = false
   @State private var isCaptureMonitoring = false
   @State private var isTogglingCapture = false
   @State private var isTogglingListening = false
@@ -296,13 +290,6 @@ struct DashboardPage: View {
   private static let homeStageTopPadding: CGFloat = 74
   private static let homeStageBottomPadding: CGFloat = 26
   private static let homeStageAnimation = Animation.spring(response: 0.46, dampingFraction: 0.86)
-  private static let appsPopupMaxWidth: CGFloat = 1040
-  private static let appsPopupMaxHeight: CGFloat = 600
-  private static let appsPopupMinWidth: CGFloat = 360
-  private static let appsPopupMinHeight: CGFloat = 360
-  private static let appsPopupHorizontalMargin: CGFloat = 48
-  private static let appsPopupVerticalMargin: CGFloat = 32
-  private static let appsPopupCornerRadius: CGFloat = 22
   private static let homeConnectSheetHorizontalMargin: CGFloat = 56
   private static let homeConnectSheetVerticalMargin: CGFloat = 44
   private static let homeConnectSheetMinWidth: CGFloat = 360
@@ -317,7 +304,7 @@ struct DashboardPage: View {
   }
 
   private var isHomeModalPresented: Bool {
-    isShowingAppsPopup || homeConnectSheetIsPresented
+    homeConnectSheetIsPresented
   }
 
   private var legacySelectedCatalogApp: Binding<OmiApp?> {
@@ -393,15 +380,6 @@ struct DashboardPage: View {
 
   private func applyHomeSheets<Content: View>(to content: Content) -> some View {
     content
-      .sheet(item: $citedConversation) { conversation in
-        ConversationDetailView(
-          conversation: conversation,
-          onBack: {
-            citedConversation = nil
-          }
-        )
-        .frame(minWidth: 500, minHeight: 500)
-      }
       .sheet(isPresented: $showingAllGoals) {
         AllGoalsSheet(
           store: intelligenceStore,
@@ -454,23 +432,6 @@ struct DashboardPage: View {
           }
         )
         .frame(width: 520, height: 620)
-      }
-      .overlay {
-        if isLoadingCitation {
-          ZStack {
-            // The lane publishes the modal bounds for this legacy Home surface.
-            ShellModalScrim()
-            VStack(spacing: OmiSpacing.md) {
-              ProgressView()
-              Text("Loading source...")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(Ink.primary)
-            }
-            .padding(OmiSpacing.xl)
-            // A modal over the transcript is a free-floating object: real glass.
-            .glassFloatingBar(cornerRadius: OmiChrome.smallControlRadius)
-          }
-        }
       }
   }
 
@@ -679,6 +640,10 @@ struct DashboardPage: View {
           },
           onAttachmentRemoved: { id in
             chatProvider.removePendingAttachment(id: id)
+          },
+          references: chatProvider.pendingComposerReferences,
+          onReferenceRemoved: { id in
+            chatProvider.removeComposerReference(id: id)
           }
         )
         .padding(.horizontal, OmiSpacing.section)
@@ -728,13 +693,6 @@ struct DashboardPage: View {
         // Capture/Listening now live in the shell's constant top bar (see
         // DesktopTopBar), so the home no longer renders its own header copy.
 
-        appsPopupOverlay(
-          contentWidth: proxy.size.width,
-          panelWidth: panelWidth,
-          panelHeight: panelHeight,
-          panelTop: panelTop
-        )
-
         homeConnectSheetOverlay(
           contentWidth: proxy.size.width,
           panelWidth: panelWidth,
@@ -754,7 +712,6 @@ struct DashboardPage: View {
           }
         }
       }
-      .omiAnimation(.easeOut(duration: 0.2), value: isShowingAppsPopup)
       .omiAnimation(.easeOut(duration: 0.2), value: homeConnectSheetIsPresented)
       .omiAnimation(Self.homeStageAnimation, value: homeMode)
     }
@@ -1459,71 +1416,6 @@ struct DashboardPage: View {
   }
 
   @ViewBuilder
-  private func appsPopupOverlay(
-    contentWidth: CGFloat,
-    panelWidth: CGFloat,
-    panelHeight: CGFloat,
-    panelTop: CGFloat
-  ) -> some View {
-    ZStack {
-      if isShowingAppsPopup {
-        // `PageGlassLane` supplies legacy Home ground and bounds this scrim; do not re-derive the preference.
-        ShellModalScrim(onTap: dismissAppsPopup)
-          .transition(.opacity)
-          .zIndex(2)
-
-        let popupSize = appsPopupSize(panelWidth: panelWidth, panelHeight: panelHeight)
-
-        AppsPage(
-          appProvider: appProvider,
-          appState: appState,
-          connectorStatusStore: homeStatusStore.connectorStatusStore,
-          initialSection: appsPopupInitialSection,
-          onDismiss: {
-            dismissAppsPopup()
-          },
-          onSelectApp: { app in
-            openAppFromAppsPopup(app)
-          },
-          onSelectConnector: { connector in
-            openImportConnectorFromAppsPopup(connector)
-          },
-          onSelectDestination: { destination in
-            openExportDestinationFromAppsPopup(destination)
-          }
-        )
-        .id(appsPopupPresentationID)
-        .frame(width: popupSize.width, height: popupSize.height)
-        // The popup is a bounded card with its own ground, so a sheet opened *inside* it dims the
-        // card rather than the lane behind it.
-        .shellModalScrimBounds(.ownSurface)
-        .background(Ink.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))
-        .overlay(
-          RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous)
-            .stroke(Ink.separator, lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
-        .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
-        .transition(.scale(scale: 0.95).combined(with: .opacity))
-        .accessibilityAddTraits(.isModal)
-        .zIndex(3)
-
-        // Only the topmost modal owns Esc; the connect sheet takes over
-        // while it is presented (including the brief crossfade overlap).
-        if appsPopupAcceptsInput && !homeConnectSheetIsPresented {
-          OverlayModalEscapeCatcher {
-            dismissAppsPopup()
-          }
-          .zIndex(3)
-        }
-      }
-    }
-    .allowsHitTesting(appsPopupAcceptsInput && !homeConnectSheetIsPresented)
-    .zIndex(2)
-  }
-
-  @ViewBuilder
   private func homeConnectSheetOverlay(
     contentWidth: CGFloat,
     panelWidth: CGFloat,
@@ -1618,19 +1510,6 @@ struct DashboardPage: View {
     }
   }
 
-  private func appsPopupSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
-    CGSize(
-      width: min(
-        Self.appsPopupMaxWidth,
-        max(Self.appsPopupMinWidth, panelWidth - (Self.appsPopupHorizontalMargin * 2))
-      ),
-      height: min(
-        Self.appsPopupMaxHeight,
-        max(Self.appsPopupMinHeight, panelHeight - (Self.appsPopupVerticalMargin * 2))
-      )
-    )
-  }
-
   private var homeHeader: some View {
     let transcriptionUnavailable = appState.transcriptionServiceError != nil
 
@@ -1701,7 +1580,7 @@ struct DashboardPage: View {
         openOmiDeviceWebsite()
       }
       HomeAIChoiceButton(title: "More", systemImage: "plus") {
-        openAppsPopup(initialSection: .imports)
+        openAppsPage()
       }
     }
   }
@@ -1736,7 +1615,7 @@ struct DashboardPage: View {
         openExportDestination(.hermes)
       }
       HomeAIChoiceButton(title: "More", systemImage: "plus") {
-        openAppsPopup(initialSection: .exports)
+        openAppsPage()
       }
     }
   }
@@ -1746,35 +1625,11 @@ struct DashboardPage: View {
     AnalyticsManager.shared.tabChanged(tabName: item.title)
   }
 
-  private func openAppsPopup(initialSection: AppsCatalogInitialSection) {
-    // Filters left behind by earlier catalog visits (a category, a search,
-    // "Installed") would otherwise replace the Imports/Exports sections
-    // this popup exists to show.
+  private func openAppsPage() {
+    // The Apps page is the sole catalog owner. Contextual "More" actions clear
+    // stale filters, then navigate there instead of mounting a bounded copy.
     appProvider.clearFilters()
-    appsPopupInitialSection = initialSection
-    appsPopupPresentationID = UUID()
-    appsPopupAcceptsInput = true
-    isShowingAppsPopup = true
-  }
-
-  private func dismissAppsPopup() {
-    appsPopupAcceptsInput = false
-    isShowingAppsPopup = false
-  }
-
-  private func openAppFromAppsPopup(_ app: OmiApp) {
-    dismissAppsPopup()
-    presentCatalogApp(app)
-  }
-
-  private func openImportConnectorFromAppsPopup(_ connector: ImportConnector) {
-    dismissAppsPopup()
-    presentImportConnector(connector)
-  }
-
-  private func openExportDestinationFromAppsPopup(_ destination: MemoryExportDestination) {
-    dismissAppsPopup()
-    presentExportDestination(destination)
+    navigate(to: .apps)
   }
 
   private func openImportConnector(_ connectorID: String) {
@@ -1876,29 +1731,19 @@ struct DashboardPage: View {
     .padding(.vertical, OmiSpacing.section)
   }
 
-  /// Handle tapping on a citation card — opens the cited conversation in a sheet.
+  /// Conversation citations use the same root handoff as every other source.
+  /// The Memory hub owns the only conversation browser/detail presentation.
   private func handleCitationTap(_ citation: Citation) {
     guard citation.sourceType == .conversation else {
       log("Citation tapped: \(citation.title) (memory - no detail view)")
       return
     }
 
-    isLoadingCitation = true
-
-    Task {
-      do {
-        let conversation = try await APIClient.shared.getConversation(id: citation.id)
-        await MainActor.run {
-          citedConversation = conversation
-          isLoadingCitation = false
-        }
-      } catch {
-        logError("Failed to fetch cited conversation", error: error)
-        await MainActor.run {
-          isLoadingCitation = false
-        }
-      }
-    }
+    ConversationDetailAutomationState.shared.requestOpen(
+      conversationId: citation.id,
+      showTranscript: false
+    )
+    NotificationCenter.default.post(name: .desktopAutomationOpenConversationRequested, object: nil)
   }
 
   private func openRecommendation(_ recommendation: DashboardRecommendation) async -> Bool {

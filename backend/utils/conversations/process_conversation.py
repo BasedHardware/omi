@@ -25,11 +25,16 @@ import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.users as users_db
 import database.tasks as tasks_db
+import database.goals as goals_db
 import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
 import database.screen_activity as screen_activity_db
-from database.vector_db import find_similar_action_items
+from database.vector_db import (
+    find_similar_action_items,
+    upsert_action_item_vectors_batch,
+    delete_action_item_vectors_batch,
+)
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
 from utils.conversations.transcript_chunks import build_transcript_chunks
@@ -120,6 +125,7 @@ from utils.other.hume import (
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
+from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
@@ -139,6 +145,7 @@ from utils.conversations.meeting_context import (
     select_overlapping_meeting,
 )
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.jit_first_open_policy import resolve_authorized_first_open_plan
 from utils.other.storage import (
     compute_audio_files_fingerprint,
     enqueue_conversation_artifact_build,
@@ -184,7 +191,7 @@ class AppUsageAttribution(str, Enum):
 class ExplicitAppSelectionFailedError(RuntimeError):
     """A reprocess that named one summarization app ended without its result.
 
-    Raised by `_trigger_apps` when an explicit `app_id` selection leaves no
+    Raised by `trigger_conversation_apps` when an explicit `app_id` selection leaves no
     non-empty result for that app — the execution failed (the executor loop
     already logged the exception) or the model returned empty content.
     First-party notes are a display fallback, not a substitute for the
@@ -208,7 +215,7 @@ def _conversation_notes_v2_enabled() -> bool:
     return summary_pipeline_mode() is SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
 
 
-def _conversation_apps_opt_in_only() -> bool:
+def conversation_apps_opt_in_only() -> bool:
     # Derived, never independently configured — see SummaryPipelineMode.
     return summary_pipeline_mode() is SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
 
@@ -289,6 +296,16 @@ def _primary_user_name(uid: str) -> Optional[str]:
     return raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else None
 
 
+def _proposes_task_candidates(conversation: Any) -> bool:
+    """Whether this conversation's action items become Candidates instead of tasks.
+
+    Desktop has a Suggested surface to review them on. Every other client — phone,
+    pendant, watch — has none, so a proposal there is invisible and expires unseen:
+    what the extractor admits is a task.
+    """
+    return getattr(conversation, 'source', None) == ConversationSource.desktop
+
+
 def _get_structured(
     uid: str,
     language_code: str,
@@ -298,7 +315,7 @@ def _get_structured(
     conversation_id: Optional[str] = None,
 ) -> Tuple[Structured, bool]:
     try:
-        task_intelligence_capture = conversation_capture.capture_enabled(uid)
+        task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
         user_language = users_db.get_user_language_preference(uid) or language_code
@@ -607,7 +624,7 @@ def get_default_conversation_summarized_apps() -> List[App]:
     return default_apps
 
 
-def _trigger_apps(
+def trigger_conversation_apps(
     uid: str,
     conversation: Conversation,
     is_reprocess: bool = False,
@@ -616,14 +633,18 @@ def _trigger_apps(
     usage_attribution: Optional[AppUsageAttribution] = None,
     language_code: str = 'en',
     people: Optional[List[Person]] = None,
-) -> None:
+    preserve_existing_results: bool = False,
+    resumable_result_commit: Optional[Callable[[str, Mapping[str, Any]], bool]] = None,
+    resumable_usage_commit: Optional[Callable[[str, UsageHistoryType], bool]] = None,
+    resumable_effect_authorizer: Optional[Callable[[], None]] = None,
+) -> bool:
     if usage_attribution is None:
         usage_attribution = (
             AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
         )
 
     # Get default apps for auto-selection
-    opt_in_only = _conversation_apps_opt_in_only()
+    opt_in_only = conversation_apps_opt_in_only()
     default_apps = [] if opt_in_only else get_default_conversation_summarized_apps()
     default_apps_dict = {app.id: app for app in default_apps}
 
@@ -672,6 +693,8 @@ def _trigger_apps(
         if app_to_run is None and not opt_in_only:
             # Only run suggestion LLM call when no usable preferred app is set
             if not conversation.suggested_summarization_apps:
+                if resumable_effect_authorizer is not None:
+                    resumable_effect_authorizer()
                 with track_usage(uid, Features.CONVERSATION_APPS):
                     suggested_apps, _reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
                 conversation.suggested_summarization_apps = suggested_apps
@@ -687,15 +710,18 @@ def _trigger_apps(
         elif app_to_run is None:
             logger.info('Summarization apps are opt-in only; skipping automatic app selection')
 
-    filtered_apps: List[App] = [app_to_run] if app_to_run else []
+    completed_app_ids = {result.app_id for result in conversation.apps_results} if preserve_existing_results else set()
+    filtered_apps: List[App] = [app_to_run] if app_to_run and app_to_run.id not in completed_app_ids else []
 
     if not filtered_apps:
         logger.info(f"No summarization app selected for conversation {conversation.id} {uid}")
 
-    # Clear existing app results
-    conversation.apps_results = []
+    if not preserve_existing_results:
+        conversation.apps_results = []
 
     def execute_app(app: App) -> None:
+        if resumable_effect_authorizer is not None:
+            resumable_effect_authorizer()
         with track_usage(uid, Features.CONVERSATION_APPS):
             transcript = conversation_transcript_for_llm(uid, conversation, people)
             prompt_prefix = None
@@ -717,17 +743,42 @@ def _trigger_apps(
                 prompt_prefix=prompt_prefix,
             ).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
+        if preserve_existing_results:
+            # Persist the generated app result before any later telemetry or
+            # aggregate effect receipt. A process crash can then resume from
+            # this durable per-app output instead of paying for the same LLM
+            # mutation again.
+            result_patch = {
+                'apps_results': [item.dict() for item in conversation.apps_results],
+                'suggested_summarization_apps': conversation.suggested_summarization_apps,
+            }
+            persisted = (
+                resumable_result_commit(app.id, result_patch)
+                if resumable_result_commit is not None
+                else conversations_db.update_conversation(uid, conversation.id, result_patch)
+            )
+            if not persisted:
+                raise RuntimeError('conversation disappeared while persisting app result')
         if usage_attribution in {
             AppUsageAttribution.AUTOMATIC_PROCESSING,
             AppUsageAttribution.EXPLICIT_SELECTION,
         }:
-            record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
+            usage_type = UsageHistoryType.memory_created_prompt
+            if resumable_usage_commit is not None:
+                recorded = resumable_usage_commit(app.id, usage_type)
+            else:
+                record_app_usage(uid, app.id, usage_type, conversation_id=conversation.id)
+                recorded = True
+            if not recorded:
+                raise RuntimeError('first-open authority lost while recording app usage')
 
     futures = [submit_with_context(llm_executor, execute_app, app) for app in filtered_apps]
+    succeeded = True
     for future in futures:
         try:
             future.result()
         except Exception as e:
+            succeeded = False
             logger.error(f"Error executing app: {e}")
 
     if app_id:
@@ -738,14 +789,23 @@ def _trigger_apps(
         if selected_result is None or not selected_result.content.strip():
             raise ExplicitAppSelectionFailedError(f'Selected app {app_id} produced no summary content')
 
+    return succeeded
 
-def _update_goal_progress(uid: str, conversation: Conversation) -> None:
+
+def update_goal_progress(
+    uid: str,
+    conversation: Conversation,
+    *,
+    idempotency_key_prefix: Optional[str] = None,
+) -> bool:
     """Extract and update goal progress from conversation text."""
     try:
-        # Idempotency: skip if this conversation was already processed for goals
-        if not redis_db.try_acquire_conversation_goal_lock(uid, conversation.id):
+        # Legacy eager processing uses the bounded Redis lock. First-open work
+        # instead uses durable per-goal events below, so TTL expiry cannot
+        # duplicate a committed goal mutation.
+        if idempotency_key_prefix is None and not redis_db.try_acquire_conversation_goal_lock(uid, conversation.id):
             logger.info(f"[GOAL] Skipping already-processed conversation {conversation.id}")
-            return
+            return True
 
         # Get conversation text
         text = ""
@@ -755,13 +815,25 @@ def _update_goal_progress(uid: str, conversation: Conversation) -> None:
             text = " ".join([s.text for s in conversation.transcript_segments[:20]])
 
         if not text or len(text) < 10:
-            return
+            return True
 
         # Use utility function to extract and update goal progress
         with track_usage(uid, Features.GOALS):
-            extract_and_update_goal_progress(uid, text)
+            account_generation = (
+                goals_db.get_task_workflow_account_generation(uid) if idempotency_key_prefix is not None else None
+            )
+            extract_and_update_goal_progress(
+                uid,
+                text,
+                idempotency_key_prefix=idempotency_key_prefix,
+                account_generation=account_generation,
+            )
+        return True
     except Exception as e:
         logger.error(f"[GOAL] Error updating progress: {e}")
+        if idempotency_key_prefix is None:
+            redis_db.release_conversation_goal_lock(uid, conversation.id)
+        return False
 
 
 def _parity_transcript_segments(conversation: Conversation) -> list[dict[str, Any]]:
@@ -789,12 +861,46 @@ def _parity_accepted_memories(memories: List[MemoryDB]) -> list[dict[str, Any]]:
     ]
 
 
+def _sweep_owned_writer_mode(uid: str) -> Optional[str]:
+    """Writer mode when a non-compatibility authority owns memory formation.
+
+    A ledger-cutover (or transitioning) user must not pay for eager
+    per-conversation extraction: writer admission would refuse the
+    compatibility write AFTER the model call was already spent, failing the
+    whole finalization, and the daily sweep owns those users' memory
+    formation. Only a positively-read non-compatibility mode is reported;
+    any control-state read failure returns None so the legacy eager path is
+    preserved.
+    """
+    try:
+        from models.memory_apply import WriterMode
+        from utils.memory.memory_system import ensure_canonical_apply_control_state
+
+        db_client = getattr(db_client_module, 'db', None)
+        control = ensure_canonical_apply_control_state(uid, db_client=db_client)
+        writer_mode = getattr(control, 'writer_mode', WriterMode.compatibility)
+        if writer_mode != WriterMode.compatibility:
+            return getattr(writer_mode, 'value', str(writer_mode))
+    except Exception:
+        return None
+    return None
+
+
 def extract_memories(uid: str, conversation: Conversation) -> None:
     """Extract one conversation's memories through the selected memory system.
 
     Finalization workers use this public boundary while holding their durable
     lease. Keep the private helper below for existing in-module async callers.
     """
+    sweep_owned_mode = _sweep_owned_writer_mode(uid)
+    if sweep_owned_mode is not None:
+        logger.info(
+            'memory extraction skipped: writer_mode=%s owns formation uid=%s conv=%s',
+            sweep_owned_mode,
+            uid,
+            conversation.id,
+        )
+        return
     source = source_for_conversation(conversation)
     parity_capture = SurfaceParityCapture.from_environ(
         principal_id=uid,
@@ -1498,15 +1604,85 @@ def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> No
     send_notification(user_id, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
-    """Propose a conversation's extracted action items as Candidates.
+def _write_action_items(uid: str, conversation: Conversation):
+    """Write the extracted items as tasks, replacing whatever this conversation wrote before."""
+    if not conversation.structured.action_items:
+        return
 
-    INVARIANT I1: nothing here writes an ``action_item``. Extraction produces
-    suggestions only; a task exists when the user says so. The items also stay
-    on ``conversation.structured``, which is what the summary view renders and
-    what its "Add to Tasks" button acts on.
+    now = datetime.now(timezone.utc)
+    is_locked = conversation.is_locked
+    action_items_data: List[Dict[str, Any]] = [
+        {
+            'description': action_item.description,
+            'completed': action_item.completed,
+            'created_at': action_item.created_at or now,
+            'updated_at': action_item.updated_at or now,
+            'due_at': action_item.due_at,
+            'completed_at': action_item.completed_at,
+            'conversation_id': conversation.id,
+            'is_locked': is_locked,
+            **conversation_capture.canonical_conversation_fields(action_item, conversation),
+        }
+        for action_item in conversation.structured.action_items
+    ]
+
+    old_ids = [item['id'] for item in action_items_db.get_action_items_by_conversation(uid, conversation.id)]
+    if old_ids:
+        delete_action_item_vectors_batch(uid, old_ids)
+    action_items_db.delete_action_items_for_conversation(uid, conversation.id)
+
+    action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+    logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
+
+    emit_product_event(
+        uid=uid,
+        event='Task Extracted',
+        properties={
+            'task_count': len(action_item_ids),
+            'conversation_id': conversation.id,
+            'task_source': 'transcript',
+            'persistence_path': 'action_items',
+        },
+    )
+
+    for idx, action_item in enumerate(conversation.structured.action_items):
+        if action_item.due_at and idx < len(action_item_ids):
+            send_action_item_data_message(
+                user_id=uid,
+                action_item_id=action_item_ids[idx],
+                description=action_item.description,
+                due_at=action_item.due_at.isoformat(),
+            )
+
+    created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
+
+    def _run_auto_sync():
+        asyncio.run(auto_sync_action_items_batch(uid, created_items))
+
+    submit_with_context(postprocess_executor, _run_auto_sync)
+
+    upsert_action_item_vectors_batch(
+        uid,
+        [
+            {'action_item_id': aid, 'description': data['description']}
+            for aid, data in zip(action_item_ids, action_items_data)
+        ],
+    )
+
+
+def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
+    """Persist a conversation's extracted action items.
+
+    Desktop conversations propose Candidates for its Suggested surface. Everywhere
+    else the conservative extraction prompt is the filter — it admits explicit
+    commands and the few real commitments, or nothing — and what it admits is
+    written as a task.
     """
     if not conversation.structured:
+        return
+
+    if not _proposes_task_candidates(conversation):
+        _write_action_items(uid, conversation)
         return
 
     try:
@@ -1664,6 +1840,7 @@ def _store_deferred_conversation(
     if not persisted:
         logger.info('lazy: deferred conversation creation fenced uid=%s conv=%s', uid, conversation.id)
         return conversation
+
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
     return conversation
 
@@ -1958,6 +2135,24 @@ def process_conversation(
         )
         return conversation
 
+    # Enrollment is resolved only from backend authority plus the persisted
+    # conversation source. We create the durable obligation before omitting a
+    # single effect; authority/Firestore failure preserves full-eager behavior.
+    jit_defer_expensive = False
+    if not force_process and not is_reprocess and not discarded:
+        source_value = getattr(conversation.source, 'value', conversation.source)
+        first_open_plan = resolve_authorized_first_open_plan(uid=uid, source=str(source_value))
+        if first_open_plan.defer_derived_work:
+            try:
+                jit_defer_expensive = conversations_db.initialize_first_open_work(uid, conversation.id)
+            except Exception as error:
+                logger.warning(
+                    'JIT first-open initialization failed; using eager path uid=%s conv=%s: %s',
+                    uid,
+                    conversation.id,
+                    error,
+                )
+
     # Wrap every post-persistence derived effect so the durable finalizer can
     # defer the bundle until it transactionally claims ownership (#10468 r5).
     # Captured by _emit_derived_effects so an explicit-selection failure can fail the
@@ -2001,7 +2196,7 @@ def process_conversation(
 
         # AI-based folder assignment
         assigned_folder_id = None
-        if not discarded and not is_reprocess and not conversation.folder_id:
+        if not jit_defer_expensive and not discarded and not is_reprocess and not conversation.folder_id:
             try:
                 # Get user's folders
                 user_folders = folders_db.get_folders(uid)
@@ -2055,30 +2250,31 @@ def process_conversation(
             if insights_gained > 0:
                 record_usage(uid, insights_gained=insights_gained)
 
-            try:
-                _trigger_apps(
-                    uid,
-                    conversation,
-                    is_reprocess=is_reprocess,
-                    app_id=app_id,
-                    explicit_app=explicit_app,
-                    usage_attribution=app_usage_attribution,
-                    language_code=language_code,
-                    people=people,
-                )
-            except ExplicitAppSelectionFailedError as error:
-                # Fail closed without stranding the bundle: the write-back below still
-                # persists apps_results exactly as it does today (opt-in clears a stale
-                # selection) and the remaining derived effects still run; the error is
-                # re-raised after the bundle so the reprocess boundary returns a real
-                # failure instead of success-with-notes (SCA-359).
-                logger.error('Explicit app selection failed: %s', error)
-                explicit_selection_failures.append(error)
-            # _trigger_apps only mutates the in-memory conversation and the durable write above already
+            if not jit_defer_expensive:
+                try:
+                    trigger_conversation_apps(
+                        uid,
+                        conversation,
+                        is_reprocess=is_reprocess,
+                        app_id=app_id,
+                        explicit_app=explicit_app,
+                        usage_attribution=app_usage_attribution,
+                        language_code=language_code,
+                        people=people,
+                    )
+                except ExplicitAppSelectionFailedError as error:
+                    # Fail closed without stranding the bundle: the write-back below still
+                    # persists apps_results exactly as it does today (opt-in clears a stale
+                    # selection) and the remaining derived effects still run; the error is
+                    # re-raised after the bundle so the reprocess boundary returns a real
+                    # failure instead of success-with-notes (SCA-359).
+                    logger.error('Explicit app selection failed: %s', error)
+                    explicit_selection_failures.append(error)
+            # trigger_conversation_apps only mutates the in-memory conversation and the durable write above already
             # happened, so persist its output the same way the calendar_event/folder_id/audio_files
             # write-backs do. Otherwise the app summary the LLM just produced is discarded.
-            if (
-                _conversation_apps_opt_in_only()
+            if not jit_defer_expensive and (
+                conversation_apps_opt_in_only()
                 or conversation.apps_results
                 or conversation.suggested_summarization_apps
             ):
@@ -2097,7 +2293,11 @@ def process_conversation(
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
             submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
-            submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
+            # Automatic goal updates are excluded from the JIT featureset
+            # entirely (not deferred): a JIT-admitted conversation never
+            # updates goals; users update goals through explicit actions.
+            if not jit_defer_expensive:
+                submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
 
         # Create audio files from chunks if private cloud sync was enabled
         if not is_reprocess and conversation.private_cloud_sync_enabled:
@@ -2144,6 +2344,12 @@ def process_conversation(
         raise conversation_processing_http_exception(failure) from failure
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation
+
+
+def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], token: str) -> None:
+    from utils.conversations.jit_first_open_worker import run_first_open_derived_work as run
+
+    run(uid, conversation_data, token)
 
 
 def _send_important_conversation_notification_if_needed(uid: str, conversation: Conversation) -> None:  # type: ignore[reportUnusedFunction]  # reserved for re-enablement

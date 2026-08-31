@@ -1,0 +1,8 @@
+{
+  "version": "0.12.238",
+  "date": "2026-08-29",
+  "changes": [
+    "After a low in-app rating, you can leave an optional comment",
+    "Simplified Screen Recording permission guidance so it stays accurate for any number of apps"
+  ]
+}

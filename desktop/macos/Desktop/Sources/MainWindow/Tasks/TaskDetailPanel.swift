@@ -169,40 +169,55 @@ struct TaskDetailPanel: View {
       } else {
         VStack(spacing: OmiSpacing.xs) {
           ForEach(content.linkedSources) { source in
-            Button {
-              TaskDetailSourceNavigator.open(source.route)
-            } label: {
-              HStack(spacing: OmiSpacing.sm) {
-                Image(systemName: source.systemImage)
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.secondary)
-                  .frame(width: 20)
-                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-                  Text(source.title)
-                    .scaledFont(size: OmiType.caption, weight: .medium)
-                    .foregroundColor(Ink.primary)
-                  Text(source.subtitle)
-                    .scaledFont(size: OmiType.micro)
-                    .foregroundColor(Ink.secondary)
-                    .lineLimit(1)
-                }
-                Spacer(minLength: OmiSpacing.xs)
-                Image(systemName: "arrow.up.right")
-                  .scaledFont(size: OmiType.micro, weight: .semibold)
-                  .foregroundColor(Ink.secondary)
-              }
-              .padding(OmiSpacing.sm)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-                  .fill(Ink.rowFillHover)
-              )
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("task-detail-source-\(source.id)")
+            linkedSourceButton(source)
           }
         }
       }
+    }
+  }
+
+  @ViewBuilder
+  private func linkedSourceButton(_ source: TaskDetailSourceLink) -> some View {
+    if case .rewindFrame(let screenshotID) = source.route {
+      RewindEvidenceCardView(
+        card: RewindEvidenceCardModel(screenshotID: screenshotID),
+        onOpen: { lease in
+          TaskDetailSourceNavigator.open(source.route, rewindLease: lease)
+        }
+      )
+      .accessibilityIdentifier("task-detail-source-\(source.id)")
+    } else {
+      Button {
+        TaskDetailSourceNavigator.open(source.route)
+      } label: {
+        HStack(spacing: OmiSpacing.sm) {
+          Image(systemName: source.systemImage)
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+            .frame(width: 20)
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+            Text(source.title)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(Ink.primary)
+            Text(source.subtitle)
+              .scaledFont(size: OmiType.micro)
+              .foregroundColor(Ink.secondary)
+              .lineLimit(1)
+          }
+          Spacer(minLength: OmiSpacing.xs)
+          Image(systemName: "arrow.up.right")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundColor(Ink.secondary)
+        }
+        .padding(OmiSpacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+            .fill(Ink.rowFillHover)
+        )
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("task-detail-source-\(source.id)")
     }
   }
 

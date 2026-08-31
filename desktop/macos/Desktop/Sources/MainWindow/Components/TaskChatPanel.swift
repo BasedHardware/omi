@@ -8,6 +8,7 @@ struct TaskChatPanel: View {
   @ObservedObject var coordinator: TaskChatCoordinator
   let task: TaskActionItem?
   let onClose: () -> Void
+  let onOpenRewindEvidence: ((Int64) -> Void)?
   @State private var showsThreadContext = true
   @ObservedObject private var runtimeStatusStore = AgentRuntimeStatusStore.shared
 
@@ -41,7 +42,8 @@ struct TaskChatPanel: View {
             runtimeProjection: runtimeStatusStore.projection(
               for: .workstream(workstreamId: projection.workstreamID)
             ),
-            isExpanded: $showsThreadContext
+            isExpanded: $showsThreadContext,
+            onOpenRewindEvidence: onOpenRewindEvidence
           )
           Divider().background(Ink.rowFillHover)
         }
@@ -239,6 +241,7 @@ private struct TaskThreadOverview: View {
   let projection: TaskThreadProjection
   let runtimeProjection: AgentRunProjection?
   @Binding var isExpanded: Bool
+  let onOpenRewindEvidence: ((Int64) -> Void)?
 
   var body: some View {
     DisclosureGroup(isExpanded: $isExpanded) {
@@ -351,11 +354,27 @@ private struct TaskThreadOverview: View {
   @ViewBuilder
   private func evidenceRow(_ refs: [OmiAPI.EvidenceRef]) -> some View {
     if !refs.isEmpty {
-      HStack(spacing: OmiSpacing.xxs) {
-        Image(systemName: "link")
-        Text(refs.prefix(3).map { "\($0.kind.userFacingLabel):\($0.id)" }.joined(separator: " · "))
-          .lineLimit(1)
-          .truncationMode(.middle)
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        let visibleRefs = Array(refs.prefix(3))
+        let currentDeviceID = ClientDeviceService.shared.clientDeviceId
+        ForEach(Array(visibleRefs.enumerated()), id: \.offset) { _, ref in
+          if let card = RewindEvidenceCardPolicy.card(for: ref, currentDeviceID: currentDeviceID) {
+            RewindEvidenceCardView(
+              card: card,
+              onOpen: RewindEvidenceCardPolicy.openHandler(
+                for: card.screenshotID,
+                onOpen: onOpenRewindEvidence
+              )
+            )
+          } else {
+            HStack(spacing: OmiSpacing.xxs) {
+              Image(systemName: "link")
+              Text("\(ref.kind.userFacingLabel):\(ref.id)")
+                .lineLimit(1)
+                .truncationMode(.middle)
+            }
+          }
+        }
       }
       .scaledFont(size: OmiType.micro)
       .foregroundColor(Ink.secondary)

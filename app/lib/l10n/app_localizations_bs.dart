@@ -2042,6 +2042,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get memoryDeleted => 'Uspomena je obrisana.';
 
   @override
+  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
   String get undo => 'Opozovi';
 
   @override
@@ -9931,4 +9934,12 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get prerecordedTranscript => 'Unaprijed snimljeno';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant još uvijek snima, pa se pohranjeni zvuk ne može prenijeti. Pritisnite dugme na Pendantu da zaustavite snimanje, zatim ponovo sinhronizujte.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Memorija Pendanta je puna i još uvijek je u režimu snimanja, pa se pohranjeni zvuk ne može prenijeti. Pritisnite dugme na Pendantu da zaustavite snimanje, a zatim ponovo sinhronizujte.';
 }

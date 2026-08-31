@@ -8,6 +8,144 @@ service: backend-main
 routes:
   - route_type: http
     method: GET
+    path: /v1/jit/knowledge-ledger/prompt-snapshot
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/jit/knowledge-ledger/mirror-snapshot
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: memories
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/jit/rollout-decision
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/jit/trigger-snapshot
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: memories
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/jit/trigger-feedback
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: memories:modify
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: memories
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/jit/proactivity/reservations
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: agent:execute_tool
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: memories
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
     path: /
     policy: &desktop_migration_policy
       review_status: legacy_unreviewed
@@ -91,7 +229,110 @@ routes:
   - route_type: http
     method: POST
     path: /v1/screen-activity/sync
-    policy: *desktop_migration_policy
+    policy:
+      <<: *desktop_migration_policy
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      rate_limit:
+        policy_name: frame_requests:read
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+  - route_type: http
+    method: POST
+    path: /v1/frame-requests
+    policy: &jit_frame_request_policy
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: frame_requests:write
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/frame-requests/pending
+    policy:
+      <<: *jit_frame_request_policy
+      rate_limit:
+        policy_name: frame_requests:read
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+  - route_type: http
+    method: GET
+    path: /v1/frame-requests/status/{request_id}
+    policy:
+      <<: *jit_frame_request_policy
+      rate_limit:
+        policy_name: frame_requests:read
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+  - route_type: http
+    method: GET
+    path: /v1/frame-requests/temporary/{request_id}/image
+    policy:
+      <<: *jit_frame_request_policy
+      rate_limit:
+        policy_name: frame_requests:read
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+  - route_type: http
+    method: POST
+    path: /v1/frame-requests/{request_id}/state
+    policy: *jit_frame_request_policy
+  - route_type: http
+    method: POST
+    path: /v1/frame-requests/{request_id}/upload
+    policy:
+      <<: *jit_frame_request_policy
+      rate_limit:
+        policy_name: frame_requests:upload
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+  - route_type: http
+    method: POST
+    path: /v1/frame-requests/{request_id}/promote
+    policy: *jit_frame_request_policy
+  - route_type: http
+    method: GET
+    path: /v1/conversations/{conversation_id}/photos
+    policy:
+      <<: *jit_frame_request_policy
+      rate_limit:
+        policy_name: frame_requests:read
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
+  - route_type: http
+    method: GET
+    path: /v1/conversations/{conversation_id}/photos/{photo_id}/image
+    policy:
+      <<: *jit_frame_request_policy
+      rate_limit:
+        policy_name: frame_requests:read
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
   - route_type: http
     method: GET
     path: /v1/screen-activity
@@ -143,6 +384,78 @@ routes:
   - route_type: http
     method: GET
     path: /v1/users/me/referral
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+          - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: validated_when_headers_present
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v2/desktop/prompts
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+          - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: validated_when_headers_present
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/csat/config
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+          - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: validated_when_headers_present
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/csat/ratings
     policy:
       review_status: reviewed
       auth:
@@ -660,6 +973,29 @@ routes:
         state: active
       owner: backend
   - route_type: http
+    method: GET
+    path: /v3/memories/ledger-history
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: memories
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
     method: DELETE
     path: /v3/memories/batch
     policy:
@@ -708,6 +1044,29 @@ routes:
   - route_type: http
     method: PATCH
     path: /v3/memories/{memory_id}/baseline
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: memories:modify
+        key_subject: uid
+        enforcement: fail_closed
+        placement: wrapper
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: memories
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v3/memories/{memory_id}/revert
     policy:
       review_status: reviewed
       auth:
@@ -2289,6 +2648,58 @@ routes:
       timeout_class: default_method
       surface: first_party_app
       visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  # Reached from a mail client, never from the app: identity is the signed
+  # unsubscribe token, so there is no session to authenticate. POST is the RFC
+  # 8058 one-click target named by List-Unsubscribe-Post.
+  - route_type: http
+    method: GET
+    path: /email/unsubscribe
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - public
+        placement: none
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: shared_public
+      visibility: public_undocumented
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  # Reached from a mail client, never from the app: identity is the signed
+  # unsubscribe token, so there is no session to authenticate. POST is the RFC
+  # 8058 one-click target named by List-Unsubscribe-Post.
+  - route_type: http
+    method: POST
+    path: /email/unsubscribe
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - public
+        placement: none
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: shared_public
+      visibility: public_undocumented
       data_domain: user_profile
       deprecation:
         state: active

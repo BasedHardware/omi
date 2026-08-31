@@ -363,6 +363,8 @@ export interface AdapterAttemptContext {
   attemptId: string;
   /** Opaque, attempt-bounded authority for Omi/Swift-backed tools. */
   toolCapabilityRef: string;
+  /** Kernel-derived policy for adapter-native tools; request metadata cannot widen it. */
+  builtInToolPolicy: "default" | "read_only";
   binding: AdapterBindingHandle;
   prompt: PromptBlock[];
   mode: RunMode;

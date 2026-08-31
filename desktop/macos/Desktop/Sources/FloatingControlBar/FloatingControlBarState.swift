@@ -247,6 +247,9 @@ struct FloatingBarNotification: Identifiable, Equatable {
   let kind: ProactiveNotificationKind
   let context: FloatingBarNotificationContext?
   let action: FloatingBarNotificationAction?
+  /// Explicit feedback controls for a planned JIT trigger. This is opaque
+  /// provenance only; action labels are rendered by the card.
+  let jitFeedbackContext: JITTriggerFeedbackContext?
   /// Optional opaque proactive-suggestion join keys. No card content or screen
   /// provenance enters notification analytics through this field.
   let suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
@@ -268,6 +271,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     kind: ProactiveNotificationKind? = nil,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
+    jitFeedbackContext: JITTriggerFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
@@ -280,10 +284,24 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.kind = kind ?? ProactiveNotificationKind.from(assistantId: assistantId)
     self.context = context
     self.action = action
+    self.jitFeedbackContext = jitFeedbackContext
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
     self.insightDeliveryID = insightDeliveryID
     self.screenshotData = screenshotData
     self.isPersistent = isPersistent
+  }
+
+  /// Identity every shown card can write. SuggestionAssistant supplies a real
+  /// pair; context-director and other cards synthesize from delivery id / card id
+  /// so the ledger is not gated on suggestion-only telemetry.
+  var feedbackIdentity: SuggestionAssistantTelemetry.NotificationIdentity {
+    if let suggestionTelemetryIdentity { return suggestionTelemetryIdentity }
+    let evaluationID =
+      insightDeliveryID
+      ?? UUID(uuidString: context?.provenanceRef ?? "")
+      ?? id
+    return SuggestionAssistantTelemetry.NotificationIdentity(
+      evaluationID: evaluationID, suggestionID: id)
   }
 
   static func == (lhs: FloatingBarNotification, rhs: FloatingBarNotification) -> Bool {
@@ -303,6 +321,11 @@ class FloatingControlBarState: NSObject, ObservableObject {
   @Published var isHoveringBar: Bool = false
   @Published var requiresHoverReset: Bool = false
   @Published var currentNotification: FloatingBarNotification? = nil
+  /// Visible while PTT is live inside the 60s card-context window.
+  @Published var interjectReplyingToTitle: String? = nil
+  /// Same hover signal the Interject dismiss timer pauses on. Notch hover
+  /// never sets `isHoveringBar`; insight teasers key off this instead.
+  @Published var interjectBarHovering: Bool = false
 
   /// Onboarding-only: pulse a glowing border on the bar so first-run users
   /// notice it. Cleared automatically once they start typing.

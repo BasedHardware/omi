@@ -37,6 +37,8 @@ export interface McpServerBuildContext {
   adapterId?: string;
   includeSwiftBackedTools?: boolean;
   screenContext?: boolean;
+  /** See `QueryMessage.jitKnowledgeToolsEnabled` — relayed opaquely, client-side UX gate only. */
+  jitKnowledgeToolsEnabled?: boolean;
   executionRole?: "coordinator" | "leaf";
   /** Server-authoritative projection admitted into this exact run snapshot. */
   chatFirstUi?: boolean;
@@ -118,6 +120,7 @@ const QUERY_WIRE_FIELDS = new Set([
   "expectedContextRendererFingerprint",
   "expectedCapabilityVersion",
   "reasoningEffort",
+  "jitKnowledgeToolsEnabled",
 ]);
 
 export class JsonlTransport {
@@ -500,6 +503,7 @@ export class JsonlTransport {
         screenContext: snapshot.sourceOutcomes.some(
           (source) => source.source === "screen" && source.outcome === "available",
         ),
+        jitKnowledgeToolsEnabled: message.jitKnowledgeToolsEnabled === true,
         chatFirstUi: snapshot.capabilities.chatFirstUi === true,
         chatFirstControlGeneration: snapshot.capabilities.chatFirstControlGeneration,
       }),
@@ -519,6 +523,7 @@ export class JsonlTransport {
         contextRendererFingerprint: snapshot.rendererFingerprint,
         contextCapabilityVersion: snapshot.capabilityVersion,
         ...(message.reasoningEffort ? { reasoningEffort: message.reasoningEffort } : {}),
+        ...(message.jitKnowledgeToolsEnabled === true ? { jitKnowledgeToolsEnabled: true } : {}),
       },
     };
   }

@@ -8,12 +8,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Iterable, Iterator, List, Optional, cast
 
+from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database.firestore_index_registry import (
     CONVERSATION_SOURCE_MEMORY_QUERY,
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
+    UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
 )
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
@@ -24,6 +26,7 @@ DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100
 MAX_PRODUCT_MEMORY_READ_LIMIT = 500
 SOURCE_REPLACEMENT_QUERY_PAGE_LIMIT = 100
 FIRESTORE_IN_QUERY_MAX_VALUES = 30
+MAX_ORDERED_PRODUCT_MEMORY_SCAN_LIMIT = MAX_PRODUCT_MEMORY_READ_LIMIT + 1
 
 
 def fetch_default_product_memory_search(
@@ -126,6 +129,56 @@ def iter_authoritative_product_memory_items(
         yield item
 
 
+def iter_authoritative_product_memory_items_newest_first(
+    uid: str,
+    *,
+    db_client: Any,
+    limit: int,
+    budget: Optional["ListReadBudget"] = None,
+) -> Iterator[MemoryItem]:
+    """Read a bounded authoritative page in stable newest-first order.
+
+    The explicit ``updated_at DESC, __name__ ASC`` keyset order matches the
+    registered universal canonical-list index.  This seam is for consumers
+    that must choose a deterministic bounded cohort; it deliberately does not
+    imply that the returned page is exhaustive.
+    """
+
+    if limit < 1 or limit > MAX_ORDERED_PRODUCT_MEMORY_SCAN_LIMIT:
+        raise ValueError(f'limit must be between 1 and {MAX_ORDERED_PRODUCT_MEMORY_SCAN_LIMIT}')
+
+    collection_path = MemoryCollections(uid=uid).memory_items
+    collection = db_client.collection(collection_path)
+    query = UNIVERSAL_CANONICAL_LIST_SCAN_QUERY.build(
+        collection,
+        {},
+        field_filter_factory=FieldFilter,
+    )
+    query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by('__name__').limit(limit)
+    if budget is None:
+        snapshots: Iterator[Any] = query.stream()
+    else:
+        timeout = budget.rpc_timeout()
+        try:
+            snapshots = query.stream(timeout=timeout)
+        except TypeError:
+            # Test fakes predating the budget seam.
+            snapshots = query.stream()
+
+    for snapshot in snapshots:
+        if budget is not None:
+            budget.charge(1)
+        raw_payload: object = snapshot.to_dict()
+        payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
+        item = MemoryItem.model_validate(payload)
+        if item.uid != uid:
+            raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
+        document_id = getattr(snapshot, 'id', None)
+        if isinstance(document_id, str) and document_id.strip() and item.memory_id != document_id:
+            raise ValueError(f'memory item id mismatch: expected {document_id}, got {item.memory_id}')
+        yield item
+
+
 def fetch_authoritative_product_memory_items(
     uid: str,
     *,
@@ -138,6 +191,63 @@ def fetch_authoritative_product_memory_items(
         iter_authoritative_product_memory_items(uid, db_client=db_client, budget=budget),
         key=_memory_item_sort_key,
     )
+
+
+def fetch_authoritative_product_memory_items_by_ids(
+    uid: str,
+    memory_ids: Iterable[str],
+    *,
+    db_client: Any,
+) -> List[MemoryItem]:
+    """Load a bounded, owner- and document-id-checked canonical subset.
+
+    Search providers return candidates, not authority. This seam hydrates only
+    requested document ids so bounded ledger search does not scan or
+    materialize an entire user's canonical collection. Missing, malformed,
+    cross-owner, and payload/document-id-mismatched rows fail closed.
+    """
+
+    normalized_ids = list(
+        dict.fromkeys(
+            memory_id.strip() for memory_id in memory_ids if memory_id and memory_id.strip() and "/" not in memory_id
+        )
+    )
+    if len(normalized_ids) > MAX_PRODUCT_MEMORY_READ_LIMIT:
+        raise ValueError(f"memory_ids must contain at most {MAX_PRODUCT_MEMORY_READ_LIMIT} entries")
+    if not normalized_ids:
+        return []
+
+    collection_path = MemoryCollections(uid=uid).memory_items
+    refs = [db_client.document(f"{collection_path}/{memory_id}") for memory_id in normalized_ids]
+    get_all = getattr(db_client, "get_all", None)
+    snapshots: Iterable[Any]
+    if callable(get_all):
+        snapshots = cast(Iterable[Any], get_all(refs))
+    else:
+        # A point-read-capable fake/client may not expose get_all. Keep the
+        # same bounded identity fence without falling back to a collection
+        # scan; production Firestore uses the batch path above.
+        snapshots = (ref.get() for ref in refs)
+
+    expected_ids = set(normalized_ids)
+    items: List[MemoryItem] = []
+    for snapshot in snapshots:
+        document_id = getattr(snapshot, "id", None)
+        if not isinstance(document_id, str) or document_id not in expected_ids:
+            continue
+        if not getattr(snapshot, "exists", False):
+            continue
+        raw_payload: object = snapshot.to_dict()
+        payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
+        try:
+            item = MemoryItem.model_validate(payload)
+        except Exception:
+            continue
+        if item.uid != uid or item.memory_id != document_id:
+            continue
+        items.append(item)
+    by_id = {item.memory_id: item for item in items}
+    return [by_id[memory_id] for memory_id in normalized_ids if memory_id in by_id]
 
 
 def fetch_authoritative_product_memory_items_for_source(

@@ -78,6 +78,8 @@ export interface RunToolCapability {
   originatingUserText: string;
   precedingAssistantText: string | null;
   runMode: RunMode;
+  /** Kernel-derived adapter built-in policy; request metadata cannot widen it. */
+  builtInToolPolicy: "default" | "read_only";
   chatMode: string | null;
   profileGeneration: number;
   manifestVersion: number;
@@ -277,13 +279,14 @@ export class RunToolCapabilityBroker {
     const projectionContext = {
       executionRole: persisted.profile.executionRole,
       screenContext: persisted.screenContext,
+      jitKnowledgeToolsEnabled: persisted.jitKnowledgeToolsEnabled,
       surfaceKind: persisted.surfaceKind,
       chatFirstUi: persisted.chatFirstUi,
       controlGeneration: persisted.chatFirstControlGeneration,
     };
     const snapshot = buildToolAvailabilitySnapshot(adapterProjection, projectionContext);
     // Realtime-voice runs invoke Swift-executed voice tools that no chat
-    // adapter advertises (ask_higher_model, point_click, …). Authorize the
+    // adapter advertises (think_deeper, point_click, …). Authorize the
     // run's surface projection alongside the adapter projection so the
     // allowlist matches the tools the surface actually offers the provider.
     const surfaceTools = REALTIME_VOICE_SURFACE_KINDS.has(persisted.surfaceKind)
@@ -314,6 +317,13 @@ export class RunToolCapabilityBroker {
       originatingUserText: persisted.originatingUserText,
       precedingAssistantText: persisted.precedingAssistantText,
       runMode: persisted.runMode,
+      // Ask-mode service turns are non-interactive system work. Derive this
+      // from persisted run/surface authority, never an external-ref prefix or
+      // caller metadata, so choosing a label cannot grant mutation tools.
+      builtInToolPolicy:
+        persisted.runMode === "ask" && persisted.surfaceKind === "service"
+          ? "read_only"
+          : "default",
       chatMode: persisted.chatMode,
       profileGeneration: persisted.profile.generation,
       manifestVersion: snapshot.manifestVersion,
@@ -395,6 +405,9 @@ export class RunToolCapabilityBroker {
     const normalized = normalizeOmiToolName(projection, input.toolName).canonicalName;
     const tool = toolManifestEntry(normalized);
     if (!tool) this.reject("tool_not_manifested", "Tool is absent from the canonical Omi manifest");
+    if (capability.builtInToolPolicy === "read_only" && tool.annotations.readOnlyHint !== true) {
+      this.reject("tool_not_allowed", "Ask-mode service runs have hard read-only tool authority");
+    }
     if (!capability.allowedToolNames.includes(tool.name)) {
       this.reject("tool_not_allowed", "Tool is unavailable for this run execution profile");
     }
@@ -713,6 +726,7 @@ export class RunToolCapabilityBroker {
     runMode: RunMode;
     chatMode: string | null;
     screenContext: boolean;
+    jitKnowledgeToolsEnabled: boolean;
     chatFirstUi: boolean;
     chatFirstControlGeneration: number | null;
     /** Spawn-time child tool restriction; null = no policy, [] = no tools (fail closed). */
@@ -776,6 +790,7 @@ export class RunToolCapabilityBroker {
       runMode: text(row.mode) === "act" ? "act" : "ask",
       chatMode: typeof metadata.chatMode === "string" ? metadata.chatMode : null,
       screenContext: admittedScreenContext(runInput),
+      jitKnowledgeToolsEnabled: metadata.jitKnowledgeToolsEnabled === true,
       chatFirstUi,
       chatFirstControlGeneration: chatFirstUi && Number.isSafeInteger(controlGeneration) && controlGeneration >= 0
         ? controlGeneration

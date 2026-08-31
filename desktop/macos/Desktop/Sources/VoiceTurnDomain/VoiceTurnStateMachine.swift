@@ -271,6 +271,12 @@ package enum VoiceTurnDeadline: String, Equatable, Hashable, Sendable, CaseItera
   case hintVisibility = "hint_visibility"
 }
 
+package enum VoiceToolDeadlineClass: Equatable, Sendable {
+  case standard
+  /// A full typed-chat turn may use several tools before producing speech.
+  case chatLane
+}
+
 package struct VoiceTurnUIProjection: Equatable, Sendable {
   package var isListening = false
   package var isLocked = false
@@ -360,6 +366,7 @@ package struct VoiceTurn: Equatable, Sendable {
   package var responseID: VoiceResponseID?
   package var pendingToolCallIDs: Set<VoiceToolCallID>
   package var toolEffectIdentities: [VoiceToolCallID: VoiceEffectIdentity]
+  package var toolDeadlineClasses: [VoiceToolCallID: VoiceToolDeadlineClass]
   package var screenEvidenceProtocol: VoiceScreenEvidenceProtocolToken?
   package var activeLease: VoiceOutputLease?
   package var providerFinished: Bool
@@ -393,6 +400,7 @@ package struct VoiceTurn: Equatable, Sendable {
     route = .undecided
     pendingToolCallIDs = []
     toolEffectIdentities = [:]
+    toolDeadlineClasses = [:]
     screenEvidenceProtocol = nil
     providerFinished = false
     postToolContinuationRequired = false
@@ -509,6 +517,9 @@ enum VoiceTurnEvent: Equatable, Sendable {
     sessionID: VoiceSessionID?, responseID: VoiceResponseID?)
   case toolStartedScoped(
     turnID: VoiceTurnID, identity: VoiceEffectIdentity, callID: VoiceToolCallID)
+  case toolDeadlineClassSelectedScoped(
+    turnID: VoiceTurnID, identity: VoiceEffectIdentity, callID: VoiceToolCallID,
+    deadlineClass: VoiceToolDeadlineClass)
   /// A native result is already the complete user-visible answer for a tool.
   /// It replaces, rather than races, an optional provider continuation.
   case authoritativeLocalResultAcceptedScoped(
@@ -591,6 +602,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
       .providerResponseStartedScoped(let turnID, _, _, _),
       .providerTurnFinishedScoped(let turnID, _, _, _),
       .toolStartedScoped(let turnID, _, _),
+      .toolDeadlineClassSelectedScoped(let turnID, _, _, _),
       .authoritativeLocalResultAcceptedScoped(let turnID, _, _, _),
       .screenEvidenceReportVerifiedScoped(let turnID, _, _, _, _),
       .screenEvidenceUnavailableScoped(let turnID, _, _),
@@ -647,6 +659,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
     case .providerResponseStartedScoped: return "provider_response_started_scoped"
     case .providerTurnFinishedScoped: return "provider_turn_finished_scoped"
     case .toolStartedScoped: return "tool_started_scoped"
+    case .toolDeadlineClassSelectedScoped: return "tool_deadline_class_selected_scoped"
     case .authoritativeLocalResultAcceptedScoped: return "authoritative_local_result_accepted_scoped"
     case .screenEvidenceReportVerifiedScoped: return "screen_evidence_report_verified_scoped"
     case .screenEvidenceUnavailableScoped: return "screen_evidence_unavailable_scoped"
@@ -862,7 +875,21 @@ package struct VoiceTurnFact: Sendable {
     identity: VoiceEffectIdentity,
     callID: VoiceToolCallID
   ) -> Self {
-    Self(.toolStartedScoped(turnID: turnID, identity: identity, callID: callID))
+    Self(
+      .toolStartedScoped(
+        turnID: turnID, identity: identity, callID: callID))
+  }
+
+  package static func toolDeadlineClassSelectedScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    callID: VoiceToolCallID,
+    deadlineClass: VoiceToolDeadlineClass
+  ) -> Self {
+    Self(
+      .toolDeadlineClassSelectedScoped(
+        turnID: turnID, identity: identity, callID: callID,
+        deadlineClass: deadlineClass))
   }
 
   package static func authoritativeLocalResultAcceptedScoped(
@@ -1078,6 +1105,7 @@ struct VoiceTurnReducer {
     var transcription: TimeInterval = 12
     var providerResponse: TimeInterval = 20
     var pendingTools: TimeInterval = 30
+    var chatLaneTool: TimeInterval = 180
     var deferredCommit: TimeInterval = 8
     var bargeInReplacement: TimeInterval = 3
     var playbackDrain: TimeInterval = 30
@@ -1607,10 +1635,22 @@ struct VoiceTurnReducer {
       model.turn?.reservedEffectIdentities.remove(identity)
       model.turn?.toolEffectIdentities[callID] = identity
       model.turn?.pendingToolCallIDs.insert(callID)
+      model.turn?.toolDeadlineClasses[callID] = .standard
       model.turn?.postToolContinuationRequired = true
       model.turn?.phase = .awaitingTools
       cancel(.providerResponse, in: &model, effects: &effects)
-      schedule(.pendingTools, after: deadlines.pendingTools, in: &model, effects: &effects)
+      reschedulePendingToolsDeadline(in: &model, effects: &effects)
+
+    case .toolDeadlineClassSelectedScoped(_, let identity, let callID, let deadlineClass):
+      guard turn.toolEffectIdentities[callID] == identity,
+        turn.pendingToolCallIDs.contains(callID),
+        acceptsProviderOutput(turn.phase)
+      else {
+        stale(&model, event: event, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
+      model.turn?.toolDeadlineClasses[callID] = deadlineClass
+      reschedulePendingToolsDeadline(in: &model, effects: &effects)
 
     case .authoritativeLocalResultAcceptedScoped(_, let identity, let callID, let kind):
       guard turn.toolEffectIdentities[callID] == identity,
@@ -1688,8 +1728,13 @@ struct VoiceTurnReducer {
         stale(&model, event: event, effects: &effects)
         return VoiceTurnReduction(model: model, effects: effects)
       }
+      // The result is about to be delivered back to the provider, so the
+      // deterministic slow-tool acknowledgement has completed its job. Allow
+      // the post-tool continuation to speak the actual answer.
+      model.turn?.providerOutputSuppressed = false
       model.turn?.pendingToolCallIDs.remove(callID)
       model.turn?.toolEffectIdentities.removeValue(forKey: callID)
+      model.turn?.toolDeadlineClasses.removeValue(forKey: callID)
       if model.turn?.pendingToolCallIDs.isEmpty == true {
         cancel(.pendingTools, in: &model, effects: &effects)
         if model.turn?.screenEvidenceProtocol != nil {
@@ -1715,6 +1760,8 @@ struct VoiceTurnReducer {
           schedule(
             .providerResponse, after: deadlines.providerResponse, in: &model, effects: &effects)
         }
+      } else {
+        reschedulePendingToolsDeadline(in: &model, effects: &effects)
       }
 
     case .playbackStartedScoped(_, let lease):
@@ -1765,14 +1812,20 @@ struct VoiceTurnReducer {
         return VoiceTurnReduction(model: model, effects: effects)
       }
       cancel(.playbackDrain, in: &model, effects: &effects)
+      let drainedLane = turn.activeLease?.lane
       model.turn?.activeLease = nil
-      model.turn?.providerOutputSuppressed = false
+      model.turn?.providerOutputSuppressed =
+        drainedLane == .deterministicAgentAck && !turn.pendingToolCallIDs.isEmpty
       if completionFencesSatisfied(model.turn) {
         terminate(&model, reason: .success, effects: &effects)
       } else if !turn.pendingToolCallIDs.isEmpty {
         model.turn?.phase = .awaitingTools
+        model.turn?.projection.isThinking = true
         model.turn?.projection.isResponseActive = false
-        model.turn?.projection.isResponseWaiting = false
+        // A spoken heads-up may drain while a long-running tool is still
+        // working. Keep the response glow visible until that exact tool call
+        // finishes or the turn is interrupted.
+        model.turn?.projection.isResponseWaiting = true
       } else if model.turn?.providerFinished == true {
         model.turn?.phase = .awaitingJournal
         model.turn?.projection.isThinking = true
@@ -2157,6 +2210,29 @@ struct VoiceTurnReducer {
     effects.append(.scheduleDeadline(turnID: turnID, deadline: deadline, after: interval))
   }
 
+  private func reschedulePendingToolsDeadline(
+    in model: inout VoiceTurnModel,
+    effects: inout [VoiceTurnEffect]
+  ) {
+    guard let turn = model.turn, !turn.pendingToolCallIDs.isEmpty else {
+      cancel(.pendingTools, in: &model, effects: &effects)
+      return
+    }
+    cancel(.pendingTools, in: &model, effects: &effects)
+    schedule(
+      .pendingTools,
+      after: pendingToolsInterval(for: turn),
+      in: &model,
+      effects: &effects)
+  }
+
+  private func pendingToolsInterval(for turn: VoiceTurn) -> TimeInterval {
+    let usesChatLane = turn.pendingToolCallIDs.contains {
+      turn.toolDeadlineClasses[$0] == .chatLane
+    }
+    return usesChatLane ? deadlines.chatLaneTool : deadlines.pendingTools
+  }
+
   private func cancel(
     _ deadline: VoiceTurnDeadline,
     in model: inout VoiceTurnModel,
@@ -2223,6 +2299,7 @@ struct VoiceTurnReducer {
     effects.append(.terminal(record))
     turn.deadlines.removeAll()
     turn.pendingToolCallIDs.removeAll()
+    turn.toolDeadlineClasses.removeAll()
     turn.screenEvidenceProtocol = nil
     turn.activeLease = nil
     turn.providerOutputSuppressed = false

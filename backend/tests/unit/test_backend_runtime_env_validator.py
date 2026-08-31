@@ -1208,6 +1208,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
         {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
       ]
     },
@@ -1443,6 +1444,10 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                 'secrets': {
                                     **STANDARD_CLOUD_RUN_SECRETS,
                                     'METRICS_SECRET': {'secret': 'METRICS_SECRET', 'version': 'latest'},
+                                    'LIFECYCLE_EMAIL_SIGNING_SECRET': {
+                                        'secret': 'LIFECYCLE_EMAIL_SIGNING_SECRET',
+                                        'version': 'latest',
+                                    },
                                 },
                             }
                         },
@@ -1479,6 +1484,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
         {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
       ]
     },
@@ -1543,6 +1549,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "1"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
         {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}},
       ]
     },
@@ -1877,6 +1884,27 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
 
 
 @pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_memory_maintenance_job_contract_rejects_daily_sweep_and_posthog_bindings(env, tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    job = manifest['environments'][env]['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED'] = {'value': 'true'}
+    job['env']['POSTHOG_HOST'] = {'value': 'https://app.posthog.com'}
+    job['secrets']['POSTHOG_PROJECT_API_KEY'] = {
+        'secret': 'POSTHOG_PROJECT_API_KEY',
+        'version': 'latest',
+    }
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env=env, manifest_path=path)
+    messages = {error.message for error in errors}
+    assert 'env MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED belongs only on daily-memory-sweep-job' in messages
+    assert 'env POSTHOG_HOST belongs only on daily-memory-sweep-job' in messages
+    assert 'secret POSTHOG_PROJECT_API_KEY belongs only on daily-memory-sweep-job' in messages
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
 def test_desktop_backend_compose_requires_vertex_pt_env(env):
     validator = load_validator()
     errors = validator.validate_runtime_env(env=env)
@@ -1890,6 +1918,10 @@ def test_desktop_backend_compose_requires_vertex_pt_env(env):
     assert desktop_env['PROMETHEUS_SIDECAR_PORT']['value'] == '9090'
     desktop_secrets = manifest['environments'][env]['desktop_backend']['secrets']
     assert desktop_secrets['METRICS_SECRET'] == {'secret': 'METRICS_SECRET', 'version': 'latest'}
+    assert desktop_secrets['POSTHOG_PROJECT_API_KEY'] == {
+        'secret': 'POSTHOG_PROJECT_API_KEY',
+        'version': 'latest',
+    }
     backend = manifest['environments'][env]['cloud_run']['services']['backend']
     assert backend['env']['PROMETHEUS_SIDECAR_PORT']['value'] == '9090'
     assert backend['secrets']['METRICS_SECRET'] == {'secret': 'METRICS_SECRET', 'version': 'latest'}

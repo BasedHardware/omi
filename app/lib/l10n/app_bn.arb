@@ -10798,5 +10798,7 @@
     "appReEnableFailedBody": "এই অ্যাপটি পুনরায় সক্রিয় করা যায়নি। আবার চেষ্টা করুন।",
     "appDisabledOn": "{date} তারিখে নিষ্ক্রিয় করা হয়েছে।",
     "appDisabledLastError": "শেষ ত্রুটি: {error}",
-    "prerecordedTranscript": "প্রি-রেকর্ডেড"
+    "prerecordedTranscript": "প্রি-রেকর্ডেড",
+    "pendantRecordingSyncBlocked": "Pendant এখনও রেকর্ড করছে, তাই এর সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।",
+    "pendantFullSyncBlocked": "Pendant-এর স্টোরেজ পূর্ণ এবং এটি এখনও রেকর্ডিং মোডে আছে, তাই সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।"
 }

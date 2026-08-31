@@ -40,17 +40,25 @@ struct OmiMarkdown: View {
     citations: [ChatCitationReference] = [],
     onOpenCitation: ((ChatCitationReference) -> Void)? = nil
   ) {
-    self.text = text
-    self.style = sender == .user ? .user : .assistant
+    let style: Style = sender == .user ? .user : .assistant
+    self.text = Self.renderableText(text, style: style)
+    self.style = style
     self.citations = citations
     self.onOpenCitation = onOpenCitation
   }
 
   init(text: String, style: Style) {
-    self.text = text
+    self.text = Self.renderableText(text, style: style)
     self.style = style
     self.citations = []
     self.onOpenCitation = nil
+  }
+
+  /// Assistant text may open with an Interject classification token; it is
+  /// machine-facing and must never render on any chat surface.
+  private static func renderableText(_ text: String, style: Style) -> String {
+    guard style == .assistant else { return text }
+    return InterjectVoiceFeedbackRouting.displayText(from: text)
   }
 
   var body: some View {

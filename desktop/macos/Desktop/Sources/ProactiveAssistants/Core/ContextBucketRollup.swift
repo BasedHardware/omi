@@ -497,9 +497,15 @@ enum ContextProactivityPromptBuilder {
   /// This text is the prompt-cache prefix: nothing volatile may be interpolated
   /// into it, and it must stay byte-identical across calls for one bucket. The
   /// naming rule is static, so it invalidates the cached prefix exactly once.
-  static func directorStablePrompt(snapshot: ContextBucketSnapshot, allowLookup: Bool = false) -> String {
+  static func directorStablePrompt(
+    snapshot: ContextBucketSnapshot,
+    allowLookup: Bool = false,
+    includeInterjectCopyBudgets: Bool = false
+  ) -> String {
     let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
     let lookup = allowLookup ? "\n" + directorLookupInstruction : ""
+    let copyBudgets =
+      includeInterjectCopyBudgets ? "\n" + InterjectCopyBudget.directorPromptSection : ""
     return """
       \(ScreenDerivedContent.untrustedPreamble)
       Decide whether interrupting the user right now adds concrete value. Silence is the
@@ -570,7 +576,7 @@ enum ContextProactivityPromptBuilder {
         handle in task_refs, copied exactly. Leave task_refs empty when it is about none of
         them. Never write a handle that is not listed above.
       Timestamps supplied below are already in the user's local time zone. When a message
-      mentions a date or time, use that local form as written; never convert to or mention UTC.\(lookup)
+      mentions a date or time, use that local form as written; never convert to or mention UTC.\(lookup)\(copyBudgets)
 
       \(stableBucket)
       """

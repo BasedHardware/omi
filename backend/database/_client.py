@@ -14,10 +14,12 @@ from database.google_credentials import (
 )
 
 __all__ = [
+    "data_plane_db",
     "db",
     "delete_collection_recursive",
     "document_id_from_seed",
     "get_customer_firestore_client",
+    "get_data_plane_firestore_client",
     "get_firestore_client",
     "get_users_uid",
     "is_document_size_limit_error",
@@ -167,6 +169,64 @@ def get_customer_firestore_client() -> Any:
     return _customer_firestore_client
 
 
+_data_plane_firestore_client = None
+_data_plane_firestore_client_lock = Lock()
+
+
+def _build_data_plane_firestore_client() -> Any:
+    """The customer data plane for services whose compute project differs from it.
+
+    Some deployments (desktop-backend in dev) run their compute on one GCP
+    project via bare ADC (``GOOGLE_CLOUD_PROJECT``) while the user's actual
+    Firestore data — the memory ledger, JIT proactivity state, screen-activity
+    sync — lives in a different project (see ``backend/deploy/runtime_env``'s
+    ``data_plane_project``). ``OMI_FIRESTORE_DATA_PLANE_PROJECT`` names that
+    project explicitly so ADC can be pinned to it instead of silently
+    resolving to the compute project's empty Firestore.
+
+    Compute-local state (``agentVm``, GCE) must keep using
+    ``get_firestore_client()`` directly rather than this seam.
+    """
+    if os.environ.get("FIRESTORE_EMULATOR_HOST"):
+        return get_firestore_client()
+
+    data_plane_project = os.environ.get("OMI_FIRESTORE_DATA_PLANE_PROJECT", "").strip()
+    if not data_plane_project:
+        return get_firestore_client()
+
+    # Bare ADC pinned to another project is not enough: the dev compute
+    # service account has no data-plane Firestore IAM (writes came back 403
+    # the first time this seam served traffic). The data-plane SA is already
+    # mounted for exactly this split — SERVICE_ACCOUNT_JSON env on listen /
+    # Python / jobs, FIREBASE_AUTH_CREDENTIALS_PATH file on desktop-backend —
+    # so the seam pins those credentials, the same way entitlement reads do.
+    pinned = customer_entitlement_service_account()
+    if pinned is not None:
+        credentials, sa_project = pinned
+        if sa_project != data_plane_project:
+            # Writing user data to whatever project the mounted SA happens to
+            # serve would be silent cross-plane corruption; refuse instead.
+            raise RuntimeError(
+                "OMI_FIRESTORE_DATA_PLANE_PROJECT="
+                f"{data_plane_project} does not match the mounted service account's "
+                f"project {sa_project}"
+            )
+        return firestore.Client(credentials=credentials, project=data_plane_project)
+
+    prepare_google_credentials()
+    return firestore.Client(project=data_plane_project)
+
+
+def get_data_plane_firestore_client() -> Any:
+    global _data_plane_firestore_client
+
+    if _data_plane_firestore_client is None:
+        with _data_plane_firestore_client_lock:
+            if _data_plane_firestore_client is None:
+                _data_plane_firestore_client = _build_data_plane_firestore_client()
+    return _data_plane_firestore_client
+
+
 _EXPIRED_TRANSACTION_MARKER = "transaction has expired"
 
 
@@ -216,6 +276,18 @@ class _LazyFirestoreClient:
 
 
 db = _LazyFirestoreClient()
+
+
+class _LazyDataPlaneFirestoreClient:
+    # Same lazy-proxy idiom as ``_LazyFirestoreClient`` above, deferring
+    # ``get_data_plane_firestore_client()`` until first attribute access so a
+    # module can bind this as a default parameter value at import time without
+    # forcing client construction (and its env/ADC reads) before that.
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_data_plane_firestore_client(), name)
+
+
+data_plane_db = _LazyDataPlaneFirestoreClient()
 
 
 def delete_collection_recursive(collection_ref: Any, *, client: Any, batch_size: int = 450) -> None:
