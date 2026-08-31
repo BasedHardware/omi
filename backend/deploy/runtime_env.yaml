@@ -61,7 +61,7 @@ environments:
             value: dev
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: dg-nova-3,modulate-velma-2,parakeet
+            value: modulate-velma-2,soniox,dg-nova-3,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -274,7 +274,7 @@ environments:
             value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
-            value: dg-nova-3,modulate-velma-2,parakeet
+            value: modulate-velma-2,soniox,dg-nova-3,parakeet
             category: stt_policy
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
@@ -352,7 +352,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: dg-nova-3,modulate-velma-2,parakeet
+            value: modulate-velma-2,soniox,dg-nova-3,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -1270,7 +1270,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: dg-nova-3,modulate-velma-2,parakeet
+            value: modulate-velma-2,soniox,dg-nova-3,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1476,7 +1476,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: dg-nova-3,modulate-velma-2,parakeet
+            value: modulate-velma-2,soniox,dg-nova-3,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:

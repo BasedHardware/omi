@@ -548,8 +548,10 @@ class TestStreamingFactoryRouting:
             env_backup = os.environ.pop('HOSTED_PARAKEET_API_URL', None)
             try:
                 service, lang, model = get_stt_service_for_language('en')
-                assert service == STTService.deepgram
-                assert model == 'nova-3'
+                # The policy default now leads with Velma; Parakeet without its
+                # endpoint falls through to whatever heads that chain.
+                assert service == STTService.modulate
+                assert model == 'velma-2'
             finally:
                 if env_backup:
                     os.environ['HOSTED_PARAKEET_API_URL'] = env_backup
