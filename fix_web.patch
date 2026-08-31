@@ -1,0 +1,11 @@
+--- backend/scripts/web.py
++++ backend/scripts/web.py
+@@ -9,7 +9,7 @@
+
+ def map_plugin_data_by_persona_name() -> None:
+     plugin_data_by_persona_name: Dict[str, Dict[str, Any]] = {}
+-    plugins_ref = db.collection("plugins_data")
++    plugins_ref = db.collection("plugin_data")
+     plugins = plugins_ref.stream()
+
+     for plugin in plugins:

@@ -7,6 +7,22 @@ from database._client import get_users_uid, db
 import json
 
 
+def map_plugin_data_by_persona_name() -> None:
+    plugin_data_by_persona_name: Dict[str, Dict[str, Any]] = {}
+    plugins_ref = db.collection("plugins_data")
+    plugins = plugins_ref.stream()
+
+    for plugin in plugins:
+        raw: object = plugin.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+        persona_name = data.get("persona_name")
+        if persona_name:
+            plugin_data_by_persona_name[persona_name] = data
+
+    with open("plugin_data_by_persona_name.json", "w") as f:
+        json.dump(plugin_data_by_persona_name, f, default=str)
+
+
 def get_user_messages_with_bot_name() -> List[str]:
     user_messages_with_bot_name: Dict[str, List[Dict[str, Any]]] = {}
     uids = get_users_uid()[:20]
@@ -37,7 +53,7 @@ def get_user_messages_with_bot_name() -> List[str]:
 
 if __name__ == "__main__":
     get_user_messages_with_bot_name()
-    # TODO: map all plugin_data by persona_name so that we can map, local json
+    map_plugin_data_by_persona_name()
     # TODO: questions
     # -- % of people who provided their x vs someone else's, and most popular questions
     # -- If someone else, who were the top 3 most popular questions and to whom
