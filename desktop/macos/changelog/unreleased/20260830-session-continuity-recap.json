@@ -1,0 +1,3 @@
+{
+  "change": "A follow-up now continues the work it refers to even after the agent process restarts: Omi rebuilds what the session already did from its own records, so \"now search it\" still knows what \"it\" was"
+}

@@ -142,6 +142,7 @@ import type {
   AgentRuntimeKernelOptions,
 } from "./kernel-types.js";
 import { ExternalSurfaceAuthorityError, StaleAdapterBindingError } from "./kernel-types.js";
+import { buildSessionRecap, type SessionRecap } from "./session-recap.js";
 import { AdapterWorkerRecycledError } from "./worker-pool.js";
 import { providerBoundaryForAdapter, resolveAdapterWithinBoundary } from "./execution-policy.js";
 import type { SurfaceRef } from "./surface-session.js";
@@ -197,6 +198,8 @@ export class KernelCore {
   protected readonly activeExecutions = new Map<string, ActiveExecution>();
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
   protected readonly contextDeliveryByBinding = new Map<string, ContextDeliveryCursor>();
+  /** Bindings already handed a session recap, so a retry on one does not repeat it. */
+  protected readonly recapSeededBindings = new Set<string>();
   protected readonly toolCapabilities: RunToolCapabilityBroker;
   private transactionDepth = 0;
   private pendingSubscriberEvents: AgentEvent[] = [];
@@ -1113,6 +1116,26 @@ export class KernelCore {
         effectivePrompt = `${renderedContext.rendered}${attachments}\n\n# User Message\n${input.prompt}`;
         effectivePromptBlocks = attemptInput.promptBlocks
           ? attemptInput.promptBlocks.map((block) =>
+              block.type === "text" ? { ...block, text: effectivePrompt } : block,
+            )
+          : undefined;
+      }
+
+      // A session's transcript lives inside the adapter process, and this
+      // binding may not be the one that held it. Hand the fresh binding what
+      // the runs table still remembers, so a follow-up that says "it" has
+      // something to point at.
+      // Only where nothing else replays the transcript. A chat surface already
+      // gets `recentTurns` from the conversation journal in its context
+      // snapshot, so a recap there would repeat what the model can read.
+      const journalReplaysTurns = surfaceRef !== null && conversationId !== null;
+      const recap = journalReplaysTurns
+        ? undefined
+        : this.seedSessionRecap(accepted.session.sessionId, accepted.run.runId, handle, attempt);
+      if (recap) {
+        effectivePrompt = `${recap.text}\n\n${effectivePrompt}`;
+        effectivePromptBlocks = effectivePromptBlocks
+          ? effectivePromptBlocks.map((block) =>
               block.type === "text" ? { ...block, text: effectivePrompt } : block,
             )
           : undefined;
@@ -2265,8 +2288,58 @@ export class KernelCore {
     });
   }
 
+  /**
+   * The recap for a binding that did not run this session's earlier turns.
+   *
+   * Returns undefined in the ordinary case — the binding is the same one, so
+   * the adapter still holds the conversation and replaying it would only
+   * duplicate what the model can already see.
+   */
+  protected seedSessionRecap(
+    sessionId: string,
+    runId: string,
+    handle: AdapterBindingHandle,
+    attempt: RunAttempt,
+  ): SessionRecap | undefined {
+    const bindingId = handle.bindingId;
+    if (!bindingId) return undefined;
+    const seedKey = `${runId}:${bindingId}`;
+    if (this.recapSeededBindings.has(seedKey)) return undefined;
+    const recap = buildSessionRecap(this.store, {
+      sessionId,
+      currentRunId: runId,
+      currentBindingId: bindingId,
+    });
+    if (!recap) return undefined;
+    this.recapSeededBindings.add(seedKey);
+    // Continuity was lost and rebuilt from durable state rather than resumed.
+    // Recording it is what keeps a rising rate visible instead of showing up
+    // only as a user saying the agent forgot what it was doing.
+    this.appendEvent({
+      sessionId,
+      runId,
+      attemptId: attempt.attemptId,
+      type: "binding.recap_seeded",
+      payload: {
+        bindingId,
+        priorBindingId: recap.priorBindingId,
+        runCount: recap.runCount,
+        truncated: recap.truncated,
+        outcome: recap.truncated ? "degraded" : "recovered",
+      },
+    });
+    return recap;
+  }
+
+  private forgetRecapSeeds(bindingId: string): void {
+    for (const key of this.recapSeededBindings) {
+      if (key.endsWith(`:${bindingId}`)) this.recapSeededBindings.delete(key);
+    }
+  }
+
   protected markBindingStale(binding: AdapterBinding, attempt: RunAttempt, reason: string): void {
     this.contextDeliveryByBinding.delete(binding.bindingId);
+    this.forgetRecapSeeds(binding.bindingId);
     const run = this.readRun(attempt.runId);
     this.withTransaction(() => {
       this.updateBinding(binding.bindingId, {
@@ -2286,6 +2359,7 @@ export class KernelCore {
 
   protected markEvictedBindingStale(bindingId: string, reason: string): void {
     this.contextDeliveryByBinding.delete(bindingId);
+    this.forgetRecapSeeds(bindingId);
     const binding = this.readBinding(bindingId);
     this.withTransaction(() => {
       this.updateBinding(binding.bindingId, {

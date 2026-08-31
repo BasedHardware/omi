@@ -56,6 +56,11 @@ Swift desktop client
   new-generation POSTs until the backend DELETE is acknowledged.
 - `run-tool-capability.ts` and `tool-invocation-ledger.ts` jointly authorize and
   record physical effects. Request IDs are tracing keys, never authorization.
+- `session-recap.ts` is the durable fallback for a session's transcript. An
+  adapter reporting `resumeFidelity: "none"` keeps the conversation only in its
+  own process, so a replaced binding starts blank; the recap rebuilds a bounded
+  summary from `runs` and the kernel prepends it to that attempt's prompt. It
+  reads persisted state only and never decides whether a binding may be reused.
 - `sqlite-store.ts` owns schema creation, migrations, startup reconciliation,
   and transactions. Other modules do not issue lifecycle-altering schema DDL.
 - `adapters/*` translate a pinned run into provider calls. They cannot choose a
