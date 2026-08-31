@@ -52,8 +52,8 @@ def _deserialize_cache_value(raw: Union[bytes, str, None]) -> Any:
         return json.loads(text)
     except (TypeError, ValueError, json.JSONDecodeError):
         try:
-
-            class _SV(ast.NodeVisitor):
+            # fmt: off
+            class V(ast.NodeVisitor):
                 def generic_visit(self, n): raise ValueError
                 def visit_Expression(self, n): return self.visit(n.body)
                 def visit_Dict(self, n): return {self.visit(k): self.visit(v) for k, v in zip(n.keys, n.values) if k is not None}
@@ -62,12 +62,12 @@ def _deserialize_cache_value(raw: Union[bytes, str, None]) -> Any:
                 def visit_Set(self, n): return {self.visit(e) for e in n.elts}
                 def visit_Constant(self, n): return n.value
                 def visit_UnaryOp(self, n):
-                    if not isinstance(n.op, (ast.UAdd, ast.USub)): raise ValueError
+                    if type(n.op) not in (ast.UAdd, ast.USub): raise ValueError
                     op = self.visit(n.operand)
-                    if not isinstance(op, (int, float)): raise ValueError
-                    return op if isinstance(n.op, ast.UAdd) else -op
-
-            return _SV().visit(ast.parse(text, mode='eval'))
+                    if type(op) not in (int, float): raise ValueError
+                    return op if type(n.op) is ast.UAdd else -op
+            return V().visit(ast.parse(text, mode='eval'))
+            # fmt: on
         except Exception:
             return text
 
