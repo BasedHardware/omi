@@ -3075,6 +3075,9 @@ class FloatingControlBarManager {
 
     barWindow.onSendQuery = { [weak self, weak barWindow, weak chatProvider] message in
       guard let self = self, let barWindow = barWindow, let provider = chatProvider else { return }
+      // Same reset as the re-wired closure in `openAIInputWithQuery`: a typed question is
+      // never quiet, whatever a preceding wake-word answer left behind.
+      barWindow.state.answersQuietly = false
       Task { @MainActor in
         await self.withQueryTracer(query: message, fromVoice: false) {
           await self.routeQuery(message, barWindow: barWindow, provider: provider, fromVoice: false)
@@ -3785,8 +3788,13 @@ class FloatingControlBarManager {
     fromVoice: Bool = false,
     voiceTurnID: VoiceTurnID? = nil
   ) {
-    guard let window = window else { return }
-    guard let provider = activeFloatingProvider() else { return }
+    // Only the visible path consumes `suppressNextVisibleSurface`, in
+    // `prepareVisibleQueryState`. Every exit before that abandons the query, so a latch set
+    // by `submitHandsFreeCommand` would outlive it and quiet the next typed question once.
+    guard let window = window, let provider = activeFloatingProvider() else {
+      Self.suppressNextVisibleSurface = false
+      return
+    }
 
     // The `.voiceOnly` surface belongs to callers that own a turn: it renders nothing, and
     // every step below re-checks ownership, so entering it without a turn drops the query
@@ -3795,6 +3803,8 @@ class FloatingControlBarManager {
     // transcribed and owns none, so it falls through to the visible path — where
     // `fromVoice` still marks it a voice query, which is what makes the answer spoken.
     if let voiceTurnID {
+      // `.voiceOnly` renders nothing, so it never reaches the consumer above either.
+      Self.suppressNextVisibleSurface = false
       guard VoiceTurnCoordinator.shared.requireCurrentOwner(for: voiceTurnID) != nil
       else { return }
       chatCancellable?.cancel()
