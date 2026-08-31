@@ -92,7 +92,7 @@ def is_audio_merge_dispatch_enabled() -> bool:
 
 
 # The production customer data plane, per INV-DATA-1
-# (docs/product/invariants/data-plane-continuity.md).
+# (product/invariants/data-plane-continuity.md).
 PRODUCTION_DATA_PROJECTS = frozenset({'based-hardware'})
 
 

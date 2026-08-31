@@ -483,6 +483,7 @@ def reprocess_conversation(
         conversation,
         force_process=True,
         is_reprocess=True,
+        bypass_jit_first_open=True,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(
@@ -950,7 +951,7 @@ def delete_conversation(
     background_tasks: BackgroundTasks,
     # TODO(Q8-gated): ratified default is cascade=true — NOT flipped; needs explicit owner sign-off
     # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
-    # docs/memory/domain_model.md §Delete/privacy matrix.
+    # backend/docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):

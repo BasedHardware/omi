@@ -743,3 +743,36 @@ def test_production_row_authorizer_force_refreshes_and_revokes_mid_batch(monkeyp
     assert publications == []
     assert result.ledger_migration_rows == 1
     assert result.ledger_migration_users == 0
+
+
+def test_ledger_writer_mode_skips_short_term_dreaming(monkeypatch):
+    _enable(monkeypatch)
+    dreamed = []
+
+    def maintenance(uid, **_kwargs):
+        dreamed.append(uid)
+        return cron.CanonicalShortTermMaintenanceReport(uid=uid)
+
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
+    monkeypatch.setattr(cron, "count_active_short_term", lambda uid, db_client, cap=11: 3)
+    monkeypatch.setattr(cron, "recently_dreamed", lambda uid, db_client, now: False)
+    monkeypatch.setattr(cron, "persist_last_dreamed_at", lambda uid, db_client, now: None)
+    monkeypatch.setattr(cron, "_is_ledger_writer", lambda uid, db_client: uid == "uid-ledger")
+
+    summary = cron.run_universal_short_term_maintenance(
+        db_client=object(),
+        now=NOW,
+        uid_inventory=lambda _db, _limit: ["uid-ledger", "uid-compat"],
+    )
+
+    assert dreamed == ["uid-compat"]
+    assert summary.skipped_ledger_writer == 1
+    assert summary.dreamed_users == 1
+    assert summary.completed_uids == ("uid-compat", "uid-ledger")
+
+
+def test_ledger_drain_scales_uid_page_without_raising_per_user_mutation_budget():
+    from utils.memory.knowledge_ledger_migration import MAX_LEDGER_MIGRATION_MUTATIONS_PER_RUN
+
+    assert cron.MAX_LEDGER_MIGRATION_UIDS_PER_RUN == 200
+    assert MAX_LEDGER_MIGRATION_MUTATIONS_PER_RUN == 100
