@@ -1625,8 +1625,12 @@ struct FloatingControlBarView: View {
   }
 
   private func interjectInsightTeaserLimit(_ notification: FloatingBarNotification) -> Int {
-    guard InterjectFeature.isEnabled, notification.kind == .insight else { return 3 }
-    return (isHovering || state.interjectBarHovering) ? 6 : 1
+    FloatingControlBarGeometry.interjectInsightTeaserLineLimit(
+      kindIsInsight: InterjectFeature.isEnabled && notification.kind == .insight,
+      isHovering: isHovering,
+      interjectBarHovering: state.interjectBarHovering,
+      interjectPTTHoldActive: state.interjectReplyingToTitle != nil
+    )
   }
 
   private var aiInputView: some View {

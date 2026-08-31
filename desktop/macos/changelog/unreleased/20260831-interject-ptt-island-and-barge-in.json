@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Interject reply cards shrinking into an unreadable notch island, and follow-up PTT no longer drops to a fallback voice that then fails"
+}
