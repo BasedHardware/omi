@@ -385,8 +385,7 @@ final class DeviceProvider: ObservableObject {
     hasFirmwareUpdate = false
     hasLowBatteryAlerted = false
 
-    // TODO: Track analytics when AnalyticsManager supports device events
-    // AnalyticsManager.shared.deviceDisconnected()
+    AnalyticsManager.shared.deviceDisconnected()
 
     if scheduleReconnectNotification {
       scheduleDisconnectNotification()

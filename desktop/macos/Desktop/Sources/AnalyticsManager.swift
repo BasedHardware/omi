@@ -566,6 +566,10 @@ class AnalyticsManager {
     PostHogManager.shared.setUserProperties(userProperties)
   }
 
+  func deviceDisconnected() {
+    PostHogManager.shared.track("Device Disconnected")
+  }
+
   /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
   func screenCaptureBrokenDetected() {
     guard !Self.isDevBuild else { return }
