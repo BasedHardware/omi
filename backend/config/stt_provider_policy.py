@@ -135,10 +135,13 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
 # hard stream gate (see parakeet/admission.py), so every listener converges on
 # one cap per serving pod instead of listener-local counters.
 DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = {
-    # Velma-2 rejects a large, variable share of live connections under production
-    # concurrency and Parakeet streaming is English-only, so neither can hold the
-    # primary slot for a multi-language live product.
-    STTServingSurface.STREAMING: ('dg-nova-3', 'modulate-velma-2', 'parakeet'),
+    # Velma-2 leads on cost, and its failures are now recoverable: a mid-session
+    # error frame hands the stream to Soniox rather than ending it (#12459), which
+    # is what the second slot is for. Deepgram stays last so a BYOK user still
+    # resolves a `dg-*` model — dropping it would strip them of Deepgram entirely.
+    # Parakeet is not listed: streaming Parakeet is English-only and live sessions
+    # are overwhelmingly auto-detect, so it was never selected here.
+    STTServingSurface.STREAMING: ('modulate-velma-2', 'soniox', 'dg-nova-3'),
     # Batch work is queued, so Parakeet's bounded GPU means waiting rather than the
     # user-visible failure it causes on the streaming surface. Prefer the self-hosted
     # provider here and keep Velma as the overflow.
