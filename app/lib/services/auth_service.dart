@@ -71,10 +71,33 @@ Future<ProviderLinkResult> resolveProviderCredentialCollision({
   required Future<String?> Function() establishDestination,
 }) async {
   final sourceToken = sourceIsAnonymous ? await captureSourceToken() : null;
-  final anonymousSourceMigration =
-      sourceToken == null ? null : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
+  final anonymousSourceMigration = sourceToken == null
+      ? null
+      : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
   final destinationUid = await establishDestination();
   return ProviderLinkResult(destinationUid: destinationUid, anonymousSourceMigration: anonymousSourceMigration);
+}
+
+/// Local-dev authorize calls skip Safari and ask the backend for a JSON code.
+@visibleForTesting
+Uri emulatorJsonAuthorizeUri(Uri authorizeUrl) {
+  return authorizeUrl.replace(queryParameters: {...authorizeUrl.queryParameters, 'response_mode': 'json'});
+}
+
+/// Rebuilds the custom-scheme callback the browser flow would have delivered.
+@visibleForTesting
+String emulatorAuthorizeCallbackUri({required String callbackScheme, required Map<String, dynamic> body}) {
+  final code = body['code'];
+  if (code is! String || code.isEmpty) {
+    throw Exception('No authorization code received');
+  }
+  final state = body['state'];
+  return Uri(
+    scheme: callbackScheme,
+    host: 'auth',
+    path: '/callback',
+    queryParameters: {'code': code, if (state is String && state.isNotEmpty) 'state': state},
+  ).toString();
 }
 
 class AuthService {
@@ -82,11 +105,11 @@ class AuthService {
   static AuthService get instance => _instance;
 
   AuthService._internal()
-      : _tokenGateway = _FirebaseAuthTokenGateway(),
-        _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
-        _refreshDelay = _defaultRefreshDelay,
-        _recordTelemetry = _recordProductionTelemetry,
-        _telemetryContextProvider = _productionTelemetryContext;
+    : _tokenGateway = _FirebaseAuthTokenGateway(),
+      _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
+      _refreshDelay = _defaultRefreshDelay,
+      _recordTelemetry = _recordProductionTelemetry,
+      _telemetryContextProvider = _productionTelemetryContext;
 
   @visibleForTesting
   AuthService.forTesting({
@@ -95,11 +118,11 @@ class AuthService {
     Duration? refreshAttemptTimeout,
     AuthTelemetryRecorder? recordTelemetry,
     AuthTelemetryContextProvider? telemetryContextProvider,
-  })  : _tokenGateway = tokenGateway,
-        _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
-        _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
-        _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
-        _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
+  }) : _tokenGateway = tokenGateway,
+       _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
+       _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
+       _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
+       _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
 
   static const int _maxRefreshAttempts = 3;
 
@@ -144,10 +167,10 @@ class AuthService {
   }
 
   static Map<String, dynamic> _productionTelemetryContext() => {
-        'platform': PlatformManager.instance.platform,
-        'app_version': PlatformManager.instance.appVersion,
-        'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
-      };
+    'platform': PlatformManager.instance.platform,
+    'app_version': PlatformManager.instance.appVersion,
+    'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
+  };
 
   bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
 
@@ -483,58 +506,23 @@ class AuthService {
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
-        queryParameters: {
-          'provider': provider,
-          'redirect_uri': redirectUri,
-          'state': state,
-          'code_challenge': codeChallenge,
-          'code_challenge_method': 'S256',
-        },
-      ).toString();
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize')
+          .replace(
+            queryParameters: {
+              'provider': provider,
+              'redirect_uri': redirectUri,
+              'state': state,
+              'code_challenge': codeChallenge,
+              'code_challenge_method': 'S256',
+            },
+          )
+          .toString();
 
       Logger.debug('Authorization URL: $authUrl');
 
-      // Set up listeners before launching URL
-      final appLinks = AppLinks();
-      late StreamSubscription linkSubscription;
-      final completer = Completer<String>();
-
-      // Listen via app_links
-      linkSubscription = appLinks.uriLinkStream.listen(
-        (Uri uri) {
-          Logger.debug('Received callback URI via app_links: $uri');
-          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
-            if (!completer.isCompleted) {
-              linkSubscription.cancel();
-              completer.complete(uri.toString());
-            }
-          }
-        },
-        onError: (error) {
-          Logger.debug('App link error: $error');
-          if (!completer.isCompleted) {
-            linkSubscription.cancel();
-            completer.completeError(error);
-          }
-        },
-      );
-
-      // Now launch the URL
-      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
-
-      if (!launched) {
-        linkSubscription.cancel();
-        throw Exception('Failed to launch authentication URL');
-      }
-
-      final result = await completer.future.timeout(
-        const Duration(minutes: 5),
-        onTimeout: () {
-          linkSubscription.cancel();
-          throw Exception('Authentication timeout');
-        },
-      );
+      final result = Env.profile.usesFirebaseAuthEmulator
+          ? await _completeEmulatorAuthorization(authUrl: authUrl, callbackScheme: callbackScheme)
+          : await _launchAuthorizationAndWaitForCallback(authUrl: authUrl, callbackScheme: callbackScheme);
 
       final uri = Uri.parse(result);
       final code = uri.queryParameters['code'];
@@ -566,7 +554,72 @@ class AuthService {
     } catch (e) {
       Logger.debug('OAuth authentication error: $e');
       Logger.handle(e, StackTrace.current, message: 'Authentication failed');
+      if (Env.profile.usesFirebaseAuthEmulator) {
+        rethrow;
+      }
       return null;
+    }
+  }
+
+  Future<String> _completeEmulatorAuthorization({required String authUrl, required String callbackScheme}) async {
+    final response = await http.get(emulatorJsonAuthorizeUri(Uri.parse(authUrl))).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) {
+      throw Exception('Emulator authorization failed: ${response.statusCode} ${response.body}');
+    }
+    final decoded = json.decode(response.body);
+    if (decoded is! Map) {
+      throw Exception('Emulator authorization returned an unexpected body');
+    }
+    return emulatorAuthorizeCallbackUri(callbackScheme: callbackScheme, body: Map<String, dynamic>.from(decoded));
+  }
+
+  Future<String> _launchAuthorizationAndWaitForCallback({
+    required String authUrl,
+    required String callbackScheme,
+  }) async {
+    final appLinks = AppLinks();
+    late StreamSubscription linkSubscription;
+    final completer = Completer<String>();
+
+    linkSubscription = appLinks.uriLinkStream.listen(
+      (Uri uri) {
+        Logger.debug('Received callback URI via app_links: $uri');
+        if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
+          if (!completer.isCompleted) {
+            linkSubscription.cancel();
+            completer.complete(uri.toString());
+          }
+        }
+      },
+      onError: (error) {
+        Logger.debug('App link error: $error');
+        if (!completer.isCompleted) {
+          linkSubscription.cancel();
+          completer.completeError(error);
+        }
+      },
+    );
+
+    // SFSafariViewController rejects the plain-HTTP URL used by the local
+    // harness on current iOS. Open local HTTP auth externally; production HTTPS
+    // auth remains inside the app browser and uses the same deep link.
+    final authLaunchMode = authUrl.startsWith('http://') ? LaunchMode.externalApplication : LaunchMode.inAppBrowserView;
+    final launched = await launchUrl(Uri.parse(authUrl), mode: authLaunchMode);
+
+    if (!launched) {
+      linkSubscription.cancel();
+      throw Exception('Failed to launch authentication URL');
+    }
+
+    try {
+      return await completer.future.timeout(
+        const Duration(minutes: 5),
+        onTimeout: () {
+          throw Exception('Authentication timeout');
+        },
+      );
+    } finally {
+      await linkSubscription.cancel();
     }
   }
 
@@ -610,8 +663,12 @@ class AuthService {
     final useCustomToken = Env.useAuthCustomToken;
     final customToken = oauthCredentials['custom_token'];
 
-    // Use custom token if enabled and available
-    if (useCustomToken && customToken != null) {
+    // Local_dev always signs in with an emulator custom token. Real Google/Apple
+    // ID tokens are not issued by the offline harness.
+    if (Env.profile.usesFirebaseAuthEmulator || (useCustomToken && customToken != null)) {
+      if (customToken == null) {
+        throw Exception('Auth emulator requires a Firebase custom token');
+      }
       Logger.debug('Signing in with Firebase custom token from $provider');
       return await FirebaseAuth.instance.signInWithCustomToken(customToken);
     }
@@ -756,13 +813,15 @@ class AuthService {
           Logger.debug('Web platform detected - attempting updateProfile with caution');
 
           // Try with a timeout to prevent hanging
-          await user.updateProfile(displayName: fullName).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () {
-              Logger.debug('updateProfile timed out on web platform');
-              throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
-            },
-          );
+          await user
+              .updateProfile(displayName: fullName)
+              .timeout(
+                const Duration(seconds: 5),
+                onTimeout: () {
+                  Logger.debug('updateProfile timed out on web platform');
+                  throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
+                },
+              );
         } else {
           await user.updateProfile(displayName: fullName);
         }
@@ -821,51 +880,23 @@ class AuthService {
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
-        queryParameters: {
-          'provider': provider,
-          'redirect_uri': redirectUri,
-          'state': state,
-          'code_challenge': codeChallenge,
-          'code_challenge_method': 'S256',
-        },
-      ).toString();
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize')
+          .replace(
+            queryParameters: {
+              'provider': provider,
+              'redirect_uri': redirectUri,
+              'state': state,
+              'code_challenge': codeChallenge,
+              'code_challenge_method': 'S256',
+            },
+          )
+          .toString();
 
       Logger.debug('Authorization URL: $authUrl');
 
-      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
-
-      if (!launched) {
-        throw Exception('Failed to launch authentication URL');
-      }
-
-      // Listen for the callback URL using app_links
-      final appLinks = AppLinks();
-      late StreamSubscription linkSubscription;
-      final completer = Completer<String>();
-
-      linkSubscription = appLinks.uriLinkStream.listen(
-        (Uri uri) {
-          Logger.debug('Received callback URI: $uri');
-          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
-            linkSubscription.cancel();
-            completer.complete(uri.toString());
-          }
-        },
-        onError: (error) {
-          Logger.debug('App link error: $error');
-          linkSubscription.cancel();
-          completer.completeError(error);
-        },
-      );
-
-      final result = await completer.future.timeout(
-        const Duration(minutes: 5),
-        onTimeout: () {
-          linkSubscription.cancel();
-          throw Exception('Authentication timeout');
-        },
-      );
+      final result = Env.profile.usesFirebaseAuthEmulator
+          ? await _completeEmulatorAuthorization(authUrl: authUrl, callbackScheme: callbackScheme)
+          : await _launchAuthorizationAndWaitForCallback(authUrl: authUrl, callbackScheme: callbackScheme);
 
       final uri = Uri.parse(result);
       final code = uri.queryParameters['code'];
@@ -884,6 +915,12 @@ class AuthService {
 
       if (oauthCredentials == null) {
         throw Exception('Failed to exchange code for OAuth credentials');
+      }
+
+      if (Env.profile.usesFirebaseAuthEmulator) {
+        final signedIn = await _signInWithOAuthCredentials(oauthCredentials);
+        await _updateUserPreferences(signedIn, provider);
+        return ProviderLinkResult(destinationUid: signedIn.user?.uid);
       }
 
       // Create Firebase credential
