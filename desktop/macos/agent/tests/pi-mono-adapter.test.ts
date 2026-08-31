@@ -1239,10 +1239,13 @@ describe("PiMonoAdapter served-model attribution", () => {
     }]);
   });
 
-  it("falls back to the requested model when the response carried none, and resets per prompt", async () => {
+  it("emits nothing when the response names no model, and resets per prompt", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");
 
+    // A turn whose response names no model (message.model is only the
+    // requested "omi-sonnet" alias) must produce NO attribution — presenting
+    // the alias as the served model is the lie #11521 removed.
     const first = adapter.sendPrompt(
       "session-1",
       [{ type: "text", text: "q1" }],
@@ -1255,7 +1258,10 @@ describe("PiMonoAdapter served-model attribution", () => {
     (turnEnd.message as any).model = "omi-sonnet";
     (adapter as any).handleTurnEnd(turnEnd);
     await first;
+    expect(events.filter((e: any) => e.type === "model_used")).toHaveLength(0);
 
+    // The dedupe set resets per prompt: the same served identity reported in
+    // one prompt is reported again for the next prompt.
     const second = adapter.sendPrompt(
       "session-1",
       [{ type: "text", text: "q2" }],
@@ -1266,11 +1272,26 @@ describe("PiMonoAdapter served-model attribution", () => {
     );
     const turnEnd2 = makeTurnEndEvent("a2");
     (turnEnd2.message as any).model = "omi-sonnet";
+    (turnEnd2.message as any).responseModel = "gpt-5.6-luna";
     (adapter as any).handleTurnEnd(turnEnd2);
     await second;
 
+    const third = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "q3" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => "",
+    );
+    const turnEnd3 = makeTurnEndEvent("a3");
+    (turnEnd3.message as any).model = "omi-sonnet";
+    (turnEnd3.message as any).responseModel = "gpt-5.6-luna";
+    (adapter as any).handleTurnEnd(turnEnd3);
+    await third;
+
     const modelEvents = events.filter((e: any) => e.type === "model_used");
     expect(modelEvents).toHaveLength(2);
-    expect(modelEvents.every((e: any) => e.model === "omi-sonnet")).toBe(true);
+    expect(modelEvents.every((e: any) => e.model === "gpt-5.6-luna")).toBe(true);
   });
 });

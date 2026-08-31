@@ -1205,13 +1205,14 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
   }
 
-  /** Report the model that actually served an assistant message. Prefers the
+  /** Report the model that actually served an assistant message — ONLY the
    *  response-observed identity (pi-ai's `responseModel`, captured from the
-   *  provider stream's chunk.model) over the requested alias; emits each
-   *  distinct identity once per prompt. */
+   *  provider stream's chunk.model). A response that names no model gets no
+   *  attribution: the requested id here is always the "omi-sonnet" alias, and
+   *  presenting it as the served model is the exact lie #11521 removed. */
   private recordServedModel(message: PiAssistantMessage | undefined): void {
     if (!message || message.role !== "assistant") return;
-    const served = message.responseModel || message.model;
+    const served = message.responseModel;
     if (!served || this.reportedPromptModels.has(served)) return;
     this.reportedPromptModels.add(served);
     this.eventHandler?.({
