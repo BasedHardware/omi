@@ -4065,9 +4065,14 @@ export interface TaskIntegrationMutationResponse {
   status: string;
 }
 
+export interface TaskIntegrationStatus {
+  app_key: string;
+  connected: boolean;
+}
+
 export interface TaskIntegrationsResponse {
   default_app: string | null;
-  integrations: Record<string, unknown>;
+  integrations: Record<string, TaskIntegrationStatus>;
 }
 
 export type TaskIntelligenceFeedbackAction = "do_now" | "later" | "dismiss" | "accept_candidate" | "edit" | "complete";
@@ -5196,6 +5201,7 @@ export interface OmiApiSchemas {
   "TaskGoalLinkImportRequest": TaskGoalLinkImportRequest;
   "TaskIntegrationData": TaskIntegrationData;
   "TaskIntegrationMutationResponse": TaskIntegrationMutationResponse;
+  "TaskIntegrationStatus": TaskIntegrationStatus;
   "TaskIntegrationsResponse": TaskIntegrationsResponse;
   "TaskIntelligenceFeedbackAction": TaskIntelligenceFeedbackAction;
   "TaskIntelligenceFeedbackReason": TaskIntelligenceFeedbackReason;

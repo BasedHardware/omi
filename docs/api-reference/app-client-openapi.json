@@ -14657,7 +14657,7 @@
         "type": "string"
       },
       "IntegrationData": {
-        "description": "Data for an integration connection",
+        "description": "Compatibility input for integrations without a server OAuth flow.\n\nDeprecated credential fields remain in the released app-client schema, but\nregistered OAuth providers are rejected before any value is persisted.",
         "properties": {
           "access_token": {
             "anyOf": [
@@ -14668,6 +14668,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Access Token"
           },
           "connected": {
@@ -14684,6 +14685,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Refresh Token"
           }
         },
@@ -24802,6 +24804,26 @@
         "title": "TaskIntegrationMutationResponse",
         "type": "object"
       },
+      "TaskIntegrationStatus": {
+        "additionalProperties": false,
+        "description": "Non-secret projection safe for clients, support tooling, and OpenAPI.",
+        "properties": {
+          "app_key": {
+            "title": "App Key",
+            "type": "string"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "app_key",
+          "connected"
+        ],
+        "title": "TaskIntegrationStatus",
+        "type": "object"
+      },
       "TaskIntegrationsResponse": {
         "description": "Response containing all task integrations",
         "properties": {
@@ -24818,8 +24840,10 @@
             "title": "Default App"
           },
           "integrations": {
-            "additionalProperties": true,
-            "description": "Map of app_key to connection details",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TaskIntegrationStatus"
+            },
+            "description": "Map of app_key to non-secret status",
             "title": "Integrations",
             "type": "object"
           }
@@ -47207,7 +47231,7 @@
         ]
       },
       "put": {
-        "description": "Save or update an integration connection.",
+        "description": "Save non-secret state for integrations without server-managed OAuth.\n\nOAuth credentials are accepted only from a provider callback into the\nencrypted control plane. This legacy compatibility route cannot inject or\nreplace a provider token.",
         "operationId": "save_integration_v1_integrations__app_key__put",
         "parameters": [
           {
