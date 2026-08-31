@@ -9897,4 +9897,9 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Din Pendants lager er fuldt, og den er stadig i optagetilstand, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser derefter igen.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Ikke optaget ($count)';
+  }
 }

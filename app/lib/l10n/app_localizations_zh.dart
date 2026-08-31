@@ -9725,4 +9725,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pendantFullSyncBlocked => 'Pendant 的存储空间已满，且仍处于录音模式，因此无法传输已存储的音频。请按下 Pendant 的按钮停止录音，然后重新同步。';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return '未记录 ($count)';
+  }
 }

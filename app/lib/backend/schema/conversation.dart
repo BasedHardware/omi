@@ -279,6 +279,51 @@ class CalendarEventLink {
   Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
+/// A booked calendar event that has no recorded conversation (SCA-381).
+///
+/// The Conversations list renders these as an honest "Not captured" group
+/// beside the audio rows; they are calendar rows, never conversations.
+class CalendarCaptureGap {
+  final String eventId;
+  final String title;
+  final DateTime startTime;
+  final DateTime endTime;
+  final String status;
+  final String coverage;
+
+  CalendarCaptureGap({
+    required this.eventId,
+    required this.title,
+    required this.startTime,
+    required this.endTime,
+    this.status = 'confirmed',
+    this.coverage = 'not_captured',
+  });
+
+  factory CalendarCaptureGap.fromJson(Map<String, dynamic> json) {
+    return CalendarCaptureGap(
+      eventId: json['event_id'] as String? ?? '',
+      title: json['title'] as String? ?? 'Untitled Event',
+      startTime: DateTime.parse(json['start_time'] as String),
+      endTime: DateTime.parse(json['end_time'] as String),
+      status: json['status'] as String? ?? 'confirmed',
+      coverage: json['coverage'] as String? ?? 'not_captured',
+    );
+  }
+}
+
+/// Buckets capture gaps by the local day of their start, matching the
+/// conversation list's per-day grouping so a gap renders under its date header.
+Map<DateTime, List<CalendarCaptureGap>> groupCaptureGapsByLocalDay(List<CalendarCaptureGap> gaps) {
+  final byDay = <DateTime, List<CalendarCaptureGap>>{};
+  for (final gap in gaps) {
+    final local = gap.startTime.toLocal();
+    final day = DateTime(local.year, local.month, local.day);
+    (byDay[day] ??= <CalendarCaptureGap>[]).add(gap);
+  }
+  return byDay;
+}
+
 class AudioFile {
   final String id;
   final String uid;
