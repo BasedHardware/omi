@@ -799,10 +799,14 @@ def set_memory_summary_rating(
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/analytics/memory_summary', tags=['v1'], response_model=MemorySummaryRatingResponse)
+@router.get(
+    '/v1/users/analytics/memory_summary',
+    tags=['v1'],
+    response_model=MemorySummaryRatingResponse,
+    dependencies=[Depends(auth.get_current_user_uid)],
+)
 def get_memory_summary_rating(
     memory_id: str,
-    _: str = Depends(auth.get_current_user_uid),
 ):
     return {'has_rating': False}
 
