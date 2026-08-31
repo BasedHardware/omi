@@ -58,13 +58,6 @@ from utils.chat import (
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
 from utils.stt.streaming import STTService, connect_stt_socket_with_fallback, drain_stt_socket
 from utils.stt.streaming import get_stt_service_for_language, process_audio_modulate, process_audio_parakeet
-from utils.stt.live_failure import (
-    MAX_STT_FAILOVERS,
-    live_stt_socket_is_dead,
-    live_stt_upstream_failure,
-    send_live_stt_audio,
-    terminate_live_stt_session,
-)
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
@@ -1314,6 +1307,16 @@ async def transcribe_voice_message_stream(
         ({"type": "service_status", "status": "stt_failed", ...}) and then a
         WebSocket close 1011 — the same terminal contract as /v4/listen.
     """
+    # Lazy: a module-level live_failure import circularly loads
+    # observability.transcription while chat tests import this module.
+    from utils.stt.live_failure import (
+        MAX_STT_FAILOVERS,
+        live_stt_socket_is_dead,
+        live_stt_upstream_failure,
+        send_live_stt_audio,
+        terminate_live_stt_session,
+    )
+
     await websocket.accept()
 
     # Paywalled desktop users — close before opening a provider connection for
