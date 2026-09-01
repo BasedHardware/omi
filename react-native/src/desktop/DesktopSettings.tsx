@@ -485,9 +485,9 @@ export function DesktopSettings({
 }
 
 const styles = {
-  root: {flex: 1, flexDirection: 'row' as const, gap: 20},
+  root: {flex: 1, flexDirection: 'row' as const},
   sidebar: {
-    gap: PANE_ITEM_GAP,
+    marginRight: 24,
     position: 'relative' as const,
     width: 196,
   },
@@ -501,10 +501,10 @@ const styles = {
     top: 0,
   },
   paneItem: {
-    alignItems: 'center' as const,
+    alignItems: 'flex-start' as const,
     height: PANE_ITEM_HEIGHT,
     justifyContent: 'center' as const,
-    marginBottom: 0,
+    marginBottom: PANE_ITEM_GAP,
     paddingHorizontal: 14,
   },
   paneText: {
@@ -512,16 +512,18 @@ const styles = {
     fontFamily: token.font,
     fontSize: token.type.caption,
     fontWeight: '600' as const,
+    textAlign: 'left' as const,
   },
   paneTextActive: {color: token.color.ink},
   scroll: {flex: 1},
-  content: {gap: 14, paddingBottom: 32},
+  content: {paddingBottom: 32},
   row: {
     alignItems: 'center' as const,
     backgroundColor: token.color.glassQuiet,
     borderRadius: 16,
     flexDirection: 'row' as const,
     gap: 12,
+    marginBottom: 14,
     minHeight: 64,
     padding: 14,
   },
