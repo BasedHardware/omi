@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:async/async.dart';
+import 'package:async/async.dart'; // StreamSinkTransformer for the fake sink below
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';

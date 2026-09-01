@@ -562,7 +562,8 @@ class AnalyticsManager {
       track('Phone Call Ended', properties: {'duration_seconds': durationSeconds});
 
   /// End-of-call (or stall) snapshot of the live-transcript session.
-  /// Counts and closed status strings only — no audio, numbers, or ids.
+  /// Aggregate counts and closed status strings only — no raw audio samples,
+  /// contact/phone numbers, transcripts, or ids are tracked.
   void phoneCallTranscriptSession({
     required bool wsAccepted,
     required int audioFramesSent,

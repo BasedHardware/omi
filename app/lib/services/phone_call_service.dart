@@ -33,8 +33,14 @@ class PhoneCallService {
   /// [resetEventStats]. Counts only; never carries payload.
   int eventChannelErrors = 0;
 
-  /// Events delivered only after coercing `data`/`channel` types.
+  /// Events delivered only after coercing `data`/`channel` types: counted
+  /// once per delivered event (never per coerced field), and never for
+  /// events that were dropped — those are [eventChannelErrors].
   int eventChannelCoerced = 0;
+
+  /// Whether the event being dispatched needed any field coercion. Set by
+  /// the coerce helpers and consumed once per event, only on delivery.
+  bool _eventNeededCoercion = false;
 
   PhoneCallService();
 
@@ -178,10 +184,16 @@ class PhoneCallService {
         onCallStateChanged!(state);
       }
     } else if (type == 'audioData') {
+      _eventNeededCoercion = false;
       final data = _coerceAudioData(event['data']);
       final channel = _coerceChannel(event['channel']);
       if (data != null && channel != null) {
+        // Count once per successfully delivered event, not once per coerced
+        // field; dropped events are eventChannelErrors and must not inflate
+        // this metric. Incremented after delivery so a throwing callback
+        // counts as an error, not a coerced delivery.
         onAudioData?.call(data, channel);
+        if (_eventNeededCoercion) eventChannelCoerced++;
       } else {
         eventChannelErrors++;
         Logger.error(
@@ -207,7 +219,7 @@ class PhoneCallService {
   Uint8List? _coerceAudioData(Object? value) {
     if (value is Uint8List) return value;
     if (value is Int8List) {
-      eventChannelCoerced++;
+      _eventNeededCoercion = true;
       var result = Uint8List(value.length);
       for (var i = 0; i < value.length; i++) {
         result[i] = value[i] & 0xff;
@@ -215,7 +227,7 @@ class PhoneCallService {
       return result;
     }
     if (value is List<int>) {
-      eventChannelCoerced++;
+      _eventNeededCoercion = true;
       try {
         return Uint8List.fromList(value);
       } catch (_) {
@@ -225,7 +237,7 @@ class PhoneCallService {
     // The standard codec decodes a generic int list as List<dynamic>, which is
     // still valid audio bytes.
     if (value is List) {
-      eventChannelCoerced++;
+      _eventNeededCoercion = true;
       var result = Uint8List(value.length);
       for (var i = 0; i < value.length; i++) {
         var element = value[i];
@@ -240,13 +252,13 @@ class PhoneCallService {
   int? _coerceChannel(Object? value) {
     if (value is int) return value;
     if (value is num) {
-      eventChannelCoerced++;
+      _eventNeededCoercion = true;
       return value.toInt();
     }
     if (value is String) {
       final parsed = int.tryParse(value);
       if (parsed != null) {
-        eventChannelCoerced++;
+        _eventNeededCoercion = true;
         return parsed;
       }
     }

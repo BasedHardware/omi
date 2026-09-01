@@ -398,6 +398,10 @@ class PhoneCallProvider extends ChangeNotifier {
 
   void _onAudioData(Uint8List audioData, int channel) {
     if (!_sessionEnabled) return;
+    // Start-of-call-only watchdog: it detects zero prefixed frames after the
+    // socket was accepted and is permanently disarmed by the first delivered
+    // frame. Mid-call interruptions are intentionally not flagged here —
+    // they surface through the socket reconnect path instead.
     _noAudioWatchdog?.cancel();
     _noAudioWatchdog = null;
     var socket = _transcriptionSocket;
@@ -453,6 +457,8 @@ class PhoneCallProvider extends ChangeNotifier {
 
   /// Arm the no-audio watchdog only once the server has accepted the socket
   /// (`_wsAccepted`): a still-connecting socket must not read as no-audio.
+  /// Start-of-call-only: the first delivered frame cancels this timer for the
+  /// rest of the call (see `_onAudioData`); it is not re-armed per frame.
   void _armNoAudioWatchdog() {
     _noAudioWatchdog?.cancel();
     _noAudioWatchdog = Timer(noAudioStallTimeout, () {

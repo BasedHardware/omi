@@ -30,6 +30,26 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     // Proximity sensor — screen off when phone held to ear
     fileprivate let proximitySensor = OmiProximitySensor()
 
+    // Audio deliveries queued onto the main queue before cleanup() must not
+    // land on the next call's event sink: each queued delivery captures the
+    // generation it was enqueued at and re-checks it before sinking.
+    // cleanup() bumps the generation first, so only the flush it enqueues
+    // afterwards can still deliver.
+    private let deliveryGenerationLock = NSLock()
+    private var audioDeliveryGeneration = 0
+
+    private func currentDeliveryGeneration() -> Int {
+        deliveryGenerationLock.lock()
+        defer { deliveryGenerationLock.unlock() }
+        return audioDeliveryGeneration
+    }
+
+    private func invalidateQueuedAudioDeliveries() {
+        deliveryGenerationLock.lock()
+        audioDeliveryGeneration += 1
+        deliveryGenerationLock.unlock()
+    }
+
     override init() {
         // Eager init: the coalescer exists before any Core Audio callback can run.
         audioEventCoalescer = OmiAudioEventCoalescer { [weak self] data, channel in
@@ -345,6 +365,11 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
 
     fileprivate func cleanup() {
         activeCall = nil
+        // Invalidate deliveries already queued onto the main queue for this
+        // call BEFORE flushing: only audio enqueued after this bump (i.e. the
+        // flush's own tail emission) may still reach the sink. A new call
+        // starts on a fresh generation.
+        invalidateQueuedAudioDeliveries()
         // Emit the final partial buffers so teardown does not drop the last
         // ~100 ms of the call, then invalidate anything still queued.
         audioEventCoalescer.flush()
@@ -364,8 +389,13 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     }
 
     func sendAudioDataEvent(_ data: Data, channel: Int) {
+        // Capture the delivery generation at enqueue time: a cleanup() that
+        // lands while this hop is queued bumps the counter, and the stale
+        // delivery is dropped instead of reaching the next call's sink.
+        let entryGeneration = currentDeliveryGeneration()
         DispatchQueue.main.async { [weak self] in
-            self?.eventSink?([
+            guard let self = self, self.currentDeliveryGeneration() == entryGeneration else { return }
+            self.eventSink?([
                 "type": "audioData",
                 "data": FlutterStandardTypedData(bytes: data),
                 "channel": channel,
