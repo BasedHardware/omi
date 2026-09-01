@@ -225,14 +225,6 @@ extension PostHogManager {
 
   // MARK: - Onboarding Events
 
-  func onboardingStepCompleted(step: Int, stepName: String) {
-    track(
-      "Onboarding Step \(stepName) Completed",
-      properties: [
-        "step": step
-      ])
-  }
-
   func onboardingBeatCompleted(
     beat: String,
     index: Int,
