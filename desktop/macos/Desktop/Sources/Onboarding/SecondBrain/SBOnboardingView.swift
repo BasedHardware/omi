@@ -665,12 +665,10 @@ struct SBOnboardingView: View {
       // Continue appears once Omi has actually answered — before that, an always-
       // tappable, clearly-visible "Skip for now" so the user is never stuck if the
       // demo doesn't fire (it used to be a tiny, easily-missed text link).
-      // Skip appears only after the doors were opened: the person reads the step and tries the
-      // page before being offered a way past it. Continue still appears once Omi has answered.
       Group {
         if model.screenDemoDone {
           SBInkButton(title: "Continue", isDefaultAction: true) { model.answerScreenDemo() }
-        } else if model.threeDoorsOpened || model.screenDemoPTTUnavailable {
+        } else {
           Button {
             model.answerScreenDemo()
           } label: {

@@ -1958,7 +1958,7 @@ class ChatProvider: ObservableObject {
     }
     let responseContext = [
       systemPromptSuffix?.trimmingCharacters(in: .whitespacesAndNewlines),
-      ThreeDoorsDemoPage.activeModelNote?.trimmingCharacters(in: .whitespacesAndNewlines),
+      OnboardingDemoNote.active?.trimmingCharacters(in: .whitespacesAndNewlines),
       AssistantSettings.shared.hasExplicitVoiceLanguages
         ? Self.responseLanguageInstruction(languageCodes: AssistantSettings.shared.voiceLanguages)
         : nil,
