@@ -36,6 +36,7 @@ from models.chat_first import (
     MaterializableProactiveIntent,
     MaterializePromptsRequest,
     MaterializePromptsResponse,
+    ProactiveMaterializationReceiptOutcome,
     MemoryLinkSpec,
     TaskCardSpec,
     stable_block_id,
@@ -54,6 +55,12 @@ from utils.task_intelligence.rollout import resolve_task_intelligence_for_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+_METRIC_REJECTION_CODES = frozenset({'invalid_intent', 'identity_conflict', 'kernel_materialization_failed'})
+
+
+def _bounded_rejection_reason(code: str) -> str:
+    return code if code in _METRIC_REJECTION_CODES else 'unknown'
 
 
 def _eligibility(uid: str):
@@ -329,6 +336,7 @@ def _materialize_prompts(
     if not request.initial_page_loaded or not request.window_foreground:
         return MaterializePromptsResponse()
     now = datetime.now(timezone.utc)
+    receipt_outcomes: list[ProactiveMaterializationReceiptOutcome] = []
     for rejection in request.rejections:
         try:
             rejected_intent, dead_letter_reason = chat_first_intents_db.record_materialization_rejection(
@@ -340,15 +348,34 @@ def _materialize_prompts(
             )
         except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc
-        except chat_first_intents_db.ProactiveIntentNotReady as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail='invalid materialization rejection'
-            ) from exc
-        CHAT_FIRST_PROACTIVE_TOTAL.labels(event='rejected', source=rejected_intent.source, reason=rejection.code).inc()
+        except chat_first_intents_db.ProactiveIntentNotReady:
+            continue
+        if rejected_intent is None:
+            continue
+        metric_code = _bounded_rejection_reason(rejection.code)
+        CHAT_FIRST_PROACTIVE_TOTAL.labels(event='rejected', source=rejected_intent.source, reason=metric_code).inc()
         if dead_letter_reason is not None:
             CHAT_FIRST_PROACTIVE_TOTAL.labels(
-                event='dead_letter', source=rejected_intent.source, reason=dead_letter_reason
+                event='dead_letter',
+                source=rejected_intent.source,
+                reason=(
+                    f'permanent_rejection:{metric_code}'
+                    if dead_letter_reason.startswith('permanent_rejection:')
+                    else dead_letter_reason
+                ),
             ).inc()
+
+    for deferral in request.deferrals:
+        try:
+            chat_first_intents_db.record_materialization_deferral(
+                uid,
+                intent_id=deferral.intent_id,
+                account_generation=request.control_generation,
+                now=now,
+            )
+        except (chat_first_intents_db.ChatFirstIntentGenerationMismatch, chat_first_intents_db.ProactiveIntentNotReady):
+            # A stale device's explicit deferral must not poison the next batch.
+            continue
 
     for receipt in request.receipts:
         try:
@@ -370,13 +397,17 @@ def _materialize_prompts(
                         )
                     except Exception:
                         logger.exception('meeting receipt materialization projection failed')
-        except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc
-        except (
-            chat_first_intents_db.ChatFirstIntentConflictError,
-            chat_first_intents_db.ProactiveIntentNotReady,
-        ) as exc:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='invalid materialization receipt') from exc
+            outcome = 'acknowledged' if delivered_intent.delivery_state == 'delivered' else 'already_terminal'
+        except chat_first_intents_db.ChatFirstIntentGenerationMismatch:
+            outcome = 'generation_mismatch'
+        except chat_first_intents_db.ChatFirstIntentConflictError:
+            outcome = 'conflict'
+        except chat_first_intents_db.ProactiveIntentNotReady:
+            outcome = 'missing'
+        except Exception:
+            logger.exception('materialization receipt processing failed')
+            outcome = 'conflict'
+        receipt_outcomes.append(ProactiveMaterializationReceiptOutcome(intent_id=receipt.intent_id, outcome=outcome))
         CHAT_FIRST_PROACTIVE_TOTAL.labels(event='kernel_receipt', source='materialization', reason='none').inc()
 
     # The kernel can only emit this after it durably terminalizes the scripted
@@ -435,7 +466,8 @@ def _materialize_prompts(
         ).inc()
     CHAT_FIRST_PROACTIVE_TOTAL.labels(event='fetch', source='materialization', reason='none').inc()
     return MaterializePromptsResponse(
-        intents=[MaterializableProactiveIntent.model_validate(intent.model_dump()) for intent in batch.intents]
+        intents=[MaterializableProactiveIntent.model_validate(intent.model_dump()) for intent in batch.intents],
+        receipt_outcomes=receipt_outcomes,
     )
 
 

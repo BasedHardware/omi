@@ -17,6 +17,19 @@ final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
     )
   }
 
+  func testKernelTailDeferralsDecodeSeparatelyFromPermanentRejections() {
+    XCTAssertEqual(
+      AgentRuntimeProcess.chatFirstDeferrals(
+        from: [["intentId": "intent-deferred", "code": "tail_question"]]
+      ),
+      [ChatFirstMaterializationDeferral(intentID: "intent-deferred", code: "tail_question")]
+    )
+  }
+
+  func testRejectionMessageIsTruncatedToTheWireLimit() {
+    XCTAssertEqual(ChatFirstMaterializationWire.rejectionMessage(String(repeating: "x", count: 500)).count, 300)
+  }
+
   func testMaterializationFallsBackOnlyWhenV2RouteIsMissing() {
     XCTAssertTrue(
       ChatFirstMaterializationEndpointPolicy.shouldFallbackToV1(

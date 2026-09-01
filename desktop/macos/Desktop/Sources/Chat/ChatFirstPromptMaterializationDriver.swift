@@ -24,6 +24,22 @@ struct ChatFirstMaterializationRejection: Codable, Equatable, Sendable {
   }
 }
 
+struct ChatFirstMaterializationDeferral: Codable, Equatable, Sendable {
+  let intentID: String
+  let code: String
+
+  enum CodingKeys: String, CodingKey {
+    case intentID = "intent_id"
+    case code
+  }
+}
+
+enum ChatFirstMaterializationWire {
+  static func rejectionMessage(_ message: String) -> String {
+    String(message.prefix(300))
+  }
+}
+
 /// A terminal receipt is derived only from the local main-Chat journal after
 /// the fixed sparse script completes or the user explicitly abandons it. It
 /// is carried beside materialization receipts through the existing server
@@ -49,15 +65,18 @@ struct ChatFirstPromptReceiptBatch: Equatable, Sendable {
   let materializationReceipts: [ChatFirstMaterializationReceipt]
   let coldStartSequenceTerminalReceipts: [ChatFirstColdStartSequenceTerminalReceipt]
   let materializationRejections: [ChatFirstMaterializationRejection]
+  let materializationDeferrals: [ChatFirstMaterializationDeferral]
 
   init(
     materializationReceipts: [ChatFirstMaterializationReceipt],
     coldStartSequenceTerminalReceipts: [ChatFirstColdStartSequenceTerminalReceipt],
-    materializationRejections: [ChatFirstMaterializationRejection] = []
+    materializationRejections: [ChatFirstMaterializationRejection] = [],
+    materializationDeferrals: [ChatFirstMaterializationDeferral] = []
   ) {
     self.materializationReceipts = materializationReceipts
     self.coldStartSequenceTerminalReceipts = coldStartSequenceTerminalReceipts
     self.materializationRejections = materializationRejections
+    self.materializationDeferrals = materializationDeferrals
   }
 
   static let empty = Self(materializationReceipts: [], coldStartSequenceTerminalReceipts: [])
@@ -65,6 +84,7 @@ struct ChatFirstPromptReceiptBatch: Equatable, Sendable {
   var isEmpty: Bool {
     materializationReceipts.isEmpty && coldStartSequenceTerminalReceipts.isEmpty
       && materializationRejections.isEmpty
+      && materializationDeferrals.isEmpty
   }
 }
 
@@ -164,6 +184,7 @@ enum ChatFirstPromptMaterializationRunner {
 final class APIChatFirstPromptMaterializationDriver: ChatFirstPromptMaterializationDriving {
   private weak var chatProvider: ChatProvider?
   private var pendingRejections: [ChatFirstMaterializationRejection] = []
+  private var pendingDeferrals: [ChatFirstMaterializationDeferral] = []
 
   init(chatProvider: ChatProvider) {
     self.chatProvider = chatProvider
@@ -179,7 +200,8 @@ final class APIChatFirstPromptMaterializationDriver: ChatFirstPromptMaterializat
     return ChatFirstPromptReceiptBatch(
       materializationReceipts: receipts.materializationReceipts,
       coldStartSequenceTerminalReceipts: receipts.coldStartSequenceTerminalReceipts,
-      materializationRejections: pendingRejections
+      materializationRejections: pendingRejections,
+      materializationDeferrals: pendingDeferrals
     )
   }
 
@@ -200,12 +222,17 @@ final class APIChatFirstPromptMaterializationDriver: ChatFirstPromptMaterializat
   func acknowledge(_ receipts: ChatFirstPromptReceiptBatch) async throws {
     guard let chatProvider else { return }
     _ = try await chatProvider.acknowledgeChatFirstMaterializationReceipts(receipts)
-    pendingRejections.removeAll()
+    let sentRejections = Set(receipts.materializationRejections.map(\.intentID))
+    let sentDeferrals = Set(receipts.materializationDeferrals.map(\.intentID))
+    pendingRejections.removeAll { sentRejections.contains($0.intentID) }
+    pendingDeferrals.removeAll { sentDeferrals.contains($0.intentID) }
   }
 
   func materialize(_ intents: [ChatFirstPromptIntent]) async throws {
     guard let chatProvider else { return }
-    pendingRejections = try await chatProvider.materializeChatFirstIntents(intents)?.rejections ?? []
+    let result = try await chatProvider.materializeChatFirstIntents(intents)
+    pendingRejections.append(contentsOf: result?.rejections ?? [])
+    pendingDeferrals.append(contentsOf: result?.deferrals ?? [])
   }
 }
 
@@ -243,6 +270,15 @@ private struct ChatFirstMaterializePromptsRequest: Encodable {
     }
   }
 
+  struct Deferral: Encodable {
+    let intentID: String
+    let code: String
+    enum CodingKeys: String, CodingKey {
+      case intentID = "intent_id"
+      case code
+    }
+  }
+
   let sourceSurface: String = "main_chat"
   let controlGeneration: Int
   let ownerFence: String
@@ -251,6 +287,7 @@ private struct ChatFirstMaterializePromptsRequest: Encodable {
   let receipts: [Receipt]
   let coldStartSequenceTerminalReceipts: [ColdStartSequenceTerminalReceipt]
   let rejections: [Rejection]
+  let deferrals: [Deferral]
 
   enum CodingKeys: String, CodingKey {
     case sourceSurface = "source_surface"
@@ -261,6 +298,7 @@ private struct ChatFirstMaterializePromptsRequest: Encodable {
     case receipts
     case coldStartSequenceTerminalReceipts = "cold_start_sequence_terminal_receipts"
     case rejections
+    case deferrals
   }
 }
 
@@ -275,7 +313,7 @@ extension APIClient {
       controlGeneration >= 0,
       receipts.materializationReceipts.count <= 16,
       receipts.coldStartSequenceTerminalReceipts.count <= 16,
-      receipts.materializationRejections.count <= 16
+      receipts.materializationRejections.count <= 16, receipts.materializationDeferrals.count <= 16
     else {
       throw APIError.invalidResponse
     }
@@ -294,7 +332,14 @@ extension APIClient {
         )
       },
       rejections: receipts.materializationRejections.map {
-        ChatFirstMaterializePromptsRequest.Rejection(intentID: $0.intentID, code: $0.code, message: $0.message)
+        ChatFirstMaterializePromptsRequest.Rejection(
+          intentID: $0.intentID,
+          code: $0.code,
+          message: $0.message.map(ChatFirstMaterializationWire.rejectionMessage)
+        )
+      },
+      deferrals: receipts.materializationDeferrals.map {
+        ChatFirstMaterializePromptsRequest.Deferral(intentID: $0.intentID, code: $0.code)
       }
     )
     do {

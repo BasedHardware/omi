@@ -3104,6 +3104,12 @@ async function main(): Promise<void> {
               code: candidate.rejectionCode ?? "kernel_materialization_failed",
               message: candidate.rejectionMessage ?? "Chat-first intent materialization failed",
             }] : []),
+            materializationDeferrals: result.stoppedByTail ? intents.flatMap((intent, index) => {
+              const candidate = result.results[index];
+              if (candidate?.accepted || candidate?.rejected) return [];
+              const streaming = result.results.some((item) => item.suppressedByStreamingTail);
+              return [{ intentId: intent.intentId, code: streaming ? "streaming_tail" : "tail_question" }];
+            }) : [],
           });
           if (committedTurns.length > 0) {
             for (const turn of committedTurns) for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {

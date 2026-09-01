@@ -33,6 +33,10 @@ class _Snapshot:
     def to_dict(self):
         return deepcopy(self._database.rows.get(self._path))
 
+    @property
+    def id(self):
+        return self._path[-1]
+
 
 class _Document:
     def __init__(self, database, path):
@@ -149,15 +153,39 @@ class _Transaction:
         ref.set(payload)
 
 
+class _WriteBatch:
+    def __init__(self, database):
+        self.database = database
+        self.writes = []
+
+    def set(self, ref, payload):
+        self.writes.append((ref, payload))
+
+    def update(self, ref, payload):
+        existing = ref.get().to_dict() or {}
+        self.writes.append((ref, {**existing, **payload}))
+
+    def commit(self):
+        self.database.batch_commit_count += 1
+        for ref, payload in self.writes:
+            ref.set(payload)
+
+
 class _Firestore:
     def __init__(self):
         self.rows = {}
+        self.transaction_count = 0
+        self.batch_commit_count = 0
 
     def collection(self, name):
         return _Collection(self, (name,))
 
     def transaction(self):
+        self.transaction_count += 1
         return _Transaction()
+
+    def batch(self):
+        return _WriteBatch(self)
 
 
 @pytest.fixture
@@ -476,6 +504,185 @@ def test_fetch_budget_dead_letters_an_unacknowledged_intent(firestore):
     assert stored.dead_letter_reason == 'unacknowledged_after_fetch_budget'
 
 
+def test_tail_deferral_never_spends_the_unacknowledged_fetch_budget(firestore):
+    intent, _ = intents_db.create_intent(
+        UID,
+        source='daily_opener',
+        continuity_key='daily:tail-deferred',
+        subject=None,
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='tail-deferred', summary='Deferred')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+
+    for index in range(intents_db.UNACKNOWLEDGED_FETCH_BUDGET + 5):
+        fetched = intents_db.fetch_ready_intents(
+            UID, account_generation=GENERATION, now=NOW + timedelta(minutes=index), firestore_client=firestore
+        )
+        assert [item.intent_id for item in fetched] == [intent.intent_id]
+        intents_db.record_materialization_deferral(
+            UID,
+            intent_id=intent.intent_id,
+            account_generation=GENERATION,
+            now=NOW + timedelta(minutes=index, seconds=1),
+            firestore_client=firestore,
+        )
+
+    stored = intents_db._intent_from_snapshot(
+        intents_db._intent_ref(UID, intent.intent_id, firestore_client=firestore).get()
+    )
+    assert stored.delivery_state == 'ready'
+    assert stored.fetch_count == 0
+
+
+def test_terminal_receipt_is_acknowledged_idempotently_after_fetch_budget_dead_letter(firestore):
+    intent, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:late-receipt',
+        subject=ChatFirstSubject(kind='capture', id='late-receipt'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='late-receipt', summary='Late')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    path = ('users', UID, intents_db.INTENTS_COLLECTION, intent.intent_id)
+    firestore.rows[path]['delivery_state'] = 'dead_letter'
+    firestore.rows[path]['dead_letter_reason'] = 'unacknowledged_after_fetch_budget'
+
+    acknowledged = intents_db.acknowledge_materialization(
+        UID,
+        intent_id=intent.intent_id,
+        receipt_id='late-kernel-receipt',
+        account_generation=GENERATION,
+        now=NOW + timedelta(hours=1),
+        firestore_client=firestore,
+    )
+
+    assert acknowledged.delivery_state == 'dead_letter'
+
+
+def test_stale_rejection_is_absorbed_after_other_device_delivery_or_deletion(firestore):
+    intent, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:stale-rejection',
+        subject=ChatFirstSubject(kind='capture', id='stale-rejection'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='stale-rejection', summary='Stale')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    path = ('users', UID, intents_db.INTENTS_COLLECTION, intent.intent_id)
+    firestore.rows[path]['delivery_state'] = 'delivered'
+    delivered, reason = intents_db.record_materialization_rejection(
+        UID,
+        intent_id=intent.intent_id,
+        code='kernel_materialization_failed',
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    del firestore.rows[path]
+    missing, missing_reason = intents_db.record_materialization_rejection(
+        UID,
+        intent_id=intent.intent_id,
+        code='kernel_materialization_failed',
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+
+    assert delivered is not None and delivered.delivery_state == 'delivered' and reason is None
+    assert missing is None and missing_reason is None
+
+
+def test_fetch_isolates_malformed_documents_and_batches_healthy_fetch_updates(firestore):
+    healthy, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:healthy-batch',
+        subject=ChatFirstSubject(kind='capture', id='healthy-batch'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='healthy-batch', summary='Healthy')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    malformed_path = ('users', UID, intents_db.INTENTS_COLLECTION, 'malformed-ready')
+    firestore.rows[malformed_path] = {'delivery_state': 'ready', 'account_generation': GENERATION}
+    transactions_before = firestore.transaction_count
+
+    batch = intents_db.fetch_ready_intent_batch(UID, account_generation=GENERATION, now=NOW, firestore_client=firestore)
+
+    assert [item.intent_id for item in batch.intents] == [healthy.intent_id]
+    assert firestore.rows[malformed_path]['delivery_state'] == 'dead_letter'
+    assert firestore.rows[malformed_path]['dead_letter_reason'] == 'malformed_document'
+    assert firestore.transaction_count == transactions_before
+    assert firestore.batch_commit_count == 1
+
+
+def test_fetch_isolates_one_advance_failure_from_the_healthy_batch(firestore, monkeypatch):
+    failing, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:advance-failure',
+        subject=ChatFirstSubject(kind='capture', id='advance-failure'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='advance-failure', summary='Failing')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    healthy, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:after-advance-failure',
+        subject=ChatFirstSubject(kind='capture', id='after-advance-failure'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='after-advance-failure', summary='Healthy')],
+        account_generation=GENERATION,
+        now=NOW + timedelta(seconds=1),
+        firestore_client=firestore,
+    )
+    failing_path = ('users', UID, intents_db.INTENTS_COLLECTION, failing.intent_id)
+    firestore.rows[failing_path]['fetch_count'] = 2
+    firestore.rows[('users', UID, 'messages', intents_db._stable_chat_first_turn_id(failing.intent_id))] = {
+        'metadata': '{"chatFirstIntentId":"' + failing.intent_id + '"}'
+    }
+    monkeypatch.setattr(
+        intents_db,
+        '_advance_fetched_intent',
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('isolated advance failure')),
+    )
+
+    batch = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(minutes=1), firestore_client=firestore
+    )
+
+    assert [item.intent_id for item in batch.intents] == [healthy.intent_id]
+
+
+def test_stored_intent_model_tolerates_new_fields_and_unknown_terminal_state():
+    payload = {
+        'intent_id': 'intent-rolling-deploy',
+        'continuity_key': 'rolling-deploy',
+        'account_generation': GENERATION,
+        'source': 'capture_arrival',
+        'blocks': [{'type': 'captureLink', 'conversation_id': 'capture-1', 'summary': 'Capture'}],
+        'delivery_state': 'future_terminal_state',
+        'created_at': NOW,
+        'last_deferral_at': NOW,
+        'newer_revision_field': True,
+    }
+
+    parsed = intents_db.ProactiveIntent.model_validate(payload)
+
+    assert parsed.delivery_state == 'dead_letter'
+
+
+def test_stable_chat_first_turn_identity_matches_the_kernel_shared_vector():
+    assert intents_db._stable_chat_first_turn_id('intent-shared-vector') == 'turn_cfi_df211fb1b31c4b849c6bb6b2'
+
+
 def test_fetch_reconciles_a_stable_chat_row_after_an_earlier_delivery(firestore):
     intent, _ = intents_db.create_intent(
         UID,
@@ -492,6 +699,13 @@ def test_fetch_reconciles_a_stable_chat_row_after_an_earlier_delivery(firestore)
     firestore.rows[('users', UID, 'messages', turn_id)] = {
         'metadata': '{"chatFirstIntentId":"' + intent.intent_id + '"}'
     }
+
+    # Reconciliation point reads begin only after the second unacknowledged
+    # delivery, avoiding a read on every ordinary poll.
+    second = intents_db.fetch_ready_intents(
+        UID, account_generation=GENERATION, now=NOW + timedelta(seconds=30), firestore_client=firestore
+    )
+    assert second
 
     batch = intents_db.fetch_ready_intent_batch(
         UID,
@@ -650,7 +864,7 @@ def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_recei
             now=NOW + timedelta(seconds=3),
             firestore_client=firestore,
         )
-    with pytest.raises(intents_db.ChatFirstIntentConflictError):
+    assert (
         intents_db.acknowledge_materialization(
             UID,
             intent_id=first.intent_id,
@@ -658,7 +872,9 @@ def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_recei
             account_generation=GENERATION,
             now=NOW + timedelta(seconds=1),
             firestore_client=firestore,
-        )
+        ).delivery_state
+        == 'delivered'
+    )
     assert intents_db.fetch_ready_intents(UID, account_generation=GENERATION, firestore_client=firestore) == []
 
 

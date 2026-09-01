@@ -16684,6 +16684,14 @@
             "title": "Control Generation",
             "type": "integer"
           },
+          "deferrals": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationDeferral"
+            },
+            "maxItems": 16,
+            "title": "Deferrals",
+            "type": "array"
+          },
           "initial_page_loaded": {
             "default": false,
             "title": "Initial Page Loaded",
@@ -16739,6 +16747,13 @@
               "$ref": "#/components/schemas/MaterializableProactiveIntent"
             },
             "title": "Intents",
+            "type": "array"
+          },
+          "receipt_outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationReceiptOutcome"
+            },
+            "title": "Receipt Outcomes",
             "type": "array"
           }
         },
@@ -20135,6 +20150,33 @@
         "title": "PrivateCloudSyncResponse",
         "type": "object"
       },
+      "ProactiveMaterializationDeferral": {
+        "additionalProperties": false,
+        "description": "A fetched intent the kernel intentionally left behind a transcript tail.",
+        "properties": {
+          "code": {
+            "enum": [
+              "tail_question",
+              "streaming_tail"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "code"
+        ],
+        "title": "ProactiveMaterializationDeferral",
+        "type": "object"
+      },
       "ProactiveMaterializationReceipt": {
         "additionalProperties": false,
         "description": "Content-free receipt emitted only after the local journal commits.",
@@ -20159,6 +20201,35 @@
           "receipt_id"
         ],
         "title": "ProactiveMaterializationReceipt",
+        "type": "object"
+      },
+      "ProactiveMaterializationReceiptOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "acknowledged",
+              "already_terminal",
+              "missing",
+              "conflict",
+              "generation_mismatch"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "outcome"
+        ],
+        "title": "ProactiveMaterializationReceiptOutcome",
         "type": "object"
       },
       "ProactiveMaterializationRejection": {

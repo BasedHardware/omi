@@ -40,7 +40,13 @@ def _client() -> TestClient:
 
 
 def _request(
-    *, generation: int = 7, owner_fence: str = 'user-1', receipts=None, terminal_receipts=None, rejections=None
+    *,
+    generation: int = 7,
+    owner_fence: str = 'user-1',
+    receipts=None,
+    terminal_receipts=None,
+    rejections=None,
+    deferrals=None,
 ) -> dict:
     return {
         'source_surface': 'main_chat',
@@ -50,6 +56,7 @@ def _request(
         'initial_page_loaded': True,
         'receipts': receipts or [],
         'rejections': rejections or [],
+        'deferrals': deferrals or [],
         'cold_start_sequence_terminal_receipts': terminal_receipts or [],
     }
 
@@ -236,6 +243,112 @@ def test_materialize_records_typed_rejections_and_dead_letter_metric(monkeypatch
         'source': 'capture_arrival',
         'reason': 'permanent_rejection:invalid_intent',
     } in metric_events
+
+
+def test_one_invalid_receipt_never_fails_the_materialization_batch(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    intent = ProactiveIntent(
+        intent_id='intent-good',
+        continuity_key='good',
+        account_generation=7,
+        source='capture_arrival',
+        subject=ChatFirstSubject(kind='capture', id='good'),
+        blocks=[_question()],
+        created_at=datetime(2026, 7, 15, tzinfo=timezone.utc),
+    )
+    calls = []
+
+    def acknowledge(*args, **kwargs):
+        calls.append(kwargs['intent_id'])
+        if kwargs['intent_id'] == 'intent-terminal':
+            raise chat_first_router.chat_first_intents_db.ProactiveIntentNotReady('terminal')
+        return intent.model_copy(update={'delivery_state': 'delivered'})
+
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'acknowledge_materialization', acknowledge)
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db, 'fetch_ready_intent_batch', lambda *args, **kwargs: _batch([])
+    )
+
+    response = _client().post(
+        '/v2/chat/materialize-prompts',
+        json=_request(
+            receipts=[
+                {'intent_id': 'intent-terminal', 'receipt_id': 'receipt-terminal'},
+                {'intent_id': 'intent-good', 'receipt_id': 'receipt-good'},
+            ]
+        ),
+    )
+
+    assert response.status_code == 200
+    assert calls == ['intent-terminal', 'intent-good']
+    assert response.json()['receipt_outcomes'] == [
+        {'intent_id': 'intent-terminal', 'outcome': 'missing'},
+        {'intent_id': 'intent-good', 'outcome': 'acknowledged'},
+    ]
+
+
+def test_tail_deferral_is_reported_separately_from_rejection(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    deferrals = []
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db,
+        'record_materialization_deferral',
+        lambda *args, **kwargs: deferrals.append(kwargs),
+    )
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db, 'fetch_ready_intent_batch', lambda *args, **kwargs: _batch([])
+    )
+
+    response = _client().post(
+        '/v2/chat/materialize-prompts',
+        json=_request(deferrals=[{'intent_id': 'intent-deferred', 'code': 'tail_question'}]),
+    )
+
+    assert response.status_code == 200
+    assert deferrals[0]['intent_id'] == 'intent-deferred'
+
+
+def test_client_rejection_codes_never_create_unbounded_metric_labels(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    intent = ProactiveIntent(
+        intent_id='intent-client-code',
+        continuity_key='client-code',
+        account_generation=7,
+        source='capture_arrival',
+        subject=None,
+        blocks=[_question()],
+        created_at=datetime(2026, 7, 15, tzinfo=timezone.utc),
+    )
+    events = []
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db,
+        'record_materialization_rejection',
+        lambda *args, **kwargs: (intent, 'permanent_rejection:invented_client_code'),
+    )
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'fetch_ready_intent_batch', lambda *a, **k: _batch([]))
+    monkeypatch.setattr(
+        chat_first_router,
+        'CHAT_FIRST_PROACTIVE_TOTAL',
+        SimpleNamespace(labels=lambda **kwargs: SimpleNamespace(inc=lambda: events.append(kwargs))),
+    )
+
+    response = _client().post(
+        '/v2/chat/materialize-prompts',
+        json=_request(rejections=[{'intent_id': intent.intent_id, 'code': 'invented_client_code'}]),
+    )
+
+    assert response.status_code == 200
+    assert {'event': 'rejected', 'source': 'capture_arrival', 'reason': 'unknown'} in events
+    assert {'event': 'dead_letter', 'source': 'capture_arrival', 'reason': 'permanent_rejection:unknown'} in events
 
 
 def test_v1_leaves_conversation_link_pending_and_v2_later_acknowledges_it(monkeypatch):

@@ -14,6 +14,7 @@ import {
   beginBackendReconcile,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
+  chatFirstWireRejectionMessage,
   classifyBackendTurnResultDisposition,
   drainBackendConversationDeleteOutbox,
   drainBackendTurnOutbox,
@@ -264,6 +265,37 @@ describe("kernel conversation journal", () => {
     expect(batch.results[1]).toMatchObject({ accepted: true, rejected: false, turn: { role: "assistant" } });
     expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(1);
     expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM chat_first_materialization_receipts").count).toBe(1);
+    fixture.store.close();
+  });
+
+  it("generation validation failures remain transient typed kernel rejections", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-generation-transient");
+    const batch = materializeChatFirstIntents(fixture.store, [{
+      ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: -1,
+      intentId: "intent-stale-generation", continuityKey: "intent-stale-generation", source: "capture_arrival",
+      blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }], nowMs: 100,
+    }]);
+
+    expect(batch.results[0]).toMatchObject({
+      rejected: true,
+      rejectionCode: "kernel_materialization_failed",
+      rejectionMessage: "Chat-first materialization requires a valid control generation",
+    });
+    fixture.store.close();
+  });
+
+  it("wire rejection messages are bounded before leaving the kernel", () => {
+    expect(chatFirstWireRejectionMessage(new Error("x".repeat(500)))).toHaveLength(300);
+  });
+
+  it("shares the stable chat-first turn identity vector with the backend", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-shared-vector");
+    const result = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 7,
+      intentId: "intent-shared-vector", continuityKey: "shared-vector", source: "capture_arrival",
+      blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }], nowMs: 100,
+    });
+    expect(result.turn?.turnId).toBe("turn_cfi_df211fb1b31c4b849c6bb6b2");
     fixture.store.close();
   });
 

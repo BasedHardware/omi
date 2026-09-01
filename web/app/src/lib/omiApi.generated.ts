@@ -2664,6 +2664,7 @@ export interface MaterializableProactiveIntent {
 export interface MaterializePromptsRequest {
   cold_start_sequence_terminal_receipts?: Array<ColdStartSequenceTerminalReceipt>;
   control_generation: number;
+  deferrals?: Array<ProactiveMaterializationDeferral>;
   initial_page_loaded?: boolean;
   owner_fence: string;
   receipts?: Array<ProactiveMaterializationReceipt>;
@@ -2674,6 +2675,7 @@ export interface MaterializePromptsRequest {
 
 export interface MaterializePromptsResponse {
   intents?: Array<MaterializableProactiveIntent>;
+  receipt_outcomes?: Array<ProactiveMaterializationReceiptOutcome>;
 }
 
 export interface McpAddServerResponse {
@@ -3260,9 +3262,19 @@ export interface PrivateCloudSyncResponse {
   private_cloud_sync_enabled: boolean;
 }
 
+export interface ProactiveMaterializationDeferral {
+  code: "tail_question" | "streaming_tail";
+  intent_id: string;
+}
+
 export interface ProactiveMaterializationReceipt {
   intent_id: string;
   receipt_id: string;
+}
+
+export interface ProactiveMaterializationReceiptOutcome {
+  intent_id: string;
+  outcome: "acknowledged" | "already_terminal" | "missing" | "conflict" | "generation_mismatch";
 }
 
 export interface ProactiveMaterializationRejection {
@@ -5141,7 +5153,9 @@ export interface OmiApiSchemas {
   "PluginResult": PluginResult;
   "PricingOption": PricingOption;
   "PrivateCloudSyncResponse": PrivateCloudSyncResponse;
+  "ProactiveMaterializationDeferral": ProactiveMaterializationDeferral;
   "ProactiveMaterializationReceipt": ProactiveMaterializationReceipt;
+  "ProactiveMaterializationReceiptOutcome": ProactiveMaterializationReceiptOutcome;
   "ProactiveMaterializationRejection": ProactiveMaterializationRejection;
   "ProactiveNotification": ProactiveNotification;
   "ProcessConversationRequest": ProcessConversationRequest;

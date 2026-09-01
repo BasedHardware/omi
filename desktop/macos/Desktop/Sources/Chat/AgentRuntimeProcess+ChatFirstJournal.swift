@@ -108,6 +108,7 @@ extension AgentRuntimeProcess {
     let materializationStoppedByTail: Bool
     let materializationReceipts: [ChatFirstMaterializationReceipt]
     let materializationRejections: [ChatFirstMaterializationRejection]
+    let materializationDeferrals: [ChatFirstMaterializationDeferral]
     let coldStartSequenceTerminalReceipts: [ChatFirstColdStartSequenceTerminalReceipt]
     let acknowledgedReceiptCount: Int
 
@@ -128,6 +129,7 @@ extension AgentRuntimeProcess {
       materializationStoppedByTail: Bool = false,
       materializationReceipts: [ChatFirstMaterializationReceipt] = [],
       materializationRejections: [ChatFirstMaterializationRejection] = [],
+      materializationDeferrals: [ChatFirstMaterializationDeferral] = [],
       coldStartSequenceTerminalReceipts: [ChatFirstColdStartSequenceTerminalReceipt] = [],
       acknowledgedReceiptCount: Int = 0
     ) {
@@ -147,6 +149,7 @@ extension AgentRuntimeProcess {
       self.materializationStoppedByTail = materializationStoppedByTail
       self.materializationReceipts = materializationReceipts
       self.materializationRejections = materializationRejections
+      self.materializationDeferrals = materializationDeferrals
       self.coldStartSequenceTerminalReceipts = coldStartSequenceTerminalReceipts
       self.acknowledgedReceiptCount = acknowledgedReceiptCount
     }
@@ -166,6 +169,7 @@ extension AgentRuntimeProcess {
     let stoppedByTail: Bool
     let receipts: [ChatFirstMaterializationReceipt]
     let rejections: [ChatFirstMaterializationRejection]
+    let deferrals: [ChatFirstMaterializationDeferral]
   }
 
   /// Append server-validated structured blocks to exactly the assistant turn
@@ -367,7 +371,8 @@ extension AgentRuntimeProcess {
       accepted: result.accepted == true,
       stoppedByTail: result.materializationStoppedByTail,
       receipts: result.materializationReceipts,
-      rejections: result.materializationRejections
+      rejections: result.materializationRejections,
+      deferrals: result.materializationDeferrals
     )
   }
 
@@ -468,6 +473,16 @@ extension AgentRuntimeProcess {
         code: code,
         message: value["message"] as? String
       )
+    }
+  }
+
+  nonisolated static func chatFirstDeferrals(from payload: Any?) -> [ChatFirstMaterializationDeferral] {
+    guard let values = payload as? [[String: Any]] else { return [] }
+    return values.compactMap { value in
+      guard let intentID = value["intentId"] as? String, !intentID.isEmpty,
+        let code = value["code"] as? String, ["tail_question", "streaming_tail"].contains(code)
+      else { return nil }
+      return ChatFirstMaterializationDeferral(intentID: intentID, code: code)
     }
   }
 

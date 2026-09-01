@@ -2,8 +2,7 @@ import Foundation
 import OmiSupport
 
 extension Notification.Name {
-  /// Posted on MainActor after the runtime handshake makes direct control
-  /// tools admissible. Carries no owner id or request content.
+  /// Posted on MainActor after the runtime handshake makes direct control tools admissible.
   static let agentRuntimeDidBecomeReady = Notification.Name("com.omi.desktop.agentRuntimeDidBecomeReady")
 }
 
@@ -3698,6 +3697,7 @@ actor AgentRuntimeProcess {
         materializationReceipts: Self.chatFirstMaterializationReceipts(
           from: message.payload["materializationReceipts"]),
         materializationRejections: Self.chatFirstRejections(from: message.payload["materializationRejections"]),
+        materializationDeferrals: Self.chatFirstDeferrals(from: message.payload["materializationDeferrals"]),
         coldStartSequenceTerminalReceipts: Self.chatFirstColdStartSequenceTerminalReceipts(
           from: message.payload["coldStartSequenceTerminalReceipts"]
         ),

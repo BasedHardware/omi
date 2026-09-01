@@ -209,6 +209,17 @@ export interface ChatFirstIntentsMaterializationResult {
   stoppedByTail: boolean;
 }
 
+class ChatFirstMaterializationError extends Error {
+  constructor(readonly code: "invalid_intent" | "identity_conflict" | "kernel_materialization_failed", message: string) {
+    super(message);
+    this.name = "ChatFirstMaterializationError";
+  }
+}
+
+export function chatFirstWireRejectionMessage(error: unknown): string {
+  return (error instanceof Error ? error.message : "Unknown chat-first materialization failure").slice(0, 300);
+}
+
 export interface RepairOrphanedJournalTurnsInput {
   ownerId: string;
   turnIds: readonly string[];
@@ -1057,7 +1068,10 @@ function materializeChatFirstIntentInTransaction(
   const intentId = nonEmpty(input.intentId, "chat-first intent ID");
   const continuityKey = nonEmpty(input.continuityKey, "chat-first intent continuity key");
   if (!Number.isSafeInteger(input.controlGeneration) || input.controlGeneration < 0) {
-    throw new Error("Chat-first materialization requires a valid control generation");
+    throw new ChatFirstMaterializationError(
+      "kernel_materialization_failed",
+      "Chat-first materialization requires a valid control generation",
+    );
   }
   if (![
     "daily_opener",
@@ -1069,7 +1083,15 @@ function materializeChatFirstIntentInTransaction(
   ].includes(input.source)) {
     throw new Error("Chat-first materialization source is invalid");
   }
-  const blocks = chatFirstIntentBlocks(intentId, input.controlGeneration, input.source, input.blocks);
+  let blocks: ConversationContentBlock[];
+  try {
+    blocks = chatFirstIntentBlocks(intentId, input.controlGeneration, input.source, input.blocks);
+  } catch (error) {
+    throw new ChatFirstMaterializationError(
+      "invalid_intent",
+      error instanceof Error ? error.message : "Chat-first intent is invalid",
+    );
+  }
   const turnId = stableChatFirstIntentTurnID(intentId);
   const receiptId = stableChatFirstMaterializationReceiptID(intentId, continuityKey);
 
@@ -1087,7 +1109,9 @@ function materializeChatFirstIntentInTransaction(
       || String(existingReceipt.receipt_id) !== receiptId
       || String(existingReceipt.turn_id) !== turnId
     ) {
-      throw new Error("Chat-first intent ID was reused with different receipt identity");
+      throw new ChatFirstMaterializationError(
+        "identity_conflict", "Chat-first intent ID was reused with different receipt identity",
+      );
     }
     return {
       accepted: true,
@@ -1110,7 +1134,9 @@ function materializeChatFirstIntentInTransaction(
   const existingTurn = findJournalTurnById(store, turnId);
   if (existingTurn) {
     if (existingTurn.conversationId !== input.conversationId) {
-      throw new Error("Chat-first stable turn ID belongs to a different conversation");
+      throw new ChatFirstMaterializationError(
+        "identity_conflict", "Chat-first stable turn ID belongs to a different conversation",
+      );
     }
     store.execute(
       `INSERT INTO chat_first_materialization_receipts(
@@ -1205,16 +1231,14 @@ export function materializeChatFirstIntents(
     try {
       result = store.withTransaction(() => materializeChatFirstIntentInTransaction(store, input));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown chat-first materialization failure";
-      const identityConflict = /reused|different conversation/i.test(message);
-      const invalidIntent = /invalid|requires|unsupported/i.test(message);
+      const message = chatFirstWireRejectionMessage(error);
       result = {
         accepted: false,
         duplicate: false,
         rejected: true,
-        rejectionCode: identityConflict
-          ? "identity_conflict"
-          : invalidIntent ? "invalid_intent" : "kernel_materialization_failed",
+        rejectionCode: error instanceof ChatFirstMaterializationError
+          ? error.code
+          : "kernel_materialization_failed",
         rejectionMessage: message,
         suppressedByTailQuestion: false,
         suppressedByStreamingTail: false,

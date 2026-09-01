@@ -171,6 +171,16 @@ class ProactiveIntent(_StrictModel):
     cold_start_sequence_terminal_state: ColdStartSequenceTerminalState | None = None
     cold_start_sequence_terminal_receipt_id: StableId | None = None
 
+    # Firestore documents outlive individual backend revisions.  Stored-state
+    # readers must tolerate fields written by newer revisions during rolling
+    # deploys; request/response models remain strict.
+    model_config = ConfigDict(extra='ignore', frozen=True)
+
+    @field_validator('delivery_state', mode='before')
+    @classmethod
+    def unknown_delivery_states_are_terminal_on_read(cls, value):
+        return value if value in {'ready', 'pending_kernel_receipt', 'delivered', 'dead_letter'} else 'dead_letter'
+
     @model_validator(mode='after')
     def validate_cold_start_sequence_state(self):
         has_terminal_receipt = self.cold_start_sequence_terminal_receipt_id is not None
@@ -240,6 +250,18 @@ class ProactiveMaterializationRejection(_StrictModel):
     message: str | None = Field(default=None, max_length=300)
 
 
+class ProactiveMaterializationDeferral(_StrictModel):
+    """A fetched intent the kernel intentionally left behind a transcript tail."""
+
+    intent_id: StableId
+    code: Literal['tail_question', 'streaming_tail']
+
+
+class ProactiveMaterializationReceiptOutcome(_StrictModel):
+    intent_id: StableId
+    outcome: Literal['acknowledged', 'already_terminal', 'missing', 'conflict', 'generation_mismatch']
+
+
 class ColdStartSequenceTerminalReceipt(_StrictModel):
     """A durable local-journal acknowledgement that sparse sequencing ended."""
 
@@ -256,6 +278,7 @@ class MaterializePromptsRequest(_StrictModel):
     initial_page_loaded: bool = False
     receipts: list[ProactiveMaterializationReceipt] = Field(default_factory=list, max_length=16)
     rejections: list[ProactiveMaterializationRejection] = Field(default_factory=list, max_length=16)
+    deferrals: list[ProactiveMaterializationDeferral] = Field(default_factory=list, max_length=16)
     cold_start_sequence_terminal_receipts: list[ColdStartSequenceTerminalReceipt] = Field(
         default_factory=list, max_length=16
     )
@@ -270,6 +293,11 @@ class MaterializePromptsRequest(_StrictModel):
             raise ValueError('materialization rejection intent IDs must be unique')
         if set(intent_ids) & set(rejection_ids):
             raise ValueError('an intent cannot be both acknowledged and rejected')
+        deferral_ids = [deferral.intent_id for deferral in self.deferrals]
+        if len(deferral_ids) != len(set(deferral_ids)):
+            raise ValueError('materialization deferral intent IDs must be unique')
+        if set(intent_ids) & set(deferral_ids) or set(rejection_ids) & set(deferral_ids):
+            raise ValueError('an intent cannot have more than one materialization outcome')
         sequence_ids = [receipt.sequence_id for receipt in self.cold_start_sequence_terminal_receipts]
         if len(sequence_ids) != len(set(sequence_ids)):
             raise ValueError('cold-start terminal receipt sequence IDs must be unique')
@@ -278,6 +306,7 @@ class MaterializePromptsRequest(_StrictModel):
 
 class MaterializePromptsResponse(_StrictModel):
     intents: list[MaterializableProactiveIntent] = Field(default_factory=list)
+    receipt_outcomes: list[ProactiveMaterializationReceiptOutcome] = Field(default_factory=list)
 
     @field_validator('intents', mode='before')
     @classmethod
