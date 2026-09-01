@@ -28,4 +28,6 @@ test('DesktopApp keeps Home on the same row as the traffic-light spacer', () => 
   expect(desktopApp).toMatch(/navbar:\s*\{[^}]*alignItems:\s*'center'/);
   expect(desktopApp).toMatch(/navItem:\s*\{[^}]*alignItems:\s*'center'/);
   expect(desktopApp).toMatch(/navItem:\s*\{[^}]*justifyContent:\s*'center'/);
+  expect(desktopApp).toContain('desktopSearchPlaceholder');
+  expect(desktopApp).toMatch(/omnibar:\s*\{/);
 });
