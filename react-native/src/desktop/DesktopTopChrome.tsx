@@ -58,43 +58,47 @@ export function DesktopChrome({
   const pillX = useRef(new Animated.Value(0)).current;
   const pillW = useRef(new Animated.Value(0)).current;
   const pillOpacity = useRef(new Animated.Value(0)).current;
+  const placed = useRef(false);
+  const lastTarget = useRef({x: -1, width: -1});
   const activeNav = route === 'Settings' ? null : route;
   const activeFrame = activeNav === null ? undefined : frames[activeNav];
 
   useEffect(() => {
     if (activeFrame === undefined) {
-      if (reduceMotion) {
-        pillOpacity.setValue(0);
-        return;
-      }
-      const hide = Animated.timing(pillOpacity, {
-        duration: desktopMotion.navMs,
-        toValue: 0,
-        useNativeDriver: false,
-      });
-      hide.start();
-      return () => hide.stop();
+      pillOpacity.setValue(0);
+      return;
     }
-    const moves = [
+    const same =
+      lastTarget.current.x === activeFrame.x &&
+      lastTarget.current.width === activeFrame.width;
+    if (same) {
+      return;
+    }
+    lastTarget.current = {x: activeFrame.x, width: activeFrame.width};
+    if (!placed.current || reduceMotion) {
+      pillX.setValue(activeFrame.x);
+      pillW.setValue(activeFrame.width);
+      pillOpacity.setValue(1);
+      placed.current = true;
+      return;
+    }
+    Animated.parallel([
       Animated.timing(pillX, {
-        duration: reduceMotion ? 0 : desktopMotion.stepMs,
+        duration: desktopMotion.stepMs,
         toValue: activeFrame.x,
         useNativeDriver: false,
       }),
       Animated.timing(pillW, {
-        duration: reduceMotion ? 0 : desktopMotion.stepMs,
+        duration: desktopMotion.stepMs,
         toValue: activeFrame.width,
         useNativeDriver: false,
       }),
       Animated.timing(pillOpacity, {
-        duration: reduceMotion ? 0 : desktopMotion.navMs,
+        duration: desktopMotion.navMs,
         toValue: 1,
         useNativeDriver: false,
       }),
-    ];
-    const animation = Animated.parallel(moves);
-    animation.start();
-    return () => animation.stop();
+    ]).start();
   }, [activeFrame, pillOpacity, pillW, pillX, reduceMotion]);
 
   return (
@@ -218,18 +222,18 @@ const styles = StyleSheet.create({
   navPill: {
     backgroundColor: token.color.glassSelected,
     borderRadius: token.radius.chip,
-    bottom: 9,
+    bottom: 6,
     left: 0,
     position: 'absolute',
-    top: 9,
+    top: 6,
   },
   navItem: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 6,
-    height: 34,
+    gap: 7,
+    height: 40,
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 16,
     zIndex: 1,
   },
   navText: {

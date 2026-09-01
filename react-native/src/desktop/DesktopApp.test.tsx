@@ -495,5 +495,10 @@ test('chrome keeps a sliding nav pill, structured home cards, and a field omniba
   expect(home).toMatch(/section:\s*\{[^}]*borderRadius:\s*16/);
   expect(home).not.toMatch(/filterRow:\s*\{/);
   expect(settings).toContain('const PANE_ITEM_GAP = 12');
+  expect(settings).toMatch(/paneItem:\s*\{[^}]*alignItems:\s*'flex-start'/);
+  expect(settings).toMatch(/paneText:\s*\{[^}]*textAlign:\s*'left'/);
+  expect(settings).toMatch(/row:\s*\{[^}]*marginBottom:\s*14/);
+  expect(chrome).toMatch(/navItem:\s*\{[^}]*paddingHorizontal:\s*16/);
+  expect(chrome).toContain('placed.current');
   expect(allKitSource).not.toMatch(/composer:\s*\{/);
 });

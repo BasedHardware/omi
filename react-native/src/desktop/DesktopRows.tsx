@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
     fontFamily: token.font,
     fontSize: token.type.caption,
     fontWeight: '600',
-    marginTop: 14,
+    marginTop: 0,
   },
   emptyCopy: {
     color: token.color.inkMuted,

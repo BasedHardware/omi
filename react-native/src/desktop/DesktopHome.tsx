@@ -188,7 +188,9 @@ export function DesktopHome({
         {messages.length > 0 || chatBusy ? (
           <AskExchange chatBusy={chatBusy} messages={messages} />
         ) : null}
-        <View accessibilityLabel="Home tasks" style={styles.section}>
+        <View
+          accessibilityLabel="Home tasks"
+          style={[styles.section, styles.sectionSpaced]}>
           <SectionTitle>Today</SectionTitle>
           {visibleTasks.length > 0 ? (
             visibleTasks.map(item => (
@@ -200,7 +202,9 @@ export function DesktopHome({
             <EmptyCopy>No tasks yet</EmptyCopy>
           )}
         </View>
-        <View accessibilityLabel="Home currents" style={styles.section}>
+        <View
+          accessibilityLabel="Home currents"
+          style={[styles.section, styles.sectionSpaced]}>
           <SectionTitle>Conversations</SectionTitle>
           {conversations.length > 0 ? (
             conversations.map(item => (
@@ -260,14 +264,14 @@ const styles = StyleSheet.create({
   },
   pressed: {opacity: 0.78},
   list: {flex: 1},
+  sectionSpaced: {marginBottom: 14},
   section: {
     backgroundColor: token.color.glassQuiet,
     borderRadius: 16,
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    gap: 8,
+    padding: 16,
   },
-  listContent: {gap: 14, paddingBottom: 32},
+  listContent: {paddingBottom: 32},
   exchange: {gap: 4, paddingBottom: 12},
   exchangeRow: {gap: 3, paddingVertical: 6},
   rowMeta: {
