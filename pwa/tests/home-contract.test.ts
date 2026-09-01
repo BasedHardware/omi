@@ -69,7 +69,7 @@ test("browser root gives the canonical RN surface the full viewport", async () =
 test("install metadata presents Omi as a finished product", async () => {
   const html = await readFile(resolve(root, "index.html"), "utf8");
   const manifest = JSON.parse(
-    await readFile(resolve(root, "public/manifest.webmanifest"), "utf8"),
+    await readFile(resolve(root, "public/manifest.webmanifest"), "utf8")
   );
 
   expect(html).toContain("<title>Omi</title>");
@@ -111,14 +111,14 @@ test("service worker installs the built application shell for an offline first r
     if (offline) throw new Error("offline");
     return new Response(
       '<link rel="stylesheet" href="/assets/index-abc.css"><script src="/assets/index-def.js"></script>',
-      { status: 200 },
+      { status: 200 }
     );
   };
 
   new Function("self", "caches", "fetch", source)(
     worker,
     cacheStorage,
-    fetchShell,
+    fetchShell
   );
   let installation: Promise<unknown> | undefined;
   listeners.get("install")?.({
@@ -154,9 +154,9 @@ test("service worker installs the built application shell for an offline first r
     return response!;
   };
   await expect(
-    fetchOffline("same-origin", "/assets/missing.js"),
+    fetchOffline("same-origin", "/assets/missing.js")
   ).rejects.toThrow("PWA resource is unavailable offline");
   await expect(
-    fetchOffline("navigate", "/memories").then((value) => value?.text()),
+    fetchOffline("navigate", "/memories").then((value) => value?.text())
   ).resolves.toBe("cached shell");
 });

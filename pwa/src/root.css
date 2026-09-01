@@ -8,15 +8,8 @@
   --omi-web-text-muted: #b0b0b0;
   --omi-web-line: rgba(255, 255, 255, 0.08);
   color-scheme: dark;
-  font-family:
-    "DM Sans",
-    Avenir Next,
-    Avenir,
-    ui-rounded,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: "DM Sans", Avenir Next, Avenir, ui-rounded, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
