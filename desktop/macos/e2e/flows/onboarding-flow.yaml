@@ -2,35 +2,24 @@ version: 2
 name: onboarding-flow
 tier: manual
 description: >
-  Onboarding orchestration after BYOK removal. Reset into onboarding, walk Goal → Tasks,
-  and confirm there is no Bring Your Own Keys step and the 2nd-brain label has no background.
+  Scenario onboarding: six beats (hello, see, card, talk, write, ready). Each permission is asked right
+  before the payoff that needs it; the app opens two bundled pages in the default browser, fires a real
+  notch card, runs the real push-to-talk demo, and writes a memory + task from the note the user sends.
 app: non-prod
 covers:
-  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/ThreeDoorsDemoPage.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingNotificationStepView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingStepScaffold.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingPromptSuggestions.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingExportsStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingDataSourcesStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingFileScanStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingFloatingBarShortcutStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingGoalStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingHowDidYouHearStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingLanguageStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingNotificationStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingPermissionStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingTasksStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingTrustStepView.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingWelcomeStepView.swift
-  - desktop/macos/Desktop/Sources/PostOnboardingPromptViews.swift
-  - desktop/macos/Desktop/Sources/FileIndexing/FileIndexingView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingAnswerWriteGate.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Scenario.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingIntroGate.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingPermissionRuntime.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBPostOnboardingGuidance.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/OnboardingOpenerComposer.swift
+  - desktop/macos/Desktop/Sources/Onboarding/Scenario/OnboardingScenarioPages.swift
+  - desktop/macos/Desktop/Sources/Onboarding/Scenario/OnboardingScenarioSeams.swift
+  - desktop/macos/Desktop/Sources/Onboarding/Scenario/OnboardingScenarioWrites.swift
   - desktop/macos/Desktop/Sources/MainWindow/OnboardingOpenerView.swift
   - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicDirector.swift
   - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicMark.swift
@@ -38,14 +27,10 @@ covers:
   - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicWindowArt.swift
   - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicWindows.swift
   - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiOnboardingCinematic.swift
-  # Decides which display the intro opens on — the same answer the shell lands with.
-  - desktop/macos/Desktop/Sources/MainWindow/ActiveDisplay.swift
   - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiOnboardingSound.swift
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingGlassChrome.swift
-  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingIntroGate.swift
-  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingPermissionRuntime.swift
-  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBPostOnboardingGuidance.swift
-  - desktop/macos/Desktop/Sources/FileIndexing/OnboardingLoadingAnimation.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ActiveDisplay.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FirstRunNotchCards.swift
+  - desktop/macos/Desktop/Sources/AnalyticsManager.swift
 preconditions:
   - automation_bridge_ready
 
@@ -55,19 +40,45 @@ steps:
     do: "Run bridge action reset_onboarding, wait for the app to restart, then reconnect the automation bridge."
     expect:
       text_visible:
-        - "What's your name"
+        - "What should I call you"
 
   - id: S2
-    name: Advance to Goal
-    do: "Skip or complete earlier steps until the Goal screen. Confirm progress reaches Goal without a Bring Your Own Keys / API keys page."
-
-  - id: S3
-    name: Goal continues to Tasks
-    do: "Continue or Skip on Goal. The next screen must be Tasks (not Bring your own keys)."
+    name: Hello
+    do: "Type a name and continue. The next Omi line asks for Screen Recording and names the payoff (a page opens in your browser)."
     expect:
       text_visible:
-        - "Take me to Omi"
+        - "Screen Recording"
+
+  - id: S3
+    name: See — the page opens
+    do: "Allow Screen Recording (or Skip for now). The default browser opens 'Omi Welcome · Order confirmed · Norrland Goods' with real dates; within ~20 s the flow advances to the card beat on its own (timed fallback if the title cannot be read)."
+    expect:
+      text_visible:
+        - "Look up. The card is at the top of your screen."
 
   - id: S4
-    name: 2nd brain label has no background
-    do: "On any split onboarding step with the graph pane, confirm 'This is your 2nd brain' has no pill fill and no bottom gradient behind the label."
+    name: Card — Remind me
+    do: "A persistent card is at the notch ('Aurora desk lamp' / return window). Press Remind me. A '✓ Reminder set' card follows and a TASK row appears in the onboarding panel. Then the Notifications ask appears."
+    expect:
+      text_visible:
+        - "Notifications"
+
+  - id: S5
+    name: Talk — microphone, chord, push-to-talk
+    do: "Answer the Notifications ask. Allow Microphone, pick a talk chord, then hold it and ask 'when does this arrive?'. Omi answers at the notch, grounded on the order page; Continue appears only after the answer."
+    expect:
+      text_visible:
+        - "Continue"
+
+  - id: S6
+    name: Write — the note to Sam
+    do: "The compose page opens in the browser. Press Send (edit the text first if you like). The panel shows MEMORY and TASK rows from the note, then 'Looks right' / 'Fix something'. If the browser never comes back, 'Open the note again' and 'Skip for now' are offered after the timeout."
+    expect:
+      text_visible:
+        - "Looks right"
+
+  - id: S7
+    name: Ready — capture choice ends onboarding
+    do: "Choose Only Meetings or Always On. Onboarding completes, Home appears, and the first-run guide chip appears at the notch ('Open something you're working on')."
+    expect:
+      interactive_count: { min: 1 }

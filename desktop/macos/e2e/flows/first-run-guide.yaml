@@ -1,0 +1,53 @@
+version: 2
+name: first-run-guide
+tier: manual
+description: >
+  Guided first run after scenario onboarding: a persistent notch chip walks the user through one real task
+  (open your work, set a context reminder by voice, drift, get pulled back, get the reminder on return),
+  then writes the session up as a conversation. Needs a real browser session and a real PTT turn.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRun/FirstRunCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRun/FirstRunContextObserver.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRun/FirstRunCardActions.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRun/FirstRunSummaryComposer.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRun/ContextReminderStore.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRun/DesktopUsageDailyReporter.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+DesktopUsage.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FirstRunNotchCards.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  - desktop/macos/Desktop/Sources/AccountCutover/DesktopHomeSignedInStartup.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/AssistantCoordinator.swift
+preconditions:
+  - automation_bridge_ready
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Chip 1 — open your work
+    do: "Right after onboarding completes (or with UserDefaults omiFirstRunPending=true on launch), the notch shows 'Open something you're working on'. Open a document, repo, or design and stay on it ~8 s. The chip becomes '✓ <title>. I'll know this place when you come back.'"
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S2
+    name: Chip 2 — set a reminder by voice
+    do: "Hold the talk chord and say 'remind me to ping Priya about the pricing table'. The chip becomes '✓ Got it. Next time you're back in <title>, I'll bring that up.' A task 'In <title>: …' exists in Tasks."
+
+  - id: S3
+    name: Chip 3 — drift, focus card
+    do: "Open reddit.com (or any listed distraction site) and stay ≥45 s. A Focus card appears (real Suggestion assistant, or the scripted fallback after 60 s). Press 'Back to it'."
+    expect:
+      text_visible:
+        - "Back to it"
+
+  - id: S4
+    name: Return — reminder card
+    do: "Return to the document from S1. The reminder card appears: 'Welcome back. You asked me to remind you: …' with Done / Remind me tomorrow. Press Done; the task completes and a '✓ That's the loop' card follows."
+
+  - id: S5
+    name: Summary
+    do: "The chip 'Here's what we did' appears once the conversation exists. Press Open; a conversation titled from the session (source onboarding) opens with action items and what Omi learned."
+    expect:
+      interactive_count: { min: 1 }

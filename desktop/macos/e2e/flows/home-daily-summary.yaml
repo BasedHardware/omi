@@ -1,0 +1,27 @@
+version: 2
+name: home-daily-summary
+tier: manual
+description: "Home hub daily summary card with the stats row (watching, moments, conversations, listening, memories, tasks)."
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeDailySummarySection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeDailySummaryStore.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+DailySummaries.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+preconditions:
+  - automation_bridge_ready
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Card appears when a summary exists
+    do: "On an account with at least one daily summary (generate one from Settings → Notifications → Daily summary → send test if needed), navigate to Home. Under the knows list a card 'DAILY SUMMARY · <date>' shows the headline and the stats chips; only non-zero stats render."
+    expect:
+      text_visible:
+        - "DAILY SUMMARY"
+
+  - id: S2
+    name: More / Less
+    do: "Press More. The overview, up to five action items, and up to three highlights expand in place; Less collapses them. No navigation occurs."
+    expect:
+      interactive_count: { min: 1 }

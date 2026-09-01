@@ -4,8 +4,8 @@ tier: manual
 description: "Manual only: reset_onboarding restarts the app. State corruption fixed in Wave 7 — run twice locally before promoting to T2."
 app: non-prod
 covers:
-  - desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+SystemActions.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
@@ -17,12 +17,12 @@ preconditions:
 steps:
   - id: S1
     name: Document reset path (manual — app restart)
-    do: "Manual probe only: `./scripts/omi-ctl action reset_onboarding` (same path as tray Reset Onboarding). Wave 7 fixed @AppStorage writeback ordering and uses AppState.current. App restarts into onboarding step 0. Keep manual until green twice locally."
+    do: "Manual probe only: `./scripts/omi-ctl action reset_onboarding` (same path as tray Reset Onboarding). App restarts into the hello beat. Keep manual until green twice locally."
     expect:
       interactive_count: { min: 0 }
 
   - id: S2
     name: Expected post-reset surface
-    do: "After restart, verify onboarding welcome / first step is visible. Promote to T2 only after two consecutive local greens."
+    do: "After restart, verify the hello beat ('What should I call you?') is visible and the first-run state was cleared with the onboarding keys. Promote to T2 only after two consecutive local greens."
     expect:
       interactive_count: { min: 1 }
