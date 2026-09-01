@@ -56,6 +56,37 @@ export function chatErrorCopy(error: unknown): string {
   return 'This request cannot be completed.';
 }
 
+function nativeErrorCode(value: unknown): string | null {
+  if (value === null || typeof value !== 'object') {
+    return null;
+  }
+  const code = (value as {code?: unknown}).code;
+  return typeof code === 'string' ? code : null;
+}
+
+export function chatHistoryErrorCopy(error: unknown): string {
+  if (error instanceof ChatBackendError) {
+    return chatErrorCopy(error);
+  }
+  const code = nativeErrorCode(error);
+  if (
+    code === 'OMI_HTTP_UNCONFIGURED' ||
+    code === 'OMI_HTTP_UNAUTHORIZED' ||
+    code === 'unauthorized' ||
+    (error instanceof Error &&
+      error.message === 'Native HTTP configuration is unavailable')
+  ) {
+    return 'Sign in again to continue.';
+  }
+  if (
+    code === 'OMI_HTTP_TRANSPORT' ||
+    (error instanceof Error && error.message === 'Native HTTP transport failed')
+  ) {
+    return 'Omi is temporarily unavailable. Try again.';
+  }
+  return 'Chat history could not be loaded. Check your connection and try again.';
+}
+
 let messageSequence = 0;
 
 export function createLocalChatMessage(
