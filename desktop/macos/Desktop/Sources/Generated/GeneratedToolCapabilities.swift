@@ -88,7 +88,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Search the user's on-screen history by meaning.",
       bullets: [
-      "Use for what the user saw, read, or worked on. Speak a short summary of the result."
+      "Use for what the user saw, read, or worked on, including text they read on a page earlier (a riddle, a message, a document). Speak a short summary of the result.",
+      "Prefer this over conversation tools for anything that was displayed rather than spoken."
     ]
     ),
     Capability(
