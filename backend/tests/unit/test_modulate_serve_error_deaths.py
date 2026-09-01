@@ -332,7 +332,9 @@ async def test_terminate_with_a_serve_error_opens_the_circuit_and_reports_the_re
     with patch.object(live_failure, 'record_live_stt_failure', lambda **labels: recorded.append(labels)):
         calls, opener = _circuit_recorder()
         with patch('utils.stt.streaming.open_provider_selection_circuit', side_effect=opener):
-            await terminate_live_stt_session(websocket, session, failure=failure, reason=MODULATE_DEATH_SERVE_ERROR, platform='ios')
+            await terminate_live_stt_session(
+                websocket, session, failure=failure, reason=MODULATE_DEATH_SERVE_ERROR, platform='ios'
+            )
 
     assert session.stt_terminal_failure is True
     assert session.close_code == LIVE_STT_FAILURE_CLOSE_CODE

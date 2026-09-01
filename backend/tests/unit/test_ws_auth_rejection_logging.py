@@ -53,9 +53,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 # The production error samples these tests replay, verbatim shapes.
 EXPIRED_MESSAGE = "Token expired, 1788101015 < 1788114388"
-RETIRED_KEY_MESSAGE = (
-    "Certificate for key id 6ac9047f6712fcd5cf67a3307941d9fa42283955 not found."
-)
+RETIRED_KEY_MESSAGE = "Certificate for key id 6ac9047f6712fcd5cf67a3307941d9fa42283955 not found."
 
 
 # Firebase auth exception classes. The hierarchy mirrors the real firebase_admin
@@ -156,7 +154,8 @@ class _SeverityAssertions(unittest.TestCase):
     def _assert_client_rejection_warns(self, captured, expected_code):
         errors = [r for r in captured.records if r.levelname == "ERROR"]
         self.assertEqual(
-            len(errors), 0,
+            len(errors),
+            0,
             f"client-caused rejection must not log at ERROR, got: {[r.getMessage() for r in errors]}",
         )
         self.assertEqual(len(captured.records), 1, f"expected exactly one log record, got {len(captured.records)}")
@@ -177,8 +176,9 @@ class TestRejectionSeverityAtTheBoundary(_SeverityAssertions):
 
     def test_expired_token_rejection_logs_warning_not_error(self):
         """The ×47/30m 'Token expired' signature is a client fault -> WARNING."""
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=InvalidIdTokenError(EXPIRED_MESSAGE)):
+        with patch.object(
+            sys.modules["utils.other.endpoints"], "verify_token", side_effect=InvalidIdTokenError(EXPIRED_MESSAGE)
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(Exception):
                     _verify_ws_auth("Bearer expired-token")
@@ -188,8 +188,9 @@ class TestRejectionSeverityAtTheBoundary(_SeverityAssertions):
     def test_retired_signing_key_rejection_logs_warning_not_error(self):
         """The ×34/30m 'Certificate for key id … not found' signature is a client
         presenting a token signed by a key Google retired -> WARNING."""
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=InvalidIdTokenError(RETIRED_KEY_MESSAGE)):
+        with patch.object(
+            sys.modules["utils.other.endpoints"], "verify_token", side_effect=InvalidIdTokenError(RETIRED_KEY_MESSAGE)
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(Exception):
                     _verify_ws_auth("Bearer retired-key-token")
@@ -198,8 +199,9 @@ class TestRejectionSeverityAtTheBoundary(_SeverityAssertions):
 
     def test_typed_expired_token_error_logs_warning(self):
         """ExpiredIdTokenError (typed, not message-derived) is client-caused -> WARNING."""
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=ExpiredIdTokenError(EXPIRED_MESSAGE)):
+        with patch.object(
+            sys.modules["utils.other.endpoints"], "verify_token", side_effect=ExpiredIdTokenError(EXPIRED_MESSAGE)
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(Exception):
                     _verify_ws_auth("Bearer typed-expired-token")
@@ -207,8 +209,9 @@ class TestRejectionSeverityAtTheBoundary(_SeverityAssertions):
 
     def test_revoked_token_rejection_logs_warning(self):
         """Revoked token: the client must re-login (4004) — still a client fault."""
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=RevokedIdTokenError("Token revoked")):
+        with patch.object(
+            sys.modules["utils.other.endpoints"], "verify_token", side_effect=RevokedIdTokenError("Token revoked")
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(Exception):
                     _verify_ws_auth("Bearer revoked-token")
@@ -216,8 +219,11 @@ class TestRejectionSeverityAtTheBoundary(_SeverityAssertions):
 
     def test_generic_invalid_token_rejection_logs_warning(self):
         """Any other InvalidIdTokenError (audience, malformed…) is client-caused."""
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=InvalidIdTokenError("Firebase ID token has incorrect \"aud\" claim")):
+        with patch.object(
+            sys.modules["utils.other.endpoints"],
+            "verify_token",
+            side_effect=InvalidIdTokenError("Firebase ID token has incorrect \"aud\" claim"),
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(Exception):
                     _verify_ws_auth("Bearer wrong-audience-token")
@@ -226,9 +232,11 @@ class TestRejectionSeverityAtTheBoundary(_SeverityAssertions):
     def test_certificate_fetch_failure_stays_error(self):
         """CertificateFetchError = the SERVER could not fetch Google's certs to
         evaluate the token — a genuine server fault, must stay at ERROR."""
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=CertificateFetchError(
-                              "Could not fetch certificates", RuntimeError("network unavailable"))):
+        with patch.object(
+            sys.modules["utils.other.endpoints"],
+            "verify_token",
+            side_effect=CertificateFetchError("Could not fetch certificates", RuntimeError("network unavailable")),
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(Exception):
                     _verify_ws_auth("Bearer any-token")
@@ -238,8 +246,11 @@ class TestRejectionSeverityAtTheBoundary(_SeverityAssertions):
         """An InvalidIdTokenError whose *message* mentions a certificate (retired
         key id — client-caused) must be classified differently from a typed
         CertificateFetchError (server-caused), even though both close with 4001."""
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=InvalidIdTokenError("Could not verify token: certificate problems")):
+        with patch.object(
+            sys.modules["utils.other.endpoints"],
+            "verify_token",
+            side_effect=InvalidIdTokenError("Could not verify token: certificate problems"),
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(Exception):
                     _verify_ws_auth("Bearer message-cert-token")
@@ -262,20 +273,20 @@ class TestSeverityThroughListenDep(_SeverityAssertions):
         self.client = TestClient(self.app)
 
     def test_expired_token_close_4001_and_warning(self):
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=InvalidIdTokenError(EXPIRED_MESSAGE)):
+        with patch.object(
+            sys.modules["utils.other.endpoints"], "verify_token", side_effect=InvalidIdTokenError(EXPIRED_MESSAGE)
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(WebSocketDisconnect) as ctx:
-                    with self.client.websocket_connect(
-                        "/ws-listen", headers={"Authorization": "Bearer expired_token"}
-                    ):
+                    with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer expired_token"}):
                         self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 4001, "client-visible close code must stay 4001 (refresh token)")
         self._assert_client_rejection_warns(captured, expected_code=4001)
 
     def test_retired_key_close_4001_and_warning(self):
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=InvalidIdTokenError(RETIRED_KEY_MESSAGE)):
+        with patch.object(
+            sys.modules["utils.other.endpoints"], "verify_token", side_effect=InvalidIdTokenError(RETIRED_KEY_MESSAGE)
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(WebSocketDisconnect) as ctx:
                     with self.client.websocket_connect(
@@ -286,21 +297,22 @@ class TestSeverityThroughListenDep(_SeverityAssertions):
         self._assert_client_rejection_warns(captured, expected_code=4001)
 
     def test_revoked_token_close_4004_and_warning(self):
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=RevokedIdTokenError("Token revoked")):
+        with patch.object(
+            sys.modules["utils.other.endpoints"], "verify_token", side_effect=RevokedIdTokenError("Token revoked")
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(WebSocketDisconnect) as ctx:
-                    with self.client.websocket_connect(
-                        "/ws-listen", headers={"Authorization": "Bearer revoked_token"}
-                    ):
+                    with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer revoked_token"}):
                         self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 4004, "client-visible close code must stay 4004 (re-login)")
         self._assert_client_rejection_warns(captured, expected_code=4004)
 
     def test_certificate_fetch_failure_close_4001_and_error(self):
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=CertificateFetchError(
-                              "Could not fetch certificates", RuntimeError("network unavailable"))):
+        with patch.object(
+            sys.modules["utils.other.endpoints"],
+            "verify_token",
+            side_effect=CertificateFetchError("Could not fetch certificates", RuntimeError("network unavailable")),
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(WebSocketDisconnect) as ctx:
                     with self.client.websocket_connect(
@@ -313,13 +325,12 @@ class TestSeverityThroughListenDep(_SeverityAssertions):
     def test_unexpected_verify_error_stays_error_close_1008(self):
         """The generic handler (unexpected exception) is a server fault: untouched
         by the reclassification — still ERROR, still close 1008."""
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=RuntimeError("unexpected error")):
+        with patch.object(
+            sys.modules["utils.other.endpoints"], "verify_token", side_effect=RuntimeError("unexpected error")
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(WebSocketDisconnect) as ctx:
-                    with self.client.websocket_connect(
-                        "/ws-listen", headers={"Authorization": "Bearer token"}
-                    ):
+                    with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer token"}):
                         self.fail("Expected connection to fail")
         self.assertEqual(ctx.exception.code, 1008)
         errors = [r for r in captured.records if r.levelname == "ERROR"]
@@ -341,8 +352,9 @@ class TestSeverityThroughRateLimitedDep(_SeverityAssertions):
         self.client = TestClient(self.app)
 
     def test_expired_token_close_4001_and_warning(self):
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=InvalidIdTokenError(EXPIRED_MESSAGE)):
+        with patch.object(
+            sys.modules["utils.other.endpoints"], "verify_token", side_effect=InvalidIdTokenError(EXPIRED_MESSAGE)
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(WebSocketDisconnect) as ctx:
                     with self.client.websocket_connect(
@@ -353,9 +365,11 @@ class TestSeverityThroughRateLimitedDep(_SeverityAssertions):
         self._assert_client_rejection_warns(captured, expected_code=4001)
 
     def test_certificate_fetch_failure_stays_error(self):
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=CertificateFetchError(
-                              "Could not fetch certificates", RuntimeError("network unavailable"))):
+        with patch.object(
+            sys.modules["utils.other.endpoints"],
+            "verify_token",
+            side_effect=CertificateFetchError("Could not fetch certificates", RuntimeError("network unavailable")),
+        ):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 with self.assertRaises(WebSocketDisconnect) as ctx:
                     with self.client.websocket_connect(
@@ -376,19 +390,20 @@ class TestErrorFeedPollutionContract(_SeverityAssertions):
             InvalidIdTokenError(RETIRED_KEY_MESSAGE),
             RevokedIdTokenError("Token revoked"),
         ]
-        with patch.object(sys.modules["utils.other.endpoints"], "verify_token",
-                          side_effect=rejections):
+        with patch.object(sys.modules["utils.other.endpoints"], "verify_token", side_effect=rejections):
             with self.assertLogs(ENDPOINTS_LOGGER, level="WARNING") as captured:
                 for _ in rejections:
                     with self.assertRaises(Exception):
                         _verify_ws_auth("Bearer stale-token")
         self.assertEqual(
-            len(captured.records), len(rejections),
+            len(captured.records),
+            len(rejections),
             f"each rejection logs exactly once, got {len(captured.records)}",
         )
         errors = [r for r in captured.records if r.levelname == "ERROR"]
         self.assertEqual(
-            errors, [],
+            errors,
+            [],
             f"the stale-client population must not pollute the ERROR feed: {[r.getMessage() for r in errors]}",
         )
 
