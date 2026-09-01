@@ -91,50 +91,133 @@ function renderedText(renderer: ReactTestRenderer.ReactTestRenderer): string {
     .join(' ');
 }
 
-test('renders the shipping search-first desktop hierarchy', () => {
+function renderDesktop(
+  overrides: Partial<React.ComponentProps<typeof DesktopApp>> = {},
+) {
   let renderer: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     renderer = ReactTestRenderer.create(
       <DesktopApp
-        onOpenChat={jest.fn()}
+        chatBusy={false}
+        chatError={null}
+        draft=""
+        messages={[]}
+        onDraftChange={jest.fn()}
         onRefresh={jest.fn()}
+        onSend={jest.fn()}
+        onSignIn={jest.fn()}
+        onSignOut={jest.fn()}
         outcomes={outcomes}
         reads={outcomes.conversations.value.items}
         readsPhase="ready"
+        session="ready"
+        signingIn={false}
+        {...overrides}
       />,
     );
   });
-  const tree = renderedText(renderer!);
+  return renderer!;
+}
+
+test('renders the shipping search-first desktop hierarchy', () => {
+  const renderer = renderDesktop();
+  const tree = renderedText(renderer);
   expect(
-    renderer!.root.findAllByType(TextInput).map(node => node.props.placeholder),
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
   ).toContain("Search what you've seen and heard…");
-  expect(tree).toContain('Brain Map');
-  expect(tree).toContain('Product review');
-  expect(tree).toContain('Library');
-  expect(tree).toContain('Rewind');
+  expect(tree).toContain('Chat');
+  expect(tree).toContain('Memories');
+  expect(tree).toContain('Tasks');
+  expect(tree).toContain('Apps');
+  expect(tree).toContain("I'm ready.");
+  expect(
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
+  ).toContain('Ask a follow-up…');
+  expect(tree).not.toContain('Library');
   expect(tree).not.toContain('Saved data unavailable');
   expect(tree).not.toContain('Omi disconnected');
   expect(tree).not.toContain('Devices');
+  expect(tree).not.toContain('Your day is clear');
 });
 
-test('keeps an unavailable read as an inline timeline state', () => {
-  let renderer: ReactTestRenderer.ReactTestRenderer;
-  act(() => {
-    renderer = ReactTestRenderer.create(
-      <DesktopApp
-        onOpenChat={jest.fn()}
-        onRefresh={jest.fn()}
-        outcomes={null}
-        reads={[]}
-        readsPhase="unavailable"
-      />,
-    );
+test('keeps signed-out users in the real desktop shell', () => {
+  const onSignIn = jest.fn();
+  const renderer = renderDesktop({
+    onSignIn,
+    outcomes: null,
+    reads: [],
+    readsPhase: 'unavailable',
+    session: 'signed-out',
   });
-  const tree = renderedText(renderer!);
-  expect(tree).toContain('Offline · showing what is available on this Mac');
+  const tree = renderedText(renderer);
   expect(
-    renderer!.root.findAllByType(TextInput).map(node => node.props.placeholder),
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
+  ).toContain("Search what you've seen and heard…");
+  expect(tree).toContain('Chat');
+  expect(tree).toContain('Sign in');
+  expect(tree).toContain('Sign in to load conversations and memories.');
+  expect(tree).not.toContain('Saved data unavailable');
+  expect(tree).not.toContain('Sign in to Omi cloud');
+  expect(tree).not.toContain('Welcome to Omi');
+  expect(tree).not.toContain('Omi disconnected');
+  expect(tree).not.toContain('Devices');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Sign in')
+      .props.onPress();
+  });
+  expect(onSignIn).toHaveBeenCalled();
+});
+
+test('holds the desktop shell while the session probe is running', () => {
+  const renderer = renderDesktop({
+    outcomes: null,
+    reads: [],
+    readsPhase: 'initial-loading',
+    session: 'probing',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Chat');
+  expect(tree).toContain('Restoring your session…');
+  expect(
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
+  ).toContain("Search what you've seen and heard…");
+  expect(tree).not.toContain('Saved data unavailable');
+  expect(tree).not.toContain('Welcome to Omi');
+});
+
+test('keeps an unavailable read as an inline shell state', () => {
+  const renderer = renderDesktop({
+    outcomes: null,
+    reads: [],
+    readsPhase: 'unavailable',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain("Some of your history isn't loaded yet.");
+  expect(tree).toContain('Try again');
+  expect(
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
   ).toContain("Search what you've seen and heard…");
   expect(tree).not.toContain('Saved data unavailable');
   expect(tree).not.toContain('Sign in to Omi cloud');
+  expect(tree).not.toContain('Offline · showing what is available on this Mac');
+});
+
+test('searches real projections instead of a fake timeline', () => {
+  const renderer = renderDesktop({
+    draft: '',
+  });
+  const search = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    );
+  act(() => {
+    search!.props.onChangeText('product');
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Product review');
+  expect(tree).not.toContain('0 screen moments');
+  expect(tree).not.toContain('💬');
+  expect(tree).not.toContain('🧠');
 });
