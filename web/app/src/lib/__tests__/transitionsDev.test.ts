@@ -66,6 +66,14 @@ describe('transitionsDev helpers', () => {
     input.remove();
   });
 
+  it('cancels an in-flight error shake', () => {
+    const input = document.createElement('div');
+    const stop = replayErrorShake(input);
+    expect(input.classList.contains('is-shaking')).toBe(true);
+    stop();
+    expect(input.classList.contains('is-shaking')).toBe(false);
+  });
+
   it('skips the error shake when reduced motion is requested', () => {
     vi.stubGlobal(
       'matchMedia',

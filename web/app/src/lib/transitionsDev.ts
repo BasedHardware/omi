@@ -10,12 +10,16 @@ export function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-export function replayErrorShake(input: HTMLElement): void {
-  if (prefersReducedMotion()) return;
+export function replayErrorShake(input: HTMLElement): () => void {
+  if (prefersReducedMotion()) return () => {};
   input.classList.remove('is-shaking');
   void input.offsetWidth;
   input.classList.add('is-shaking');
   const shakeMs =
     readDurationToken('--shake-dur-a', 80) * 2 + readDurationToken('--shake-dur-b', 60) * 2;
-  window.setTimeout(() => input.classList.remove('is-shaking'), shakeMs + 20);
+  const timer = window.setTimeout(() => input.classList.remove('is-shaking'), shakeMs + 20);
+  return () => {
+    window.clearTimeout(timer);
+    input.classList.remove('is-shaking');
+  };
 }

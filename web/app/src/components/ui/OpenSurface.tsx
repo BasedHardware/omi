@@ -42,7 +42,8 @@ export function OpenSurface({
   useLayoutEffect(() => {
     if (!mounted) return;
     const el = ref.current;
-    const host = el?.parentElement?.closest('[data-state]');
+    const parent = el?.parentElement;
+    const host = parent?.hasAttribute('data-state') ? parent : null;
 
     if (host) {
       const sync = () => {

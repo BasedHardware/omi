@@ -50,4 +50,18 @@ describe('OpenSurface', () => {
     expect(screen.queryByText('Menu')).toBeNull();
     expect(onExited).toHaveBeenCalledTimes(1);
   });
+
+  it('does not treat a distant data-state ancestor as the close host', () => {
+    render(
+      <div data-state="closed">
+        <div>
+          <OpenSurface open className="t-dropdown">
+            Menu
+          </OpenSurface>
+        </div>
+      </div>,
+    );
+    expect(screen.getByText('Menu')).toHaveClass('is-open');
+    expect(screen.getByText('Menu')).not.toHaveClass('is-closing');
+  });
 });

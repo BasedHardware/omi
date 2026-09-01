@@ -15,7 +15,11 @@ import { HeaderRecordingIndicator } from '@/components/recording';
 import { getChatApps } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MemoriesPrefetcher } from '@/components/memories/MemoriesPrefetcher';
-import { ChatBubble } from '@/components/chat/ChatBubble';
+
+const ChatBubble = dynamic(
+  () => import('@/components/chat/ChatBubble').then((mod) => ({ default: mod.ChatBubble })),
+  { ssr: false },
+);
 
 // Dynamic imports for panels - not visible on initial load
 const ChatPanel = dynamic(

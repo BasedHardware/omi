@@ -14,6 +14,7 @@ export function PageSlide({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLElement>(null);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -28,7 +29,7 @@ export function PageSlide({
       return;
     }
 
-    const page = el.querySelector('.t-page');
+    const page = pageRef.current;
     const settle = () => el.setAttribute('data-settled', '');
     page?.addEventListener('transitionend', settle);
     const timer = window.setTimeout(settle, readDurationToken('--page-slide-dur', 250) + 80);
@@ -40,7 +41,7 @@ export function PageSlide({
 
   return (
     <div ref={ref} className={cn('t-page-slide h-full', className)} data-page="1">
-      <section className="t-page" data-page-id="2">
+      <section ref={pageRef} className="t-page" data-page-id="2">
         {children}
       </section>
     </div>

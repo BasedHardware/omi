@@ -400,3 +400,9 @@
 @media (prefers-reduced-motion: reduce) {
   .t-input { animation: none !important; transform: none !important; }
 }
+
+.t-input:not(.is-shaking),
+.t-text-swap:not(.is-exit):not(.is-enter-start),
+.t-badge:not([data-open="true"]) {
+  will-change: auto;
+}

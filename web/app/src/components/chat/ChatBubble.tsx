@@ -54,7 +54,23 @@ export function ChatBubble() {
 
   if (reduceMotion) {
     return (
-      <div className="fixed bottom-20 right-6 z-50 lg:bottom-6">
+      <div className="fixed bottom-20 right-6 z-50 flex flex-col items-center gap-3 lg:bottom-6">
+        <button
+          type="button"
+          onClick={toggleNotificationCenter}
+          className={cn(
+            'relative flex h-14 w-14 items-center justify-center rounded-full',
+            'bg-text-primary text-bg-primary shadow-lg shadow-black/40 hover:bg-text-primary/80',
+          )}
+          aria-label="Notifications"
+        >
+          <Bell className="h-6 w-6" />
+          <span className="t-badge" data-open={unreadCount > 0 ? 'true' : 'false'}>
+            <span className="t-badge-dot flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          </span>
+        </button>
         <button
           type="button"
           onClick={toggleChat}
@@ -83,11 +99,11 @@ export function ChatBubble() {
     >
       <Liquid
         className="h-full w-full"
-        blur={6}
-        contrast={18}
+        blur={fan ? 6 : 0}
+        contrast={fan ? 18 : 1}
         fill="#ffffff"
         shadow="0 10px 15px -3px rgba(0,0,0,0.4)"
-        filterPadding={80}
+        filterPadding={fan ? 80 : 0}
       >
         <Liquid.Item x={0} y={fan ? -72 : 0} transition="bouncy">
           <button

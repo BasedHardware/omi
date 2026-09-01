@@ -70,7 +70,7 @@ export function LoginClient() {
 
   useEffect(() => {
     if (!statusMessage || !authActionsRef.current) return;
-    replayErrorShake(authActionsRef.current);
+    return replayErrorShake(authActionsRef.current);
   }, [statusMessage]);
 
   // Track page view

@@ -96,6 +96,7 @@ describe('ChatBubble', () => {
     expect(screen.queryByTestId('liquid')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Open chat' }));
     expect(state.toggleChat).toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: 'Notifications' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Notifications' }));
+    expect(state.toggleNotificationCenter).toHaveBeenCalled();
   });
 });
