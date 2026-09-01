@@ -37,4 +37,20 @@ describe("manifest-owned tool result projection", () => {
     }
   });
 
+  it("ranks purpose matches first only when the flag-controlled input is enabled", () => {
+    const raw = JSON.stringify({ sections: [{
+      name: "conversations",
+      total: 2,
+      items: ["routine planning", "Met Ada Lovelace at the compiler meetup"],
+    }] });
+    const result = projectToolResultPayload({
+      toolName: "get_conversations",
+      result: raw,
+      purpose: "interesting person Ada",
+      purposeRankingEnabled: true,
+      maxBytes: 300,
+    });
+    expect(result.text.indexOf("Ada Lovelace")).toBeLessThan(result.text.indexOf("routine planning"));
+  });
+
 });

@@ -1,6 +1,7 @@
 import { toolManifestEntry, type OmiToolSurface } from "./omi-tool-manifest.js";
 
 export const DEFAULT_MODEL_TOOL_RESULT_BUDGET_BYTES = 8 * 1024;
+export const PURPOSE_RANKING_FLAG = "OMI_TOOL_RESULT_PURPOSE_RANKING_ENABLED";
 
 export interface ProjectedToolPayload {
   text: string;
@@ -26,10 +27,17 @@ export function toolResultBudgetBytes(toolName: string, surface: OmiToolSurface)
 export function projectToolResultPayload(input: {
   toolName: string;
   result: string;
+  purpose?: string;
   maxBytes: number;
+  purposeRankingEnabled?: boolean;
 }): ProjectedToolPayload {
   const sections = extractSections(input.result, input.toolName);
-  const ranked = sections;
+  const rankByPurpose = input.purposeRankingEnabled
+    ?? process.env[PURPOSE_RANKING_FLAG] === "1";
+  const ranked = sections.map((section) => ({
+    ...section,
+    items: rankByPurpose && input.purpose ? rankItems(section.items, input.purpose) : section.items,
+  }));
   const omitted: Record<string, number> = Object.fromEntries(ranked.map((section) => [section.name, section.total]));
   const lines: string[] = [];
 
@@ -80,6 +88,20 @@ function extractSections(result: string, toolName: string): TypedSection[] {
 function renderItem(value: unknown): string {
   if (typeof value === "string") return value.replace(/\s+/g, " ").trim();
   try { return JSON.stringify(value); } catch { return String(value); }
+}
+
+function rankItems(items: unknown[], purpose: string): unknown[] {
+  const terms = new Set(purpose.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []);
+  return items.map((item, index) => ({ item, index, score: lexicalScore(renderItem(item), terms) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map(({ item }) => item);
+}
+
+function lexicalScore(value: string, terms: Set<string>): number {
+  const haystack = value.toLowerCase();
+  let score = 0;
+  for (const term of terms) if (haystack.includes(term)) score += 1;
+  return score;
 }
 
 function fits(value: ProjectedToolPayload, maxBytes: number): boolean {

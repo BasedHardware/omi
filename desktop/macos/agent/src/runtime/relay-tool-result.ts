@@ -23,6 +23,7 @@ export interface RelayToolResultIdentity {
   attemptId: string;
   toolName: string;
   surfaceKind?: string;
+  purpose?: string;
 }
 
 export interface FinalizeRelayToolResultInput {
@@ -113,6 +114,7 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
     const projection = projectToolResultPayload({
       toolName: input.identity.toolName,
       result: input.result,
+      purpose: input.identity.purpose,
       maxBytes: Math.max(0, budget - reserve),
     });
     const projectedBytes = Buffer.byteLength(JSON.stringify(projection), "utf8");
@@ -126,6 +128,7 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
         originalBytes: boundedOriginalBytes,
         projectedBytes,
         fullOutputRef: recoveredRef,
+        purpose: input.identity.purpose,
         provenance: provenance(input.identity),
       }),
     });

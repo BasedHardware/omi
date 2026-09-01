@@ -567,6 +567,7 @@ export interface AgentControlToolContext {
     attemptId: string;
     toolName: string;
     surfaceKind?: string;
+    purpose?: string;
   };
   trustedUserControl?: boolean;
   getOwnerId?: () => string;
@@ -2252,6 +2253,7 @@ function stringifyProjectedControlSuccess(
     const projection = projectToolResultPayload({
       toolName,
       result: fullJson,
+      purpose: context?.authorizedToolInvocation?.purpose,
       maxBytes: Math.max(0, budget - reserve),
     });
     const projectedBytes = Buffer.byteLength(JSON.stringify(projection), "utf8");
@@ -2264,6 +2266,7 @@ function stringifyProjectedControlSuccess(
         originalBytes: Math.max(originalBytes, projectedBytes + 1),
         projectedBytes,
         fullOutputRef,
+        purpose: context?.authorizedToolInvocation?.purpose,
         provenance: controlToolResultProvenance(context, toolName),
       }),
     });
