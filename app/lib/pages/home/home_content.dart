@@ -212,6 +212,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   summaryAddresses: summary?.locations.map((location) => location.address).toList() ?? const [],
                   headline: summary?.headline,
                   canGoForward: day.isBefore(_startOfToday()),
+                  navigable: !snapshot.isNewUser,
                   onPreviousDay: () => _goToDay(DateTime(day.year, day.month, day.day - 1)),
                   onNextDay: () => _goToDay(DateTime(day.year, day.month, day.day + 1)),
                   onPickDay: _pickDay,
@@ -448,6 +449,9 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 28, 16, 24),
       child: Column(
+        // Without this the column takes the full height its Center offers and
+        // pins the tiles to the top of it, leaving a void above the chat bar.
+        mainAxisSize: MainAxisSize.min,
         children: [
           // Top of the triangle: Record with Phone (the simplest path).
           phoneOption,

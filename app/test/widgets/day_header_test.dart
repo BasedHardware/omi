@@ -99,6 +99,18 @@ void main() {
     expect(picks, 1);
   });
 
+  testWidgets('drops the day navigation before there is another day to reach', (tester) async {
+    var picks = 0;
+    await _pumpHeader(tester, [], onPickDay: () => picks++, navigable: false);
+
+    expect(find.text('Wed, Jul 15'), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_left_rounded), findsNothing);
+    expect(find.byIcon(Icons.chevron_right_rounded), findsNothing);
+
+    await tester.tap(find.text('Wed, Jul 15'));
+    expect(picks, 0, reason: 'the picker has nowhere to jump to yet');
+  });
+
   test('collapses a full address to its neighbourhood component', () {
     expect(shortPlaceLabel('1234 Mission St, San Francisco, CA 94110, USA'), 'San Francisco');
     expect(shortPlaceLabel('Mission District, San Francisco, USA'), 'Mission District');
@@ -114,6 +126,7 @@ Future<void> _pumpHeader(
   List<ServerConversation> conversations, {
   List<String?> summaryAddresses = const [],
   VoidCallback? onPickDay,
+  bool navigable = true,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -131,6 +144,7 @@ Future<void> _pumpHeader(
           onPreviousDay: () {},
           onNextDay: () {},
           onPickDay: onPickDay,
+          navigable: navigable,
           tileProvider: _MemoryTileProvider(),
         ),
       ),

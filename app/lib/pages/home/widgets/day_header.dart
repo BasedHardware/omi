@@ -25,6 +25,7 @@ class DayHeader extends StatelessWidget {
     this.onHeadlineTap,
     this.onPickDay,
     this.tileProvider,
+    this.navigable = true,
   });
 
   final DateTime day;
@@ -55,6 +56,10 @@ class DayHeader extends StatelessWidget {
   /// Test seam: lets a widget test serve map tiles without network access.
   final TileProvider? tileProvider;
 
+  /// A first run has no other day worth going to, so the arrows and the date
+  /// picker would only lead to more empty days. The day still names itself.
+  final bool navigable;
+
   @override
   Widget build(BuildContext context) {
     final points = dayLocationPoints(conversations);
@@ -68,11 +73,11 @@ class DayHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              _DayArrow(icon: Icons.chevron_left_rounded, onTap: onPreviousDay),
+              if (navigable) _DayArrow(icon: Icons.chevron_left_rounded, onTap: onPreviousDay),
               Flexible(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: onPickDay,
+                  onTap: navigable ? onPickDay : null,
                   child: Text(
                     dayLabel(context, day),
                     maxLines: 1,
@@ -86,7 +91,7 @@ class DayHeader extends StatelessWidget {
                   ),
                 ),
               ),
-              _DayArrow(icon: Icons.chevron_right_rounded, onTap: canGoForward ? onNextDay : null),
+              if (navigable) _DayArrow(icon: Icons.chevron_right_rounded, onTap: canGoForward ? onNextDay : null),
             ],
           ),
           if (summary != null && summary.isNotEmpty) ...[
