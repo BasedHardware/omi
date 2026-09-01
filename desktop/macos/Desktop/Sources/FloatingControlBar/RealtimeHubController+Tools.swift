@@ -16,8 +16,12 @@ extension RealtimeHubController {
     invocationID: String,
     ownerID: String
   ) async -> AuthorizedRealtimeToolExecutionResult {
-    await queryChatLaneForVoice(
-      prompt: RealtimeHubTools.escalationUserPrompt(query: query, toolContext: toolContext),
+    // The chat lane cannot see the screen; hand it what this turn's screenshot showed so
+    // "what's the answer to this riddle?" resolves to the riddle on screen, not an earlier one.
+    let screenContext = screenContextByContinuityKey[turnIdempotencyKey]
+    return await queryChatLaneForVoice(
+      prompt: RealtimeHubTools.escalationUserPrompt(
+        query: query, toolContext: toolContext, screenContext: screenContext),
       invocationID: invocationID,
       ownerID: ownerID,
       toolName: HubTool.thinkDeeper.rawValue,
