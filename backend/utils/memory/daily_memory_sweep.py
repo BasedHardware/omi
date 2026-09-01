@@ -105,6 +105,12 @@ MAX_ONBOARDING_SCAN_PAGES = 16
 MAX_ONBOARDING_INPUT_CHARACTERS = 24_000
 MAX_ONBOARDING_RECEIPT_KEYS = 4_096
 MAX_LEGACY_COMPAT_OCCUPANTS = 64
+# The compatibility occupant proof pages through the complete cohort; a real
+# long-tenured account holds hundreds of active unslotted facts per subject,
+# so completeness must come from draining a cursor, not from one bounded page.
+# The ceiling still fails closed on a pathological cohort.
+LEGACY_COMPAT_OCCUPANT_PAGE_SIZE = 300
+MAX_LEGACY_COMPAT_OCCUPANT_SCAN = 5000
 MODEL_COST_PER_1K_INPUT_CHARACTERS_USD = 0.002
 ONBOARDING_CONSUMED_STATE_PATH = "memory_control/daily_memory_sweep_onboarding"
 ONBOARDING_PERMANENT_RECEIPT_PREFIX = "onboarding_source_"
@@ -2606,13 +2612,26 @@ def _find_active_slot_or_subject(
                 field_filter_factory=FieldFilter,
             )
             # Legacy rows predate ``normalized_content_key``.  Prove the
-            # complete bounded compatibility cohort before deciding that no
-            # duplicate exists; two rows is not a safe global cap for a user
-            # who accumulated several historical unslotted facts.
-            snapshots = list(legacy_query.limit(MAX_LEGACY_COMPAT_OCCUPANTS + 1).stream())
+            # complete compatibility cohort before deciding that no duplicate
+            # exists. One bounded page is not that proof: a long-tenured
+            # account holds far more than 64 active unslotted facts per
+            # subject, and the old single-page cap made every such account's
+            # sweep day fail closed forever (dev, hourly, since 2026-08-30).
+            # Drain the cursor in bounded pages instead; the scan ceiling
+            # below still fails closed on a pathological cohort.
+            snapshots = []
+            cursor_query = legacy_query
+            while True:
+                page = list(cursor_query.limit(LEGACY_COMPAT_OCCUPANT_PAGE_SIZE).stream())
+                snapshots.extend(page)
+                if len(snapshots) > MAX_LEGACY_COMPAT_OCCUPANT_SCAN:
+                    break
+                if len(page) < LEGACY_COMPAT_OCCUPANT_PAGE_SIZE:
+                    break
+                cursor_query = legacy_query.start_after(page[-1])
     except Exception as exc:
         raise SweepAuthoritativeQueryUnavailable("canonical occupant query failed") from exc
-    proof_limit = MAX_LEGACY_COMPAT_OCCUPANTS if used_legacy_compatibility else MAX_AUTHORITATIVE_OCCUPANTS
+    proof_limit = MAX_LEGACY_COMPAT_OCCUPANT_SCAN if used_legacy_compatibility else MAX_AUTHORITATIVE_OCCUPANTS
     if len(snapshots) > proof_limit:
         raise SweepAuthoritativeQueryUnavailable("canonical occupant query exceeded proof budget")
     items: List[MemoryItem] = []

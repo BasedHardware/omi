@@ -1822,3 +1822,115 @@ def test_unstructured_fallback_marker_matches_the_prompt_rule():
     assert UNSTRUCTURED_SUMMARY_MARKER in prompts._DAILY_SWEEP_SHARED_RULES
     rule = next(line for line in prompts._DAILY_SWEEP_SHARED_RULES.splitlines() if UNSTRUCTURED_SUMMARY_MARKER in line)
     assert "NEVER set a slot" in rule
+
+
+def _legacy_row_payload(index: int, content: str):
+    from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState
+    from models.memory_evidence import SourceState
+
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    return {
+        "memory_id": f"memory-{index:05d}",
+        "uid": "user-1",
+        "version": 1,
+        "tier": MemoryTier.long_term.value,
+        "status": MemoryItemStatus.active.value,
+        "processing_state": ProcessingState.processed.value,
+        "content": content,
+        "source_state": SourceState.active.value,
+        "sensitivity_labels": [],
+        "visibility": "private",
+        "user_asserted": True,
+        "captured_at": now,
+        "updated_at": now,
+        "ledger_commit_id": f"commit-{index}",
+        "ledger_sequence": index + 1,
+    }
+
+
+class _PaginatedLegacyDb:
+    """A fake whose legacy query obeys limit + start_after over sorted rows."""
+
+    def __init__(self, rows):
+        self._rows = sorted(rows, key=lambda snapshot: snapshot.id)
+
+    def collection(self, _path):
+        rows = self._rows
+
+        class Query:
+            def __init__(self, normalized=False, after_id=None, count=None):
+                self.normalized = normalized
+                self.after_id = after_id
+                self.count = count
+
+            def where(self, *, filter):
+                return Query(
+                    self.normalized or filter.field_path == "normalized_content_key", self.after_id, self.count
+                )
+
+            def limit(self, count):
+                return Query(self.normalized, self.after_id, count)
+
+            def start_after(self, snapshot):
+                return Query(self.normalized, snapshot.id, self.count)
+
+            def stream(self):
+                if self.normalized:
+                    return []
+                selected = [row for row in rows if self.after_id is None or row.id > self.after_id]
+                return selected[: self.count] if self.count is not None else selected
+
+        class Collection:
+            def where(self, *, filter):
+                return Query(filter.field_path == "normalized_content_key")
+
+        return Collection()
+
+
+class _LegacySnapshot:
+    def __init__(self, payload, row_id):
+        self._payload = payload
+        self.id = row_id
+
+    def to_dict(self):
+        return self._payload
+
+
+def test_legacy_compatibility_proof_survives_a_real_accounts_cohort():
+    """Regression: dev sweep stuck since 2026-08-30 (canonical_occupant_query_unavailable).
+
+    The compatibility occupant proof capped the whole cohort at one 64-row
+    page, so an account with more active unslotted facts than that — the
+    owner's dogfood account holds ~196 — could never complete a sweep day:
+    every hourly run failed closed with "exceeded proof budget". Completeness
+    now comes from draining the cursor; the duplicate is still found even
+    when it sits past the old cap.
+    """
+
+    rows = [_legacy_row_payload(index, f"legacy fact {index}") for index in range(700)]
+    rows[650]["content"] = "Alice owns release review"
+    db = _PaginatedLegacyDb([_LegacySnapshot(payload, payload["memory_id"]) for payload in rows])
+
+    occupant = _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
+
+    assert occupant is not None and occupant.memory_id == "memory-00650"
+
+
+def test_legacy_compatibility_proof_completes_with_no_duplicate_past_the_old_cap():
+    rows = [_legacy_row_payload(index, f"legacy fact {index}") for index in range(100)]
+    db = _PaginatedLegacyDb([_LegacySnapshot(payload, payload["memory_id"]) for payload in rows])
+
+    occupant = _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
+
+    assert occupant is None
+
+
+def test_legacy_compatibility_proof_still_fails_closed_above_the_scan_ceiling():
+    from utils.memory.daily_memory_sweep import MAX_LEGACY_COMPAT_OCCUPANT_SCAN, SweepAuthoritativeQueryUnavailable
+
+    total = MAX_LEGACY_COMPAT_OCCUPANT_SCAN + 1
+    rows = [_legacy_row_payload(index, f"legacy fact {index}") for index in range(total)]
+    db = _PaginatedLegacyDb([_LegacySnapshot(payload, payload["memory_id"]) for payload in rows])
+
+    with pytest.raises(SweepAuthoritativeQueryUnavailable):
+        _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
