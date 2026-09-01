@@ -17,6 +17,9 @@ static int32_t last_sleep_ms;
 static bool last_transport_storage_available;
 static bool sd_on;
 static int sd_off_calls;
+// mount_sd_card() powers the card before the steps that can fail, so a failed
+// mount normally leaves it on; only the early GPIO-not-ready exit does not.
+static bool mount_powers_sd;
 
 static void reset_fakes(void)
 {
@@ -31,12 +34,13 @@ static void reset_fakes(void)
     last_transport_storage_available = false;
     sd_on = false;
     sd_off_calls = 0;
+    mount_powers_sd = true;
 }
 
 int mount_sd_card(void)
 {
     mount_calls++;
-    if (mount_result == 0) {
+    if (mount_powers_sd) {
         sd_on = true;
     }
     return mount_result;
@@ -105,7 +109,23 @@ static void test_mount_failure_still_starts_transport(void)
     assert(sleep_calls == 0);
     assert(transport_calls == 1);
     assert(!last_transport_storage_available);
+    assert(sd_off_calls == 1);
     assert(!sd_on);
+}
+
+static void test_mount_failure_before_power_on_skips_sd_off(void)
+{
+    reset_fakes();
+    mount_result = -EIO;
+    mount_powers_sd = false;
+
+    startup_init_optional_storage();
+    int result = startup_start_transport();
+
+    assert(result == 0);
+    assert(sd_off_calls == 0);
+    assert(transport_calls == 1);
+    assert(!last_transport_storage_available);
 }
 
 static void test_storage_failure_still_starts_transport(void)
@@ -155,6 +175,7 @@ int main(void)
 {
     test_storage_success();
     test_mount_failure_still_starts_transport();
+    test_mount_failure_before_power_on_skips_sd_off();
     test_storage_failure_still_starts_transport();
     test_transport_failure_is_propagated();
     puts("DevKit offline storage startup tests passed");
