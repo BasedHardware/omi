@@ -141,7 +141,15 @@ function extractSections(result: string, toolName: string): TypedSection[] {
       const total = integer(value.total) ?? value.items.length;
       return [{ name: value.name, total: Math.max(total, value.items.length), items: value.items }];
     });
-    if (sections.length > 0) return sections;
+    if (sections.length > 0) {
+      const siblings = Object.fromEntries(Object.entries(parsed).filter(([key]) => ![
+        "ok", "tool", "totals", "sections", "toolResultEnvelope",
+      ].includes(key)));
+      if (Object.keys(siblings).length > 0) {
+        sections.push({ name: "meta", total: 1, items: [siblings] });
+      }
+      return sections;
+    }
   }
   if (isRecord(parsed)) {
     const arrays = Object.entries(parsed).filter(([, value]) => Array.isArray(value));
@@ -154,6 +162,29 @@ function extractSections(result: string, toolName: string): TypedSection[] {
 }
 
 function renderItemExcerpt(value: unknown, maxBytes: number): string {
+  if (!isRecord(value)) return utf8Excerpt(renderItem(value), maxBytes);
+
+  // Swift encodes typed items with sorted keys, so byte-prefixing the JSON can
+  // put a large `content` field before title/summary/source identity. Render
+  // those semantic fields explicitly first and spend only the remaining bytes
+  // on content. This is deliberately independent of object insertion order.
+  const parts: string[] = [];
+  const append = (label: string, field: unknown, budget: number) => {
+    if (typeof field !== "string" || field.length === 0) return;
+    parts.push(`${label}: ${utf8Excerpt(field.replace(/\s+/g, " ").trim(), budget)}`);
+  };
+  append("title", value.title, Math.max(16, Math.floor(maxBytes * 0.28)));
+  append("summary", value.summary, Math.max(16, Math.floor(maxBytes * 0.36)));
+  append("citation", value.citationMarker, 48);
+  append("sourceId", value.sourceId, 96);
+
+  const identity = parts.join(" | ");
+  const separator = identity.length > 0 ? " | " : "";
+  const remaining = Math.max(0, maxBytes - Buffer.byteLength(identity + separator + "content: ", "utf8"));
+  if (typeof value.content === "string" && value.content.length > 0 && remaining > 0) {
+    parts.push(`content: ${utf8Excerpt(value.content.replace(/\s+/g, " ").trim(), remaining)}`);
+  }
+  if (parts.length > 0) return utf8Excerpt(parts.join(" | "), maxBytes);
   return utf8Excerpt(renderItem(value), maxBytes);
 }
 

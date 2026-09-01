@@ -98,6 +98,24 @@ final class ChatToolExecutorRowIntTests: XCTestCase {
     XCTAssertNil(sections.first { ($0["name"] as? String) == "text" })
   }
 
+  func testRenderedRecordSegmentsRejectsAnInvalidConvertedRange() {
+    let result = ChatToolExecutor.renderedRecordSegmentsForTesting(
+      "Conversation #1\nHello",
+      matchRanges: [NSRange(location: 10_000, length: 1)],
+      expectedCount: 1)
+    XCTAssertNil(result)
+  }
+
+  func testRealtimeConversationDefaultsAvoidTranscriptFetchCost() {
+    let realtime = ChatToolExecutor.backendConversationDefaults(surfaceKind: "realtime_voice")
+    XCTAssertEqual(realtime.limit, 5)
+    XCTAssertFalse(realtime.includeTranscript)
+
+    let chat = ChatToolExecutor.backendConversationDefaults(surfaceKind: "main_chat")
+    XCTAssertEqual(chat.limit, 20)
+    XCTAssertTrue(chat.includeTranscript)
+  }
+
   func testUnresolvedCitationMarkersAreRemoved() {
     let reference = ChatCitationReference(
       ordinal: 41,

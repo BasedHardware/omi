@@ -37,10 +37,6 @@ import type {
   WorkstreamProductContext,
 } from "./workstream-continuity.js";
 
-const PROVIDER_TOOL_RESULT_BUDGET_BYTES = toolResultBudgetBytes("list_agent_sessions", "realtime_voice");
-const PROVIDER_RESULT_ENVELOPE_RESERVE_BYTES = PROVIDER_TOOL_RESULT_BUDGET_BYTES / 4;
-const PROVIDER_DETAIL_PROJECTION_RESERVE_BYTES = PROVIDER_RESULT_ENVELOPE_RESERVE_BYTES * 1.5;
-const DEFAULT_READ_TOOL_OUTPUT_BYTES = PROVIDER_TOOL_RESULT_BUDGET_BYTES / 2;
 import {
   executionRoleAllowsTool,
   LEAF_AGENT_CONTROL_TOOLS,
@@ -49,6 +45,11 @@ import {
   type AgentExecutionRole,
   type ProviderBoundary,
 } from "./execution-policy.js";
+
+const PROVIDER_TOOL_RESULT_BUDGET_BYTES = toolResultBudgetBytes("list_agent_sessions", "realtime_voice");
+const PROVIDER_RESULT_ENVELOPE_RESERVE_BYTES = PROVIDER_TOOL_RESULT_BUDGET_BYTES / 4;
+const PROVIDER_DETAIL_PROJECTION_RESERVE_BYTES = PROVIDER_RESULT_ENVELOPE_RESERVE_BYTES * 1.5;
+const DEFAULT_READ_TOOL_OUTPUT_BYTES = PROVIDER_TOOL_RESULT_BUDGET_BYTES / 2;
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
 const terminalRunStatuses = new Set(["succeeded", "failed", "cancelled", "timed_out", "orphaned"]);
@@ -2260,6 +2261,13 @@ function stringifyProjectedControlSuccess(
   existingRef: string | null,
   context: AgentControlToolContext | undefined,
 ): string {
+  // Direct-control is authenticated local IPC consumed by Swift/UI code that
+  // requires the typed schema. If even structural compaction cannot fit its
+  // separate 128 KiB bridge budget, preserve the prior typed failure contract
+  // for this non-model-facing caller rather than substituting prose.
+  if (isDirectControlOutput(context)) {
+    return stringifyProviderBudgetFailure(toolName, undefined, null, context);
+  }
   const budget = controlToolResultByteBudget(context);
   const ownerId = context ? safeControlToolOwnerId(context) : null;
   const sessionId = context?.callerSessionId;
@@ -2342,15 +2350,16 @@ function stringifyProjectedControlCancellation(
     cancellation: { code: "cancelled", message: "The tool operation was cancelled." },
   };
   const projectedBytes = Buffer.byteLength(JSON.stringify(cancellation), "utf8");
+  const truncated = existingRef !== null && originalBytes > projectedBytes;
   return JSON.stringify({
     ok: false,
     ...cancellation,
     toolResultEnvelope: makeToolResultEnvelope({
       status: "cancelled",
-      truncated: true,
-      originalBytes: Math.max(originalBytes, projectedBytes + 1),
+      truncated,
+      originalBytes: truncated ? originalBytes : projectedBytes,
       projectedBytes,
-      fullOutputRef: existingRef ?? "artifact:unavailable",
+      fullOutputRef: truncated ? existingRef : null,
       provenance: controlToolResultProvenance(context, toolName),
     }),
   });

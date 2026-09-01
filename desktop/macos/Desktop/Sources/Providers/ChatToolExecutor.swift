@@ -58,6 +58,64 @@ private final class CancellablePermissionContinuation<Value: Sendable>: @uncheck
 @MainActor
 class ChatToolExecutor {
 
+  struct DailyRecapItem: Codable, Sendable {
+    var title: String
+    var summary: String? = nil
+    var minutes: Double? = nil
+    var captures: Int? = nil
+    var firstSeenAt: String? = nil
+    var lastSeenAt: String? = nil
+    var emoji: String? = nil
+    var sourceId: String? = nil
+    var citationMarker: String? = nil
+    var createdAt: String? = nil
+    var completed: Bool? = nil
+    var priority: String? = nil
+    var status: String? = nil
+    var durationSeconds: Int? = nil
+    var category: String? = nil
+    var context: String? = nil
+  }
+
+  struct DailyRecapSection: Codable, Sendable {
+    let name: String
+    let total: Int
+    let items: [DailyRecapItem]
+  }
+
+  private struct DailyRecapSource: Sendable {
+    let kind: String
+    let sourceID: String
+    let title: String
+    let preview: String
+
+    var toolSource: APIClient.ToolSource {
+      APIClient.ToolSource(
+        kind: kind,
+        sourceID: sourceID,
+        title: title,
+        preview: preview,
+        createdAt: nil,
+        momentTimestampMs: nil,
+        appName: nil,
+        url: nil)
+    }
+  }
+
+  private struct DailyRecapReadResult: Sendable {
+    let renderedText: String
+    let sources: [DailyRecapSource]
+    let totals: [String: Int]
+    let sections: [DailyRecapSection]
+  }
+
+  private struct DailyRecapPayload: Codable, Sendable {
+    let ok: Bool
+    let tool: String
+    let totals: [String: Int]
+    let sections: [DailyRecapSection]
+  }
+
   struct CanonicalGoalCreationInput: Equatable {
     let title: String
     let desiredOutcome: String
@@ -469,6 +527,7 @@ class ChatToolExecutor {
         toolCall,
         runID: originatingRunId,
         attemptID: originatingAttemptId,
+        surfaceKind: originatingSurfaceRef?.surfaceKind,
         expectedOwnerID: expectedOwnerID,
         api: backendAPIClient)
 
@@ -1511,13 +1570,12 @@ class ChatToolExecutor {
 
         // Format compact markdown
         var out = "# \(dateLabel) Recap\n\n"
-        var sources = [APIClient.ToolSource]()
-        var typedSections: [[String: Any]] = [
-          [
-            "name": "summary",
-            "total": 1,
-            "items": [["title": "\(dateLabel) recap"]],
-          ]
+        var sources = [DailyRecapSource]()
+        var typedSections = [
+          DailyRecapSection(
+            name: "summary",
+            total: 1,
+            items: [DailyRecapItem(title: "\(dateLabel) recap")])
         ]
         func note(
           kind: ChatCitationReference.Kind,
@@ -1528,20 +1586,16 @@ class ChatToolExecutor {
           let trimmed = sourceID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
           guard !trimmed.isEmpty else { return "" }
           sources.append(
-            APIClient.ToolSource(
+            DailyRecapSource(
               kind: kind.rawValue,
               sourceID: trimmed,
               title: title,
-              preview: preview,
-              createdAt: nil,
-              momentTimestampMs: nil,
-              appName: nil,
-              url: nil))
+              preview: preview))
           return " {{cite:\(sources.count)}}"
         }
 
         out += "## Apps (\(apps.count) apps)\n"
-        var appItems = [[String: Any]]()
+        var appItems = [DailyRecapItem]()
         if apps.isEmpty {
           out += "No screen activity recorded.\n"
         } else {
@@ -1557,22 +1611,22 @@ class ChatToolExecutor {
               DesktopChatTimestampFormat.formatSQLCell(
                 column: "lastSeenAt", value: app["lastSeenAt"], timeZone: timeZone) ?? ""
             let window = firstSeen.isEmpty && lastSeen.isEmpty ? "" : " \(firstSeen)–\(lastSeen)"
-            appItems.append([
-              "title": name,
-              "minutes": minutes,
-              "captures": screenshots,
-              "firstSeenAt": firstSeen,
-              "lastSeenAt": lastSeen,
-            ])
+            appItems.append(
+              DailyRecapItem(
+                title: name,
+                minutes: minutes,
+                captures: screenshots,
+                firstSeenAt: firstSeen,
+                lastSeenAt: lastSeen))
             out +=
               "- **\(name)**: \(minutes) min (\(screenshots) captures,\(window))\n"
           }
           if apps.count > 20 { out += "- ...and \(apps.count - 20) more apps\n" }
         }
-        typedSections.append(["name": "apps", "total": apps.count, "items": appItems])
+        typedSections.append(DailyRecapSection(name: "apps", total: apps.count, items: appItems))
 
         out += "\n## Conversations (\(convos.count))\n"
-        var conversationItems = [[String: Any]]()
+        var conversationItems = [DailyRecapItem]()
         if convos.isEmpty {
           out += "No conversations recorded.\n"
         } else {
@@ -1587,24 +1641,23 @@ class ChatToolExecutor {
               sourceID: convo["backendId"] as? String,
               title: title,
               preview: overview)
-            conversationItems.append([
-              "title": title,
-              "summary": overview,
-              "emoji": emoji,
-              "minutes": durMin,
-              "sourceId": convo["backendId"] as? String ?? "",
-              "citationMarker": marker.trimmingCharacters(in: .whitespaces),
-              "createdAt": convo["startedAt"] as? String ?? "",
-            ])
+            conversationItems.append(
+              DailyRecapItem(
+                title: title,
+                summary: overview,
+                minutes: durMin,
+                emoji: emoji,
+                sourceId: convo["backendId"] as? String ?? "",
+                citationMarker: marker.trimmingCharacters(in: .whitespaces),
+                createdAt: convo["startedAt"] as? String ?? ""))
             out += "- \(emoji) **\(title)**\(dur): \(overview)\(marker)\n"
           }
         }
-        typedSections.append([
-          "name": "conversations", "total": convos.count, "items": conversationItems,
-        ])
+        typedSections.append(
+          DailyRecapSection(name: "conversations", total: convos.count, items: conversationItems))
 
         out += "\n## Tasks (\(tasks.count))\n"
-        var taskItems = [[String: Any]]()
+        var taskItems = [DailyRecapItem]()
         if tasks.isEmpty {
           out += "No tasks created.\n"
         } else {
@@ -1619,29 +1672,28 @@ class ChatToolExecutor {
               sourceID: task["backendId"] as? String,
               title: desc,
               preview: desc)
-            taskItems.append([
-              "title": desc,
-              "completed": completed,
-              "priority": priority,
-              "sourceId": task["backendId"] as? String ?? "",
-              "citationMarker": marker.trimmingCharacters(in: .whitespaces),
-              "createdAt": task["createdAt"] as? String ?? "",
-            ])
+            taskItems.append(
+              DailyRecapItem(
+                title: desc,
+                sourceId: task["backendId"] as? String ?? "",
+                citationMarker: marker.trimmingCharacters(in: .whitespaces),
+                createdAt: task["createdAt"] as? String ?? "",
+                completed: completed,
+                priority: priority))
             out += "- \(check) \(desc)\(pri)\(marker)\n"
           }
         }
-        typedSections.append(["name": "tasks", "total": tasks.count, "items": taskItems])
+        typedSections.append(DailyRecapSection(name: "tasks", total: tasks.count, items: taskItems))
 
         // Focus sessions
         let focused = focusSessions.filter { ($0["status"] as? String) == "focused" }
         let distracted = focusSessions.filter { ($0["status"] as? String) == "distracted" }
-        let focusItems: [[String: Any]] = focusSessions.map { session in
-          [
-            "title": session["appOrSite"] as? String ?? "",
-            "summary": session["description"] as? String ?? "",
-            "status": session["status"] as? String ?? "",
-            "durationSeconds": Self.rowInt(session["durationSeconds"]) ?? 0,
-          ]
+        let focusItems = focusSessions.map { session in
+          DailyRecapItem(
+            title: session["appOrSite"] as? String ?? "",
+            summary: session["description"] as? String ?? "",
+            status: session["status"] as? String ?? "",
+            durationSeconds: Self.rowInt(session["durationSeconds"]) ?? 0)
         }
         if !focusSessions.isEmpty {
           out += "\n## Focus (\(focused.count) focused, \(distracted.count) distracted)\n"
@@ -1658,12 +1710,11 @@ class ChatToolExecutor {
             out += "- ...and \(focusSessions.count - 10) more sessions\n"
           }
         }
-        typedSections.append([
-          "name": "focus", "total": focusSessions.count, "items": focusItems,
-        ])
+        typedSections.append(
+          DailyRecapSection(name: "focus", total: focusSessions.count, items: focusItems))
 
         // Memories
-        var memoryItems = [[String: Any]]()
+        var memoryItems = [DailyRecapItem]()
         if !memories.isEmpty {
           out += "\n## Memories Learned (\(memories.count))\n"
           for memory in memories {
@@ -1675,28 +1726,26 @@ class ChatToolExecutor {
               sourceID: memory["backendId"] as? String,
               title: content,
               preview: content)
-            memoryItems.append([
-              "title": content,
-              "summary": content,
-              "category": category,
-              "sourceId": memory["backendId"] as? String ?? "",
-              "citationMarker": marker.trimmingCharacters(in: .whitespaces),
-            ])
+            memoryItems.append(
+              DailyRecapItem(
+                title: content,
+                summary: content,
+                sourceId: memory["backendId"] as? String ?? "",
+                citationMarker: marker.trimmingCharacters(in: .whitespaces),
+                category: category))
             out += "- \(content)\(catStr)\(marker)\n"
           }
           if memories.count > 10 { out += "- ...and \(memories.count - 10) more\n" }
         }
-        typedSections.append([
-          "name": "memories", "total": memories.count, "items": memoryItems,
-        ])
+        typedSections.append(
+          DailyRecapSection(name: "memories", total: memories.count, items: memoryItems))
 
         // Observations (context summaries)
-        let observationItems: [[String: Any]] = observations.map { observation in
-          [
-            "title": observation["appName"] as? String ?? "",
-            "summary": observation["currentActivity"] as? String ?? "",
-            "context": observation["contextSummary"] as? String ?? "",
-          ]
+        let observationItems = observations.map { observation in
+          DailyRecapItem(
+            title: observation["appName"] as? String ?? "",
+            summary: observation["currentActivity"] as? String ?? "",
+            context: observation["contextSummary"] as? String ?? "")
         }
         if !observations.isEmpty {
           out += "\n## Screen Context (\(observations.count) observations)\n"
@@ -1709,17 +1758,16 @@ class ChatToolExecutor {
             out += "- ...and \(observations.count - 10) more observations\n"
           }
         }
-        typedSections.append([
-          "name": "observations", "total": observations.count, "items": observationItems,
-        ])
+        typedSections.append(
+          DailyRecapSection(name: "observations", total: observations.count, items: observationItems))
 
         log(
           "Tool get_daily_recap: \(apps.count) apps, \(convos.count) convos, \(tasks.count) tasks, \(focusSessions.count) focus, \(memories.count) memories, \(observations.count) observations"
         )
-        return (
-          out,
-          sources,
-          [
+        return DailyRecapReadResult(
+          renderedText: out,
+          sources: sources,
+          totals: [
             "summary": 1,
             "apps": apps.count,
             "conversations": convos.count,
@@ -1728,16 +1776,12 @@ class ChatToolExecutor {
             "memories": memories.count,
             "observations": observations.count,
           ],
-          typedSections
-        )
+          sections: typedSections)
       }
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
       let references = await ChatCitationProvenanceRegistry.shared.register(
-        result.1, runID: runID, attemptID: attemptID)
-      let typedResult = typedReadToolResult(
-        toolName: "get_daily_recap",
-        sections: result.3,
-        totals: result.2)
+        result.sources.map(\.toolSource), runID: runID, attemptID: attemptID)
+      let typedResult = typedDailyRecapToolResult(result)
       return resolvingCitationMarkers(in: typedResult, references: references)
     } catch {
       logError("Tool get_daily_recap failed", error: error)
@@ -3260,6 +3304,28 @@ class ChatToolExecutor {
     return json
   }
 
+  /// Encodes the value-typed recap only after the GRDB read has crossed back
+  /// to the executor actor. No `[String: Any]` value escapes the database
+  /// closure under strict concurrency checking.
+  private nonisolated static func typedDailyRecapToolResult(
+    _ result: DailyRecapReadResult
+  ) -> String {
+    let payload = DailyRecapPayload(
+      ok: true,
+      tool: "get_daily_recap",
+      totals: result.totals,
+      sections: result.sections)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    guard let data = try? encoder.encode(payload),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return toolFailureEnvelope(
+        code: "typed_tool_result_encoding_failed", message: "The typed tool result could not be encoded.")
+    }
+    return json
+  }
+
   /// Builds the typed read-tool boundary without discarding the backend's rendered detail.
   /// Older servers may omit `sources`; in that case the rendered result remains the canonical
   /// model-visible content instead of becoming a successful empty section.
@@ -3329,13 +3395,25 @@ class ChatToolExecutor {
     let range = NSRange(resultText.startIndex..., in: resultText)
     let matches = expression.matches(in: resultText, range: range)
     guard matches.count == expectedCount else { return nil }
-    return matches.enumerated().compactMap { index, match in
-      let start = match.range.location
-      let end = index + 1 < matches.count ? matches[index + 1].range.location : range.length
+    return renderedRecordSegmentsForTesting(
+      resultText, matchRanges: matches.map(\.range), expectedCount: expectedCount)
+  }
+
+  nonisolated static func renderedRecordSegmentsForTesting(
+    _ resultText: String,
+    matchRanges: [NSRange],
+    expectedCount: Int
+  ) -> [String]? {
+    guard matchRanges.count == expectedCount else { return nil }
+    let fullRange = NSRange(resultText.startIndex..., in: resultText)
+    let segments: [String] = matchRanges.enumerated().compactMap { index, matchRange in
+      let start = matchRange.location
+      let end = index + 1 < matchRanges.count ? matchRanges[index + 1].location : fullRange.length
       guard let segmentRange = Range(NSRange(location: start, length: end - start), in: resultText)
       else { return nil }
       return resultText[segmentRange].trimmingCharacters(in: .whitespacesAndNewlines)
     }
+    return segments.count == expectedCount ? segments : nil
   }
 
   private nonisolated static func utf8Prefix(_ value: String, maximumBytes: Int) -> String {
@@ -3368,14 +3446,23 @@ class ChatToolExecutor {
       options: .regularExpression)
   }
 
+  nonisolated static func backendConversationDefaults(
+    surfaceKind: String?
+  ) -> (limit: Int, includeTranscript: Bool) {
+    let realtime = surfaceKind == "realtime" || surfaceKind == "realtime_voice"
+    return realtime ? (5, false) : (20, true)
+  }
+
   private static func executeBackendTool(
     _ toolCall: ToolCall,
     runID: String?,
     attemptID: String?,
+    surfaceKind: String?,
     expectedOwnerID: String?,
     api: APIClient
   ) async -> String {
     let args = toolCall.arguments
+    let conversationDefaults = backendConversationDefaults(surfaceKind: surfaceKind)
 
     func backendFailureEnvelope(_ response: APIClient.ToolResponse) -> String {
       toolFailureEnvelope(code: "backend_tool_failed", message: response.resultText)
@@ -3422,9 +3509,9 @@ class ChatToolExecutor {
         let resp = try await api.toolGetConversations(
           startDate: validatedStartDate,
           endDate: validatedEndDate,
-          limit: args["limit"] as? Int ?? 20,
+          limit: args["limit"] as? Int ?? conversationDefaults.limit,
           offset: args["offset"] as? Int ?? 0,
-          includeTranscript: args["include_transcript"] as? Bool ?? true,
+          includeTranscript: args["include_transcript"] as? Bool ?? conversationDefaults.includeTranscript,
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
@@ -3439,7 +3526,7 @@ class ChatToolExecutor {
           startDate: validatedStartDate,
           endDate: validatedEndDate,
           limit: args["limit"] as? Int ?? 5,
-          includeTranscript: args["include_transcript"] as? Bool ?? true,
+          includeTranscript: args["include_transcript"] as? Bool ?? conversationDefaults.includeTranscript,
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )

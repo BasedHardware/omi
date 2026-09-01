@@ -100,11 +100,16 @@ describe("manifest-owned tool result projection", () => {
   });
 
   it("bounds transcript-bearing search items without dropping their titles", () => {
+    // Literal fixture matches JSONSerialization(.sortedKeys) output from
+    // typedReadToolResult: content sorts before sourceId/summary/title.
     const conversations = Array.from({ length: 12 }, (_, index) => ({
-      title: `Search conversation ${index + 1}`,
-      summary: `Relevant summary ${index + 1}`,
-      transcript: `Speaker: ${"long transcript evidence ".repeat(180)}`,
+      appName: "Omi",
+      citationMarker: `[${index + 1}]`,
+      content: `Speaker: ${"long transcript evidence ".repeat(180)}`,
       createdAt: `2026-08-${String(31 - index).padStart(2, "0")}T12:00:00Z`,
+      sourceId: `conversation-${index + 1}`,
+      summary: `Relevant summary ${index + 1}`,
+      title: `Search conversation ${index + 1}`,
     }));
     const projected = projectToolResultPayload({
       toolName: "search_conversations",
@@ -114,7 +119,22 @@ describe("manifest-owned tool result projection", () => {
     expect(Buffer.byteLength(JSON.stringify(projected), "utf8")).toBeLessThanOrEqual(7_424);
     expect(12 - projected.omitted.conversations).toBeGreaterThanOrEqual(5);
     expect(conversations.filter((item) => projected.text.includes(item.title)).length).toBeGreaterThanOrEqual(5);
+    expect(conversations.filter((item) => projected.text.includes(item.summary)).length).toBeGreaterThanOrEqual(5);
     expect(projected.text).toContain("long transcript evidence");
+  });
+
+  it("marks unknown typed-result siblings omitted instead of silently dropping them", () => {
+    const projected = projectToolResultPayload({
+      toolName: "get_conversations",
+      result: JSON.stringify({
+        ok: true,
+        transportPadding: "p".repeat(4_000),
+        sections: [{ name: "conversations", total: 1, items: [{ title: "Planning", summary: "Release" }] }],
+      }),
+      maxBytes: 1_024,
+    });
+    expect(projected.text).toContain("meta (1 total)");
+    expect(projected.omitted.meta).toBeDefined();
   });
 
 });

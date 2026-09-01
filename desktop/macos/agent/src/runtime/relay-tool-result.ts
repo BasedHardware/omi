@@ -90,27 +90,31 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
   // Persistence is an observability/recovery concern, never execution
   // authority. A storage outage cannot rewrite executor success as failure.
 
-  const envelope = makeToolResultEnvelope({
-    status,
-    truncated: needsArtifact,
-    originalBytes,
-    projectedBytes: payloadBytes,
-    fullOutputRef,
-    provenance: provenance(input.identity),
-  });
-  const candidate = JSON.stringify({
-    ...payload,
-    ok: status === "succeeded",
-    toolResultEnvelope: envelope,
-  });
   const budget = toolResultBudgetBytes(
     input.identity.toolName,
     input.identity.surfaceKind === "realtime" || input.identity.surfaceKind === "realtime_voice"
       ? "realtime_voice"
       : "desktop_chat",
   );
-  if (Buffer.byteLength(candidate, "utf8") <= budget && (!needsArtifact || payloadBytes < originalBytes)) {
-    return candidate;
+  // Rewrapping can make an upstream truncated payload as large as (or larger
+  // than) its recorded original size. Do not construct an invalid envelope:
+  // only the consistent pair reaches makeToolResultEnvelope; otherwise the
+  // normal projection path below establishes a fresh bounded measurement.
+  if (!needsArtifact || payloadBytes < originalBytes) {
+    const envelope = makeToolResultEnvelope({
+      status,
+      truncated: needsArtifact,
+      originalBytes,
+      projectedBytes: payloadBytes,
+      fullOutputRef,
+      provenance: provenance(input.identity),
+    });
+    const candidate = JSON.stringify({
+      ...payload,
+      ok: status === "succeeded",
+      toolResultEnvelope: envelope,
+    });
+    if (Buffer.byteLength(candidate, "utf8") <= budget) return candidate;
   }
 
   for (let reserve = 768; reserve < budget; reserve += 256) {

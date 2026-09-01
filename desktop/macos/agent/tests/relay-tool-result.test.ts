@@ -84,6 +84,29 @@ describe("normal pending stdio tool-result boundary", () => {
     }
   });
 
+  it("never throws when rewrapping truncated source envelopes with expanded payloads", () => {
+    for (const payloadBytes of [80, 100, 101, 1_024, 16_384]) {
+      const source = JSON.stringify({
+        ok: true,
+        text: "x".repeat(payloadBytes),
+        toolResultEnvelope: {
+          version: 1,
+          status: "succeeded",
+          truncated: true,
+          originalBytes: 100,
+          projectedBytes: 50,
+          fullOutputRef: "artifact:upstream-result",
+        },
+      });
+      let result = "";
+      expect(() => { result = finalize(source, "succeeded"); }).not.toThrow();
+      expect(JSON.parse(result)).toMatchObject({
+        ok: true,
+        toolResultEnvelope: { status: "succeeded" },
+      });
+    }
+  });
+
   it("clamps an unbounded originating utterance without stranding projection", () => {
     const result = finalize(
       JSON.stringify({ ok: true, text: "x".repeat(MAX_RELAY_TOOL_RESULT_BYTES * 2) }),
@@ -121,7 +144,7 @@ describe("normal pending stdio tool-result boundary", () => {
     }));
   });
 
-  it("does not synthesize truncation or a degraded record for a complete projection", () => {
+  it("accounts for non-section siblings as truncated recoverable metadata", () => {
     const artifactRoot = mkdtempSync(join(tmpdir(), "omi-relay-tool-result-"));
     roots.push(artifactRoot);
     const onDegraded = vi.fn();
@@ -146,9 +169,10 @@ describe("normal pending stdio tool-result boundary", () => {
       toolResultEnvelope: { truncated: boolean; originalBytes: number; projectedBytes: number };
     };
     expect(payload.omitted?.conversations).toBe(0);
-    expect(payload.toolResultEnvelope.truncated).toBe(false);
-    expect(payload.toolResultEnvelope.originalBytes).toBe(payload.toolResultEnvelope.projectedBytes);
-    expect(onDegraded).not.toHaveBeenCalled();
+    expect(payload.omitted?.meta).toBeDefined();
+    expect(payload.toolResultEnvelope.truncated).toBe(true);
+    expect(payload.toolResultEnvelope.originalBytes).toBeGreaterThan(payload.toolResultEnvelope.projectedBytes);
+    expect(onDegraded).toHaveBeenCalledOnce();
   });
 
   it.each([
