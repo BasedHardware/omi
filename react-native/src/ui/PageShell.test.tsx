@@ -27,8 +27,8 @@ test('DesktopApp keeps an even window inset around one chrome row', () => {
   expect(desktopChrome).toContain('height: desktopTrafficLightButton');
   expect(desktopChrome).not.toContain('marginLeft');
   expect(desktopChrome).toMatch(/row:\s*\{[^}]*alignItems:\s*'center'/);
-  expect(desktopChrome).toMatch(/navItem:\s*\{[^}]*alignItems:\s*'center'/);
-  expect(desktopChrome).toMatch(/navItem:\s*\{[^}]*justifyContent:\s*'center'/);
+  expect(desktopChrome).toMatch(/navHit:\s*\{[^}]*alignItems:\s*'center'/);
+  expect(desktopChrome).toMatch(/navHit:\s*\{[^}]*justifyContent:\s*'center'/);
   expect(desktopChrome).toContain('desktopSearchPlaceholder');
   expect(desktopChrome).toMatch(/omnibar:\s*\{/);
   expect(desktopChrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
@@ -36,4 +36,6 @@ test('DesktopApp keeps an even window inset around one chrome row', () => {
   expect(desktopChrome).toContain('styles.navPill');
   expect(desktopChrome).toContain("active={route === 'Settings'}");
   expect(desktopChrome).toContain('accessibilityLabel="Settings"');
+  expect(desktopChrome).not.toMatch(/navTextActive:\s*\{[^}]*fontWeight/);
+  expect(desktopChrome).toMatch(/navItem:\s*\{[^}]*paddingHorizontal:\s*16/);
 });

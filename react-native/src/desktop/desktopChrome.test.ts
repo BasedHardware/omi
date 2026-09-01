@@ -15,6 +15,7 @@ import {
   desktopTrafficLightTrailing,
   desktopWindowInset,
   isShippingDesktopNav,
+  navFrameMoved,
   visibleChatError,
 } from './desktopChrome';
 import {
@@ -106,6 +107,14 @@ test('settings IA keeps wired panes and drops no-op duplicates', () => {
 test('omnibar sits on its own row under the nav', () => {
   expect(desktopOmnibarHeight).toBe(40);
   expect(desktopNavBarHeight).toBe(52);
+});
+
+test('nav pill frames ignore sub-point jitter', () => {
+  expect(navFrameMoved(undefined, {x: 10, width: 80})).toBe(true);
+  expect(navFrameMoved({x: 10, width: 80}, {x: 10, width: 80})).toBe(false);
+  expect(navFrameMoved({x: 10, width: 80}, {x: 10.4, width: 80.2})).toBe(false);
+  expect(navFrameMoved({x: 10, width: 80}, {x: 10.6, width: 80})).toBe(true);
+  expect(navFrameMoved({x: 10, width: 80}, {x: 10, width: 80.6})).toBe(true);
 });
 
 test('chat transport errors surface only for ready sessions', () => {

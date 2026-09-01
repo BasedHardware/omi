@@ -73,3 +73,20 @@ export function visibleChatError(
 export function isShippingDesktopNav(label: string): boolean {
   return (desktopNavItems as readonly string[]).includes(label);
 }
+
+export const desktopNavLayoutEpsilon = 0.5;
+
+export type DesktopNavFrame = {x: number; width: number};
+
+export function navFrameMoved(
+  previous: DesktopNavFrame | undefined,
+  next: DesktopNavFrame,
+): boolean {
+  if (previous === undefined) {
+    return true;
+  }
+  return (
+    Math.abs(previous.x - next.x) > desktopNavLayoutEpsilon ||
+    Math.abs(previous.width - next.width) > desktopNavLayoutEpsilon
+  );
+}

@@ -16,6 +16,8 @@ import {
   desktopSearchPlaceholder,
   desktopTrafficLightButton,
   desktopTrafficLightRowWidth,
+  navFrameMoved,
+  type DesktopNavFrame,
   type DesktopNavItem,
 } from './desktopChrome';
 import {ShippingPressable} from './ShippingPressable';
@@ -40,8 +42,6 @@ type Props = {
   omnibarRef: React.RefObject<TextInput | null>;
 };
 
-type ItemFrame = {x: number; width: number};
-
 export function DesktopChrome({
   chatNotice,
   draft,
@@ -53,44 +53,51 @@ export function DesktopChrome({
 }: Props) {
   const reduceMotion = useReduceMotion();
   const [frames, setFrames] = useState<
-    Partial<Record<DesktopNavItem, ItemFrame>>
+    Partial<Record<DesktopNavItem, DesktopNavFrame>>
   >({});
   const pillX = useRef(new Animated.Value(0)).current;
   const pillW = useRef(new Animated.Value(0)).current;
   const pillOpacity = useRef(new Animated.Value(0)).current;
   const placed = useRef(false);
+  const animating = useRef(false);
   const lastTarget = useRef({x: -1, width: -1});
   const activeNav = route === 'Settings' ? null : route;
   const activeFrame = activeNav === null ? undefined : frames[activeNav];
+  const activeX = activeFrame?.x;
+  const activeWidth = activeFrame?.width;
 
   useEffect(() => {
-    if (activeFrame === undefined) {
+    if (activeNav === null) {
       pillOpacity.setValue(0);
       return;
     }
-    const same =
-      lastTarget.current.x === activeFrame.x &&
-      lastTarget.current.width === activeFrame.width;
-    if (same) {
+    if (activeX === undefined || activeWidth === undefined) {
       return;
     }
-    lastTarget.current = {x: activeFrame.x, width: activeFrame.width};
+    const target = {x: activeX, width: activeWidth};
+    const same = !navFrameMoved(lastTarget.current, target);
+    if (same) {
+      pillOpacity.setValue(1);
+      return;
+    }
+    lastTarget.current = target;
     if (!placed.current || reduceMotion) {
-      pillX.setValue(activeFrame.x);
-      pillW.setValue(activeFrame.width);
+      pillX.setValue(target.x);
+      pillW.setValue(target.width);
       pillOpacity.setValue(1);
       placed.current = true;
       return;
     }
+    animating.current = true;
     Animated.parallel([
       Animated.timing(pillX, {
         duration: desktopMotion.stepMs,
-        toValue: activeFrame.x,
+        toValue: target.x,
         useNativeDriver: false,
       }),
       Animated.timing(pillW, {
         duration: desktopMotion.stepMs,
-        toValue: activeFrame.width,
+        toValue: target.width,
         useNativeDriver: false,
       }),
       Animated.timing(pillOpacity, {
@@ -98,8 +105,18 @@ export function DesktopChrome({
         toValue: 1,
         useNativeDriver: false,
       }),
-    ]).start();
-  }, [activeFrame, pillOpacity, pillW, pillX, reduceMotion]);
+    ]).start(() => {
+      animating.current = false;
+    });
+  }, [
+    activeNav,
+    activeWidth,
+    activeX,
+    pillOpacity,
+    pillW,
+    pillX,
+    reduceMotion,
+  ]);
 
   return (
     <View accessibilityLabel="Omi desktop chrome" style={styles.chrome}>
@@ -121,35 +138,47 @@ export function DesktopChrome({
               },
             ]}
           />
-          {desktopNavItems.map(label => {
+          {desktopNavItems.map((label, index) => {
             const Icon = navIcons[label];
             const active = route === label;
             return (
-              <FocusPressable
-                accessibilityLabel={label}
-                accessibilityRole="button"
-                accessibilityState={{selected: active}}
+              <View
                 key={label}
                 onLayout={event => {
+                  if (animating.current) {
+                    return;
+                  }
                   const {x, width} = event.nativeEvent.layout;
                   setFrames(current => {
-                    const previous = current[label];
-                    if (previous?.x === x && previous.width === width) {
+                    const next = {width, x};
+                    if (!navFrameMoved(current[label], next)) {
                       return current;
                     }
-                    return {...current, [label]: {width, x}};
+                    return {...current, [label]: next};
                   });
                 }}
-                onPress={() => onNavigate(label)}
-                style={({pressed}) => [
+                style={[
                   styles.navItem,
-                  pressed && styles.pressed,
+                  index < desktopNavItems.length - 1 && styles.navItemFollow,
                 ]}>
-                <Icon color={token.color.ink} size={14} />
-                <Text style={[styles.navText, active && styles.navTextActive]}>
-                  {label}
-                </Text>
-              </FocusPressable>
+                <FocusPressable
+                  accessibilityLabel={label}
+                  accessibilityRole="button"
+                  accessibilityState={{selected: active}}
+                  onPress={() => onNavigate(label)}
+                  style={({pressed}) => [
+                    styles.navHit,
+                    pressed && styles.pressed,
+                  ]}>
+                  <View style={styles.navIcon}>
+                    <Icon color={token.color.ink} size={14} />
+                  </View>
+                  <Text
+                    style={[styles.navText, active && styles.navTextActive]}>
+                    {label}
+                  </Text>
+                </FocusPressable>
+              </View>
             );
           })}
         </View>
@@ -216,7 +245,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     flexShrink: 1,
-    gap: 6,
     position: 'relative',
   },
   navPill: {
@@ -228,13 +256,22 @@ const styles = StyleSheet.create({
     top: 6,
   },
   navItem: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 7,
     height: 40,
-    justifyContent: 'center',
     paddingHorizontal: 16,
     zIndex: 1,
+  },
+  navItemFollow: {
+    marginRight: 6,
+  },
+  navHit: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    height: 40,
+    justifyContent: 'center',
+  },
+  navIcon: {
+    marginRight: 7,
   },
   navText: {
     color: token.color.inkMuted,
@@ -244,7 +281,6 @@ const styles = StyleSheet.create({
   },
   navTextActive: {
     color: token.color.ink,
-    fontWeight: '700',
   },
   omnibar: {
     alignItems: 'center',
