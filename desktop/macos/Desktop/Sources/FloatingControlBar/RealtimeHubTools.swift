@@ -275,10 +275,14 @@ enum RealtimeHubTools {
     """
   }
 
-  static func escalationUserPrompt(query: String, toolContext: String) -> String {
+  static func escalationUserPrompt(query: String, toolContext: String, screenContext: String? = nil) -> String {
+    var prompt = query
+    if let screen = screenContext?.trimmingCharacters(in: .whitespacesAndNewlines), !screen.isEmpty {
+      prompt += "\n\nWhat the user's screen showed when they asked (this turn's screenshot):\n" + screen
+    }
     let trimmedToolContext = toolContext.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedToolContext.isEmpty else { return query }
-    return query + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
+    guard !trimmedToolContext.isEmpty else { return prompt }
+    return prompt + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
   }
 
   /// Host-authored public-only request sent to the managed web-search lane.

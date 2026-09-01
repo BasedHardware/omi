@@ -50,6 +50,9 @@ enum ThreeDoorsDemoPage {
     Door 1 riddle: "I have keys but open no locks. I have space but no room. You can enter, but never go inside." (answer: keyboard). \
     Door 2: "Which planet has a day longer than its year?" (answer: Venus). \
     Door 3 asks for the last word of the first riddle (answer: inside). \
+    The doors appear one at a time, in order. When the user asks about "this riddle" or "the answer", first call the \
+    screenshot tool to see which door is on screen now (the page says "Door N of 3"), then answer THAT door from this note. \
+    Never assume it is door 1 because door 1 was answered earlier. \
     If the user asks about any of these doors or riddles, answer directly and briefly from this note. \
     Never say you don't remember the riddle or that it was never mentioned.
     """
