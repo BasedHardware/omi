@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 private struct AssistantEventDataBox: @unchecked Sendable {
@@ -133,6 +134,9 @@ class AssistantCoordinator {
   ) async -> Bool {
     // Injectable for tests only; production always reads the live flag.
     let bucketsEnabled = bucketsEnabled ?? ContextBucketsFeature.isEnabled
+    let newBundleID = NSWorkspace.shared.frontmostApplication.flatMap { application in
+      application.localizedName == newApp ? application.bundleIdentifier : nil
+    }
     let transitionRequest = ContextTransitionRequest(app: newApp, windowTitle: newWindowTitle)
     guard lastTrackedApp != nil else {
       if bucketsEnabled {
@@ -209,14 +213,20 @@ class AssistantCoordinator {
         lastTrackedApp = newApp
         lastTrackedWindowTitle = newWindowTitle
         await fireContextSwitchOnAllAssistants(
-          departingFrame: departingFrame, newApp: newApp, newWindowTitle: newWindowTitle)
+          departingFrame: departingFrame,
+          newApp: newApp,
+          newWindowTitle: newWindowTitle,
+          newBundleID: newBundleID,
+          bucketID: nil)
         return true
       }
+      var arrivingBucketID: String?
       do {
         let transition = try await ContextVisitCoordinator.shared.transition(
           toApp: newApp,
           windowTitle: newWindowTitle,
           departingFrame: departingFrame)
+        arrivingBucketID = transition.arrivingFence.bucketID
         if transition.departingQualified, let departingFence = transition.departingFence, let departingFrame {
           Task { await ContextBucketRollupWriter.shared.extract(frame: departingFrame, fence: departingFence) }
         }
@@ -227,13 +237,21 @@ class AssistantCoordinator {
       lastTrackedApp = newApp
       lastTrackedWindowTitle = newWindowTitle
       await fireContextSwitchOnAllAssistants(
-        departingFrame: departingFrame, newApp: newApp, newWindowTitle: newWindowTitle)
+        departingFrame: departingFrame,
+        newApp: newApp,
+        newWindowTitle: newWindowTitle,
+        newBundleID: newBundleID,
+        bucketID: arrivingBucketID)
       return true
     }
 
     // Flag-off rollback path: fire today's independent assistants unchanged.
     await fireContextSwitchOnAllAssistants(
-      departingFrame: departingFrame, newApp: newApp, newWindowTitle: newWindowTitle)
+      departingFrame: departingFrame,
+      newApp: newApp,
+      newWindowTitle: newWindowTitle,
+      newBundleID: newBundleID,
+      bucketID: nil)
     return true
   }
 
@@ -299,7 +317,9 @@ class AssistantCoordinator {
   func fireContextSwitchOnAllAssistants(
     departingFrame: CapturedFrame?,
     newApp: String,
-    newWindowTitle: String?
+    newWindowTitle: String?,
+    newBundleID: String? = nil,
+    bucketID: String? = nil
   ) async {
     for (_, assistant) in assistants {
       await assistant.onContextSwitch(
@@ -308,6 +328,11 @@ class AssistantCoordinator {
         newWindowTitle: newWindowTitle
       )
     }
+    FirstRunContextObserver.post(
+      appName: newApp,
+      bundleID: newBundleID,
+      windowTitle: newWindowTitle,
+      bucketID: bucketID)
   }
 
   private func finishContextTransition(_ request: ContextTransitionRequest) {

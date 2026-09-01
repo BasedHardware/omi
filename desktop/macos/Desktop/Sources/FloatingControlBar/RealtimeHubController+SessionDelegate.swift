@@ -1107,6 +1107,7 @@ extension RealtimeHubController {
             "RealtimeHub: provider transcript language did not match the configured voice languages; using bounded local decode for continuity"
           )
         }
+        FirstRunContextObserver.postCompletedVoiceTurn(resolution.userText)
         let accepted =
           await self?.persistTurnDirectlyToKernel(
             ownerID: completedTurnOwnerID,

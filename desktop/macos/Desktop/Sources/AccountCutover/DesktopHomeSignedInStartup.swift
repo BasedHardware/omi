@@ -63,6 +63,18 @@ enum DesktopHomeSignedInStartup {
     if let barState = FloatingControlBarManager.shared.barState {
       PushToTalkManager.shared.setup(barState: barState)
     }
+
+    FirstRunCoordinator.shared.configure(meetingIsActive: { [weak appState] in
+      appState?.meetingDetector?.isMeetingActive == true
+    })
+    FirstRunCoordinator.shared.startIfNeeded(
+      hasCompletedOnboarding: appState.hasCompletedOnboarding)
+    DesktopUsageDailyReporter.shared.start(
+      isWatching: { ProactiveAssistantsPlugin.shared.isMonitoring },
+      isListening: { [weak appState] in
+        appState?.isLiveCapturing == true
+          || VoiceTurnCoordinator.shared.activeTurn?.phase.isRecording == true
+      })
   }
 
   static func loadDataIfAdmitted(

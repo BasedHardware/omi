@@ -1593,6 +1593,7 @@ class PushToTalkManager: ObservableObject {
     seenFinalSegmentIDs.removeAll()
     lastInterimText = ""
     currentContextSnapshot = nil
+    FirstRunContextObserver.postCompletedVoiceTurn(query)
 
     guard hasQuery else {
       log("PushToTalkManager: no transcript to send")

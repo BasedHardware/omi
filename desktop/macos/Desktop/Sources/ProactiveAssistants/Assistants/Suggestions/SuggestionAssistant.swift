@@ -538,7 +538,8 @@ actor SuggestionAssistant: ProactiveAssistant {
   @discardableResult
   private func resolveDelivery(
     _ result: AssistantResult,
-    sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
+    sendEvent: @escaping @Sendable (String, [String: Any]) -> Void,
+    assistantIDOverride: String? = nil
   ) async -> SuggestionAssistantTelemetry.DeliveryOutcome? {
     guard let result = result as? SuggestionResult else { return nil }
     guard result.hasSuggestion, let suggestion = result.suggestion else {
@@ -604,7 +605,8 @@ actor SuggestionAssistant: ProactiveAssistant {
       suggestion,
       result: result,
       ownerID: ownerID,
-      telemetryIdentity: telemetryIdentity
+      telemetryIdentity: telemetryIdentity,
+      assistantIDOverride: assistantIDOverride
     )
     return .delivered
   }
@@ -623,11 +625,13 @@ actor SuggestionAssistant: ProactiveAssistant {
     _ suggestion: ExtractedSuggestion,
     result: SuggestionResult,
     ownerID: String,
-    telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
+    telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?,
+    assistantIDOverride: String? = nil
   ) async {
+    let deliveryAssistantID = assistantIDOverride ?? identifier
     let context = FloatingBarNotificationContext(
       sourceTitle: "Focus",
-      assistantId: identifier,
+      assistantId: deliveryAssistantID,
       sourceApp: nil,
       windowTitle: nil,
       contextSummary: result.contextSummary,
@@ -643,7 +647,7 @@ actor SuggestionAssistant: ProactiveAssistant {
         ownerID: ownerID,
         title: "Focus",
         message: suggestion.suggestion,
-        assistantId: identifier,
+        assistantId: deliveryAssistantID,
         context: context,
         suggestionTelemetryIdentity: telemetryIdentity
       )
@@ -663,6 +667,7 @@ actor SuggestionAssistant: ProactiveAssistant {
   /// which an agent cannot do without taking the user's focus.
   func probeEvaluateAndDeliver(
     frame: CapturedFrame,
+    assistantIDOverride: String? = nil,
     sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
   ) async -> [String: String] {
     // The probe bypasses only timing gates for intentional QA. It retains every
@@ -721,7 +726,10 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     // Report what delivery actually did, not that a suggestion existed. `outcome` is
     // "delivered" only when a card reached NotificationService.
-    let delivery = await resolveDelivery(result, sendEvent: sendEvent)
+    let delivery = await resolveDelivery(
+      result,
+      sendEvent: sendEvent,
+      assistantIDOverride: assistantIDOverride)
 
     return [
       "outcome": delivery?.rawValue ?? "no_delivery_decision",

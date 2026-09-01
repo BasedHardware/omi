@@ -3625,6 +3625,37 @@ class FloatingControlBarManager {
     dismissNotificationAndAdvanceQueue(trackDismissal: true, kind: kind)
   }
 
+  var currentNotificationAssistantID: String? {
+    window?.state.currentNotification?.assistantId
+  }
+
+  var currentNotificationTitle: String? {
+    window?.state.currentNotification?.title
+  }
+
+  func hasNotification(assistantID: String) -> Bool {
+    window?.state.currentNotification?.assistantId == assistantID
+      || pendingNotifications.contains(where: { $0.assistantId == assistantID })
+  }
+
+  /// Remove one feature owner's current and queued cards without changing rendering.
+  /// First run uses this to replace persistent instruction chips and to hide them
+  /// while a meeting or focus card owns the notch.
+  func dismissNotifications(
+    assistantID: String,
+    kind: NotificationDismissalKind = .replaced
+  ) {
+    let removed = pendingNotifications.filter { $0.assistantId == assistantID }
+    pendingNotifications.removeAll { $0.assistantId == assistantID }
+    for notification in removed {
+      notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
+      notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
+    }
+    guard window?.state.currentNotification?.assistantId == assistantID else { return }
+    cancelNotificationDismissTimer()
+    dismissNotificationAndAdvanceQueue(trackDismissal: true, kind: kind)
+  }
+
   private func cancelNotificationDismissTimer() {
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
@@ -4411,6 +4442,8 @@ class FloatingControlBarManager {
       let window
     else { return }
 
+    DesktopUsageDailyReporter.shared.recordProactiveCardActed()
+
     AnalyticsManager.shared.notificationClicked(
       notificationId: notification.id.uuidString,
       title: notification.title,
@@ -4518,6 +4551,7 @@ class FloatingControlBarManager {
       surface: "floating_bar",
       suggestionIdentity: notification.suggestionTelemetryIdentity
     )
+    DesktopUsageDailyReporter.shared.recordProactiveCardShown()
 
     // A persistent card (meeting summary share) stays until the user acts on
     // it — Copy/Send/close are its only exits, all of which route through
@@ -4556,6 +4590,12 @@ class FloatingControlBarManager {
         suggestionIdentity: dismissedNotification.suggestionTelemetryIdentity,
         attention: attention
       )
+      if kind == .user, dismissedNotification.assistantId == "first_run_guide" {
+        NotificationCenter.default.post(
+          name: .firstRunNotificationDismissed,
+          object: nil,
+          userInfo: ["assistant_id": dismissedNotification.assistantId])
+      }
       if InterjectFeature.isEnabled, kind != .replaced {
         interjectGraceCard = dismissedNotification
         interjectGraceWindow.arm(now: Date())

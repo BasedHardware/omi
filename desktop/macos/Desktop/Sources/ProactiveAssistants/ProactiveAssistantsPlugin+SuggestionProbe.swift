@@ -12,7 +12,8 @@ extension ProactiveAssistantsPlugin {
   /// leisure context can be probed without stealing the user's focus for 30 seconds.
   func probeSuggestionNudge(
     appOverride: String?,
-    windowTitleOverride: String?
+    windowTitleOverride: String?,
+    deliveryAssistantID: String? = nil
   ) async -> [String: String] {
     let registered = AssistantCoordinator.shared.assistant(withIdentifier: "suggestion")
     guard let assistant = registered as? SuggestionAssistant else {
@@ -53,7 +54,10 @@ extension ProactiveAssistantsPlugin {
 
     // The probe's own delivery does not need to fan out assistant events; the observable
     // result is the notification itself plus the returned outcome.
-    return await assistant.probeEvaluateAndDeliver(frame: frame) { _, _ in }
+    return await assistant.probeEvaluateAndDeliver(
+      frame: frame,
+      assistantIDOverride: deliveryAssistantID
+    ) { _, _ in }
   }
 
   /// Whether the frontmost app is one the user has excluded from capture.
