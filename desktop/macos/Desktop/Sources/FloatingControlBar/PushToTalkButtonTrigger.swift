@@ -87,6 +87,18 @@ extension PushToTalkManager {
     }
   }
 
+  /// Discard control is offered only while audio is still being captured —
+  /// never while the turn is committing or idle. Mic click stays "send".
+  nonisolated static func showsCancelRecordingControl(phase: VoiceTurnPhase?) -> Bool {
+    switch phase {
+    case .recording, .lockedRecording, .pendingLockDecision:
+      return true
+    case .idle, .finalizing, .awaitingResponse, .awaitingTools, .awaitingJournal, .playing,
+      .terminal, .none:
+      return false
+    }
+  }
+
   // MARK: - Button surface
 
   /// Read-only projection of the same rule `isBlockedByUsageLimit()` enforces,

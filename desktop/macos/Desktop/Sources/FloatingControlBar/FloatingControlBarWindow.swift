@@ -719,8 +719,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   func handleEscapeKey() {
-    if FloatingBarVoicePlaybackService.shared.isSpeaking {
-      FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+    if VoiceResponsePlayback.interrupt() {
       return
     }
 

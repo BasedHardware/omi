@@ -125,6 +125,7 @@ extension RealtimeHubController {
     realtimePlaybackEpoch += 1
     pcmPlayer?.stop()
     responseGlowGate.clearImmediately()
+    VoiceResponsePlaybackMonitor.shared.refresh()
     return true
   }
 }

@@ -22,6 +22,8 @@ enum HomeAskBarPrimaryAction: Equatable {
   /// primary that thins out the moment it becomes the only control is a button
   /// that disappears exactly when it starts to matter.
   case stop(isStopping: Bool)
+  /// Stop spoken playback after the text answer is already on screen.
+  case stopSpeaking
 }
 
 /// The Home ask bar's trailing cluster, resolved from composer state.
@@ -37,10 +39,14 @@ struct HomeAskBarControls: Equatable {
     isSending: Bool,
     isStopping: Bool,
     hasText: Bool,
-    isFocused: Bool
+    isFocused: Bool,
+    isSpeaking: Bool = false
   ) -> HomeAskBarControls {
     if isSending {
       return HomeAskBarControls(primary: .stop(isStopping: isStopping), showsConnect: false)
+    }
+    if isSpeaking {
+      return HomeAskBarControls(primary: .stopSpeaking, showsConnect: false)
     }
     return HomeAskBarControls(primary: .send(isArmed: hasText), showsConnect: !hasText && !isFocused)
   }
@@ -58,6 +64,7 @@ struct HomeAskBarTrailingControls: View {
   let isConnectActive: Bool
   let onSend: () -> Void
   let onStop: () -> Void
+  var onStopSpeaking: (() -> Void)? = nil
   let onConnect: () -> Void
 
   var body: some View {
@@ -71,6 +78,8 @@ struct HomeAskBarTrailingControls: View {
         sendButton(isArmed: isArmed)
       case .stop(let isStopping):
         stopButton(isStopping: isStopping)
+      case .stopSpeaking:
+        stopSpeakingButton
       }
     }
   }
@@ -120,6 +129,24 @@ struct HomeAskBarTrailingControls: View {
     .disabled(isStopping)
     .help("Stop")
     .accessibilityLabel("Stop response")
+  }
+
+  private var stopSpeakingButton: some View {
+    Button(action: { (onStopSpeaking ?? onStop)() }) {
+      ZStack {
+        Circle()
+          .fill(HomeAskBarPalette.primaryFill)
+        Image(systemName: "speaker.slash.fill")
+          .scaledFont(size: OmiType.caption, weight: .bold)
+          .foregroundStyle(HomeAskBarPalette.primaryLabel)
+      }
+      .frame(width: 34, height: 34)
+      .contentShape(Circle())
+    }
+    .buttonStyle(.plain)
+    .help("Stop speaking")
+    .accessibilityLabel("Stop speaking")
+    .accessibilityIdentifier("home_ask_bar_stop_speaking")
   }
 }
 

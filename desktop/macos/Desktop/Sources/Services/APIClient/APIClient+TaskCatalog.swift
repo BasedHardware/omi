@@ -148,6 +148,7 @@ extension APIClient {
     status: String? = nil,
     sortOrder: Int? = nil,
     indentLevel: Int? = nil,
+    idempotencyKey: String? = nil,
     expectedOwnerId: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> TaskActionItem {
@@ -193,11 +194,15 @@ extension APIClient {
       relevanceScore: relevanceScore
     )
 
+    // Always send a key (web parity). Callers with a durable local row pass a
+    // stable key so launch retries dedupe; everyone else gets a fresh UUID.
+    let key = idempotencyKey ?? UUID().uuidString
     return try await post(
       "v1/action-items",
       body: request,
       expectedOwnerId: expectedOwnerId,
-      authorizationSnapshot: authorizationSnapshot)
+      authorizationSnapshot: authorizationSnapshot,
+      idempotencyKey: key)
   }
 
   private func taskMutationBody<Wire: Encodable>(

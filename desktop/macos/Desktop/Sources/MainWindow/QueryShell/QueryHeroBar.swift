@@ -93,6 +93,7 @@ struct QueryHeroBar: View {
   var references: [ChatComposerReference] = []
   var onReferenceRemoved: (String) -> Void = { _ in }
 
+  @ObservedObject private var voicePlayback = VoiceResponsePlaybackMonitor.shared
   @State private var isDropTargeted = false
   /// True while an input method has uncommitted marked text, which is the one moment the placeholder
   /// must stay hidden over an apparently empty field.
@@ -228,6 +229,14 @@ struct QueryHeroBar: View {
           .accessibilityIdentifier("query-shell-stop")
           .accessibilityLabel("Stop response")
           .help("Stop this response")
+      } else if voicePlayback.isActive {
+        heroPrimary(
+          systemImage: "speaker.slash.fill", isProminent: true,
+          action: { VoiceResponsePlayback.interrupt() }
+        )
+        .accessibilityIdentifier("query-shell-stop-speaking")
+        .accessibilityLabel("Stop speaking")
+        .help("Stop speaking")
       } else {
         heroPrimary(systemImage: "arrow.up", isProminent: canSend, action: onAsk)
           .keyboardShortcut(.return, modifiers: .command)
@@ -283,6 +292,14 @@ struct QueryHeroBar: View {
           .accessibilityIdentifier("query-shell-stop")
           .accessibilityLabel("Stop response")
           .help("Stop this response")
+      } else if voicePlayback.isActive {
+        panelPrimary(
+          systemImage: "speaker.slash.fill", isProminent: true,
+          action: { VoiceResponsePlayback.interrupt() }
+        )
+        .accessibilityIdentifier("query-shell-stop-speaking")
+        .accessibilityLabel("Stop speaking")
+        .help("Stop speaking")
       } else {
         panelPrimary(systemImage: "arrow.up", isProminent: canSend, action: onAsk)
           .keyboardShortcut(.return, modifiers: .command)
