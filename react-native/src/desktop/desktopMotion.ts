@@ -1,12 +1,20 @@
 import {Animated, Easing} from 'react-native';
 import {desktopMotion} from './desktopChrome';
 
+export function desktopEaseSmoothOut() {
+  return Easing.bezier(0.22, 1, 0.36, 1);
+}
+
 export function desktopEaseOut() {
-  return Easing.out(Easing.cubic);
+  return desktopEaseSmoothOut();
 }
 
 export function desktopEaseInOut() {
   return Easing.inOut(Easing.cubic);
+}
+
+export function desktopEaseBounce() {
+  return Easing.bezier(0.34, 1.36, 0.64, 1);
 }
 
 export function motionDuration(ms: number, reduceMotion: boolean): number {

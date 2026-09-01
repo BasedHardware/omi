@@ -13,7 +13,7 @@ afterEach(() => {
   mockReduceMotion = false;
 });
 
-test('page stage uses 80ms ease-out on route change and never springs', () => {
+test('page stage uses 250ms smooth-out on route change and never springs', () => {
   const timing = jest.spyOn(Animated, 'timing');
   const spring = jest.spyOn(Animated, 'spring');
   let renderer: ReactTestRenderer.ReactTestRenderer;
@@ -35,7 +35,7 @@ test('page stage uses 80ms ease-out on route change and never springs', () => {
   expect(spring).not.toHaveBeenCalled();
   expect(timing).toHaveBeenCalled();
   const durations = timing.mock.calls.map(call => call[1]?.duration);
-  expect(durations).toContain(80);
+  expect(durations).toContain(250);
   act(() => {
     renderer.unmount();
   });
@@ -43,7 +43,7 @@ test('page stage uses 80ms ease-out on route change and never springs', () => {
   spring.mockRestore();
 });
 
-test('search stage uses the 240ms hub-to-results step', () => {
+test('search stage uses the 250ms hub-to-results step', () => {
   const timing = jest.spyOn(Animated, 'timing');
   let renderer: ReactTestRenderer.ReactTestRenderer;
   act(() => {
@@ -61,7 +61,7 @@ test('search stage uses the 240ms hub-to-results step', () => {
     );
   });
   const durations = timing.mock.calls.map(call => call[1]?.duration);
-  expect(durations).toContain(240);
+  expect(durations).toContain(250);
   act(() => {
     renderer.unmount();
   });

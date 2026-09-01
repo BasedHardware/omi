@@ -37,14 +37,24 @@ export const desktopTrafficLightRowWidth =
 export const desktopGlassCornerRadius = 22;
 export const desktopSystemFontFamily = 'System';
 
+// transitions.dev motion tokens (https://transitions.dev), mapped onto RN.
+// Durations: stagger 40 / micro 80 / quick 150 / fast 250 / medium 350 /
+// slow 400 / very-slow 500. Easing lives in desktopMotion.ts (smooth-out).
 export const desktopMotion = {
-  navMs: 80,
-  pressMs: 90,
-  stepMs: 240,
-  settleMs: 280,
-  overlayMs: 300,
-  checkboxMs: 180,
-  searchExpandMs: 160,
+  staggerMs: 40,
+  microMs: 80,
+  quickMs: 150,
+  fastMs: 250,
+  mediumMs: 350,
+  slowMs: 400,
+  verySlowMs: 500,
+  navMs: 250,
+  pressMs: 80,
+  stepMs: 250,
+  settleMs: 350,
+  overlayMs: 400,
+  checkboxMs: 150,
+  searchExpandMs: 150,
   listInsertMs: 0,
   glassMs: 0,
 } as const;

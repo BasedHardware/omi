@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Animated, ScrollView, Switch, Text, View} from 'react-native';
 import {useReduceMotion} from '../app/useReduceMotion';
+import {desktopEaseSmoothOut} from './desktopMotion';
 import {
   loadAccountSettings,
   setPrivateCloudSync,
@@ -128,7 +129,8 @@ function SettingsNav({
       return;
     }
     const animation = Animated.timing(translateY, {
-      duration: desktopMotion.stepMs,
+      duration: desktopMotion.navMs,
+      easing: desktopEaseSmoothOut(),
       toValue: next,
       useNativeDriver: true,
     });
