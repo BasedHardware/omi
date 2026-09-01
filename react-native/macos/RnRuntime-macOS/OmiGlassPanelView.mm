@@ -5,7 +5,7 @@
 // Default radius for floating panels; the host may override it per instance so a
 // single panel can run full-bleed inside the window's own rounded clip shape.
 static const CGFloat defaultCornerRadius = 22.0;
-static const CGFloat OmiGlassScrimAlpha = 0.14;
+static const CGFloat OmiGlassScrimAlpha = 0.46;
 
 @interface OmiGlassPanelView ()
 

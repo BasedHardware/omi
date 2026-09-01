@@ -7,7 +7,7 @@ function readNativeSource(fileName: string): string {
   return readFileSync(resolve(macOSRoot, fileName), 'utf8');
 }
 
-test('keeps the RN host surface clear while the stock titlebar carries a dark glass fill', () => {
+test('keeps a transparent glass window over the desktop', () => {
   const source = readNativeSource('AppDelegate.mm');
 
   expect(source).toContain('#import <React/RCTUIKit.h>');
@@ -16,15 +16,18 @@ test('keeps the RN host surface clear while the stock titlebar carries a dark gl
   );
   expect(source).toContain('rootView.backgroundColor = NSColor.clearColor;');
   expect(source).toContain('window.opaque = NO;');
-  expect(source).toContain('window.backgroundColor = OmiTitlebarFillColor();');
-  expect(source).toMatch(/alpha:0\.8[0-9]\]/);
+  expect(source).toContain('window.backgroundColor = NSColor.clearColor;');
   expect(source).toContain(
-    'window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];',
+    'window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];',
   );
-  expect(source).not.toContain('window.backgroundColor = NSColor.clearColor;');
+  expect(source).toContain('NSVisualEffectView');
+  expect(source).toContain('NSVisualEffectMaterialUnderWindowBackground');
+  expect(source).toContain('NSVisualEffectBlendingModeBehindWindow');
+  expect(source).not.toContain('OmiTitlebarFillColor');
+  expect(source).not.toContain('NSAppearanceNameVibrantDark');
 });
 
-test('uses standard visible macOS traffic lights with native window dragging', () => {
+test('puts traffic lights in the content chrome next to Home', () => {
   const source = readNativeSource('AppDelegate.mm');
 
   expect(source).toContain(
@@ -36,28 +39,19 @@ test('uses standard visible macOS traffic lights with native window dragging', (
   expect(source).toContain(
     '[window standardWindowButton:NSWindowZoomButton].hidden = NO;',
   );
-  expect(source).toContain('window.movableByWindowBackground = YES;');
-  expect(source).toMatch(
-    /window\.toolbarStyle = NSWindowToolbarStyle(?:Automatic|Preference);/,
-  );
-  expect(source).toContain('window.title = @"omi";');
-  expect(source).toContain('window.titleVisibility = NSWindowTitleVisible');
-  expect(source).not.toContain('window.title = @"";');
-  expect(source).not.toContain('NSWindowTitleHidden');
+  expect(source).toContain('window.movableByWindowBackground = NO;');
+  expect(source).toContain('window.title = @"";');
+  expect(source).toContain('NSWindowTitleHidden');
   expect(source).toContain('positionOmiTrafficLights');
   expect(source).toContain('OmiTrafficLightLeading');
-  expect(source).toMatch(/OmiTrafficLightLeading\s*=\s*1[234]\.0/);
-  expect(source).not.toContain('FullSizeContentView');
-  expect(source).toContain('titlebarAppearsTransparent = NO');
-  expect(source).not.toContain('titlebarAppearsTransparent = YES');
-  expect(source).toContain('NSTitlebarSeparatorStyleAutomatic');
-  expect(source).not.toContain('NSTitlebarSeparatorStyleNone');
-  expect(source).not.toContain('NSTitlebarAccessoryViewController');
-  expect(source).not.toContain('installOmiTitlebarAccessory');
-  expect(source).not.toContain('omiTitlebarAccessory');
-  expect(source).not.toContain('addTitlebarAccessoryViewController');
-  expect(source).not.toMatch(/OmiTrafficLightChromeHeight\s*-\s*28\.0/);
-  expect(source).not.toMatch(/OmiTrafficLightChromeHeight\s*=\s*52\.0/);
+  expect(source).toMatch(/OmiTrafficLightLeading\s*=\s*16\.0/);
+  expect(source).toContain('NSWindowStyleMaskFullSizeContentView');
+  expect(source).toContain('titlebarAppearsTransparent = YES');
+  expect(source).toContain('NSTitlebarSeparatorStyleNone');
+  expect(source).toContain('NSTitlebarAccessoryViewController');
+  expect(source).toContain('installOmiTitlebarAccessory');
+  expect(source).toContain('addTitlebarAccessoryViewController');
+  expect(source).toMatch(/OmiTrafficLightChromeHeight\s*=\s*52\.0/);
   expect(source).not.toContain('accessibilityLabel="Window drag handle"');
 });
 
@@ -131,6 +125,13 @@ test('pairs the macOS backend origin and credentials in one validated policy', (
   expect(source).toContain(
     'self.examplePlatformBackend && !OmiExamplePlatformRequestSupported(method, path)',
   );
+  expect(source).toContain('omi.backend.softwarePlane');
+  expect(source).toContain('OmiSoftwarePlaneIsNew');
+  expect(source).toContain('RCT_REMAP_METHOD(setSoftwarePlane');
+  expect(source).toContain('RCT_REMAP_METHOD(stampedV5BackendOrigin');
+  expect(source).not.toContain(
+    'omi-v5-backend-staging.undivisible.workers.dev',
+  );
   const cloudBranch = source.slice(
     source.indexOf('OmiBackendCredentialKindCloud'),
     source.indexOf('static BOOL OmiBackendPolicyIsValid'),
@@ -166,7 +167,10 @@ test('owns an in-app PKCE sign-in session and stores its cloud token locally', (
     backend.indexOf('environment[@"OMI_CLOUD_API_TOKEN"]'),
   );
   expect(backend).not.toContain('OmiKeychainCloudToken');
-  expect(backend).not.toContain('com.omi.desktop.firebase-rest-session');
+  expect(auth).toContain('OmiAuthImportShippingSessionIfNeeded');
+  expect(auth).toContain('com.omi.desktop.firebase-rest-session');
+  expect(auth).toContain('com.omi.computer-macos');
+  expect(backend).toContain('OmiAuthImportShippingSessionIfNeeded');
 });
 
 test('signs out by deleting only this app firebase-rest-session keychain item', () => {
@@ -184,6 +188,7 @@ test('signs out by deleting only this app firebase-rest-session keychain item', 
   expect(auth).toContain('RCT_EXPORT_MODULE(OmiAuth)');
   expect(method).toContain('OmiAuthClearSession');
   expect(method).toContain('OmiAuthSetEnvironmentCloudTokensIgnored(YES)');
+  expect(method).toContain('OmiAuthSetShippingSessionIgnored(YES)');
   expect(method).toContain('errSecSuccess');
   expect(method).toContain('errSecItemNotFound');
   expect(method).toContain('@{@"signedOut" : @YES}');
@@ -191,7 +196,7 @@ test('signs out by deleting only this app firebase-rest-session keychain item', 
   expect(method).toContain('Could not clear the Omi cloud session');
   expect(method).toContain('NSOSStatusErrorDomain');
   expect(auth).toContain('com.omi.rnruntime.firebase-rest-session');
-  expect(auth).not.toContain('com.omi.desktop.firebase-rest-session');
+  expect(method).not.toContain('com.omi.desktop.firebase-rest-session');
   expect(method).not.toContain('authorization');
   expect(method).not.toContain('Bearer');
   expect(method).not.toContain('127.0.0.1');
@@ -388,6 +393,19 @@ test('renders macOS chrome icons as named SF Symbols', () => {
   expect(source).toContain('configurationWithPointSize');
 });
 
+test('desktop settings persist preferences and request real macOS permissions', () => {
+  const source = readNativeSource('OmiDesktopCommandsModule.mm');
+  expect(source).toContain('RCT_REMAP_METHOD(loadDesktopPreferences');
+  expect(source).toContain('RCT_REMAP_METHOD(setDesktopPreference');
+  expect(source).toContain('screenAnalysisEnabled');
+  expect(source).toContain('audioRecordingMode');
+  expect(source).toContain('CGPreflightScreenCaptureAccess');
+  expect(source).toContain('CGRequestScreenCaptureAccess');
+  expect(source).toContain('AVCaptureDevice');
+  expect(source).toContain('requestAuthorizationWithOptions');
+  expect(source).not.toContain('CBCentralManager');
+});
+
 test('glass material never swallows hits', () => {
   const source = readNativeSource('OmiGlassPanelView.mm');
   expect(source).toContain('- (NSView *)hitTest:(NSPoint)point');
@@ -409,7 +427,7 @@ test('keeps the glass reduce-transparency fallback intact', () => {
 test('keeps the shared HUD material translucent with a semantic opaque fallback', () => {
   const source = readNativeSource('OmiGlassPanelView.mm');
 
-  expect(source).toContain('static const CGFloat OmiGlassScrimAlpha = 0.14;');
+  expect(source).toContain('static const CGFloat OmiGlassScrimAlpha = 0.46;');
   expect(source).toContain(
     'self.fallback.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;',
   );
@@ -536,6 +554,10 @@ test('exposes a real OmiNative CoreBluetooth module instead of a hardware stub',
   expect(scanSource).toContain('self.devices[keepId] = kept');
   expect(source).not.toContain('.swift');
   expect(entitlements).toContain('com.apple.security.device.bluetooth');
+  expect(entitlements).toContain('com.apple.security.app-sandbox');
+  expect(entitlements).toContain('<false/>');
+  expect(entitlements).toContain('com.apple.security.device.audio-input');
+  expect(entitlements).toContain('com.apple.security.device.screen-capture');
   expect(info).toContain('NSBluetoothAlwaysUsageDescription');
   expect(pbxproj).toContain('OmiNativeModule.mm in Sources');
   expect(pbxproj).toContain('CoreBluetooth.framework');
