@@ -7,17 +7,14 @@ enum FirstRunCardActionKind: Equatable {
 }
 
 enum FirstRunCardActions {
-  static func make(_ kind: FirstRunCardActionKind) -> FloatingBarNotificationAction? {
-    // MERGE-POINT: replace with FloatingBarNotificationAction cases from Task A
-    // switch kind {
-    // case .focusReturn(let projectTitle):
-    //   return .firstRunFocusReturn(projectTitle: projectTitle)
-    // case .contextReminder(let reminderID):
-    //   return .contextReminder(reminderID: reminderID)
-    // case .openSummary(let conversationID):
-    //   return .firstRunOpenSummary(conversationID: conversationID)
-    // }
-    _ = kind
-    return nil
+  static func make(_ kind: FirstRunCardActionKind) -> FloatingBarNotificationAction {
+    switch kind {
+    case .focusReturn(let projectTitle):
+      return .firstRunFocusReturn(projectTitle: projectTitle)
+    case .contextReminder(let reminderID):
+      return .contextReminder(reminderID: reminderID)
+    case .openSummary(let conversationID):
+      return .firstRunOpenSummary(conversationID: conversationID)
+    }
   }
 }

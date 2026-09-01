@@ -234,42 +234,37 @@ enum FloatingBarNotificationAction: Equatable {
   /// one-click "Send to …" email would go to (empty = no send button).
   case meetingSummaryShare(conversationID: String, recipients: [ConversationShareRecipient])
 
+  /// Scenario onboarding: the order-confirmation card's "Remind me" / "Not now".
+  case onboardingRemindMe(taskTitle: String, dueDate: Date)
+  /// First run: the focus card's "Back to it" / "5 more minutes".
+  case firstRunFocusReturn(projectTitle: String)
+  /// A context reminder delivered on return to its place: "Done" / "Remind me tomorrow".
+  case contextReminder(reminderID: String)
+  /// First run: the session write-up exists: "Open".
+  case firstRunOpenSummary(conversationID: String)
+
+  /// The seam identity of a button-bearing card action, as posted on
+  /// `.omiFloatingBarCardAction` by `FloatingBarCardActionDispatcher`.
   struct ScenarioDescriptor: Equatable {
     let kind: String
     let id: String
   }
 
-  private static let scenarioPrefix = "omi_card_action:"
-
-  static func onboardingRemindMe(taskTitle: String, dueDate: Date) -> Self {
-    _ = taskTitle
-    _ = dueDate
-    return .openWhatMattersNow(recommendationID: scenarioPrefix + "onboarding_remind_me")
-  }
-
-  static func firstRunFocusReturn(projectTitle: String) -> Self {
-    _ = projectTitle
-    return .openWhatMattersNow(recommendationID: scenarioPrefix + "first_run_focus_return")
-  }
-
-  static func contextReminder(reminderID: String) -> Self {
-    .openWhatMattersNow(recommendationID: scenarioPrefix + "context_reminder:" + reminderID)
-  }
-
-  static func firstRunOpenSummary(conversationID: String) -> Self {
-    .openWhatMattersNow(recommendationID: scenarioPrefix + "first_run_open_summary:" + conversationID)
-  }
-
+  /// Non-nil only for the button-bearing cases above. The focus card carries no id on purpose:
+  /// the project title is a window title and stays out of notification payloads.
   var scenarioDescriptor: ScenarioDescriptor? {
-    guard case .openWhatMattersNow(let value) = self,
-      value.hasPrefix(Self.scenarioPrefix)
-    else { return nil }
-    let payload = String(value.dropFirst(Self.scenarioPrefix.count))
-    let parts = payload.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-    return ScenarioDescriptor(
-      kind: parts.first.map(String.init) ?? payload,
-      id: parts.count == 2 ? String(parts[1]) : ""
-    )
+    switch self {
+    case .onboardingRemindMe:
+      return ScenarioDescriptor(kind: "onboarding_remind_me", id: "")
+    case .firstRunFocusReturn:
+      return ScenarioDescriptor(kind: "first_run_focus_return", id: "")
+    case .contextReminder(let reminderID):
+      return ScenarioDescriptor(kind: "context_reminder", id: reminderID)
+    case .firstRunOpenSummary(let conversationID):
+      return ScenarioDescriptor(kind: "first_run_open_summary", id: conversationID)
+    case .openWhatMattersNow, .connectIntegration, .meetingSummaryShare:
+      return nil
+    }
   }
 }
 

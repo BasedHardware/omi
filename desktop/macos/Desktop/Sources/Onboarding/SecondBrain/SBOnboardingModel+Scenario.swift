@@ -290,6 +290,15 @@ extension SBOnboardingModel {
     advance(userAnswer: "Looks right", to: .ready, detection: "title_match")
   }
 
+  /// The escape when the browser hand-off never comes back (no default browser, a closed tab).
+  /// Never gate a beat on something the app cannot observe.
+  func skipWriteBeat() {
+    guard step == .write, writePhase == .waitingForSend else { return }
+    scenarioDetectionTask?.cancel()
+    OnboardingScenarioJournal().append(who: "user", text: "Skip for now")
+    advance(userAnswer: "Skip for now", to: .ready, skipped: true, detection: "timeout")
+  }
+
   func requestScenarioWriteFix() {
     guard step == .write, writePhase == .review else { return }
     OnboardingScenarioJournal().append(who: "user", text: "fix_requested")

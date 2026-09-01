@@ -5,36 +5,59 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Omi Welcome · Note to Sam</title>
   <style>
-    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body { margin: 0; background: #eef1f4; color: #17191c; }
-    main { max-width: 760px; margin: 64px auto; background: white; border-radius: 20px; box-shadow: 0 16px 60px #00000014; overflow: hidden; }
-    header { padding: 20px 28px; border-bottom: 1px solid #e2e5e8; font-weight: 700; }
-    form { padding: 20px 28px 28px; }
-    label { display: grid; grid-template-columns: 72px 1fr; padding: 12px 0; border-bottom: 1px solid #eceef0; color: #6b7077; }
-    input, textarea { border: 0; font: inherit; color: #17191c; outline: none; }
-    textarea { box-sizing: border-box; width: 100%; min-height: 220px; margin-top: 22px; resize: vertical; line-height: 1.5; }
-    button { border: 0; border-radius: 999px; padding: 11px 22px; background: #17191c; color: white; font: inherit; font-weight: 700; cursor: pointer; }
-    #sent { display: none; padding: 60px 28px; text-align: center; font-size: 22px; }
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      --ink: #17191c; --ink-2: #5b6168; --ink-3: #8c939c; --line: #e6e8eb; --paper: #eef1f4; --accent: #1a73e8;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); line-height: 1.5; }
+    main { max-width: 760px; margin: 56px auto 40px; background: white; border-radius: 20px; box-shadow: 0 18px 60px rgba(23,25,28,.08); overflow: hidden; }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--line); }
+    header b { font-size: 15px; }
+    header span { font-size: 12px; color: var(--ink-3); }
+    form { padding: 6px 24px 24px; }
+    .row { display: grid; grid-template-columns: 76px 1fr; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line); color: var(--ink-3); font-size: 14px; }
+    .row .pill { justify-self: start; background: #eef1f4; color: var(--ink); border-radius: 999px; padding: 2px 10px; font-size: 14px; }
+    .row input { border: 0; font: inherit; color: var(--ink); outline: none; background: transparent; }
+    textarea { display: block; width: 100%; min-height: 200px; margin-top: 18px; border: 0; resize: vertical; font: inherit; font-size: 15px; line-height: 1.55; color: var(--ink); outline: none; }
+    .bar { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+    button { border: 0; border-radius: 999px; padding: 10px 22px; background: var(--accent); color: white; font: inherit; font-weight: 700; cursor: pointer; }
+    button:hover { filter: brightness(.95); }
+    .hint { font-size: 12px; color: var(--ink-3); }
+    #sent { display: none; padding: 56px 24px 64px; text-align: center; }
+    #sent .check { width: 48px; height: 48px; border-radius: 50%; background: #e4f5ec; color: #1f7a4d; display: inline-grid; place-items: center; font-size: 22px; font-weight: 800; margin-bottom: 14px; }
+    #sent h2 { margin: 0 0 6px; font-size: 22px; }
+    #sent p { margin: 0; color: var(--ink-2); }
+    #sent p b { color: var(--ink); }
   </style>
 </head>
-<body><main>
-  <header>New message</header>
-  <form id="compose">
-    <label>To <input value="Sam Ortega" readonly></label>
-    <label>Subject <input value="that lamp" readonly></label>
-    <textarea id="note">Hey Sam — got the lamp we talked about. Arrives {{deliveryWeekday}}. I'll send you the link by {{deliveryWeekday}} so you can grab one before the sale ends {{saleEndWeekday}}.</textarea>
-    <button type="submit">Send</button>
-  </form>
-  <div id="sent">Sent ✓ · demo mailbox, nothing leaves your Mac</div>
-</main>
-<script>
-  document.getElementById('compose').addEventListener('submit', function (event) {
-    event.preventDefault();
-    const noteText = document.getElementById('note').value.slice(0, 1500);
-    this.style.display = 'none';
-    document.getElementById('sent').style.display = 'block';
-    document.title = 'Omi Welcome · Sent · ' + encodeURIComponent(noteText);
-  });
-</script>
+<body>
+  <main>
+    <header><b>New message</b><span>Demo mailbox · nothing leaves your Mac</span></header>
+    <form id="compose">
+      <label class="row">To <span class="pill">Sam Ortega</span></label>
+      <label class="row">Subject <input value="that lamp" readonly></label>
+      <textarea id="note" aria-label="Message">Hey Sam — got the lamp we talked about. Arrives {{deliveryWeekday}}. I'll send you the link by {{deliveryWeekday}} so you can grab one before the sale ends {{saleEndWeekday}}.</textarea>
+      <div class="bar">
+        <button type="submit">Send</button>
+        <span class="hint">Say what you'd actually say. Omi keeps only what matters.</span>
+      </div>
+    </form>
+    <div id="sent">
+      <div class="check">✓</div>
+      <h2>Sent</h2>
+      <p>Now go back to <b>Omi</b>. It read what you wrote.</p>
+    </div>
+  </main>
+  <script>
+    document.getElementById('compose').addEventListener('submit', function (event) {
+      event.preventDefault();
+      var noteText = document.getElementById('note').value.slice(0, 1500);
+      this.style.display = 'none';
+      document.getElementById('sent').style.display = 'block';
+      document.title = 'Omi Welcome · Sent · ' + encodeURIComponent(noteText);
+    });
+  </script>
 </body>
 </html>

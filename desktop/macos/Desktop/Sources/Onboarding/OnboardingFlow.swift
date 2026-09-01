@@ -276,6 +276,8 @@ enum OnboardingFlow {
     OnboardingScenarioDefaults.pageAOpenedKey,
     OnboardingScenarioDefaults.journalKey,
     OnboardingScenarioDefaults.firstRunPendingKey,
+    // The guided first run's persisted reducer state; account-scoped like the flag that starts it.
+    FirstRunCoordinator.stateKey,
     "onboardingRole",
     "onboardingGoalDraft",
     "onboardingJustCompleted",

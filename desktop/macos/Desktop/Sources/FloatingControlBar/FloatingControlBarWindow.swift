@@ -4472,6 +4472,14 @@ class FloatingControlBarManager {
       // have nothing to resolve.
       MeetingSummaryShareActions.openSummary(conversationID: conversationID)
       return
+    case .firstRunOpenSummary(let conversationID):
+      // The first-run write-up is a real conversation; a click anywhere on the card opens it.
+      MeetingSummaryShareActions.openSummary(conversationID: conversationID)
+      return
+    case .onboardingRemindMe, .firstRunFocusReturn, .contextReminder:
+      // The buttons own the decision; a click on the body reads as "tell me more" and opens
+      // the card in chat like any other proactive card.
+      break
     case nil:
       break
     }

@@ -389,10 +389,10 @@ private final class FirstRunTaskCancellation: FirstRunScheduledCancellation {
 final class FirstRunCoordinator {
   static let shared = FirstRunCoordinator()
 
-  static let pendingKey = "omiFirstRunPending"
-  static let stateKey = "omiFirstRunState"
+  nonisolated static let pendingKey = "omiFirstRunPending"
+  nonisolated static let stateKey = "omiFirstRunState"
   static let scenarioJournalKey = "sbOnboardingScenarioJournal"
-  static let persistedKeys: Set<String> = [pendingKey, stateKey]
+  nonisolated static let persistedKeys: Set<String> = [pendingKey, stateKey]
 
   private let defaults: UserDefaults
   private let now: () -> Date

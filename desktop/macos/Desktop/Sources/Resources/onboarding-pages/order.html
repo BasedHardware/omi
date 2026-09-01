@@ -5,27 +5,57 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Omi Welcome · Order confirmed · Norrland Goods</title>
   <style>
-    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    body { margin: 0; background: #f4f2ed; color: #171714; }
-    main { max-width: 680px; margin: 72px auto; padding: 40px; background: white; border-radius: 24px; box-shadow: 0 16px 60px #00000014; }
-    h1 { margin: 0 0 12px; font-size: 34px; }
-    .muted { color: #6d6b63; }
-    .item { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 34px 0; padding: 24px 0; border-block: 1px solid #dedbd2; }
-    .item strong { font-size: 20px; }
-    dl { display: grid; grid-template-columns: 180px 1fr; gap: 14px; }
-    dt { color: #6d6b63; } dd { margin: 0; font-weight: 600; }
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      --ink: #14213d; --ink-2: #4a5568; --ink-3: #8a94a6; --line: #e3e7ee; --paper: #eef1f5;
+      --brass: #b8862b; --brass-2: #7a5a12; --card: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); line-height: 1.45; }
+    .mast { max-width: 720px; margin: 0 auto; padding: 28px 8px 0; display: flex; justify-content: space-between; align-items: baseline; }
+    .brand { font-weight: 800; letter-spacing: -0.01em; font-size: 18px; color: var(--ink); }
+    .brand small { display: block; font-weight: 500; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin-top: 2px; }
+    .status { font-size: 12px; font-weight: 600; color: #1f7a4d; background: #e4f5ec; padding: 5px 10px; border-radius: 999px; }
+    main { max-width: 720px; margin: 20px auto 40px; padding: 36px 40px 32px; background: var(--card); border-radius: 22px; box-shadow: 0 18px 60px rgba(20,33,61,.08); }
+    h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: -0.02em; }
+    .sub { color: var(--ink-2); margin: 0 0 26px; }
+    .item { display: grid; grid-template-columns: 84px 1fr auto; gap: 18px; align-items: center; padding: 18px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .lamp { width: 84px; height: 84px; border-radius: 14px; background:
+      radial-gradient(circle at 50% 28%, #fff4d6 0 14%, transparent 15%),
+      linear-gradient(160deg, #f1d28a, var(--brass) 55%, var(--brass-2)); }
+    .name { font-weight: 700; font-size: 18px; }
+    .meta { color: var(--ink-2); font-size: 14px; }
+    .price { font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
+    dl { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0 0; }
+    .fact { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+    .fact dt { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+    .fact dd { margin: 3px 0 0; font-weight: 700; font-size: 17px; }
+    .fact.key { border-color: #f0dfb6; background: #fff9ec; }
+    .cue { max-width: 720px; margin: 0 auto; padding: 0 8px 40px; color: var(--ink-3); font-size: 13px; display: flex; gap: 8px; align-items: center; }
+    .cue b { color: var(--ink-2); font-weight: 600; }
   </style>
 </head>
-<body><main>
-  <p class="muted">NORRLAND GOODS</p>
-  <h1>Thanks, {{name}}.</h1>
-  <p>Order #A2419 is on its way.</p>
-  <section class="item"><div><strong>Aurora desk lamp</strong><div class="muted">Brass</div></div><strong>$148.00</strong></section>
-  <dl>
-    <dt>Arrives</dt><dd>{{deliveryDate}}</dd>
-    <dt>Return window closes</dt><dd>{{returnDate}}</dd>
-    <dt>Ships from</dt><dd>Portland, OR</dd>
-    <dt>Sale ends</dt><dd>{{saleEndDate}}</dd>
-  </dl>
-</main></body>
+<body>
+  <div class="mast">
+    <div class="brand">Norrland Goods<small>Order confirmation</small></div>
+    <span class="status">Confirmed</span>
+  </div>
+  <main>
+    <h1>Thanks, {{name}}.</h1>
+    <p class="sub">Order #A2419 is on its way. We'll email you when it ships.</p>
+    <section class="item">
+      <div class="lamp" aria-hidden="true"></div>
+      <div><div class="name">Aurora desk lamp</div><div class="meta">Brass · warm white · qty 1</div></div>
+      <div class="price">$148.00</div>
+    </section>
+    <dl>
+      <div class="fact"><dt>Arrives</dt><dd>{{deliveryDate}}</dd></div>
+      <div class="fact key"><dt>Return window closes</dt><dd>{{returnDate}}</dd></div>
+      <div class="fact"><dt>Ships from</dt><dd>Portland, OR</dd></div>
+      <div class="fact"><dt>Sale ends</dt><dd>{{saleEndDate}}</dd></div>
+    </dl>
+  </main>
+  <p class="cue">↑ <span>This is a demo page from Omi. <b>Watch the top of your screen</b> for a moment.</span></p>
+</body>
 </html>

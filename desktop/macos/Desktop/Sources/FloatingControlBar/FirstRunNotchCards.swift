@@ -20,18 +20,6 @@ enum FirstRunNotchCardIdentity {
   }
 }
 
-/// Seam shared with the scenario onboarding and the first-run engine: every button on these cards
-/// posts here, then dismisses the card. Both engines observe this name; the bar never needs to know
-/// who is listening.
-enum FirstRunCardActionSeam {
-  static let notificationName = Notification.Name("omi.floatingBar.cardAction")
-
-  static func post(action: String, id: String = "") {
-    NotificationCenter.default.post(
-      name: notificationName, object: nil, userInfo: ["action": action, "id": id])
-  }
-}
-
 /// A button the card renders, resolved from the notification's action by the bar view.
 struct FirstRunCardButton: Identifiable, Equatable {
   enum Emphasis: Equatable { case primary, secondary }
@@ -41,6 +29,45 @@ struct FirstRunCardButton: Identifiable, Equatable {
   /// The seam payload sent when tapped.
   let action: String
   let actionID: String
+
+  /// The buttons a card action carries, in display order, with the seam strings
+  /// `FloatingBarCardActionDispatcher` expects for each.
+  nonisolated static func buttons(for descriptor: FloatingBarNotificationAction.ScenarioDescriptor)
+    -> [FirstRunCardButton]
+  {
+    let id = descriptor.id
+    switch descriptor.kind {
+    case "onboarding_remind_me":
+      return [
+        FirstRunCardButton(id: "remind", title: "Remind me", emphasis: .primary, action: "onboarding_remind_me", actionID: id),
+        FirstRunCardButton(id: "not-now", title: "Not now", emphasis: .secondary, action: "onboarding_not_now", actionID: id),
+      ]
+    case "first_run_focus_return":
+      return [
+        FirstRunCardButton(id: "back", title: "Back to it", emphasis: .primary, action: "first_run_focus_return", actionID: id),
+        FirstRunCardButton(id: "snooze", title: "5 more minutes", emphasis: .secondary, action: "first_run_focus_snooze", actionID: id),
+      ]
+    case "context_reminder":
+      return [
+        FirstRunCardButton(id: "done", title: "Done", emphasis: .primary, action: "context_reminder_done", actionID: id),
+        FirstRunCardButton(id: "tomorrow", title: "Remind me tomorrow", emphasis: .secondary, action: "context_reminder_snooze", actionID: id),
+      ]
+    case "first_run_open_summary":
+      return [FirstRunCardButton(id: "open", title: "Open", emphasis: .primary, action: "first_run_open_summary", actionID: id)]
+    default:
+      return []
+    }
+  }
+
+  nonisolated static func symbol(for descriptor: FloatingBarNotificationAction.ScenarioDescriptor) -> String {
+    switch descriptor.kind {
+    case "onboarding_remind_me": return "bell.badge"
+    case "first_run_focus_return": return "scope"
+    case "context_reminder": return "arrow.uturn.backward"
+    case "first_run_open_summary": return "text.document"
+    default: return "sparkles"
+    }
+  }
 }
 
 /// The guidance chip: one line of instruction that stays until the step it names is observed.
@@ -84,9 +111,10 @@ struct FirstRunGuideChipView: View {
     .padding(.vertical, OmiSpacing.md)
     .frame(maxWidth: .infinity, alignment: .leading)
     .overlay(alignment: .topTrailing) {
+      // A user dismissal of the guide reaches the first-run engine through the manager's
+      // `.firstRunNotificationDismissed` post; nothing else is needed here.
       FirstRunDismissButton {
-        FirstRunCardActionSeam.post(action: "first_run_guide_dismiss")
-        FloatingControlBarManager.shared.dismissCurrentNotification()
+        FloatingControlBarManager.shared.dismissCurrentNotification(kind: .user)
       }
     }
     .accessibilityElement(children: .contain)
@@ -152,7 +180,9 @@ struct FirstRunActionCardView: View {
             Button {
               guard !didAct else { return }
               didAct = true
-              FirstRunCardActionSeam.post(action: button.action, id: button.actionID)
+              FloatingBarCardActionDispatcher.dispatch(action: button.action, id: button.actionID) {
+                FloatingControlBarManager.shared.dismissCurrentNotification(kind: .user)
+              }
             } label: {
               Text(button.title)
                 .scaledFont(size: OmiType.caption, weight: .semibold)

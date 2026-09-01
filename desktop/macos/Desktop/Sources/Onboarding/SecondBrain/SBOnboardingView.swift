@@ -291,45 +291,129 @@ struct SBOnboardingView: View {
     }
   }
 
+  /// The card beat's widget points at the real surface instead of reproducing it: the whole beat is
+  /// about learning where cards live. Once "Remind me" lands, the task it created shows here as the
+  /// first thing Omi has written on the user's behalf.
   private var cardWaitingWidget: some View {
     VStack(alignment: .leading, spacing: 10) {
-      Text("Use the real card at the top of your screen.")
-        .inkStyle(InkType.rowCopy, color: Ink.secondary)
-      ForEach(model.scenarioTaskChips, id: \.self) { task in
-        Text("Task · \(task)").inkStyle(InkType.statusLabel, color: Ink.primary)
+      HStack(alignment: .top, spacing: 12) {
+        Image(systemName: "arrow.up")
+          .inkStyle(InkType.rowCopy, color: Ink.primary)
+          .frame(width: 18)
+        VStack(alignment: .leading, spacing: 3) {
+          Text("Look up. The card is at the top of your screen.")
+            .inkStyle(InkType.rowCopy, color: Ink.primary)
+            .fixedSize(horizontal: false, vertical: true)
+          Text("Cards show at the notch and get out of the way. This one offers a reminder.")
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        Spacer(minLength: 0)
       }
-      ProgressView().controlSize(.small)
+      .padding(.horizontal, 14).padding(.vertical, 12)
+      .glassCard(cornerRadius: PageGlass.rowRadius)
+
+      ForEach(model.scenarioTaskChips, id: \.self) { task in
+        scenarioWriteRow(symbol: "checkmark.circle", label: "TASK", text: task)
+      }
+      if model.scenarioTaskChips.isEmpty {
+        HStack(spacing: 8) {
+          ProgressView().controlSize(.small)
+          Text("Waiting for you to answer the card…").inkStyle(InkType.statusLabel, color: Ink.secondary)
+        }
+      }
     }
     .frame(maxWidth: 380, alignment: .leading)
   }
 
-  private var writeScenarioWidget: some View {
+  /// One thing Omi wrote from the user's own words. Same glass row as the trust rows on the first
+  /// screen, so "what Omi saved" reads like a receipt, not a notification.
+  private func scenarioWriteRow(symbol: String, label: String, text: String) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+      Image(systemName: symbol)
+        .inkStyle(InkType.rowCopy, color: Ink.secondary)
+        .frame(width: 18)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(label).inkFont(InkType.statusLabel).foregroundStyle(Ink.secondary)
+        Text(text).inkStyle(InkType.rowCopy, color: Ink.primary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, 14).padding(.vertical, 10)
+    .glassCard(cornerRadius: PageGlass.rowRadius)
+  }
+
+  /// The write beat: the note is in the browser, so this side only has to say where to look, wait
+  /// for Send, and then show what Omi kept. "Fix something" is honest about being a correction path
+  /// rather than a magic button.
+  @ViewBuilder private var writeScenarioWidget: some View {
     VStack(alignment: .leading, spacing: 10) {
-      if model.writePhase == .waitingForSend {
-        Text("Waiting for the note to be sent in your browser…")
-          .inkStyle(InkType.rowCopy, color: Ink.secondary)
+      switch model.writePhase {
+      case .waitingForSend:
+        HStack(alignment: .top, spacing: 12) {
+          Image(systemName: "envelope")
+            .inkStyle(InkType.rowCopy, color: Ink.primary)
+            .frame(width: 18)
+          VStack(alignment: .leading, spacing: 3) {
+            Text("Your note to Sam is open in your browser.")
+              .inkStyle(InkType.rowCopy, color: Ink.primary)
+              .fixedSize(horizontal: false, vertical: true)
+            Text("Say what you'd actually say, then press Send. It's a demo mailbox; nothing leaves your Mac.")
+              .inkStyle(InkType.statusLabel, color: Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .glassCard(cornerRadius: PageGlass.rowRadius)
+
         if model.scenarioWriteDetectionTimedOut {
-          Button("Check again") { model.retryWriteDetection() }
-            .buttonStyle(InkButtonStyle(kind: .secondary))
+          Text("I didn't see the note go out. Open it again, or skip this one.")
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+          Button {
+            model.retryWriteDetection()
+          } label: {
+            Text("Open the note again").frame(maxWidth: .infinity)
+          }
+          .buttonStyle(InkButtonStyle(kind: .primary))
+          Button {
+            model.skipWriteBeat()
+          } label: {
+            Text("Skip for now").frame(maxWidth: .infinity)
+          }
+          .buttonStyle(InkButtonStyle(kind: .secondary))
         } else {
-          ProgressView().controlSize(.small)
+          HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text("Waiting for Send…").inkStyle(InkType.statusLabel, color: Ink.secondary)
+          }
         }
-      } else {
-        if model.scenarioWritesPending {
-          ProgressView().controlSize(.small)
-        }
+      case .review:
         ForEach(model.scenarioMemoryChips, id: \.self) { memory in
-          Text("Memory · \(memory)").inkStyle(InkType.statusLabel, color: Ink.primary)
+          scenarioWriteRow(symbol: "sparkles", label: "MEMORY", text: memory)
         }
         ForEach(model.scenarioTaskChips, id: \.self) { task in
-          Text("Task · \(task)").inkStyle(InkType.statusLabel, color: Ink.primary)
+          scenarioWriteRow(symbol: "checkmark.circle", label: "TASK", text: task)
         }
-        if !model.scenarioWritesPending {
+        if model.scenarioWritesPending {
+          HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text("Saving…").inkStyle(InkType.statusLabel, color: Ink.secondary)
+          }
+        } else {
+          if model.scenarioMemoryChips.isEmpty && model.scenarioTaskChips.isEmpty {
+            Text("Nothing to keep from that note. That happens; I only save what you actually said.")
+              .inkStyle(InkType.statusLabel, color: Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
           HStack(spacing: 8) {
             SBInkButton(title: "Looks right", isDefaultAction: true) { model.confirmScenarioWrites() }
             Button("Fix something") { model.requestScenarioWriteFix() }
               .buttonStyle(InkButtonStyle(kind: .secondary))
           }
+          .padding(.top, 4)
         }
       }
     }
@@ -776,17 +860,13 @@ struct SBOnboardingView: View {
           HStack(spacing: 5) {
             Text("Get stuck, then hold").inkStyle(InkType.rowCopy, color: Ink.primary)
             ForEach(model.voiceChordTokens, id: \.self) { tok in keycap(tok) }
-            Text("and say what the page tells you.").inkStyle(InkType.rowCopy, color: Ink.primary)
+            Text("and ask, out loud.").inkStyle(InkType.rowCopy, color: Ink.primary)
           }
-          Text("I can see the page, and I answer at the top of your screen.")
-            .inkStyle(InkType.statusLabel, color: Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-          if model.threeDoorsOpened {
-            Button("Open the doors again") { model.openThreeDoorsPage() }
-              .buttonStyle(InkButtonStyle(kind: .secondary))
-          } else {
-            SBInkButton(title: "Open the doors", isDefaultAction: true) { model.openThreeDoorsPage() }
-          }
+          Text(
+            "Try “When does this arrive?” I can see the order page, and I answer at the top of your screen, in \(model.selectedResponseLanguageName)."
+          )
+          .inkStyle(InkType.statusLabel, color: Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
         }
       } else if model.screenDemoPTTUnavailable {
         VStack(alignment: .leading, spacing: 8) {
