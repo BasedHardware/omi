@@ -31,6 +31,11 @@ enum CuaAppleScript {
   /// than a hung session.
   static let defaultTimeout: TimeInterval = 20
 
+  /// Most a script may hand back on each stream. A script is asked a question,
+  /// not used as a pipe, and an unbounded `readDataToEndOfFile` would let one
+  /// runaway `repeat` exhaust Omi's memory before the timeout ever fires.
+  static let maxStreamBytes = 1 << 20
+
   /// Whether Omi may already script `bundleID`, without prompting.
   ///
   /// Apple Events are granted per target, so there is no process-wide answer:
@@ -100,6 +105,8 @@ enum CuaAppleScript {
       )
     }
 
+    outData.waitUntilFinished(timeout: 2)
+    errData.waitUntilFinished(timeout: 2)
     let output = String(decoding: outData.value, as: UTF8.self)
       .trimmingCharacters(in: .whitespacesAndNewlines)
     let errorText = String(decoding: errData.value, as: UTF8.self)
@@ -107,34 +114,77 @@ enum CuaAppleScript {
     if process.terminationStatus != 0 {
       return Result(output: output, failure: errorText.isEmpty ? "osascript failed" : errorText)
     }
+    if outData.wasTruncated {
+      return Result(
+        output: output,
+        failure: "The script produced more than \(maxStreamBytes / 1024)KB and was cut off.")
+    }
     return Result(output: output, failure: nil)
   }
 
   private static func readInBackground(_ pipe: Pipe) -> Box {
     let box = Box()
     DispatchQueue.global(qos: .userInitiated).async {
-      box.value = pipe.fileHandleForReading.readDataToEndOfFile()
+      let handle = pipe.fileHandleForReading
+      var collected = Data()
+      while true {
+        let chunk = handle.availableData
+        if chunk.isEmpty { break }
+        // Keep draining past the cap, discarding the excess. Stopping the read
+        // here would leave the child blocked writing into a full pipe, so it
+        // never exits and the call burns its whole timeout instead.
+        let room = maxStreamBytes - collected.count
+        if chunk.count >= room {
+          if room > 0 { collected.append(chunk.prefix(room)) }
+          box.markTruncated()
+          continue
+        }
+        collected.append(chunk)
+      }
+      box.finish(collected)
     }
     return box
   }
 
   /// A mailbox for one pipe's bytes, filled by the reader and read after the
   /// process has exited.
+  /// A stream's bytes, plus the latch that says the reader is finished with it.
+  /// Snapshotting on process exit alone raced the reader and dropped the tail of
+  /// a result that had already been written.
   final class Box: @unchecked Sendable {
     private let lock = NSLock()
+    private let done = DispatchSemaphore(value: 0)
     private var storage = Data()
+    private var truncated = false
 
     var value: Data {
-      get {
-        lock.lock()
-        defer { lock.unlock() }
-        return storage
-      }
-      set {
-        lock.lock()
-        storage = newValue
-        lock.unlock()
-      }
+      lock.lock()
+      defer { lock.unlock() }
+      return storage
+    }
+
+    var wasTruncated: Bool {
+      lock.lock()
+      defer { lock.unlock() }
+      return truncated
+    }
+
+    func markTruncated() {
+      lock.lock()
+      truncated = true
+      lock.unlock()
+    }
+
+    func finish(_ data: Data) {
+      lock.lock()
+      storage = data
+      lock.unlock()
+      done.signal()
+    }
+
+    /// Waits for the reader, bounded so a wedged pipe cannot hold the caller.
+    func waitUntilFinished(timeout: TimeInterval) {
+      _ = done.wait(timeout: .now() + timeout)
     }
   }
 }

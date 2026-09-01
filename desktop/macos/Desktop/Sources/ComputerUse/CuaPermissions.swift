@@ -78,7 +78,18 @@ enum CuaPermission: String, CaseIterable, Sendable {
   /// known.
   @MainActor
   func isGranted() -> Bool {
-    if Self.observed.contains(self) { return true }
+    if Self.observed.contains(self) {
+      // An observation is a fast path, not a promise: a grant revoked while Omi
+      // runs has to close the gate. Only `.postEvents` is revalidated, because
+      // only its preflight answers live. Screen Recording's is the stale one the
+      // sticky path exists to work around, and re-asking it would put back the
+      // "I granted it and Omi keeps refusing" bug.
+      if self == .postEvents, !CGPreflightPostEventAccess() {
+        Self.observed.remove(self)
+        return false
+      }
+      return true
+    }
     let granted: Bool
     switch self {
     case .postEvents:
@@ -121,7 +132,11 @@ enum CuaPermission: String, CaseIterable, Sendable {
     let works = await Task.detached { AppState.axProbeResult(targets: targets) == .working }.value
     guard works else { return }
     await MainActor.run {
-      observed.formUnion(wanted)
+      // The probe reads another process's UI, which proves `kTCCServiceAccessibility`
+      // and nothing else. Posting an event is a separate grant, and marking it here
+      // is how a click gets reported as working while the window server drops it.
+      observed.insert(.accessibility)
+      if CGPreflightPostEventAccess() { observed.insert(.postEvents) }
     }
   }
 

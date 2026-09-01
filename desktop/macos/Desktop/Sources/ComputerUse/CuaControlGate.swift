@@ -50,6 +50,7 @@ final class CuaControlGate: ObservableObject {
   fileprivate enum Keys {
     static let enabled = "computerUseControlEnabled"
     static let owner = "computerUseControlOwnerID"
+    static let suspension = "computerUseControlSuspension"
   }
 
   /// Posted whenever the gate opens or closes, so the indicator and the kill
@@ -76,6 +77,7 @@ final class CuaControlGate: ObservableObject {
     self.defaults = defaults
     self.missingPermission = missingPermission
     self.ownerID = ownerID
+    self.suspension = defaults.string(forKey: Keys.suspension)
   }
 
   /// Whether the user has turned control on for the account signed in now.
@@ -120,6 +122,10 @@ final class CuaControlGate: ObservableObject {
   func suspend(reason: String) {
     guard suspension == nil else { return }
     suspension = reason
+    cancelActiveGestures()
+    // The stop has to outlive the process. Relaunching with the switch still on
+    // and the suspension gone would resume tool calls without anyone re-arming.
+    defaults.set(reason, forKey: Keys.suspension)
     log("CuaControlGate: suspended — \(reason)")
     NotificationCenter.default.post(name: Self.stateChanged, object: nil)
   }
@@ -127,6 +133,7 @@ final class CuaControlGate: ObservableObject {
   func rearm() {
     guard suspension != nil else { return }
     suspension = nil
+    defaults.removeObject(forKey: Keys.suspension)
     NotificationCenter.default.post(name: Self.stateChanged, object: nil)
   }
 
@@ -159,10 +166,66 @@ final class CuaControlGate: ObservableObject {
     return .success(value)
   }
 
+  /// Authorize here, then run the gesture off the main actor.
+  ///
+  /// A gesture is a run of events with real pauses between them: typing a
+  /// paragraph is seconds of `Thread.sleep`. Running that inside this actor
+  /// freezes the app for its whole duration, and the ⌃⌥⌘. kill switch and the
+  /// Stop button both live on this actor — so the one moment the user most wants
+  /// to interrupt is the one moment nothing can. The check still happens here;
+  /// only the posting moves.
+  func performOffMain<T: Sendable>(
+    needs permissions: [CuaPermission], _ effect: @escaping @Sendable (CuaGestureCancel) -> T
+  ) async -> Result<T, Refusal> {
+    if let refusal = refusal(needs: permissions) {
+      return .failure(refusal)
+    }
+    let cancel = CuaGestureCancel()
+    activeGestures.insert(cancel)
+    lastActivity = Date()
+    let value = await Task.detached(priority: .userInitiated) { effect(cancel) }.value
+    activeGestures.remove(cancel)
+    lastActivity = Date()
+    return .success(value)
+  }
+
+  /// Gestures posting right now, so a suspend can stop them mid-run rather than
+  /// only refusing the next call.
+  private var activeGestures: Set<CuaGestureCancel> = []
+
+  private func cancelActiveGestures() {
+    for gesture in activeGestures { gesture.cancel() }
+    activeGestures.removeAll()
+  }
+
   /// Marks the surface active for an effect that ran somewhere else — an
   /// accessibility press, which is a real action on the user's Mac even though
   /// it posts no event.
   func noteActivity() {
     lastActivity = Date()
   }
+}
+
+/// A running gesture's stop flag, checked between events.
+///
+/// Identity-based so the gate can hold a set of them; the flag itself is read
+/// from the posting thread and written from the main actor.
+final class CuaGestureCancel: Hashable, @unchecked Sendable {
+  private let lock = NSLock()
+  private var cancelled = false
+
+  var isCancelled: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return cancelled
+  }
+
+  func cancel() {
+    lock.lock()
+    cancelled = true
+    lock.unlock()
+  }
+
+  static func == (lhs: CuaGestureCancel, rhs: CuaGestureCancel) -> Bool { lhs === rhs }
+  func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(self)) }
 }

@@ -147,15 +147,16 @@ enum CuaInputSynth {
   /// reordering and canvas apps ignore a down-then-up with no motion between.
   static func drag(
     from start: CGPoint, to end: CGPoint, button: Button = .left, steps: Int = 12,
-    flags: CGEventFlags = []
+    flags: CGEventFlags = [], cancel: CuaGestureCancel? = nil
   ) {
     holdingModifiers(flags) {
-      postDrag(from: start, to: end, button: button, steps: steps, flags: flags)
+      postDrag(from: start, to: end, button: button, steps: steps, flags: flags, cancel: cancel)
     }
   }
 
   private static func postDrag(
-    from start: CGPoint, to end: CGPoint, button: Button, steps: Int, flags: CGEventFlags
+    from start: CGPoint, to end: CGPoint, button: Button, steps: Int, flags: CGEventFlags,
+    cancel: CuaGestureCancel? = nil
   ) {
     moveCursor(to: start)
     Thread.sleep(forTimeInterval: pressInterval)
@@ -175,6 +176,9 @@ enum CuaInputSynth {
     Thread.sleep(forTimeInterval: dragHoldInterval)
     let stepCount = min(max(steps, 1), 60)
     for step in 1...stepCount {
+      // A cancelled drag still releases the button: leaving it down would leave
+      // the Mac holding a selection the user cannot clear.
+      if cancel?.isCancelled == true { break }
       let progress = CGFloat(step) / CGFloat(stepCount)
       post(
         button.dragType,
@@ -196,11 +200,19 @@ enum CuaInputSynth {
   /// event with a big delta is clamped by some views and ignored by others that
   /// only animate continuous scrolls, so "scroll down 10" moved a page by
   /// nothing in exactly the apps a model is most likely to be reading.
-  static func scroll(at point: CGPoint, deltaX: Int, deltaY: Int, flags: CGEventFlags = []) {
-    holdingModifiers(flags) { postScroll(at: point, deltaX: deltaX, deltaY: deltaY, flags: flags) }
+  static func scroll(
+    at point: CGPoint, deltaX: Int, deltaY: Int, flags: CGEventFlags = [],
+    cancel: CuaGestureCancel? = nil
+  ) {
+    holdingModifiers(flags) {
+      postScroll(at: point, deltaX: deltaX, deltaY: deltaY, flags: flags, cancel: cancel)
+    }
   }
 
-  private static func postScroll(at point: CGPoint, deltaX: Int, deltaY: Int, flags: CGEventFlags) {
+  private static func postScroll(
+    at point: CGPoint, deltaX: Int, deltaY: Int, flags: CGEventFlags,
+    cancel: CuaGestureCancel? = nil
+  ) {
     moveCursor(to: point)
     // Same reason a click waits: a scroll is delivered to the view under the
     // pointer as the app understands it, so scrolling before the move has been
@@ -211,6 +223,7 @@ enum CuaInputSynth {
     let stepX = deltaX == 0 ? 0 : (deltaX > 0 ? 1 : -1)
     let stepY = deltaY == 0 ? 0 : (deltaY > 0 ? 1 : -1)
     for step in 0..<min(steps, 200) {
+      if cancel?.isCancelled == true { return }
       guard
         let event = CGEvent(
           scrollWheelEvent2Source: source(), units: .line, wheelCount: 2,
@@ -276,8 +289,11 @@ enum CuaInputSynth {
   ///
   /// Newlines are always a real Return: a carriage return delivered as text is
   /// dropped by most fields.
-  static func typeText(_ text: String, layout: CuaKeyMap.KeyboardLayout) {
+  static func typeText(
+    _ text: String, layout: CuaKeyMap.KeyboardLayout, cancel: CuaGestureCancel? = nil
+  ) {
     for (index, line) in text.components(separatedBy: "\n").enumerated() {
+      if cancel?.isCancelled == true { return }
       if index > 0 { key(.init(keyCode: CGKeyCode(kVK_Return), flags: [])) }
       var unicodeRun: [UniChar] = []
       let flushUnicode = {
@@ -285,6 +301,10 @@ enum CuaInputSynth {
         unicodeRun.removeAll()
       }
       for character in line {
+        if cancel?.isCancelled == true {
+          flushUnicode()
+          return
+        }
         if let stroke = layout.stroke(for: character) {
           flushUnicode()
           key(.init(keyCode: stroke.keyCode, flags: stroke.needsShift ? .maskShift : []))

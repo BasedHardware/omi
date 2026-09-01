@@ -97,4 +97,22 @@ final class CuaFrameGeometryTests: XCTestCase {
     XCTAssertNotNil(registry.geometry(id: ids[2]))
     XCTAssertEqual(registry.latest()?.id, ids[5])
   }
+
+  /// The bug this replaces: an unknown or aged-out frame id fell through to the
+  /// raw numbers, so screenshot coordinates were read as points on the desk and
+  /// the click landed somewhere the model had never looked.
+  func testAnAgedOutFrameIsUnknownRatherThanResolvedAgainstAnother() {
+    let registry = CuaFrameRegistry.shared
+    registry.reset()
+    let geometry = CuaFrameGeometry(
+      bounds: CGRect(x: 0, y: 0, width: 200, height: 200),
+      imageSize: CGSize(width: 100, height: 100))
+    var ids: [String] = []
+    for _ in 0..<5 { ids.append(registry.store(geometry)) }
+
+    XCTAssertNil(registry.geometry(id: ids[0]), "the oldest frame should have aged out")
+    XCTAssertNil(registry.geometry(id: "frame-does-not-exist"))
+    XCTAssertNotNil(registry.geometry(id: ids[4]))
+    registry.reset()
+  }
 }

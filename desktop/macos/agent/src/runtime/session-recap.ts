@@ -19,8 +19,12 @@ const DEFAULT_MAX_CHARS = 6_000;
 const MAX_PROMPT_CHARS = 400;
 const MAX_ANSWER_CHARS = 600;
 
-/** Runs that produced something a later turn can refer back to. */
-const RECAPPED_STATUSES = ["succeeded", "failed", "cancelled", "timed_out"] as const;
+/**
+ * Runs that produced something a later turn can refer back to. `orphaned` is in
+ * the list because that is what a daemon restart leaves behind, which is exactly
+ * the case a recap exists for.
+ */
+const RECAPPED_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
 
 export interface SessionRecapInput {
   sessionId: string;

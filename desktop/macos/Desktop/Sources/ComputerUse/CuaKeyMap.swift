@@ -162,8 +162,13 @@ enum CuaKeyMap {
             &length,
             &characters
           )
+          // Space is a key like any other. Excluding all whitespace pushed it onto
+          // the Unicode-only path, which terminals and Chromium ignore, so typed
+          // text arrived with its words run together. Tab and newline stay out:
+          // `typeText` posts those as their own keystrokes.
           guard status == noErr, length == 1,
-            let scalar = Unicode.Scalar(characters[0]), !scalar.properties.isWhitespace
+            let scalar = Unicode.Scalar(characters[0]),
+            scalar == " " || !scalar.properties.isWhitespace
           else { continue }
           let character = Character(scalar)
           if strokes[character] == nil {

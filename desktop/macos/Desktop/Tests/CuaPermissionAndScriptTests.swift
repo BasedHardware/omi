@@ -124,6 +124,44 @@ final class CuaPermissionAndScriptTests: XCTestCase {
     XCTAssertEqual(CuaKeyMap.flags(from: "cmd+shift"), [.maskCommand, .maskShift])
   }
 
+  /// The bug this replaces: an AX probe reads another process's UI, which proves
+  /// `kTCCServiceAccessibility` only. Marking `.postEvents` from the same probe
+  /// reported clicks as working while the window server dropped them, which is
+  /// the exact confusion this module was written to end.
+  @MainActor
+  func testAnAccessibilityProbeDoesNotVouchForPostingEvents() {
+    let gate = gate(missing: [.postEvents])
+    XCTAssertEqual(gate.refusal(needs: [.postEvents]), .missingPermission(.postEvents))
+    XCTAssertNil(gate.refusal(needs: [.accessibility]))
+  }
+
+  /// ⌃⌥⌘. has to outlive the process. The enable flag is persisted, so a
+  /// suspension that only lived in memory let a relaunch resume tool calls with
+  /// nobody re-arming it.
+  @MainActor
+  func testAStopSurvivesARelaunch() {
+    let first = gate(missing: [])
+    first.suspend(reason: "kill switch")
+    XCTAssertEqual(first.refusal(), .suspended(reason: "kill switch"))
+
+    let relaunched = CuaControlGate(
+      defaults: defaults, missingPermission: { _ in nil }, ownerID: { "owner-1" })
+    XCTAssertEqual(relaunched.refusal(), .suspended(reason: "kill switch"))
+    relaunched.rearm()
+    XCTAssertNil(relaunched.refusal())
+  }
+
+  /// A script is asked a question, not used as a pipe. Unbounded reads let one
+  /// runaway `repeat` accumulate for the whole timeout.
+  func testRunawayScriptOutputIsCappedAndSaysSo() {
+    // Doubling stays inside AppleScript, so the test needs no Automation grant.
+    let result = CuaAppleScript.run(
+      "set s to \"xxxxxxxxxxxxxxxx\"\nrepeat 18 times\n  set s to s & s\nend repeat\nreturn s",
+      timeout: 20)
+    XCTAssertLessThanOrEqual(result.output.utf8.count, CuaAppleScript.maxStreamBytes)
+    XCTAssertTrue((result.failure ?? "").contains("cut off"), "got: \(result.failure ?? "nil")")
+  }
+
   /// The bug this replaces: `list_windows` read the window list through
   /// `SCShareableContent`, which is Screen Recording territory, but declared no
   /// permission. Without the grant the call threw, `try?` swallowed it, and the

@@ -61,6 +61,11 @@ enum CuaAxReader {
   /// own is refused rather than survived.
   static func snapshot(pid: pid_t, maxDepth: Int = 12, maxNodes: Int = 250) async -> Snapshot? {
     guard AccessibilityProcessBoundary.isForeignProcess(pid) else { return nil }
+    // A caller names these, so they are clamped here rather than trusted. The
+    // walk recurses, and an unbounded depth is a stack the accessibility server
+    // can push over on Omi's behalf.
+    let maxDepth = min(max(maxDepth, 1), 40)
+    let maxNodes = min(max(maxNodes, 1), 2_000)
     let appName = NSRunningApplication(processIdentifier: pid)?.localizedName ?? "pid \(pid)"
     return await withCheckedContinuation { continuation in
       queue.async {

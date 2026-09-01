@@ -464,8 +464,9 @@ enum CuaToolCatalog {
   }
 
   private static func click(_ args: CuaArguments) async -> CuaToolResult {
-    guard let point = resolvePoint(args, xKey: "x", yKey: "y") else {
-      return .error("click needs x and y.")
+    let resolved = resolvePoint(args, xKey: "x", yKey: "y")
+    guard case .success(let point) = resolved else {
+      return .error("click " + resolved.failureMessage)
     }
     let button = CuaInputSynth.Button(rawValue: args.string("button") ?? "left") ?? .left
     let count = args.int("count") ?? 1
@@ -478,8 +479,9 @@ enum CuaToolCatalog {
   }
 
   private static func moveCursor(_ args: CuaArguments) async -> CuaToolResult {
-    guard let point = resolvePoint(args, xKey: "x", yKey: "y") else {
-      return .error("move_cursor needs x and y.")
+    let resolved = resolvePoint(args, xKey: "x", yKey: "y")
+    guard case .success(let point) = resolved else {
+      return .error("move_cursor " + resolved.failureMessage)
     }
     return await perform("Pointer moved to (\(Int(point.x)), \(Int(point.y)))") {
       CuaInputSynth.moveCursor(to: point)
@@ -487,21 +489,23 @@ enum CuaToolCatalog {
   }
 
   private static func drag(_ args: CuaArguments) async -> CuaToolResult {
-    guard let start = resolvePoint(args, xKey: "from_x", yKey: "from_y"),
-      let end = resolvePoint(args, xKey: "to_x", yKey: "to_y")
-    else { return .error("drag needs from_x, from_y, to_x and to_y.") }
+    let from = resolvePoint(args, xKey: "from_x", yKey: "from_y")
+    let to = resolvePoint(args, xKey: "to_x", yKey: "to_y")
+    guard case .success(let start) = from else { return .error("drag " + from.failureMessage) }
+    guard case .success(let end) = to else { return .error("drag " + to.failureMessage) }
     let button = CuaInputSynth.Button(rawValue: args.string("button") ?? "left") ?? .left
     guard let flags = modifierFlags(args) else {
       return .error("\(args.string("modifiers") ?? "") is not a modifier list.")
     }
-    return await perform("Dragged to (\(Int(end.x)), \(Int(end.y)))") {
-      CuaInputSynth.drag(from: start, to: end, button: button, flags: flags)
+    return await performGesture("Dragged to (\(Int(end.x)), \(Int(end.y)))") { cancel in
+      CuaInputSynth.drag(from: start, to: end, button: button, flags: flags, cancel: cancel)
     }
   }
 
   private static func scroll(_ args: CuaArguments) async -> CuaToolResult {
-    guard let point = resolvePoint(args, xKey: "x", yKey: "y") else {
-      return .error("scroll needs x and y.")
+    let resolved = resolvePoint(args, xKey: "x", yKey: "y")
+    guard case .success(let point) = resolved else {
+      return .error("scroll " + resolved.failureMessage)
     }
     let dx = args.int("dx") ?? 0
     let dy = args.int("dy") ?? 0
@@ -509,8 +513,8 @@ enum CuaToolCatalog {
     guard let flags = modifierFlags(args) else {
       return .error("\(args.string("modifiers") ?? "") is not a modifier list.")
     }
-    return await perform("Scrolled \(dx), \(dy)") {
-      CuaInputSynth.scroll(at: point, deltaX: dx, deltaY: dy, flags: flags)
+    return await performGesture("Scrolled \(dx), \(dy)") { cancel in
+      CuaInputSynth.scroll(at: point, deltaX: dx, deltaY: dy, flags: flags, cancel: cancel)
     }
   }
 
@@ -519,8 +523,8 @@ enum CuaToolCatalog {
       return .error("type_text needs text.")
     }
     let layout = await MainActor.run { CuaKeyMap.KeyboardLayout.current() }
-    return await perform("Typed \(text.count) characters") {
-      CuaInputSynth.typeText(text, layout: layout)
+    return await performGesture("Typed \(text.count) characters") { cancel in
+      CuaInputSynth.typeText(text, layout: layout, cancel: cancel)
     }
   }
 
@@ -531,8 +535,11 @@ enum CuaToolCatalog {
       return .error("\(combo) is not a key this keyboard has.")
     }
     let count = min(max(args.int("count") ?? 1, 1), 20)
-    return await perform("Pressed \(combo)\(count > 1 ? " \(count) times" : "")") {
-      for _ in 0..<count { CuaInputSynth.key(chord) }
+    return await performGesture("Pressed \(combo)\(count > 1 ? " \(count) times" : "")") { cancel in
+      for _ in 0..<count {
+        if cancel.isCancelled { return }
+        CuaInputSynth.key(chord)
+      }
     }
   }
 
@@ -671,6 +678,22 @@ enum CuaToolCatalog {
   // MARK: - Shared plumbing
 
   /// Runs a synthetic gesture behind the gate, and says what happened either way.
+  /// For the gestures that take real time: authorized on the main actor, posted
+  /// off it, and stopped between events when the gate suspends.
+  private static func performGesture(
+    _ success: String, needs permissions: [CuaPermission] = [.postEvents],
+    _ effect: @escaping @Sendable (CuaGestureCancel) -> Void
+  ) async -> CuaToolResult {
+    await CuaPermission.refreshLiveGrants(permissions)
+    let outcome = await CuaControlGate.shared.performOffMain(needs: permissions, effect)
+    switch outcome {
+    case .success:
+      return .text(success + ".")
+    case .failure(let refusal):
+      return .error(refusal.message)
+    }
+  }
+
   private static func perform(
     _ success: String, needs permissions: [CuaPermission] = [.postEvents],
     _ effect: @escaping @Sendable () -> Void
@@ -689,14 +712,24 @@ enum CuaToolCatalog {
   ///
   /// Without a frame the numbers are read as global points, which is what a
   /// caller driving this server without ever taking a screenshot means.
-  private static func resolvePoint(_ args: CuaArguments, xKey: String, yKey: String) -> CGPoint? {
-    guard let x = args.double(xKey), let y = args.double(yKey) else { return nil }
+  private static func resolvePoint(_ args: CuaArguments, xKey: String, yKey: String)
+    -> ResolvedPoint
+  {
+    guard let x = args.double(xKey), let y = args.double(yKey) else {
+      return .failure("needs \(xKey) and \(yKey).")
+    }
     let raw = CGPoint(x: x, y: y)
     if let id = args.string("frame") {
-      return CuaFrameRegistry.shared.geometry(id: id)?.globalPoint(forImagePoint: raw) ?? raw
+      // A frame that has aged out must refuse. Falling back to `raw` reads the
+      // screenshot's coordinates as points on the desk, which lands the click
+      // somewhere the model never looked.
+      guard let geometry = CuaFrameRegistry.shared.geometry(id: id) else {
+        return .failure("frame \(id) is not one of the recent screenshots. Take a new one.")
+      }
+      return .success(geometry.globalPoint(forImagePoint: raw))
     }
-    guard let latest = CuaFrameRegistry.shared.latest() else { return raw }
-    return latest.geometry.globalPoint(forImagePoint: raw)
+    guard let latest = CuaFrameRegistry.shared.latest() else { return .success(raw) }
+    return .success(latest.geometry.globalPoint(forImagePoint: raw))
   }
 
   // MARK: - Schema helpers
@@ -751,6 +784,24 @@ struct CuaArguments {
   }
 
   func int(_ key: String) -> Int? {
-    double(key).map { Int($0.rounded()) }
+    // `Int(_:)` traps on NaN, an infinity, or a magnitude past Int, so one
+    // malformed argument would take the app down rather than fail the call.
+    guard let rounded = double(key)?.rounded(), rounded.isFinite,
+      rounded >= Double(Int.min), rounded <= Double(Int.max)
+    else { return nil }
+    return Int(rounded)
+  }
+}
+
+/// A coordinate, or why it could not be resolved. The two failures read very
+/// differently to a caller: missing numbers is a malformed call, while an
+/// unknown frame means the screenshot it was measured against is gone.
+enum ResolvedPoint {
+  case success(CGPoint)
+  case failure(String)
+
+  var failureMessage: String {
+    if case .failure(let message) = self { return message }
+    return "could not resolve the point."
   }
 }
