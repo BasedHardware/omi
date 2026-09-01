@@ -359,7 +359,9 @@ test('signed-out first paint does not show a chat transport error', () => {
   expect(
     renderer.root
       .findAllByType(Text)
-      .filter(node => node.props.accessibilityLabel === 'Chat transport notice'),
+      .filter(
+        node => node.props.accessibilityLabel === 'Chat transport notice',
+      ),
   ).toHaveLength(0);
 });
 
@@ -382,7 +384,9 @@ test('ready chat transport error stays in the chrome and off the Home stage', ()
     expect(
       scroll
         .findAllByType(Text)
-        .filter(node => node.props.accessibilityLabel === 'Chat transport notice'),
+        .filter(
+          node => node.props.accessibilityLabel === 'Chat transport notice',
+        ),
     ).toHaveLength(0);
   }
 });

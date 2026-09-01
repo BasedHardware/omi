@@ -117,7 +117,9 @@ function SettingsNav({
 }) {
   const reduceMotion = useReduceMotion();
   const index = Math.max(0, desktopSettingsPanes.indexOf(pane));
-  const translateY = useRef(new Animated.Value(index * (PANE_ITEM_HEIGHT + PANE_ITEM_GAP))).current;
+  const translateY = useRef(
+    new Animated.Value(index * (PANE_ITEM_HEIGHT + PANE_ITEM_GAP)),
+  ).current;
   useEffect(() => {
     const next = index * (PANE_ITEM_HEIGHT + PANE_ITEM_GAP);
     if (reduceMotion) {
@@ -138,10 +140,7 @@ function SettingsNav({
     <View accessibilityRole="tablist" style={styles.sidebar}>
       <Animated.View
         pointerEvents="none"
-        style={[
-          styles.panePill,
-          {transform: [{translateY}]},
-        ]}
+        style={[styles.panePill, {transform: [{translateY}]}]}
       />
       {desktopSettingsPanes.map(label => (
         <FocusPressable

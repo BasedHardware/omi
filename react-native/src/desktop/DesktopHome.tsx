@@ -1,5 +1,11 @@
 import React, {useMemo, useState} from 'react';
-import {ActivityIndicator, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Monitor from 'lucide-react-native/icons/monitor';
 import type {ChatMessage} from '../chatClient';
 import type {

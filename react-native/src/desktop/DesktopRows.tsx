@@ -23,13 +23,13 @@ function timeLabel(item: DesktopReadProjection): string {
   });
 }
 
-function RowGlyph({
-  kind,
-}: {
-  kind: DesktopReadProjection['kind'];
-}) {
+function RowGlyph({kind}: {kind: DesktopReadProjection['kind']}) {
   const Icon =
-    kind === 'conversation' ? MessageCircle : kind === 'memory' ? Sparkles : CheckCircle2;
+    kind === 'conversation'
+      ? MessageCircle
+      : kind === 'memory'
+      ? Sparkles
+      : CheckCircle2;
   return (
     <View style={styles.glyph}>
       <Icon color={token.color.ink} size={16} />
