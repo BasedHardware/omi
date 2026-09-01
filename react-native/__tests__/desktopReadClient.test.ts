@@ -901,7 +901,7 @@ test('loadAccountSettings keeps failed slices independent', async () => {
 });
 
 test('desktopTaskItems stays empty for null or failed outcomes', () => {
-  const task: TaskProjection = {
+  const listed: TaskProjection = {
     kind: 'task',
     id: 'task-1',
     title: 'Ship the glass chrome',
@@ -934,7 +934,7 @@ test('desktopTaskItems stays empty for null or failed outcomes', () => {
       tasks: {
         status: 'success',
         value: {
-          items: [task],
+          items: [listed],
           page: {
             windowStatus: 'complete',
             complete: true,
@@ -946,5 +946,5 @@ test('desktopTaskItems stays empty for null or failed outcomes', () => {
         },
       },
     }),
-  ).toEqual([task]);
+  ).toEqual([listed]);
 });
