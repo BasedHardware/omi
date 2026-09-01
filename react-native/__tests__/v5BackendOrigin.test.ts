@@ -10,17 +10,18 @@ import {
 
 const workerOrigin = 'https://omi-v5-backend-staging.example.workers.dev';
 
-test('allowlisted worker URL is used for device-session capture', () => {
+test('allowlisted worker URL is unused until Advanced flips to the new plane', () => {
   expect(validateV5BackendUrl(workerOrigin)?.origin).toBe(workerOrigin);
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/device-sessions',
       v5BackendUrl: workerOrigin,
     }),
-  ).toEqual({ok: true, origin: workerOrigin});
+  ).toEqual({ok: true, origin: CLOUD_BACKEND_ORIGIN});
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/device-sessions/11111111-2222-3333-4444-555555555555/audio',
+      softwarePlane: 'new',
       v5BackendUrl: workerOrigin,
     }),
   ).toEqual({ok: true, origin: workerOrigin});
@@ -40,6 +41,7 @@ test('http and credentialed V5 URLs are rejected', () => {
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/device-sessions',
+      softwarePlane: 'new',
       v5BackendUrl: 'http://omi-v5-backend-staging.example.workers.dev',
     }),
   ).toEqual({ok: false, reason: 'rejected'});
@@ -52,6 +54,7 @@ test('random hosts are rejected', () => {
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/device-sessions',
+      softwarePlane: 'new',
       v5BackendUrl: 'https://evil.example',
     }),
   ).toEqual({ok: false, reason: 'rejected'});
@@ -74,12 +77,13 @@ test('loopback still works for local backend and https V5', () => {
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/device-sessions',
+      softwarePlane: 'new',
       v5BackendUrl: 'https://localhost',
     }),
   ).toEqual({ok: true, origin: 'https://localhost'});
 });
 
-test('old-cloud reads stay on api.omi.me when V5 is configured', () => {
+test('old plane keeps every software path on api.omi.me', () => {
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/settings',
@@ -92,6 +96,20 @@ test('old-cloud reads stay on api.omi.me when V5 is configured', () => {
       v5BackendUrl: workerOrigin,
     }),
   ).toEqual({ok: true, origin: CLOUD_BACKEND_ORIGIN});
+  expect(
+    resolveNativeRequestOrigin({
+      path: '/v1/chat-messages',
+      softwarePlane: 'old',
+      v5BackendUrl: workerOrigin,
+    }),
+  ).toEqual({ok: true, origin: CLOUD_BACKEND_ORIGIN});
+  expect(
+    resolveNativeRequestOrigin({
+      path: '/v1/action-items',
+      softwarePlane: 'new',
+      v5BackendUrl: workerOrigin,
+    }),
+  ).toEqual({ok: true, origin: workerOrigin});
   expect(isCaptureBackendPath('/v1/device-sessions')).toBe(true);
   expect(isCaptureBackendPath('/v1/device-sessions-extra')).toBe(false);
   expect(isCaptureBackendPath('/v1/settings')).toBe(false);

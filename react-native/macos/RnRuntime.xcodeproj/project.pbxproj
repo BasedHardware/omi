@@ -22,6 +22,8 @@
 		A10407000000000000000001 /* LocalAuthentication.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10407000000000000000002 /* LocalAuthentication.framework */; };
 		A10408000000000000000001 /* OmiNativeModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10408000000000000000002 /* OmiNativeModule.mm */; };
 		A10409000000000000000001 /* CoreBluetooth.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10409000000000000000002 /* CoreBluetooth.framework */; };
+		A1040A000000000000000001 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1040A000000000000000002 /* AVFoundation.framework */; };
+		A1040B000000000000000001 /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1040B000000000000000002 /* UserNotifications.framework */; };
 		DA2AA05EC605ADA710BAA8FE /* libPods-RnRuntime-macOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */; };
 /* End PBXBuildFile section */
 
@@ -53,6 +55,8 @@
 		A10408000000000000000002 /* OmiNativeModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiNativeModule.mm; sourceTree = "<group>"; };
 		A10408000000000000000003 /* OmiNativeModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiNativeModule.h; sourceTree = "<group>"; };
 		A10409000000000000000002 /* CoreBluetooth.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreBluetooth.framework; path = System/Library/Frameworks/CoreBluetooth.framework; sourceTree = SDKROOT; };
+		A1040A000000000000000002 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		A1040B000000000000000002 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RnRuntime-macOS.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -72,6 +76,8 @@
 				A10406000000000000000001 /* AuthenticationServices.framework in Frameworks */,
 				A10407000000000000000001 /* LocalAuthentication.framework in Frameworks */,
 				A10409000000000000000001 /* CoreBluetooth.framework in Frameworks */,
+				A1040A000000000000000001 /* AVFoundation.framework in Frameworks */,
+				A1040B000000000000000001 /* UserNotifications.framework in Frameworks */,
 				DA2AA05EC605ADA710BAA8FE /* libPods-RnRuntime-macOS.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -85,6 +91,8 @@
 				A10406000000000000000002 /* AuthenticationServices.framework */,
 				A10407000000000000000002 /* LocalAuthentication.framework */,
 				A10409000000000000000002 /* CoreBluetooth.framework */,
+				A1040A000000000000000002 /* AVFoundation.framework */,
+				A1040B000000000000000002 /* UserNotifications.framework */,
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */,
 			);

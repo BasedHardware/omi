@@ -14,6 +14,7 @@
 static NSString *const OmiAuthKeychainService = @"com.omi.rnruntime.firebase-rest-session";
 static NSString *const OmiAuthKeychainAccount = @"firebase-rest-tokens";
 static NSString *const OmiOnboardingCompletedKey = @"omi.onboarding.completed";
+static NSString *const OmiAuthShippingSessionIgnoredKey = @"omi.auth.shippingSessionIgnored";
 
 static BOOL OmiAuthIgnoreEnvironmentCloudTokens = NO;
 
@@ -27,6 +28,14 @@ void OmiAuthSetEnvironmentCloudTokensIgnored(BOOL ignored) {
   @synchronized (OmiAuthKeychainService) {
     OmiAuthIgnoreEnvironmentCloudTokens = ignored;
   }
+}
+
+BOOL OmiAuthShippingSessionIgnored(void) {
+  return [NSUserDefaults.standardUserDefaults boolForKey:OmiAuthShippingSessionIgnoredKey];
+}
+
+void OmiAuthSetShippingSessionIgnored(BOOL ignored) {
+  [NSUserDefaults.standardUserDefaults setBool:ignored forKey:OmiAuthShippingSessionIgnoredKey];
 }
 
 
@@ -176,16 +185,20 @@ static NSURL *OmiAuthAcceptCallback(int listener, uint16_t port, NSTimeInterval 
   return nil;
 }
 
-static NSDictionary *OmiAuthKeychainQuery(void) {
+static NSDictionary *OmiAuthKeychainQueryForService(NSString *service) {
   return @{
     (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
-    (__bridge id)kSecAttrService : OmiAuthKeychainService,
+    (__bridge id)kSecAttrService : service,
     (__bridge id)kSecAttrAccount : OmiAuthKeychainAccount,
   };
 }
 
-static NSDictionary *OmiAuthStoredSession(void) {
-  NSMutableDictionary *query = [OmiAuthKeychainQuery() mutableCopy];
+static NSDictionary *OmiAuthKeychainQuery(void) {
+  return OmiAuthKeychainQueryForService(OmiAuthKeychainService);
+}
+
+static NSDictionary *OmiAuthReadKeychainSession(NSString *service) {
+  NSMutableDictionary *query = [OmiAuthKeychainQueryForService(service) mutableCopy];
   query[(__bridge id)kSecReturnData] = @YES;
   query[(__bridge id)kSecMatchLimit] = (__bridge id)kSecMatchLimitOne;
   query[(__bridge id)kSecUseAuthenticationUI] = (__bridge id)kSecUseAuthenticationUIFail;
@@ -198,6 +211,78 @@ static NSDictionary *OmiAuthStoredSession(void) {
   NSData *data = CFBridgingRelease(result);
   NSDictionary *session = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
   return [session isKindOfClass:NSDictionary.class] ? session : nil;
+}
+
+static NSDictionary *OmiAuthReadShippingPreferences(void) {
+  NSString *idToken = (__bridge_transfer NSString *)CFPreferencesCopyAppValue(
+      CFSTR("auth_idToken"), CFSTR("com.omi.computer-macos"));
+  NSString *refreshToken = (__bridge_transfer NSString *)CFPreferencesCopyAppValue(
+      CFSTR("auth_refreshToken"), CFSTR("com.omi.computer-macos"));
+  if (idToken.length == 0 || refreshToken.length == 0) return nil;
+  id expiry = (__bridge_transfer id)CFPreferencesCopyAppValue(
+      CFSTR("auth_tokenExpiry"), CFSTR("com.omi.computer-macos"));
+  id userId = (__bridge_transfer id)CFPreferencesCopyAppValue(
+      CFSTR("auth_userId"), CFSTR("com.omi.computer-macos"));
+  NSMutableDictionary *session = [@{
+    @"idToken" : idToken,
+    @"refreshToken" : refreshToken,
+  } mutableCopy];
+  if ([expiry respondsToSelector:@selector(doubleValue)]) {
+    session[@"expiryTime"] = @([expiry doubleValue]);
+  }
+  if ([userId isKindOfClass:NSString.class] && [userId length] > 0) {
+    session[@"tokenUserId"] = userId;
+  }
+  return session;
+}
+
+static NSArray<NSString *> *OmiAuthShippingKeychainServices(void) {
+  return @[
+    @"com.omi.desktop.firebase-rest-session.v2.team.9536L8KLMP.bundle.com.omi.computer-macos",
+    @"com.omi.desktop.firebase-rest-session.v2.team.9536L8KLMP.bundle.com.omi.computer-macos.beta",
+  ];
+}
+
+static BOOL OmiAuthCopySessionIntoOwnKeychain(NSDictionary *session) {
+  NSString *idToken = [session[@"idToken"] isKindOfClass:NSString.class] ? session[@"idToken"] : nil;
+  NSString *refreshToken = [session[@"refreshToken"] isKindOfClass:NSString.class]
+      ? session[@"refreshToken"] : nil;
+  if (idToken.length == 0 || refreshToken.length == 0) return NO;
+  NSData *data = [NSJSONSerialization dataWithJSONObject:session options:0 error:nil];
+  if (data == nil) return NO;
+  NSDictionary *attributes = @{
+    (__bridge id)kSecValueData : data,
+    (__bridge id)kSecAttrAccessible : (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+  };
+  NSDictionary *query = OmiAuthKeychainQuery();
+  OSStatus status = SecItemUpdate((__bridge CFDictionaryRef)query, (__bridge CFDictionaryRef)attributes);
+  if (status == errSecItemNotFound) {
+    NSMutableDictionary *add = [query mutableCopy];
+    [add addEntriesFromDictionary:attributes];
+    status = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+  }
+  return status == errSecSuccess;
+}
+
+BOOL OmiAuthImportShippingSessionIfNeeded(void) {
+  if (OmiAuthShippingSessionIgnored()) return NO;
+  if (OmiAuthReadKeychainSession(OmiAuthKeychainService) != nil) return YES;
+  for (NSString *service in OmiAuthShippingKeychainServices()) {
+    NSDictionary *session = OmiAuthReadKeychainSession(service);
+    if (session != nil && OmiAuthCopySessionIntoOwnKeychain(session)) return YES;
+  }
+  NSDictionary *defaultsSession = OmiAuthReadShippingPreferences();
+  if (defaultsSession != nil && OmiAuthCopySessionIntoOwnKeychain(defaultsSession)) return YES;
+  return NO;
+}
+
+static NSDictionary *OmiAuthStoredSession(void) {
+  NSDictionary *own = OmiAuthReadKeychainSession(OmiAuthKeychainService);
+  if (own != nil) return own;
+  if (OmiAuthImportShippingSessionIfNeeded()) {
+    return OmiAuthReadKeychainSession(OmiAuthKeychainService);
+  }
+  return nil;
 }
 
 static OSStatus OmiAuthClearSession(void) {
@@ -449,6 +534,7 @@ RCT_EXPORT_MODULE(OmiAuth)
     return;
   }
   OmiAuthSetEnvironmentCloudTokensIgnored(NO);
+  OmiAuthSetShippingSessionIgnored(NO);
   resolve(value);
   [self bringOmiToFront];
 }
@@ -738,6 +824,7 @@ RCT_REMAP_METHOD(signOut,
   OSStatus status = OmiAuthClearSession();
   if (status == errSecSuccess || status == errSecItemNotFound) {
     OmiAuthSetEnvironmentCloudTokensIgnored(YES);
+    OmiAuthSetShippingSessionIgnored(YES);
     resolve(@{@"signedOut" : @YES});
     return;
   }
