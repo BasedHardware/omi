@@ -13,7 +13,6 @@ final class FirstRunPTTAccountingTests: XCTestCase {
   private var ownerFixture: RuntimeOwnerAuthorityTestFixture?
 
   override func setUp() async throws {
-    try await super.setUp()
     let fixture = RuntimeOwnerAuthorityTestFixture()
     ownerFixture = fixture
     await fixture.establish(authOwnerID: ownerID)
@@ -27,7 +26,6 @@ final class FirstRunPTTAccountingTests: XCTestCase {
     VoiceTurnCoordinator.shared.reset()
     await ownerFixture?.restore()
     ownerFixture = nil
-    try await super.tearDown()
   }
 
   func testTooShortSilentRejectionProducesNoCompletionObservation() {
