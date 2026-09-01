@@ -145,7 +145,7 @@ import routers.developer as developer  # noqa: E402
 import utils.task_intelligence.proactive_engine as proactive_engine  # noqa: E402
 import utils.conversations.meeting_receipt as meeting_receipt  # noqa: E402
 from models.conversation import Conversation, CreateConversation  # noqa: E402
-from models.conversation_enums import ConversationStatus  # noqa: E402
+from models.conversation_enums import ConversationSource, ConversationStatus  # noqa: E402
 from utils.conversations.meeting_treatment import meeting_treatment_verdict  # noqa: E402
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -266,6 +266,34 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
         is_desktop_meeting=True,
         recommended_action_items=[],
     )
+
+
+def test_onboarding_source_is_processed_and_preserved(monkeypatch):
+    captured = {}
+
+    def _process(_uid, _language, conversation):
+        captured['source'] = conversation.source
+        return Conversation(
+            id='onboarding-conversation',
+            created_at=NOW,
+            started_at=conversation.started_at,
+            finished_at=conversation.finished_at,
+            source=conversation.source,
+            language=conversation.language,
+            structured={'title': 'Welcome to Omi'},
+            transcript_segments=conversation.transcript_segments,
+            discarded=False,
+            status=ConversationStatus.completed,
+        )
+
+    monkeypatch.setattr(developer, 'process_conversation', _process)
+
+    response = developer._create_conversation_from_segments('uid1', _request(source='onboarding'))
+
+    assert captured['source'] == ConversationSource.onboarding
+    assert response.id == 'onboarding-conversation'
+    assert response.status == 'completed'
+    assert response.discarded is False
 
 
 def test_client_session_id_uses_stable_conversation_id(monkeypatch):

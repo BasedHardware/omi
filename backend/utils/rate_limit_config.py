@@ -61,6 +61,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # cheaper than :create — no Deepgram, just LLM structuring). Used per finished
     # conversation by Parakeet/local-STT users, so a bit more headroom than :create.
     "conversations:from-segments": (30, 3600),
+    # Desktop sends running per-day totals periodically; allow several devices
+    # plus reconnect bursts while still capping accidental hot loops.
+    "users:desktop_usage_daily": (600, 3600),
     # Chat — 2-6 LLM calls per message
     "chat:send_message": (120, 3600),
     "chat:initial": (60, 3600),

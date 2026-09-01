@@ -68,16 +68,43 @@ void main() {
     expect(find.byKey(const ValueKey('daily_summary_location_row_2')), findsNothing);
     expect(find.text('Unknown'), findsNWidgets(2));
   });
+
+  testWidgets('shows positive desktop watching and proactive stats', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData.dark(),
+        home: DailySummaryDetailPage(
+          summaryId: 'summary-stats',
+          summary: _summary(
+            stats: DayStats(
+              totalConversations: 1,
+              totalDurationMinutes: 30,
+              watchingMinutes: 17,
+              proactiveMoments: 9,
+            ),
+          ),
+          tileProvider: _MemoryTileProvider(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('17m'), findsOneWidget);
+    expect(find.text('9'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
-DailySummary _summary({List<LocationPin>? locations}) {
+DailySummary _summary({List<LocationPin>? locations, DayStats? stats}) {
   return DailySummary(
     id: 'summary-1',
     date: '2026-07-15',
     createdAt: DateTime(2026, 7, 16),
     headline: 'A day around the city',
     overview: 'A productive day.',
-    stats: DayStats(totalConversations: 1, totalDurationMinutes: 30),
+    stats: stats ?? DayStats(totalConversations: 1, totalDurationMinutes: 30),
     locations: locations ??
         [
           LocationPin(latitude: 37.7749, longitude: -122.4194, address: 'Home, San Francisco', time: '08:00'),

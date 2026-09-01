@@ -115,6 +115,90 @@ import pydantic  # noqa: E402
 from routers.users import SetUserWebhookUrlRequest  # noqa: E402
 
 
+def _desktop_usage_payload(**overrides):
+    today = users_mod.datetime.now(users_mod.pytz.timezone('America/Los_Angeles')).strftime('%Y-%m-%d')
+    payload = {
+        'date': today,
+        'timezone': 'America/Los_Angeles',
+        'client_device_id': 'macos_abc123',
+        'watching_seconds': 120,
+        'listening_seconds': 60,
+        'proactive_cards_shown': 3,
+        'proactive_cards_acted': 1,
+        'ptt_turns': 2,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_desktop_daily_usage_endpoint_records_validated_payload():
+    request = users_mod.DesktopDailyUsageRequest.model_validate(_desktop_usage_payload())
+
+    with patch.object(users_mod.daily_summaries_db, 'upsert_desktop_daily_usage') as upsert:
+        response = users_mod.record_desktop_daily_usage(request, uid='uid1')
+
+    assert response == {'ok': True}
+    upsert.assert_called_once_with(
+        'uid1',
+        _desktop_usage_payload()['date'],
+        'America/Los_Angeles',
+        'macos_abc123',
+        {
+            'watching_seconds': 120,
+            'listening_seconds': 60,
+            'proactive_cards_shown': 3,
+            'proactive_cards_acted': 1,
+            'ptt_turns': 2,
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    'override',
+    [
+        {'date': '2026-02-30'},
+        {'date': '2000-01-01'},
+        {'timezone': 'Mars/Olympus_Mons'},
+        {'client_device_id': '   '},
+        {'client_device_id': 'x' * 201},
+        {'watching_seconds': -1},
+        {'listening_seconds': 86401},
+        {'proactive_cards_shown': 10001},
+        {'ptt_turns': True},
+    ],
+)
+def test_desktop_daily_usage_endpoint_rejects_invalid_payload(override):
+    with pytest.raises(pydantic.ValidationError):
+        users_mod.DesktopDailyUsageRequest.model_validate(_desktop_usage_payload(**override))
+
+
+def test_daily_summary_day_stats_serializes_new_fields():
+    response = users_mod.DailySummaryResponse.model_validate(
+        {
+            'id': 'summary-1',
+            'stats': {
+                'total_conversations': 2,
+                'total_duration_minutes': 18,
+                'action_items_count': 1,
+                'memories_created': 3,
+                'action_items_created': 4,
+                'watching_minutes': 5,
+                'proactive_moments': 6,
+            },
+        }
+    )
+
+    assert response.model_dump()['stats'] == {
+        'total_conversations': 2,
+        'total_duration_minutes': 18,
+        'action_items_count': 1,
+        'memories_created': 3,
+        'action_items_created': 4,
+        'watching_minutes': 5,
+        'proactive_moments': 6,
+    }
+
+
 def test_missing_url_returns_422():
     # Pydantic rejects missing required field; FastAPI surfaces as 422 at API layer.
     with pytest.raises(pydantic.ValidationError):

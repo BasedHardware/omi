@@ -431,6 +431,20 @@ def get_memories(
     return result
 
 
+def count_memories_created(uid: str, start_date: datetime, end_date: datetime, *, firestore_client: Any = None) -> int:
+    """Count memory documents created in an inclusive UTC range."""
+    database = _get_db(firestore_client)
+    query = (
+        database.collection(users_collection)
+        .document(uid)
+        .collection(memories_collection)
+        .where(filter=FieldFilter('created_at', '>=', start_date))
+        .where(filter=FieldFilter('created_at', '<=', end_date))
+    )
+    result = query.count().get()
+    return int(result[0][0].value or 0)
+
+
 _HISTORICAL_SCAN_PAGE_MAX = 500
 HistoricalScanCursor = tuple[datetime, str]
 

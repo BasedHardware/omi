@@ -1139,7 +1139,7 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     )
     source: Optional[ConversationSource] = Field(
         default=ConversationSource.phone,
-        description="Source of the conversation (e.g., omi, friend, openglass, phone, external_integration)",
+        description="Source of the conversation (e.g., omi, friend, openglass, phone, onboarding, external_integration)",
     )
     started_at: Optional[datetime] = Field(default=None, description="When conversation started (defaults to now)")
     finished_at: Optional[datetime] = Field(
@@ -1857,7 +1857,7 @@ def create_conversation_from_segments(
 
     **Other Parameters:**
     - **source**: Source of conversation (default: external_integration). Options:
-      - omi, friend, openglass, phone, desktop, apple_watch, bee, plaud, frame, etc.
+      - omi, friend, openglass, phone, onboarding, desktop, apple_watch, bee, plaud, frame, etc.
     - **started_at**: When conversation started (defaults to now)
     - **finished_at**: When conversation finished (calculated from last segment if not provided)
     - **language**: Language code (default: 'en')

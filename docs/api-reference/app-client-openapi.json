@@ -8914,7 +8914,7 @@
               }
             ],
             "default": "phone",
-            "description": "Source of the conversation (e.g., omi, friend, openglass, phone, external_integration)"
+            "description": "Source of the conversation (e.g., omi, friend, openglass, phone, onboarding, external_integration)"
           },
           "started_at": {
             "anyOf": [
@@ -9692,6 +9692,39 @@
             ],
             "title": "Action Items Count"
           },
+          "action_items_created": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Items Created"
+          },
+          "memories_created": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memories Created"
+          },
+          "proactive_moments": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proactive Moments"
+          },
           "total_conversations": {
             "anyOf": [
               {
@@ -9713,6 +9746,17 @@
               }
             ],
             "title": "Total Duration Minutes"
+          },
+          "watching_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watching Minutes"
           }
         },
         "title": "DailySummaryDayStats",
@@ -10518,6 +10562,79 @@
           "message"
         ],
         "title": "DeleteLimitlessConversationsResponse",
+        "type": "object"
+      },
+      "DesktopDailyUsageRequest": {
+        "properties": {
+          "client_device_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Client Device Id",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "listening_seconds": {
+            "maximum": 86400.0,
+            "minimum": 0.0,
+            "title": "Listening Seconds",
+            "type": "integer"
+          },
+          "proactive_cards_acted": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Proactive Cards Acted",
+            "type": "integer"
+          },
+          "proactive_cards_shown": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Proactive Cards Shown",
+            "type": "integer"
+          },
+          "ptt_turns": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Ptt Turns",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "watching_seconds": {
+            "maximum": 86400.0,
+            "minimum": 0.0,
+            "title": "Watching Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "timezone",
+          "client_device_id",
+          "watching_seconds",
+          "listening_seconds",
+          "proactive_cards_shown",
+          "proactive_cards_acted",
+          "ptt_turns"
+        ],
+        "title": "DesktopDailyUsageRequest",
+        "type": "object"
+      },
+      "DesktopDailyUsageResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "DesktopDailyUsageResponse",
         "type": "object"
       },
       "DeterministicFacts": {
@@ -42053,7 +42170,7 @@
     },
     "/v1/dev/user/conversations/from-segments": {
       "post": {
-        "description": "Create a new conversation from structured transcript segments.\n\nThis endpoint is for advanced integrations that have speaker diarization and timing information.\nIt processes the transcript segments through the full conversation pipeline.\n\n**Transcript Segments:**\n- **text**: The text spoken (required)\n- **speaker**: Speaker identifier like 'SPEAKER_00', 'SPEAKER_01' (default: 'SPEAKER_00')\n- **speaker_id**: Numeric speaker ID (auto-calculated from speaker if not provided)\n- **is_user**: Whether this segment is from the user (default: False)\n- **person_id**: ID of known person speaking (optional)\n- **start**: Start time in seconds, e.g., 0.0, 1.5, 60.2 (required)\n- **end**: End time in seconds, e.g., 1.5, 3.0, 65.8 (required)\n\n**Other Parameters:**\n- **source**: Source of conversation (default: external_integration). Options:\n  - omi, friend, openglass, phone, desktop, apple_watch, bee, plaud, frame, etc.\n- **started_at**: When conversation started (defaults to now)\n- **finished_at**: When conversation finished (calculated from last segment if not provided)\n- **language**: Language code (default: 'en')\n- **geolocation**: Optional geolocation data\n\n**Example:**\n```json\n{\n  \"transcript_segments\": [\n    {\n      \"text\": \"Hey, how are you doing?\",\n      \"speaker\": \"SPEAKER_00\",\n      \"is_user\": true,\n      \"start\": 0.0,\n      \"end\": 2.5\n    },\n    {\n      \"text\": \"I'm doing great, thanks!\",\n      \"speaker\": \"SPEAKER_01\",\n      \"is_user\": false,\n      \"start\": 2.8,\n      \"end\": 5.2\n    }\n  ],\n  \"source\": \"phone\",\n  \"language\": \"en\"\n}\n```",
+        "description": "Create a new conversation from structured transcript segments.\n\nThis endpoint is for advanced integrations that have speaker diarization and timing information.\nIt processes the transcript segments through the full conversation pipeline.\n\n**Transcript Segments:**\n- **text**: The text spoken (required)\n- **speaker**: Speaker identifier like 'SPEAKER_00', 'SPEAKER_01' (default: 'SPEAKER_00')\n- **speaker_id**: Numeric speaker ID (auto-calculated from speaker if not provided)\n- **is_user**: Whether this segment is from the user (default: False)\n- **person_id**: ID of known person speaking (optional)\n- **start**: Start time in seconds, e.g., 0.0, 1.5, 60.2 (required)\n- **end**: End time in seconds, e.g., 1.5, 3.0, 65.8 (required)\n\n**Other Parameters:**\n- **source**: Source of conversation (default: external_integration). Options:\n  - omi, friend, openglass, phone, onboarding, desktop, apple_watch, bee, plaud, frame, etc.\n- **started_at**: When conversation started (defaults to now)\n- **finished_at**: When conversation finished (calculated from last segment if not provided)\n- **language**: Language code (default: 'en')\n- **geolocation**: Optional geolocation data\n\n**Example:**\n```json\n{\n  \"transcript_segments\": [\n    {\n      \"text\": \"Hey, how are you doing?\",\n      \"speaker\": \"SPEAKER_00\",\n      \"is_user\": true,\n      \"start\": 0.0,\n      \"end\": 2.5\n    },\n    {\n      \"text\": \"I'm doing great, thanks!\",\n      \"speaker\": \"SPEAKER_01\",\n      \"is_user\": false,\n      \"start\": 2.8,\n      \"end\": 5.2\n    }\n  ],\n  \"source\": \"phone\",\n  \"language\": \"en\"\n}\n```",
         "operationId": "createConversationFromSegments",
         "requestBody": {
           "content": {
@@ -56550,6 +56667,93 @@
           }
         ],
         "summary": "Delete Account",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/desktop-usage/daily": {
+      "post": {
+        "operationId": "record_desktop_daily_usage_v1_users_desktop_usage_daily_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopDailyUsageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopDailyUsageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Record Desktop Daily Usage",
         "tags": [
           "v1"
         ]
