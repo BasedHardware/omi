@@ -49,8 +49,14 @@ struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
             // site's fixed `.frame(height:)` taller than the host simply runs off it — and every
             // call site had picked its number against one window size. Bounding here means no
             // sheet can outgrow the surface it is mounted in, at any window size or on resize.
+            //
+            // The clamp alone only decided how much of an oversized sheet is *drawn*: the rest was
+            // cut off with no way to reach it — a short window, a long error, or a larger text size
+            // could hide a sheet's own buttons. The scroll is what makes the bound survivable; it
+            // still sizes to its content, so a sheet that fits neither scrolls nor grows.
             GeometryReader { proxy in
-              sheetContent()
+              ScrollView(.vertical) { sheetContent() }
+                .scrollBounceBehavior(.basedOnSize)
                 .frame(
                   maxWidth: max(Self.minimumSheetSide, proxy.size.width - Self.hostInset),
                   maxHeight: max(Self.minimumSheetSide, proxy.size.height - Self.hostInset)
