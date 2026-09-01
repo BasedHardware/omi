@@ -14,6 +14,7 @@ import {
   beginBackendReconcile,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
+  chatFirstMaterializationDeferrals,
   chatFirstWireRejectionMessage,
   classifyBackendTurnResultDisposition,
   drainBackendConversationDeleteOutbox,
@@ -350,6 +351,13 @@ describe("kernel conversation journal", () => {
     expect(batch).toMatchObject({ stoppedByTail: true, results: [{
       accepted: false, rejected: false, suppressedByStreamingTail: true, turn: null,
     }] });
+    expect(chatFirstMaterializationDeferrals(
+      [{ intentId: "intent-late" }, { intentId: "intent-after-streaming-item" }],
+      batch,
+    )).toEqual([
+      { intentId: "intent-late", code: "streaming_tail" },
+      { intentId: "intent-after-streaming-item", code: "tail_question" },
+    ]);
     fixture.store.close();
   });
 

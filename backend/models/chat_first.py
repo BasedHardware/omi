@@ -163,6 +163,8 @@ class ProactiveIntent(_StrictModel):
     last_rejection_at: datetime | None = None
     fetch_count: int = Field(default=0, ge=0)
     last_fetched_at: datetime | None = None
+    first_deferred_at: datetime | None = None
+    last_deferral_at: datetime | None = None
     dead_letter_reason: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[a-z0-9_:.-]+$')
     # This is a terminal local-journal receipt on the same sparse cold-start
     # intent, never an operator-owned completion switch. It is the bounded
@@ -262,6 +264,11 @@ class ProactiveMaterializationReceiptOutcome(_StrictModel):
     outcome: Literal['acknowledged', 'already_terminal', 'missing', 'conflict', 'generation_mismatch']
 
 
+class ProactiveMaterializationRejectionOutcome(_StrictModel):
+    intent_id: StableId
+    outcome: Literal['recorded', 'absorbed', 'generation_mismatch', 'malformed', 'missing']
+
+
 class ColdStartSequenceTerminalReceipt(_StrictModel):
     """A durable local-journal acknowledgement that sparse sequencing ended."""
 
@@ -307,11 +314,19 @@ class MaterializePromptsRequest(_StrictModel):
 class MaterializePromptsResponse(_StrictModel):
     intents: list[MaterializableProactiveIntent] = Field(default_factory=list)
     receipt_outcomes: list[ProactiveMaterializationReceiptOutcome] = Field(default_factory=list)
+    rejection_outcomes: list[ProactiveMaterializationRejectionOutcome] = Field(default_factory=list)
 
     @field_validator('intents', mode='before')
     @classmethod
     def narrow_internal_intents_for_wire(cls, intents):
-        return [intent.model_dump() if isinstance(intent, ProactiveIntent) else intent for intent in intents]
+        return [
+            (
+                intent.model_dump(exclude={'first_deferred_at', 'last_deferral_at'})
+                if isinstance(intent, ProactiveIntent)
+                else intent
+            )
+            for intent in intents
+        ]
 
 
 class LegacyProactiveIntent(_StrictModel):

@@ -16755,6 +16755,13 @@
             },
             "title": "Receipt Outcomes",
             "type": "array"
+          },
+          "rejection_outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationRejectionOutcome"
+            },
+            "title": "Rejection Outcomes",
+            "type": "array"
           }
         },
         "title": "MaterializePromptsResponse",
@@ -20268,6 +20275,35 @@
           "code"
         ],
         "title": "ProactiveMaterializationRejection",
+        "type": "object"
+      },
+      "ProactiveMaterializationRejectionOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "recorded",
+              "absorbed",
+              "generation_mismatch",
+              "malformed",
+              "missing"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "outcome"
+        ],
+        "title": "ProactiveMaterializationRejectionOutcome",
         "type": "object"
       },
       "ProactiveNotification": {

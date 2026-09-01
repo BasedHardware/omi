@@ -209,6 +209,21 @@ export interface ChatFirstIntentsMaterializationResult {
   stoppedByTail: boolean;
 }
 
+export function chatFirstMaterializationDeferrals(
+  inputs: readonly Pick<MaterializeChatFirstIntentInput, "intentId">[],
+  result: ChatFirstIntentsMaterializationResult,
+): Array<{ intentId: string; code: "tail_question" | "streaming_tail" }> {
+  if (!result.stoppedByTail) return [];
+  return inputs.flatMap((input, index) => {
+    const candidate = result.results[index];
+    if (candidate?.accepted || candidate?.rejected) return [];
+    return [{
+      intentId: input.intentId,
+      code: candidate?.suppressedByStreamingTail ? "streaming_tail" : "tail_question",
+    }];
+  });
+}
+
 class ChatFirstMaterializationError extends Error {
   constructor(readonly code: "invalid_intent" | "identity_conflict" | "kernel_materialization_failed", message: string) {
     super(message);

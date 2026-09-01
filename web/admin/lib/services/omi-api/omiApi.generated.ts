@@ -2676,6 +2676,7 @@ export interface MaterializePromptsRequest {
 export interface MaterializePromptsResponse {
   intents?: Array<MaterializableProactiveIntent>;
   receipt_outcomes?: Array<ProactiveMaterializationReceiptOutcome>;
+  rejection_outcomes?: Array<ProactiveMaterializationRejectionOutcome>;
 }
 
 export interface McpAddServerResponse {
@@ -3281,6 +3282,11 @@ export interface ProactiveMaterializationRejection {
   code: string;
   intent_id: string;
   message?: string | null;
+}
+
+export interface ProactiveMaterializationRejectionOutcome {
+  intent_id: string;
+  outcome: "recorded" | "absorbed" | "generation_mismatch" | "malformed" | "missing";
 }
 
 export interface ProactiveNotification {
@@ -5157,6 +5163,7 @@ export interface OmiApiSchemas {
   "ProactiveMaterializationReceipt": ProactiveMaterializationReceipt;
   "ProactiveMaterializationReceiptOutcome": ProactiveMaterializationReceiptOutcome;
   "ProactiveMaterializationRejection": ProactiveMaterializationRejection;
+  "ProactiveMaterializationRejectionOutcome": ProactiveMaterializationRejectionOutcome;
   "ProactiveNotification": ProactiveNotification;
   "ProcessConversationRequest": ProcessConversationRequest;
   "ProgressExtractRequest": ProgressExtractRequest;

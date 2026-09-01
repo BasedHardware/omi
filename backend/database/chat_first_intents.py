@@ -31,6 +31,8 @@ DEFERRALS_COLLECTION = 'chat_first_deferrals'
 STATE_COLLECTION = 'chat_first_proactive_state'
 BUDGET_DOCUMENT = 'budget'
 _DEFERRAL_DUE_AFTER = timedelta(hours=24)
+CONTINUOUS_DEFERRAL_BUDGET = timedelta(days=7)
+FETCH_CANDIDATE_SCAN_MULTIPLIER = 2
 
 # A ready intent must reach a terminal state under bounded identical retries:
 # typed kernel failures park it after three reports, while fetch-only clients
@@ -55,11 +57,25 @@ class ReadyIntentBatch:
     stalled_source: ProactiveIntentSource | None
 
 
+@dataclass(frozen=True)
+class DeferralReleaseBatch:
+    intents: list[ProactiveIntent]
+    malformed_count: int
+
+
 class ChatFirstIntentStoreError(RuntimeError):
     """Base class for closed intent-store failures."""
 
 
 class ChatFirstIntentGenerationMismatch(ChatFirstIntentStoreError):
+    pass
+
+
+class ChatFirstIntentDocumentGenerationMismatch(ChatFirstIntentStoreError):
+    pass
+
+
+class ChatFirstMalformedDocument(ChatFirstIntentStoreError):
     pass
 
 
@@ -153,7 +169,7 @@ def _budget_from_snapshot(snapshot: Any, *, account_generation: int, now: dateti
     try:
         state = parse_snapshot_strict(ProactiveBudgetState, snapshot)
     except MalformedDocError as error:
-        raise ChatFirstIntentGenerationMismatch('chat-first proactive budget state is malformed') from error
+        raise ChatFirstMalformedDocument('chat-first proactive budget state is malformed') from error
     if state.account_generation != account_generation:
         return ProactiveBudgetState(account_generation=account_generation)
     return normalized_budget_state(state, now=now)
@@ -165,7 +181,7 @@ def _intent_from_snapshot(snapshot: Any) -> ProactiveIntent:
     try:
         return parse_snapshot_strict(ProactiveIntent, snapshot)
     except MalformedDocError as error:
-        raise ChatFirstIntentGenerationMismatch('chat-first proactive intent is malformed') from error
+        raise ChatFirstMalformedDocument('chat-first proactive intent is malformed') from error
 
 
 def _deferral_from_snapshot(snapshot: Any) -> ProactiveDeferral:
@@ -174,7 +190,7 @@ def _deferral_from_snapshot(snapshot: Any) -> ProactiveDeferral:
     try:
         return parse_snapshot_strict(ProactiveDeferral, snapshot)
     except MalformedDocError as error:
-        raise ChatFirstIntentGenerationMismatch('chat-first deferral is malformed') from error
+        raise ChatFirstMalformedDocument('chat-first deferral is malformed') from error
 
 
 def _require_current_control(uid: str, *, account_generation: int, firestore_client: Any) -> None:
@@ -643,7 +659,7 @@ def _advance_fetched_intent(
             write_transaction.set(intent_ref, _intent_payload(dead_lettered))
             return None, IntentLifecycleEvent('dead_letter', intent.source, 'unacknowledged_after_fetch_budget')
         fetched = intent.model_copy(update=common)
-        write_transaction.set(intent_ref, _intent_payload(fetched))
+        write_transaction.set(intent_ref, common, merge=True)
         return fetched, None
 
     return apply(transaction)
@@ -674,7 +690,7 @@ def _dead_letter_malformed_intent(
             return
         try:
             _intent_from_snapshot(snapshot)
-        except ChatFirstIntentGenerationMismatch:
+        except ChatFirstMalformedDocument:
             write_transaction.set(
                 intent_ref,
                 {**raw, 'delivery_state': 'dead_letter', 'dead_letter_reason': 'malformed_document'},
@@ -709,7 +725,7 @@ def fetch_ready_intent_batch(
     for snapshot in query.stream():
         try:
             intent = _intent_from_snapshot(snapshot)
-        except ChatFirstIntentGenerationMismatch:
+        except ChatFirstMalformedDocument:
             raw = snapshot.to_dict() or {}
             malformed_intent_ids.append(getattr(snapshot, 'id', raw.get('intent_id', 'malformed')))
             continue
@@ -727,7 +743,9 @@ def fetch_ready_intent_batch(
 
     ready: list[ProactiveIntent] = []
     lifecycle_events: list[IntentLifecycleEvent] = []
-    for intent_id in malformed_intent_ids:
+    candidate_scan_limit = FETCH_CANDIDATE_SCAN_MULTIPLIER * limit
+    malformed_scan_count = min(len(malformed_intent_ids), candidate_scan_limit)
+    for intent_id in malformed_intent_ids[:malformed_scan_count]:
         try:
             _dead_letter_malformed_intent(
                 uid,
@@ -739,13 +757,14 @@ def fetch_ready_intent_batch(
             # A concurrently deleted or repaired malformed row is isolated from
             # every independent ready intent in this fetch.
             continue
-    # Process beyond the response limit when earlier candidates terminalize;
-    # the caller still receives up to eight live items in this same fetch.
-    for intent in candidates:
+    # Process beyond the response limit when earlier candidates terminalize,
+    # but never let a poison backlog amplify point reads and transactions
+    # without bound on every device poll.
+    remaining_scan_limit = candidate_scan_limit - malformed_scan_count
+    for intent in candidates[:remaining_scan_limit]:
         if deferred_intent_ids and intent.intent_id in deferred_intent_ids:
-            advanced, event = intent, None
             if len(ready) < limit:
-                ready.append(advanced)
+                ready.append(intent)
             if len(ready) >= limit:
                 break
             continue
@@ -825,7 +844,7 @@ def record_materialization_rejection(
             return None, None
         intent = _intent_from_snapshot(snapshot)
         if intent.account_generation != account_generation:
-            raise ChatFirstIntentGenerationMismatch('intent account generation changed')
+            raise ChatFirstIntentDocumentGenerationMismatch('intent account generation changed')
         if intent.delivery_state in {'dead_letter', 'delivered'}:
             return intent, None
         if intent.delivery_state not in {'ready', 'pending_kernel_receipt'}:
@@ -872,11 +891,27 @@ def record_materialization_deferral(
             return None
         intent = _intent_from_snapshot(snapshot)
         if intent.account_generation != account_generation:
-            raise ChatFirstIntentGenerationMismatch('intent account generation changed')
+            raise ChatFirstIntentDocumentGenerationMismatch('intent account generation changed')
         if intent.delivery_state not in {'ready', 'pending_kernel_receipt'}:
             return intent
-        write_transaction.set(intent_ref, {'last_deferral_at': now}, merge=True)
-        return intent
+        first_deferred_at = intent.first_deferred_at or now
+        if now - first_deferred_at >= CONTINUOUS_DEFERRAL_BUDGET:
+            dead_lettered = intent.model_copy(
+                update={
+                    'first_deferred_at': first_deferred_at,
+                    'last_deferral_at': now,
+                    'delivery_state': 'dead_letter',
+                    'dead_letter_reason': 'deferred_beyond_budget',
+                }
+            )
+            write_transaction.set(intent_ref, _intent_payload(dead_lettered))
+            return dead_lettered
+        write_transaction.set(
+            intent_ref,
+            {'first_deferred_at': first_deferred_at, 'last_deferral_at': now},
+            merge=True,
+        )
+        return intent.model_copy(update={'first_deferred_at': first_deferred_at, 'last_deferral_at': now})
 
     return apply(transaction)
 
@@ -907,8 +942,12 @@ def acknowledge_materialization(
         intent = _intent_from_snapshot(intent_snapshot)
         budget_snapshot = budget_ref.get(transaction=write_transaction) if intent.consumes_turn_budget else None
         if intent.account_generation != account_generation:
-            raise ChatFirstIntentGenerationMismatch('intent account generation changed')
-        if intent.delivery_state in {'delivered', 'dead_letter'}:
+            raise ChatFirstIntentDocumentGenerationMismatch('intent account generation changed')
+        if intent.delivery_state == 'delivered':
+            if intent.materialization_receipt_id != receipt_id:
+                raise ChatFirstIntentConflictError('intent was delivered with a different receipt')
+            return intent
+        if intent.delivery_state == 'dead_letter':
             return intent
         if intent.delivery_state not in {'ready', 'pending_kernel_receipt'}:
             raise ProactiveIntentNotReady('proactive intent is not ready')
@@ -992,7 +1031,7 @@ def release_due_deferrals(
     now: datetime,
     subject: ChatFirstSubject | None = None,
     firestore_client: Any = None,
-) -> list[ProactiveIntent]:
+) -> DeferralReleaseBatch:
     """Release due or meaningful-subject-change deferrals exactly once.
 
     Keep the pending/state and releaseability predicates in Firestore. A user's
@@ -1022,8 +1061,13 @@ def release_due_deferrals(
         )
     query = query.limit(32)
     candidates: list[ProactiveDeferral] = []
+    malformed_count = 0
     for snapshot in query.stream():
-        deferred = _deferral_from_snapshot(snapshot)
+        try:
+            deferred = _deferral_from_snapshot(snapshot)
+        except ChatFirstMalformedDocument:
+            malformed_count += 1
+            continue
         # Keep strict model validation and an exact subject check as the final
         # fence for old/malformed rows and for fake clients that do not fully
         # emulate Firestore's nested-field filtering.
@@ -1037,16 +1081,26 @@ def release_due_deferrals(
 
     released: list[ProactiveIntent] = []
     for deferred in candidates:
-        intent = _release_deferral_transaction(
-            uid,
-            deferred,
-            account_generation=account_generation,
-            now=now,
-            firestore_client=client,
-        )
+        try:
+            intent = _release_deferral_transaction(
+                uid,
+                deferred,
+                account_generation=account_generation,
+                now=now,
+                firestore_client=client,
+            )
+        except ChatFirstIntentGenerationMismatch:
+            raise
+        except ChatFirstMalformedDocument:
+            malformed_count += 1
+            continue
+        except Exception:
+            # One concurrently deleted, conflicting, or otherwise broken row
+            # cannot roll back independent due deferrals in this batch.
+            continue
         if intent is not None:
             released.append(intent)
-    return released
+    return DeferralReleaseBatch(released, malformed_count)
 
 
 def _release_deferral_transaction(
@@ -1117,7 +1171,9 @@ __all__ = [
     'AgentJudgmentAdmission',
     'BUDGET_DOCUMENT',
     'ChatFirstIntentConflictError',
+    'ChatFirstIntentDocumentGenerationMismatch',
     'ChatFirstIntentGenerationMismatch',
+    'ChatFirstMalformedDocument',
     'ChatFirstIntentStoreError',
     'DEFERRALS_COLLECTION',
     'INTENTS_COLLECTION',

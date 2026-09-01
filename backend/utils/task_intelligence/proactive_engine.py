@@ -155,7 +155,7 @@ def wake_after_commit(
         now=resolved_now,
         subject=trigger.subject,
     )
-    for _intent in released:
+    for _intent in getattr(released, 'intents', released):
         _meter('deferral_released', 'deferral_reraise')
 
     if trigger.kind not in {'task_changed', 'goal_changed'}:

@@ -243,6 +243,52 @@ def test_materialize_records_typed_rejections_and_dead_letter_metric(monkeypatch
         'source': 'capture_arrival',
         'reason': 'permanent_rejection:invalid_intent',
     } in metric_events
+    assert response.json()['rejection_outcomes'] == [{'intent_id': 'intent-poison', 'outcome': 'recorded'}]
+
+
+def test_one_malformed_intent_with_pending_rejection_never_fails_batch_and_sibling_is_recorded(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    healthy = ProactiveIntent(
+        intent_id='intent-healthy-rejection',
+        continuity_key='healthy-rejection',
+        account_generation=7,
+        source='capture_arrival',
+        subject=ChatFirstSubject(kind='capture', id='healthy-rejection'),
+        blocks=[_question()],
+        created_at=datetime(2026, 7, 15, tzinfo=timezone.utc),
+    )
+    calls = []
+
+    def record_rejection(*args, **kwargs):
+        calls.append(kwargs['intent_id'])
+        if kwargs['intent_id'] == 'intent-malformed-rejection':
+            raise chat_first_router.chat_first_intents_db.ChatFirstMalformedDocument('malformed intent')
+        return healthy, None
+
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'record_materialization_rejection', record_rejection)
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db, 'fetch_ready_intent_batch', lambda *args, **kwargs: _batch([])
+    )
+
+    response = _client().post(
+        '/v2/chat/materialize-prompts',
+        json=_request(
+            rejections=[
+                {'intent_id': 'intent-malformed-rejection', 'code': 'invalid_intent'},
+                {'intent_id': healthy.intent_id, 'code': 'kernel_materialization_failed'},
+            ]
+        ),
+    )
+
+    assert response.status_code == 200
+    assert calls == ['intent-malformed-rejection', healthy.intent_id]
+    assert response.json()['rejection_outcomes'] == [
+        {'intent_id': 'intent-malformed-rejection', 'outcome': 'malformed'},
+        {'intent_id': healthy.intent_id, 'outcome': 'recorded'},
+    ]
 
 
 def test_one_invalid_receipt_never_fails_the_materialization_batch(monkeypatch):
