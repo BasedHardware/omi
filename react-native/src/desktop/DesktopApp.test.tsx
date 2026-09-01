@@ -436,6 +436,27 @@ test('Tasks page does not mount FlatList inside the shipping stage', () => {
   expect(tasksPage).toContain('ScrollView');
 });
 
+test('uses discrete glass panels instead of one window material', () => {
+  const renderer = renderDesktop();
+  const panels = renderer.root.findAll(
+    node => node.props.glassCornerRadius !== undefined,
+  );
+  expect(panels.length).toBeGreaterThanOrEqual(4);
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Omi desktop')
+      .props.style,
+  ).toEqual(
+    expect.objectContaining({
+      backgroundColor: 'transparent',
+      paddingTop: expect.anything(),
+    }),
+  );
+  const source = readFileSync(resolve(__dirname, './DesktopApp.tsx'), 'utf8');
+  expect(source).not.toContain('UnderWindowBackground');
+  expect(source.match(/<GlassSurface/g)?.length).toBeGreaterThanOrEqual(4);
+  expect(source).toContain('token.color.onGlass');
+});
+
 test('searches real projections instead of a fake timeline', () => {
   const renderer = renderDesktop({
     draft: '',

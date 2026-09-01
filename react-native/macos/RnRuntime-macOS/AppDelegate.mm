@@ -1,6 +1,5 @@
 #import "AppDelegate.h"
 #import "OmiDesktopCommandsModule.h"
-#import "OmiGlassPanelView.h"
 
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTUIKit.h>
@@ -54,10 +53,14 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
 {
   RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
   if (self.omiWindowGlass == nil) {
-    OmiGlassPanelView *glass = [[OmiGlassPanelView alloc] initWithFrame:rootView.bounds];
-    [glass setGlassCornerRadius:0];
-    glass.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-    self.omiWindowGlass = glass;
+    NSVisualEffectView *backdrop = [[NSVisualEffectView alloc] initWithFrame:rootView.bounds];
+    backdrop.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+    backdrop.material = NSVisualEffectMaterialUnderWindowBackground;
+    backdrop.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+    backdrop.state = NSVisualEffectStateActive;
+    backdrop.wantsLayer = YES;
+    backdrop.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    self.omiWindowGlass = backdrop;
   }
   self.omiWindowGlass.frame = rootView.bounds;
   if (self.omiWindowGlass.superview != rootView) {

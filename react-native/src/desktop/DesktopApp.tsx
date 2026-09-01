@@ -114,6 +114,10 @@ function GlassSurface({
   );
 }
 
+function GlassHairline() {
+  return <View style={styles.glassHairline} />;
+}
+
 function Chip({
   active = false,
   Icon,
@@ -132,7 +136,9 @@ function Chip({
       active={active}
       onPress={onPress}
       style={styles.chip}>
-      {Icon === undefined ? null : <Icon color={token.color.ink} size={13} />}
+      {Icon === undefined ? null : (
+        <Icon color={token.color.onGlass} size={13} />
+      )}
       <Text style={[styles.chipText, active && styles.chipTextActive]}>
         {label}
       </Text>
@@ -163,7 +169,7 @@ function ResultRow({item}: {item: DesktopReadProjection}) {
   return (
     <View style={styles.resultRow}>
       <View style={styles.glyph}>
-        <Icon color={token.color.ink} size={16} />
+        <Icon color={token.color.onGlass} size={16} />
       </View>
       <View style={styles.resultCopy}>
         <Text numberOfLines={1} style={styles.rowTitle}>
@@ -191,7 +197,7 @@ const ConversationRow = memo(function ConversationRow({
   return (
     <View style={styles.resultRow}>
       <View style={styles.glyph}>
-        <MessageCircle color={token.color.ink} size={16} />
+        <MessageCircle color={token.color.onGlass} size={16} />
       </View>
       <View style={styles.resultCopy}>
         <Text style={styles.rowTitle}>{item.title}</Text>
@@ -355,7 +361,8 @@ function ChatHome({
           />
         </GlassSurface>
       </ShippingSearchFocus>
-      <GlassSurface style={styles.homePanel}>
+      <GlassHairline />
+      <GlassSurface style={styles.chipPanel}>
         <View style={styles.filterBar}>
           <Text style={styles.filterLabel}>Filter</Text>
           <View style={styles.filterChips}>
@@ -371,6 +378,9 @@ function ChatHome({
             ))}
           </View>
         </View>
+      </GlassSurface>
+      <GlassHairline />
+      <GlassSurface style={styles.stagePanel}>
         <SessionBanner
           onRefresh={onRefresh}
           onSignIn={onSignIn}
@@ -423,7 +433,7 @@ function ChatHome({
               {error !== null ? (
                 <Text style={styles.errorText}>{error}</Text>
               ) : null}
-              <View style={styles.composer}>
+              <GlassSurface style={styles.composer}>
                 <TextInput
                   accessibilityLabel="Ask a follow-up"
                   onChangeText={onDraftChange}
@@ -443,7 +453,7 @@ function ChatHome({
                   ]}>
                   <Text style={styles.sendText}>Ask</Text>
                 </FocusPressable>
-              </View>
+              </GlassSurface>
             </View>
           )}
         </ShippingStage>
@@ -629,7 +639,7 @@ function AppsPage() {
           <View style={styles.appCard}>
             <View style={styles.appCardHeader}>
               <View style={styles.appIcon}>
-                <Icon color={token.color.ink} size={18} />
+                <Icon color={token.color.onGlass} size={18} />
               </View>
               <View>
                 <Text style={styles.rowTitle}>{name}</Text>
@@ -680,7 +690,7 @@ export function DesktopApp({
                 key={label}
                 onPress={() => navigate(label)}
                 style={styles.navItem}>
-                <Icon color={token.color.ink} size={14} />
+                <Icon color={token.color.onGlass} size={14} />
                 <Text
                   style={[
                     styles.navText,
@@ -700,10 +710,11 @@ export function DesktopApp({
             active={route === 'Settings'}
             onPress={() => navigate('Settings')}
             style={styles.utilityButton}>
-            <Settings color={token.color.ink} size={14} />
+            <Settings color={token.color.onGlass} size={14} />
           </ShippingPressable>
         </View>
       </GlassSurface>
+      <GlassHairline />
       <ShippingStage stageKey={route} variant="page">
         {route === 'Home' ? (
           <ChatHome
@@ -760,6 +771,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: token.radius.panel,
     overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: {height: 3, width: 0},
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+  },
+  glassHairline: {
+    backgroundColor: token.color.sheen,
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 14,
   },
   navbar: {
     alignItems: 'center',
@@ -787,7 +807,7 @@ const styles = StyleSheet.create({
     fontSize: token.type.nav,
     fontWeight: '600',
   },
-  navTextActive: {color: token.color.ink},
+  navTextActive: {color: token.color.onGlass},
   navUtilities: {alignItems: 'center', flexDirection: 'row', gap: 12},
   utilityButton: {borderRadius: 16, height: 32, padding: 8, width: 32},
   page: {flex: 1, gap: 8},
@@ -799,14 +819,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   omnisearchInput: {
-    color: token.color.ink,
+    color: token.color.onGlass,
     flex: 1,
     fontFamily: token.font,
     fontSize: token.type.search,
     fontWeight: '400',
     paddingVertical: 12,
   },
-  homePanel: {flex: 1, padding: 14},
+  chipPanel: {paddingHorizontal: 14, paddingVertical: 10},
+  stagePanel: {flex: 1, padding: 14},
   filterBar: {gap: 8},
   filterLabel: {
     color: token.color.inkMuted,
@@ -829,7 +850,7 @@ const styles = StyleSheet.create({
     fontSize: token.type.caption,
     fontWeight: '600',
   },
-  chipTextActive: {color: token.color.ink},
+  chipTextActive: {color: token.color.onGlass},
   pressed: {opacity: 0.78},
   banner: {
     alignItems: 'center',
@@ -848,7 +869,7 @@ const styles = StyleSheet.create({
     fontSize: token.type.meta,
   },
   bannerAction: {
-    color: token.color.ink,
+    color: token.color.onGlass,
     fontFamily: token.font,
     fontSize: token.type.meta,
     fontWeight: '600',
@@ -882,7 +903,7 @@ const styles = StyleSheet.create({
   },
   resultCopy: {flex: 1},
   rowTitle: {
-    color: token.color.ink,
+    color: token.color.onGlass,
     fontFamily: token.font,
     fontSize: token.type.title,
     fontWeight: '500',
@@ -919,7 +940,6 @@ const styles = StyleSheet.create({
   },
   composer: {
     alignItems: 'center',
-    backgroundColor: token.color.glassQuiet,
     borderRadius: token.radius.control,
     flexDirection: 'row',
     gap: 10,
@@ -928,7 +948,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   composerInput: {
-    color: token.color.ink,
+    color: token.color.onGlass,
     flex: 1,
     fontFamily: token.font,
     fontSize: token.type.body,
@@ -948,7 +968,7 @@ const styles = StyleSheet.create({
   singlePanel: {flex: 1, padding: 18},
   hubRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 6},
   pageTitle: {
-    color: token.color.ink,
+    color: token.color.onGlass,
     fontFamily: token.font,
     fontSize: token.type.title,
     fontWeight: '600',
@@ -971,7 +991,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   searchInput: {
-    color: token.color.ink,
+    color: token.color.onGlass,
     flex: 1,
     fontFamily: token.font,
     fontSize: token.type.body,
@@ -983,7 +1003,7 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   memoryText: {
-    color: token.color.ink,
+    color: token.color.onGlass,
     fontFamily: token.font,
     fontSize: token.type.body,
     lineHeight: 21,
@@ -1011,7 +1031,7 @@ const styles = StyleSheet.create({
   },
   taskCircleDone: {backgroundColor: token.color.ink},
   taskText: {
-    color: token.color.ink,
+    color: token.color.onGlass,
     fontFamily: token.font,
     fontSize: token.type.body,
   },
