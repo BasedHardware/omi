@@ -78,9 +78,8 @@ HomeDaySnapshot buildHomeDaySnapshot({
   final dayConversations = conversations
       .where((conversation) => conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt) == day)
       .toList()
-    // Newest first: opening home should land on what just happened, and the
-    // conversations list orders the same way.
-    ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    // The day reads top to bottom the way it was lived.
+    ..sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
 
   final dayRecordings = recordings.where((recording) => conversationLocalDayKey(recording.startedAt) == day).toList();
 
@@ -144,9 +143,9 @@ HomeDaySnapshot buildHomeDaySnapshot({
     conversations: dayConversations,
     recordings: dayRecordings,
     // The conversations page already defines what "everything that happened
-    // that day, in order" means — newest first — and reusing it keeps home from
-    // drifting into a second answer.
-    entries: buildConversationGroupEntries(conversations: highlights, recordings: dayRecordings),
+    // that day, in order" means; reusing it keeps home from drifting into a
+    // second answer. That helper orders newest first, home reads forwards.
+    entries: buildConversationGroupEntries(conversations: highlights, recordings: dayRecordings).reversed.toList(),
     shortOnes: shortOnes,
     tasksByConversation: tasksByConversation,
     isNewUser: isNewUser,

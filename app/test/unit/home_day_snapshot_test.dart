@@ -56,7 +56,7 @@ void main() {
       expect(snapshot(conversations: plain), isNot(snapshot(conversations: located)));
     });
 
-    test('splits the day on the short threshold and orders it newest first', () {
+    test('splits the day on the short threshold and keeps it in order', () {
       final result = snapshot(
         conversations: [
           _conversation('late', 'Roadmap sync', day.add(const Duration(hours: 13)), 600),
@@ -65,9 +65,9 @@ void main() {
         ],
       );
 
-      expect(result.entries.map((e) => e.conversation?.id), ['late', 'early']);
+      expect(result.entries.map((e) => e.conversation?.id), ['early', 'late']);
       expect(result.shortOnes.map((c) => c.id), ['blip']);
-      expect(result.conversations.map((c) => c.id), ['late', 'blip', 'early']);
+      expect(result.conversations.map((c) => c.id), ['early', 'blip', 'late']);
     });
 
     test('changes when the short-conversation threshold changes', () {
@@ -101,8 +101,8 @@ void main() {
       );
 
       expect(result.entries, hasLength(2));
-      expect(result.entries.first.recording?.id, 'rec', reason: 'newest first, so 11am leads');
-      expect(result.entries.last.conversation?.id, 'convo');
+      expect(result.entries.first.conversation?.id, 'convo');
+      expect(result.entries.last.recording?.id, 'rec', reason: 'the day reads forwards, 9am before 11am');
       expect(result.isEmpty, isFalse);
     });
 
