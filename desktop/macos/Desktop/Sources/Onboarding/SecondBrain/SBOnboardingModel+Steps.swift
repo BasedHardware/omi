@@ -764,6 +764,7 @@ extension SBOnboardingModel {
   /// the notch, which spins while Omi is thinking.
   func startScreenDemo() {
     screenDemoDone = false
+    threeDoorsOpened = false
     screenDemoPTTReady = false
     screenDemoPTTUnavailable = false
     FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
@@ -819,6 +820,19 @@ extension SBOnboardingModel {
     .sink { [weak self] _ in self?.screenDemoDone = true }
     screenDemoPTTReady = true
     FloatingControlBarManager.shared.showForOnboardingDemo()
+    openThreeDoorsPage(onlyIfNotYetOpened: true)
+  }
+
+  /// Open the bundled three-doors page in the default browser. Called once automatically when
+  /// push-to-talk is armed, and again from the step's "Open the doors again" button.
+  func openThreeDoorsPage(onlyIfNotYetOpened: Bool = false) {
+    if onlyIfNotYetOpened, threeDoorsOpened { return }
+    guard let url = ThreeDoorsDemoPage.url(pttTokens: voiceChordTokens) else {
+      log("SBOnboarding: three-doors page missing from bundle; demo step shows without it")
+      return
+    }
+    threeDoorsOpened = true
+    NSWorkspace.shared.open(url)
   }
 
   private func resetFloatingBarConversation() {
