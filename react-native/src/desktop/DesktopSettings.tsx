@@ -36,8 +36,8 @@ type Props = {
   onSignOut: () => void;
 };
 
-const PANE_ITEM_HEIGHT = 36;
-const PANE_ITEM_GAP = 8;
+const PANE_ITEM_HEIGHT = 40;
+const PANE_ITEM_GAP = 12;
 const PANE_PILL_RADIUS = 14;
 
 function Row({
@@ -504,7 +504,8 @@ const styles = {
     alignItems: 'center' as const,
     height: PANE_ITEM_HEIGHT,
     justifyContent: 'center' as const,
-    paddingHorizontal: 12,
+    marginBottom: 0,
+    paddingHorizontal: 14,
   },
   paneText: {
     color: token.color.inkMuted,
@@ -514,7 +515,7 @@ const styles = {
   },
   paneTextActive: {color: token.color.ink},
   scroll: {flex: 1},
-  content: {gap: 10, paddingBottom: 32},
+  content: {gap: 14, paddingBottom: 32},
   row: {
     alignItems: 'center' as const,
     backgroundColor: token.color.glassQuiet,

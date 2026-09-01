@@ -1,5 +1,5 @@
-import React from 'react';
-import {StyleSheet, Text, TextInput, View} from 'react-native';
+import React, {useEffect, useRef, useState} from 'react';
+import {Animated, StyleSheet, Text, TextInput, View} from 'react-native';
 import House from 'lucide-react-native/icons/house';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
 import ListFilter from 'lucide-react-native/icons/list-filter';
@@ -7,7 +7,9 @@ import Puzzle from 'lucide-react-native/icons/puzzle';
 import Search from 'lucide-react-native/icons/search';
 import Settings from 'lucide-react-native/icons/settings';
 import {FocusPressable} from '../ui/Pressable';
+import {useReduceMotion} from '../app/useReduceMotion';
 import {
+  desktopMotion,
   desktopNavBarHeight,
   desktopNavItems,
   desktopOmnibarHeight,
@@ -38,6 +40,8 @@ type Props = {
   omnibarRef: React.RefObject<TextInput | null>;
 };
 
+type ItemFrame = {x: number; width: number};
+
 export function DesktopChrome({
   chatNotice,
   draft,
@@ -47,6 +51,52 @@ export function DesktopChrome({
   onSend,
   route,
 }: Props) {
+  const reduceMotion = useReduceMotion();
+  const [frames, setFrames] = useState<
+    Partial<Record<DesktopNavItem, ItemFrame>>
+  >({});
+  const pillX = useRef(new Animated.Value(0)).current;
+  const pillW = useRef(new Animated.Value(0)).current;
+  const pillOpacity = useRef(new Animated.Value(0)).current;
+  const activeNav = route === 'Settings' ? null : route;
+  const activeFrame = activeNav === null ? undefined : frames[activeNav];
+
+  useEffect(() => {
+    if (activeFrame === undefined) {
+      if (reduceMotion) {
+        pillOpacity.setValue(0);
+        return;
+      }
+      const hide = Animated.timing(pillOpacity, {
+        duration: desktopMotion.navMs,
+        toValue: 0,
+        useNativeDriver: false,
+      });
+      hide.start();
+      return () => hide.stop();
+    }
+    const moves = [
+      Animated.timing(pillX, {
+        duration: reduceMotion ? 0 : desktopMotion.stepMs,
+        toValue: activeFrame.x,
+        useNativeDriver: false,
+      }),
+      Animated.timing(pillW, {
+        duration: reduceMotion ? 0 : desktopMotion.stepMs,
+        toValue: activeFrame.width,
+        useNativeDriver: false,
+      }),
+      Animated.timing(pillOpacity, {
+        duration: reduceMotion ? 0 : desktopMotion.navMs,
+        toValue: 1,
+        useNativeDriver: false,
+      }),
+    ];
+    const animation = Animated.parallel(moves);
+    animation.start();
+    return () => animation.stop();
+  }, [activeFrame, pillOpacity, pillW, pillX, reduceMotion]);
+
   return (
     <View accessibilityLabel="Omi desktop chrome" style={styles.chrome}>
       <View style={styles.row}>
@@ -56,22 +106,46 @@ export function DesktopChrome({
           style={styles.windowControls}
         />
         <View style={styles.nav}>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.navPill,
+              {
+                opacity: pillOpacity,
+                transform: [{translateX: pillX}],
+                width: pillW,
+              },
+            ]}
+          />
           {desktopNavItems.map(label => {
             const Icon = navIcons[label];
             const active = route === label;
             return (
-              <ShippingPressable
+              <FocusPressable
                 accessibilityLabel={label}
                 accessibilityRole="button"
                 accessibilityState={{selected: active}}
                 key={label}
+                onLayout={event => {
+                  const {x, width} = event.nativeEvent.layout;
+                  setFrames(current => {
+                    const previous = current[label];
+                    if (previous?.x === x && previous.width === width) {
+                      return current;
+                    }
+                    return {...current, [label]: {width, x}};
+                  });
+                }}
                 onPress={() => onNavigate(label)}
-                style={styles.navItem}>
+                style={({pressed}) => [
+                  styles.navItem,
+                  pressed && styles.pressed,
+                ]}>
                 <Icon color={token.color.ink} size={14} />
                 <Text style={[styles.navText, active && styles.navTextActive]}>
                   {label}
                 </Text>
-              </ShippingPressable>
+              </FocusPressable>
             );
           })}
         </View>
@@ -79,6 +153,7 @@ export function DesktopChrome({
           accessibilityLabel="Settings"
           accessibilityRole="button"
           accessibilityState={{selected: route === 'Settings'}}
+          active={route === 'Settings'}
           onPress={() => onNavigate('Settings')}
           style={styles.settingsButton}>
           <Settings color={token.color.ink} size={15} />
@@ -138,6 +213,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexShrink: 1,
     gap: 6,
+    position: 'relative',
+  },
+  navPill: {
+    backgroundColor: token.color.glassSelected,
+    borderRadius: token.radius.chip,
+    bottom: 9,
+    left: 0,
+    position: 'absolute',
+    top: 9,
   },
   navItem: {
     alignItems: 'center',
@@ -146,6 +230,7 @@ const styles = StyleSheet.create({
     height: 34,
     justifyContent: 'center',
     paddingHorizontal: 10,
+    zIndex: 1,
   },
   navText: {
     color: token.color.inkMuted,
@@ -156,18 +241,17 @@ const styles = StyleSheet.create({
   navTextActive: {
     color: token.color.ink,
     fontWeight: '700',
-    textDecorationLine: 'underline',
   },
   omnibar: {
     alignItems: 'center',
     alignSelf: 'stretch',
     backgroundColor: token.color.glassQuiet,
-    borderRadius: 14,
+    borderRadius: 20,
     flexDirection: 'row',
     gap: 8,
     height: desktopOmnibarHeight,
     minWidth: 220,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
   },
   omnibarInput: {
     color: token.color.ink,
@@ -177,9 +261,10 @@ const styles = StyleSheet.create({
     fontFamily: token.font,
     fontSize: token.type.search,
     fontWeight: '400',
-    height: desktopOmnibarHeight,
+    lineHeight: 20,
     minWidth: 0,
-    paddingVertical: 0,
+    paddingVertical: 10,
+    textAlignVertical: 'center',
   },
   notice: {
     color: token.color.inkMuted,
@@ -202,9 +287,11 @@ const styles = StyleSheet.create({
   },
   settingsButton: {
     alignItems: 'center',
+    borderRadius: 17,
     flexShrink: 0,
     height: 34,
     justifyContent: 'center',
+    overflow: 'hidden',
     width: 34,
   },
   pressed: {opacity: 0.78},

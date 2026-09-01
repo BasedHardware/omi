@@ -188,7 +188,7 @@ export function DesktopHome({
         {messages.length > 0 || chatBusy ? (
           <AskExchange chatBusy={chatBusy} messages={messages} />
         ) : null}
-        <View accessibilityLabel="Home tasks">
+        <View accessibilityLabel="Home tasks" style={styles.section}>
           <SectionTitle>Today</SectionTitle>
           {visibleTasks.length > 0 ? (
             visibleTasks.map(item => (
@@ -200,7 +200,7 @@ export function DesktopHome({
             <EmptyCopy>No tasks yet</EmptyCopy>
           )}
         </View>
-        <View accessibilityLabel="Home currents">
+        <View accessibilityLabel="Home currents" style={styles.section}>
           <SectionTitle>Conversations</SectionTitle>
           {conversations.length > 0 ? (
             conversations.map(item => (
@@ -220,7 +220,7 @@ export function DesktopHome({
             </EmptyCopy>
           )}
         </View>
-        <View accessibilityLabel="Home rewind">
+        <View accessibilityLabel="Home rewind" style={styles.section}>
           <SectionTitle>Screen history</SectionTitle>
           <EmptyCopy>Screen history is ready when capture is on</EmptyCopy>
         </View>
@@ -260,7 +260,14 @@ const styles = StyleSheet.create({
   },
   pressed: {opacity: 0.78},
   list: {flex: 1},
-  listContent: {gap: 8, paddingBottom: 32},
+  section: {
+    backgroundColor: token.color.glassQuiet,
+    borderRadius: 16,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  listContent: {gap: 14, paddingBottom: 32},
   exchange: {gap: 4, paddingBottom: 12},
   exchangeRow: {gap: 3, paddingVertical: 6},
   rowMeta: {

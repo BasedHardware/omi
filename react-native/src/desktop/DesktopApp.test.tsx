@@ -476,23 +476,24 @@ test('desktop lists never use FlatList and the stage stays copy-driven', () => {
   expect(allKitSource).not.toContain('omnibarError');
 });
 
-test('one continuous surface: no islands, no pills, no docked composer', () => {
+test('chrome keeps a sliding nav pill, structured home cards, and a field omnibar', () => {
   const chrome = kitSources['DesktopTopChrome.tsx'];
   const app = kitSources['DesktopApp.tsx'];
   const home = kitSources['DesktopHome.tsx'];
+  const settings = kitSources['DesktopSettings.tsx'];
   expect(app).toMatch(/root:\s*\{[^}]*padding:\s*desktopWindowInset/);
   expect(chrome).toContain('height: desktopNavBarHeight');
   expect(chrome).toContain('width: desktopTrafficLightRowWidth');
-  expect(chrome).not.toContain('marginLeft');
+  expect(chrome).toContain('styles.navPill');
+  expect(chrome).toContain("active={route === 'Settings'}");
+  expect(chrome).toMatch(
+    /omnibarInput:\s*\{[^}]*textAlignVertical:\s*'center'/,
+  );
+  expect(chrome).toMatch(/omnibarInput:\s*\{[^}]*paddingVertical:\s*10/);
   expect(chrome).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
-  expect(chrome).not.toMatch(/send:\s*\{[^}]*backgroundColor/);
-  expect(chrome).not.toMatch(/send:\s*\{[^}]*borderRadius/);
   expect(chrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
-  expect(chrome).toMatch(/omnibarInput:\s*\{[^}]*minWidth:\s*0/);
-  expect(chrome).toMatch(/navItem:\s*\{[^}]*justifyContent:\s*'center'/);
-  expect(chrome).toMatch(/navItem:\s*\{[^}]*alignItems:\s*'center'/);
+  expect(home).toMatch(/section:\s*\{[^}]*borderRadius:\s*16/);
   expect(home).not.toMatch(/filterRow:\s*\{/);
-  expect(home).not.toMatch(/chip:\s*\{[^}]*borderRadius:\s*14/);
-  expect(home).not.toMatch(/banner:\s*\{[^}]*borderRadius/);
+  expect(settings).toContain('const PANE_ITEM_GAP = 12');
   expect(allKitSource).not.toMatch(/composer:\s*\{/);
 });
