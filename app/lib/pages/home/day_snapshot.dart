@@ -47,7 +47,10 @@ class HomeDaySnapshot {
   /// same pixels, so the page can skip the rebuild.
   final String fingerprint;
 
-  bool get isEmpty => entries.isEmpty;
+  /// Nothing happened that day at all. Deliberately not `entries.isEmpty`: a
+  /// day of only short conversations has empty entries but is not an empty day,
+  /// and saying so under its own "N short conversations" line contradicts it.
+  bool get isEmpty => conversations.isEmpty && recordings.isEmpty;
 
   @override
   bool operator ==(Object other) => other is HomeDaySnapshot && other.fingerprint == fingerprint;
