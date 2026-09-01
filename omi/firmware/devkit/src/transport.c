@@ -698,14 +698,16 @@ static bool offline_storage_is_available(void)
 
 void update_file_size()
 {
-    k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
     if (!offline_storage_is_available()) {
-        k_mutex_unlock(&write_sdcard_mutex);
         return;
     }
 
-    file_num_array[0] = get_file_size(1);
-    file_num_array[1] = get_offset();
+    int size = get_file_size(1);
+    int offset = get_offset();
+
+    k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+    file_num_array[0] = size;
+    file_num_array[1] = offset;
     k_mutex_unlock(&write_sdcard_mutex);
     // LOG_PRINTK("file size for file count %d %d\n",file_count,file_num_array[0]);
     // LOG_PRINTK("offset for file count %d %d\n",file_count,file_num_array[1]);

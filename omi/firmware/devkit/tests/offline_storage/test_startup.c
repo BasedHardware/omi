@@ -15,6 +15,8 @@ static int transport_calls;
 static int sleep_calls;
 static int32_t last_sleep_ms;
 static bool last_transport_storage_available;
+static bool sd_on;
+static int sd_off_calls;
 
 static void reset_fakes(void)
 {
@@ -27,12 +29,28 @@ static void reset_fakes(void)
     sleep_calls = 0;
     last_sleep_ms = 0;
     last_transport_storage_available = false;
+    sd_on = false;
+    sd_off_calls = 0;
 }
 
 int mount_sd_card(void)
 {
     mount_calls++;
+    if (mount_result == 0) {
+        sd_on = true;
+    }
     return mount_result;
+}
+
+bool is_sd_on(void)
+{
+    return sd_on;
+}
+
+void sd_off(void)
+{
+    sd_off_calls++;
+    sd_on = false;
 }
 
 int storage_init(void)
@@ -69,6 +87,8 @@ static void test_storage_success(void)
     assert(last_sleep_ms == 500);
     assert(transport_calls == 1);
     assert(last_transport_storage_available);
+    assert(sd_off_calls == 0);
+    assert(sd_on);
 }
 
 static void test_mount_failure_still_starts_transport(void)
@@ -85,6 +105,7 @@ static void test_mount_failure_still_starts_transport(void)
     assert(sleep_calls == 0);
     assert(transport_calls == 1);
     assert(!last_transport_storage_available);
+    assert(!sd_on);
 }
 
 static void test_storage_failure_still_starts_transport(void)
@@ -102,6 +123,8 @@ static void test_storage_failure_still_starts_transport(void)
     assert(last_sleep_ms == 500);
     assert(transport_calls == 1);
     assert(!last_transport_storage_available);
+    assert(sd_off_calls == 1);
+    assert(!sd_on);
 }
 
 static void test_transport_failure_is_propagated(void)

@@ -20,6 +20,9 @@ void startup_init_optional_storage(void)
     int err = mount_sd_card();
     if (err) {
         LOG_WRN("SD mount failed (err %d); continuing without offline storage", err);
+        if (is_sd_on()) {
+            sd_off();
+        }
         return;
     }
 
@@ -29,6 +32,7 @@ void startup_init_optional_storage(void)
     err = storage_init();
     if (err) {
         LOG_WRN("Offline storage init failed (err %d); continuing without offline storage", err);
+        sd_off();
         return;
     }
 
