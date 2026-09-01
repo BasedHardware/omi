@@ -424,6 +424,16 @@ test('Home Tasks Library Rewind Apps never throw for empty outcomes', () => {
   for (const label of ['Tasks', 'Library', 'Rewind', 'Apps', 'Home'] as const) {
     expect(() => pressLabeledButton(renderer, label)).not.toThrow();
   }
+  pressLabeledButton(renderer, 'Library');
+  expect(renderedText(renderer)).toContain('Activity');
+  pressLabeledButton(renderer, 'Rewind');
+  expect(renderedText(renderer)).toContain(
+    'Screen history is ready when capture is on',
+  );
+  pressLabeledButton(renderer, 'Apps');
+  expect(renderedText(renderer)).toContain('Imports');
+  pressLabeledButton(renderer, 'Home');
+  expect(renderedText(renderer)).toContain("I'm ready.");
 });
 
 test('Tasks page does not mount FlatList inside the shipping stage', () => {
@@ -434,6 +444,51 @@ test('Tasks page does not mount FlatList inside the shipping stage', () => {
   expect(start).toBeGreaterThan(-1);
   expect(tasksPage).not.toContain('FlatList');
   expect(tasksPage).toContain('ScrollView');
+});
+
+test('Apps page does not mount FlatList and still paints import cards', () => {
+  const source = readFileSync(resolve(__dirname, './DesktopApp.tsx'), 'utf8');
+  const start = source.indexOf('function AppsPage');
+  const end = source.indexOf('export function DesktopApp');
+  const appsPage = source.slice(start, end);
+  expect(start).toBeGreaterThan(-1);
+  expect(appsPage).not.toContain('FlatList');
+  expect(appsPage).toContain('ScrollView');
+
+  const renderer = renderDesktop();
+  pressLabeledButton(renderer, 'Apps');
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Imports');
+  expect(tree).toContain('Google Calendar');
+  expect(tree).toContain('This Mac');
+  expect(tree).toContain('Home');
+  expect(tree).toContain('Tasks');
+});
+
+test('puts shipping chrome inside GlassPanel instead of stacking it on top', () => {
+  const source = readFileSync(resolve(__dirname, './DesktopApp.tsx'), 'utf8');
+  const start = source.indexOf('function GlassSurface');
+  const end = source.indexOf('function GlassHairline');
+  const glassSurface = source.slice(start, end);
+  expect(start).toBeGreaterThan(-1);
+  expect(glassSurface).toContain('{children}');
+  expect(glassSurface).not.toContain('pointerEvents="none"');
+  expect(glassSurface).not.toContain('StyleSheet.absoluteFill');
+
+  const renderer = renderDesktop();
+  const panels = renderer.root.findAll(
+    node => node.props.glassCornerRadius !== undefined,
+  );
+  const navbar = panels.find(panel =>
+    panel.findAllByType(Text).some(text => text.props.children === 'Home'),
+  );
+  expect(navbar).toBeDefined();
+  expect(
+    navbar!
+      .findAllByType(Text)
+      .map(text => text.props.children)
+      .join(' '),
+  ).toContain('Tasks');
 });
 
 test('Home and Library chips share a sliding glass pill', () => {
