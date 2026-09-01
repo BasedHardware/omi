@@ -534,17 +534,29 @@ enum ContextProactivityTelemetry {
   }
 
   static func recordJITAdmission(outcome: String, reason: String) async {
-    let allowedOutcomes = Set(["legacy_fallback", "suppressed", "contract_missing"])
+    let allowedOutcomes = Set([
+      "legacy_fallback", "suppressed", "contract_missing",
+      "delivered", "delivery_failed", "delivery_suppressed",
+    ])
     // Exact reason set produced by JITProactivityPolicy.decide,
-    // JITProactivityRuntime.admission/admitAmbient, and
-    // JITProactivityCoordinator.handle. Anything else stays "other".
+    // JITProactivityRuntime.admission/admitAmbient, JITProactivityCoordinator.handle,
+    // and JITProactivityDelivery.deliver. Anything else stays "other". The set is
+    // content-free by construction: reasons name a code path, never user data.
     let allowedReasons = Set([
       "kill_switch", "rollout_unknown", "rollout_disabled",
       "no_eligible_candidate",
       "planned_runtime_rejected", "planned_match_ambiguous", "planned_action_invalid",
       "planned_duplicate_or_budget", "authoritative_snapshot_unavailable", "jit_execution_missing",
+      "empty_watchlist",
       "ambient_local_gate", "ambient_nano_receipt_unavailable", "ambient_nano_budget",
       "ambient_nano_rejected", "ambient_duplicate_or_budget", "ambient_receipt_unavailable",
+      "ambient_paced", "ambient_reserved_for_intent",
+      // Delivery phase (outcome delivered / delivery_failed / delivery_suppressed).
+      "planned", "ambient",
+      "owner_changed", "stale_fence", "surface_unavailable", "delivery_gate",
+      "attempt_rejected", "jit_trigger_authority_changed", "jit_paid_boundary_invalid",
+      "jit_notification_budget", "jit_full_turn_budget", "jit_suppressed",
+      "candidate_graduation", "notification_dropped", "jit_execution",
     ])
     await MainActor.run {
       let boundedOutcome = allowedOutcomes.contains(outcome) ? outcome : "other"

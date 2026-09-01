@@ -711,6 +711,31 @@ actor JITTriggerMirror {
     }
   }
 
+  /// Today's ambient nano spend, read from the same receipts that enforce the
+  /// daily cap, so pacing and the cap can never disagree about what was bought.
+  func ambientNanoUsage(budgetDay: String, now: Date) async throws -> JITAmbientNanoUsage {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw JITTriggerMirrorError.databaseUnavailable }
+    return try await pool.read { db in
+      try Self.ambientNanoUsage(budgetDay: budgetDay, now: now, in: db)
+    }
+  }
+
+  static func ambientNanoUsage(budgetDay: String, now: Date, in db: Database) throws -> JITAmbientNanoUsage {
+    let row = try Row.fetchOne(
+      db,
+      sql: """
+        SELECT COUNT(*) AS used, MAX(updatedAt) AS lastSpentAt
+        FROM jit_trigger_wakeup_receipts
+        WHERE triggerID = 'ambient-nano' AND budgetDay = ?
+          AND (state = 'delivered' OR (state IN ('claimed', 'executing') AND leaseExpiresAt > ?))
+        """,
+      arguments: [budgetDay, now])
+    let used: Int = row?["used"] ?? 0
+    let lastSpentAt: Date? = row?["lastSpentAt"]
+    return JITAmbientNanoUsage(used: used, lastSpentAt: used > 0 ? lastSpentAt : nil)
+  }
+
   func claimAmbientNanoChange(
     contextID: String,
     semanticFingerprint: String,

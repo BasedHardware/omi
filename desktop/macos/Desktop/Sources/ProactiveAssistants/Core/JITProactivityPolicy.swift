@@ -14,6 +14,22 @@ enum JITProactivityLane: String, Equatable, Sendable {
   case ambient
 }
 
+/// Whether the current owner's proactivity is routed through the JIT lanes.
+///
+/// Set by `JITProactivityCoordinator` from the backend rollout verdict on every
+/// context visit. Legacy per-frame producers that the JIT lanes replace (the
+/// focus-nudge assistant) read it so the two never run side by side for one
+/// owner. It is derived state, never authority: the backend flag and kill
+/// switch remain the only enrolment path.
+@MainActor
+enum JITProactivityLaneState {
+  private(set) static var isActive = false
+
+  static func update(active: Bool) {
+    isActive = active
+  }
+}
+
 enum JITAmbientNanoTriage: Equatable, Sendable {
   case approved
   case rejected
