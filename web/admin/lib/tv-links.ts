@@ -198,7 +198,8 @@ export async function resolveActiveTvToken(
   if (DEV_BYPASS_ENABLED && rawToken === "dev-kiosk") {
     return { id: "dev-kiosk", label: "Dev TV" };
   }
-  if (!rawToken || rawToken.length < 16) return null;
+  // Reject junk before a Firestore read (base64url from generateTvToken).
+  if (!/^[A-Za-z0-9_-]{32,64}$/.test(rawToken)) return null;
   try {
     const tokenHash = hashTvToken(rawToken);
     const ref = getDb().collection(TV_LINKS_COLLECTION).doc(tokenHash);

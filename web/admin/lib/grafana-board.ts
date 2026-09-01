@@ -8,7 +8,10 @@ export function grafanaBoardPath(
   platform: string | null | undefined,
   kiosk = false
 ): string {
-  const uid = GRAFANA_BOARD_UIDS[platform ?? ""] ?? "omi-tv";
+  const key = platform ?? "";
+  const uid = Object.hasOwn(GRAFANA_BOARD_UIDS, key)
+    ? GRAFANA_BOARD_UIDS[key]
+    : "omi-tv";
   const qs = kiosk ? "refresh=5m&kiosk" : "refresh=5m";
   return `/grafana/d/${uid}/?${qs}`;
 }

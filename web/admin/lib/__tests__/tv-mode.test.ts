@@ -23,6 +23,7 @@ describe("tv-links crypto", () => {
     const b = generateTvToken();
     expect(a.token).not.toEqual(b.token);
     expect(a.token.length).toBeGreaterThanOrEqual(40);
+    expect(a.token).toMatch(/^[A-Za-z0-9_-]{32,64}$/);
     expect(a.tokenHash).toBe(hashTvToken(a.token));
     expect(a.prefix).toBe(a.token.slice(0, 8));
   });
@@ -71,6 +72,12 @@ describe("grafana board src", () => {
     );
     expect(grafanaBoardPath("mobile", false)).toBe(
       "/grafana/d/omi-tv-mobile/?refresh=5m"
+    );
+    expect(grafanaBoardPath("constructor", true)).toBe(
+      "/grafana/d/omi-tv/?refresh=5m&kiosk"
+    );
+    expect(grafanaBoardPath("__proto__", false)).toBe(
+      "/grafana/d/omi-tv/?refresh=5m"
     );
   });
 

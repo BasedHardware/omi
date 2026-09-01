@@ -52,6 +52,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const isTvKiosk = pathname?.startsWith("/tv/view/") ?? false;
+  const isTvKioskRef = React.useRef(isTvKiosk);
+  isTvKioskRef.current = isTvKiosk;
 
   const signOut = async () => {
     try {
@@ -65,10 +67,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (isTvKiosk) {
-      setLoading(false);
-      return;
-    }
     if (bypassAuth) {
       setUser(createBypassUser());
       setIsAdmin(true);
@@ -94,17 +92,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.warn(
               `User ${currentUser.email} is not an admin. Signing out.`
             );
-            await firebaseSignOut(auth);
             setUser(null);
             setIsAdmin(false);
-            router.push("/login?error=unauthorized"); // Redirect non-admin to login
+            // Kiosk must not sign out or redirect — a TV may share a browser
+            // with an admin session, and kiosk→dashboard must not bounce login.
+            if (!isTvKioskRef.current) {
+              await firebaseSignOut(auth);
+              router.push("/login?error=unauthorized");
+            }
           }
         } catch (error) {
           console.error("Error checking admin status:", error);
-          await firebaseSignOut(auth);
           setUser(null);
           setIsAdmin(false);
-          router.push("/login?error=check_failed"); // Redirect on error
+          if (!isTvKioskRef.current) {
+            await firebaseSignOut(auth);
+            router.push("/login?error=check_failed");
+          }
         }
       } else {
         setUser(null);
@@ -115,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Cleanup subscription on unmount
     return () => unsubscribe();
-  }, [bypassAuth, isTvKiosk, router]);
+  }, [bypassAuth, router]);
 
   return (
     <AuthContext.Provider value={{ user, isAdmin, loading, signOut }}>

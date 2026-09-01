@@ -128,10 +128,16 @@ export function TvLinksPanel() {
           await copyText(url);
           markCopied(data.link?.id || "new");
         } catch {
-          // Clipboard may be blocked; still refresh so the new link is visible.
+          // Clipboard may be blocked; still keep the new link visible below.
         }
       }
       await refresh();
+      if (data.link) {
+        setLinks((current) => [
+          data.link,
+          ...current.filter((link) => link.id !== data.link.id),
+        ]);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

@@ -19,6 +19,7 @@ function GrafanaKioskFrame() {
         src={base}
         title="Omi TV"
         className="border-0"
+        referrerPolicy="no-referrer"
         allow="fullscreen"
         style={{
           width: pct,
