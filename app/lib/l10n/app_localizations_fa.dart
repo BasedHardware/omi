@@ -9915,4 +9915,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get transcriptionNoAudio => 'رونویسی صدا دریافت نمی‌کند';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

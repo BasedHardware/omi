@@ -210,7 +210,6 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
   }
 }
 
-
 /// Circular phone-mic record button shown to the right of the home chat bar.
 /// Tap starts/stops recording; long-press opens the record options sheet.
 class HomeRecordButton extends StatefulWidget {
@@ -304,7 +303,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                    : const FaIcon(FontAwesomeIcons.microphone, size: 18, color: Colors.white),
+                    : const Icon(Icons.add, size: 28, color: Colors.white),
           ),
         );
       },

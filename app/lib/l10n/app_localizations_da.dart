@@ -9899,4 +9899,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get transcriptionNoAudio => 'Transskription modtager ikke lyd';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }
