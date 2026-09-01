@@ -9885,12 +9885,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get accountCutoverOpenStore => 'Áruház megnyitása';
 
   @override
-  String get chatScopeToday => 'Ma';
-
-  @override
-  String get chatScopeThisWeek => 'Ezen a héten';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Erről: $title';
   }

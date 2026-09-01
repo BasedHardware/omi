@@ -9838,12 +9838,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
-  String get chatScopeToday => 'Dnes';
-
-  @override
-  String get chatScopeThisWeek => 'Tento týždeň';
-
-  @override
   String chatScopeAbout(String title) {
     return 'O: $title';
   }

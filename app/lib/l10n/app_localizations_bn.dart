@@ -9850,12 +9850,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
-  String get chatScopeToday => 'আজ';
-
-  @override
-  String get chatScopeThisWeek => 'এই সপ্তাহ';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title সম্পর্কে';
   }
