@@ -19,6 +19,7 @@ import {
   cancelChatGeneration,
   ChatBackendError,
   chatErrorCopy,
+  chatHistoryErrorCopy,
   createLocalChatMessage,
   loadNewestChatHistory,
   loadOlderChatHistory,
@@ -99,6 +100,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     null,
   );
   const [chatError, setChatError] = useState<string | null>(null);
+  const [chatEpoch, setChatEpoch] = useState(0);
   const [route, setRoute] = useState<Route>(() =>
     resolveInitialRoute(initialRoute),
   );
@@ -151,17 +153,18 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           setMessages(page.messages);
           setOlderChatCursor(page.olderCursor);
           setHasOlderChat(page.hasOlder);
+          setChatError(null);
         }
       })
-      .catch(() => {
+      .catch(error => {
         if (active && (!macDesktop || onboardingRequired === false)) {
-          setChatError('Chat is temporarily unavailable.');
+          setChatError(chatHistoryErrorCopy(error));
         }
       });
     return () => {
       active = false;
     };
-  }, [macDesktop, onboardingRequired, stableChatMessageIds]);
+  }, [chatEpoch, macDesktop, onboardingRequired, stableChatMessageIds]);
 
   useEffect(() => {
     if (route === 'Home') {
@@ -570,6 +573,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           }}
           onSignOut={() => {
             signOutAndRefresh().catch(() => undefined);
+          }}
+          onWorkspaceReload={() => {
+            refreshReads(false).catch(() => undefined);
+            setChatEpoch(current => current + 1);
           }}
           outcomes={readOutcomes}
           reads={reads}

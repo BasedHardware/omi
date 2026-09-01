@@ -2,6 +2,7 @@ import {
   ChatBackendError,
   cancelChatGeneration,
   chatErrorCopy,
+  chatHistoryErrorCopy,
   loadChatHistory,
   loadNewestChatHistory,
   loadOlderChatHistory,
@@ -278,6 +279,17 @@ test('maps ratified public recovery without automatically retrying', () => {
   expect(
     chatErrorCopy(new ChatBackendError(404, 'not_found', false, 'none', null)),
   ).toBe('This request cannot be completed.');
+  expect(
+    chatHistoryErrorCopy(
+      new ChatBackendError(401, 'unauthorized', false, 'reauthenticate', null),
+    ),
+  ).toBe('Sign in again to continue.');
+  expect(chatHistoryErrorCopy({code: 'OMI_HTTP_UNCONFIGURED'})).toBe(
+    'Sign in again to continue.',
+  );
+  expect(chatHistoryErrorCopy(new Error('socket hang up'))).toBe(
+    'Chat history could not be loaded. Check your connection and try again.',
+  );
 });
 
 test('loads opaque older cursors and preserves exact page metadata', async () => {
