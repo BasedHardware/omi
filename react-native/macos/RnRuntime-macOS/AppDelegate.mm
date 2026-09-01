@@ -5,10 +5,91 @@
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTUIKit.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
+#import <objc/runtime.h>
 
+static const CGFloat OmiWindowInset = 8.0;
 static const CGFloat OmiTrafficLightLeading = 16.0;
 static const CGFloat OmiTrafficLightSpacing = 8.0;
 static const CGFloat OmiTrafficLightChromeHeight = 52.0;
+
+@interface OmiTitlebarPassthroughView : NSView
+@end
+
+@implementation OmiTitlebarPassthroughView
+
+- (NSView *)hitTest:(NSPoint)point
+{
+  return nil;
+}
+
+@end
+
+static void OmiSwizzleTitlebarHitTest(Class cls)
+{
+  static NSMutableSet<NSString *> *swizzled;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    swizzled = [NSMutableSet new];
+  });
+  if (cls == Nil) {
+    return;
+  }
+  NSString *name = NSStringFromClass(cls);
+  if ([swizzled containsObject:name]) {
+    return;
+  }
+  [swizzled addObject:name];
+  SEL selector = @selector(hitTest:);
+  Method method = class_getInstanceMethod(cls, selector);
+  if (method == NULL) {
+    return;
+  }
+  NSView *(*original)(id, SEL, NSPoint) =
+      (NSView * (*)(id, SEL, NSPoint)) method_getImplementation(method);
+  IMP replacement = imp_implementationWithBlock(^NSView *(NSView *self, NSPoint point) {
+    NSView *hit = original(self, selector, point);
+    if (hit == nil) {
+      return nil;
+    }
+    for (NSView *view = hit; view != nil; view = view.superview) {
+      if ([view isKindOfClass:NSButton.class]) {
+        return hit;
+      }
+      if (view == self) {
+        break;
+      }
+    }
+    return nil;
+  });
+  method_setImplementation(method, replacement);
+}
+
+static BOOL OmiViewBlocksWindowDrag(NSView *view)
+{
+  if ([view isKindOfClass:NSControl.class] || [view isKindOfClass:NSText.class] ||
+      [view isKindOfClass:NSScrollView.class] || [view isKindOfClass:NSTextView.class]) {
+    return YES;
+  }
+  if (!view.mouseDownCanMoveWindow) {
+    return YES;
+  }
+  NSAccessibilityRole role = view.accessibilityRole;
+  if ([role isEqualToString:NSAccessibilityButtonRole] ||
+      [role isEqualToString:NSAccessibilityTextFieldRole] ||
+      [role isEqualToString:NSAccessibilityTextAreaRole] ||
+      [role isEqualToString:NSAccessibilityCheckBoxRole] ||
+      [role isEqualToString:NSAccessibilityLinkRole] ||
+      [role isEqualToString:NSAccessibilitySearchFieldRole] ||
+      [role isEqualToString:NSAccessibilityPopUpButtonRole]) {
+    return YES;
+  }
+  NSString *className = NSStringFromClass(view.class);
+  if ([className containsString:@"RCTText"] || [className containsString:@"RCTUIText"] ||
+      [className containsString:@"RCTScroll"]) {
+    return YES;
+  }
+  return NO;
+}
 
 @implementation AppDelegate
 
@@ -82,7 +163,8 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
   if (self.omiTitlebarAccessory != nil) {
     return;
   }
-  NSView *spacer = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 0, OmiTrafficLightChromeHeight)];
+  NSView *spacer = [[OmiTitlebarPassthroughView alloc]
+      initWithFrame:NSMakeRect(0, 0, 0, OmiTrafficLightChromeHeight + OmiWindowInset)];
   NSTitlebarAccessoryViewController *accessory = [[NSTitlebarAccessoryViewController alloc] init];
   accessory.view = spacer;
   accessory.layoutAttribute = NSLayoutAttributeTop;
@@ -128,6 +210,7 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
   [self installOmiWindowGlass:window];
   [self installOmiTitlebarAccessory:window];
   [self hideOmiTitlebarMaterial:window];
+  [self installOmiTitlebarClickThrough:window];
   [window standardWindowButton:NSWindowCloseButton].hidden = NO;
   [window standardWindowButton:NSWindowMiniaturizeButton].hidden = NO;
   [window standardWindowButton:NSWindowZoomButton].hidden = NO;
@@ -149,15 +232,26 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
   NSView *container = closeButton.superview;
   CGFloat buttonWidth = NSWidth(closeButton.frame);
   CGFloat buttonHeight = NSHeight(closeButton.frame);
-  CGFloat y = NSHeight(container.bounds) - OmiTrafficLightChromeHeight +
+  CGFloat y = NSHeight(container.bounds) - OmiWindowInset - OmiTrafficLightChromeHeight +
       floor((OmiTrafficLightChromeHeight - buttonHeight) / 2.0);
-  CGFloat x = OmiTrafficLightLeading;
+  CGFloat x = OmiWindowInset + OmiTrafficLightLeading;
   for (NSButton *button in @[ closeButton, miniaturizeButton, zoomButton ]) {
     NSRect frame = button.frame;
     frame.origin = NSMakePoint(x, y);
     button.frame = frame;
     x += buttonWidth + OmiTrafficLightSpacing;
   }
+}
+
+- (void)installOmiTitlebarClickThrough:(NSWindow *)window
+{
+  NSButton *closeButton = [window standardWindowButton:NSWindowCloseButton];
+  NSView *titlebar = closeButton.superview;
+  if (titlebar == nil) {
+    return;
+  }
+  OmiSwizzleTitlebarHitTest(titlebar.class);
+  OmiSwizzleTitlebarHitTest(titlebar.superview.class);
 }
 
 - (void)installOmiWindowDragMonitor
@@ -194,8 +288,7 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
     return NO;
   }
   for (NSView *view = hitView; view != nil; view = view.superview) {
-    if ([view isKindOfClass:NSControl.class] || [view isKindOfClass:NSText.class] ||
-        [view isKindOfClass:NSScrollView.class] || !view.mouseDownCanMoveWindow) {
+    if (OmiViewBlocksWindowDrag(view)) {
       return NO;
     }
     if (view == contentView) {

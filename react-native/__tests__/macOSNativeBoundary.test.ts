@@ -47,6 +47,7 @@ test('puts traffic lights in the content chrome next to Home', () => {
   expect(source).toContain('positionOmiTrafficLights');
   expect(source).toContain('OmiTrafficLightLeading');
   expect(source).toMatch(/OmiTrafficLightLeading\s*=\s*16\.0/);
+  expect(source).toMatch(/OmiWindowInset\s*=\s*8\.0/);
   expect(source).toContain('NSWindowStyleMaskFullSizeContentView');
   expect(source).toContain('titlebarAppearsTransparent = YES');
   expect(source).toContain('NSTitlebarSeparatorStyleNone');
@@ -77,8 +78,35 @@ test('keeps every traffic light at its native standard size and moves only its o
   );
   expect(methodSource).toContain('frame.origin = NSMakePoint(x, y);');
   expect(methodSource).toContain('x += buttonWidth + OmiTrafficLightSpacing;');
+  expect(methodSource).toContain(
+    'CGFloat x = OmiWindowInset + OmiTrafficLightLeading;',
+  );
+  expect(methodSource).toContain(
+    'NSHeight(container.bounds) - OmiWindowInset - OmiTrafficLightChromeHeight',
+  );
   expect(methodSource).not.toContain('frame.size =');
   expect(methodSource).not.toMatch(/button\.frame\s*=\s*NSMakeRect/);
+});
+
+test('titlebar and drag monitor do not steal chrome clicks', () => {
+  const source = readNativeSource('AppDelegate.mm');
+  const header = readNativeSource('AppDelegate.h');
+
+  expect(source).toContain('OmiTitlebarPassthroughView');
+  expect(source).toContain('OmiTrafficLightChromeHeight + OmiWindowInset');
+  expect(source).toContain('installOmiTitlebarClickThrough');
+  expect(source).toContain('OmiSwizzleTitlebarHitTest');
+  expect(source).toContain('OmiViewBlocksWindowDrag');
+  expect(source).toContain('NSAccessibilityButtonRole');
+  expect(source).toContain('RCTText');
+  expect(source).toContain('return nil;');
+  expect(header).toContain('omiWindowDragMonitor');
+  const dragStart = source.indexOf('- (BOOL)omiWindowGroundDragEvent:');
+  expect(dragStart).toBeGreaterThan(-1);
+  const dragEnd = source.indexOf('\n}', dragStart);
+  const dragSource = source.slice(dragStart, dragEnd);
+  expect(dragSource).toContain('OmiViewBlocksWindowDrag(view)');
+  expect(dragSource).toContain('return NO;');
 });
 
 test('pairs the macOS backend origin and credentials in one validated policy', () => {
