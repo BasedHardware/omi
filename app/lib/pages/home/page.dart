@@ -869,7 +869,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               },
                             ),
                             if (home.selectedIndex == 0)
-                              Positioned(left: 16, right: 16, bottom: 78, child: _buildChatBar(context)),
+                              Positioned(
+                                left: 16,
+                                right: 16,
+                                bottom: 78,
+                                child: Row(
+                                  children: [
+                                    Expanded(child: _buildChatBar(context)),
+                                    const SizedBox(width: 10),
+                                    const HomeRecordButton(),
+                                  ],
+                                ),
+                              ),
                           ],
                         );
                       },
