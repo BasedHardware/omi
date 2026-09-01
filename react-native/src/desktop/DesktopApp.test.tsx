@@ -1,6 +1,8 @@
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {Text, TextInput} from 'react-native';
+import {ScrollView, Text, TextInput} from 'react-native';
 import {DesktopApp} from './DesktopApp';
 
 jest.mock('../app/useReduceMotion', () => ({
@@ -147,7 +149,26 @@ const outcomes = {
   tasks: {
     status: 'success' as const,
     value: {
-      items: [],
+      items: [
+        {
+          kind: 'task' as const,
+          id: 'task-1',
+          title: 'Ship the desktop chrome',
+          summary: 'Finish the Home stage.',
+          searchableText: 'ship the desktop chrome finish the home stage',
+          completed: false,
+          completedAt: null,
+          dueAt: null,
+          owner: null,
+          source: 'desktop',
+          provenance: [],
+          sortOrder: 0,
+          indentLevel: 0,
+          createdAt: 1756540800,
+          updatedAt: 1756540800,
+          revision: null,
+        },
+      ],
       page: {
         windowStatus: 'complete' as const,
         complete: true,
@@ -200,7 +221,10 @@ function renderDesktop(
         onSignIn={jest.fn()}
         onSignOut={jest.fn()}
         outcomes={outcomes}
-        reads={outcomes.conversations.value.items}
+        reads={[
+          ...outcomes.conversations.value.items,
+          ...outcomes.tasks.value.items,
+        ]}
         readsPhase="ready"
         session="ready"
         signingIn={false}
@@ -215,22 +239,56 @@ function renderDesktop(
 test('renders the shipping search-first desktop hierarchy', () => {
   const renderer = renderDesktop();
   const tree = renderedText(renderer);
-  expect(
-    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).toContain("Search what you've seen and heard…");
+  const placeholders = renderer.root
+    .findAllByType(TextInput)
+    .map(node => node.props.placeholder);
+  expect(placeholders).toContain("Search what you've seen and heard…");
+  expect(placeholders).not.toContain('Ask a follow-up…');
   expect(tree).toContain('Home');
   expect(tree).toContain('Library');
   expect(tree).toContain('Tasks');
   expect(tree).toContain('Rewind');
   expect(tree).toContain('Apps');
-  expect(tree).toContain("I'm ready.");
-  expect(
-    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).toContain('Ask a follow-up…');
+  expect(tree).toContain('Currents');
+  expect(tree).toContain('Product review');
+  expect(tree).toContain('Ship the desktop chrome');
+  expect(tree).not.toContain("I'm ready.");
   expect(tree).not.toContain('Saved data unavailable');
   expect(tree).not.toContain('Omi disconnected');
   expect(tree).not.toContain('Devices');
   expect(tree).not.toContain('Your day is clear');
+  expect(renderer.root.findAllByType(ScrollView).length).toBeGreaterThan(0);
+});
+
+test('omnibar send uses the existing chat send path', () => {
+  const onSend = jest.fn();
+  const onDraftChange = jest.fn();
+  const renderer = renderDesktop({
+    draft: 'What did we decide?',
+    onDraftChange,
+    onSend,
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    );
+  expect(omnibar).toBeDefined();
+  expect(omnibar!.props.value).toBe('What did we decide?');
+  act(() => {
+    omnibar!.props.onChangeText('Follow up');
+  });
+  expect(onDraftChange).toHaveBeenCalledWith('Follow up');
+  act(() => {
+    omnibar!.props.onSubmitEditing();
+  });
+  expect(onSend).toHaveBeenCalled();
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
+  });
+  expect(onSend).toHaveBeenCalledTimes(2);
 });
 
 test('keeps signed-out users in the real desktop shell', () => {
@@ -341,19 +399,27 @@ test('Settings opens the shipping multi-pane IA including Advanced', async () =>
 
 test('searches real projections instead of a fake timeline', () => {
   const renderer = renderDesktop({
-    draft: '',
-  });
-  const search = renderer.root
-    .findAllByType(TextInput)
-    .find(
-      node => node.props.placeholder === "Search what you've seen and heard…",
-    );
-  act(() => {
-    search!.props.onChangeText('product');
+    draft: 'product',
   });
   const tree = renderedText(renderer);
   expect(tree).toContain('Product review');
+  expect(tree).not.toContain('Ship the desktop chrome');
   expect(tree).not.toContain('0 screen moments');
   expect(tree).not.toContain('💬');
   expect(tree).not.toContain('🧠');
+});
+
+test('Home stage lists never use FlatList', () => {
+  const source = readFileSync(resolve(__dirname, 'DesktopApp.tsx'), 'utf8');
+  expect(source).not.toMatch(/\bFlatList\b/);
+  expect(source).toContain('ScrollView');
+  expect(source).not.toContain('function GlassSurface');
+  expect(source).not.toContain("I'm ready.");
+  expect(source).not.toContain('Ask a follow-up');
+  expect(source).toMatch(/filterRow:\s*\{[^}]*flexDirection:\s*'row'/);
+  expect(source).not.toMatch(/chip:\s*\{[^}]*borderRadius:\s*14/);
+  expect(source).not.toMatch(/banner:\s*\{[^}]*borderRadius:/);
+  expect(source).not.toMatch(/composer:\s*\{/);
+  expect(source).toContain('accessibilityLabel="Home currents"');
+  expect(source).toContain('accessibilityLabel="Home tasks"');
 });
