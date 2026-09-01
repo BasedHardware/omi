@@ -189,7 +189,7 @@ final class FirstRunEngineTests: XCTestCase {
   @MainActor
   func testCoordinatorQueuesSynchronousCallbackEventsWithoutReenteringReducer() throws {
     let suite = "FirstRunEngineTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
     defer { defaults.removePersistentDomain(forName: suite) }
     var persisted = FirstRunState.inactive
     persisted.step = .openWork
@@ -294,14 +294,14 @@ final class FirstRunEngineTests: XCTestCase {
   }
 
   @MainActor
-  func testUsageReporterAccumulatesAndRollsOverWithoutDroppingPriorDay() {
+  func testUsageReporterAccumulatesAndRollsOverWithoutDroppingPriorDay() throws {
     let suite = "FirstRunEngineTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
     defer { defaults.removePersistentDomain(forName: suite) }
     var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "America/New_York")!
+    calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
     let dayOne = Date(timeIntervalSince1970: 1_788_230_400)
-    let dayTwo = calendar.date(byAdding: .day, value: 1, to: dayOne)!
+    let dayTwo = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: dayOne))
     let reporter = DesktopUsageDailyReporter(
       defaults: defaults,
       now: { dayOne },
@@ -327,9 +327,9 @@ final class FirstRunEngineTests: XCTestCase {
   }
 
   @MainActor
-  func testUsagePersistenceIsNamespacedByOwner() {
+  func testUsagePersistenceIsNamespacedByOwner() throws {
     let suite = "FirstRunEngineTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
     defer { defaults.removePersistentDomain(forName: suite) }
     let ownerA = DesktopUsageDailyReporter(defaults: defaults, ownerID: { "owner-a" })
     ownerA.recordProactiveCardShown()

@@ -63,9 +63,9 @@ final class HomeDailySummaryTests: XCTestCase {
     XCTAssertEqual(HomeDailySummaryStatsRow.duration(130), "2h 10m")
   }
 
-  func testEyebrowFormatsDateAndFallsBackCleanly() {
+  func testEyebrowFormatsDateAndFallsBackCleanly() throws {
     var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "UTC")!
+    calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
     let eyebrow = HomeDailySummarySection.eyebrow(
       for: "2026-09-01", calendar: calendar, locale: Locale(identifier: "en_US"))
     XCTAssertEqual(eyebrow, "DAILY SUMMARY · TUE, SEP 1")

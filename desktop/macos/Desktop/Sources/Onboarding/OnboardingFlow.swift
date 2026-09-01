@@ -416,16 +416,20 @@ enum OnboardingChatPersistence {
     UserDefaults.standard.bool(forKey: goalCompletedKey)
   }
 
+  /// Legacy keys from the retired onboarding chat; cleared for accounts that still carry them.
+  static let legacyACPSessionIDKey = "onboardingACPSessionId"
+  static let legacyChatMessagesKey = "onboardingChatMessages"
+
   /// Clear all persisted onboarding data
   static func clear() {
     // Legacy onboarding ACP session id (pre-kernel surface_conversations)
-    UserDefaults.standard.removeObject(forKey: "onboardingACPSessionId")
+    UserDefaults.standard.removeObject(forKey: legacyACPSessionIDKey)
     UserDefaults.standard.removeObject(forKey: midOnboardingKey)
     UserDefaults.standard.removeObject(forKey: explorationTextKey)
     UserDefaults.standard.removeObject(forKey: explorationCompletedKey)
     UserDefaults.standard.removeObject(forKey: toolCompletedKey)
     UserDefaults.standard.removeObject(forKey: goalCompletedKey)
     // Clean up legacy messages key if present
-    UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
+    UserDefaults.standard.removeObject(forKey: legacyChatMessagesKey)
   }
 }

@@ -60,14 +60,14 @@ struct HomeDailySummarySection: View {
 
   private func header(_ summary: DailySummaryRecord) -> some View {
     HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
-      Text(summary.dayEmoji?.isEmpty == false ? summary.dayEmoji! : "📅")
+      Text(Self.nonEmpty(summary.dayEmoji) ?? "📅")
         .scaledFont(size: OmiType.subheading)
       VStack(alignment: .leading, spacing: 2) {
         Text(Self.eyebrow(for: summary.date))
           .scaledFont(size: OmiType.micro, weight: .semibold)
           .foregroundStyle(HomePalette.muted)
           .tracking(0.6)
-        Text(summary.headline?.isEmpty == false ? summary.headline! : "Your day in review")
+        Text(Self.nonEmpty(summary.headline) ?? "Your day in review")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundStyle(HomePalette.ink)
           .lineLimit(isExpanded ? nil : 1)
@@ -121,7 +121,7 @@ struct HomeDailySummarySection: View {
           .tracking(0.6)
         ForEach(Array(highlights.prefix(3).enumerated()), id: \.offset) { _, highlight in
           HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
-            Text(highlight.emoji?.isEmpty == false ? highlight.emoji! : "•")
+            Text(Self.nonEmpty(highlight.emoji) ?? "•")
               .scaledFont(size: OmiType.caption)
             VStack(alignment: .leading, spacing: 1) {
               if let topic = highlight.topic, !topic.isEmpty {
@@ -138,6 +138,11 @@ struct HomeDailySummarySection: View {
         }
       }
     }
+  }
+
+  nonisolated static func nonEmpty(_ value: String?) -> String? {
+    guard let value, !value.isEmpty else { return nil }
+    return value
   }
 
   /// "Daily summary · Mon, Sep 1" from the backend's `YYYY-MM-DD`; falls back to the bare label when
