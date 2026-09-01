@@ -109,7 +109,16 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
         return None
 
     try:
-        state_data = json.loads(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
+        raw = state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str
+        try:
+            state_data = json.loads(raw)
+        except json.JSONDecodeError:
+            # Pre-migration writers stored str(dict) (single quotes). Those keys
+            # expire after OAUTH_STATE_EXPIRY (10 min). Map them to JSON without
+            # reintroducing ast.literal_eval.
+            state_data = json.loads(raw.replace("'", '"'))
+        if not isinstance(state_data, dict):
+            return None
         return state_data
     except Exception as e:
         logger.error(f"Error parsing state data: {e}")
