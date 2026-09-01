@@ -6,10 +6,6 @@ const orchestrator = readFileSync(
   'utf8',
 );
 const app = readFileSync(resolve(__dirname, 'App.tsx'), 'utf8');
-const desktopApp = readFileSync(
-  resolve(__dirname, 'src/desktop/DesktopApp.tsx'),
-  'utf8',
-);
 
 test('the product entry keeps the canonical orchestrator', () => {
   expect(app).toContain('AppOrchestrator');
@@ -70,11 +66,18 @@ test('DesktopApp owns sign-in inside the search-first shell', () => {
     resolve(__dirname, 'src/desktop/desktopChrome.ts'),
     'utf8',
   );
+  const desktopKit = [
+    'src/desktop/DesktopApp.tsx',
+    'src/desktop/DesktopTopChrome.tsx',
+    'src/desktop/DesktopHome.tsx',
+  ]
+    .map(path => readFileSync(resolve(__dirname, path), 'utf8'))
+    .join('\n');
   expect(chrome).toContain("Search what you've seen and heard");
-  expect(desktopApp).toContain('desktopSearchPlaceholder');
-  expect(desktopApp).toContain('signed-out');
-  expect(desktopApp).toContain('Restoring your session');
-  expect(desktopApp).not.toContain('Saved data unavailable');
-  expect(desktopApp).not.toContain('Omi disconnected');
-  expect(desktopApp).not.toContain('Welcome to Omi');
+  expect(desktopKit).toContain('desktopSearchPlaceholder');
+  expect(desktopKit).toContain('signed-out');
+  expect(desktopKit).toContain('Restoring your session');
+  expect(desktopKit).not.toContain('Saved data unavailable');
+  expect(desktopKit).not.toContain('Omi disconnected');
+  expect(desktopKit).not.toContain('Welcome to Omi');
 });

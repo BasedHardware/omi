@@ -1,5 +1,6 @@
-import React, {useCallback, useEffect, useState} from 'react';
-import {ScrollView, Switch, Text, View} from 'react-native';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {Animated, ScrollView, Switch, Text, View} from 'react-native';
+import {useReduceMotion} from '../app/useReduceMotion';
 import {
   loadAccountSettings,
   setPrivateCloudSync,
@@ -20,11 +21,11 @@ import {
 import {omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
 import {
+  desktopMotion,
   desktopSettingsPanes,
   type DesktopSession,
   type DesktopSettingsPane,
 } from './desktopChrome';
-import {ShippingPressable} from './ShippingPressable';
 import {ShippingStage} from './ShippingStage';
 import {desktopTokens as token} from './tokens';
 
@@ -34,6 +35,10 @@ type Props = {
   onSignIn: () => void;
   onSignOut: () => void;
 };
+
+const PANE_ITEM_HEIGHT = 36;
+const PANE_ITEM_GAP = 8;
+const PANE_PILL_RADIUS = 14;
 
 function Row({
   action,
@@ -96,6 +101,59 @@ function Segmented<Value extends string>({
               value === option && styles.segmentTextActive,
             ]}>
             {option}
+          </Text>
+        </FocusPressable>
+      ))}
+    </View>
+  );
+}
+
+function SettingsNav({
+  pane,
+  onChange,
+}: {
+  pane: DesktopSettingsPane;
+  onChange: (pane: DesktopSettingsPane) => void;
+}) {
+  const reduceMotion = useReduceMotion();
+  const index = Math.max(0, desktopSettingsPanes.indexOf(pane));
+  const translateY = useRef(new Animated.Value(index * (PANE_ITEM_HEIGHT + PANE_ITEM_GAP))).current;
+  useEffect(() => {
+    const next = index * (PANE_ITEM_HEIGHT + PANE_ITEM_GAP);
+    if (reduceMotion) {
+      translateY.setValue(next);
+      return;
+    }
+    const animation = Animated.timing(translateY, {
+      duration: desktopMotion.stepMs,
+      toValue: next,
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [index, reduceMotion, translateY]);
+  return (
+    <View accessibilityRole="tablist" style={styles.sidebar}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.panePill,
+          {transform: [{translateY}]},
+        ]}
+      />
+      {desktopSettingsPanes.map(label => (
+        <FocusPressable
+          accessibilityLabel={label}
+          accessibilityRole="tab"
+          accessibilityState={{selected: pane === label}}
+          key={label}
+          onPress={() => onChange(label)}
+          style={styles.paneItem}>
+          <Text
+            style={[styles.paneText, pane === label && styles.paneTextActive]}>
+            {label}
           </Text>
         </FocusPressable>
       ))}
@@ -231,31 +289,6 @@ export function DesktopSettings({
           />
         }
       />
-      <Row
-        copy="Play Omi interface sounds."
-        title="Interface Sounds"
-        trailing={
-          <Switch
-            onValueChange={value => {
-              setPref('interfaceSounds', value).catch(() => undefined);
-            }}
-            value={prefs.interfaceSounds}
-          />
-        }
-      />
-      <Row
-        copy={`${prefs.fontScale}% of the shipping system size.`}
-        title="Font Size"
-        trailing={
-          <Segmented
-            onChange={value => {
-              setPref('fontScale', Number(value)).catch(() => undefined);
-            }}
-            options={['80', '100', '120'] as const}
-            value={String(prefs.fontScale) as '80' | '100' | '120'}
-          />
-        }
-      />
     </>
   );
 
@@ -352,35 +385,8 @@ export function DesktopSettings({
     </>
   );
 
-  const floatingBar = (
-    <Row
-      copy="Show the floating Ask Omi bar."
-      title="Show floating bar"
-      trailing={
-        <Switch
-          onValueChange={value => {
-            setPref('floatingBar', value).catch(() => undefined);
-          }}
-          value={prefs.floatingBar}
-        />
-      }
-    />
-  );
-
   const alerts = (
     <>
-      <Row
-        copy="Product notifications for tasks, memories, and summaries."
-        title="Notifications"
-        trailing={
-          <Switch
-            onValueChange={value => {
-              setPref('notificationsEnabled', value).catch(() => undefined);
-            }}
-            value={prefs.notificationsEnabled}
-          />
-        }
-      />
       <Row
         copy={
           account?.storeRecordingPermission
@@ -426,86 +432,27 @@ export function DesktopSettings({
     </>
   );
 
-  const permissionPane = (
-    <>
-      {(
-        [
-          ['screen', 'Screen Recording'],
-          ['microphone', 'Microphone'],
-          ['notifications', 'Notifications'],
-        ] as const
-      ).map(([kind, title]) => (
-        <Row
-          action={() => {
-            request(kind).catch(() => undefined);
-          }}
-          actionLabel={permissions[kind] === 'granted' ? 'Allowed' : 'Request'}
-          copy={`macOS reports this permission as ${permissions[kind]}.`}
-          key={kind}
-          title={title}
-        />
-      ))}
-    </>
-  );
-
-  const shortcuts = (
-    <>
-      <Row
-        copy="Open the Omi window from anywhere."
-        title="Open Omi Shortcut"
-        trailing={
-          <Switch
-            onValueChange={value => {
-              setPref('openOmiShortcut', value).catch(() => undefined);
-            }}
-            value={prefs.openOmiShortcut}
-          />
-        }
-      />
-      <Row
-        copy="Hold to talk without opening the window."
-        title="Push to Talk"
-        trailing={
-          <Switch
-            onValueChange={value => {
-              setPref('pushToTalk', value).catch(() => undefined);
-            }}
-            value={prefs.pushToTalk}
-          />
-        }
-      />
-    </>
-  );
-
   const advanced = (
-    <>
-      <Row
-        copy="Old uses production api.omi.me for chat, memories, tasks, profile, and session."
-        title="Backend"
-      />
-      <Segmented
-        onChange={value => {
-          setPref('softwarePlane', value === 'new' ? 'new' : 'old').catch(
-            () => undefined,
-          );
-        }}
-        options={['old', 'new'] as const}
-        value={prefs.softwarePlane}
-      />
-      <Row
-        copy={
-          prefs.stampedV5Origin == null
-            ? 'New backend origin is not stamped on this build. OMI_V5_BACKEND_URL is read from the environment only.'
-            : 'This build has a stamped new-backend origin. It is used only after you flip Advanced to new.'
-        }
-        title="New backend origin"
-      />
-    </>
+    <Row
+      copy="Old uses production api.omi.me. New uses the stamped v5 origin when one exists."
+      title="Backend"
+      trailing={
+        <Segmented
+          onChange={value => {
+            setPref('softwarePlane', value === 'new' ? 'new' : 'old').catch(
+              () => undefined,
+            );
+          }}
+          options={['old', 'new'] as const}
+          value={prefs.softwarePlane}
+        />
+      }
+    />
   );
 
   const about = (
     <>
-      <Row copy="Omi v5 for Mac" title="About" />
+      <Row copy="Omi v5 for Mac" title="Version" />
       <Row copy="https://omi.me" title="Website" />
       <Row copy="https://omi.me/privacy" title="Privacy Policy" />
     </>
@@ -520,46 +467,17 @@ export function DesktopSettings({
       ? transcription
       : pane === 'Rewind'
       ? rewind
-      : pane === 'Floating Bar'
-      ? floatingBar
       : pane === 'Alerts & Privacy'
       ? alerts
-      : pane === 'Permissions'
-      ? permissionPane
-      : pane === 'Shortcuts'
-      ? shortcuts
       : pane === 'AI & Automation'
       ? advanced
       : about;
 
   return (
     <View style={styles.root}>
-      <View accessibilityRole="tablist" style={styles.sidebar}>
-        {desktopSettingsPanes.map(label => (
-          <ShippingPressable
-            accessibilityLabel={label}
-            accessibilityRole="tab"
-            accessibilityState={{selected: pane === label}}
-            active={pane === label}
-            key={label}
-            onPress={() => setPane(label)}
-            style={styles.paneItem}>
-            <Text
-              style={[
-                styles.paneText,
-                pane === label && styles.paneTextActive,
-              ]}>
-              {label}
-            </Text>
-          </ShippingPressable>
-        ))}
-      </View>
+      <SettingsNav onChange={setPane} pane={pane} />
       <ScrollView contentContainerStyle={styles.content} style={styles.scroll}>
         <ShippingStage stageKey={pane} variant="page">
-          <Text style={styles.pageTitle}>{pane}</Text>
-          {pane === 'AI & Automation' ? (
-            <Text style={styles.advancedLabel}>Advanced</Text>
-          ) : null}
           {body}
         </ShippingStage>
       </ScrollView>
@@ -568,15 +486,27 @@ export function DesktopSettings({
 }
 
 const styles = {
-  root: {flex: 1, flexDirection: 'row' as const, gap: 16},
-  sidebar: {gap: 4, width: 188},
+  root: {flex: 1, flexDirection: 'row' as const, gap: 20},
+  sidebar: {
+    gap: PANE_ITEM_GAP,
+    position: 'relative' as const,
+    width: 196,
+  },
+  panePill: {
+    backgroundColor: token.color.glassSelected,
+    borderRadius: PANE_PILL_RADIUS,
+    height: PANE_ITEM_HEIGHT,
+    left: 0,
+    position: 'absolute' as const,
+    right: 0,
+    top: 0,
+  },
   paneItem: {
-    borderRadius: token.radius.chip,
-    minHeight: 28,
+    alignItems: 'center' as const,
+    height: PANE_ITEM_HEIGHT,
     justifyContent: 'center' as const,
     paddingHorizontal: 12,
   },
-  paneItemActive: {backgroundColor: token.color.glassSelected},
   paneText: {
     color: token.color.inkMuted,
     fontFamily: token.font,
@@ -586,19 +516,6 @@ const styles = {
   paneTextActive: {color: token.color.ink},
   scroll: {flex: 1},
   content: {gap: 10, paddingBottom: 32},
-  pageTitle: {
-    color: token.color.ink,
-    fontFamily: token.font,
-    fontSize: token.type.title,
-    fontWeight: '600' as const,
-    marginBottom: 8,
-  },
-  advancedLabel: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.caption,
-    fontWeight: '600' as const,
-  },
   row: {
     alignItems: 'center' as const,
     backgroundColor: token.color.glassQuiet,

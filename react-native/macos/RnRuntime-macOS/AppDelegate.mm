@@ -7,11 +7,9 @@
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <objc/runtime.h>
 
-static const CGFloat OmiWindowInset = 8.0;
-static const CGFloat OmiWindowTopInset = 12.0;
-static const CGFloat OmiTrafficLightLeading = 16.0;
+static const CGFloat OmiWindowInset = 12.0;
 static const CGFloat OmiTrafficLightSpacing = 8.0;
-static const CGFloat OmiTrafficLightChromeHeight = 52.0;
+static const CGFloat OmiChromeRowHeight = 52.0;
 
 @interface OmiTitlebarPassthroughView : NSView
 @end
@@ -166,7 +164,7 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
     return;
   }
   NSView *spacer = [[OmiTitlebarPassthroughView alloc]
-      initWithFrame:NSMakeRect(0, 0, 0, OmiTrafficLightChromeHeight + OmiWindowTopInset)];
+      initWithFrame:NSMakeRect(0, 0, 0, OmiChromeRowHeight + OmiWindowInset)];
   NSTitlebarAccessoryViewController *accessory = [[NSTitlebarAccessoryViewController alloc] init];
   accessory.view = spacer;
   accessory.layoutAttribute = NSLayoutAttributeTop;
@@ -235,9 +233,12 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   NSView *frameView = window.contentView.superview ?: container;
   CGFloat buttonWidth = NSWidth(closeButton.frame);
   CGFloat buttonHeight = NSHeight(closeButton.frame);
-  CGFloat yInFrame = NSHeight(frameView.bounds) - OmiWindowTopInset - OmiTrafficLightChromeHeight +
-      floor((OmiTrafficLightChromeHeight - buttonHeight) / 2.0);
-  CGFloat xInFrame = OmiWindowInset + OmiTrafficLightLeading;
+  // Center the lights on the React chrome row: the row starts at the even
+  // window inset and is OmiChromeRowHeight tall, so its center sits
+  // OmiWindowInset + OmiChromeRowHeight / 2 below the top of the frame view.
+  CGFloat yInFrame = NSHeight(frameView.bounds) - OmiWindowInset - OmiChromeRowHeight +
+      floor((OmiChromeRowHeight - buttonHeight) / 2.0);
+  CGFloat xInFrame = OmiWindowInset;
   for (NSButton *button in @[ closeButton, miniaturizeButton, zoomButton ]) {
     NSPoint inFrame = NSMakePoint(xInFrame, yInFrame);
     NSPoint inContainer = [container convertPoint:inFrame fromView:frameView];
