@@ -436,6 +436,13 @@ test('Tasks page does not mount FlatList inside the shipping stage', () => {
   expect(tasksPage).toContain('ScrollView');
 });
 
+test('Home and Library chips share a sliding glass pill', () => {
+  const source = readFileSync(resolve(__dirname, './DesktopApp.tsx'), 'utf8');
+  expect(source.match(/<ChipRail/g)?.length).toBeGreaterThanOrEqual(2);
+  expect(source).not.toContain('active={filter === label}');
+  expect(source).not.toContain('active={hub === label}');
+});
+
 test('uses discrete glass panels instead of one window material', () => {
   const renderer = renderDesktop();
   const panels = renderer.root.findAll(

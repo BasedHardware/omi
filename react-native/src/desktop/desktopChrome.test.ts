@@ -18,6 +18,7 @@ import {
   visibleChatError,
 } from './desktopChrome';
 import {
+  chipMotionDuration,
   glassMotionDuration,
   listInsertMotionDuration,
   motionDuration,
@@ -68,8 +69,11 @@ test('desktop chrome uses the shipping Home Library IA', () => {
   expect(desktopMotion.overlayMs).toBe(300);
   expect(desktopMotion.checkboxMs).toBe(180);
   expect(desktopMotion.searchExpandMs).toBe(160);
+  expect(desktopMotion.chipMs).toBe(120);
   expect(desktopMotion.listInsertMs).toBe(0);
   expect(desktopMotion.glassMs).toBe(0);
+  expect(chipMotionDuration(true)).toBe(0);
+  expect(chipMotionDuration(false)).toBe(120);
   expect(desktopStageFade.hubOffsetY).toBe(14);
   expect(desktopStageFade.chatRiseY).toBe(54);
   expect(desktopStageFade.dropScale).toBe(0.98);
