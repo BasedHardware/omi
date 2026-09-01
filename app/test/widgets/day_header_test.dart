@@ -6,9 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_map/flutter_map.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
-import 'package:omi/models/local_recording.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/widgets/day_header.dart';
@@ -129,21 +127,6 @@ void main() {
     expect(identical(first, second), isTrue);
   });
 
-  testWidgets('draws the map from a day that only has untranscribed recordings', (tester) async {
-    // Transcribe Later captures carry their own start-location snapshot, so a
-    // day with nothing uploaded yet still knows where it happened.
-    await _pumpHeader(
-      tester,
-      const [],
-      recordings: [
-        _recording(latitude: 37.7749, longitude: -122.4194, address: '1 Mission St, San Francisco, CA, USA')
-      ],
-    );
-
-    expect(find.byType(FlutterMap), findsOneWidget);
-    expect(find.text('San Francisco'), findsOneWidget);
-  });
-
   test('collapses a full address to its neighbourhood component', () {
     expect(shortPlaceLabel('1234 Mission St, San Francisco, CA 94110, USA'), 'San Francisco');
     expect(shortPlaceLabel('Mission District, San Francisco, USA'), 'Mission District');
@@ -158,7 +141,6 @@ Future<void> _pumpHeader(
   WidgetTester tester,
   List<ServerConversation> conversations, {
   List<String?> summaryAddresses = const [],
-  List<LocalRecording> recordings = const [],
   VoidCallback? onPickDay,
   bool navigable = true,
   DateTime? day,
@@ -177,7 +159,6 @@ Future<void> _pumpHeader(
           day: day ?? DateTime(2026, 7, 15),
           conversations: conversations,
           summaryAddresses: summaryAddresses,
-          recordings: recordings,
           headline: 'A day worth remembering',
           canGoForward: true,
           onPreviousDay: () {},
@@ -200,20 +181,6 @@ ServerConversation _conversation(String id, {double? latitude, double? longitude
     createdAt: DateTime(2026, 7, 15, 9),
     structured: Structured('Title', 'Overview', emoji: '🧠'),
     geolocation: latitude == null ? null : Geolocation(latitude: latitude, longitude: longitude, address: address),
-  );
-}
-
-LocalRecording _recording({required double latitude, required double longitude, String? address}) {
-  return LocalRecording(
-    fileName: 'rec.bin',
-    filePath: '/tmp/rec.bin',
-    timerStart: DateTime(2026, 7, 15, 9).millisecondsSinceEpoch ~/ 1000,
-    codec: BleAudioCodec.opus,
-    frameSize: 160,
-    sizeBytes: 1024,
-    seconds: 600,
-    state: LocalRecordingState.pending,
-    geolocation: Geolocation(latitude: latitude, longitude: longitude, address: address),
   );
 }
 
