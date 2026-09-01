@@ -68,15 +68,16 @@ static NSView *OmiMakeLiquidGlass(NSRect frame, CGFloat radius)
   if (self.liquidGlass != nil) {
     [self addSubview:self.liquidGlass];
   }
-
-  self.material = [[NSVisualEffectView alloc] initWithFrame:self.bounds];
-  self.material.appearance = OmiInkGlassAppearance();
-  self.material.material = NSVisualEffectMaterialHUDWindow;
-  self.material.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-  self.material.state = NSVisualEffectStateActive;
-  self.material.wantsLayer = YES;
-  self.material.layer.masksToBounds = YES;
-  [self addSubview:self.material];
+  if (self.liquidGlass == nil) {
+    self.material = [[NSVisualEffectView alloc] initWithFrame:self.bounds];
+    self.material.appearance = OmiInkGlassAppearance();
+    self.material.material = NSVisualEffectMaterialHUDWindow;
+    self.material.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+    self.material.state = NSVisualEffectStateActive;
+    self.material.wantsLayer = YES;
+    self.material.layer.masksToBounds = YES;
+    [self addSubview:self.material];
+  }
 
   self.fallback = [[NSView alloc] initWithFrame:self.bounds];
   self.fallback.wantsLayer = YES;
@@ -152,7 +153,9 @@ static NSView *OmiMakeLiquidGlass(NSRect frame, CGFloat radius)
   BOOL reduceTransparency = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency;
   BOOL hasLiquid = self.liquidGlass != nil;
   self.liquidGlass.hidden = reduceTransparency || !hasLiquid;
-  self.material.hidden = reduceTransparency || hasLiquid;
+  if (self.material != nil) {
+    self.material.hidden = reduceTransparency;
+  }
   self.fallback.hidden = !reduceTransparency;
   self.appearance = OmiInkGlassAppearance();
   [self.appearance performAsCurrentDrawingAppearance:^{
