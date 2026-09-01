@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export function PanelReveal({
@@ -17,14 +17,13 @@ export function PanelReveal({
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (!open) {
-      el.setAttribute('data-open', 'false');
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      el.setAttribute('data-open', 'true');
-    });
-    return () => cancelAnimationFrame(frame);
+    if (!open) el.setAttribute('data-open', 'false');
+  }, [open]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.setAttribute('data-open', open ? 'true' : 'false');
   }, [open]);
 
   return (

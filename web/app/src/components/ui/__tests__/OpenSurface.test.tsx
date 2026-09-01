@@ -18,11 +18,6 @@ describe('OpenSurface', () => {
         onchange: null,
       })),
     );
-    vi.stubGlobal(
-      'requestAnimationFrame',
-      (cb: FrameRequestCallback) => window.setTimeout(() => cb(0), 0),
-    );
-    vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id));
   });
 
   afterEach(() => {
@@ -39,9 +34,6 @@ describe('OpenSurface', () => {
       </OpenSurface>,
     );
 
-    act(() => {
-      vi.advanceTimersByTime(0);
-    });
     expect(screen.getByText('Menu')).toHaveClass('is-open');
 
     rerender(

@@ -45,33 +45,23 @@ export function OpenSurface({
     const host = el?.parentElement?.closest('[data-state]');
 
     if (host) {
-      let enterFrame = 0;
       const sync = () => {
-        cancelAnimationFrame(enterFrame);
-        if (host.getAttribute('data-state') === 'closed') {
-          setPhase('closing');
-          return;
-        }
-        setPhase('idle');
-        enterFrame = requestAnimationFrame(() => setPhase('open'));
+        setPhase(host.getAttribute('data-state') === 'closed' ? 'closing' : 'open');
       };
-      sync();
+      if (host.getAttribute('data-state') === 'closed') {
+        setPhase('closing');
+      }
       const observer = new MutationObserver(sync);
       observer.observe(host, { attributes: true, attributeFilter: ['data-state'] });
-      return () => {
-        cancelAnimationFrame(enterFrame);
-        observer.disconnect();
-      };
+      return () => observer.disconnect();
     }
 
-    if (!open) {
-      setPhase('closing');
-      return;
-    }
+    setPhase(open ? 'idle' : 'closing');
+  }, [mounted, open]);
 
-    setPhase('idle');
-    const enterFrame = requestAnimationFrame(() => setPhase('open'));
-    return () => cancelAnimationFrame(enterFrame);
+  useEffect(() => {
+    if (!mounted || !open) return;
+    setPhase((current) => (current === 'closing' ? current : 'open'));
   }, [mounted, open]);
 
   useEffect(() => {
