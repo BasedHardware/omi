@@ -78,6 +78,7 @@ from .receiver import ListenReceiver
 from .registry import register as register_listen_session
 from .registry import unregister as unregister_listen_session
 from .speakers import SpeakerMatcher
+from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
 from utils.observability.transcription import record_listen_session_accepted
 

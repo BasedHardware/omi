@@ -11,6 +11,7 @@ from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
+from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.observability.transcription import record_listen_audio_outcome
