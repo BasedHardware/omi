@@ -90,6 +90,16 @@ final class JITProactivityDeliveryTests: XCTestCase {
         task.replacingOccurrences(of: "[\"fact:1\"]", with: "[]"), lane: .ambient))
   }
 
+  func testFocusNudgeIsAnAmbientOnlyDecisionUnderTheFocusBadge() throws {
+    let nudge = """
+      {"decision":"focus_nudge","title":"Focus","message":"Reply to Sam before standup",\
+      "reasoning":"fact","bucket_entry_refs":[],"fact_ids":["fact:1"]}
+      """
+    XCTAssertEqual(try JITProactivityOutputPolicy.decode(nudge, lane: .ambient).decision, "focus_nudge")
+    XCTAssertThrowsError(try JITProactivityOutputPolicy.decode(nudge, lane: .planned))
+    XCTAssertEqual(ProactiveNotificationKind.from(decisionType: "focus_nudge"), .suggestion)
+  }
+
   func testReservationIdentifiersAreContentFreeAndOnlyAdmissionCanResume() {
     let candidateID = JITProactivityReservation.identifier("candidate", "raw local context")
     let eventID = JITProactivityReservation.identifier("notification", candidateID)
