@@ -236,11 +236,10 @@ test('renders the shipping search-first desktop hierarchy', () => {
   expect(placeholders).toContain("Search what you've seen and heard…");
   expect(placeholders).not.toContain('Ask a follow-up…');
   expect(tree).toContain('Home');
-  expect(tree).toContain('Library');
+  expect(tree).toContain('Conversations');
   expect(tree).toContain('Tasks');
-  expect(tree).toContain('Rewind');
   expect(tree).toContain('Apps');
-  expect(tree).toContain('Currents');
+  expect(tree).toContain('Today');
   expect(tree).toContain('Product review');
   expect(tree).toContain('Ship the desktop chrome');
   expect(tree).not.toContain("I'm ready.");
@@ -378,7 +377,7 @@ test('ready chat transport error stays in the chrome and off the Home stage', ()
     'Chat is temporarily unavailable.',
   );
   expect(notices[0].props.numberOfLines).toBe(1);
-  expect(renderedText(renderer)).toContain('Currents');
+  expect(renderedText(renderer)).toContain('Today');
   expect(renderedText(renderer)).toContain('Product review');
   for (const scroll of renderer.root.findAllByType(ScrollView)) {
     expect(
@@ -437,29 +436,14 @@ test('searches real projections instead of a fake timeline', () => {
   expect(tree).not.toContain('🧠');
 });
 
-test('Rewind route and filter show capture copy, not a blank chat', () => {
+test('Home keeps screen-history copy without a Rewind tab', () => {
   const renderer = renderDesktop();
-  act(() => {
-    renderer.root
-      .find(node => node.props.accessibilityLabel === 'Rewind')
-      .props.onPress();
-  });
-  expect(renderedText(renderer)).toContain(
-    'Screen history is ready when capture is on',
-  );
-  act(() => {
-    renderer.root
-      .find(node => node.props.accessibilityLabel === 'Home')
-      .props.onPress();
-  });
-  act(() => {
-    renderer.root
-      .find(node => node.props.accessibilityLabel === 'Filter Rewind')
-      .props.onPress();
-  });
   const homeTree = renderedText(renderer);
   expect(homeTree).toContain('Screen history is ready when capture is on');
   expect(homeTree).not.toContain("I'm ready.");
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Rewind'),
+  ).toHaveLength(0);
 });
 
 const kitFiles = [
@@ -507,7 +491,7 @@ test('one continuous surface: no islands, no pills, no docked composer', () => {
   expect(chrome).toMatch(/omnibarInput:\s*\{[^}]*minWidth:\s*0/);
   expect(chrome).toMatch(/navItem:\s*\{[^}]*justifyContent:\s*'center'/);
   expect(chrome).toMatch(/navItem:\s*\{[^}]*alignItems:\s*'center'/);
-  expect(home).toMatch(/filterRow:\s*\{[^}]*flexDirection:\s*'row'/);
+  expect(home).not.toMatch(/filterRow:\s*\{/);
   expect(home).not.toMatch(/chip:\s*\{[^}]*borderRadius:\s*14/);
   expect(home).not.toMatch(/banner:\s*\{[^}]*borderRadius/);
   expect(allKitSource).not.toMatch(/composer:\s*\{/);

@@ -1,8 +1,7 @@
 export const desktopNavItems = [
   'Home',
-  'Library',
+  'Conversations',
   'Tasks',
-  'Rewind',
   'Apps',
 ] as const;
 

@@ -13,7 +13,7 @@ import {
   type DesktopSession,
 } from './desktopChrome';
 import {DesktopChrome, type DesktopRoute} from './DesktopTopChrome';
-import {DesktopHome, RewindPanel} from './DesktopHome';
+import {DesktopHome} from './DesktopHome';
 import {AppsPage, LibraryPage, TasksPage} from './DesktopPages';
 import {DesktopSettings} from './DesktopSettings';
 import {ShippingStage} from './ShippingStage';
@@ -88,14 +88,10 @@ export function DesktopApp({
             session={session}
             signingIn={signingIn}
           />
-        ) : route === 'Library' ? (
+        ) : route === 'Conversations' ? (
           <LibraryPage outcomes={outcomes} />
         ) : route === 'Tasks' ? (
           <TasksPage outcomes={outcomes} />
-        ) : route === 'Rewind' ? (
-          <View style={styles.page}>
-            <RewindPanel />
-          </View>
         ) : route === 'Apps' ? (
           <AppsPage />
         ) : (

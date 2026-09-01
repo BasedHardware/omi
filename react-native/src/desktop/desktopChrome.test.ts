@@ -34,16 +34,12 @@ import {
 
 const workerOrigin = 'https://omi-v5-backend-staging.example.workers.dev';
 
-test('desktop chrome uses the shipping Home Library IA', () => {
-  expect(desktopNavItems).toEqual([
-    'Home',
-    'Library',
-    'Tasks',
-    'Rewind',
-    'Apps',
-  ]);
+test('desktop chrome uses the shipping Home Conversations IA', () => {
+  expect(desktopNavItems).toEqual(['Home', 'Conversations', 'Tasks', 'Apps']);
   expect(isShippingDesktopNav('Home')).toBe(true);
+  expect(isShippingDesktopNav('Conversations')).toBe(true);
   expect(isShippingDesktopNav('Chat')).toBe(false);
+  expect(isShippingDesktopNav('Library')).toBe(false);
   expect(isShippingDesktopNav('Memories')).toBe(false);
   expect(desktopSearchPlaceholder).toBe("Search what you've seen and heard…");
   expect(desktopSystemFontFamily).toBe('System');
