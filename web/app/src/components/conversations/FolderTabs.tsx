@@ -1,10 +1,10 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { motion } from 'framer-motion';
 import { Plus, Star, Pencil, Trash2, Inbox, Briefcase, Heart, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Folder } from '@/types/folder';
+import { OpenSurface } from '@/components/ui/OpenSurface';
 
 // Special folder IDs for built-in tabs
 export const FOLDER_ALL = 'all';
@@ -100,10 +100,10 @@ export function FolderTabs({
           {/* Backdrop */}
           <div className="fixed inset-0 z-50" onClick={closeContextMenu} />
           {/* Menu */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
+          <OpenSurface
+            data-origin="top-left"
             className={cn(
+              't-dropdown',
               'fixed z-50 py-1 rounded-lg',
               'bg-bg-secondary border border-bg-tertiary',
               'shadow-lg min-w-[140px]',
@@ -138,7 +138,7 @@ export function FolderTabs({
               <Trash2 className="w-4 h-4" />
               <span>Delete folder</span>
             </button>
-          </motion.div>
+          </OpenSurface>
         </>
       )}
     </div>

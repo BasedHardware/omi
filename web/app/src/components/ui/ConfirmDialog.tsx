@@ -4,6 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { OpenSurface } from '@/components/ui/OpenSurface';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -50,21 +51,22 @@ export function ConfirmDialog({
               />
             </Dialog.Overlay>
             <Dialog.Content asChild>
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                transition={{ duration: 0.15, ease: 'easeOut' }}
+              <div
                 className={cn(
                   'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101]',
                   'w-[90vw] max-w-[400px]',
-                  'bg-bg-secondary rounded-2xl',
-                  'border border-bg-tertiary',
-                  'shadow-2xl',
-                  'p-6',
                   'focus:outline-none',
                 )}
               >
+                <OpenSurface
+                  className={cn(
+                    't-modal relative',
+                    'bg-bg-secondary rounded-2xl',
+                    'border border-bg-tertiary',
+                    'shadow-2xl',
+                    'p-6',
+                  )}
+                >
                 {/* Close button */}
                 <Dialog.Close asChild>
                   <button
@@ -137,7 +139,8 @@ export function ConfirmDialog({
                     )}
                   </button>
                 </div>
-              </motion.div>
+                </OpenSurface>
+              </div>
             </Dialog.Content>
           </Dialog.Portal>
         )}

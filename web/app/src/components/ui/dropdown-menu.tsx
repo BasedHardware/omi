@@ -43,8 +43,9 @@ const DropdownMenuSubContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.SubContent
     ref={ref}
+    data-origin="top-left"
     className={cn(
-      'z-50 min-w-[8rem] overflow-hidden rounded-section border border-stroke bg-bg-raised p-1 text-text-primary shadow-strong data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+      't-dropdown is-open z-50 min-w-[8rem] overflow-hidden rounded-section border border-stroke bg-bg-raised p-1 text-text-primary shadow-strong',
       className,
     )}
     {...props}
@@ -55,20 +56,41 @@ DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayNam
 const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 4, ...props }, ref) => (
-  <DropdownMenuPrimitive.Portal>
-    <DropdownMenuPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      className={cn(
-        'z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-section border border-stroke bg-bg-raised p-1 text-text-primary shadow-strong',
-        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-        className,
-      )}
-      {...props}
-    />
-  </DropdownMenuPrimitive.Portal>
-));
+>(({ className, sideOffset = 4, ...props }, ref) => {
+  const localRef = React.useRef<HTMLDivElement>(null);
+  React.useLayoutEffect(() => {
+    const el = localRef.current;
+    if (!el) return;
+    el.classList.remove('is-closing');
+    el.classList.add('is-open');
+    return () => {
+      el.classList.remove('is-open');
+      el.classList.add('is-closing');
+    };
+  }, []);
+  const setRefs = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      localRef.current = node;
+      if (typeof ref === 'function') ref(node);
+      else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    },
+    [ref],
+  );
+  return (
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.Content
+        ref={setRefs}
+        sideOffset={sideOffset}
+        data-origin="top-left"
+        className={cn(
+          't-dropdown z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-section border border-stroke bg-bg-raised p-1 text-text-primary shadow-strong',
+          className,
+        )}
+        {...props}
+      />
+    </DropdownMenuPrimitive.Portal>
+  );
+});
 DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName;
 
 const DropdownMenuItem = React.forwardRef<

@@ -1,0 +1,51 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { prefersReducedMotion, readDurationToken, replayErrorShake } from '@/lib/transitionsDev';
+
+describe('transitionsDev helpers', () => {
+  beforeEach(() => {
+    document.documentElement.style.setProperty('--text-swap-dur', '150ms');
+    document.documentElement.style.setProperty('--shake-dur-a', '80ms');
+    document.documentElement.style.setProperty('--shake-dur-b', '60ms');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('reads duration tokens from :root', () => {
+    expect(readDurationToken('--text-swap-dur', 200)).toBe(150);
+    expect(readDurationToken('--missing-token', 42)).toBe(42);
+  });
+
+  it('detects prefers-reduced-motion', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+        onchange: null,
+      })),
+    );
+    expect(prefersReducedMotion()).toBe(true);
+  });
+
+  it('replays the error shake class through a reflow', () => {
+    vi.useFakeTimers();
+    const input = document.createElement('div');
+    input.classList.add('t-input');
+    document.body.appendChild(input);
+
+    replayErrorShake(input);
+    expect(input.classList.contains('is-shaking')).toBe(true);
+
+    vi.advanceTimersByTime(300);
+    expect(input.classList.contains('is-shaking')).toBe(false);
+    input.remove();
+  });
+});
