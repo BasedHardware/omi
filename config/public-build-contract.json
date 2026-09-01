@@ -343,7 +343,10 @@
           "--base-url",
           "{base_url}"
         ],
-        "marker": "frontend:ready"
+        "marker": "frontend:ready",
+        "public_urls": {
+          "prod": "https://h.omi.me"
+        }
       },
       "traffic_promotion": "candidate_after_browser_acceptance"
     },
