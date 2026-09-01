@@ -392,9 +392,11 @@ struct RealtimeProviderToolResult: Equatable {
   let output: String
   let originalByteCount: Int
   let wasOversized: Bool
+  let wasTruncated: Bool
 }
 
 enum RealtimeProviderToolResultPolicy {
+  /// Transport invariant only. Projection policy belongs to the Node kernel manifest.
   static let maximumByteCount = 48 * 1024
 
   /// The sole model-visible result boundary for both realtime providers.
@@ -405,7 +407,6 @@ enum RealtimeProviderToolResultPolicy {
     name: String,
     output: String
   ) -> RealtimeProviderToolResult {
-    let originalByteCount = output.utf8.count
     var providerOutput = output
     if name == HubTool.spawnAgent.rawValue,
       let payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any],
@@ -416,25 +417,15 @@ enum RealtimeProviderToolResultPolicy {
     {
       providerOutput = compact
     }
-    guard providerOutput.utf8.count <= maximumByteCount else {
-      return oversizedFailure(
-        provider: provider,
-        name: name,
-        originalOutput: output,
-        originalByteCount: originalByteCount)
-    }
     let finalized = finalize(provider: provider, name: name, output: providerOutput)
-    guard finalized.utf8.count <= maximumByteCount else {
-      return oversizedFailure(
-        provider: provider,
-        name: name,
-        originalOutput: output,
-        originalByteCount: originalByteCount)
-    }
+    let envelope = parsedCanonicalToolResultEnvelope(from: finalized)
+    let originalByteCount = envelope?["originalBytes"] as? Int ?? output.utf8.count
+    let wasTruncated = envelope?["truncated"] as? Bool ?? false
     return RealtimeProviderToolResult(
       output: finalized,
       originalByteCount: originalByteCount,
-      wasOversized: false)
+      wasOversized: finalized.utf8.count > maximumByteCount,
+      wasTruncated: wasTruncated)
   }
 
   static func rejectedOutput(
@@ -458,34 +449,6 @@ enum RealtimeProviderToolResultPolicy {
     let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     return data.flatMap { String(data: $0, encoding: .utf8) }
       ?? #"{"ok":false,"error":{"code":"realtime_tool_rejected","message":"The tool could not be completed."}}"#
-  }
-
-  private static func oversizedFailure(
-    provider: RealtimeHubProvider,
-    name: String,
-    originalOutput: String,
-    originalByteCount: Int
-  ) -> RealtimeProviderToolResult {
-    let error: [String: Any] = [
-      "code": "tool_result_too_large",
-      "message": "The tool returned too much detail. Retry with narrower filters.",
-      "tool": String(name.prefix(128)),
-      "originalBytes": originalByteCount,
-    ]
-    let payload: [String: Any] = [
-      "ok": false,
-      "error": error,
-      "toolResultEnvelope": providerFailureEnvelope(
-        provider: provider, name: name, error: error, originalOutput: originalOutput),
-    ]
-    let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-    let bounded =
-      data.flatMap { String(data: $0, encoding: .utf8) }
-      ?? #"{"ok":false,"error":{"code":"tool_result_too_large"}}"#
-    return RealtimeProviderToolResult(
-      output: bounded,
-      originalByteCount: originalByteCount,
-      wasOversized: true)
   }
 
   private static func finalize(provider: RealtimeHubProvider, name: String, output: String) -> String {

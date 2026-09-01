@@ -385,6 +385,7 @@ function relayResultIdentity(
       runId: invocation.runId,
       attemptId: invocation.attemptId,
       toolName: invocation.canonicalToolName,
+      surfaceKind: invocation.surfaceKind,
     };
   }
   // Capability rejection occurs before a kernel-owned invocation exists. It
@@ -411,6 +412,14 @@ function finalizeRelayResult(
     outcome,
     kernel: runtimeKernel,
     artifactRoot: agentArtifactsDir(),
+    onDegraded: (record) => {
+      console.error(JSON.stringify({
+        event: "fallback",
+        area: "tool_result_projection",
+        outcome: "degraded",
+        ...record,
+      }));
+    },
   });
 }
 
@@ -982,6 +991,7 @@ function startOmiToolsRelay(): Promise<string> {
                           runId: authorized.runId,
                           attemptId: authorized.attemptId,
                           toolName: authorized.canonicalToolName,
+                          surfaceKind: authorized.surfaceKind,
                         },
                         getOwnerId: establishedOwnerId,
                         executionLease,
@@ -2326,6 +2336,7 @@ async function main(): Promise<void> {
                     runId: authorized.runId,
                     attemptId: authorized.attemptId,
                     toolName: authorized.canonicalToolName,
+                    surfaceKind: authorized.surfaceKind,
                   },
                   getOwnerId: establishedOwnerId,
                   executionLease,

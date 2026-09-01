@@ -6,9 +6,14 @@ import { pathToFileURL } from "node:url";
 import type { AgentRuntimeKernel } from "./kernel.js";
 import { maybePruneExpiredToolOutputs, TOOL_OUTPUT_DIRECTORY_NAME } from "./artifact-storage.js";
 import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
+import {
+  DEFAULT_MODEL_TOOL_RESULT_BUDGET_BYTES,
+  projectToolResultPayload,
+  toolResultBudgetBytes,
+} from "./tool-result-projector.js";
 
 /** One budget applies to every result put back on a model-facing stdio relay. */
-export const MAX_RELAY_TOOL_RESULT_BYTES = 8 * 1024;
+export const MAX_RELAY_TOOL_RESULT_BYTES = DEFAULT_MODEL_TOOL_RESULT_BUDGET_BYTES;
 
 export interface RelayToolResultIdentity {
   invocationId: string;
@@ -17,6 +22,7 @@ export interface RelayToolResultIdentity {
   runId: string;
   attemptId: string;
   toolName: string;
+  surfaceKind?: string;
 }
 
 export interface FinalizeRelayToolResultInput {
@@ -25,6 +31,7 @@ export interface FinalizeRelayToolResultInput {
   outcome?: "succeeded" | "failed" | "cancelled";
   kernel?: AgentRuntimeKernel;
   artifactRoot: string;
+  onDegraded?: (record: { toolName: string; originalBytes: number; projectedBytes: number }) => void;
 }
 
 /**
@@ -34,7 +41,7 @@ export interface FinalizeRelayToolResultInput {
  * output all pass here before the adapter receives a `tool_result` frame. A
  * source envelope is validated but never trusted for provenance: the pending
  * capability is the authoritative invocation identity. Outputs that cannot
- * fit are persisted before a typed recoverable failure is returned.
+ * fit are persisted before a typed successful projection is returned.
  */
 export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): string {
   const rawBytes = Buffer.byteLength(input.result, "utf8");
@@ -75,23 +82,8 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
   if (needsArtifact && !fullOutputRef) {
     fullOutputRef = persistRelayToolOutput(input, input.result);
   }
-  if (needsArtifact && !fullOutputRef) {
-    return projectionFailure(input, originalBytes, null, "tool_result_artifact_unavailable");
-  }
-
-  // A hostile or stale producer can claim that its source envelope is already
-  // truncated while putting the complete payload back beside that envelope.
-  // Do not construct an impossible `truncated: true` envelope whose projected
-  // bytes are as large as (or larger than) its original bytes; return the
-  // bounded artifact-backed projection instead.
-  if (needsArtifact && payloadBytes >= originalBytes) {
-    return projectionFailure(
-      input,
-      payloadBytes,
-      fullOutputRef,
-      "tool_result_projection_exceeded_budget",
-    );
-  }
+  // Persistence is an observability/recovery concern, never execution
+  // authority. A storage outage cannot rewrite executor success as failure.
 
   const envelope = makeToolResultEnvelope({
     status,
@@ -106,12 +98,43 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
     ok: status === "succeeded",
     toolResultEnvelope: envelope,
   });
-  if (Buffer.byteLength(candidate, "utf8") <= MAX_RELAY_TOOL_RESULT_BYTES) {
+  const budget = toolResultBudgetBytes(
+    input.identity.toolName,
+    input.identity.surfaceKind === "realtime" || input.identity.surfaceKind === "realtime_voice"
+      ? "realtime_voice"
+      : "desktop_chat",
+  );
+  if (Buffer.byteLength(candidate, "utf8") <= budget && (!needsArtifact || payloadBytes < originalBytes)) {
     return candidate;
   }
 
-  const recoveredRef = fullOutputRef ?? persistRelayToolOutput(input, input.result);
-  return projectionFailure(input, originalBytes, recoveredRef, "tool_result_projection_exceeded_budget");
+  const recoveredRef = fullOutputRef ?? persistRelayToolOutput(input, input.result) ?? "artifact:unavailable";
+  for (let reserve = 768; reserve < budget; reserve += 256) {
+    const projection = projectToolResultPayload({
+      toolName: input.identity.toolName,
+      result: input.result,
+      maxBytes: Math.max(0, budget - reserve),
+    });
+    const projectedBytes = Buffer.byteLength(JSON.stringify(projection), "utf8");
+    const boundedOriginalBytes = Math.max(originalBytes, projectedBytes + 1);
+    const projected = JSON.stringify({
+      ok: status === "succeeded",
+      ...projection,
+      toolResultEnvelope: makeToolResultEnvelope({
+        status,
+        truncated: true,
+        originalBytes: boundedOriginalBytes,
+        projectedBytes,
+        fullOutputRef: recoveredRef,
+        provenance: provenance(input.identity),
+      }),
+    });
+    if (Buffer.byteLength(projected, "utf8") <= budget) {
+      input.onDegraded?.({ toolName: input.identity.toolName, originalBytes: boundedOriginalBytes, projectedBytes });
+      return projected;
+    }
+  }
+  throw new Error(`Tool result manifest budget is too small for its canonical envelope: ${input.identity.toolName}`);
 }
 
 /**
@@ -158,36 +181,6 @@ function provenance(identity: RelayToolResultIdentity): ToolResultEnvelope["prov
     attemptId: identity.attemptId,
     toolName: identity.toolName,
   };
-}
-
-function projectionFailure(
-  input: FinalizeRelayToolResultInput,
-  originalBytes: number,
-  fullOutputRef: string | null,
-  code: "tool_result_artifact_unavailable" | "tool_result_projection_exceeded_budget",
-): string {
-  const payload = {
-    error: {
-      code,
-      message: code === "tool_result_projection_exceeded_budget"
-        ? "Tool output was saved locally; use fullOutputRef to inspect the complete result."
-        : "Tool output could not be retained safely, so it was not delivered.",
-    },
-  };
-  const payloadBytes = Buffer.byteLength(JSON.stringify(payload), "utf8");
-  const recoverable = fullOutputRef !== null && originalBytes > payloadBytes;
-  return JSON.stringify({
-    ok: false,
-    ...payload,
-    toolResultEnvelope: makeToolResultEnvelope({
-      status: "failed",
-      truncated: recoverable,
-      originalBytes: recoverable ? originalBytes : payloadBytes,
-      projectedBytes: payloadBytes,
-      fullOutputRef: recoverable ? fullOutputRef : null,
-      provenance: provenance(input.identity),
-    }),
-  });
 }
 
 function persistRelayToolOutput(input: FinalizeRelayToolResultInput, fullResult: string): string | null {

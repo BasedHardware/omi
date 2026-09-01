@@ -360,22 +360,38 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
     XCTAssertLessThan(result.output.utf8.count, envelope.utf8.count)
   }
 
-  func testOversizedToolResultBecomesSmallStructuredRetryError() throws {
+  func testOverBudgetPayloadLogsInvariantButIsNotRewrittenBySwift() throws {
+    let payload = String(repeating: "x", count: RealtimeProviderToolResultPolicy.maximumByteCount + 1)
+    let output = try XCTUnwrap(
+      String(
+        data: JSONSerialization.data(withJSONObject: [
+          "ok": true,
+          "payload": payload,
+          "toolResultEnvelope": [
+            "version": 1,
+            "status": "succeeded",
+            "truncated": false,
+            "originalBytes": payload.utf8.count,
+            "projectedBytes": payload.utf8.count,
+            "fullOutputRef": NSNull(),
+            "provenance": [
+              "invocationId": "invocation-over-budget",
+              "runId": "run-over-budget",
+              "attemptId": "attempt-over-budget",
+              "toolName": HubTool.listAgentSessions.rawValue,
+            ],
+          ],
+        ]), encoding: .utf8))
+
     let result = RealtimeProviderToolResultPolicy.prepare(
       name: HubTool.listAgentSessions.rawValue,
-      output: String(repeating: "x", count: RealtimeProviderToolResultPolicy.maximumByteCount + 1))
+      output: output)
 
     XCTAssertTrue(result.wasOversized)
-    XCTAssertLessThan(result.output.utf8.count, RealtimeProviderToolResultPolicy.maximumByteCount)
-    let object = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
-    let error = try XCTUnwrap(object["error"] as? [String: Any])
-    XCTAssertEqual(error["code"] as? String, "tool_result_too_large")
-    XCTAssertEqual(error["tool"] as? String, HubTool.listAgentSessions.rawValue)
-    let envelope = try XCTUnwrap(object["toolResultEnvelope"] as? [String: Any])
-    XCTAssertEqual(envelope["status"] as? String, "failed")
-    XCTAssertEqual(envelope["truncated"] as? Bool, false)
-    XCTAssertNil(envelope["fullOutputRef"] as? String)
+    XCTAssertEqual(result.output, output)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
+    XCTAssertEqual(object["ok"] as? Bool, true)
+    XCTAssertEqual((object["toolResultEnvelope"] as? [String: Any])?["status"] as? String, "succeeded")
   }
 
   func testOversizedProviderResultRetainsTheCanonicalArtifactReference() throws {
@@ -408,8 +424,9 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
     let envelope = try XCTUnwrap(object["toolResultEnvelope"] as? [String: Any])
 
     XCTAssertTrue(result.wasOversized)
-    XCTAssertEqual(object["ok"] as? Bool, false)
-    XCTAssertEqual(envelope["status"] as? String, "failed")
+    XCTAssertEqual(result.output, output)
+    XCTAssertEqual(object["ok"] as? Bool, true)
+    XCTAssertEqual(envelope["status"] as? String, "succeeded")
     XCTAssertEqual(envelope["truncated"] as? Bool, true)
     XCTAssertEqual(envelope["fullOutputRef"] as? String, "artifact:tool-output:provider-oversize")
   }

@@ -51,16 +51,16 @@ function finalize(
 }
 
 describe("normal pending stdio tool-result boundary", () => {
-  it("persists and replaces an oversized Swift success before writing the relay frame", () => {
+  it("persists and projects an oversized Swift success without changing its outcome", () => {
     const result = finalize(JSON.stringify({ ok: true, snapshot: "x".repeat(MAX_RELAY_TOOL_RESULT_BYTES + 1) }), "succeeded");
     expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(MAX_RELAY_TOOL_RESULT_BYTES);
 
-    const payload = JSON.parse(result) as { ok: boolean; toolResultEnvelope: unknown; error?: { code: string } };
-    expect(payload.ok).toBe(false);
-    expect(payload.error?.code).toBe("tool_result_projection_exceeded_budget");
+    const payload = JSON.parse(result) as { ok: boolean; omitted: Record<string, number>; toolResultEnvelope: unknown };
+    expect(payload.ok).toBe(true);
+    expect(payload.omitted).toBeDefined();
     assertToolResultEnvelope(payload.toolResultEnvelope);
     expect(payload.toolResultEnvelope).toMatchObject({
-      status: "failed",
+      status: "succeeded",
       truncated: true,
       fullOutputRef: "artifact:artifact-relay-output",
       provenance: {
@@ -70,6 +70,18 @@ describe("normal pending stdio tool-result boundary", () => {
         toolName: identity.toolName,
       },
     });
+    expect(finalizedToolResultOutcome(result)).toBe("succeeded");
+  });
+
+  it("keeps succeeded executor results succeeded for deterministic fuzz sizes through 4 MB", () => {
+    for (const bytes of [0, 1, 127, 8191, 8192, 8193, 65_537, 524_289, 4 * 1024 * 1024]) {
+      const result = finalize(JSON.stringify({ ok: true, text: "x".repeat(bytes) }), "succeeded");
+      const payload = JSON.parse(result) as { ok: boolean; toolResultEnvelope: { status: string } };
+      expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(MAX_RELAY_TOOL_RESULT_BYTES);
+      expect(payload.ok, `bytes=${bytes}`).toBe(true);
+      expect(payload.toolResultEnvelope.status, `bytes=${bytes}`).toBe("succeeded");
+      expect(finalizedToolResultOutcome(result), `bytes=${bytes}`).toBe("succeeded");
+    }
   });
 
   it.each([

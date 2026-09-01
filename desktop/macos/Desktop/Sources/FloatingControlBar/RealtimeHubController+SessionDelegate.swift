@@ -79,12 +79,12 @@ extension RealtimeHubController {
       provider: effectiveProvider,
       name: name,
       output: output)
-    if providerResult.wasOversized {
+    if providerResult.wasTruncated {
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "realtime_hub",
         from: "tool_result_full",
-        to: "tool_result_error",
-        reason: "capability_mismatch",
+        to: "tool_result_bounded_projection",
+        reason: "provider_budget",
         outcome: .degraded,
         extra: [
           "tool": name,
@@ -92,6 +92,12 @@ extension RealtimeHubController {
           "provider_bytes": providerResult.output.utf8.count,
           "user_visible": true,
         ])
+    }
+    if providerResult.wasOversized {
+      log(
+        "RealtimeHub[\(providerTag)]: INVARIANT VIOLATION unprojected tool result \(name) "
+          + "provider_bytes=\(providerResult.output.utf8.count) limit=\(RealtimeProviderToolResultPolicy.maximumByteCount)"
+      )
     }
     log(
       "RealtimeHub[\(providerTag)]: tool result \(name) raw_bytes=\(providerResult.originalByteCount) "

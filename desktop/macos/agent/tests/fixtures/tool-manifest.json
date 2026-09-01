@@ -275,6 +275,25 @@
         "advertised": true
       }
     },
+    "resultContract": {
+      "budgets": {
+        "desktop_chat": 8192,
+        "realtime_voice": 8192,
+        "onboarding": 8192,
+        "task_chat": 8192
+      },
+      "sections": [
+        "summary",
+        "apps",
+        "conversations",
+        "tasks",
+        "focus",
+        "memories",
+        "observations"
+      ],
+      "ranking": "purpose_then_recency",
+      "maxItemsPerSection": 500
+    },
     "surfaces": [
       "desktop_chat",
       "realtime_voice"
@@ -3710,6 +3729,19 @@
         "advertised": true
       }
     },
+    "resultContract": {
+      "budgets": {
+        "desktop_chat": 8192,
+        "realtime_voice": 8192,
+        "onboarding": 8192,
+        "task_chat": 8192
+      },
+      "sections": [
+        "conversations"
+      ],
+      "ranking": "purpose_then_recency",
+      "maxItemsPerSection": 500
+    },
     "surfaces": [
       "desktop_chat",
       "realtime_voice"
@@ -3780,6 +3812,19 @@
         "advertised": true
       }
     },
+    "resultContract": {
+      "budgets": {
+        "desktop_chat": 8192,
+        "realtime_voice": 8192,
+        "onboarding": 8192,
+        "task_chat": 8192
+      },
+      "sections": [
+        "conversations"
+      ],
+      "ranking": "purpose_then_recency",
+      "maxItemsPerSection": 500
+    },
     "surfaces": [
       "desktop_chat",
       "realtime_voice"
@@ -3844,6 +3889,19 @@
         "advertised": true
       }
     },
+    "resultContract": {
+      "budgets": {
+        "desktop_chat": 8192,
+        "realtime_voice": 8192,
+        "onboarding": 8192,
+        "task_chat": 8192
+      },
+      "sections": [
+        "memories"
+      ],
+      "ranking": "purpose_then_recency",
+      "maxItemsPerSection": 500
+    },
     "surfaces": [
       "desktop_chat",
       "realtime_voice"
@@ -3903,6 +3961,19 @@
       "omi-tools-stdio": {
         "advertised": true
       }
+    },
+    "resultContract": {
+      "budgets": {
+        "desktop_chat": 8192,
+        "realtime_voice": 8192,
+        "onboarding": 8192,
+        "task_chat": 8192
+      },
+      "sections": [
+        "memories"
+      ],
+      "ranking": "purpose_then_recency",
+      "maxItemsPerSection": 500
     },
     "surfaces": [
       "desktop_chat",
@@ -4517,6 +4588,19 @@
       "omi-tools-stdio": {
         "advertised": true
       }
+    },
+    "resultContract": {
+      "budgets": {
+        "desktop_chat": 8192,
+        "realtime_voice": 8192,
+        "onboarding": 8192,
+        "task_chat": 8192
+      },
+      "sections": [
+        "action_items"
+      ],
+      "ranking": "purpose_then_recency",
+      "maxItemsPerSection": 500
     },
     "surfaces": [
       "desktop_chat",
@@ -5466,7 +5550,7 @@
       ]
     },
     "voice": {
-      "realtimeDescription": "Take a fresh capture of the user's screen. Every turn already includes the screen as it was when the user pressed the key; call this only when no image arrived with this turn or the user says the screen changed since."
+      "realtimeDescription": "Capture the user's current screen so you can see what they're looking at."
     }
   },
   {
