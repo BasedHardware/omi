@@ -52,6 +52,7 @@ import {
 } from './desktopChrome';
 
 export type {DesktopSession};
+import {ChipRail} from './ChipRail';
 import {DesktopSettings} from './DesktopSettings';
 import {ShippingPressable} from './ShippingPressable';
 import {
@@ -116,34 +117,6 @@ function GlassSurface({
 
 function GlassHairline() {
   return <View style={styles.glassHairline} />;
-}
-
-function Chip({
-  active = false,
-  Icon,
-  label,
-  onPress,
-}: {
-  active?: boolean;
-  Icon?: typeof Search;
-  label: string;
-  onPress?: () => void;
-}) {
-  return (
-    <ShippingPressable
-      accessibilityRole="button"
-      accessibilityState={{selected: active}}
-      active={active}
-      onPress={onPress}
-      style={styles.chip}>
-      {Icon === undefined ? null : (
-        <Icon color={token.color.onGlass} size={13} />
-      )}
-      <Text style={[styles.chipText, active && styles.chipTextActive]}>
-        {label}
-      </Text>
-    </ShippingPressable>
-  );
 }
 
 function ResultRow({item}: {item: DesktopReadProjection}) {
@@ -365,18 +338,13 @@ function ChatHome({
       <GlassSurface style={styles.chipPanel}>
         <View style={styles.filterBar}>
           <Text style={styles.filterLabel}>Filter</Text>
-          <View style={styles.filterChips}>
-            {(
+          <ChipRail
+            labels={
               ['All', 'Conversations', 'Memories', 'Tasks', 'Rewind'] as const
-            ).map(label => (
-              <Chip
-                active={filter === label}
-                key={label}
-                label={label}
-                onPress={() => setFilter(label)}
-              />
-            ))}
-          </View>
+            }
+            onChange={setFilter}
+            value={filter}
+          />
         </View>
       </GlassSurface>
       <GlassHairline />
@@ -474,8 +442,8 @@ function LibraryPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
       : [];
   return (
     <GlassSurface style={styles.singlePanel}>
-      <View style={styles.hubRow}>
-        {(
+      <ChipRail
+        labels={
           [
             'Activity',
             'Conversations',
@@ -483,15 +451,10 @@ function LibraryPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
             'Rewind',
             'Brain Map',
           ] as const
-        ).map(label => (
-          <Chip
-            active={hub === label}
-            key={label}
-            label={label}
-            onPress={() => setHub(label)}
-          />
-        ))}
-      </View>
+        }
+        onChange={setHub}
+        value={hub}
+      />
       {hub === 'Conversations' ? (
         <FlatList
           contentContainerStyle={styles.list}
@@ -835,22 +798,6 @@ const styles = StyleSheet.create({
     fontSize: token.type.caption,
     fontWeight: '600',
   },
-  filterChips: {flexDirection: 'row', flexWrap: 'wrap', gap: 6},
-  chip: {
-    alignItems: 'center',
-    borderRadius: 14,
-    flexDirection: 'row',
-    gap: 6,
-    height: 28,
-    paddingHorizontal: 12,
-  },
-  chipText: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.caption,
-    fontWeight: '600',
-  },
-  chipTextActive: {color: token.color.onGlass},
   pressed: {opacity: 0.78},
   banner: {
     alignItems: 'center',
@@ -966,7 +913,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   singlePanel: {flex: 1, padding: 18},
-  hubRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 6},
   pageTitle: {
     color: token.color.onGlass,
     fontFamily: token.font,

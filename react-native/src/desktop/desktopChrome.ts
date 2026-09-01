@@ -46,6 +46,7 @@ export const desktopMotion = {
   overlayMs: 300,
   checkboxMs: 180,
   searchExpandMs: 160,
+  chipMs: 120,
   listInsertMs: 0,
   glassMs: 0,
 } as const;
