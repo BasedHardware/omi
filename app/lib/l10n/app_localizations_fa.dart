@@ -9914,16 +9914,5 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'گفتگوهای کوتاه: $count',
-      one: '$count گفتگوی کوتاه',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get transcriptionNoAudio => 'رونویسی صدا دریافت نمی‌کند';
 }

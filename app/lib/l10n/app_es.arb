@@ -3235,6 +3235,5 @@
     "pendantRecordingSyncBlocked": "Tu Pendant sigue grabando, por lo que su audio almacenado no se puede transferir. Pulsa el botón del Pendant para detener la grabación y vuelve a sincronizar.",
     "pendantFullSyncBlocked": "El almacenamiento de tu Pendant está lleno y sigue en modo de grabación, por lo que su audio almacenado no se puede transferir. Pulsa el botón del Pendant para detener la grabación y vuelve a sincronizar.",
     "conversationsNotCapturedCount": "No capturado ({count})",
-    "shortConversationsCount": "{count, plural, =1{{count} conversación corta} other{{count} conversaciones cortas}}",
     "transcriptionNoAudio": "La transcripción no recibe audio"
 }

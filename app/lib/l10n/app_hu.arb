@@ -3330,6 +3330,5 @@
     "pendantRecordingSyncBlocked": "A Pendant még mindig felvételt készít, ezért a tárolt hang nem vihető át. Nyomd meg a Pendant gombját a felvétel leállításához, majd szinkronizálj újra.",
     "pendantFullSyncBlocked": "A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra.",
     "conversationsNotCapturedCount": "Nincs rögzítve ({count})",
-    "shortConversationsCount": "{count, plural, =1{{count} rövid beszélgetés} other{{count} rövid beszélgetés}}",
     "transcriptionNoAudio": "Az átírás nem kap hangot"
 }

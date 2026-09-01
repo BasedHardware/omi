@@ -3210,6 +3210,5 @@
     "pendantRecordingSyncBlocked": "Pendantはまだ録音中のため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。",
     "pendantFullSyncBlocked": "Pendantのストレージが満杯で、まだ録音モードのままのため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。",
     "conversationsNotCapturedCount": "未記録 ({count})",
-    "shortConversationsCount": "{count, plural, other{短い会話 {count} 件}}",
     "transcriptionNoAudio": "文字起こしが音声を受信していません"
 }
