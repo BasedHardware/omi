@@ -1977,6 +1977,7 @@ def replace_conversation_sourced_memories(
     *,
     db_client: Any = None,
     conflict_backoff_seconds: Sequence[float] = _REPLACEMENT_CONFLICT_BACKOFF_SECONDS,
+    empty_set_intent: str = "retraction",
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete canonical memory set.
 
@@ -1984,7 +1985,19 @@ def replace_conversation_sourced_memories(
     a conflicted round must re-plan against the control the peer left behind.
     ``conflict_backoff_seconds`` bounds those rounds: one entry per retry, and
     the number of attempts is ``len(...) + 1``.
+
+    ``empty_set_intent`` states what an empty ``items`` means for this caller
+    (FC-destructive-gate-keyed-on-proxy-for-intent: emptiness alone cannot
+    carry intent). ``"retraction"`` — the default, and the only meaning before
+    this parameter existed — treats it as "remove this conversation's rows",
+    which demands ``explicit_memory_deletion`` authority whenever rows exist.
+    ``"extraction"`` declares the empty set an extraction outcome: when the
+    conversation already has rows and no deletion gate is held, the existing
+    rows are kept and the call resolves as a no-op instead of failing —
+    extraction variance is not permission to destroy knowledge.
     """
+    if empty_set_intent not in {"retraction", "extraction"}:
+        raise ValueError(f"unknown empty_set_intent: {empty_set_intent!r}")
     client = db_client if db_client is not None else default_db_client
     replacement_digest = _conversation_replacement_digest(uid, conversation_id, items)
     replacement_id = f"replace_{replacement_digest[:32]}"
@@ -2044,6 +2057,34 @@ def replace_conversation_sourced_memories(
             try:
                 current_destructive_operation_token(uid, kind="explicit_memory_deletion")
             except LegalHoldAuthorityUnavailable:
+                return {
+                    "retracted_memory_ids": [],
+                    "committed_memory_ids": [],
+                    "reactivated_memory_ids": [],
+                    "vector_delete_ids": [],
+                    "tombstoned_evidence_ids": [],
+                    "source_generation": observed_control.source_generation,
+                }
+        if not items and expected_source_items and empty_set_intent == "extraction":
+            # An extraction that produced nothing over a conversation that
+            # already has canonical rows. Falling through would retract those
+            # rows, and the retraction branch rightly demands an
+            # ``explicit_memory_deletion`` token the extraction path never
+            # holds — the residual LegalHoldAuthorityUnavailable 500s on
+            # conversation reprocess after #12410. Extraction emptiness is
+            # model variance, not deletion intent: keep the rows and resolve
+            # as a no-op. A caller that genuinely holds the deletion gate is
+            # performing a deliberate deletion and still falls through so the
+            # retraction is recorded.
+            try:
+                current_destructive_operation_token(uid, kind="explicit_memory_deletion")
+            except LegalHoldAuthorityUnavailable:
+                logger.info(
+                    "conversation extraction was empty; keeping %d existing canonical rows uid=%s conversation_id=%s",
+                    len(expected_source_items),
+                    uid,
+                    conversation_id,
+                )
                 return {
                     "retracted_memory_ids": [],
                     "committed_memory_ids": [],
