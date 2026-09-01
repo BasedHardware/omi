@@ -727,7 +727,6 @@ def test_legacy_conversation_photo_without_any_bytes_reference_exports_metadata(
     assert manifest["bytes_available"] is False
     assert manifest["bytes_unavailable_reason"] == "no_retained_bytes_reference"
 
-
 def test_export_photo_manifest_require_bytes_missing_reference():
     with pytest.raises(
         data_export.PortabilityExportIncomplete, match="retained image bytes reference is missing or malformed"
