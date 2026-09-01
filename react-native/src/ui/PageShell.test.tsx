@@ -6,6 +6,10 @@ const desktopApp = readFileSync(
   resolve(__dirname, '../desktop/DesktopApp.tsx'),
   'utf8',
 );
+const desktopChrome = readFileSync(
+  resolve(__dirname, '../desktop/DesktopTopChrome.tsx'),
+  'utf8',
+);
 
 test('macOS PageShell does not inset the nav below the titlebar', () => {
   expect(pageShell).toContain('const content = macDesktop ? (');
@@ -15,24 +19,24 @@ test('macOS PageShell does not inset the nav below the titlebar', () => {
   );
 });
 
-test('DesktopApp keeps Home on the same row as the traffic-light spacer', () => {
-  expect(desktopApp).toContain('paddingTop: desktopNavTopInset');
-  expect(desktopApp).toContain('height: desktopNavBarHeight');
-  expect(desktopApp).toContain('accessibilityLabel="Window controls"');
-  expect(desktopApp).toContain('width: desktopTrafficLightRowWidth');
-  expect(desktopApp).toContain('marginLeft: desktopTrafficLightLeading');
-  expect(desktopApp).toContain('height: desktopTrafficLightButton');
-  expect(desktopApp).toMatch(/root:\s*\{[^}]*paddingTop:\s*desktopNavTopInset/);
-  expect(desktopApp).not.toMatch(/root:\s*\{[^}]*padding:\s*8/);
-  expect(desktopApp).not.toMatch(/navbar:\s*\{[^}]*height:\s*52/);
-  expect(desktopApp).toMatch(/navbar:\s*\{[^}]*alignItems:\s*'center'/);
-  expect(desktopApp).toMatch(/navItem:\s*\{[^}]*alignItems:\s*'center'/);
-  expect(desktopApp).toMatch(/navItem:\s*\{[^}]*justifyContent:\s*'center'/);
-  expect(desktopApp).toContain('desktopSearchPlaceholder');
-  expect(desktopApp).toMatch(/omnibar:\s*\{/);
-  expect(desktopApp).toMatch(/navbar:\s*\{[^}]*alignItems:\s*'center'/);
-  expect(desktopApp).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
-  expect(desktopApp).toMatch(
+test('DesktopApp keeps an even window inset around one chrome row', () => {
+  expect(desktopApp).toMatch(/root:\s*\{[^}]*padding:\s*desktopWindowInset/);
+  expect(desktopChrome).toContain('height: desktopNavBarHeight');
+  expect(desktopChrome).toContain('accessibilityLabel="Window controls"');
+  expect(desktopChrome).toContain('width: desktopTrafficLightRowWidth');
+  expect(desktopChrome).toContain('height: desktopTrafficLightButton');
+  expect(desktopChrome).not.toContain('marginLeft');
+  expect(desktopChrome).toMatch(/row:\s*\{[^}]*alignItems:\s*'center'/);
+  expect(desktopChrome).toMatch(/navItem:\s*\{[^}]*alignItems:\s*'center'/);
+  expect(desktopChrome).toMatch(/navItem:\s*\{[^}]*justifyContent:\s*'center'/);
+  expect(desktopChrome).toContain('desktopSearchPlaceholder');
+  expect(desktopChrome).toMatch(/omnibar:\s*\{/);
+  expect(desktopChrome).toMatch(
+    /omnibar:\s*\{[^}]*minWidth:\s*220/,
+  );
+  expect(desktopChrome).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
+  expect(desktopChrome).toMatch(
     /navTextActive:[^}]*textDecorationLine:\s*'underline'/,
   );
+  expect(desktopChrome).toContain('accessibilityLabel="Settings"');
 });

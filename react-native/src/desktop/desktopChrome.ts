@@ -13,10 +13,7 @@ export const desktopSettingsPanes = [
   'Account & Plan',
   'Transcription',
   'Rewind',
-  'Floating Bar',
   'Alerts & Privacy',
-  'Permissions',
-  'Shortcuts',
   'AI & Automation',
   'About',
 ] as const;
@@ -25,16 +22,19 @@ export type DesktopSettingsPane = (typeof desktopSettingsPanes)[number];
 
 export const desktopSearchPlaceholder = "Search what you've seen and heard…";
 
-export const desktopTrafficLightLeading = 16;
+// Even 12pt inset from every window edge. Traffic lights sit on the nav row
+// (not the omnibar row) and share that row's vertical center with Home.
+// AppDelegate.mm mirrors the nav-row numbers.
+export const desktopWindowInset = 12;
+export const desktopNavBarHeight = 52;
+export const desktopOmnibarHeight = 40;
 export const desktopTrafficLightButton = 14;
 export const desktopTrafficLightSpacing = 8;
-export const desktopWindowInset = 8;
+export const desktopTrafficLightTrailing = 16;
 export const desktopTrafficLightClusterWidth =
   3 * desktopTrafficLightButton + 2 * desktopTrafficLightSpacing;
 export const desktopTrafficLightRowWidth =
-  desktopTrafficLightClusterWidth + desktopTrafficLightLeading;
-export const desktopNavBarHeight = 52;
-export const desktopNavTopInset = 12;
+  desktopTrafficLightClusterWidth + desktopTrafficLightTrailing;
 export const desktopGlassCornerRadius = 22;
 export const desktopSystemFontFamily = 'System';
 
@@ -58,14 +58,17 @@ export const desktopStageFade = {
 
 export type DesktopSession = 'probing' | 'signed-out' | 'ready';
 
+// Chat transport errors never take over the currents/tasks stage. They are
+// only surfaced under the omnibar that owns chat, and only once the session
+// is ready; a signed-out or probing first paint stays quiet.
 export function visibleChatError(
   session: DesktopSession,
-  _chatError: string | null,
+  chatError: string | null,
 ): string | null {
-  if (session !== 'ready') {
+  if (session !== 'ready' || chatError === null || chatError === '') {
     return null;
   }
-  return null;
+  return chatError;
 }
 
 export function isShippingDesktopNav(label: string): boolean {

@@ -89,15 +89,6 @@ jest.mock('../desktopCloudClient', () => ({
   setStoreRecordingPermission: jest.fn(),
 }));
 
-jest.mock('../ui/GlassPanel', () => {
-  const ReactModule = require('react');
-  const {View} = require('react-native');
-  return {
-    GlassPanel: (props: Record<string, unknown>) =>
-      ReactModule.createElement(View, props),
-  };
-});
-
 const outcomes = {
   conversations: {
     status: 'success' as const,
@@ -365,17 +356,35 @@ test('signed-out first paint does not show a chat transport error', () => {
   const tree = renderedText(renderer);
   expect(tree).toContain('Sign in to load conversations and memories.');
   expect(tree).not.toContain('Chat is temporarily unavailable.');
+  expect(
+    renderer.root
+      .findAllByType(Text)
+      .filter(node => node.props.accessibilityLabel === 'Chat transport notice'),
+  ).toHaveLength(0);
 });
 
-test('ready chat transport error is not painted on Home', () => {
+test('ready chat transport error stays in the chrome and off the Home stage', () => {
   const renderer = renderDesktop({
     chatError: 'Chat is temporarily unavailable.',
     session: 'ready',
   });
-  expect(renderedText(renderer)).not.toContain(
+  const notices = renderer.root
+    .findAllByType(Text)
+    .filter(node => node.props.accessibilityLabel === 'Chat transport notice');
+  expect(notices).toHaveLength(1);
+  expect(String(notices[0].props.children)).toBe(
     'Chat is temporarily unavailable.',
   );
+  expect(notices[0].props.numberOfLines).toBe(1);
   expect(renderedText(renderer)).toContain('Currents');
+  expect(renderedText(renderer)).toContain('Product review');
+  for (const scroll of renderer.root.findAllByType(ScrollView)) {
+    expect(
+      scroll
+        .findAllByType(Text)
+        .filter(node => node.props.accessibilityLabel === 'Chat transport notice'),
+    ).toHaveLength(0);
+  }
 });
 
 test('Settings opens the shipping multi-pane IA including Advanced', async () => {
@@ -389,7 +398,11 @@ test('Settings opens the shipping multi-pane IA including Advanced', async () =>
   const tree = renderedText(renderer);
   expect(tree).toContain('General');
   expect(tree).toContain('Account & Plan');
-  expect(tree).toContain('Permissions');
+  expect(tree).not.toContain('Permissions');
+  expect(tree).not.toContain('Floating Bar');
+  expect(tree).not.toContain('Shortcuts');
+  expect(tree).not.toContain('Font Size');
+  expect(tree).not.toContain('Interface Sounds');
   expect(tree).toContain('AI & Automation');
   expect(tree).toContain('Screen Capture');
   expect(tree).toContain('Audio Recording');
@@ -401,7 +414,7 @@ test('Settings opens the shipping multi-pane IA including Advanced', async () =>
     await Promise.resolve();
   });
   const advanced = renderedText(renderer);
-  expect(advanced).toContain('Advanced');
+  expect(advanced).toContain('AI & Automation');
   expect(advanced).toContain('Backend');
   expect(advanced).toContain('old');
   expect(advanced).toContain('new');
@@ -420,27 +433,78 @@ test('searches real projections instead of a fake timeline', () => {
   expect(tree).not.toContain('🧠');
 });
 
-test('Home stage lists never use FlatList', () => {
-  const source = readFileSync(resolve(__dirname, 'DesktopApp.tsx'), 'utf8');
-  expect(source).not.toMatch(/\bFlatList\b/);
-  expect(source).toContain('ScrollView');
-  expect(source).not.toContain('function GlassSurface');
-  expect(source).not.toContain("I'm ready.");
-  expect(source).not.toContain('Ask a follow-up');
-  expect(source).toMatch(/filterRow:\s*\{[^}]*flexDirection:\s*'row'/);
-  expect(source).not.toMatch(/chip:\s*\{[^}]*borderRadius:\s*14/);
-  expect(source).not.toMatch(/banner:\s*\{[^}]*borderRadius:/);
-  expect(source).not.toMatch(/composer:\s*\{/);
-  expect(source).toContain('accessibilityLabel="Home currents"');
-  expect(source).toContain('accessibilityLabel="Home tasks"');
-  expect(source).toContain('visibleChatError');
-  expect(source).not.toContain('omnibarError');
-  expect(source).not.toMatch(/active=\{route === label\}/);
-  expect(source).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
-  expect(source).not.toMatch(
-    /sendButton:\s*\{[^}]*backgroundColor:\s*token\.color\.dark/,
+test('Rewind route and filter show capture copy, not a blank chat', () => {
+  const renderer = renderDesktop();
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Rewind')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'Screen history is ready when capture is on',
   );
-  expect(source).not.toMatch(/sendButton:\s*\{[^}]*borderRadius/);
-  expect(source).toMatch(/omnibarInput:\s*\{[^}]*minWidth:\s*0/);
-  expect(source).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Home')
+      .props.onPress();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Filter Rewind')
+      .props.onPress();
+  });
+  const homeTree = renderedText(renderer);
+  expect(homeTree).toContain('Screen history is ready when capture is on');
+  expect(homeTree).not.toContain("I'm ready.");
+});
+
+const kitFiles = [
+  'DesktopApp.tsx',
+  'DesktopTopChrome.tsx',
+  'DesktopHome.tsx',
+  'DesktopPages.tsx',
+  'DesktopRows.tsx',
+  'DesktopSettings.tsx',
+] as const;
+
+const kitSources = Object.fromEntries(
+  kitFiles.map(fileName => [
+    fileName,
+    readFileSync(resolve(__dirname, fileName), 'utf8'),
+  ]),
+) as Record<(typeof kitFiles)[number], string>;
+
+const allKitSource = kitFiles.map(fileName => kitSources[fileName]).join('\n');
+
+test('desktop lists never use FlatList and the stage stays copy-driven', () => {
+  expect(allKitSource).not.toMatch(/\bFlatList\b/);
+  expect(allKitSource).toContain('ScrollView');
+  expect(allKitSource).not.toContain('function GlassSurface');
+  expect(allKitSource).not.toContain("I'm ready.");
+  expect(allKitSource).not.toContain('Ask a follow-up');
+  expect(allKitSource).toContain('accessibilityLabel="Home currents"');
+  expect(allKitSource).toContain('accessibilityLabel="Home tasks"');
+  expect(allKitSource).toContain('visibleChatError');
+  expect(allKitSource).not.toContain('omnibarError');
+});
+
+test('one continuous surface: no islands, no pills, no docked composer', () => {
+  const chrome = kitSources['DesktopTopChrome.tsx'];
+  const app = kitSources['DesktopApp.tsx'];
+  const home = kitSources['DesktopHome.tsx'];
+  expect(app).toMatch(/root:\s*\{[^}]*padding:\s*desktopWindowInset/);
+  expect(chrome).toContain('height: desktopNavBarHeight');
+  expect(chrome).toContain('width: desktopTrafficLightRowWidth');
+  expect(chrome).not.toContain('marginLeft');
+  expect(chrome).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
+  expect(chrome).not.toMatch(/send:\s*\{[^}]*backgroundColor/);
+  expect(chrome).not.toMatch(/send:\s*\{[^}]*borderRadius/);
+  expect(chrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
+  expect(chrome).toMatch(/omnibarInput:\s*\{[^}]*minWidth:\s*0/);
+  expect(chrome).toMatch(/navItem:\s*\{[^}]*justifyContent:\s*'center'/);
+  expect(chrome).toMatch(/navItem:\s*\{[^}]*alignItems:\s*'center'/);
+  expect(home).toMatch(/filterRow:\s*\{[^}]*flexDirection:\s*'row'/);
+  expect(home).not.toMatch(/chip:\s*\{[^}]*borderRadius:\s*14/);
+  expect(home).not.toMatch(/banner:\s*\{[^}]*borderRadius/);
+  expect(allKitSource).not.toMatch(/composer:\s*\{/);
 });

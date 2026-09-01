@@ -45,17 +45,14 @@ test('puts traffic lights in the content chrome next to Home', () => {
   expect(source).toContain('window.title = @"";');
   expect(source).toContain('NSWindowTitleHidden');
   expect(source).toContain('positionOmiTrafficLights');
-  expect(source).toContain('OmiTrafficLightLeading');
-  expect(source).toMatch(/OmiTrafficLightLeading\s*=\s*16\.0/);
-  expect(source).toMatch(/OmiWindowInset\s*=\s*8\.0/);
-  expect(source).toMatch(/OmiWindowTopInset\s*=\s*12\.0/);
+  expect(source).toMatch(/OmiWindowInset\s*=\s*12\.0/);
+  expect(source).toMatch(/OmiChromeRowHeight\s*=\s*52\.0/);
   expect(source).toContain('NSWindowStyleMaskFullSizeContentView');
   expect(source).toContain('titlebarAppearsTransparent = YES');
   expect(source).toContain('NSTitlebarSeparatorStyleNone');
   expect(source).toContain('NSTitlebarAccessoryViewController');
   expect(source).toContain('installOmiTitlebarAccessory');
   expect(source).toContain('addTitlebarAccessoryViewController');
-  expect(source).toMatch(/OmiTrafficLightChromeHeight\s*=\s*52\.0/);
   expect(source).toContain('hideOmiTitlebarMaterial');
   expect(source).not.toContain('NSWindowToolbarStyleUnified');
   expect(source).not.toContain('accessibilityLabel="Window drag handle"');
@@ -87,14 +84,12 @@ test('keeps every traffic light at its native standard size and moves only its o
   expect(methodSource).toContain(
     'xInFrame += buttonWidth + OmiTrafficLightSpacing;',
   );
+  expect(methodSource).toContain('CGFloat xInFrame = OmiWindowInset;');
   expect(methodSource).toContain(
-    'CGFloat xInFrame = OmiWindowInset + OmiTrafficLightLeading;',
-  );
-  expect(methodSource).toContain(
-    'NSHeight(frameView.bounds) - OmiWindowTopInset - OmiTrafficLightChromeHeight',
+    'NSHeight(frameView.bounds) - OmiWindowInset - OmiChromeRowHeight',
   );
   expect(methodSource).not.toContain(
-    'NSHeight(container.bounds) - OmiWindowInset - OmiTrafficLightChromeHeight',
+    'NSHeight(container.bounds) - OmiWindowInset - OmiChromeRowHeight',
   );
   expect(methodSource).not.toContain('frame.size =');
   expect(methodSource).not.toMatch(/button\.frame\s*=\s*NSMakeRect/);
@@ -105,7 +100,7 @@ test('titlebar and drag monitor do not steal chrome clicks', () => {
   const header = readNativeSource('AppDelegate.h');
 
   expect(source).toContain('OmiTitlebarPassthroughView');
-  expect(source).toContain('OmiTrafficLightChromeHeight + OmiWindowTopInset');
+  expect(source).toContain('OmiChromeRowHeight + OmiWindowInset');
   expect(
     source.replaceAll('NSAccessibilitySearchFieldSubrole', ''),
   ).not.toContain('NSAccessibilitySearchFieldRole');

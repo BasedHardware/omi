@@ -2,17 +2,17 @@ import {
   desktopGlassCornerRadius,
   desktopMotion,
   desktopNavBarHeight,
+  desktopOmnibarHeight,
   desktopNavItems,
-  desktopNavTopInset,
   desktopSearchPlaceholder,
   desktopSettingsPanes,
   desktopStageFade,
   desktopSystemFontFamily,
   desktopTrafficLightButton,
   desktopTrafficLightClusterWidth,
-  desktopTrafficLightLeading,
   desktopTrafficLightRowWidth,
   desktopTrafficLightSpacing,
+  desktopTrafficLightTrailing,
   desktopWindowInset,
   isShippingDesktopNav,
   visibleChatError,
@@ -49,18 +49,24 @@ test('desktop chrome uses the shipping Home Library IA', () => {
   expect(desktopSystemFontFamily).toBe('System');
   expect(desktopGlassCornerRadius).toBe(22);
   expect(desktopNavBarHeight).toBe(52);
-  expect(desktopWindowInset).toBe(8);
-  expect(desktopNavTopInset).toBeGreaterThan(desktopWindowInset);
-  expect(desktopNavTopInset).toBe(12);
-  expect(desktopTrafficLightLeading).toBe(16);
+});
+
+test('window chrome geometry is one even inset with an inline light cluster', () => {
+  expect(desktopWindowInset).toBe(12);
   expect(desktopTrafficLightButton).toBe(14);
   expect(desktopTrafficLightSpacing).toBe(8);
+  expect(desktopTrafficLightTrailing).toBe(16);
   expect(desktopTrafficLightClusterWidth).toBe(
     3 * desktopTrafficLightButton + 2 * desktopTrafficLightSpacing,
   );
+  expect(desktopTrafficLightClusterWidth).toBe(58);
   expect(desktopTrafficLightRowWidth).toBe(
-    desktopTrafficLightClusterWidth + desktopTrafficLightLeading,
+    desktopTrafficLightClusterWidth + desktopTrafficLightTrailing,
   );
+  expect(desktopTrafficLightRowWidth).toBe(74);
+});
+
+test('shipping motion constants stay put', () => {
   expect(desktopMotion.navMs).toBe(80);
   expect(desktopMotion.pressMs).toBe(90);
   expect(desktopMotion.stepMs).toBe(240);
@@ -86,32 +92,38 @@ test('desktop chrome uses the shipping Home Library IA', () => {
   expect(searchExpandMotionDuration(false)).toBe(160);
 });
 
-test('settings IA includes shipping panes plus Advanced backend', () => {
+test('settings IA keeps wired panes and drops no-op duplicates', () => {
   expect(desktopSettingsPanes).toEqual([
     'General',
     'Account & Plan',
     'Transcription',
     'Rewind',
-    'Floating Bar',
     'Alerts & Privacy',
-    'Permissions',
-    'Shortcuts',
     'AI & Automation',
     'About',
   ]);
+  expect(desktopSettingsPanes).not.toContain('Floating Bar');
+  expect(desktopSettingsPanes).not.toContain('Permissions');
+  expect(desktopSettingsPanes).not.toContain('Shortcuts');
 });
 
-test('signed-out and probing first paint hide chat transport errors', () => {
+test('omnibar sits on its own row under the nav', () => {
+  expect(desktopOmnibarHeight).toBe(40);
+  expect(desktopNavBarHeight).toBe(52);
+});
+
+test('chat transport errors surface only for ready sessions', () => {
   expect(
     visibleChatError('signed-out', 'Chat is temporarily unavailable.'),
   ).toBeNull();
   expect(
     visibleChatError('probing', 'Chat is temporarily unavailable.'),
   ).toBeNull();
-  expect(
-    visibleChatError('ready', 'Chat is temporarily unavailable.'),
-  ).toBeNull();
   expect(visibleChatError('ready', null)).toBeNull();
+  expect(visibleChatError('ready', '')).toBeNull();
+  expect(visibleChatError('ready', 'Chat is temporarily unavailable.')).toBe(
+    'Chat is temporarily unavailable.',
+  );
 });
 
 test('software plane defaults to production until Advanced is flipped', () => {
