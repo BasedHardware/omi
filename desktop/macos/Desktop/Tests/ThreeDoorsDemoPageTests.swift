@@ -60,6 +60,7 @@ final class ThreeDoorsDemoPageTests: XCTestCase {
       XCTAssertTrue(ThreeDoorsDemoPage.modelNote.contains(phrase), phrase)
     }
     XCTAssertTrue(ThreeDoorsDemoPage.modelNote.contains("(answer: inside)"))
+    XCTAssertTrue(ThreeDoorsDemoPage.modelNote.contains("Never assume it is door 1"))
   }
 
   func testBundledTemplateContainsTheReplaceableKeyMarkup() throws {
