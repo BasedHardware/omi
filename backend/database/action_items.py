@@ -287,9 +287,9 @@ def create_action_item(
             retry on flaky networks or duplicate event delivery — the previous
             behaviour silently allocated a fresh Firestore id on every call,
             producing user-visible duplicates. The key is stored on the
-            document so future calls can find it. Callers that want
-            content-based idempotency typically pass
-            ``hashlib.sha256(f"{uid}:{normalized_description}".encode()).hexdigest()``.
+            document so future calls can find it. Pass a per-attempt client
+            key (for example an ``Idempotency-Key`` header), not a hash of
+            the description: task titles are not unique.
         document_id: Optional caller-reserved Firestore document id. Reusing
             the id returns the existing document without rewriting it, making
             a crash-retried create deterministic.
