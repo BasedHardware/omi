@@ -199,18 +199,23 @@ export async function resolveActiveTvToken(
     return { id: "dev-kiosk", label: "Dev TV" };
   }
   if (!rawToken || rawToken.length < 16) return null;
-  const tokenHash = hashTvToken(rawToken);
-  const ref = getDb().collection(TV_LINKS_COLLECTION).doc(tokenHash);
-  const snap = await ref.get();
-  if (!snap.exists) return null;
-  const data = snap.data() as TvLinkRecord;
-  if (!safeEqualHex(data.tokenHash || tokenHash, tokenHash)) return null;
-  if (!isTvLinkActive(data)) return null;
+  try {
+    const tokenHash = hashTvToken(rawToken);
+    const ref = getDb().collection(TV_LINKS_COLLECTION).doc(tokenHash);
+    const snap = await ref.get();
+    if (!snap.exists) return null;
+    const data = snap.data() as TvLinkRecord;
+    if (!safeEqualHex(data.tokenHash || tokenHash, tokenHash)) return null;
+    if (!isTvLinkActive(data)) return null;
 
-  const now = Date.now();
-  if (!data.lastUsedAt || now - data.lastUsedAt > 60_000) {
-    await ref.update({ lastUsedAt: now }).catch(() => undefined);
+    const now = Date.now();
+    if (!data.lastUsedAt || now - data.lastUsedAt > 60_000) {
+      await ref.update({ lastUsedAt: now }).catch(() => undefined);
+    }
+
+    return { id: snap.id, label: data.label };
+  } catch (error) {
+    console.error("resolve TV token:", error);
+    return null;
   }
-
-  return { id: snap.id, label: data.label };
 }
