@@ -634,7 +634,17 @@ class _LegacyCompletionProbe:
     billed_reads: int
 
 
-def _count_query(query: Any, *, budget: Optional[ListReadBudget]) -> tuple[int, int]:
+@dataclass
+class _LegacyCompletionProbeLedger:
+    billed_reads: int = 0
+
+
+def _count_query(
+    query: Any,
+    *,
+    budget: Optional[ListReadBudget],
+    ledger: Optional[_LegacyCompletionProbeLedger] = None,
+) -> tuple[int, int]:
     """Return an aggregation count and its Firestore read charge.
 
     Firestore bills count aggregations at one document read per batch of up to
@@ -649,12 +659,22 @@ def _count_query(query: Any, *, budget: Optional[ListReadBudget]) -> tuple[int, 
         rows = aggregation.get(timeout=budget.rpc_timeout())
     count = int(rows[0][0].value)
     billed_reads = max(1, (count + 999) // 1000)
+    if ledger is not None:
+        # Record the known Firestore charge before the request budget can raise.
+        # The caller must still attribute this successful aggregation if a later
+        # count fails or this charge exhausts the request allowance.
+        ledger.billed_reads += billed_reads
     if budget is not None:
         budget.charge(billed_reads)
     return count, billed_reads
 
 
-def _probe_legacy_completion_rows(query: Any, *, budget: Optional[ListReadBudget]) -> _LegacyCompletionProbe:
+def _probe_legacy_completion_rows(
+    query: Any,
+    *,
+    budget: Optional[ListReadBudget],
+    ledger: Optional[_LegacyCompletionProbeLedger] = None,
+) -> _LegacyCompletionProbe:
     """Cheaply determine whether the default list needs its compatibility scan.
 
     Current writers stamp ``completed`` as a concrete bool. Legacy/partial rows
@@ -672,8 +692,9 @@ def _probe_legacy_completion_rows(query: Any, *, budget: Optional[ListReadBudget
         {'canonical_values': [False, True]},
         field_filter_factory=FieldFilter,
     )
-    canonical_count, canonical_reads = _count_query(canonical_query, budget=budget)
-    total_count, total_reads = _count_query(query, budget=budget)
+    probe_ledger = ledger or _LegacyCompletionProbeLedger()
+    canonical_count, canonical_reads = _count_query(canonical_query, budget=budget, ledger=probe_ledger)
+    total_count, total_reads = _count_query(query, budget=budget, ledger=probe_ledger)
     return _LegacyCompletionProbe(
         has_legacy_rows=canonical_count != total_count,
         billed_reads=canonical_reads + total_reads,
@@ -769,16 +790,32 @@ def get_action_items(
                 and due_end_date is None
             )
             if can_probe_legacy:
+                probe_ledger = _LegacyCompletionProbeLedger()
                 try:
-                    legacy_probe = _probe_legacy_completion_rows(_base_query(), budget=budget)
-                    total_docs += legacy_probe.billed_reads
+                    legacy_probe = _probe_legacy_completion_rows(
+                        _base_query(),
+                        budget=budget,
+                        ledger=probe_ledger,
+                    )
                     should_scan_legacy = legacy_probe.has_legacy_rows
                 except ListReadBudgetExhausted:
                     should_scan_legacy = False
                 except FirestoreDeadlineExceeded:
                     if budget is not None:
                         budget.mark_exhausted('deadline')
-                    should_scan_legacy = False
+                        should_scan_legacy = False
+                    else:
+                        # Without a request-derived timeout, an aggregation
+                        # deadline is an optimization failure, not proof that
+                        # legacy rows are absent. Preserve the released scan.
+                        record_fallback(
+                            component='firestore_read',
+                            from_mode='legacy_completion_probe',
+                            to_mode='bounded_legacy_scan',
+                            reason='timeout',
+                            outcome='recovered',
+                            log=logger,
+                        )
                 except (AttributeError, GoogleAPICallError, IndexError, TypeError, ValueError):
                     # Aggregation is an optimization boundary. If it is unavailable,
                     # retain the exact released behavior and make that recovery visible.
@@ -790,6 +827,11 @@ def get_action_items(
                         outcome='recovered',
                         log=logger,
                     )
+                finally:
+                    # A successful first count is billable even if the second
+                    # count fails or a budget charge raises. Keep family
+                    # attribution complete on fallback and truncation paths.
+                    total_docs += probe_ledger.billed_reads
 
             if should_scan_legacy and not _out_of_budget():
                 # Bound unfiltered scan generously enough to product-sort before capping:

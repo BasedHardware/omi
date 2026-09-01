@@ -61,7 +61,7 @@ class _FakeAggregation:
 
 
 class _FakeQuery:
-    def __init__(self, docs: List[_FakeDoc], filters: Optional[List] = None, *, count_error: Exception | None = None):
+    def __init__(self, docs: List[_FakeDoc], filters: Optional[List] = None, *, count_error: Any = None):
         self._docs = docs
         self._filters = list(filters or [])
         self._count_error = count_error
@@ -120,7 +120,8 @@ class _FakeQuery:
         return docs
 
     def count(self):
-        return _FakeAggregation(len(self._filtered_docs()), self._count_error)
+        error = self._count_error(self) if callable(self._count_error) else self._count_error
+        return _FakeAggregation(len(self._filtered_docs()), error)
 
     def stream(self):
         docs = self._filtered_docs()
@@ -134,7 +135,7 @@ class _FakeQuery:
 
 
 class _FakeCollection:
-    def __init__(self, docs: List[_FakeDoc], *, count_error: Exception | None = None):
+    def __init__(self, docs: List[_FakeDoc], *, count_error: Any = None):
         self._docs = docs
         self._count_error = count_error
 
@@ -143,7 +144,7 @@ class _FakeCollection:
 
 
 class _FakeDB:
-    def __init__(self, docs: List[_FakeDoc], *, count_error: Exception | None = None):
+    def __init__(self, docs: List[_FakeDoc], *, count_error: Any = None):
         self._coll = _FakeCollection(docs, count_error=count_error)
 
     def collection(self, name: str):
@@ -257,6 +258,75 @@ def test_get_action_items_aggregation_failure_recovers_with_legacy_scan(ai_mod, 
             'log': ai.logger,
         }
     ]
+
+
+def test_get_action_items_unbudgeted_aggregation_timeout_recovers_with_legacy_scan(ai_mod, monkeypatch):
+    ai, recorded, _metrics = ai_mod
+    legacy = _item('legacy')
+    legacy.pop('completed')
+    fallbacks = []
+
+    def _fail_collection_total(query):
+        if not query._filters:
+            return ai.FirestoreDeadlineExceeded('aggregation timeout')
+        return None
+
+    monkeypatch.setattr(ai, 'db', _FakeDB([_FakeDoc(legacy)], count_error=_fail_collection_total))
+    monkeypatch.setattr(ai, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+
+    page = ai.get_action_items('uid', limit=3)
+
+    assert [item['id'] for item in page] == ['legacy']
+    assert recorded[0][2] == 2  # successful canonical count + compatibility scan
+    assert fallbacks == [
+        {
+            'component': 'firestore_read',
+            'from_mode': 'legacy_completion_probe',
+            'to_mode': 'bounded_legacy_scan',
+            'reason': 'timeout',
+            'outcome': 'recovered',
+            'log': ai.logger,
+        }
+    ]
+
+
+def test_get_action_items_attributes_partial_probe_billing_before_fallback(ai_mod, monkeypatch):
+    ai, recorded, _metrics = ai_mod
+    legacy = _item('legacy')
+    legacy.pop('completed')
+
+    def _fail_collection_total(query):
+        if not query._filters:
+            return TypeError('second aggregation unavailable')
+        return None
+
+    monkeypatch.setattr(ai, 'db', _FakeDB([_FakeDoc(legacy)], count_error=_fail_collection_total))
+
+    page = ai.get_action_items('uid', limit=3)
+
+    assert [item['id'] for item in page] == ['legacy']
+    assert recorded[0][2] == 2  # successful canonical count + compatibility scan
+
+
+def test_get_action_items_attributes_partial_probe_billing_before_budget_truncation(ai_mod, monkeypatch):
+    ai, recorded, _metrics = ai_mod
+    legacy = _item('legacy')
+    legacy.pop('completed')
+
+    def _timeout_collection_total(query):
+        if not query._filters:
+            return ai.FirestoreDeadlineExceeded('request-derived timeout')
+        return None
+
+    monkeypatch.setattr(ai, 'db', _FakeDB([_FakeDoc(legacy)], count_error=_timeout_collection_total))
+    budget = ai.ListReadBudget(deadline_monotonic=10, max_documents=10, clock=lambda: 0, started_monotonic=0)
+
+    page = ai.get_action_items('uid', limit=3, budget=budget)
+
+    assert page == []
+    assert budget.truncated is True
+    assert budget.exhaustion_reason == 'deadline'
+    assert recorded[0][2] == 1  # successful canonical count before the timed-out total
 
 
 def test_legacy_probe_charges_firestore_aggregation_batches(ai_mod):
