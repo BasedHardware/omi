@@ -107,10 +107,9 @@ function GlassSurface({
     <ShippingGlassMount style={[styles.glassSurface, style]}>
       <GlassPanel
         glassCornerRadius={token.radius.panel}
-        pointerEvents="none"
-        style={StyleSheet.absoluteFill}
-      />
-      {children}
+        style={[styles.glassHost, style]}>
+        {children}
+      </GlassPanel>
     </ShippingGlassMount>
   );
 }
@@ -593,13 +592,11 @@ function AppsPage() {
   return (
     <GlassSurface style={styles.singlePanel}>
       <Text style={styles.pageTitle}>Imports</Text>
-      <FlatList
+      <ScrollView
         contentContainerStyle={styles.appGrid}
-        data={imports}
-        keyExtractor={item => item[0]}
-        numColumns={3}
-        renderItem={({item: [name, source, Icon]}) => (
-          <View style={styles.appCard}>
+        style={styles.taskList}>
+        {imports.map(([name, source, Icon]) => (
+          <View key={name} style={styles.appCard}>
             <View style={styles.appCardHeader}>
               <View style={styles.appIcon}>
                 <Icon color={token.color.onGlass} size={18} />
@@ -611,8 +608,8 @@ function AppsPage() {
             </View>
             <Text style={styles.rowMeta}>Not connected</Text>
           </View>
-        )}
-      />
+        ))}
+      </ScrollView>
     </GlassSurface>
   );
 }
@@ -738,6 +735,13 @@ const styles = StyleSheet.create({
     shadowOffset: {height: 3, width: 0},
     shadowOpacity: 0.1,
     shadowRadius: 10,
+  },
+  glassHost: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   glassHairline: {
     backgroundColor: token.color.sheen,
@@ -985,11 +989,16 @@ const styles = StyleSheet.create({
     color: token.color.inkFaint,
     textDecorationLine: 'line-through',
   },
-  appGrid: {paddingTop: 14},
+  appGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingTop: 14,
+  },
   appCard: {
     backgroundColor: token.color.glassQuiet,
     borderRadius: 16,
-    flex: 1,
+    flexBasis: '30%',
+    flexGrow: 1,
     margin: 6,
     minHeight: 108,
     padding: 12,
