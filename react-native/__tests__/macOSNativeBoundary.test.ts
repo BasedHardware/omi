@@ -20,10 +20,10 @@ test('keeps a transparent glass window over the desktop', () => {
   expect(source).toContain(
     'window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];',
   );
-  expect(source).toContain('OmiGlassPanelView');
-  expect(source).toContain('setGlassCornerRadius:0');
+  expect(source).toContain('NSVisualEffectMaterialUnderWindowBackground');
+  expect(source).not.toContain('OmiGlassPanelView');
+  expect(source).not.toContain('setGlassCornerRadius:0');
   expect(source).toContain('hideOmiTitlebarMaterial');
-  expect(source).not.toContain('NSVisualEffectMaterialUnderWindowBackground');
   expect(source).not.toContain('NSWindowToolbarStyleUnified');
   expect(source).not.toContain('OmiTitlebarFillColor');
   expect(source).not.toContain('NSAppearanceNameVibrantDark');
@@ -429,16 +429,13 @@ test('keeps the glass reduce-transparency fallback intact', () => {
 
   expect(source).toContain('@property (nonatomic, strong) NSView *fallback;');
   expect(source).toContain('self.fallback.hidden = !reduceTransparency;');
-  expect(source).toContain(
-    'self.material.hidden = reduceTransparency || hasLiquid;',
-  );
   expect(source).toContain('self.sheen.hidden = reduceTransparency;');
   expect(source).toContain(
     'CGFloat alpha = reduceTransparency ? 1.0 : OmiGlassScrimAlpha;',
   );
 });
 
-test('keeps the shared HUD material translucent with a semantic opaque fallback', () => {
+test('uses NSGlassEffectView per panel and HUD only as InkGlass fallback', () => {
   const source = readNativeSource('OmiGlassPanelView.mm');
 
   expect(source).toContain('static const CGFloat OmiGlassScrimAlpha = 0.46;');
@@ -455,6 +452,15 @@ test('keeps the shared HUD material translucent with a semantic opaque fallback'
   );
   expect(source).toContain(
     'self.material.material = NSVisualEffectMaterialHUDWindow;',
+  );
+  expect(source).toMatch(
+    /if \(self\.liquidGlass != nil\) \{\s*\[self addSubview:self\.liquidGlass\];/,
+  );
+  expect(source).toMatch(
+    /if \(self\.liquidGlass == nil\) \{\s*self\.material = \[\[NSVisualEffectView alloc\]/,
+  );
+  expect(source).not.toContain(
+    'self.material.hidden = reduceTransparency || hasLiquid;',
   );
   expect(source).not.toContain('self.appearance = nil;');
   expect(source).not.toContain('NSVisualEffectMaterialUnderWindowBackground');
