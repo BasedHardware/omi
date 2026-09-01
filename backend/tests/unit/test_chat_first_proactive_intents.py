@@ -913,7 +913,7 @@ def test_stable_chat_first_turn_identity_matches_the_kernel_shared_vector():
     assert intents_db._stable_chat_first_turn_id('intent-shared-vector') == 'turn_cfi_df211fb1b31c4b849c6bb6b2'
 
 
-def test_fetch_reconciles_a_stable_chat_row_after_an_earlier_delivery(firestore):
+def test_fetch_reconciles_a_stable_chat_row_and_acknowledges_a_late_real_receipt(firestore):
     intent, _ = intents_db.create_intent(
         UID,
         source='capture_arrival',
@@ -954,6 +954,47 @@ def test_fetch_reconciles_a_stable_chat_row_after_an_earlier_delivery(firestore)
     )
     assert stored.delivery_state == 'delivered'
     assert stored.materialization_receipt_id.startswith('cfi_reconciled_')
+
+    acknowledged = intents_db.acknowledge_materialization(
+        UID,
+        intent_id=intent.intent_id,
+        receipt_id='late-real-kernel-receipt',
+        account_generation=GENERATION,
+        now=NOW + timedelta(minutes=2),
+        firestore_client=firestore,
+    )
+    assert acknowledged == stored
+
+
+def test_two_distinct_real_materialization_receipts_conflict(firestore):
+    intent, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:real-receipt-conflict',
+        subject=ChatFirstSubject(kind='capture', id='real-receipt-conflict'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='real-receipt-conflict', summary='Capture')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    intents_db.acknowledge_materialization(
+        UID,
+        intent_id=intent.intent_id,
+        receipt_id='first-real-receipt',
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+
+    with pytest.raises(intents_db.ChatFirstIntentConflictError):
+        intents_db.acknowledge_materialization(
+            UID,
+            intent_id=intent.intent_id,
+            receipt_id='second-real-receipt',
+            account_generation=GENERATION,
+            now=NOW + timedelta(seconds=1),
+            firestore_client=firestore,
+        )
 
 
 def test_fetch_orders_daily_and_meeting_intents_ahead_of_capture_link_backlog(firestore):

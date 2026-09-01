@@ -402,19 +402,26 @@ def _materialize_prompts(
 
     for deferral in request.deferrals:
         try:
-            chat_first_intents_db.record_materialization_deferral(
+            deferred_intent = chat_first_intents_db.record_materialization_deferral(
                 uid,
                 intent_id=deferral.intent_id,
                 account_generation=request.control_generation,
                 now=now,
             )
             deferred_intent_ids.add(deferral.intent_id)
+            if deferred_intent is not None and deferred_intent.dead_letter_reason == 'deferred_beyond_budget':
+                CHAT_FIRST_PROACTIVE_TOTAL.labels(
+                    event='dead_letter', source=deferred_intent.source, reason='deferred_beyond_budget'
+                ).inc()
         except (
             chat_first_intents_db.ChatFirstIntentDocumentGenerationMismatch,
             chat_first_intents_db.ChatFirstMalformedDocument,
             chat_first_intents_db.ProactiveIntentNotReady,
         ):
             # A stale device's explicit deferral must not poison the next batch.
+            continue
+        except Exception:
+            logger.exception('materialization deferral processing failed')
             continue
 
     for receipt in request.receipts:
@@ -489,7 +496,7 @@ def _materialize_prompts(
             account_generation=request.control_generation,
             now=now,
         )
-        released_intents = getattr(release_batch, 'intents', release_batch)
+        released_intents = release_batch if isinstance(release_batch, list) else release_batch.intents
         for _intent in released_intents:
             CHAT_FIRST_PROACTIVE_TOTAL.labels(event='deferral_released', source='deferral_reraise', reason='none').inc()
         for _ in range(getattr(release_batch, 'malformed_count', 0)):

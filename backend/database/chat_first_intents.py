@@ -41,6 +41,7 @@ MATERIALIZATION_REJECTION_BUDGET = 3
 UNACKNOWLEDGED_FETCH_BUDGET = 20
 STALLED_READY_AGE = timedelta(hours=24)
 PERMANENT_REJECTION_CODES = frozenset({'invalid_intent', 'identity_conflict'})
+_SYNTHETIC_RECONCILIATION_RECEIPT_PREFIX = 'cfi_reconciled_'
 
 
 @dataclass(frozen=True)
@@ -572,7 +573,7 @@ def _stable_chat_first_turn_id(intent_id: str) -> str:
 
 
 def _synthetic_reconciliation_receipt_id(intent_id: str) -> str:
-    return f'cfi_reconciled_{hashlib.sha256(intent_id.encode()).hexdigest()[:24]}'
+    return f'{_SYNTHETIC_RECONCILIATION_RECEIPT_PREFIX}{hashlib.sha256(intent_id.encode()).hexdigest()[:24]}'
 
 
 def _message_has_intent_identity(uid: str, intent_id: str, *, firestore_client: Any) -> bool:
@@ -944,7 +945,9 @@ def acknowledge_materialization(
         if intent.account_generation != account_generation:
             raise ChatFirstIntentDocumentGenerationMismatch('intent account generation changed')
         if intent.delivery_state == 'delivered':
-            if intent.materialization_receipt_id != receipt_id:
+            if intent.materialization_receipt_id != receipt_id and not (
+                intent.materialization_receipt_id or ''
+            ).startswith(_SYNTHETIC_RECONCILIATION_RECEIPT_PREFIX):
                 raise ChatFirstIntentConflictError('intent was delivered with a different receipt')
             return intent
         if intent.delivery_state == 'dead_letter':

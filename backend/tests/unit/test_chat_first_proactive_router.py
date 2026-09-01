@@ -386,10 +386,16 @@ def test_one_stale_cold_start_terminal_receipt_never_fails_the_materialization_b
 def test_tail_deferral_is_reported_separately_from_rejection(monkeypatch):
     _enable_chat_first(monkeypatch)
     deferrals = []
+
+    def record_deferral(*args, **kwargs):
+        deferrals.append(kwargs)
+        if kwargs['intent_id'] == 'intent-broken':
+            raise RuntimeError('broken deferral')
+
     monkeypatch.setattr(
         chat_first_router.chat_first_intents_db,
         'record_materialization_deferral',
-        lambda *args, **kwargs: deferrals.append(kwargs),
+        record_deferral,
     )
     monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
     monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
@@ -403,12 +409,55 @@ def test_tail_deferral_is_reported_separately_from_rejection(monkeypatch):
 
     response = _client().post(
         '/v2/chat/materialize-prompts',
-        json=_request(deferrals=[{'intent_id': 'intent-deferred', 'code': 'tail_question'}]),
+        json=_request(
+            deferrals=[
+                {'intent_id': 'intent-broken', 'code': 'tail_question'},
+                {'intent_id': 'intent-deferred', 'code': 'tail_question'},
+            ]
+        ),
     )
 
     assert response.status_code == 200
-    assert deferrals[0]['intent_id'] == 'intent-deferred'
+    assert [item['intent_id'] for item in deferrals] == ['intent-broken', 'intent-deferred']
     assert fetched[0]['deferred_intent_ids'] == {'intent-deferred'}
+
+
+def test_seven_day_deferral_records_deferred_beyond_budget_metric(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    dead_lettered = ProactiveIntent(
+        intent_id='intent-deferred',
+        continuity_key='deferred-seven-days',
+        account_generation=7,
+        source='capture_arrival',
+        subject=ChatFirstSubject(kind='capture', id='deferred'),
+        blocks=[_question()],
+        created_at=datetime(2026, 7, 8, tzinfo=timezone.utc),
+        delivery_state='dead_letter',
+        dead_letter_reason='deferred_beyond_budget',
+    )
+    events = []
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db,
+        'record_materialization_deferral',
+        lambda *args, **kwargs: dead_lettered,
+    )
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'fetch_ready_intent_batch', lambda *a, **k: _batch([]))
+    monkeypatch.setattr(
+        chat_first_router,
+        'CHAT_FIRST_PROACTIVE_TOTAL',
+        SimpleNamespace(labels=lambda **kwargs: SimpleNamespace(inc=lambda: events.append(kwargs))),
+    )
+
+    response = _client().post(
+        '/v2/chat/materialize-prompts',
+        json=_request(deferrals=[{'intent_id': dead_lettered.intent_id, 'code': 'tail_question'}]),
+    )
+
+    assert response.status_code == 200
+    assert {'event': 'dead_letter', 'source': 'capture_arrival', 'reason': 'deferred_beyond_budget'} in events
 
 
 def test_client_rejection_codes_never_create_unbounded_metric_labels(monkeypatch):

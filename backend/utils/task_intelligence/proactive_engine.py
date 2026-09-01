@@ -155,7 +155,11 @@ def wake_after_commit(
         now=resolved_now,
         subject=trigger.subject,
     )
-    for _intent in getattr(released, 'intents', released):
+    malformed_count = getattr(released, 'malformed_count', 0)
+    if malformed_count:
+        logger.warning('Skipped malformed Chat-first deferrals during release: count=%d', malformed_count)
+    released_intents = released if isinstance(released, list) else released.intents
+    for _intent in released_intents:
         _meter('deferral_released', 'deferral_reraise')
 
     if trigger.kind not in {'task_changed', 'goal_changed'}:
