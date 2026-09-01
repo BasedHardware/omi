@@ -9,6 +9,7 @@ import signal
 import sys
 import tempfile
 import unittest
+from contextlib import nullcontext
 from unittest import mock
 from pathlib import Path
 
@@ -26,29 +27,7 @@ def sse_event(payload: object) -> bytes:
     return f"data: {json.dumps(payload)}\n".encode()
 
 
-class CandidateProbeTests(unittest.TestCase):
-    def test_gemini_request_uses_unique_uuid_request_id(self) -> None:
-        class Response:
-            headers = {"x-omi-provider": "vertex_ai", "x-omi-request-id": "server-request-id"}
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_args):
-                return False
-
-            def read(self) -> bytes:
-                return b'{"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}'
-
-        request_id = "12345678-1234-5678-1234-567812345678"
-        with mock.patch.object(PROBE.uuid, "uuid4", return_value=request_id), mock.patch.object(
-            PROBE.urllib.request, "urlopen", return_value=Response()
-        ) as urlopen:
-            PROBE._gemini_request("https://candidate.example", token="token")
-
-        request = urlopen.call_args.args[0]
-        self.assertEqual(request.get_header("X-omi-request-id"), f"candidate-probe-{request_id}")
-
+class CandidateProbeDeadlineTests(unittest.TestCase):
     @unittest.skipUnless(hasattr(signal, "SIGALRM"), "requires POSIX interval timers")
     def test_gemini_response_read_is_interrupted_at_total_budget(self) -> None:
         class DripFeedResponse:
@@ -72,6 +51,40 @@ class CandidateProbeTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(PROBE.ProbeError, "exceeded 70s response budget"):
                 PROBE._gemini_request("https://candidate.example", token="token")
+
+
+class CandidateProbeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        response_budget = mock.patch.object(
+            PROBE,
+            "_total_response_budget",
+            autospec=True,
+            side_effect=lambda **_kwargs: nullcontext(),
+        )
+        response_budget.start()
+        self.addCleanup(response_budget.stop)
+
+    def test_gemini_request_uses_unique_uuid_request_id(self) -> None:
+        class Response:
+            headers = {"x-omi-provider": "vertex_ai", "x-omi-request-id": "server-request-id"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self) -> bytes:
+                return b'{"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}'
+
+        request_id = "12345678-1234-5678-1234-567812345678"
+        with mock.patch.object(PROBE.uuid, "uuid4", return_value=request_id), mock.patch.object(
+            PROBE.urllib.request, "urlopen", return_value=Response()
+        ) as urlopen:
+            PROBE._gemini_request("https://candidate.example", token="token")
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.get_header("X-omi-request-id"), f"candidate-probe-{request_id}")
 
     def test_gemini_probe_rejects_stub_or_unknown_provider_routes(self) -> None:
         for provider in ("offline_stub", "desktop_llm_stub", "unknown", ""):
