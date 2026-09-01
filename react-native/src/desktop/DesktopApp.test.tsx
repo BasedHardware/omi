@@ -367,6 +367,17 @@ test('signed-out first paint does not show a chat transport error', () => {
   expect(tree).not.toContain('Chat is temporarily unavailable.');
 });
 
+test('ready chat transport error is not painted on Home', () => {
+  const renderer = renderDesktop({
+    chatError: 'Chat is temporarily unavailable.',
+    session: 'ready',
+  });
+  expect(renderedText(renderer)).not.toContain(
+    'Chat is temporarily unavailable.',
+  );
+  expect(renderedText(renderer)).toContain('Currents');
+});
+
 test('Settings opens the shipping multi-pane IA including Advanced', async () => {
   const renderer = renderDesktop();
   await act(async () => {
@@ -422,4 +433,14 @@ test('Home stage lists never use FlatList', () => {
   expect(source).not.toMatch(/composer:\s*\{/);
   expect(source).toContain('accessibilityLabel="Home currents"');
   expect(source).toContain('accessibilityLabel="Home tasks"');
+  expect(source).toContain('visibleChatError');
+  expect(source).not.toContain('omnibarError');
+  expect(source).not.toMatch(/active=\{route === label\}/);
+  expect(source).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
+  expect(source).not.toMatch(
+    /sendButton:\s*\{[^}]*backgroundColor:\s*token\.color\.dark/,
+  );
+  expect(source).not.toMatch(/sendButton:\s*\{[^}]*borderRadius/);
+  expect(source).toMatch(/omnibarInput:\s*\{[^}]*minWidth:\s*0/);
+  expect(source).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
 });

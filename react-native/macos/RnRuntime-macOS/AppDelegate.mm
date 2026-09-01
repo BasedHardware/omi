@@ -8,6 +8,7 @@
 #import <objc/runtime.h>
 
 static const CGFloat OmiWindowInset = 8.0;
+static const CGFloat OmiWindowTopInset = 12.0;
 static const CGFloat OmiTrafficLightLeading = 16.0;
 static const CGFloat OmiTrafficLightSpacing = 8.0;
 static const CGFloat OmiTrafficLightChromeHeight = 52.0;
@@ -74,13 +75,14 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
     return YES;
   }
   NSAccessibilityRole role = view.accessibilityRole;
+  NSAccessibilitySubrole subrole = view.accessibilitySubrole;
   if ([role isEqualToString:NSAccessibilityButtonRole] ||
       [role isEqualToString:NSAccessibilityTextFieldRole] ||
       [role isEqualToString:NSAccessibilityTextAreaRole] ||
       [role isEqualToString:NSAccessibilityCheckBoxRole] ||
       [role isEqualToString:NSAccessibilityLinkRole] ||
-      [role isEqualToString:NSAccessibilitySearchFieldRole] ||
-      [role isEqualToString:NSAccessibilityPopUpButtonRole]) {
+      [role isEqualToString:NSAccessibilityPopUpButtonRole] ||
+      [subrole isEqualToString:NSAccessibilitySearchFieldSubrole]) {
     return YES;
   }
   NSString *className = NSStringFromClass(view.class);
@@ -164,7 +166,7 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
     return;
   }
   NSView *spacer = [[OmiTitlebarPassthroughView alloc]
-      initWithFrame:NSMakeRect(0, 0, 0, OmiTrafficLightChromeHeight + OmiWindowInset)];
+      initWithFrame:NSMakeRect(0, 0, 0, OmiTrafficLightChromeHeight + OmiWindowTopInset)];
   NSTitlebarAccessoryViewController *accessory = [[NSTitlebarAccessoryViewController alloc] init];
   accessory.view = spacer;
   accessory.layoutAttribute = NSLayoutAttributeTop;
@@ -230,16 +232,19 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   miniaturizeButton.hidden = NO;
   zoomButton.hidden = NO;
   NSView *container = closeButton.superview;
+  NSView *frameView = window.contentView.superview ?: container;
   CGFloat buttonWidth = NSWidth(closeButton.frame);
   CGFloat buttonHeight = NSHeight(closeButton.frame);
-  CGFloat y = NSHeight(container.bounds) - OmiWindowInset - OmiTrafficLightChromeHeight +
+  CGFloat yInFrame = NSHeight(frameView.bounds) - OmiWindowTopInset - OmiTrafficLightChromeHeight +
       floor((OmiTrafficLightChromeHeight - buttonHeight) / 2.0);
-  CGFloat x = OmiWindowInset + OmiTrafficLightLeading;
+  CGFloat xInFrame = OmiWindowInset + OmiTrafficLightLeading;
   for (NSButton *button in @[ closeButton, miniaturizeButton, zoomButton ]) {
+    NSPoint inFrame = NSMakePoint(xInFrame, yInFrame);
+    NSPoint inContainer = [container convertPoint:inFrame fromView:frameView];
     NSRect frame = button.frame;
-    frame.origin = NSMakePoint(x, y);
+    frame.origin = inContainer;
     button.frame = frame;
-    x += buttonWidth + OmiTrafficLightSpacing;
+    xInFrame += buttonWidth + OmiTrafficLightSpacing;
   }
 }
 
