@@ -9854,12 +9854,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
-  String get chatScopeToday => 'आज';
-
-  @override
-  String get chatScopeThisWeek => 'या आठवड्यात';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title विषयी';
   }

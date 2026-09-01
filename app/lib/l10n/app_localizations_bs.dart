@@ -9873,12 +9873,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
-  String get chatScopeToday => 'Danas';
-
-  @override
-  String get chatScopeThisWeek => 'Ove sedmice';
-
-  @override
   String chatScopeAbout(String title) {
     return 'O: $title';
   }

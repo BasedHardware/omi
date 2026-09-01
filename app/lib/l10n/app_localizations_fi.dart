@@ -9845,12 +9845,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get accountCutoverOpenStore => 'Avaa kauppa';
 
   @override
-  String get chatScopeToday => 'Tänään';
-
-  @override
-  String get chatScopeThisWeek => 'Tällä viikolla';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Aihe: $title';
   }
