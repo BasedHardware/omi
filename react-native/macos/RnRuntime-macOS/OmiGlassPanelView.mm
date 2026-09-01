@@ -45,6 +45,8 @@ static NSView *OmiMakeLiquidGlass(NSRect frame, CGFloat radius)
 @property (nonatomic, strong) NSView *liquidGlass;
 @property (nonatomic, strong) NSVisualEffectView *material;
 @property (nonatomic, strong) NSView *fallback;
+@property (nonatomic, strong) NSView *contentHost;
+@property (nonatomic, strong) NSView *finish;
 @property (nonatomic, strong) CALayer *scrim;
 @property (nonatomic, strong) CALayer *sheen;
 @property (nonatomic, strong, nullable) id accessibilityObserver;
@@ -61,8 +63,18 @@ static NSView *OmiMakeLiquidGlass(NSRect frame, CGFloat radius)
   }
 
   self.wantsLayer = YES;
+  self.clipsToBounds = YES;
+  self.layer.masksToBounds = YES;
   self.appearance = OmiInkGlassAppearance();
   self.layer.borderWidth = 1;
+
+  self.contentHost = [[NSView alloc] initWithFrame:self.bounds];
+  self.contentHost.wantsLayer = YES;
+  self.contentHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  self.finish = [[NSView alloc] initWithFrame:self.bounds];
+  self.finish.wantsLayer = YES;
+  self.finish.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  [self.contentHost addSubview:self.finish];
 
   self.liquidGlass = OmiMakeLiquidGlass(self.bounds, defaultCornerRadius);
   if (self.liquidGlass != nil) {
@@ -85,9 +97,9 @@ static NSView *OmiMakeLiquidGlass(NSRect frame, CGFloat radius)
   [self addSubview:self.fallback];
 
   self.scrim = [CALayer layer];
-  [self.layer addSublayer:self.scrim];
+  [self.finish.layer addSublayer:self.scrim];
   self.sheen = [CALayer layer];
-  [self.layer addSublayer:self.sheen];
+  [self.finish.layer addSublayer:self.sheen];
 
   __weak OmiGlassPanelView *weakSelf = self;
   self.accessibilityObserver =
@@ -119,6 +131,8 @@ static NSView *OmiMakeLiquidGlass(NSRect frame, CGFloat radius)
   self.material.layer.cornerCurve = kCACornerCurveContinuous;
   self.fallback.layer.cornerRadius = _glassCornerRadius;
   self.fallback.layer.cornerCurve = kCACornerCurveContinuous;
+  self.finish.layer.cornerRadius = _glassCornerRadius;
+  self.finish.layer.cornerCurve = kCACornerCurveContinuous;
   self.scrim.cornerRadius = _glassCornerRadius;
   self.scrim.cornerCurve = kCACornerCurveContinuous;
   if (self.liquidGlass != nil && [self.liquidGlass respondsToSelector:@selector(setCornerRadius:)]) {
@@ -134,7 +148,19 @@ static NSView *OmiMakeLiquidGlass(NSRect frame, CGFloat radius)
 
 - (NSView *)hitTest:(NSPoint)point
 {
-  return nil;
+  NSPoint local = [self convertPoint:point fromView:self.superview];
+  if (self.isHidden || ![self mouse:local inRect:self.bounds] || self.contentHost == nil) {
+    return nil;
+  }
+  NSView *hostSuperview = self.contentHost.superview;
+  if (hostSuperview == nil) {
+    return nil;
+  }
+  NSView *hit = [self.contentHost hitTest:[hostSuperview convertPoint:local fromView:self]];
+  if (hit == nil || hit == self.contentHost || hit == self.finish) {
+    return nil;
+  }
+  return hit;
 }
 
 - (void)layout
@@ -143,9 +169,57 @@ static NSView *OmiMakeLiquidGlass(NSRect frame, CGFloat radius)
   self.liquidGlass.frame = self.bounds;
   self.material.frame = self.bounds;
   self.fallback.frame = self.bounds;
-  self.scrim.frame = self.bounds;
+  if (self.contentHost.superview == self) {
+    self.contentHost.frame = self.bounds;
+  } else if (self.contentHost.superview != nil) {
+    self.contentHost.frame = self.contentHost.superview.bounds;
+  }
+  self.finish.frame = self.contentHost.bounds;
+  self.scrim.frame = self.finish.bounds;
   self.sheen.frame = NSMakeRect(0, NSMaxY(self.bounds) - OmiGlassSheenHeight, NSWidth(self.bounds),
       OmiGlassSheenHeight);
+}
+
+- (void)omiAttachContentHost
+{
+  BOOL reduceTransparency = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency;
+  BOOL useGlassContent = self.liquidGlass != nil && !self.liquidGlass.hidden && !reduceTransparency &&
+      [self.liquidGlass respondsToSelector:@selector(setContentView:)];
+  if (useGlassContent) {
+    ((void (*)(id, SEL, id))objc_msgSend)(
+        self.liquidGlass, @selector(setContentView:), self.contentHost);
+    return;
+  }
+  if ([self.liquidGlass respondsToSelector:@selector(setContentView:)]) {
+    id current = ((id (*)(id, SEL))objc_msgSend)(self.liquidGlass, @selector(contentView));
+    if (current == self.contentHost) {
+      ((void (*)(id, SEL, id))objc_msgSend)(self.liquidGlass, @selector(setContentView:), nil);
+    }
+  }
+  if (self.contentHost.superview != self) {
+    [self addSubview:self.contentHost];
+  }
+}
+
+- (void)insertReactSubview:(RCTUIView *)subview atIndex:(NSInteger)atIndex
+{
+  [super insertReactSubview:subview atIndex:atIndex];
+  NSArray<NSView *> *siblings = self.contentHost.subviews;
+  NSInteger hostIndex = atIndex + 1;
+  if (hostIndex >= 0 && hostIndex < (NSInteger)siblings.count) {
+    [self.contentHost addSubview:subview positioned:NSWindowBelow relativeTo:siblings[hostIndex]];
+    return;
+  }
+  [self.contentHost addSubview:subview];
+}
+
+- (void)removeReactSubview:(RCTUIView *)subview
+{
+  [super removeReactSubview:subview];
+}
+
+- (void)didUpdateReactSubviews
+{
 }
 
 - (void)applyAccessibilityAppearance
@@ -166,6 +240,7 @@ static NSView *OmiMakeLiquidGlass(NSRect frame, CGFloat radius)
     self.sheen.backgroundColor = [NSColor.whiteColor colorWithAlphaComponent:OmiGlassSheenAlpha].CGColor;
     self.layer.borderColor = [NSColor.labelColor colorWithAlphaComponent:OmiGlassEdgeAlpha].CGColor;
   }];
+  [self omiAttachContentHost];
 }
 
 @end
