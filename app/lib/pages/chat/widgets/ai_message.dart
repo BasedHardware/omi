@@ -624,7 +624,13 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                           widget.onAskOmi?.call(text);
                         }, selectedText: selectedText);
                       },
-                      child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      // Force full available width: SelectionArea + MarkdownBody
+                      // otherwise size to the text's minimum intrinsic width, which
+                      // collapses the message to ~1 word per line on iOS.
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      ),
                     );
                   },
                 ),
