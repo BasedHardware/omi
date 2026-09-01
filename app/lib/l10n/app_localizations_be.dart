@@ -9944,4 +9944,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Не запісана ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Транскрыпцыя не атрымлівае аўдыё';
 }

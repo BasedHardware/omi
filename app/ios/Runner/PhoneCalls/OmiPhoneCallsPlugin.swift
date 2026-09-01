@@ -19,6 +19,11 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     private var isSpeakerOn: Bool = false
     private var audioDevice = OmiRecordingAudioDevice()
 
+    // 20 ms Core Audio buffers are coalesced (~100 ms per channel) before they
+    // become EventChannel events; one Map per buffer saturated the main queue.
+    private lazy var audioEventCoalescer = OmiAudioEventCoalescer { [weak self] data, channel in
+        self?.sendAudioDataEvent(data, channel: channel)
+    }
     // Call coordinator (manages CallKit or direct audio, swappable via protocol)
     fileprivate let callCoordinator: OmiCallCoordinatorProtocol
     fileprivate var callUUID: UUID?
@@ -67,9 +72,9 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
             self.cleanup()
         }
 
-        // Wire up audio data callback to stream to Flutter
+        // Wire up audio data callback to stream to Flutter (coalesced, bounded)
         audioDevice.onAudioData = { [weak self] data, channel in
-            self?.sendAudioDataEvent(data, channel: channel)
+            self?.audioEventCoalescer.append(data, channel: channel)
         }
 
         // Set Twilio's audio device (custom device captures both streams)
@@ -336,6 +341,7 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     // MARK: - Cleanup
 
     fileprivate func cleanup() {
+        audioEventCoalescer.reset()
         activeCall = nil
         callDelegate = nil
         callUUID = nil
@@ -344,7 +350,6 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     }
 
     // MARK: - Event Sending
-
     func sendCallStateEvent(_ state: String) {
         sendEvent(["type": "callStateChanged", "state": state])
     }

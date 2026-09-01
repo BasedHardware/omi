@@ -9913,4 +9913,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nezaznamenáno ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripce nepřijímá zvuk';
 }

@@ -9906,4 +9906,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Salvestamata ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkriptsioon ei saa heli';
 }

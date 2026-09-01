@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/models/audio_route.dart';
@@ -8,16 +10,30 @@ import 'package:omi/utils/logger.dart';
 /// Native method channel bridge for phone call operations.
 /// Communicates with iOS (Swift) and Android (Kotlin) native layers
 /// for Twilio Voice SDK, CallKit, and audio capture.
+///
+/// The event stream carries live call audio (100 buffers/sec across two
+/// channels). A single malformed event must never end the subscription:
+/// audio coercion failures are counted and dropped, and an error/done from
+/// the platform side triggers a resubscribe while [startListening] is active.
 class PhoneCallService {
   static const MethodChannel _methodChannel = MethodChannel('com.omi/phone_calls');
   static const EventChannel _eventChannel = EventChannel('com.omi/phone_calls/events');
 
   StreamSubscription? _eventSubscription;
+  bool _listening = false;
+  int _resubscribeDelayMs = 100;
   Function(PhoneCallState state)? onCallStateChanged;
   Function(Uint8List audioData, int channel)? onAudioData;
   Function(PhoneCallError error)? onError;
   Function(bool muted)? onMuteConfirmed;
   Function(bool speakerOn)? onSpeakerConfirmed;
+
+  /// Events dropped because a field could not be coerced since the last
+  /// [resetEventStats]. Counts only; never carries payload.
+  int eventChannelErrors = 0;
+
+  /// Events delivered only after coercing `data`/`channel` types.
+  int eventChannelCoerced = 0;
 
   PhoneCallService();
 
@@ -84,46 +100,143 @@ class PhoneCallService {
   }
 
   /// Start listening for call events from native side.
+  ///
+  /// The subscription survives malformed events and resubscribes after a
+  /// platform-side error or done until [stopListening] cancels it.
   void startListening() {
+    _listening = true;
+    _eventSubscription?.cancel();
     _eventSubscription = _eventChannel.receiveBroadcastStream().listen(
-      (event) {
-        if (event is Map) {
-          final type = event['type'] as String?;
-          if (type == 'callStateChanged') {
-            final stateStr = event['state'] as String?;
-            if (stateStr != null && onCallStateChanged != null) {
-              final state = _parseCallState(stateStr);
-              onCallStateChanged!(state);
-            }
-          } else if (type == 'audioData') {
-            final data = event['data'] as Uint8List?;
-            final channel = event['channel'] as int?;
-            if (data != null && channel != null && onAudioData != null) {
-              onAudioData!(data, channel);
-            }
-          } else if (type == 'error') {
-            final error = PhoneCallError.fromEvent(event);
-            Logger.error('PhoneCallService: native error: $error');
-            onError?.call(error);
-          } else if (type == 'muteConfirmed') {
-            final muted = event['muted'] as bool? ?? false;
-            onMuteConfirmed?.call(muted);
-          } else if (type == 'speakerConfirmed') {
-            final speakerOn = event['speakerOn'] as bool? ?? false;
-            onSpeakerConfirmed?.call(speakerOn);
-          }
-        }
-      },
+      (event) => _handleEvent(event),
       onError: (error) {
         Logger.error('PhoneCallService: event stream error: $error');
+        _scheduleResubscribe();
       },
+      onDone: _scheduleResubscribe,
     );
   }
 
-  /// Stop listening for call events.
+  /// Stop listening for call events and cancel any pending resubscribe.
   void stopListening() {
+    _listening = false;
     _eventSubscription?.cancel();
     _eventSubscription = null;
+  }
+
+  /// Reset per-call event counters. Called when a call session starts.
+  void resetEventStats() {
+    eventChannelErrors = 0;
+    eventChannelCoerced = 0;
+  }
+
+  /// Dispatch one raw platform event through the production path.
+  @visibleForTesting
+  void handleEventForTesting(Object? event) => _handleEvent(event);
+
+  void _scheduleResubscribe() {
+    if (!_listening) return;
+    var delay = Duration(milliseconds: _resubscribeDelayMs);
+    _resubscribeDelayMs = (_resubscribeDelayMs * 2).clamp(100, 2000);
+    Timer(delay, () {
+      if (_listening) {
+        Logger.info('PhoneCallService: resubscribing to event stream');
+        startListening();
+      }
+    });
+  }
+
+  void _handleEvent(Object? event) {
+    try {
+      _dispatchEvent(event);
+    } catch (error, stackTrace) {
+      eventChannelErrors++;
+      Logger.error('PhoneCallService: event dispatch failed: $error\n$stackTrace');
+    }
+  }
+
+  void _dispatchEvent(Object? event) {
+    if (event is! Map) return;
+    final type = event['type'] as String?;
+    if (type == 'callStateChanged') {
+      final stateStr = event['state'] as String?;
+      if (stateStr != null && onCallStateChanged != null) {
+        final state = _parseCallState(stateStr);
+        onCallStateChanged!(state);
+      }
+    } else if (type == 'audioData') {
+      final data = _coerceAudioData(event['data']);
+      final channel = _coerceChannel(event['channel']);
+      if (data != null && channel != null) {
+        onAudioData?.call(data, channel);
+      } else {
+        eventChannelErrors++;
+        Logger.error(
+          'PhoneCallService: dropped audio event (data=${data == null ? "invalid" : "ok"}, channel=${channel == null ? "invalid" : "ok"})',
+        );
+      }
+    } else if (type == 'error') {
+      final error = PhoneCallError.fromEvent(event);
+      Logger.error('PhoneCallService: native error: $error');
+      onError?.call(error);
+    } else if (type == 'muteConfirmed') {
+      final muted = event['muted'] as bool? ?? false;
+      onMuteConfirmed?.call(muted);
+    } else if (type == 'speakerConfirmed') {
+      final speakerOn = event['speakerOn'] as bool? ?? false;
+      onSpeakerConfirmed?.call(speakerOn);
+    }
+  }
+
+  /// Native sides send `data` as Uint8List (iOS FlutterStandardTypedData,
+  /// Android ByteArray), but any List<int> shape is still valid audio —
+  /// coerce instead of dropping the frame.
+  Uint8List? _coerceAudioData(Object? value) {
+    if (value is Uint8List) return value;
+    if (value is Int8List) {
+      eventChannelCoerced++;
+      var result = Uint8List(value.length);
+      for (var i = 0; i < value.length; i++) {
+        result[i] = value[i] & 0xff;
+      }
+      return result;
+    }
+    if (value is List<int>) {
+      eventChannelCoerced++;
+      try {
+        return Uint8List.fromList(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    // The standard codec decodes a generic int list as List<dynamic>, which is
+    // still valid audio bytes.
+    if (value is List) {
+      eventChannelCoerced++;
+      var result = Uint8List(value.length);
+      for (var i = 0; i < value.length; i++) {
+        var element = value[i];
+        if (element is! int || element < 0 || element > 255) return null;
+        result[i] = element;
+      }
+      return result;
+    }
+    return null;
+  }
+
+  int? _coerceChannel(Object? value) {
+    if (value is int) return value;
+    if (value is num) {
+      eventChannelCoerced++;
+      return value.toInt();
+    }
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      if (parsed != null) {
+        eventChannelCoerced++;
+        return parsed;
+      }
+    }
+    return null;
   }
 
   PhoneCallState _parseCallState(String state) {

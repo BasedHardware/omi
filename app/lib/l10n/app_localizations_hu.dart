@@ -9953,4 +9953,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nincs rögzítve ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Az átírás nem kap hangot';
 }

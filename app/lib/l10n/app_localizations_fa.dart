@@ -9912,4 +9912,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'ثبت نشده ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'رونویسی صدا دریافت نمی‌کند';
 }

@@ -10003,4 +10003,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Hindi na-record ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Hindi tumatanggap ng audio ang transkripsyon';
 }

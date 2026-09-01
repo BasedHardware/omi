@@ -32,6 +32,12 @@ class PhoneCallsPlugin private constructor(
     private var isMuted: Boolean = false
     private var isSpeakerOn: Boolean = false
     private val audioDevice = OmiRecordingAudioDevice()
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val audioEventCoalescer = AudioEventCoalescer { data, channel ->
+        mainHandler.post {
+            eventSink?.success(mapOf("type" to "audioData", "data" to data, "channel" to channel))
+        }
+    }
 
     companion object {
         private const val TAG = "PhoneCallsPlugin"
@@ -98,6 +104,7 @@ class PhoneCallsPlugin private constructor(
 
         override fun onDisconnected(call: Call, callException: CallException?) {
             resetAudioMode()
+            audioEventCoalescer.reset()
             if (callException != null) {
                 Log.e(TAG, "Call disconnected with error: ${callException.message}")
                 sendCallStateEvent("failed")
@@ -278,9 +285,9 @@ class PhoneCallsPlugin private constructor(
     }
 
     private fun sendAudioDataEvent(data: ByteArray, channel: Int) {
-        android.os.Handler(android.os.Looper.getMainLooper()).post {
-            eventSink?.success(mapOf("type" to "audioData", "data" to data, "channel" to channel))
-        }
+        // Coalesce ~100 ms per channel; per-buffer main-looper posts could not
+        // keep up with 48 kHz dual-channel call audio.
+        audioEventCoalescer.append(data, channel)
     }
 
     // MARK: - EventChannel.StreamHandler
@@ -291,5 +298,43 @@ class PhoneCallsPlugin private constructor(
 
     override fun onCancel(arguments: Any?) {
         eventSink = null
+    }
+}
+
+/**
+ * Batches 20 ms call-audio buffers into bounded events before they cross the
+ * EventChannel: one main-looper post per ~100 ms per channel instead of one
+ * per buffer. Pending bytes are hard-capped; a saturated consumer drops the
+ * pending batch rather than growing without bound.
+ */
+private class AudioEventCoalescer(
+    private val flushBytes: Int = 10_240,
+    private val maxPendingBytes: Int = 40_960,
+    private val emit: (ByteArray, Int) -> Unit
+) {
+    private val lock = Any()
+    private val pending = HashMap<Int, java.io.ByteArrayOutputStream>()
+
+    fun append(data: ByteArray, channel: Int) {
+        var toEmit: ByteArray? = null
+        synchronized(lock) {
+            val stream = pending.getOrPut(channel) { java.io.ByteArrayOutputStream() }
+            stream.write(data)
+            when {
+                stream.size() >= flushBytes -> {
+                    toEmit = stream.toByteArray()
+                    pending.remove(channel)
+                }
+                stream.size() > maxPendingBytes -> {
+                    Log.w("AudioEventCoalescer", "dropping ${stream.size()} stalled bytes (channel $channel)")
+                    pending.remove(channel)
+                }
+            }
+        }
+        toEmit?.let { emit(it, channel) }
+    }
+
+    fun reset() {
+        synchronized(lock) { pending.clear() }
     }
 }

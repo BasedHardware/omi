@@ -9833,4 +9833,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'לא הוקלט ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'התמליל אינו מקבל שמע';
 }

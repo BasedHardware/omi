@@ -9905,4 +9905,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nezaznamenané ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripcia neprijíma zvuk';
 }

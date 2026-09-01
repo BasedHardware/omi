@@ -9995,4 +9995,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nicht erfasst ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkription empfängt kein Audio';
 }

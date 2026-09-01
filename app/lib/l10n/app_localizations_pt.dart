@@ -9921,4 +9921,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Não capturado ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'A transcrição não está recebendo áudio';
 }

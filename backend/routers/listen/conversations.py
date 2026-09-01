@@ -11,9 +11,9 @@ from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
-from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
+from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
@@ -145,6 +145,14 @@ class LiveConversationController:
             return True
         return route == 'noop'
 
+    def _should_report_no_audio_teardown(self) -> bool:
+        """Multi-channel session (phone calls today) that never sent a first audio byte."""
+
+        return bool(
+            getattr(self.host, 'is_multi_channel', False)
+            and getattr(self.host.state, 'first_audio_byte_timestamp', None) is None
+        )
+
     async def process_conversation(self, conversation_id: str) -> bool:
         data = await self.host.persistence.call(
             conversations_db.get_conversation,
@@ -159,6 +167,20 @@ class LiveConversationController:
         recording_session_id = recording_session_id_for_lifecycle_event(
             self.host.recording_session_ids_by_conversation, conversation_id
         )
+        if self._should_report_no_audio_teardown():
+            # The empty conversation is about to be deleted, which is correct —
+            # but a phone_call that stayed silent for its whole duration must be
+            # distinguishable from a call that was never transcribed at all.
+            logger.warning(
+                'Listen session tore down with no audio received source=%s platform=%s',
+                self.host.request.source,
+                self.host.client_device_context.platform,
+            )
+            record_listen_audio_outcome(
+                source=self.host.request.source,
+                outcome='no_audio_teardown',
+                platform=self.host.client_device_context.platform,
+            )
         deleted = await self.host.persistence.call(
             lifecycle_service.delete_empty_recording_conversation,
             self.host.request.uid,

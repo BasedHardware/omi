@@ -9907,4 +9907,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Không được ghi âm ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Bản ghi âm không nhận được âm thanh';
 }

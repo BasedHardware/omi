@@ -9923,4 +9923,7 @@ class AppLocalizationsId extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Tidak direkam ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';
 }

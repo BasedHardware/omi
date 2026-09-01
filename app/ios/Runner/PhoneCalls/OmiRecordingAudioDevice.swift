@@ -27,6 +27,10 @@ final class OmiRecordingAudioDevice: NSObject {
     // MARK: - Thread-Safe Audio State
 
     @OmiAudioLock private var _audioUnit: AudioUnit?
+    // CallKit can activate the audio session before Twilio initializes the
+    // capturer; a start() in that window is remembered and retried once the
+    // unit exists, so a running call never keeps a live socket with no tap.
+    @OmiAudioLock private var _pendingStartRequested = false
     @OmiAudioLock private var _renderingContext: RenderingContext?
     @OmiAudioLock private var _capturingContext: CapturingContext?
 
@@ -285,11 +289,17 @@ extension OmiRecordingAudioDevice: AudioDevice {
     }
 
     func start() -> Bool {
-        guard let unit = _audioUnit else { return false }
+        guard let unit = _audioUnit else {
+            _pendingStartRequested = true
+            print("OmiAudioDevice: start deferred — audio unit not created yet")
+            return false
+        }
+        _pendingStartRequested = false
         return AudioOutputUnitStart(unit) == noErr
     }
 
     func stop() -> Bool {
+        _pendingStartRequested = false
         guard let unit = _audioUnit else { return false }
         return AudioOutputUnitStop(unit) == noErr
     }
@@ -318,9 +328,17 @@ extension OmiRecordingAudioDevice: AudioDeviceRenderer {
 // MARK: - AudioDeviceCapturer Protocol
 
 extension OmiRecordingAudioDevice: AudioDeviceCapturer {
-
     func initializeCapturer() -> Bool {
-        return setupAudioUnit()
+        let created = setupAudioUnit()
+        if created && _pendingStartRequested && !isStarted() {
+            // A start() arrived before the unit existed (CallKit activation can
+            // precede Twilio's capturer init); honor it now that the unit is live.
+            print("OmiAudioDevice: retrying deferred start after initializeCapturer")
+            if AudioOutputUnitStart(_audioUnit!) == noErr {
+                _pendingStartRequested = false
+            }
+        }
+        return created
     }
 
     func startCapturing(_ context: AudioDeviceContext) -> Bool {
@@ -332,6 +350,12 @@ extension OmiRecordingAudioDevice: AudioDeviceCapturer {
             maxFrames: framesPerBuffer,
             bytesPerFrame: bytesPerFrame
         )
+        if _pendingStartRequested && !isStarted() {
+            print("OmiAudioDevice: retrying deferred start after startCapturing")
+            if AudioOutputUnitStart(unit) == noErr {
+                _pendingStartRequested = false
+            }
+        }
         return true
     }
 

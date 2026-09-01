@@ -9969,4 +9969,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'No enregistrat ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'La transcripció no rep àudio';
 }

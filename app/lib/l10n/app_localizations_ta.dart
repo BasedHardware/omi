@@ -9982,4 +9982,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'பதிவு செய்யப்படவில்லை ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'நகலெடுப்பு ஆடியோவைப் பெறவில்லை';
 }

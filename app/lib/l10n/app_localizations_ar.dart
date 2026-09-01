@@ -9854,4 +9854,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'لم يتم التسجيل ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'النسخ لا يستلم الصوت';
 }

@@ -9944,4 +9944,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'ದಾಖಲಾಗಿಲ್ಲ ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'ಲಿಪ್ಯಂತರಣ ಆಡಿಯೊ ಸ್ವೀಕರಿಸುತ್ತಿಲ್ಲ';
 }

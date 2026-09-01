@@ -9932,4 +9932,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Neįrašyta ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripcija negauna garso';
 }
