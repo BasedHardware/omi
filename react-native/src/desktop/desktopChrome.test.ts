@@ -8,7 +8,12 @@ import {
   desktopSettingsPanes,
   desktopStageFade,
   desktopSystemFontFamily,
+  desktopTrafficLightButton,
+  desktopTrafficLightClusterWidth,
+  desktopTrafficLightLeading,
   desktopTrafficLightRowWidth,
+  desktopTrafficLightSpacing,
+  desktopWindowInset,
   isShippingDesktopNav,
   visibleChatError,
 } from './desktopChrome';
@@ -44,8 +49,18 @@ test('desktop chrome uses the shipping Home Library IA', () => {
   expect(desktopSystemFontFamily).toBe('System');
   expect(desktopGlassCornerRadius).toBe(22);
   expect(desktopNavBarHeight).toBe(52);
-  expect(desktopNavTopInset).toBe(0);
-  expect(desktopTrafficLightRowWidth).toBeGreaterThan(70);
+  expect(desktopWindowInset).toBe(8);
+  expect(desktopNavTopInset).toBe(desktopWindowInset);
+  expect(desktopNavTopInset).not.toBe(0);
+  expect(desktopTrafficLightLeading).toBe(16);
+  expect(desktopTrafficLightButton).toBe(14);
+  expect(desktopTrafficLightSpacing).toBe(8);
+  expect(desktopTrafficLightClusterWidth).toBe(
+    3 * desktopTrafficLightButton + 2 * desktopTrafficLightSpacing,
+  );
+  expect(desktopTrafficLightRowWidth).toBe(
+    desktopTrafficLightClusterWidth + desktopTrafficLightLeading,
+  );
   expect(desktopMotion.navMs).toBe(80);
   expect(desktopMotion.pressMs).toBe(90);
   expect(desktopMotion.stepMs).toBe(240);
