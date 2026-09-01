@@ -582,9 +582,19 @@ struct AddMcpServerSheet: View {
     case savedLocal
   }
 
-  private enum Mode: String, CaseIterable {
+  private enum Mode: String, CaseIterable, Identifiable {
     case remote = "Remote URL"
     case local = "Local Command"
+
+    var id: String { rawValue }
+
+    var icon: String { self == .remote ? "server.rack" : "terminal" }
+
+    var automationID: String { self == .remote ? "remote" : "local" }
+  }
+
+  private enum Field: Hashable {
+    case name, url, key, command
   }
 
   @State private var name = ""
@@ -594,21 +604,11 @@ struct AddMcpServerSheet: View {
   @State private var mode: Mode = .remote
   @State private var phase: Phase = .editing
   @State private var errorMessage: String?
+  @FocusState private var focusedField: Field?
 
   var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-      HStack(alignment: .top) {
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text("Add MCP Server")
-            .scaledFont(size: OmiType.title, weight: .semibold)
-            .foregroundColor(Ink.primary)
-          Text("Its tools become available to the assistant in chat")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
-        }
-        Spacer()
-        DismissButton(action: onDismiss)
-      }
+    VStack(alignment: .leading, spacing: OmiSpacing.xl) {
+      header
 
       switch phase {
       case .savedLocal:
@@ -619,87 +619,158 @@ struct AddMcpServerSheet: View {
         formContent
       }
 
+      // The overlay sizes itself to the tallest lane; without this the shorter ones float
+      // vertically centred in a box that is not theirs.
       Spacer(minLength: 0)
     }
-    .padding(OmiSpacing.lg)
+    .padding(OmiSpacing.xxl)
+    // The title needs more room above it than beside it, or it reads as pinned to the card's edge.
+    .padding(.top, OmiSpacing.md)
+    .frame(maxWidth: .infinity, alignment: .topLeading)
     .background(Ink.surface)
   }
 
-  private var formContent: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      Picker("", selection: $mode) {
-        ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-      }
-      .pickerStyle(.segmented)
-      .labelsHidden()
+  private var header: some View {
+    HStack(alignment: .top, spacing: OmiSpacing.md) {
+      Image(systemName: mode.icon)
+        .scaledFont(size: OmiType.subheading, weight: .medium)
+        .foregroundColor(Ink.primary)
+        .frame(width: 40, height: 40)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+            .fill(Ink.rowFill)
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+            .strokeBorder(Ink.separator, lineWidth: 1)
+        )
+        .omiAnimation(.easeOut(duration: 0.15), value: mode)
 
-      labeledField("Name") {
-        TextField(mode == .remote ? "e.g. Linear" : "e.g. Playwright", text: $name)
-      }
-      if mode == .remote {
-        labeledField("Server URL") {
-          TextField("https://mcp.example.com/mcp", text: $serverUrl)
-        }
-        labeledField("API key (optional)") {
-          SecureField("Leave empty for public or OAuth servers", text: $apiKey)
-        }
-      } else {
-        labeledField("Command") {
-          TextField("npx @playwright/mcp@latest", text: $commandLine)
-        }
-        Text("Runs this command on your Mac and connects to it as an MCP server. Saved to ~/.omi/mcp.json.")
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+        Text("Add MCP Server")
+          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .foregroundColor(Ink.primary)
+        Text("Its tools become available to the assistant in chat")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
 
-      if let errorMessage {
-        Text(errorMessage)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.errorRed)
-          .fixedSize(horizontal: false, vertical: true)
+      Spacer(minLength: OmiSpacing.md)
+
+      DismissButton(action: onDismiss)
+    }
+  }
+
+  private var formContent: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+      modeChips
+
+      labeledField("Name", field: .name) {
+        TextField(mode == .remote ? "e.g. Linear" : "e.g. Playwright", text: $name)
+      }
+      .accessibilityIdentifier("add-mcp-name")
+
+      if mode == .remote {
+        labeledField("Server URL", field: .url) {
+          TextField("https://mcp.example.com/mcp", text: $serverUrl)
+        }
+        .accessibilityIdentifier("add-mcp-url")
+        labeledField("API key", field: .key, hint: "Leave empty for public or OAuth servers") {
+          SecureField("", text: $apiKey)
+        }
+        .accessibilityIdentifier("add-mcp-api-key")
+      } else {
+        labeledField(
+          "Command", field: .command,
+          hint: "Runs on your Mac and is saved to ~/.omi/mcp.json."
+        ) {
+          TextField("npx @playwright/mcp@latest", text: $commandLine)
+        }
+        .accessibilityIdentifier("add-mcp-command")
       }
 
-      HStack {
-        Spacer()
+      errorRow
+
+      footer
+    }
+  }
+
+  private var modeChips: some View {
+    HStack(spacing: OmiSpacing.xs) {
+      ForEach(Mode.allCases) { candidate in
         Button {
-          Task { await submit() }
+          errorMessage = nil
+          OmiMotion.withGated(.easeOut(duration: 0.15)) { mode = candidate }
         } label: {
-          if phase == .submitting {
-            ProgressView()
-              .scaleEffect(0.7)
-              .frame(width: 110, height: 32)
-          } else {
-            Text("Connect")
-              .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(Ink.surface)
-              .frame(width: 110, height: 32)
-              .background(canSubmit ? Ink.primary : Ink.secondary.opacity(0.4))
-              .cornerRadius(OmiChrome.controlRadius)
+          HStack(spacing: OmiSpacing.xs) {
+            Image(systemName: candidate.icon)
+              .scaledFont(size: OmiType.caption)
+            Text(candidate.rawValue)
+              .scaledFont(size: OmiType.caption, weight: mode == candidate ? .semibold : .regular)
           }
+          .foregroundStyle(GlassShell.controlLabel(isProminent: mode == candidate))
+          .padding(.horizontal, OmiSpacing.lg)
+          .padding(.vertical, OmiSpacing.sm)
+          .glassChip(isActive: mode == candidate)
         }
         .buttonStyle(.plain)
-        .disabled(!canSubmit || phase == .submitting)
+        .accessibilityIdentifier("add-mcp-mode-\(candidate.automationID)")
+        .accessibilityAddTraits(mode == candidate ? .isSelected : [])
       }
     }
   }
 
-  private var waitingContent: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      HStack(spacing: OmiSpacing.md) {
-        ProgressView()
-        Text("Finish authorizing in your browser…")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.primary)
-      }
-      Text("This window updates automatically once the server is connected.")
-        .scaledFont(size: OmiType.caption)
+  private var footer: some View {
+    HStack(spacing: OmiSpacing.lg) {
+      Spacer()
+
+      Button("Cancel", action: onDismiss)
+        .buttonStyle(.plain)
+        .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(Ink.secondary)
+
+      Button {
+        Task { await submit() }
+      } label: {
+        ConnectionModalActionButton(title: phase == .submitting ? "Connecting…" : "Connect")
+          // The primitive has no disabled state of its own, and a live-looking button that does
+          // nothing is worse than a dim one.
+          .opacity(canSubmit && phase != .submitting ? 1 : 0.45)
+      }
+      .buttonStyle(.plain)
+      .keyboardShortcut(.defaultAction)
+      .disabled(!canSubmit || phase == .submitting)
+      .accessibilityIdentifier("add-mcp-submit")
     }
-    .padding(OmiSpacing.md)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(Ink.rowFill)
-    .cornerRadius(OmiChrome.smallControlRadius)
+  }
+
+  @ViewBuilder
+  private var errorRow: some View {
+    if let errorMessage {
+      HStack(alignment: .top, spacing: OmiSpacing.xs) {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .scaledFont(size: OmiType.caption)
+        Text(errorMessage)
+          .scaledFont(size: OmiType.caption)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .foregroundColor(Ink.errorRed)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(OmiSpacing.md)
+      .background(
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+          .fill(Ink.errorRed.opacity(0.10))
+      )
+    }
+  }
+
+  private var waitingContent: some View {
+    statusCard(
+      icon: { ProgressView().scaleEffect(0.6).frame(width: 20, height: 20) },
+      title: "Finish authorizing in your browser…",
+      detail: "This sheet updates automatically once the server is connected."
+    )
   }
 
   private var canSubmit: Bool {
@@ -714,36 +785,68 @@ struct AddMcpServerSheet: View {
 
   private var savedLocalContent: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      HStack(spacing: OmiSpacing.sm) {
-        Image(systemName: "checkmark.circle.fill")
-          .scaledFont(size: OmiType.subheading)
-          .foregroundColor(Ink.primary)
-        Text("Server saved to ~/.omi/mcp.json")
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(Ink.primary)
-      }
-      Text("Its tools are discovered when the assistant starts its next chat session.")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.secondary)
+      statusCard(
+        icon: {
+          Image(systemName: "checkmark.circle.fill")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.primary)
+            .frame(width: 20, height: 20)
+        },
+        title: "Server saved to ~/.omi/mcp.json",
+        detail: "Its tools are discovered when the assistant starts its next chat session."
+      )
+
       HStack {
         Spacer()
         Button(action: onDismiss) {
-          Text("Done")
-            .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(Ink.surface)
-            .frame(width: 110, height: 32)
-            .background(Ink.primary)
-            .cornerRadius(OmiChrome.controlRadius)
+          ConnectionModalActionButton(title: "Done")
         }
         .buttonStyle(.plain)
       }
     }
   }
 
-  private func labeledField<Content: View>(_ label: String, @ViewBuilder content: () -> Content)
-    -> some View
-  {
-    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+  /// The one card shape both terminal phases use, so "waiting" and "saved" differ by their words
+  /// rather than by their layout.
+  private func statusCard<Icon: View>(
+    @ViewBuilder icon: () -> Icon,
+    title: String,
+    detail: String
+  ) -> some View {
+    HStack(alignment: .top, spacing: OmiSpacing.md) {
+      icon()
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text(title)
+          .scaledFont(size: OmiType.body, weight: .medium)
+          .foregroundColor(Ink.primary)
+          .fixedSize(horizontal: false, vertical: true)
+        Text(detail)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(OmiSpacing.lg)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+        .fill(Ink.rowFill)
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+        .strokeBorder(Ink.separator, lineWidth: 1)
+    )
+  }
+
+  private func labeledField<Content: View>(
+    _ label: String,
+    field: Field,
+    hint: String? = nil,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    let shape = RoundedRectangle(cornerRadius: PageGlass.fieldRadius, style: .continuous)
+    return VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(label)
         .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(Ink.secondary)
@@ -751,17 +854,29 @@ struct AddMcpServerSheet: View {
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.primary)
-        .padding(OmiSpacing.sm)
-        .background(Ink.rowFill)
-        .cornerRadius(OmiChrome.smallControlRadius)
+        .focused($focusedField, equals: field)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(shape.fill(Ink.rowFill))
         .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-            .stroke(Ink.separator, lineWidth: 1)
+          shape.strokeBorder(
+            focusedField == field ? Ink.accent : Ink.separator, lineWidth: 1)
         )
+        .omiAnimation(.easeOut(duration: 0.12), value: focusedField == field)
+      if let hint {
+        Text(hint)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
     }
   }
 
   private func submit() async {
+    // Return-to-submit reaches here from any field, including a half-filled one.
+    guard canSubmit, phase != .submitting else { return }
+    focusedField = nil
     errorMessage = nil
     do {
       if mode == .local {

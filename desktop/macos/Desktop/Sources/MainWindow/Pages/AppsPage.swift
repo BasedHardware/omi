@@ -280,7 +280,7 @@ struct AppsPage: View {
     }
     .dismissableSheet(isPresented: $showAddMcpServerSheet) {
       AddMcpServerSheet(appProvider: appProvider, onDismiss: { showAddMcpServerSheet = false })
-        .frame(width: 440, height: 340)
+        .frame(width: 460, height: 424)
     }
     .dismissableSheet(item: $selectedLocalMcpServer) { server in
       LocalMcpDetailSheet(
