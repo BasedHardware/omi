@@ -337,6 +337,7 @@ def _materialize_prompts(
         return MaterializePromptsResponse()
     now = datetime.now(timezone.utc)
     receipt_outcomes: list[ProactiveMaterializationReceiptOutcome] = []
+    deferred_intent_ids: set[str] = set()
     for rejection in request.rejections:
         try:
             rejected_intent, dead_letter_reason = chat_first_intents_db.record_materialization_rejection(
@@ -373,6 +374,7 @@ def _materialize_prompts(
                 account_generation=request.control_generation,
                 now=now,
             )
+            deferred_intent_ids.add(deferral.intent_id)
         except (chat_first_intents_db.ChatFirstIntentGenerationMismatch, chat_first_intents_db.ProactiveIntentNotReady):
             # A stale device's explicit deferral must not poison the next batch.
             continue
@@ -423,15 +425,19 @@ def _materialize_prompts(
                 account_generation=request.control_generation,
                 now=now,
             )
-        except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc
-        except (
-            chat_first_intents_db.ChatFirstIntentConflictError,
-            chat_first_intents_db.ProactiveIntentNotReady,
-        ) as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail='invalid cold-start terminal receipt'
-            ) from exc
+            outcome = 'acknowledged'
+        except chat_first_intents_db.ChatFirstIntentGenerationMismatch:
+            outcome = 'generation_mismatch'
+        except chat_first_intents_db.ChatFirstIntentConflictError:
+            outcome = 'conflict'
+        except chat_first_intents_db.ProactiveIntentNotReady:
+            outcome = 'missing'
+        except Exception:
+            logger.exception('cold-start terminal receipt processing failed')
+            outcome = 'conflict'
+        receipt_outcomes.append(
+            ProactiveMaterializationReceiptOutcome(intent_id=terminal_receipt.sequence_id, outcome=outcome)
+        )
         CHAT_FIRST_PROACTIVE_TOTAL.labels(
             event='cold_start_terminal_receipt', source='cold_start_sparse', reason='none'
         ).inc()
@@ -450,6 +456,7 @@ def _materialize_prompts(
             uid,
             account_generation=request.control_generation,
             exclude_block_types=exclude_block_types,
+            deferred_intent_ids=deferred_intent_ids,
             now=now,
         )
     except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:

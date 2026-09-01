@@ -649,12 +649,47 @@ def _advance_fetched_intent(
     return apply(transaction)
 
 
+def _dead_letter_malformed_intent(
+    uid: str,
+    intent_id: str,
+    *,
+    account_generation: int,
+    firestore_client: Any,
+) -> None:
+    """Terminalize one still-active malformed row without racing a newer writer."""
+
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=firestore_client)
+    transaction = firestore_client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> None:
+        snapshot = intent_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return
+        raw = snapshot.to_dict() or {}
+        if raw.get('account_generation') != account_generation or raw.get('delivery_state') not in {
+            'ready',
+            'pending_kernel_receipt',
+        }:
+            return
+        try:
+            _intent_from_snapshot(snapshot)
+        except ChatFirstIntentGenerationMismatch:
+            write_transaction.set(
+                intent_ref,
+                {**raw, 'delivery_state': 'dead_letter', 'dead_letter_reason': 'malformed_document'},
+            )
+
+    apply(transaction)
+
+
 def fetch_ready_intent_batch(
     uid: str,
     *,
     account_generation: int,
     limit: int = 8,
     exclude_block_types: set[str] | frozenset[str] | None = None,
+    deferred_intent_ids: set[str] | frozenset[str] | None = None,
     now: datetime | None = None,
     firestore_client: Any = None,
 ) -> ReadyIntentBatch:
@@ -670,20 +705,13 @@ def fetch_ready_intent_batch(
     # collection otherwise grows with account age.
     query = collection.where(filter=FieldFilter('delivery_state', 'in', ['ready', 'pending_kernel_receipt']))
     candidates: list[ProactiveIntent] = []
-    malformed_refs: list[tuple[Any, dict[str, Any]]] = []
+    malformed_intent_ids: list[str] = []
     for snapshot in query.stream():
         try:
             intent = _intent_from_snapshot(snapshot)
         except ChatFirstIntentGenerationMismatch:
             raw = snapshot.to_dict() or {}
-            malformed_refs.append(
-                (
-                    _intent_ref(
-                        uid, getattr(snapshot, 'id', raw.get('intent_id', 'malformed')), firestore_client=client
-                    ),
-                    {**raw, 'delivery_state': 'dead_letter', 'dead_letter_reason': 'malformed_document'},
-                )
-            )
+            malformed_intent_ids.append(getattr(snapshot, 'id', raw.get('intent_id', 'malformed')))
             continue
         if intent.account_generation != account_generation:
             continue
@@ -699,67 +727,50 @@ def fetch_ready_intent_batch(
 
     ready: list[ProactiveIntent] = []
     lifecycle_events: list[IntentLifecycleEvent] = []
-    write_batch = client.batch()
-    has_batched_writes = False
-    for ref, payload in malformed_refs:
-        write_batch.set(ref, payload)
-        has_batched_writes = True
+    for intent_id in malformed_intent_ids:
+        try:
+            _dead_letter_malformed_intent(
+                uid,
+                intent_id,
+                account_generation=account_generation,
+                firestore_client=client,
+            )
+        except Exception:
+            # A concurrently deleted or repaired malformed row is isolated from
+            # every independent ready intent in this fetch.
+            continue
     # Process beyond the response limit when earlier candidates terminalize;
     # the caller still receives up to eight live items in this same fetch.
     for intent in candidates:
+        if deferred_intent_ids and intent.intent_id in deferred_intent_ids:
+            advanced, event = intent, None
+            if len(ready) < limit:
+                ready.append(advanced)
+            if len(ready) >= limit:
+                break
+            continue
         reconcile = intent.fetch_count >= 2 and _message_has_intent_identity(
             uid, intent.intent_id, firestore_client=client
         )
-        if reconcile:
-            try:
-                advanced, event = _advance_fetched_intent(
-                    uid,
-                    intent.intent_id,
-                    account_generation=account_generation,
-                    now=fetched_at,
-                    reconcile=True,
-                    firestore_client=client,
-                )
-            except Exception:
-                # One concurrently malformed or otherwise unadvanceable row is
-                # never allowed to block independent ready intents.
-                continue
-        else:
-            fetch_count = intent.fetch_count + 1
-            common = {'fetch_count': fetch_count, 'last_fetched_at': fetched_at}
-            if fetch_count > UNACKNOWLEDGED_FETCH_BUDGET:
-                advanced = None
-                event = IntentLifecycleEvent('dead_letter', intent.source, 'unacknowledged_after_fetch_budget')
-                updated = intent.model_copy(
-                    update={
-                        **common,
-                        'delivery_state': 'dead_letter',
-                        'dead_letter_reason': 'unacknowledged_after_fetch_budget',
-                    }
-                )
-            else:
-                updated = intent.model_copy(update=common)
-                advanced, event = updated, None
-            update = (
-                common
-                if advanced is not None
-                else {
-                    **common,
-                    'delivery_state': 'dead_letter',
-                    'dead_letter_reason': 'unacknowledged_after_fetch_budget',
-                }
+        try:
+            advanced, event = _advance_fetched_intent(
+                uid,
+                intent.intent_id,
+                account_generation=account_generation,
+                now=fetched_at,
+                reconcile=reconcile,
+                firestore_client=client,
             )
-            write_batch.update(_intent_ref(uid, intent.intent_id, firestore_client=client), update)
-            has_batched_writes = True
+        except Exception:
+            # One concurrently malformed or otherwise unadvanceable row is
+            # never allowed to block independent ready intents.
+            continue
         if event is not None:
             lifecycle_events.append(event)
         if advanced is not None and len(ready) < limit:
             ready.append(advanced)
         if len(ready) >= limit:
             break
-
-    if has_batched_writes:
-        write_batch.commit()
 
     stalled_source = (
         oldest_candidate.source
@@ -848,11 +859,7 @@ def record_materialization_deferral(
     now: datetime,
     firestore_client: Any = None,
 ) -> ProactiveIntent | None:
-    """Exclude one explicitly suppressed delivery from the fetch backstop.
-
-    ``last_deferral_at`` makes replay idempotent when a response is lost after
-    the server committed this acknowledgement.
-    """
+    """Record one explicit suppression without refunding an earlier fetch."""
 
     client = _db(firestore_client)
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
@@ -868,17 +875,8 @@ def record_materialization_deferral(
             raise ChatFirstIntentGenerationMismatch('intent account generation changed')
         if intent.delivery_state not in {'ready', 'pending_kernel_receipt'}:
             return intent
-        raw = snapshot.to_dict() or {}
-        last_deferral_at = raw.get('last_deferral_at')
-        if intent.last_fetched_at is None or (
-            isinstance(last_deferral_at, datetime) and last_deferral_at >= intent.last_fetched_at
-        ):
-            return intent
-        adjusted = intent.model_copy(update={'fetch_count': max(0, intent.fetch_count - 1)})
-        payload = _intent_payload(adjusted)
-        payload['last_deferral_at'] = now
-        write_transaction.set(intent_ref, payload)
-        return adjusted
+        write_transaction.set(intent_ref, {'last_deferral_at': now}, merge=True)
+        return intent
 
     return apply(transaction)
 

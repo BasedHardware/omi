@@ -290,6 +290,53 @@ def test_one_invalid_receipt_never_fails_the_materialization_batch(monkeypatch):
     ]
 
 
+def test_one_stale_cold_start_terminal_receipt_never_fails_the_materialization_batch(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    calls = []
+
+    def acknowledge_terminal(*args, **kwargs):
+        calls.append(kwargs['sequence_id'])
+        if kwargs['sequence_id'] == 'cold-start:stale':
+            raise chat_first_router.chat_first_intents_db.ProactiveIntentNotReady('stale receipt')
+
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db,
+        'acknowledge_sparse_cold_start_sequence_terminal',
+        acknowledge_terminal,
+    )
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db, 'fetch_ready_intent_batch', lambda *args, **kwargs: _batch([])
+    )
+
+    response = _client().post(
+        '/v2/chat/materialize-prompts',
+        json=_request(
+            terminal_receipts=[
+                {
+                    'sequence_id': 'cold-start:stale',
+                    'receipt_id': 'terminal-stale',
+                    'terminal_state': 'completed',
+                },
+                {
+                    'sequence_id': 'cold-start:7',
+                    'receipt_id': 'terminal-current',
+                    'terminal_state': 'completed',
+                },
+            ]
+        ),
+    )
+
+    assert response.status_code == 200
+    assert calls == ['cold-start:stale', 'cold-start:7']
+    assert response.json()['receipt_outcomes'] == [
+        {'intent_id': 'cold-start:stale', 'outcome': 'missing'},
+        {'intent_id': 'cold-start:7', 'outcome': 'acknowledged'},
+    ]
+
+
 def test_tail_deferral_is_reported_separately_from_rejection(monkeypatch):
     _enable_chat_first(monkeypatch)
     deferrals = []
@@ -301,8 +348,11 @@ def test_tail_deferral_is_reported_separately_from_rejection(monkeypatch):
     monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
     monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
+    fetched = []
     monkeypatch.setattr(
-        chat_first_router.chat_first_intents_db, 'fetch_ready_intent_batch', lambda *args, **kwargs: _batch([])
+        chat_first_router.chat_first_intents_db,
+        'fetch_ready_intent_batch',
+        lambda *args, **kwargs: fetched.append(kwargs) or _batch([]),
     )
 
     response = _client().post(
@@ -312,6 +362,7 @@ def test_tail_deferral_is_reported_separately_from_rejection(monkeypatch):
 
     assert response.status_code == 200
     assert deferrals[0]['intent_id'] == 'intent-deferred'
+    assert fetched[0]['deferred_intent_ids'] == {'intent-deferred'}
 
 
 def test_client_rejection_codes_never_create_unbounded_metric_labels(monkeypatch):

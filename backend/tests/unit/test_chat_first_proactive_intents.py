@@ -53,10 +53,14 @@ class _Document:
     def get(self, transaction=None):
         if transaction is not None:
             transaction.read()
+            hook = self._database.transaction_read_hooks.pop(self._path, None)
+            if hook is not None:
+                hook()
         return _Snapshot(self._database, self._path)
 
-    def set(self, payload):
-        self._database.rows[self._path] = deepcopy(payload)
+    def set(self, payload, merge=False):
+        existing = self._database.rows.get(self._path, {}) if merge else {}
+        self._database.rows[self._path] = {**deepcopy(existing), **deepcopy(payload)}
 
 
 class _Collection:
@@ -141,16 +145,17 @@ class _FilteredCollection:
 
 
 class _Transaction:
-    def __init__(self):
+    def __init__(self, database):
+        self.database = database
         self._wrote = False
 
     def read(self):
         if self._wrote:
             raise AssertionError('Firestore transactions must finish reads before writes')
 
-    def set(self, ref, payload):
+    def set(self, ref, payload, merge=False):
         self._wrote = True
-        ref.set(payload)
+        ref.set(payload, merge=merge)
 
 
 class _WriteBatch:
@@ -162,13 +167,23 @@ class _WriteBatch:
         self.writes.append((ref, payload))
 
     def update(self, ref, payload):
-        existing = ref.get().to_dict() or {}
-        self.writes.append((ref, {**existing, **payload}))
+        self.writes.append(('update', ref, payload))
 
     def commit(self):
         self.database.batch_commit_count += 1
-        for ref, payload in self.writes:
-            ref.set(payload)
+        hook = self.database.batch_commit_hook
+        self.database.batch_commit_hook = None
+        if hook is not None:
+            hook()
+        for operation in self.writes:
+            if len(operation) == 2:
+                ref, payload = operation
+                ref.set(payload)
+                continue
+            _, ref, payload = operation
+            if ref._path not in self.database.rows:
+                raise KeyError('write batch update requires an existing document')
+            ref.set(payload, merge=True)
 
 
 class _Firestore:
@@ -176,13 +191,15 @@ class _Firestore:
         self.rows = {}
         self.transaction_count = 0
         self.batch_commit_count = 0
+        self.transaction_read_hooks = {}
+        self.batch_commit_hook = None
 
     def collection(self, name):
         return _Collection(self, (name,))
 
     def transaction(self):
         self.transaction_count += 1
-        return _Transaction()
+        return _Transaction(self)
 
     def batch(self):
         return _WriteBatch(self)
@@ -505,7 +522,7 @@ def test_fetch_budget_dead_letters_an_unacknowledged_intent(firestore):
 
 
 def test_tail_deferral_never_spends_the_unacknowledged_fetch_budget(firestore):
-    intent, _ = intents_db.create_intent(
+    deferred, _ = intents_db.create_intent(
         UID,
         source='daily_opener',
         continuity_key='daily:tail-deferred',
@@ -515,25 +532,48 @@ def test_tail_deferral_never_spends_the_unacknowledged_fetch_budget(firestore):
         now=NOW,
         firestore_client=firestore,
     )
+    undeferred, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:undeferred-sibling',
+        subject=ChatFirstSubject(kind='capture', id='undeferred-sibling'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='undeferred-sibling', summary='Sibling')],
+        account_generation=GENERATION,
+        now=NOW + timedelta(seconds=1),
+        firestore_client=firestore,
+    )
 
-    for index in range(intents_db.UNACKNOWLEDGED_FETCH_BUDGET + 5):
-        fetched = intents_db.fetch_ready_intents(
-            UID, account_generation=GENERATION, now=NOW + timedelta(minutes=index), firestore_client=firestore
-        )
-        assert [item.intent_id for item in fetched] == [intent.intent_id]
+    for index in range(25):
+        request_now = NOW + timedelta(minutes=index)
+        # Match the router order exactly: record deferrals and then fetch with
+        # the same request timestamp and the current request's deferred IDs.
         intents_db.record_materialization_deferral(
             UID,
-            intent_id=intent.intent_id,
+            intent_id=deferred.intent_id,
             account_generation=GENERATION,
-            now=NOW + timedelta(minutes=index, seconds=1),
+            now=request_now,
             firestore_client=firestore,
         )
+        batch = intents_db.fetch_ready_intent_batch(
+            UID,
+            account_generation=GENERATION,
+            deferred_intent_ids={deferred.intent_id},
+            now=request_now,
+            firestore_client=firestore,
+        )
+        assert deferred.intent_id in [item.intent_id for item in batch.intents]
 
-    stored = intents_db._intent_from_snapshot(
-        intents_db._intent_ref(UID, intent.intent_id, firestore_client=firestore).get()
+    stored_deferred = intents_db._intent_from_snapshot(
+        intents_db._intent_ref(UID, deferred.intent_id, firestore_client=firestore).get()
     )
-    assert stored.delivery_state == 'ready'
-    assert stored.fetch_count == 0
+    stored_undeferred = intents_db._intent_from_snapshot(
+        intents_db._intent_ref(UID, undeferred.intent_id, firestore_client=firestore).get()
+    )
+    assert stored_deferred.delivery_state == 'ready'
+    assert stored_deferred.fetch_count == 0
+    assert stored_deferred.last_fetched_at is None
+    assert stored_undeferred.delivery_state == 'dead_letter'
+    assert stored_undeferred.fetch_count == intents_db.UNACKNOWLEDGED_FETCH_BUDGET + 1
 
 
 def test_terminal_receipt_is_acknowledged_idempotently_after_fetch_budget_dead_letter(firestore):
@@ -598,7 +638,7 @@ def test_stale_rejection_is_absorbed_after_other_device_delivery_or_deletion(fir
     assert missing is None and missing_reason is None
 
 
-def test_fetch_isolates_malformed_documents_and_batches_healthy_fetch_updates(firestore):
+def test_fetch_isolates_malformed_documents_and_transactions_healthy_fetch_updates(firestore):
     healthy, _ = intents_db.create_intent(
         UID,
         source='capture_arrival',
@@ -618,8 +658,106 @@ def test_fetch_isolates_malformed_documents_and_batches_healthy_fetch_updates(fi
     assert [item.intent_id for item in batch.intents] == [healthy.intent_id]
     assert firestore.rows[malformed_path]['delivery_state'] == 'dead_letter'
     assert firestore.rows[malformed_path]['dead_letter_reason'] == 'malformed_document'
-    assert firestore.transaction_count == transactions_before
-    assert firestore.batch_commit_count == 1
+    assert firestore.transaction_count == transactions_before + 2
+    assert firestore.batch_commit_count == 0
+
+
+def test_concurrently_deleted_candidate_does_not_abort_fetch_or_other_writes(firestore):
+    deleted, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:deleted-during-fetch',
+        subject=ChatFirstSubject(kind='capture', id='deleted-during-fetch'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='deleted-during-fetch', summary='Deleted')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    healthy, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:survives-peer-delete',
+        subject=ChatFirstSubject(kind='capture', id='survives-peer-delete'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='survives-peer-delete', summary='Healthy')],
+        account_generation=GENERATION,
+        now=NOW + timedelta(seconds=1),
+        firestore_client=firestore,
+    )
+    deleted_path = ('users', UID, intents_db.INTENTS_COLLECTION, deleted.intent_id)
+
+    def delete_during_write():
+        firestore.rows.pop(deleted_path)
+
+    firestore.transaction_read_hooks[deleted_path] = delete_during_write
+    firestore.batch_commit_hook = delete_during_write
+
+    batch = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(minutes=1), firestore_client=firestore
+    )
+
+    assert [item.intent_id for item in batch.intents] == [healthy.intent_id]
+    healthy_path = ('users', UID, intents_db.INTENTS_COLLECTION, healthy.intent_id)
+    assert firestore.rows[healthy_path]['fetch_count'] == 1
+
+
+def test_dead_letter_transition_never_overwrites_a_concurrent_delivery(firestore):
+    intent, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:delivered-before-dead-letter',
+        subject=ChatFirstSubject(kind='capture', id='delivered-before-dead-letter'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='delivered-before-dead-letter', summary='Race')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    path = ('users', UID, intents_db.INTENTS_COLLECTION, intent.intent_id)
+    firestore.rows[path]['fetch_count'] = intents_db.UNACKNOWLEDGED_FETCH_BUDGET
+
+    def deliver_concurrently():
+        firestore.rows[path]['delivery_state'] = 'delivered'
+        firestore.rows[path]['materialization_receipt_id'] = 'other-device-receipt'
+
+    firestore.transaction_read_hooks[path] = deliver_concurrently
+    firestore.batch_commit_hook = deliver_concurrently
+
+    batch = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(minutes=1), firestore_client=firestore
+    )
+
+    assert batch.intents == []
+    assert firestore.rows[path]['delivery_state'] == 'delivered'
+    assert firestore.rows[path]['materialization_receipt_id'] == 'other-device-receipt'
+
+
+def test_two_interleaved_device_fetches_increment_fetch_count_twice(firestore):
+    intent, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:two-device-fetch',
+        subject=ChatFirstSubject(kind='capture', id='two-device-fetch'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='two-device-fetch', summary='Two devices')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    path = ('users', UID, intents_db.INTENTS_COLLECTION, intent.intent_id)
+
+    def second_device_fetch():
+        intents_db.fetch_ready_intent_batch(
+            UID,
+            account_generation=GENERATION,
+            now=NOW + timedelta(seconds=1),
+            firestore_client=firestore,
+        )
+
+    firestore.transaction_read_hooks[path] = second_device_fetch
+    firestore.batch_commit_hook = second_device_fetch
+    intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(seconds=2), firestore_client=firestore
+    )
+
+    assert firestore.rows[path]['fetch_count'] == 2
 
 
 def test_fetch_isolates_one_advance_failure_from_the_healthy_batch(firestore, monkeypatch):
@@ -648,11 +786,14 @@ def test_fetch_isolates_one_advance_failure_from_the_healthy_batch(firestore, mo
     firestore.rows[('users', UID, 'messages', intents_db._stable_chat_first_turn_id(failing.intent_id))] = {
         'metadata': '{"chatFirstIntentId":"' + failing.intent_id + '"}'
     }
-    monkeypatch.setattr(
-        intents_db,
-        '_advance_fetched_intent',
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('isolated advance failure')),
-    )
+    advance = intents_db._advance_fetched_intent
+
+    def fail_one_advance(uid, intent_id, **kwargs):
+        if intent_id == failing.intent_id:
+            raise RuntimeError('isolated advance failure')
+        return advance(uid, intent_id, **kwargs)
+
+    monkeypatch.setattr(intents_db, '_advance_fetched_intent', fail_one_advance)
 
     batch = intents_db.fetch_ready_intent_batch(
         UID, account_generation=GENERATION, now=NOW + timedelta(minutes=1), firestore_client=firestore
