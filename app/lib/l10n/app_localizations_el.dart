@@ -9985,4 +9985,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get transcriptionNoAudio => 'Η μεταγραφή δεν λαμβάνει ήχο';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

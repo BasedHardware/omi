@@ -9931,4 +9931,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get transcriptionNoAudio => 'Транскрипција не прима аудио';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

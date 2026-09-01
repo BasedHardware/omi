@@ -11740,5 +11740,9 @@
     "transcriptionNoAudio": "Transcription not receiving audio",
     "@transcriptionNoAudio": {
         "description": "Status when an active call transcription socket receives no audio frames"
+    },
+    "tapPlusToStartRecording": "Tap + to start recording",
+    "@tapPlusToStartRecording": {
+        "description": "Empty-home hint pointing at the + record button"
     }
 }

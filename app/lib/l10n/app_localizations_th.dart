@@ -9858,4 +9858,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get transcriptionNoAudio => 'การถอดเสียงไม่ได้รับเสียง';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

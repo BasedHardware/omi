@@ -9746,4 +9746,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get transcriptionNoAudio => '文字起こしが音声を受信していません';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

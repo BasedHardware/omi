@@ -9908,4 +9908,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get transcriptionNoAudio => 'Transkripcia neprijíma zvuk';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

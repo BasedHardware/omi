@@ -9749,4 +9749,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get transcriptionNoAudio => '전사가 오디오를 받지 못하고 있습니다';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

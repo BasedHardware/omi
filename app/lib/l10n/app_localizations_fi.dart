@@ -9916,4 +9916,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get transcriptionNoAudio => 'Transkriptio ei vastaanota ääntä';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

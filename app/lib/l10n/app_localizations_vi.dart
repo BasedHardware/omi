@@ -9910,4 +9910,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get transcriptionNoAudio => 'Bản ghi âm không nhận được âm thanh';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }
