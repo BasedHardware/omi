@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import React from 'react';
 import {Animated, Text} from 'react-native';
 import ReactTestRenderer, {act} from 'react-test-renderer';
@@ -8,15 +10,6 @@ let mockReduceMotion = false;
 jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => mockReduceMotion,
 }));
-
-jest.mock('../ui/GlassPanel', () => {
-  const ReactModule = require('react');
-  const {View} = require('react-native');
-  return {
-    GlassPanel: (props: Record<string, unknown>) =>
-      ReactModule.createElement(View, props),
-  };
-});
 
 afterEach(() => {
   mockReduceMotion = false;
@@ -40,6 +33,14 @@ function layoutChip(
     });
   });
 }
+
+test('chip pill is a React Native View, not a native glass host', () => {
+  const source = readFileSync(resolve(__dirname, './ChipRail.tsx'), 'utf8');
+  expect(source).not.toContain('GlassPanel');
+  expect(source).not.toContain('OmiGlassPanel');
+  expect(source).toContain('token.color.glassStrong');
+  expect(source).toContain('Animated.View');
+});
 
 test('slides a glass pill behind the selected chip in 120ms ease-out', () => {
   const timing = jest.spyOn(Animated, 'timing');
