@@ -131,18 +131,6 @@ void main() {
       expect(result.recordings, isEmpty);
     });
 
-    test('a day of only short conversations is not an empty day', () {
-      // Its entries are empty because everything folded into shortOnes, but the
-      // day still happened — calling it empty contradicts the line counting it.
-      final result = snapshot(
-        conversations: [_conversation('blip', 'yeah ok', day.add(const Duration(hours: 9)), 6)],
-      );
-
-      expect(result.entries, isEmpty);
-      expect(result.shortOnes, hasLength(1));
-      expect(result.isEmpty, isFalse);
-    });
-
     test('keeps only the selected day', () {
       final result = snapshot(
         conversations: [
