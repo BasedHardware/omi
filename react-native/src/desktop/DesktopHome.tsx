@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useMemo} from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -15,20 +15,9 @@ import type {
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
 import type {DesktopSession} from './desktopChrome';
-import {ShippingPressable} from './ShippingPressable';
 import {ShippingListInsert} from './ShippingStage';
 import {EmptyCopy, ReadRow, SectionTitle, TaskRow} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
-
-export const homeFilters = [
-  'All',
-  'Conversations',
-  'Memories',
-  'Tasks',
-  'Rewind',
-] as const;
-
-export type HomeFilter = (typeof homeFilters)[number];
 
 type Props = {
   chatBusy: boolean;
@@ -42,29 +31,6 @@ type Props = {
   session: DesktopSession;
   signingIn: boolean;
 };
-
-function FilterText({
-  active,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  label: HomeFilter;
-  onPress: () => void;
-}) {
-  return (
-    <ShippingPressable
-      accessibilityLabel={`Filter ${label}`}
-      accessibilityRole="button"
-      accessibilityState={{selected: active}}
-      onPress={onPress}
-      style={styles.filterItem}>
-      <Text style={[styles.filterText, active && styles.filterTextActive]}>
-        {label}
-      </Text>
-    </ShippingPressable>
-  );
-}
 
 export function RewindPanel() {
   return (
@@ -113,10 +79,10 @@ function SessionBanner({
           disabled={signingIn}
           onPress={onSignIn}
           style={({pressed}) => [
-            styles.signInButton,
+            styles.bannerActionHit,
             pressed && styles.pressed,
           ]}>
-          <Text style={styles.signInText}>
+          <Text style={styles.bannerAction}>
             {signingIn ? 'Signing in…' : 'Sign in'}
           </Text>
         </FocusPressable>
@@ -187,25 +153,19 @@ export function DesktopHome({
   session,
   signingIn,
 }: Props) {
-  const [filter, setFilter] = useState<HomeFilter>('All');
   const query = draft.trim();
   const normalized = query.toLocaleLowerCase();
-  const currents = useMemo(() => {
+  const conversations = useMemo(() => {
     return reads.filter(item => {
-      if (item.kind === 'task') {
+      if (item.kind !== 'conversation') {
         return false;
       }
-      const kindMatches =
-        filter === 'All' ||
-        (filter === 'Conversations' && item.kind === 'conversation') ||
-        (filter === 'Memories' && item.kind === 'memory');
       return (
-        kindMatches &&
-        (normalized === '' ||
-          item.searchableText.toLocaleLowerCase().includes(normalized))
+        normalized === '' ||
+        item.searchableText.toLocaleLowerCase().includes(normalized)
       );
     });
-  }, [filter, normalized, reads]);
+  }, [normalized, reads]);
   const tasks =
     outcomes?.tasks.status === 'success' ? outcomes.tasks.value.items : [];
   const visibleTasks = tasks.filter(
@@ -213,20 +173,8 @@ export function DesktopHome({
       normalized === '' ||
       item.searchableText.toLocaleLowerCase().includes(normalized),
   );
-  const showCurrents = filter !== 'Tasks' && filter !== 'Rewind';
-  const showTasks = filter === 'All' || filter === 'Tasks';
   return (
     <View style={styles.home}>
-      <View accessibilityRole="tablist" style={styles.filterRow}>
-        {homeFilters.map(label => (
-          <FilterText
-            active={filter === label}
-            key={label}
-            label={label}
-            onPress={() => setFilter(label)}
-          />
-        ))}
-      </View>
       <SessionBanner
         onRefresh={onRefresh}
         onSignIn={onSignIn}
@@ -240,85 +188,69 @@ export function DesktopHome({
         {messages.length > 0 || chatBusy ? (
           <AskExchange chatBusy={chatBusy} messages={messages} />
         ) : null}
-        {filter === 'Rewind' ? (
-          <RewindPanel />
-        ) : (
-          <>
-            {showCurrents ? (
-              <View accessibilityLabel="Home currents">
-                <SectionTitle>Currents</SectionTitle>
-                {currents.length > 0 ? (
-                  currents.map(item => (
-                    <ShippingListInsert
-                      itemKey={`${item.kind}-${item.id}`}
-                      key={`${item.kind}-${item.id}`}>
-                      <ReadRow item={item} />
-                    </ShippingListInsert>
-                  ))
-                ) : (
-                  <EmptyCopy>
-                    {readsPhase === 'ready'
-                      ? query !== ''
-                        ? 'Nothing captured matches this search.'
-                        : 'Nothing current right now.'
-                      : 'Currents will show here when your day is loaded.'}
-                  </EmptyCopy>
-                )}
-              </View>
-            ) : null}
-            {showTasks ? (
-              <View accessibilityLabel="Home tasks">
-                <SectionTitle>Tasks</SectionTitle>
-                {visibleTasks.length > 0 ? (
-                  visibleTasks.map(item => (
-                    <ShippingListInsert itemKey={item.id} key={item.id}>
-                      <TaskRow item={item} />
-                    </ShippingListInsert>
-                  ))
-                ) : (
-                  <EmptyCopy>No tasks yet</EmptyCopy>
-                )}
-              </View>
-            ) : null}
-          </>
-        )}
+        <View accessibilityLabel="Home tasks">
+          <SectionTitle>Today</SectionTitle>
+          {visibleTasks.length > 0 ? (
+            visibleTasks.map(item => (
+              <ShippingListInsert itemKey={item.id} key={item.id}>
+                <TaskRow item={item} />
+              </ShippingListInsert>
+            ))
+          ) : (
+            <EmptyCopy>No tasks yet</EmptyCopy>
+          )}
+        </View>
+        <View accessibilityLabel="Home currents">
+          <SectionTitle>Conversations</SectionTitle>
+          {conversations.length > 0 ? (
+            conversations.map(item => (
+              <ShippingListInsert
+                itemKey={`${item.kind}-${item.id}`}
+                key={`${item.kind}-${item.id}`}>
+                <ReadRow item={item} />
+              </ShippingListInsert>
+            ))
+          ) : (
+            <EmptyCopy>
+              {readsPhase === 'ready'
+                ? query !== ''
+                  ? 'Nothing captured matches this search.'
+                  : 'Conversations will show here when your day is loaded.'
+                : 'Conversations will show here when your day is loaded.'}
+            </EmptyCopy>
+          )}
+        </View>
+        <View accessibilityLabel="Home rewind">
+          <SectionTitle>Screen history</SectionTitle>
+          <EmptyCopy>Screen history is ready when capture is on</EmptyCopy>
+        </View>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  home: {flex: 1},
-  filterRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 14,
-    minHeight: 32,
-  },
-  filterItem: {
-    alignItems: 'center',
-    height: 28,
-    justifyContent: 'center',
-  },
-  filterText: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.caption,
-    fontWeight: '600',
-  },
-  filterTextActive: {color: token.color.ink},
+  home: {flex: 1, gap: 12},
   banner: {
     alignItems: 'center',
+    alignSelf: 'stretch',
     flexDirection: 'row',
-    gap: 10,
-    minHeight: 28,
+    gap: 12,
+    minHeight: 32,
+    width: '100%',
   },
   bannerText: {
     color: token.color.inkMuted,
     flex: 1,
+    flexShrink: 1,
     fontFamily: token.font,
     fontSize: token.type.meta,
+    minWidth: 0,
+  },
+  bannerActionHit: {
+    flexShrink: 0,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
   },
   bannerAction: {
     color: token.color.ink,
@@ -326,22 +258,10 @@ const styles = StyleSheet.create({
     fontSize: token.type.meta,
     fontWeight: '600',
   },
-  signInButton: {
-    backgroundColor: token.color.dark,
-    borderRadius: token.radius.control,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  signInText: {
-    color: token.color.white,
-    fontFamily: token.font,
-    fontSize: token.type.caption,
-    fontWeight: '600',
-  },
   pressed: {opacity: 0.78},
   list: {flex: 1},
-  listContent: {paddingBottom: 24, paddingTop: 4},
-  exchange: {gap: 4, paddingBottom: 8},
+  listContent: {gap: 8, paddingBottom: 32},
+  exchange: {gap: 4, paddingBottom: 12},
   exchangeRow: {gap: 3, paddingVertical: 6},
   rowMeta: {
     color: token.color.inkMuted,

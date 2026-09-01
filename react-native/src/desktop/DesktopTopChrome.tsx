@@ -1,9 +1,8 @@
 import React from 'react';
 import {StyleSheet, Text, TextInput, View} from 'react-native';
 import House from 'lucide-react-native/icons/house';
-import Library from 'lucide-react-native/icons/library';
+import MessageCircle from 'lucide-react-native/icons/message-circle';
 import ListFilter from 'lucide-react-native/icons/list-filter';
-import Clock from 'lucide-react-native/icons/clock';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import Search from 'lucide-react-native/icons/search';
 import Settings from 'lucide-react-native/icons/settings';
@@ -24,9 +23,8 @@ export type DesktopRoute = DesktopNavItem | 'Settings';
 
 const navIcons: Record<DesktopNavItem, typeof Search> = {
   Home: House,
-  Library: Library,
+  Conversations: MessageCircle,
   Tasks: ListFilter,
-  Rewind: Clock,
   Apps: Puzzle,
 };
 
@@ -121,7 +119,8 @@ export function DesktopChrome({
 
 const styles = StyleSheet.create({
   chrome: {
-    gap: 8,
+    gap: 10,
+    marginBottom: 8,
   },
   row: {
     alignItems: 'center',
@@ -138,15 +137,15 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     flexShrink: 1,
-    gap: 4,
+    gap: 6,
   },
   navItem: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 5,
+    gap: 6,
     height: 34,
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
   },
   navText: {
     color: token.color.inkMuted,
@@ -161,11 +160,14 @@ const styles = StyleSheet.create({
   },
   omnibar: {
     alignItems: 'center',
+    alignSelf: 'stretch',
+    backgroundColor: token.color.glassQuiet,
+    borderRadius: 14,
     flexDirection: 'row',
     gap: 8,
     height: desktopOmnibarHeight,
     minWidth: 220,
-    paddingHorizontal: 4,
+    paddingHorizontal: 12,
   },
   omnibarInput: {
     color: token.color.ink,
@@ -190,7 +192,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     height: 30,
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
   },
   sendText: {
     color: token.color.ink,
