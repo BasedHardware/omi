@@ -51,5 +51,6 @@ extension DesktopAutomationActionRegistry {
       ]
     }
 
+    registerResponseContextActions()
   }
 }

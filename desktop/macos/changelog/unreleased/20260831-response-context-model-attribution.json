@@ -1,0 +1,3 @@
+{
+  "change": "Every answer now shows which model actually produced it: the Response Context (i) popover — including on the latest message and on voice answers — gains a Model row reporting the served model observed on the response itself (e.g. the managed chat lane's real model), never the requested alias."
+}

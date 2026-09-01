@@ -92,6 +92,9 @@ interface ActiveRequestContext {
   isRunning?: boolean;
   authorityController?: AbortController;
   revoked?: boolean;
+  /** Served models observed on this query's completions (from `model_used`
+   *  adapter events); reported on the terminal result message. */
+  modelsUsed?: Set<string>;
 }
 
 const TERMINAL_RUN_EVENT_STATUSES = new Set([
@@ -208,6 +211,7 @@ export class JsonlTransport {
         outputTokens: result.run.outputTokens ?? Math.ceil(result.text.length / 4),
         cacheReadTokens: result.run.cacheReadTokens ?? 0,
         cacheWriteTokens: result.run.cacheWriteTokens ?? 0,
+        modelsUsed: context.modelsUsed ? [...context.modelsUsed] : undefined,
         artifacts: result.artifacts.map(serializeArtifact),
         completionDeltaArtifacts: result.completionDeltaArtifacts?.map(serializeArtifact),
       };
@@ -593,6 +597,15 @@ export class JsonlTransport {
     context.adapterSessionId = adapterEvent.adapterSessionId ?? context.adapterSessionId;
 
     switch (type) {
+      case "model_used": {
+        // Collected onto the owning query and reported once on its terminal
+        // result; not forwarded as a streaming event.
+        const served = (adapterEvent as { model?: unknown }).model;
+        if (typeof served === "string" && served.length > 0) {
+          (context.modelsUsed ??= new Set()).add(served);
+        }
+        break;
+      }
       case "text_delta":
       case "tool_activity":
       case "tool_result_display":

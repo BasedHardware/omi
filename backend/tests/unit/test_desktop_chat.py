@@ -46,7 +46,10 @@ def test_request_translates_openai_tool_history_and_alias():
             'tool_choice': 'auto',
         }
     )
-    assert public_model == 'omi-sonnet'
+    # Response identity is the SERVED model (OpenAI chat-completions convention:
+    # response.model names the model that generated the response), never the
+    # requested alias — clients attribute answers from it.
+    assert public_model == 'claude-sonnet-4-6'
     assert payload['model'] == 'claude-sonnet-4-6'
     assert payload['max_tokens'] == 16_384
     assert payload['system'] == 'be concise'
