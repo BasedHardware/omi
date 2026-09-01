@@ -65,6 +65,7 @@ from models.memory_evidence import (
 )
 from models.memories import Evidence, MemoryDB, MemoryCategory, SubjectAttribution, decide_initial_memory_tier
 from models.memory_apply import (
+    ApplyResult,
     ApplyStatus,
     MemoryControlState,
     MemoryWriterClass,
@@ -1401,6 +1402,42 @@ def _canonical_extraction_apply_write(
     )
 
 
+_DUPLICATE_ADD_ROW_REASON = "add patch new_memory_id already exists"
+
+
+def _existing_identical_add_row(
+    uid: str,
+    *,
+    result: ApplyResult,
+    memory_id: str,
+    data: Dict[str, Any],
+    db_client: Any,
+) -> Optional[MemoryItem]:
+    """Resolve an add collision against an already-committed identical row.
+
+    Operation identity folds the observed head commit into the operation id, so
+    a duplicate submission is only replay-idempotent while the account head has
+    not moved. Re-sending the same memory after any other ledger write proposes
+    a fresh operation whose add then collides with the deterministically derived
+    row id. The requested row already exists with the same content, so the write
+    is complete rather than failed. A collision with different content — a
+    client-supplied id reused for new text — is still an error, and a row that
+    is no longer active keeps failing so a resurrected id can never masquerade
+    as a fresh create.
+    """
+    if result.status != ApplyStatus.invalid_patch or result.reason != _DUPLICATE_ADD_ROW_REASON:
+        return None
+    snapshot = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
+    if not getattr(snapshot, "exists", False):
+        return None
+    item = MemoryItem(**_snapshot_payload(snapshot))
+    if item.status != MemoryItemStatus.active:
+        return None
+    if (item.content or "").strip() != (data.get("content") or "").strip():
+        return None
+    return item
+
+
 def write_canonical_extraction_memory(
     uid: str,
     data: Dict[str, Any],
@@ -1455,7 +1492,26 @@ def write_canonical_extraction_memory(
             break
     assert result is not None
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
-        raise RuntimeError(f"canonical write failed: {result.status} ({result.reason})")
+        duplicate_row = _existing_identical_add_row(
+            uid,
+            result=result,
+            memory_id=memory_id,
+            data=data,
+            db_client=client,
+        )
+        if duplicate_row is None:
+            raise RuntimeError(f"canonical write failed: {result.status} ({result.reason})")
+        logger.info(
+            "canonical duplicate add resolved to existing row uid=%s memory_id=%s",
+            uid,
+            duplicate_row.memory_id,
+        )
+        assert_legal_state(
+            DomainMemoryLayer(duplicate_row.tier.value),
+            physical_status_to_record_status(duplicate_row.status.value),
+            MemoryProcessingState(duplicate_row.processing_state.value),
+        )
+        return duplicate_row.memory_id
 
     committed_id = memory_id
     if result.memory_items:
