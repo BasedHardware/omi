@@ -73,6 +73,10 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   /// outside the loaded window — the day is not empty, it is just not fetched.
   bool _dayLoadStoppedEarly = false;
 
+  /// Fires at the next local midnight so "Today"/"Yesterday" and the relative
+  /// due markers re-derive on a screen that was left open overnight.
+  Timer? _midnightTimer;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -80,10 +84,27 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadSummaries());
+    _scheduleMidnightRefresh();
+  }
+
+  void _scheduleMidnightRefresh() {
+    _midnightTimer?.cancel();
+    final now = DateTime.now();
+    // A second past the boundary, so the new day is unambiguous by the time the
+    // labels are rebuilt.
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1).add(const Duration(seconds: 1));
+    _midnightTimer = Timer(nextMidnight.difference(now), () {
+      if (!mounted) return;
+      // The selected day deliberately stays where it is — its conversations did
+      // not move, only what today means. The header relabels itself.
+      setState(() {});
+      _scheduleMidnightRefresh();
+    });
   }
 
   @override
   void dispose() {
+    _midnightTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -143,10 +164,16 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
 
     setState(() => _loadingOlderDays = true);
     var pages = 0;
-    while (mounted && pages++ < maxPages && !_isDayLoaded(provider, day) && provider.hasMoreConversations) {
+    while (mounted &&
+        _selectedDay == day &&
+        pages++ < maxPages &&
+        !_isDayLoaded(provider, day) &&
+        provider.hasMoreConversations) {
       if (!await provider.getMoreConversationsFromServer()) break;
     }
-    if (!mounted) return;
+    // Stepping through days faster than the pages load leaves this request
+    // owning nothing: a newer day is on screen and will report its own state.
+    if (!mounted || _selectedDay != day) return;
     setState(() {
       _loadingOlderDays = false;
       _dayLoadStoppedEarly = !_isDayLoaded(provider, day) && provider.hasMoreConversations;
@@ -189,11 +216,16 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
         return RefreshIndicator(
           onRefresh: () async {
             HapticFeedback.mediumImpact();
+            final refreshedDay = _selectedDay;
             await Future.wait([
               context.read<ConversationProvider>().getInitialConversations(),
               context.read<ActionItemsProvider>().fetchActionItems(),
               _loadSummaries(),
             ]);
+            // The refresh resets the list to the first page, so a day further
+            // back than that page falls out of the loaded window and would
+            // otherwise read as empty until the user navigated away and back.
+            await _loadDayIfNeeded(refreshedDay, maxPages: _maxPagesPerDayJump);
           },
           color: Colors.white,
           backgroundColor: const Color(0xFF1F1F25),

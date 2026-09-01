@@ -55,7 +55,9 @@ HomeDaySnapshot buildHomeDaySnapshot({
   required List<ActionItemWithMetadata> tasks,
   required int shortThreshold,
   required bool isNewUser,
+  DateTime? now,
 }) {
+  final current = now ?? DateTime.now();
   final dayConversations = conversations
       .where((conversation) => conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt) == day)
       .toList()
@@ -67,7 +69,13 @@ HomeDaySnapshot buildHomeDaySnapshot({
   final dayConversationIds = <String>{};
   final fingerprint = StringBuffer()
     ..write(day.toIso8601String())
-    ..write(isNewUser);
+    ..write(isNewUser)
+    // Which conversations are collapsed depends on this, and it changes when
+    // the user edits the short-conversation setting.
+    ..write(shortThreshold)
+    // Due markers read "Overdue"/"Today"/"Tomorrow" relative to the wall clock,
+    // so the same task means something different after midnight.
+    ..write(DateTime(current.year, current.month, current.day).toIso8601String());
 
   for (final conversation in dayConversations) {
     final seconds = conversation.getDurationInSeconds();
@@ -77,6 +85,9 @@ HomeDaySnapshot buildHomeDaySnapshot({
     fingerprint
       ..write('|c:')
       ..write(conversation.id)
+      // Reconciliation can move a conversation's start within the same day,
+      // changing both its printed time and its place in the order.
+      ..write((conversation.startedAt ?? conversation.createdAt).millisecondsSinceEpoch)
       ..write(seconds)
       ..write(conversation.discarded)
       ..write(conversation.structured.title)

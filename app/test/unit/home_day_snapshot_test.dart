@@ -12,6 +12,7 @@ void main() {
     List<ActionItemWithMetadata> tasks = const [],
     DateTime? on,
     int shortThreshold = 120,
+    DateTime? now,
   }) {
     return buildHomeDaySnapshot(
       day: on ?? day,
@@ -19,6 +20,7 @@ void main() {
       tasks: tasks,
       shortThreshold: shortThreshold,
       isNewUser: false,
+      now: now ?? DateTime(2026, 7, 15, 12),
     );
   }
 
@@ -62,6 +64,28 @@ void main() {
       expect(result.highlights.map((c) => c.id), ['early', 'late']);
       expect(result.shortOnes.map((c) => c.id), ['blip']);
       expect(result.conversations.map((c) => c.id), ['early', 'blip', 'late']);
+    });
+
+    test('changes when the short-conversation threshold changes', () {
+      // Otherwise the collapsed/expanded split would keep the old partition
+      // until something unrelated moved.
+      expect(snapshot(shortThreshold: 120), isNot(snapshot(shortThreshold: 900)));
+    });
+
+    test('changes when the wall clock crosses midnight', () {
+      // Due markers read Overdue/Today/Tomorrow against the current day, so the
+      // same task means something different tomorrow.
+      expect(
+        snapshot(now: DateTime(2026, 7, 15, 23, 59)),
+        isNot(snapshot(now: DateTime(2026, 7, 16, 0, 1))),
+      );
+    });
+
+    test('changes when a conversation start time moves within the day', () {
+      final before = [_conversation('a', 'Standup', day.add(const Duration(hours: 9)), 600)];
+      final after = [_conversation('a', 'Standup', day.add(const Duration(hours: 10)), 600)];
+
+      expect(snapshot(conversations: before), isNot(snapshot(conversations: after)));
     });
 
     test('keeps only the selected day', () {

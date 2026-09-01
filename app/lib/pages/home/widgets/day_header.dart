@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_map/flutter_map.dart';
@@ -286,7 +287,39 @@ class _DayMapBackdropState extends State<_DayMapBackdrop> {
   // after layout makes the tile layer load the fitted bounds.
   static const double _tileLoadZoomDelta = 0.000001;
 
+  static const double _singlePointZoom = 14;
+  static const double _boundsMaxZoom = 15;
+  static const EdgeInsets _boundsPadding = EdgeInsets.all(48);
+
   final MapController _mapController = MapController();
+
+  @override
+  void didUpdateWidget(covariant _DayMapBackdrop oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // FlutterMap applies its camera fit once, at creation. A day that gains or
+    // moves a location while it is on screen keeps the same State (the key is
+    // the day), so without this the backdrop stays framed on the old points.
+    if (!listEquals(oldWidget.points, widget.points)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fitToPoints());
+    }
+  }
+
+  void _fitToPoints() {
+    if (!mounted) return;
+    final distinctPoints = widget.points.toSet().toList();
+    if (distinctPoints.isEmpty) return;
+    if (distinctPoints.length == 1) {
+      _mapController.move(distinctPoints.first, _singlePointZoom);
+      return;
+    }
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints(distinctPoints),
+        padding: _boundsPadding,
+        maxZoom: _boundsMaxZoom,
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -316,13 +349,13 @@ class _DayMapBackdropState extends State<_DayMapBackdrop> {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: center,
-              initialZoom: 14,
+              initialZoom: _singlePointZoom,
               initialCameraFit: singlePoint
                   ? null
                   : CameraFit.bounds(
                       bounds: LatLngBounds.fromPoints(distinctPoints),
-                      padding: const EdgeInsets.all(48),
-                      maxZoom: 15,
+                      padding: _boundsPadding,
+                      maxZoom: _boundsMaxZoom,
                     ),
               interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
               keepAlive: true,

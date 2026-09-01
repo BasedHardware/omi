@@ -131,6 +131,9 @@ Future<void> _pumpHeader(
   await tester.pumpWidget(
     MaterialApp(
       theme: ThemeData.dark(),
+      // Pinned: the day label comes from MaterialLocalizations.formatMediumDate,
+      // so an unpinned locale would render a different string off en_US.
+      locale: const Locale('en'),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(

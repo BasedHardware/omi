@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/widgets/task_completion_circle.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 /// One conversation on the home day timeline: when it happened, what it was
@@ -80,7 +81,7 @@ class DayTimelineEntry extends StatelessWidget {
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
-                            formatConversationDuration(durationSeconds),
+                            timelineDurationLabel(context, durationSeconds),
                             style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
                           ),
                         ),
@@ -186,13 +187,15 @@ String timelineTimeLabel(BuildContext context, DateTime at) {
       .trim();
 }
 
-String formatConversationDuration(int seconds) {
-  if (seconds < 60) return '${seconds}s';
-  final minutes = seconds ~/ 60;
-  if (minutes < 60) return '${minutes}m';
-  final hours = minutes ~/ 60;
-  final remainder = minutes % 60;
-  return remainder == 0 ? '${hours}h' : '${hours}h ${remainder}m';
+/// How long the conversation ran, to the minute.
+///
+/// Defers to the app's shared localized formatter, but truncates to whole
+/// minutes first: that formatter adds seconds below ten minutes ("5m 33s"),
+/// which is more precision than a glanceable day reads for and takes the width
+/// the conversation title needs.
+String timelineDurationLabel(BuildContext context, int seconds) {
+  final rounded = seconds < 60 ? seconds : (seconds ~/ 60) * 60;
+  return secondsToCompactDuration(rounded, context);
 }
 
 /// The trailing due marker on a task row. Past-due open tasks read red; the

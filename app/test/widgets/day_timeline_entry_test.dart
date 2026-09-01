@@ -44,6 +44,19 @@ void main() {
     expect(toggled?.id, 't1');
   });
 
+  testWidgets('reads durations to the minute, through the localized formatter', (tester) async {
+    await _pumpEntry(
+      tester,
+      // 5m 33s: the shared formatter would spell out the seconds below ten
+      // minutes, which the timeline trims away.
+      conversation: _conversation(id: 'a', title: 'Standup', startedAt: DateTime(2026, 7, 15, 9), durationSeconds: 333),
+      tasks: const [],
+    );
+
+    expect(find.text('5m'), findsOneWidget);
+    expect(find.text('5m 33s'), findsNothing);
+  });
+
   testWidgets('opens the conversation when its row is tapped', (tester) async {
     var opened = 0;
 
@@ -56,15 +69,6 @@ void main() {
 
     await tester.tap(find.text('Standup'));
     expect(opened, 1);
-  });
-
-  test('formats a conversation duration the way the timeline reads it', () {
-    expect(formatConversationDuration(0), '0s');
-    expect(formatConversationDuration(42), '42s');
-    expect(formatConversationDuration(60), '1m');
-    expect(formatConversationDuration(29 * 60 + 30), '29m');
-    expect(formatConversationDuration(3600), '1h');
-    expect(formatConversationDuration(3600 + 5 * 60), '1h 5m');
   });
 }
 
