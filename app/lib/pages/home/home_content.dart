@@ -13,18 +13,15 @@ import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart';
 import 'package:omi/pages/home/day_snapshot.dart';
 import 'package:omi/pages/home/widgets/day_header.dart';
 import 'package:omi/pages/home/widgets/day_timeline_entry.dart';
-import 'package:omi/pages/home/widgets/day_timeline_recording.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -194,21 +191,16 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Selector3<ConversationProvider, ActionItemsProvider, LocalRecordingsProvider, HomeDaySnapshot>(
-      selector: (_, convoProvider, tasksProvider, recordingsProvider) => buildHomeDaySnapshot(
+    return Selector2<ConversationProvider, ActionItemsProvider, HomeDaySnapshot>(
+      selector: (_, convoProvider, tasksProvider) => buildHomeDaySnapshot(
         day: _selectedDay,
         conversations: convoProvider.conversations,
         tasks: tasksProvider.actionItems,
-        recordings: recordingsProvider.recordings,
         shortThreshold: homeShortConversationThreshold(
           showShortConversations: convoProvider.showShortConversations,
           userThreshold: convoProvider.shortConversationThreshold,
         ),
-        // Someone who only ever used Transcribe Later has recorded plenty; the
-        // audio just has not become conversations yet. Telling them to start
-        // recording would be wrong, so recordings count as having started.
         isNewUser: convoProvider.conversations.isEmpty &&
-            recordingsProvider.recordings.isEmpty &&
             !convoProvider.isLoadingConversations &&
             !convoProvider.isFetchingConversations &&
             !convoProvider.isAwaitingInitialFetchRetry,
@@ -249,7 +241,6 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   day: day,
                   topInset: topInset,
                   conversations: snapshot.conversations,
-                  recordings: snapshot.recordings,
                   summaryAddresses: summary?.locations.map((location) => location.address).toList() ?? const [],
                   headline: summary?.headline,
                   canGoForward: day.isBefore(_startOfToday()),
@@ -272,8 +263,8 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
               else ...[
                 SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    childCount: snapshot.entries.length,
-                    (context, index) => _buildTimelineRow(context, snapshot.entries[index], snapshot),
+                    childCount: snapshot.highlights.length,
+                    (context, index) => _buildEntry(context, snapshot.highlights[index], snapshot),
                   ),
                 ),
                 if (snapshot.shortOnes.isNotEmpty)
@@ -310,16 +301,6 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
         );
       },
     );
-  }
-
-  /// A day is a sequence of things that happened, some of them conversations
-  /// and some of them audio still waiting to become one.
-  Widget _buildTimelineRow(BuildContext context, ConversationGroupEntry entry, HomeDaySnapshot snapshot) {
-    final recording = entry.recording;
-    if (recording != null) {
-      return DayTimelineRecording(key: ValueKey('recording-${recording.id}'), recording: recording);
-    }
-    return _buildEntry(context, entry.conversation!, snapshot);
   }
 
   Widget _buildEntry(

@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/models/local_recording.dart';
 import 'package:omi/pages/home/day_snapshot.dart';
 
 void main() {
@@ -12,7 +10,6 @@ void main() {
   HomeDaySnapshot snapshot({
     List<ServerConversation>? conversations,
     List<ActionItemWithMetadata> tasks = const [],
-    List<LocalRecording> recordings = const [],
     DateTime? on,
     int shortThreshold = 120,
     DateTime? now,
@@ -21,7 +18,6 @@ void main() {
       day: on ?? day,
       conversations: conversations ?? [_conversation('a', 'Standup', day, 600)],
       tasks: tasks,
-      recordings: recordings,
       shortThreshold: shortThreshold,
       isNewUser: false,
       now: now ?? DateTime(2026, 7, 15, 12),
@@ -65,7 +61,7 @@ void main() {
         ],
       );
 
-      expect(result.entries.map((e) => e.conversation?.id), ['early', 'late']);
+      expect(result.highlights.map((c) => c.id), ['early', 'late']);
       expect(result.shortOnes.map((c) => c.id), ['blip']);
       expect(result.conversations.map((c) => c.id), ['early', 'blip', 'late']);
     });
@@ -90,45 +86,6 @@ void main() {
       final after = [_conversation('a', 'Standup', day.add(const Duration(hours: 10)), 600)];
 
       expect(snapshot(conversations: before), isNot(snapshot(conversations: after)));
-    });
-
-    test('places a recording waiting to be transcribed in the day it happened', () {
-      // Without this a day spent recording offline reads as empty on home until
-      // the files upload, while the conversations tab shows them sitting there.
-      final result = snapshot(
-        conversations: [_conversation('convo', 'Standup', day.add(const Duration(hours: 9)), 600)],
-        recordings: [_recording('rec', day.add(const Duration(hours: 11)))],
-      );
-
-      expect(result.entries, hasLength(2));
-      expect(result.entries.first.conversation?.id, 'convo');
-      expect(result.entries.last.recording?.id, 'rec', reason: 'the day reads forwards, 9am before 11am');
-      expect(result.isEmpty, isFalse);
-    });
-
-    test('keeps a recording out of the collapsed short group', () {
-      // A short conversation is noise; an untranscribed recording is a thing
-      // the user still has to act on, so it is never folded away.
-      final result = snapshot(
-        conversations: const [],
-        recordings: [_recording('blip', day.add(const Duration(hours: 9)), seconds: 6)],
-      );
-
-      expect(result.entries.single.recording?.id, 'blip');
-      expect(result.shortOnes, isEmpty);
-    });
-
-    test('changes when a recording finishes uploading', () {
-      final pending = [_recording('rec', day, state: LocalRecordingState.pending)];
-      final processing = [_recording('rec', day, state: LocalRecordingState.processing)];
-
-      expect(snapshot(recordings: pending), isNot(snapshot(recordings: processing)));
-    });
-
-    test('ignores recordings from another day', () {
-      final result = snapshot(recordings: [_recording('elsewhere', other)]);
-
-      expect(result.recordings, isEmpty);
     });
 
     test('keeps only the selected day', () {
@@ -170,24 +127,6 @@ ServerConversation _conversation(
         translations: const [],
       ),
     ],
-  );
-}
-
-LocalRecording _recording(
-  String id,
-  DateTime startedAt, {
-  int seconds = 600,
-  LocalRecordingState state = LocalRecordingState.pending,
-}) {
-  return LocalRecording(
-    fileName: id,
-    filePath: '/tmp/$id',
-    timerStart: startedAt.millisecondsSinceEpoch ~/ 1000,
-    codec: BleAudioCodec.opus,
-    frameSize: 160,
-    sizeBytes: 1024,
-    seconds: seconds,
-    state: state,
   );
 }
 
