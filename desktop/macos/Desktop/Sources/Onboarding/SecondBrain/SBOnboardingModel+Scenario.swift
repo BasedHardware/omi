@@ -299,6 +299,8 @@ extension SBOnboardingModel {
     scenarioMemoryChips = []
     scenarioTaskChips = []
     writePhase = .review
+    scenarioProposedTaskTitle = effects.taskTitle
+    if let proposed = effects.taskTitle { scenarioTaskChips = [proposed] }
     persistScenarioProgress()
     scenarioWritesPending = true
     OnboardingScenarioJournal().append(who: "user", text: note)
@@ -324,26 +326,31 @@ extension SBOnboardingModel {
           OnboardingScenarioJournal().append(who: "system", text: "Created memory: \(memory)")
         }
       }
-      if let taskTitle = effects.taskTitle,
-        !self.scenarioWriteReceipts.contains("task:\(taskTitle)"),
-        RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
-        await OnboardingScenarioWrites.createActionItem(
-          title: taskTitle,
-          dueDate: self.scenarioDates.atNineAM(self.scenarioDates.deliveryDate),
-          ownerID: ownerID,
-          authorization: authorization)
-      {
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
-        self.scenarioWriteReceipts.insert("task:\(taskTitle)")
-        self.persistScenarioProgress()
-        self.scenarioTaskChips.append(taskTitle)
-        OnboardingScenarioJournal().append(who: "system", text: "Created task: \(taskTitle)")
-      }
     }
   }
 
+  /// "Looks right" is the explicit gesture that turns the note's commitment into a task
+  /// (INV-TASK-2: capture proposes; only a user gesture writes a task). The memories were written on
+  /// detection because they are the user's own words; the task waits for this tap.
   func confirmScenarioWrites() {
     guard step == .write, writePhase == .review else { return }
+    if let taskTitle = scenarioProposedTaskTitle, !scenarioWriteReceipts.contains("task:\(taskTitle)"),
+      let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
+    {
+      let dueDate = scenarioDates.atNineAM(scenarioDates.deliveryDate)
+      Task { [weak self] in
+        guard let self, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+        if await OnboardingScenarioWrites.createActionItem(
+          title: taskTitle, dueDate: dueDate, ownerID: ownerID, authorization: authorization)
+        {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+          self.scenarioWriteReceipts.insert("task:\(taskTitle)")
+          self.persistScenarioProgress()
+          OnboardingScenarioJournal().append(who: "system", text: "Created task: \(taskTitle)")
+        }
+      }
+    }
     advance(userAnswer: "Looks right", to: .ready, detection: "title_match")
   }
 

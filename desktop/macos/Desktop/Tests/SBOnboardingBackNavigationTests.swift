@@ -253,9 +253,17 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     let completedKey = SBOnboardingModel.shortcutsCompletedKey
     let prevResume = UserDefaults.standard.integer(forKey: resumeKey)
     let prevCompleted = UserDefaults.standard.bool(forKey: completedKey)
+    // The beat phases persist alongside the resume step; a phase left behind by another test
+    // would otherwise resume this model mid-beat.
+    let phaseKeys = [SBOnboardingModel.cardPhaseKey, SBOnboardingModel.talkPhaseKey, SBOnboardingModel.writePhaseKey, SBOnboardingModel.writeReceiptsKey]
+    let prevPhases = phaseKeys.map { UserDefaults.standard.object(forKey: $0) }
+    phaseKeys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
     defer {
       UserDefaults.standard.set(prevResume, forKey: resumeKey)
       UserDefaults.standard.set(prevCompleted, forKey: completedKey)
+      for (key, value) in zip(phaseKeys, prevPhases) {
+        if let value { UserDefaults.standard.set(value, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) }
+      }
     }
 
     // Hold a strong reference to AppState for the life of the test. SBOnboardingModel

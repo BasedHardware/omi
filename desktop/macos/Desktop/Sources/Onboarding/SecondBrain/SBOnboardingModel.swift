@@ -106,6 +106,8 @@ final class SBOnboardingModel: ObservableObject {
   @Published var talkPhase: TalkPhase = .microphone
   @Published var writePhase: WritePhase = .waitingForSend
   @Published var scenarioTaskChips: [String] = []
+  /// The task the note implies; written only on "Looks right".
+  var scenarioProposedTaskTitle: String?
   @Published var scenarioMemoryChips: [String] = []
   @Published var scenarioWriteNote: String?
   @Published var scenarioWriteDetectionTimedOut = false
