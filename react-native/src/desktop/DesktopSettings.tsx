@@ -34,6 +34,7 @@ type Props = {
   signingIn: boolean;
   onSignIn: () => void;
   onSignOut: () => void;
+  onWorkspaceReload?: () => void;
 };
 
 const PANE_ITEM_HEIGHT = 40;
@@ -163,6 +164,7 @@ function SettingsNav({
 export function DesktopSettings({
   onSignIn,
   onSignOut,
+  onWorkspaceReload,
   session,
   signingIn,
 }: Props) {
@@ -433,14 +435,22 @@ export function DesktopSettings({
 
   const advanced = (
     <Row
-      copy="Old uses production api.omi.me. New uses the stamped v5 origin when one exists."
+      copy={
+        prefs.softwarePlane === 'new'
+          ? prefs.stampedV5Origin != null
+            ? 'New uses the stamped v5 origin with the same OmiAuth keychain session as the shipping Mac app.'
+            : 'New is selected, but no stamped v5 origin is configured, so requests stay on production api.omi.me with the same OmiAuth session.'
+          : 'Old uses production api.omi.me. Session is the same OmiAuth keychain as the shipping Mac app.'
+      }
       title="Backend"
       trailing={
         <Segmented
           onChange={value => {
-            setPref('softwarePlane', value === 'new' ? 'new' : 'old').catch(
-              () => undefined,
-            );
+            setPref('softwarePlane', value === 'new' ? 'new' : 'old')
+              .then(() => {
+                onWorkspaceReload?.();
+              })
+              .catch(() => undefined);
           }}
           options={['old', 'new'] as const}
           value={prefs.softwarePlane}
