@@ -22,7 +22,7 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     // 20 ms Core Audio buffers are coalesced (~100 ms per channel) before they
     // become EventChannel events; one Map per buffer saturated the main queue.
     // Created eagerly in init() (not lazily at the first Core Audio callback).
-    private let audioEventCoalescer: OmiAudioEventCoalescer
+    private var audioEventCoalescer: OmiAudioEventCoalescer!
     // Call coordinator (manages CallKit or direct audio, swappable via protocol)
     fileprivate let callCoordinator: OmiCallCoordinatorProtocol
     fileprivate var callUUID: UUID?
@@ -51,10 +51,6 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     }
 
     override init() {
-        // Eager init: the coalescer exists before any Core Audio callback can run.
-        audioEventCoalescer = OmiAudioEventCoalescer { [weak self] data, channel in
-            self?.sendAudioDataEvent(data, channel: channel)
-        }
         // Select coordinator based on region
         if OmiRegionCheck.isCallKitRestricted {
             callCoordinator = OmiDirectCallCoordinator()
@@ -64,6 +60,12 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
             print("OmiPhoneCallsPlugin: using CallKitCoordinator")
         }
         super.init()
+
+        // The coalescer exists before any Core Audio callback can run (the audio
+        // device only starts after registration); capturing self requires super.init().
+        audioEventCoalescer = OmiAudioEventCoalescer { [weak self] data, channel in
+            self?.sendAudioDataEvent(data, channel: channel)
+        }
 
         // Wire coordinator callbacks
         callCoordinator.onAudioSessionActivated = { [weak self] in
