@@ -25,9 +25,9 @@ void main() {
     expect(map.options.initialCameraFit, isNotNull);
     expect(map.options.keepAlive, isTrue);
 
-    // The basemap plus its street/place-name reference layer.
-    expect(find.byType(TileLayer), findsNWidgets(2));
-    final tileLayer = tester.widget<TileLayer>(find.byType(TileLayer).first);
+    // The basemap alone: the place-name reference layer is deliberately off.
+    expect(find.byType(TileLayer), findsOneWidget);
+    final tileLayer = tester.widget<TileLayer>(find.byType(TileLayer));
     expect(tileLayer.keepBuffer, 0);
     expect(tileLayer.panBuffer, 0);
     expect(tileLayer.tileDisplay, isA<InstantaneousTileDisplay>());
@@ -111,6 +111,22 @@ void main() {
     expect(picks, 0, reason: 'the picker has nowhere to jump to yet');
   });
 
+  testWidgets('keeps one map across days rather than rebuilding it', (tester) async {
+    await _pumpHeader(tester, [_conversation('a', latitude: 37.7749, longitude: -122.4194)]);
+    final first = tester.widget<FlutterMap>(find.byType(FlutterMap)).mapController;
+
+    // Stepping to another day re-frames the same map. Rebuilding it would drop
+    // the loaded tiles and cross-fade a blank map in — the day-switch flicker.
+    await _pumpHeader(
+      tester,
+      [_conversation('b', latitude: 51.5072, longitude: -0.1276)],
+      day: DateTime(2026, 7, 14),
+    );
+    final second = tester.widget<FlutterMap>(find.byType(FlutterMap)).mapController;
+
+    expect(identical(first, second), isTrue);
+  });
+
   test('collapses a full address to its neighbourhood component', () {
     expect(shortPlaceLabel('1234 Mission St, San Francisco, CA 94110, USA'), 'San Francisco');
     expect(shortPlaceLabel('Mission District, San Francisco, USA'), 'Mission District');
@@ -127,6 +143,7 @@ Future<void> _pumpHeader(
   List<String?> summaryAddresses = const [],
   VoidCallback? onPickDay,
   bool navigable = true,
+  DateTime? day,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -139,7 +156,7 @@ Future<void> _pumpHeader(
       home: Scaffold(
         backgroundColor: Colors.black,
         body: DayHeader(
-          day: DateTime(2026, 7, 15),
+          day: day ?? DateTime(2026, 7, 15),
           conversations: conversations,
           summaryAddresses: summaryAddresses,
           headline: 'A day worth remembering',
