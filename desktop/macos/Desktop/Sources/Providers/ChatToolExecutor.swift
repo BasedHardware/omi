@@ -1646,7 +1646,18 @@ class ChatToolExecutor {
         log(
           "Tool get_daily_recap: \(apps.count) apps, \(convos.count) convos, \(tasks.count) tasks, \(focusSessions.count) focus, \(memories.count) memories, \(observations.count) observations"
         )
-        return (out, sources)
+        return (
+          out,
+          sources,
+          [
+            "apps": apps.count,
+            "conversations": convos.count,
+            "tasks": tasks.count,
+            "focus": focusSessions.count,
+            "memories": memories.count,
+            "observations": observations.count,
+          ]
+        )
       }
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
       let references = await ChatCitationProvenanceRegistry.shared.register(
@@ -1664,7 +1675,10 @@ class ChatToolExecutor {
             with: " [\(reference.ordinal)]")
         }
       }
-      return ChatCitationProvenanceRegistry.annotatedToolResult(recap, references: references)
+      return typedReadToolResult(
+        toolName: "get_daily_recap",
+        resultText: ChatCitationProvenanceRegistry.annotatedToolResult(recap, references: references),
+        totals: result.2)
     } catch {
       logError("Tool get_daily_recap failed", error: error)
       return "Error: \(error.localizedDescription)"
@@ -3153,12 +3167,70 @@ class ChatToolExecutor {
   /// flips the invocation outcome to `failed`. Returning prose instead left a failed
   /// write indistinguishable from a successful one, which is how "I've added that"
   /// was spoken over a write that never landed.
-  static func toolFailureEnvelope(code: String, message: String) -> String {
+  nonisolated static func toolFailureEnvelope(code: String, message: String) -> String {
     let payload: [String: Any] = ["ok": false, "error": ["code": code, "message": message]]
     guard let data = try? JSONSerialization.data(withJSONObject: payload),
       let json = String(data: data, encoding: .utf8)
     else {
       return "{\"ok\":false,\"error\":{\"code\":\"\(code)\"}}"
+    }
+    return json
+  }
+
+  /// Typed executor result for read tools. Rendering and bounding belong to the
+  /// kernel projector; Swift transports section data and authoritative totals.
+  nonisolated static func typedReadToolResult(
+    toolName: String,
+    resultText: String,
+    totals explicitTotals: [String: Int] = [:]
+  ) -> String {
+    let defaultSection: String
+    switch toolName {
+    case "get_conversations", "search_conversations": defaultSection = "conversations"
+    case "get_memories", "search_memories": defaultSection = "memories"
+    case "get_action_items": defaultSection = "action_items"
+    default: defaultSection = "summary"
+    }
+
+    var sections = [[String: Any]]()
+    if toolName == "get_daily_recap" {
+      let chunks = resultText.components(separatedBy: "\n## ")
+      for (index, chunk) in chunks.enumerated() where !chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let heading =
+          index == 0 ? "summary" : chunk.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? "summary"
+        let name = heading.lowercased()
+          .replacingOccurrences(of: #"\s*\([^)]*\)"#, with: "", options: .regularExpression)
+          .replacingOccurrences(of: " ", with: "_")
+        let total = explicitTotals[name] ?? (name == "screen_context" ? explicitTotals["observations"] : nil) ?? 1
+        sections.append(["name": name, "total": total, "items": [chunk]])
+      }
+    } else {
+      let parsed = try? JSONSerialization.jsonObject(with: Data(resultText.utf8))
+      if let object = parsed as? [String: Any] {
+        let arrays = object.compactMap { key, value -> (String, [Any])? in
+          guard let values = value as? [Any] else { return nil }
+          return (key, values)
+        }
+        if arrays.isEmpty {
+          sections = [["name": defaultSection, "total": explicitTotals[defaultSection] ?? 1, "items": [object]]]
+        } else {
+          sections = arrays.map { ["name": $0.0, "total": explicitTotals[$0.0] ?? $0.1.count, "items": $0.1] }
+        }
+      } else {
+        sections = [["name": defaultSection, "total": explicitTotals[defaultSection] ?? 1, "items": [resultText]]]
+      }
+    }
+    let payload: [String: Any] = [
+      "ok": true,
+      "tool": toolName,
+      "totals": explicitTotals,
+      "sections": sections,
+    ]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return toolFailureEnvelope(
+        code: "typed_tool_result_encoding_failed", message: "The typed tool result could not be encoded.")
     }
     return json
   }
@@ -3191,8 +3263,15 @@ class ChatToolExecutor {
       }
       let references = await ChatCitationProvenanceRegistry.shared.register(
         sources, runID: runID, attemptID: attemptID)
-      return ChatCitationProvenanceRegistry.annotatedToolResult(
-        response.resultText, references: references)
+      return typedReadToolResult(
+        toolName: toolCall.name,
+        resultText: ChatCitationProvenanceRegistry.annotatedToolResult(
+          response.resultText, references: references),
+        totals: [
+          toolCall.name == "get_action_items"
+            ? "action_items"
+            : toolCall.name.contains("conversation") ? "conversations" : "memories": sources.count
+        ])
     }
 
     do {
@@ -3227,7 +3306,9 @@ class ChatToolExecutor {
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         if isRealtimeVoice {
-          return RealtimeConversationToolProjection.makeResult(resp, limit: limit)
+          return typedReadToolResult(
+            toolName: toolCall.name,
+            resultText: RealtimeConversationToolProjection.makeResult(resp, limit: limit))
         }
         return await annotated(resp)
 
@@ -3250,7 +3331,9 @@ class ChatToolExecutor {
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         if isRealtimeVoice {
-          return RealtimeConversationToolProjection.makeResult(resp, limit: limit)
+          return typedReadToolResult(
+            toolName: toolCall.name,
+            resultText: RealtimeConversationToolProjection.makeResult(resp, limit: limit))
         }
         return await annotated(resp)
 

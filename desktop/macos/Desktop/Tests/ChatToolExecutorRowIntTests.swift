@@ -9,6 +9,20 @@ import XCTest
 /// silently reported 0 captures, unchecked ("done") tasks as not done, 0m focus
 /// durations, and "0 files" per type. `rowInt` reads the value correctly.
 final class ChatToolExecutorRowIntTests: XCTestCase {
+  func testDailyRecapTypedResultCarriesSectionTotals() throws {
+    let result = ChatToolExecutor.typedReadToolResult(
+      toolName: "get_daily_recap",
+      resultText: "# Yesterday Recap\n\n## Conversations (2)\n- Ada\n- Grace\n\n## Memories Learned (1)\n- Compilers",
+      totals: ["conversations": 2, "memories": 1])
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any])
+    XCTAssertEqual(object["ok"] as? Bool, true)
+    XCTAssertEqual(object["tool"] as? String, "get_daily_recap")
+    let totals = try XCTUnwrap(object["totals"] as? [String: Int])
+    XCTAssertEqual(totals["conversations"], 2)
+    XCTAssertEqual(totals["memories"], 1)
+    let sections = try XCTUnwrap(object["sections"] as? [[String: Any]])
+    XCTAssertTrue(sections.contains { ($0["name"] as? String) == "conversations" && ($0["total"] as? Int) == 2 })
+  }
 
   func testInt64AsIntNeverBridges() {
     // The exact defect the helper exists to work around. Cast from an `Any`

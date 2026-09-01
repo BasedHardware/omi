@@ -1057,7 +1057,7 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("returns a typed failure when a 620 KiB session listing cannot persist its full output", async () => {
+  it("keeps a 620 KiB session listing successful when artifact persistence is unavailable", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const surfaceContextSentinel = "UNSAVED_CONTEXT_SENTINEL".repeat(26_000);
     const result = await kernel.executeRun({
@@ -1076,17 +1076,16 @@ describe("agent control tools", () => {
     const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
       ownerId: "owner",
     });
-    const failed = parseToolResult(raw);
+    const projected = parseToolResult(raw);
 
     expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
     expect(raw).not.toContain("UNSAVED_CONTEXT_SENTINEL");
-    expect(failed).toMatchObject({
-      ok: false,
-      error: { code: "tool_result_exceeded_provider_budget" },
+    expect(projected).toMatchObject({
+      ok: true,
       toolResultEnvelope: {
-        status: "failed",
-        truncated: false,
-        fullOutputRef: null,
+        status: "succeeded",
+        truncated: true,
+        fullOutputRef: "artifact:unavailable",
       },
     });
     store.close();
