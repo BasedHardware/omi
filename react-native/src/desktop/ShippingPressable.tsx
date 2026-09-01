@@ -50,7 +50,7 @@ export function ShippingPressable({
           {
             backgroundColor: progress.interpolate({
               inputRange: [0, 1],
-              outputRange: ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.085)'],
+              outputRange: ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.16)'],
             }),
           },
         ]}
