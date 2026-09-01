@@ -223,11 +223,13 @@ struct HomeDailySummaryStatsRow: View {
       chips.append(Chip(id: "listening", symbol: "waveform", value: duration(minutes), label: "listening"))
     }
     if let memories = stats.memoriesCreated, memories > 0 {
-      chips.append(Chip(id: "memories", symbol: "sparkles", value: "\(memories)", label: memories == 1 ? "memory" : "memories"))
+      chips.append(
+        Chip(id: "memories", symbol: "sparkles", value: "\(memories)", label: memories == 1 ? "memory" : "memories"))
     }
     let tasks = stats.actionItemsCreated ?? stats.actionItemsCount
     if let tasks, tasks > 0 {
-      chips.append(Chip(id: "tasks", symbol: "checkmark.circle", value: "\(tasks)", label: tasks == 1 ? "task" : "tasks"))
+      chips.append(
+        Chip(id: "tasks", symbol: "checkmark.circle", value: "\(tasks)", label: tasks == 1 ? "task" : "tasks"))
     }
     return chips
   }

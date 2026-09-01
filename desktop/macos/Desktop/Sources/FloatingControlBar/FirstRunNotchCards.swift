@@ -39,21 +39,31 @@ struct FirstRunCardButton: Identifiable, Equatable {
     switch descriptor.kind {
     case "onboarding_remind_me":
       return [
-        FirstRunCardButton(id: "remind", title: "Remind me", emphasis: .primary, action: "onboarding_remind_me", actionID: id),
-        FirstRunCardButton(id: "not-now", title: "Not now", emphasis: .secondary, action: "onboarding_not_now", actionID: id),
+        FirstRunCardButton(
+          id: "remind", title: "Remind me", emphasis: .primary, action: "onboarding_remind_me", actionID: id),
+        FirstRunCardButton(
+          id: "not-now", title: "Not now", emphasis: .secondary, action: "onboarding_not_now", actionID: id),
       ]
     case "first_run_focus_return":
       return [
-        FirstRunCardButton(id: "back", title: "Back to it", emphasis: .primary, action: "first_run_focus_return", actionID: id),
-        FirstRunCardButton(id: "snooze", title: "5 more minutes", emphasis: .secondary, action: "first_run_focus_snooze", actionID: id),
+        FirstRunCardButton(
+          id: "back", title: "Back to it", emphasis: .primary, action: "first_run_focus_return", actionID: id),
+        FirstRunCardButton(
+          id: "snooze", title: "5 more minutes", emphasis: .secondary, action: "first_run_focus_snooze", actionID: id),
       ]
     case "context_reminder":
       return [
-        FirstRunCardButton(id: "done", title: "Done", emphasis: .primary, action: "context_reminder_done", actionID: id),
-        FirstRunCardButton(id: "tomorrow", title: "Remind me tomorrow", emphasis: .secondary, action: "context_reminder_snooze", actionID: id),
+        FirstRunCardButton(
+          id: "done", title: "Done", emphasis: .primary, action: "context_reminder_done", actionID: id),
+        FirstRunCardButton(
+          id: "tomorrow", title: "Remind me tomorrow", emphasis: .secondary, action: "context_reminder_snooze",
+          actionID: id),
       ]
     case "first_run_open_summary":
-      return [FirstRunCardButton(id: "open", title: "Open", emphasis: .primary, action: "first_run_open_summary", actionID: id)]
+      return [
+        FirstRunCardButton(
+          id: "open", title: "Open", emphasis: .primary, action: "first_run_open_summary", actionID: id)
+      ]
     default:
       return []
     }
@@ -145,10 +155,12 @@ struct FirstRunActionCardView: View {
               .fill(
                 LinearGradient(
                   colors: [Color.white.opacity(0.18), Color.white.opacity(0.08)],
-                  startPoint: .top, endPoint: .bottom))
+                  startPoint: .top, endPoint: .bottom)
+              )
               .overlay(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                  .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                  .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+              )
               .frame(width: 44, height: 44)
             Image(systemName: symbol)
               .font(.system(size: 17, weight: .semibold))

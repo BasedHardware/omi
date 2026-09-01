@@ -20,6 +20,7 @@ from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknow
 from config.memory_confidence import SOURCE_SIGNAL_CAPTURE_PRIORS
 from database import memory_ledger
 from database.firestore_index_registry import (
+    MEMORIES_CREATED_RANGE_QUERY,
     UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
 )
@@ -434,12 +435,11 @@ def get_memories(
 def count_memories_created(uid: str, start_date: datetime, end_date: datetime, *, firestore_client: Any = None) -> int:
     """Count memory documents created in an inclusive UTC range."""
     database = _get_db(firestore_client)
-    query = (
-        database.collection(users_collection)
-        .document(uid)
-        .collection(memories_collection)
-        .where(filter=FieldFilter('created_at', '>=', start_date))
-        .where(filter=FieldFilter('created_at', '<=', end_date))
+    collection = database.collection(users_collection).document(uid).collection(memories_collection)
+    query = MEMORIES_CREATED_RANGE_QUERY.build(
+        collection,
+        {'start': start_date, 'end': end_date},
+        field_filter_factory=FieldFilter,
     )
     result = query.count().get()
     return int(result[0][0].value or 0)

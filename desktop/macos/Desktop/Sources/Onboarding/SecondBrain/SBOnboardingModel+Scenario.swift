@@ -200,7 +200,8 @@ extension SBOnboardingModel {
     disarmShortcutSummon()
     talkPhase = .demo
     OnboardingScenarioJournal().append(who: "user", text: "Talk shortcut selected")
-    appendScenarioOmiLine("Hold ⌥ and say: 'when does this arrive?' Let go when you're done.")
+    appendScenarioOmiLine(
+      "Hold \(voiceChordTokens.joined(separator: " ")) and say: 'when does this arrive?' Let go when you're done.")
     startScreenDemo()
   }
 

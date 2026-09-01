@@ -394,6 +394,13 @@ final class FirstRunCoordinator {
   static let scenarioJournalKey = "sbOnboardingScenarioJournal"
   nonisolated static let persistedKeys: Set<String> = [pendingKey, stateKey]
 
+  /// The push-to-talk chord the user actually chose, for chip copy. Never a hard-coded ⌥: the
+  /// scenario lets them pick fn or ⌃, and a chip that names the wrong key is a dead end.
+  static func talkChordLabel() -> String {
+    let tokens = ShortcutSettings.shared.pttShortcut.displayTokens
+    return tokens.isEmpty ? "fn" : tokens.joined(separator: " ")
+  }
+
   private let defaults: UserDefaults
   private let now: () -> Date
   private let calendar: Calendar
@@ -599,7 +606,7 @@ final class FirstRunCoordinator {
       copy = ("Open something you're working on", "a doc, a repo, a design, a deck. Anything real.")
     case .setReminder:
       copy = (
-        "Hold ⌥ and tell me something to bring up next time you open this",
+        "Hold \(Self.talkChordLabel()) and tell me something to bring up next time you open this",
         "e.g. 'remind me to ping Priya about the pricing table'"
       )
     case .drift:
