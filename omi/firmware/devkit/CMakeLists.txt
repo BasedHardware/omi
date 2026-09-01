@@ -7,6 +7,7 @@ enable_language(C ASM)
 
 target_sources(app PRIVATE
     src/main.c
+    src/startup.c
     src/transport.c
     src/mic.c
     src/led.c
