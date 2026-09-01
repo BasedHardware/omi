@@ -566,7 +566,27 @@ class AnalyticsManager {
     PostHogManager.shared.setUserProperties(userProperties)
   }
 
+  private var deviceConnectionTelemetryCaptureForTests: (@MainActor (String) -> Void)?
+
+  func setDeviceConnectionTelemetryCaptureForTests(
+    _ capture: (@MainActor (String) -> Void)?
+  ) {
+    deviceConnectionTelemetryCaptureForTests = capture
+  }
+
+  func deviceConnected(deviceType: String, deviceName: String) {
+    deviceConnectionTelemetryCaptureForTests?("Device Connected")
+    PostHogManager.shared.track(
+      "Device Connected",
+      properties: [
+        "device_type": deviceType,
+        "device_name": deviceName,
+      ]
+    )
+  }
+
   func deviceDisconnected() {
+    deviceConnectionTelemetryCaptureForTests?("Device Disconnected")
     PostHogManager.shared.track("Device Disconnected")
   }
 
