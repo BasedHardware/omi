@@ -7,6 +7,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/models/local_recording.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
@@ -18,6 +19,7 @@ class DayHeader extends StatelessWidget {
     required this.day,
     required this.conversations,
     required this.canGoForward,
+    this.recordings = const [],
     this.summaryAddresses = const [],
     this.topInset = 0,
     required this.onPreviousDay,
@@ -34,6 +36,10 @@ class DayHeader extends StatelessWidget {
   /// Every conversation of the day, short and discarded ones included — they
   /// still carry the locations that make up the day's map.
   final List<ServerConversation> conversations;
+
+  /// Transcribe Later captures for the day. They carry a start-location
+  /// snapshot of their own, so a day spent recording offline still has a map.
+  final List<LocalRecording> recordings;
 
   /// Addresses the daily summary recorded for the day. Conversations often
   /// carry coordinates without an address, so the summary is the only place a
@@ -63,8 +69,8 @@ class DayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final points = dayLocationPoints(conversations);
-    final place = dayPlaceLabel(conversations, summaryAddresses: summaryAddresses);
+    final points = dayLocationPoints(conversations, recordings: recordings);
+    final place = dayPlaceLabel(conversations, summaryAddresses: summaryAddresses, recordings: recordings);
     final summary = headline?.trim();
 
     final content = Padding(
@@ -191,27 +197,42 @@ String dayLabel(BuildContext context, DateTime day) {
   return MaterialLocalizations.of(context).formatMediumDate(day);
 }
 
-/// Map pins for the day. Conversations without a usable fix are skipped.
-List<LatLng> dayLocationPoints(List<ServerConversation> conversations) {
+/// Map pins for the day, from its conversations and from any Transcribe Later
+/// captures still waiting to be uploaded. Anything without a usable fix is
+/// skipped.
+List<LatLng> dayLocationPoints(
+  List<ServerConversation> conversations, {
+  List<LocalRecording> recordings = const [],
+}) {
   final points = <LatLng>[];
   for (final conversation in conversations) {
-    final latitude = conversation.geolocation?.latitude;
-    final longitude = conversation.geolocation?.longitude;
-    if (latitude == null || longitude == null) continue;
-    if (!latitude.isFinite || !longitude.isFinite) continue;
-    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) continue;
-    if (latitude == 0 && longitude == 0) continue;
-    points.add(LatLng(latitude, longitude));
+    _addPoint(points, conversation.geolocation?.latitude, conversation.geolocation?.longitude);
+  }
+  for (final recording in recordings) {
+    _addPoint(points, recording.geolocation?.latitude, recording.geolocation?.longitude);
   }
   return points;
+}
+
+void _addPoint(List<LatLng> points, double? latitude, double? longitude) {
+  if (latitude == null || longitude == null) return;
+  if (!latitude.isFinite || !longitude.isFinite) return;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return;
+  if (latitude == 0 && longitude == 0) return;
+  points.add(LatLng(latitude, longitude));
 }
 
 /// Where the day happened: the place that shows up in the most conversations,
 /// falling back to the day summary's own pins when the conversations only
 /// carried coordinates.
-String? dayPlaceLabel(List<ServerConversation> conversations, {List<String?> summaryAddresses = const []}) {
-  final fromConversations = _mostCommonPlace(conversations.map((c) => c.geolocation?.address));
-  return fromConversations ?? _mostCommonPlace(summaryAddresses);
+String? dayPlaceLabel(
+  List<ServerConversation> conversations, {
+  List<String?> summaryAddresses = const [],
+  List<LocalRecording> recordings = const [],
+}) {
+  return _mostCommonPlace(conversations.map((c) => c.geolocation?.address)) ??
+      _mostCommonPlace(recordings.map((r) => r.geolocation?.address)) ??
+      _mostCommonPlace(summaryAddresses);
 }
 
 String? _mostCommonPlace(Iterable<String?> addresses) {
