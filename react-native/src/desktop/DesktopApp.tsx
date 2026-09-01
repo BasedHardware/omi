@@ -41,7 +41,11 @@ import {desktopTokens as token} from './tokens';
 export type DesktopSession = 'probing' | 'signed-out' | 'ready';
 type DesktopRoute = 'Chat' | 'Memories' | 'Tasks' | 'Apps' | 'Settings';
 type MemoryHub =
-  'Activity' | 'Conversations' | 'Memories' | 'Rewind' | 'Brain Map';
+  | 'Activity'
+  | 'Conversations'
+  | 'Memories'
+  | 'Rewind'
+  | 'Brain Map';
 
 type Props = {
   outcomes: DesktopReadOutcomes | null;
@@ -123,8 +127,8 @@ function ResultRow({item}: {item: DesktopReadProjection}) {
     item.kind === 'conversation'
       ? Date.parse(item.startedAt ?? item.createdAt)
       : item.kind === 'memory'
-        ? (item.timestamp ?? 0) * 1000
-        : item.createdAt * 1000;
+      ? (item.timestamp ?? 0) * 1000
+      : item.createdAt * 1000;
   const time =
     timestamp > 0
       ? new Date(timestamp).toLocaleTimeString(undefined, {
@@ -136,8 +140,8 @@ function ResultRow({item}: {item: DesktopReadProjection}) {
     item.kind === 'conversation'
       ? MessageCircle
       : item.kind === 'memory'
-        ? Sparkles
-        : CheckCircle2;
+      ? Sparkles
+      : CheckCircle2;
   return (
     <View style={styles.resultRow}>
       <View style={styles.glyph}>
@@ -664,8 +668,8 @@ function SettingsPage({
               {session === 'ready'
                 ? 'Sign out'
                 : signingIn
-                  ? 'Signing in…'
-                  : 'Sign in'}
+                ? 'Signing in…'
+                : 'Sign in'}
             </Text>
           </FocusPressable>
         </View>

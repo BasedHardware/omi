@@ -25,7 +25,11 @@ import {
 } from './mobileTokens';
 
 export type MobileProjectionStatus =
-  'ready' | 'loading' | 'empty' | 'offline' | 'error';
+  | 'ready'
+  | 'loading'
+  | 'empty'
+  | 'offline'
+  | 'error';
 
 export type MobileRoute = 'home' | 'chat' | 'tasks' | 'apps';
 
@@ -350,8 +354,8 @@ export function MobileAppSurface({
       activeRoute === 'chat'
         ? 'Conversations'
         : activeRoute === 'tasks'
-          ? 'Tasks'
-          : 'Apps';
+        ? 'Tasks'
+        : 'Apps';
     return (
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView

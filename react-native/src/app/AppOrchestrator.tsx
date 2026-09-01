@@ -451,8 +451,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     nativeSnapshot === null
       ? '#b4ad9f'
       : nativeSnapshot.bluetooth === 'poweredOn'
-        ? '#45b79b'
-        : '#d9826f';
+      ? '#45b79b'
+      : '#d9826f';
   const currentItems = reads.slice(0, 2);
 
   const firstRunOnboarding = (
@@ -572,8 +572,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             onboardingRequired === null
               ? 'probing'
               : onboardingRequired
-                ? 'signed-out'
-                : 'ready'
+              ? 'signed-out'
+              : 'ready'
           }
           signingIn={signingIn}
         />
@@ -604,17 +604,17 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       readsPhase === 'initial-loading' || readsPhase === 'refreshing'
         ? 'loading'
         : readsPhase === 'unavailable' ||
-            readsPhase === 'saved-but-refresh-failed'
-          ? 'offline'
-          : 'ready';
+          readsPhase === 'saved-but-refresh-failed'
+        ? 'offline'
+        : 'ready';
     const activeMobileRoute: MobileRoute =
       route === 'Tasks'
         ? 'tasks'
         : route === 'Connectors'
-          ? 'apps'
-          : homeChatOpen || route === 'Conversations'
-            ? 'chat'
-            : 'home';
+        ? 'apps'
+        : homeChatOpen || route === 'Conversations'
+        ? 'chat'
+        : 'home';
     return (
       <MobileAppSurface
         activeRoute={activeMobileRoute}
@@ -640,10 +640,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             destination === 'tasks'
               ? 'Tasks'
               : destination === 'apps'
-                ? 'Connectors'
-                : destination === 'chat'
-                  ? 'Conversations'
-                  : 'Home',
+              ? 'Connectors'
+              : destination === 'chat'
+              ? 'Conversations'
+              : 'Home',
           );
         }}
         onTaskToggle={() => undefined}
@@ -770,11 +770,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                     {readsPhase === 'initial-loading'
                                       ? 'Loading saved data…'
                                       : readsPhase === 'refreshing'
-                                        ? 'Refreshing saved data…'
-                                        : readsPhase ===
-                                            'saved-but-refresh-failed'
-                                          ? 'Showing saved data. Could not refresh.'
-                                          : 'Saved data is unavailable.'}
+                                      ? 'Refreshing saved data…'
+                                      : readsPhase ===
+                                        'saved-but-refresh-failed'
+                                      ? 'Showing saved data. Could not refresh.'
+                                      : 'Saved data is unavailable.'}
                                   </Text>
                                   {allHomeReadsUnavailable && (
                                     <Text
@@ -889,8 +889,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                 : styles.chatHistoryCompact,
                             ]
                           : messages.length === 0 && !chatBusy
-                            ? styles.home
-                            : styles.chatHistory
+                          ? styles.home
+                          : styles.chatHistory
                       }>
                       <FocusPressable
                         accessibilityLabel="Back to Home"
