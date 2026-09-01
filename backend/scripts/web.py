@@ -8,17 +8,31 @@ import json
 
 
 def get_plugin_data_by_persona_name() -> None:
-    plugin_data_by_name: Dict[str, Dict[str, Any]] = {}
+    """Map persona plugins_data docs keyed by username (unique handle).
+
+    Display `name` is not unique; last-write-wins on name silently dropped
+    documents. Output lives under backend/scripts/data/ which is gitignored so
+    an accidental `git add -A` cannot commit owner emails / prompts.
+    """
+    from pathlib import Path
+
+    plugin_data_by_username: Dict[str, Dict[str, Any]] = {}
     plugins_ref = db.collection("plugins_data").stream()
     for doc in plugins_ref:
         raw: object = doc.to_dict()
         data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-        name = data.get("name")
-        if name:
-            plugin_data_by_name[name] = data
+        capabilities = data.get("capabilities") or []
+        if isinstance(capabilities, list) and "persona" not in capabilities:
+            continue
+        username = data.get("username")
+        if not username:
+            continue
+        plugin_data_by_username.setdefault(str(username), data)
 
-    with open("plugin_data_by_persona_name.json", "w") as f:
-        json.dump(plugin_data_by_name, f, default=str)
+    out_dir = Path(__file__).resolve().parent / "data"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with open(out_dir / "plugin_data_by_persona_name.json", "w") as f:
+        json.dump(plugin_data_by_username, f, default=str)
 
 
 def get_user_messages_with_bot_name() -> List[str]:
@@ -43,7 +57,11 @@ def get_user_messages_with_bot_name() -> List[str]:
     with ThreadPoolExecutor() as executor:
         executor.map(process_user, uids)
 
-    with open("user_messages_with_bot_name.json", "w") as f:
+    from pathlib import Path
+
+    out_dir = Path(__file__).resolve().parent / "data"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with open(out_dir / "user_messages_with_bot_name.json", "w") as f:
         json.dump(user_messages_with_bot_name, f, default=str)
 
     return uids
