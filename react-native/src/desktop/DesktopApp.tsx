@@ -40,6 +40,8 @@ import {
   desktopNavItems,
   desktopNavTopInset,
   desktopSearchPlaceholder,
+  desktopTrafficLightButton,
+  desktopTrafficLightLeading,
   desktopTrafficLightRowWidth,
   desktopWindowInset,
   visibleChatError,
@@ -760,9 +762,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     height: desktopNavBarHeight,
-    paddingHorizontal: desktopWindowInset,
+    paddingRight: desktopWindowInset,
   },
-  trafficLights: {height: 14, width: desktopTrafficLightRowWidth},
+  trafficLights: {
+    height: desktopTrafficLightButton,
+    marginLeft: desktopTrafficLightLeading,
+    width: desktopTrafficLightRowWidth,
+  },
   navItems: {alignItems: 'center', flex: 1, flexDirection: 'row', gap: 4},
   navItem: {
     alignItems: 'center',
@@ -770,6 +776,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
     height: 30,
+    justifyContent: 'center',
     paddingHorizontal: 12,
   },
   navText: {
@@ -780,7 +787,14 @@ const styles = StyleSheet.create({
   },
   navTextActive: {color: token.color.ink},
   navUtilities: {alignItems: 'center', flexDirection: 'row', gap: 12},
-  utilityButton: {borderRadius: 16, height: 32, padding: 8, width: 32},
+  utilityButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    height: 32,
+    justifyContent: 'center',
+    padding: 8,
+    width: 32,
+  },
   page: {flex: 1, gap: 8},
   omnisearch: {
     alignItems: 'center',

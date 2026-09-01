@@ -26,10 +26,15 @@ export type DesktopSettingsPane = (typeof desktopSettingsPanes)[number];
 export const desktopSearchPlaceholder = "Search what you've seen and heard…";
 
 export const desktopTrafficLightLeading = 16;
-export const desktopTrafficLightRowWidth = 78;
-export const desktopNavBarHeight = 52;
+export const desktopTrafficLightButton = 14;
+export const desktopTrafficLightSpacing = 8;
 export const desktopWindowInset = 8;
-export const desktopNavTopInset = 0;
+export const desktopTrafficLightClusterWidth =
+  3 * desktopTrafficLightButton + 2 * desktopTrafficLightSpacing;
+export const desktopTrafficLightRowWidth =
+  desktopTrafficLightClusterWidth + desktopTrafficLightLeading;
+export const desktopNavBarHeight = 52;
+export const desktopNavTopInset = desktopWindowInset;
 export const desktopGlassCornerRadius = 22;
 export const desktopSystemFontFamily = 'System';
 

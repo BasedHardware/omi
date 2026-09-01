@@ -20,7 +20,12 @@ test('DesktopApp keeps Home on the same row as the traffic-light spacer', () => 
   expect(desktopApp).toContain('height: desktopNavBarHeight');
   expect(desktopApp).toContain('accessibilityLabel="Window controls"');
   expect(desktopApp).toContain('width: desktopTrafficLightRowWidth');
+  expect(desktopApp).toContain('marginLeft: desktopTrafficLightLeading');
+  expect(desktopApp).toContain('height: desktopTrafficLightButton');
   expect(desktopApp).toMatch(/root:\s*\{[^}]*paddingTop:\s*desktopNavTopInset/);
   expect(desktopApp).not.toMatch(/root:\s*\{[^}]*padding:\s*8/);
   expect(desktopApp).not.toMatch(/navbar:\s*\{[^}]*height:\s*52/);
+  expect(desktopApp).toMatch(/navbar:\s*\{[^}]*alignItems:\s*'center'/);
+  expect(desktopApp).toMatch(/navItem:\s*\{[^}]*alignItems:\s*'center'/);
+  expect(desktopApp).toMatch(/navItem:\s*\{[^}]*justifyContent:\s*'center'/);
 });
