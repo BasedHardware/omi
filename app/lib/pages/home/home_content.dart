@@ -81,7 +81,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             HapticFeedback.mediumImpact();
             await Future.wait([convoProvider.getInitialConversations(), _loadSummaries()]);
           },
-          color: Colors.deepPurpleAccent,
+          color: Colors.black,
           backgroundColor: Colors.white,
           child: CustomScrollView(
             controller: _scrollController,
@@ -226,12 +226,12 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF7B5CFF), Color(0xFF5733E0)],
+                  colors: [Color(0xFF2A2A31), Color(0xFF1F1F25)],
                 ),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.deepPurple.withValues(alpha: 0.45),
+                    color: Colors.black.withValues(alpha: 0.45),
                     blurRadius: 28,
                     spreadRadius: 1,
                     offset: const Offset(0, 10),
