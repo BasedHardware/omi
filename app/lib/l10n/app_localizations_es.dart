@@ -9947,4 +9947,7 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'La transcripción no recibe audio';
 }

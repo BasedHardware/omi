@@ -9993,4 +9993,7 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Η μεταγραφή δεν λαμβάνει ήχο';
 }

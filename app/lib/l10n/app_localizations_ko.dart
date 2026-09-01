@@ -9756,4 +9756,7 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => '전사가 오디오를 받지 못하고 있습니다';
 }

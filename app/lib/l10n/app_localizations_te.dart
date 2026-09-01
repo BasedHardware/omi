@@ -9972,4 +9972,7 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'ట్రాన్స్‌క్రిప్షన్ ఆడియో స్వీకరించడం లేదు';
 }

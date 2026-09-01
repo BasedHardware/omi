@@ -3239,5 +3239,6 @@
     "pendantRecordingSyncBlocked": "Pendant vẫn đang ghi âm nên không thể chuyển âm thanh đã lưu. Nhấn nút trên Pendant để dừng ghi âm, sau đó đồng bộ lại.",
     "pendantFullSyncBlocked": "Bộ nhớ của Pendant đã đầy và nó vẫn đang ở chế độ ghi âm, nên không thể chuyển âm thanh đã lưu. Nhấn nút của Pendant để dừng ghi âm, sau đó đồng bộ lại.",
     "conversationsNotCapturedCount": "Không được ghi âm ({count})",
-    "shortConversationsCount": "{count, plural, other{{count} cuộc trò chuyện ngắn}}"
+    "shortConversationsCount": "{count, plural, other{{count} cuộc trò chuyện ngắn}}",
+    "transcriptionNoAudio": "Bản ghi âm không nhận được âm thanh"
 }

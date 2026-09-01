@@ -9935,4 +9935,7 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'ٹرانسکرپشن آڈیو وصول نہیں کر رہی';
 }

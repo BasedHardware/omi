@@ -9950,4 +9950,7 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transcriptie ontvangt geen audio';
 }

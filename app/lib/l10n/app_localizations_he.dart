@@ -9844,4 +9844,7 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'התמליל אינו מקבל שמע';
 }

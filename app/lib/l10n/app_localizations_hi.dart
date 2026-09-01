@@ -9902,4 +9902,7 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'ट्रांसक्रिप्शन ऑडियो प्राप्त नहीं कर रहा है';
 }

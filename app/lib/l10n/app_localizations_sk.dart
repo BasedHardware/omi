@@ -9916,4 +9916,7 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripcia neprijíma zvuk';
 }

@@ -9932,4 +9932,7 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'ट्रान्सक्रिप्शन ऑडिओ घेत नाही';
 }

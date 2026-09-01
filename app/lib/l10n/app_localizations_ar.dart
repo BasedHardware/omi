@@ -9865,4 +9865,7 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'النسخ لا يستلم الصوت';
 }

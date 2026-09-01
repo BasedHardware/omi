@@ -12,6 +12,9 @@ from utils.metrics import (
     OMI_LIVE_STT_ACCEPTED_TOTAL,
     OMI_LIVE_STT_TERMINAL_TOTAL,
     OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL,
+    OMI_LISTEN_ACCEPTED_TOTAL,
+    OMI_LISTEN_AUDIO_OUTCOME_TOTAL,
+    OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
     OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL,
     OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL,
     OMI_TRANSCRIPTION_ACCEPTED_TOTAL,
@@ -30,6 +33,7 @@ _SYNC_MODELS = {'nova-3', 'parakeet', 'velma-2'}
 _LIVE_PHASES = {'connection', 'initialization', 'send'}
 _LIVE_TERMINAL_OUTCOMES = frozenset({'success', 'failure', 'cancelled'})
 _LIVE_TERMINAL_PHASES = frozenset({'connection', 'initialization', 'send', 'teardown', 'transcript_delivery'})
+_LISTEN_AUDIO_OUTCOMES = frozenset({'first_audio', 'no_audio_teardown'})
 LiveSTTTerminalOutcome = Literal['success', 'failure', 'cancelled']
 LiveSTTTerminalPhase = Literal['connection', 'initialization', 'send', 'teardown', 'transcript_delivery']
 
@@ -45,7 +49,10 @@ def _bounded_platform(platform: str | None) -> str:
 
 def _bounded_source(source: str | None) -> str:
     normalized = (source or '').strip()
-    return ConversationSource(normalized).value if normalized else ConversationSource.unknown.value
+    try:
+        return ConversationSource(normalized).value if normalized else ConversationSource.unknown.value
+    except ValueError:
+        return ConversationSource.unknown.value
 
 
 def _deployment_version() -> str:
@@ -237,4 +244,34 @@ def record_live_stt_failure(
         client_platform=_bounded_platform(platform),
         deployment_environment=_deployment_environment(),
         phase=phase if phase in _LIVE_PHASES else 'unknown',
+    ).inc()
+
+
+def record_listen_session_accepted(*, source: str | None, platform: str | None) -> None:
+    """Count one accepted /v4/listen socket with bounded labels only."""
+
+    OMI_LISTEN_ACCEPTED_TOTAL.labels(
+        transcription_source=_bounded_source(source),
+        client_platform=_bounded_platform(platform),
+    ).inc()
+
+
+def record_listen_audio_outcome(*, source: str | None, outcome: str, platform: str | None) -> None:
+    """Record a per-session listen audio funnel outcome (first audio / silent teardown)."""
+
+    if outcome not in _LISTEN_AUDIO_OUTCOMES:
+        raise ValueError(f'unknown listen audio outcome: {outcome}')
+    OMI_LISTEN_AUDIO_OUTCOME_TOTAL.labels(
+        transcription_source=_bounded_source(source),
+        outcome=outcome,
+        client_platform=_bounded_platform(platform),
+    ).inc()
+
+
+def record_listen_unknown_channel_prefix(*, source: str | None, platform: str | None) -> None:
+    """Count a multi-channel frame dropped because its channel prefix was unknown."""
+
+    OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL.labels(
+        transcription_source=_bounded_source(source),
+        client_platform=_bounded_platform(platform),
     ).inc()

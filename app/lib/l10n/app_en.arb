@@ -11745,5 +11745,9 @@
                 "type": "int"
             }
         }
+    },
+    "transcriptionNoAudio": "Transcription not receiving audio",
+    "@transcriptionNoAudio": {
+        "description": "Status when an active call transcription socket receives no audio frames"
     }
 }

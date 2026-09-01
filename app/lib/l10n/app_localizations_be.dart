@@ -9955,4 +9955,7 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Транскрыпцыя не атрымлівае аўдыё';
 }

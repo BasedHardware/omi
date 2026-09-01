@@ -81,6 +81,10 @@ from utils.transcribe_decisions import (
 from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
 from utils.observability.fallback import record_fallback
+from utils.observability.transcription import (
+    record_listen_audio_outcome,
+    record_listen_unknown_channel_prefix,
+)
 from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
@@ -143,6 +147,7 @@ class ListenReceiver:
         self.last_image_chunk_cleanup = 0.0
         self.decode_failure_streak = 0
         self.decode_stream_reported = False
+        self._unknown_prefix_streak = 0
         self.speaker_provider_epoch = SpeakerProviderEpoch()
 
     def _capture(self, method: str, *args: Any) -> None:
@@ -202,6 +207,34 @@ class ListenReceiver:
         self._capture('capture_inbound_stt', segments)
         self.speaker_provider_epoch.stamp(segments, provider or self._serving_provider())
         self.host.transcripts.enqueue(segments)
+
+    def _telemetry_platform(self) -> Any:
+        """Platform label for listen funnel counters; never part of the audio failure domain."""
+
+        return getattr(getattr(self.host, 'client_device_context', None), 'platform', None)
+
+    def _mark_first_audio(self, now: float) -> None:
+        """Record the funnel's first-audio transition once a frame was accepted.
+
+        Called only after a frame passed channel-prefix validation and decoding,
+        so a session of purely unknown-prefix or undecodable frames stays at zero
+        audio and can still surface as a no-audio teardown. Reads defensively:
+        funnel telemetry never belongs to the audio failure domain.
+        """
+
+        if getattr(self.host.state, 'first_audio_byte_timestamp', None) is not None:
+            return
+
+        self.host.state.first_audio_byte_timestamp = now
+        self.host.state.last_usage_record_timestamp = now
+        record_listen_audio_outcome(
+            source=getattr(self.host.request, 'source', None),
+            outcome='first_audio',
+            platform=self._telemetry_platform(),
+        )
+        start_transcription = getattr(self.host, 'start_live_transcription', None)
+        if callable(start_transcription):
+            start_transcription()
 
     def initialize_decoders(self) -> None:
         request = self.host.request
@@ -706,11 +739,28 @@ class ListenReceiver:
             if self.host.state.stt_terminal_failure:
                 return
 
-    async def _handle_multi_channel_audio(self, data: bytes) -> int:
+    async def _handle_multi_channel_audio(self, data: bytes, now: float | None = None) -> int:
+        if now is None:
+            now = time.time()
         request = self.host.request
         channel_index = self.channel_id_to_index.get(data[0])
         if channel_index is None:
+            # A whole call's worth of frames can land here if a client prefixes
+            # its channels differently than build_channel_config expects; that
+            # used to be indistinguishable from silence, so count and log it.
+            record_listen_unknown_channel_prefix(
+                source=getattr(request, 'source', None),
+                platform=self._telemetry_platform(),
+            )
+            self._unknown_prefix_streak += 1
+            if self._unknown_prefix_streak <= 3 or self._unknown_prefix_streak % 100 == 0:
+                logger.warning(
+                    'Listen multi-channel frame dropped unknown prefix byte=%d frames=%s',
+                    data[0],
+                    self._unknown_prefix_streak,
+                )
             return 0
+        self._unknown_prefix_streak = 0
         audio = data[1:]
         if request.codec == 'opus' and self.multi_opus_decoders[channel_index]:
             try:
@@ -723,6 +773,9 @@ class ListenReceiver:
             self.decode_failure_streak = 0
             if not audio:
                 return 0
+        # First audio only counts once the channel prefix resolved and an opus
+        # frame decoded; rejected frames above leave the no-audio funnel intact.
+        self._mark_first_audio(now)
         pcm = resample_pcm(bytes(audio), request.sample_rate, TARGET_SAMPLE_RATE)
         self._capture('capture_client_audio', pcm)
         # Custom-STT clients own transcript production.  Their channel sockets are intentionally
@@ -859,12 +912,12 @@ class ListenReceiver:
                         continue
                     now = time.time()
                     self.host.state.last_audio_received_time = now
-                    if self.host.state.first_audio_byte_timestamp is None:
-                        self.host.state.first_audio_byte_timestamp = now
-                        self.host.state.last_usage_record_timestamp = now
-                        self.host.start_live_transcription()
                     if self.host.is_multi_channel:
-                        decoded_audio_bytes += await self._handle_multi_channel_audio(data)
+                        # `_handle_multi_channel_audio` marks first audio only
+                        # after the channel prefix is known-good (and an opus
+                        # frame decoded), so unknown-prefix frames leave the
+                        # session eligible for a no_audio teardown.
+                        decoded_audio_bytes += await self._handle_multi_channel_audio(data, now)
                         continue
                     try:
                         decoded: bytes = data
@@ -884,6 +937,7 @@ class ListenReceiver:
                     self.decode_failure_streak = 0
                     if not decoded:
                         continue
+                    self._mark_first_audio(now)
                     decoded_audio_bytes += len(decoded)
                     self._capture('capture_client_audio', decoded)
                     if self.host.state.audio_ring_buffer is not None:

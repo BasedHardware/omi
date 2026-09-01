@@ -19,6 +19,10 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     private var isSpeakerOn: Bool = false
     private var audioDevice = OmiRecordingAudioDevice()
 
+    // 20 ms Core Audio buffers are coalesced (~100 ms per channel) before they
+    // become EventChannel events; one Map per buffer saturated the main queue.
+    // Created eagerly in init() (not lazily at the first Core Audio callback).
+    private let audioEventCoalescer: OmiAudioEventCoalescer
     // Call coordinator (manages CallKit or direct audio, swappable via protocol)
     fileprivate let callCoordinator: OmiCallCoordinatorProtocol
     fileprivate var callUUID: UUID?
@@ -26,7 +30,31 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     // Proximity sensor — screen off when phone held to ear
     fileprivate let proximitySensor = OmiProximitySensor()
 
+    // Audio deliveries queued onto the main queue before cleanup() must not
+    // land on the next call's event sink: each queued delivery captures the
+    // generation it was enqueued at and re-checks it before sinking.
+    // cleanup() bumps the generation first, so only the flush it enqueues
+    // afterwards can still deliver.
+    private let deliveryGenerationLock = NSLock()
+    private var audioDeliveryGeneration = 0
+
+    private func currentDeliveryGeneration() -> Int {
+        deliveryGenerationLock.lock()
+        defer { deliveryGenerationLock.unlock() }
+        return audioDeliveryGeneration
+    }
+
+    private func invalidateQueuedAudioDeliveries() {
+        deliveryGenerationLock.lock()
+        audioDeliveryGeneration += 1
+        deliveryGenerationLock.unlock()
+    }
+
     override init() {
+        // Eager init: the coalescer exists before any Core Audio callback can run.
+        audioEventCoalescer = OmiAudioEventCoalescer { [weak self] data, channel in
+            self?.sendAudioDataEvent(data, channel: channel)
+        }
         // Select coordinator based on region
         if OmiRegionCheck.isCallKitRestricted {
             callCoordinator = OmiDirectCallCoordinator()
@@ -67,9 +95,9 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
             self.cleanup()
         }
 
-        // Wire up audio data callback to stream to Flutter
+        // Wire up audio data callback to stream to Flutter (coalesced, bounded)
         audioDevice.onAudioData = { [weak self] data, channel in
-            self?.sendAudioDataEvent(data, channel: channel)
+            self?.audioEventCoalescer.append(data, channel: channel)
         }
 
         // Set Twilio's audio device (custom device captures both streams)
@@ -337,6 +365,14 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
 
     fileprivate func cleanup() {
         activeCall = nil
+        // Invalidate deliveries already queued onto the main queue for this
+        // call BEFORE flushing: only audio enqueued after this bump (i.e. the
+        // flush's own tail emission) may still reach the sink. A new call
+        // starts on a fresh generation.
+        invalidateQueuedAudioDeliveries()
+        // Emit the final partial buffers so teardown does not drop the last
+        // ~100 ms of the call, then invalidate anything still queued.
+        audioEventCoalescer.flush()
         callDelegate = nil
         callUUID = nil
         currentCallId = nil
@@ -344,7 +380,6 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     }
 
     // MARK: - Event Sending
-
     func sendCallStateEvent(_ state: String) {
         sendEvent(["type": "callStateChanged", "state": state])
     }
@@ -354,8 +389,13 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     }
 
     func sendAudioDataEvent(_ data: Data, channel: Int) {
+        // Capture the delivery generation at enqueue time: a cleanup() that
+        // lands while this hop is queued bumps the counter, and the stale
+        // delivery is dropped instead of reaching the next call's sink.
+        let entryGeneration = currentDeliveryGeneration()
         DispatchQueue.main.async { [weak self] in
-            self?.eventSink?([
+            guard let self = self, self.currentDeliveryGeneration() == entryGeneration else { return }
+            self.eventSink?([
                 "type": "audioData",
                 "data": FlutterStandardTypedData(bytes: data),
                 "channel": channel,

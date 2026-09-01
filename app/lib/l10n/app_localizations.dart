@@ -18458,6 +18458,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{{count} short conversation} other{{count} short conversations}}'**
   String shortConversationsCount(int count);
+
+  /// Status when an active call transcription socket receives no audio frames
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription not receiving audio'**
+  String get transcriptionNoAudio;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

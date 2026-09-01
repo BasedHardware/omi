@@ -9993,4 +9993,7 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'நகலெடுப்பு ஆடியோவைப் பெறவில்லை';
 }

@@ -9865,4 +9865,7 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'การถอดเสียงไม่ได้รับเสียง';
 }

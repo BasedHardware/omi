@@ -9923,4 +9923,7 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'رونویسی صدا دریافت نمی‌کند';
 }

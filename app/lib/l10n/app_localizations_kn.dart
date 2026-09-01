@@ -9955,4 +9955,7 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'ಲಿಪ್ಯಂತರಣ ಆಡಿಯೊ ಸ್ವೀಕರಿಸುತ್ತಿಲ್ಲ';
 }

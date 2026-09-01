@@ -9734,4 +9734,7 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => '转录未接收到音频';
 }

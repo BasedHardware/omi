@@ -9928,4 +9928,7 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'ট্রান্সক্রিপশন অডিও গ্রহণ করছে না';
 }

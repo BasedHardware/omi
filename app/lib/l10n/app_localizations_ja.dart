@@ -9753,4 +9753,7 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => '文字起こしが音声を受信していません';
 }

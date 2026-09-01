@@ -9917,4 +9917,7 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Bản ghi âm không nhận được âm thanh';
 }

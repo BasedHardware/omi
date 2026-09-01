@@ -9970,4 +9970,7 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transcrierea nu primește audio';
 }

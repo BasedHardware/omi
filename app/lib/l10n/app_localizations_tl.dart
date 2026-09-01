@@ -10013,4 +10013,7 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Hindi tumatanggap ng audio ang transkripsyon';
 }

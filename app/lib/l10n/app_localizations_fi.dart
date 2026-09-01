@@ -9924,4 +9924,7 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkriptio ei vastaanota ääntä';
 }

@@ -10010,4 +10010,7 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'La transcription ne reçoit pas d\'audio';
 }

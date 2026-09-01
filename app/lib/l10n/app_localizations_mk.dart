@@ -9976,4 +9976,7 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Транскрипцијата не прима аудио';
 }
