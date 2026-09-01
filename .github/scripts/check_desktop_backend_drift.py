@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -70,12 +71,19 @@ def deployed_at(health: dict[str, Any]) -> str | None:
     return None
 
 
+def _git_env() -> dict[str, str]:
+    # Pre-push/preflight hooks export GIT_DIR for the outer checkout. Fixture
+    # repos and `-C` probes must not inherit that namespace.
+    return {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+
+
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", "-C", str(repo), *args],
         check=False,
         capture_output=True,
         text=True,
+        env=_git_env(),
     )
 
 
@@ -181,15 +189,25 @@ def _self_test() -> int:
     with tempfile.TemporaryDirectory() as raw:
         repo = Path(raw)
         def git(*args: str) -> None:
-            result = subprocess.run(
-                ["git", "-c", "user.name=drift-self-test", "-c", "user.email=drift@example.test", *args],
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "user.name=drift-self-test",
+                    "-c",
+                    "user.email=drift@example.test",
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "-c",
+                    "commit.gpgsign=false",
+                    *args,
+                ],
                 cwd=repo,
                 check=True,
                 capture_output=True,
                 text=True,
+                env=_git_env(),
             )
-            if result.returncode:
-                raise RuntimeError(result.stderr)
 
         git("init", "-b", "main")
         (repo / "backend" / "routers").mkdir(parents=True)
@@ -197,7 +215,7 @@ def _self_test() -> int:
         (repo / "backend" / "routers" / "updates.py").write_text("old = True\n", encoding="utf-8")
         git("add", ".")
         git("commit", "-m", "base serving revision")
-        serving = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+        serving = _git(repo, "rev-parse", "HEAD").stdout.strip()
         (repo / "backend" / "routers" / "updates.py").write_text("new = True\n", encoding="utf-8")
         git("add", "backend/routers/updates.py")
         git("commit", "-m", "desktop update control plane")

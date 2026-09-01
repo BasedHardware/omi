@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -40,6 +41,21 @@ class ServingShaTests(unittest.TestCase):
             check=False,
             capture_output=True,
             text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("self-test OK", result.stdout)
+
+    def test_self_test_mode_ignores_hook_git_dir(self) -> None:
+        env = os.environ.copy()
+        env["GIT_DIR"] = "/nonexistent/hook.git"
+        env["GIT_WORK_TREE"] = "/nonexistent/worktree"
+        env["GIT_INDEX_FILE"] = "/nonexistent/index"
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--self-test"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("self-test OK", result.stdout)
