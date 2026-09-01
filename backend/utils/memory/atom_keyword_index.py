@@ -54,14 +54,15 @@ _REQUIRED_SCHEMA_FIELDS = {
     "predicate",
     "created_at",
 }
-_LEDGER_SCHEMA_FIELDS = {
-    "ledger_index_version",
-    "ledger_schema_version",
-    "ledger_kind",
-    "ledger_row_state",
-    "ledger_has_slot",
-    "ledger_subject_scope",
+_LEDGER_FIELD_DEFINITIONS = {
+    "ledger_index_version": {"name": "ledger_index_version", "type": "int32", "facet": True, "optional": True},
+    "ledger_schema_version": {"name": "ledger_schema_version", "type": "string", "facet": True, "optional": True},
+    "ledger_kind": {"name": "ledger_kind", "type": "string", "facet": True, "optional": True},
+    "ledger_row_state": {"name": "ledger_row_state", "type": "string", "facet": True, "optional": True},
+    "ledger_has_slot": {"name": "ledger_has_slot", "type": "bool", "facet": True, "optional": True},
+    "ledger_subject_scope": {"name": "ledger_subject_scope", "type": "string", "facet": True, "optional": True},
 }
+_LEDGER_SCHEMA_FIELDS = set(_LEDGER_FIELD_DEFINITIONS)
 
 
 Payload = Dict[str, Any]
@@ -217,12 +218,7 @@ def ensure_memories_collection() -> None:
                 {"name": "schema_version", "type": "int32", "facet": True},
                 {"name": "entity_terms", "type": "string", "optional": True},
                 {"name": "predicate", "type": "string", "optional": True},
-                {"name": "ledger_index_version", "type": "int32", "facet": True, "optional": True},
-                {"name": "ledger_schema_version", "type": "string", "facet": True, "optional": True},
-                {"name": "ledger_kind", "type": "string", "facet": True, "optional": True},
-                {"name": "ledger_row_state", "type": "string", "facet": True, "optional": True},
-                {"name": "ledger_has_slot", "type": "bool", "facet": True, "optional": True},
-                {"name": "ledger_subject_scope", "type": "string", "facet": True, "optional": True},
+                *[dict(field) for field in _LEDGER_FIELD_DEFINITIONS.values()],
                 {"name": "created_at", "type": "int64"},
             ],
             "default_sorting_field": "created_at",
@@ -239,16 +235,45 @@ def ensure_memories_collection() -> None:
         )
 
 
+def _schema_field_names(schema: Payload) -> set[str]:
+    return {str(field.get("name")) for field in _payload_list(schema.get("fields")) if field.get("name")}
+
+
 def ensure_ledger_keyword_schema() -> None:
-    """Fail closed when the provider has not adopted the ledger index fields."""
+    """Adopt the ledger index fields on a pre-ledger collection; fail closed otherwise.
+
+    ``ensure_memories_collection`` includes the ledger fields only when it
+    creates the collection, so a collection created before those fields
+    existed could never pass this check: every ledger keyword search failed
+    closed, permanently (observed hourly in dev since 2026-08-30). The fields
+    are all optional and additive, so adopting them is a bounded idempotent
+    alter. A concurrent adopter can win the race; the post-alter re-read is
+    the authority, and a collection still missing fields after the attempt
+    keeps failing closed.
+    """
 
     collection_name = memories_collection_name()
+    collection = _typesense_client().collections[collection_name]
     try:
-        schema = _payload_or_empty(_typesense_client().collections[collection_name].retrieve())
+        schema = _payload_or_empty(collection.retrieve())
     except Exception as exc:
         raise RuntimeError("ledger keyword schema unavailable") from exc
-    actual_fields = {str(field.get("name")) for field in _payload_list(schema.get("fields")) if field.get("name")}
-    missing = sorted(_LEDGER_SCHEMA_FIELDS - actual_fields)
+    missing = sorted(_LEDGER_SCHEMA_FIELDS - _schema_field_names(schema))
+    if not missing:
+        return
+    try:
+        collection.update({"fields": [dict(_LEDGER_FIELD_DEFINITIONS[name]) for name in missing]})
+    except Exception:
+        logger.warning(
+            "ledger keyword schema adoption failed for collection=%s missing=%s",
+            collection_name,
+            missing,
+        )
+    try:
+        schema = _payload_or_empty(collection.retrieve())
+    except Exception as exc:
+        raise RuntimeError("ledger keyword schema unavailable") from exc
+    missing = sorted(_LEDGER_SCHEMA_FIELDS - _schema_field_names(schema))
     if missing:
         raise RuntimeError(f"Typesense ledger keyword schema is missing fields: {missing}")
 

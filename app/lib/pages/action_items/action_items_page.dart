@@ -18,6 +18,7 @@ import 'package:omi/utils/other/debouncer.dart';
 import 'task_categorization.dart';
 import 'widgets/action_item_form_sheet.dart';
 import 'widgets/action_item_shimmer_widget.dart';
+import 'widgets/task_completion_circle.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
@@ -1236,7 +1237,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             ),
             child: Row(
               children: [
-                _buildCheckbox(item.completed),
+                TaskCompletionCircle(completed: item.completed),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -1389,7 +1390,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         await provider.updateActionItemState(item, !item.completed);
                         if (!item.completed) _onActionItemCompleted();
                       },
-                child: SizedBox(width: 44, height: 48, child: Center(child: _buildCheckbox(item.completed))),
+                child: SizedBox(
+                    width: 44, height: 48, child: Center(child: TaskCompletionCircle(completed: item.completed))),
               ),
               // Task text
               Expanded(
@@ -1440,23 +1442,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildCheckbox(bool isCompleted) {
-    if (isCompleted) {
-      return Container(
-        width: 22,
-        height: 22,
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.amber),
-        child: const Icon(Icons.check, size: 14, color: Colors.black),
-      );
-    }
-    // Incomplete: dashed outline circle (Joi-inspired). Quieter than a solid
-    // gray ring so the task title carries the visual weight.
-    return CustomPaint(
-      size: const Size(22, 22),
-      painter: _DashedCirclePainter(color: Colors.grey[500]!, strokeWidth: 1.5, dashLength: 3, gapLength: 3),
     );
   }
 
@@ -2068,46 +2053,3 @@ class _CircularProgressPainter extends CustomPainter {
 
 /// Paints a dashed circle outline. Used for incomplete-task indicators —
 /// signals "open" without competing with the title for visual weight.
-class _DashedCirclePainter extends CustomPainter {
-  final Color color;
-  final double strokeWidth;
-  final double dashLength;
-  final double gapLength;
-
-  _DashedCirclePainter({
-    required this.color,
-    required this.strokeWidth,
-    required this.dashLength,
-    required this.gapLength,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width / 2) - (strokeWidth / 2);
-    final circumference = 2 * 3.141592653589793 * radius;
-    final segmentLength = dashLength + gapLength;
-    final segments = (circumference / segmentLength).floor();
-    final adjustedSegment = circumference / segments;
-    final dashAngle = (dashLength / adjustedSegment) * (2 * 3.141592653589793 / segments);
-    final stepAngle = 2 * 3.141592653589793 / segments;
-
-    for (var i = 0; i < segments; i++) {
-      final startAngle = i * stepAngle;
-      canvas.drawArc(Rect.fromCircle(center: center, radius: radius), startAngle, dashAngle, false, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedCirclePainter oldDelegate) =>
-      oldDelegate.color != color ||
-      oldDelegate.strokeWidth != strokeWidth ||
-      oldDelegate.dashLength != dashLength ||
-      oldDelegate.gapLength != gapLength;
-}

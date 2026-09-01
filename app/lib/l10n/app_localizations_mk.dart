@@ -9965,4 +9965,15 @@ class AppLocalizationsMk extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Не е снимено ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Кратки разговори: $count',
+      one: '$count краток разговор',
+    );
+    return '$_temp0';
+  }
 }

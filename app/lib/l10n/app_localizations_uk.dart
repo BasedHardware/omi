@@ -9934,4 +9934,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Не записано ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Короткі розмови: $count',
+      one: '$count коротка розмова',
+    );
+    return '$_temp0';
+  }
 }

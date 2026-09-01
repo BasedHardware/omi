@@ -9905,4 +9905,15 @@ class AppLocalizationsSk extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nezaznamenané ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Krátke konverzácie: $count',
+      one: '$count krátka konverzácia',
+    );
+    return '$_temp0';
+  }
 }
