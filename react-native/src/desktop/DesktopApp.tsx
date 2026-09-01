@@ -35,6 +35,7 @@ type Props = {
   onSignOut: () => void;
   onDraftChange: (value: string) => void;
   onSend: () => void;
+  onWorkspaceReload?: () => void;
 };
 
 export function DesktopApp({
@@ -47,6 +48,7 @@ export function DesktopApp({
   onSend,
   onSignIn,
   onSignOut,
+  onWorkspaceReload,
   outcomes,
   reads,
   readsPhase,
@@ -93,12 +95,13 @@ export function DesktopApp({
         ) : route === 'Tasks' ? (
           <TasksPage outcomes={outcomes} />
         ) : route === 'Apps' ? (
-          <AppsPage />
+          <AppsPage session={session} />
         ) : (
           <View style={styles.page}>
             <DesktopSettings
               onSignIn={onSignIn}
               onSignOut={onSignOut}
+              onWorkspaceReload={onWorkspaceReload}
               session={session}
               signingIn={signingIn}
             />

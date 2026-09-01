@@ -85,6 +85,12 @@ jest.mock('../desktopCloudClient', () => ({
   loadAccountSettings: jest.fn(async () => {
     throw new Error('unused');
   }),
+  loadConnectors: jest.fn(async () => ({
+    apps: [],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+  })),
   setPrivateCloudSync: jest.fn(),
   setStoreRecordingPermission: jest.fn(),
 }));
@@ -500,5 +506,31 @@ test('chrome keeps a sliding nav pill, structured home cards, and a field omniba
   expect(settings).toMatch(/row:\s*\{[^}]*marginBottom:\s*14/);
   expect(chrome).toMatch(/navItem:\s*\{[^}]*paddingHorizontal:\s*16/);
   expect(chrome).toContain('placed.current');
+  expect(chrome).toContain('navFrameMoved');
+  expect(chrome).toContain('animating.current');
+  expect(chrome).not.toMatch(/navTextActive:\s*\{[^}]*fontWeight/);
+  expect(chrome).toMatch(/navText:\s*\{[^}]*fontWeight:\s*'500'/);
   expect(allKitSource).not.toMatch(/composer:\s*\{/);
+});
+
+test('Apps is a wrapped gallery of tiles', async () => {
+  const pages = kitSources['DesktopPages.tsx'];
+  expect(pages).toMatch(/appGrid:\s*\{[^}]*flexWrap:\s*'wrap'/);
+  expect(pages).toMatch(/appSlot:\s*\{[^}]*width:\s*'50%'/);
+  expect(pages).not.toMatch(/appCard:\s*\{[^}]*flex:\s*1/);
+  expect(pages).toContain('loadConnectors');
+  expect(pages).toContain('Not connected');
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Calendar');
+  expect(tree).toContain('Google Calendar');
+  expect(tree).toContain('Not connected');
+  expect(tree).toContain('ChatGPT');
+  expect(tree).not.toContain('Installed');
 });
