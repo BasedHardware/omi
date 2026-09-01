@@ -23,6 +23,10 @@ def _batch(intents):
     return chat_first_router.chat_first_intents_db.ReadyIntentBatch(intents, (), None)
 
 
+def _empty_release_batch(*args, **kwargs):
+    return chat_first_router.chat_first_intents_db.DeferralReleaseBatch(intents=[], malformed_count=0)
+
+
 def _client() -> TestClient:
     app = FastAPI()
     app.include_router(chat_first_router.router)
@@ -159,7 +163,7 @@ def test_materialize_returns_ready_intents_and_acknowledges_only_kernel_receipts
         'acknowledge_sparse_cold_start_sequence_terminal',
         lambda *args, **kwargs: terminal_acknowledgements.append(kwargs) or intent,
     )
-    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -213,7 +217,7 @@ def test_materialize_records_typed_rejections_and_dead_letter_metric(monkeypatch
         'record_materialization_rejection',
         lambda *args, **kwargs: recorded.append(kwargs) or (intent, 'permanent_rejection:invalid_intent'),
     )
-    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -266,7 +270,7 @@ def test_one_malformed_intent_with_pending_rejection_never_fails_batch_and_sibli
         return healthy, None
 
     monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'record_materialization_rejection', record_rejection)
-    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -311,7 +315,7 @@ def test_one_invalid_receipt_never_fails_the_materialization_batch(monkeypatch):
         return intent.model_copy(update={'delivery_state': 'delivered'})
 
     monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'acknowledge_materialization', acknowledge)
-    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -350,7 +354,7 @@ def test_one_stale_cold_start_terminal_receipt_never_fails_the_materialization_b
         'acknowledge_sparse_cold_start_sequence_terminal',
         acknowledge_terminal,
     )
-    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -397,7 +401,7 @@ def test_tail_deferral_is_reported_separately_from_rejection(monkeypatch):
         'record_materialization_deferral',
         record_deferral,
     )
-    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     fetched = []
@@ -441,7 +445,7 @@ def test_seven_day_deferral_records_deferred_beyond_budget_metric(monkeypatch):
         'record_materialization_deferral',
         lambda *args, **kwargs: dead_lettered,
     )
-    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'fetch_ready_intent_batch', lambda *a, **k: _batch([]))
@@ -477,7 +481,7 @@ def test_client_rejection_codes_never_create_unbounded_metric_labels(monkeypatch
         'record_materialization_rejection',
         lambda *args, **kwargs: (intent, 'permanent_rejection:invented_client_code'),
     )
-    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'fetch_ready_intent_batch', lambda *a, **k: _batch([]))
@@ -515,7 +519,7 @@ def test_v1_leaves_conversation_link_pending_and_v2_later_acknowledges_it(monkey
         created_at=datetime(2026, 8, 19, tzinfo=timezone.utc),
     )
     acknowledgements = []
-    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', _empty_release_batch)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     monkeypatch.setattr(

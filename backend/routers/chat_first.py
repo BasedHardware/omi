@@ -496,10 +496,9 @@ def _materialize_prompts(
             account_generation=request.control_generation,
             now=now,
         )
-        released_intents = release_batch if isinstance(release_batch, list) else release_batch.intents
-        for _intent in released_intents:
+        for _intent in release_batch.intents:
             CHAT_FIRST_PROACTIVE_TOTAL.labels(event='deferral_released', source='deferral_reraise', reason='none').inc()
-        for _ in range(getattr(release_batch, 'malformed_count', 0)):
+        for _ in range(release_batch.malformed_count):
             CHAT_FIRST_PROACTIVE_TOTAL.labels(
                 event='deferral_malformed', source='deferral_reraise', reason='malformed_document'
             ).inc()

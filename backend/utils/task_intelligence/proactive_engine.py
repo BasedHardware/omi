@@ -149,17 +149,15 @@ def wake_after_commit(
 
     # A due deferral is deterministic. Release it before agent judgment, but
     # never recurse into this wake path from the release/receipt operation.
-    released = intent_db.release_due_deferrals(
+    release_batch = intent_db.release_due_deferrals(
         uid,
         account_generation=generation,
         now=resolved_now,
         subject=trigger.subject,
     )
-    malformed_count = getattr(released, 'malformed_count', 0)
-    if malformed_count:
-        logger.warning('Skipped malformed Chat-first deferrals during release: count=%d', malformed_count)
-    released_intents = released if isinstance(released, list) else released.intents
-    for _intent in released_intents:
+    if release_batch.malformed_count:
+        logger.warning('Skipped malformed Chat-first deferrals during release: count=%d', release_batch.malformed_count)
+    for _intent in release_batch.intents:
         _meter('deferral_released', 'deferral_reraise')
 
     if trigger.kind not in {'task_changed', 'goal_changed'}:
