@@ -409,11 +409,13 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             ),
             const SizedBox(height: 10),
             SizedBox(
-              width: 120,
+              width: 124,
               child: Text(
                 label,
                 textAlign: TextAlign.center,
-                maxLines: 1,
+                // Two lines: the localized labels are longer than the English
+                // literals they replaced, and several locales run longer still.
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500, height: 1.2),
               ),
@@ -425,19 +427,19 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
 
     final phoneOption = option(
       icon: Icons.mic_rounded,
-      label: 'Record with Phone',
+      label: context.l10n.recordWithPhoneMic,
       onTap: () => _startPhoneRecording(context),
     );
     final callOption = option(
       icon: Icons.phone_in_talk_rounded,
-      label: 'Record Call',
+      label: context.l10n.phoneCall,
       onTap: () {
         Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
       },
     );
     final deviceOption = option(
       icon: Icons.bluetooth_searching_rounded,
-      label: 'Connect Device',
+      label: context.l10n.connectDevice,
       onTap: () {
         Navigator.push(context, MaterialPageRoute(builder: (_) => const DeviceSelectionPage()));
       },
