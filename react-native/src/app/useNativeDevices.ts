@@ -51,7 +51,8 @@ function mergeBattery(
   };
 }
 
-export function useNativeDevices() {
+export function useNativeDevices(options?: {enabled?: boolean}) {
+  const enabled = options?.enabled ?? true;
   const [nativeSnapshot, setNativeSnapshot] =
     useState<PlatformNativeSnapshot | null>(null);
   const [deviceBusy, setDeviceBusy] = useState(false);
@@ -190,7 +191,7 @@ export function useNativeDevices() {
 
   useEffect(() => {
     let active = true;
-    if (omiNative === undefined || omiNative === null) {
+    if (!enabled || omiNative === undefined || omiNative === null) {
       return () => undefined;
     }
     omiNative
@@ -240,7 +241,7 @@ export function useNativeDevices() {
       active = false;
       unsubscribe();
     };
-  }, [persistAudio]);
+  }, [enabled, persistAudio]);
 
   useEffect(() => {
     if (

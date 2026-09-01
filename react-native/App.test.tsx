@@ -32,6 +32,36 @@ test('macOS chrome is DesktopApp after first paint for every session state', () 
   expect(orchestrator).not.toContain('"Saved data unavailable"');
 });
 
+test('macOS first paint and session probe do not require native devices or BLE', () => {
+  const onboarding = readFileSync(
+    resolve(__dirname, 'src/app/useOnboarding.ts'),
+    'utf8',
+  );
+
+  expect(orchestrator).toMatch(
+    /useNativeDevices\(\{\s*enabled:\s*!macDesktop\s*\}\)/,
+  );
+  expect(orchestrator).not.toMatch(/useNativeDevices\(\)/);
+  expect(onboarding).toContain('hasCloudSession');
+  expect(onboarding).toContain('setOnboardingRequired(!hasSession)');
+  expect(onboarding).not.toContain(
+    'setOnboardingRequired(!completed && !hasSession)',
+  );
+  expect(onboarding).not.toContain('omiNative');
+  expect(onboarding).not.toContain('getSnapshot');
+  expect(onboarding).not.toContain('useNativeDevices');
+  expect(onboarding).not.toContain('CBCentral');
+  expect(onboarding).not.toContain('startScan');
+  const sessionBlock = orchestrator.slice(
+    orchestrator.indexOf('session='),
+    orchestrator.indexOf('signingIn={signingIn}'),
+  );
+  expect(sessionBlock).toContain('onboardingRequired');
+  expect(sessionBlock).not.toContain('nativeSnapshot');
+  expect(sessionBlock).not.toContain('omiNative');
+  expect(sessionBlock).not.toContain('useNativeDevices');
+});
+
 test('DesktopApp owns sign-in inside the search-first shell', () => {
   expect(desktopApp).toContain("Search what you've seen and heard");
   expect(desktopApp).toContain('signed-out');
