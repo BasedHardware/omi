@@ -84,6 +84,27 @@ describe("normal pending stdio tool-result boundary", () => {
     }
   });
 
+  it("emits one degraded fallback record for a truncated projection", () => {
+    const artifactRoot = mkdtempSync(join(tmpdir(), "omi-relay-tool-result-"));
+    roots.push(artifactRoot);
+    const onDegraded = vi.fn();
+    const result = finalizeRelayToolResult({
+      identity,
+      result: JSON.stringify({ ok: true, text: "x".repeat(MAX_RELAY_TOOL_RESULT_BYTES * 2) }),
+      outcome: "succeeded",
+      kernel: kernelWithArtifact(),
+      artifactRoot,
+      onDegraded,
+    });
+    expect(JSON.parse(result).toolResultEnvelope.truncated).toBe(true);
+    expect(onDegraded).toHaveBeenCalledOnce();
+    expect(onDegraded).toHaveBeenCalledWith(expect.objectContaining({
+      toolName: identity.toolName,
+      originalBytes: expect.any(Number),
+      projectedBytes: expect.any(Number),
+    }));
+  });
+
   it.each([
     ["swift_tool_timeout", "Timed out waiting for the Swift tool executor"],
     ["policy_denied", "Tool capability rejected"],

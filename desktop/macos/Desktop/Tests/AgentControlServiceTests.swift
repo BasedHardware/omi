@@ -388,6 +388,7 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
       output: output)
 
     XCTAssertTrue(result.wasOversized)
+    XCTAssertFalse(result.wasTruncated)
     XCTAssertEqual(result.output, output)
     let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
     XCTAssertEqual(object["ok"] as? Bool, true)
@@ -424,6 +425,7 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
     let envelope = try XCTUnwrap(object["toolResultEnvelope"] as? [String: Any])
 
     XCTAssertTrue(result.wasOversized)
+    XCTAssertTrue(result.wasTruncated)
     XCTAssertEqual(result.output, output)
     XCTAssertEqual(object["ok"] as? Bool, true)
     XCTAssertEqual(envelope["status"] as? String, "succeeded")
