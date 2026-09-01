@@ -90,11 +90,19 @@ export type NativeOriginResolution =
   | {ok: true; origin: string}
   | {ok: false; reason: 'rejected' | 'unconfigured'};
 
+export type SoftwarePlane = 'old' | 'new';
+export const SOFTWARE_PLANE_DEFAULTS_KEY = 'omi.backend.softwarePlane';
+
+export function parseSoftwarePlane(value: unknown): SoftwarePlane {
+  return value === 'new' ? 'new' : 'old';
+}
+
 export function resolveNativeRequestOrigin(input: {
   path: string;
   v5BackendUrl?: string;
   localBackendUrl?: string;
   localSelected?: boolean;
+  softwarePlane?: SoftwarePlane;
 }): NativeOriginResolution {
   if (input.localSelected) {
     const local = validateLoopbackBackendUrl(
@@ -104,9 +112,9 @@ export function resolveNativeRequestOrigin(input: {
       ? {ok: false, reason: 'rejected'}
       : {ok: true, origin: local.origin};
   }
-  if (isCaptureBackendPath(input.path) && input.v5BackendUrl !== undefined) {
-    if (input.v5BackendUrl.length === 0) {
-      return {ok: false, reason: 'unconfigured'};
+  if (parseSoftwarePlane(input.softwarePlane) === 'new') {
+    if (input.v5BackendUrl === undefined || input.v5BackendUrl.length === 0) {
+      return {ok: true, origin: CLOUD_BACKEND_ORIGIN};
     }
     const v5 = validateV5BackendUrl(input.v5BackendUrl);
     return v5 === null

@@ -136,6 +136,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     if (backend === undefined || backend === null) {
       return () => undefined;
     }
+    if (macDesktop && onboardingRequired !== false) {
+      setChatError(null);
+      return () => {
+        active = false;
+      };
+    }
     loadNewestChatHistory(backend)
       .then(page => {
         if (active) {
@@ -148,14 +154,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
       })
       .catch(() => {
-        if (active) {
+        if (active && (!macDesktop || onboardingRequired === false)) {
           setChatError('Chat is temporarily unavailable.');
         }
       });
     return () => {
       active = false;
     };
-  }, [stableChatMessageIds]);
+  }, [macDesktop, onboardingRequired, stableChatMessageIds]);
 
   useEffect(() => {
     if (route === 'Home') {
@@ -546,7 +552,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
 
   if (macDesktop) {
     return (
-      <PageShell macDesktop workspaceMaterial={false}>
+      <PageShell macDesktop workspaceMaterial>
         <DesktopApp
           chatBusy={chatBusy}
           chatError={chatError}

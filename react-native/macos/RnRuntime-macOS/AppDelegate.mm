@@ -5,23 +5,15 @@
 #import <React/RCTUIKit.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 
-static const CGFloat OmiTrafficLightLeading = 13.0;
-static const CGFloat OmiTrafficLightSpacing = 6.0;
-
-// Opaque-enough dark fill for the stock titlebar. A translucent window
-// background is what the system titlebar paints with, so this reads as dark
-// glass over the desktop; the RN workspace material covers the content area.
-static NSColor *OmiTitlebarFillColor(void) {
-  return [NSColor colorWithRed:18.0 / 255.0 green:20.0 / 255.0 blue:19.0 / 255.0 alpha:0.88];
-}
+static const CGFloat OmiTrafficLightLeading = 16.0;
+static const CGFloat OmiTrafficLightSpacing = 8.0;
+static const CGFloat OmiTrafficLightChromeHeight = 52.0;
 
 @implementation AppDelegate
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
   self.moduleName = @"RnRuntime";
-  // You can add your custom initial props in the dictionary below.
-  // They will be passed down to the ViewController used by React Native.
   self.initialProps = @{};
   NSString *metroPort = NSProcessInfo.processInfo.environment[@"OMI_METRO_PORT"];
   if (metroPort.integerValue > 0 && metroPort.integerValue <= 65535) {
@@ -56,6 +48,35 @@ static NSColor *OmiTitlebarFillColor(void) {
   [super applicationWillTerminate:notification];
 }
 
+- (void)installOmiWindowGlass:(NSWindow *)window
+{
+  RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
+  if (self.omiWindowGlass == nil) {
+    self.omiWindowGlass = [[NSVisualEffectView alloc] initWithFrame:rootView.bounds];
+    self.omiWindowGlass.material = NSVisualEffectMaterialUnderWindowBackground;
+    self.omiWindowGlass.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+    self.omiWindowGlass.state = NSVisualEffectStateActive;
+    self.omiWindowGlass.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  }
+  self.omiWindowGlass.frame = rootView.bounds;
+  if (self.omiWindowGlass.superview != rootView) {
+    [rootView addSubview:self.omiWindowGlass positioned:NSWindowBelow relativeTo:nil];
+  }
+}
+
+- (void)installOmiTitlebarAccessory:(NSWindow *)window
+{
+  if (self.omiTitlebarAccessory != nil) {
+    return;
+  }
+  NSView *spacer = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 0, OmiTrafficLightChromeHeight)];
+  NSTitlebarAccessoryViewController *accessory = [[NSTitlebarAccessoryViewController alloc] init];
+  accessory.view = spacer;
+  accessory.layoutAttribute = NSLayoutAttributeTop;
+  self.omiTitlebarAccessory = accessory;
+  [window addTitlebarAccessoryViewController:accessory];
+}
+
 - (void)dressOmiWindow
 {
   NSWindow *window = self.window;
@@ -63,32 +84,27 @@ static NSColor *OmiTitlebarFillColor(void) {
     return;
   }
 
-  // The product is dark glass: pin the dark appearance so the stock titlebar
-  // title, the workspace material, and the RN chrome agree in Light Mode too.
-  // Content stays on the shared workspace glass below a filled native titlebar.
-  window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
+  window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
   window.opaque = NO;
-  window.backgroundColor = OmiTitlebarFillColor();
+  window.backgroundColor = NSColor.clearColor;
   RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
   rootView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
   rootView.backgroundColor = NSColor.clearColor;
   window.hasShadow = NO;
   window.styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
-      NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
-  window.titlebarAppearsTransparent = NO;
-  window.titleVisibility = NSWindowTitleVisible;
-  window.title = @"omi";
-  window.toolbarStyle = NSWindowToolbarStyleAutomatic;
-  window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleAutomatic;
-  // Stock titled window: traffic lights and the "omi" title live in the
-  // native titlebar. RN chrome is a separate row in the content view after
-  // onboarding. Keep background-drag without an RN gesture layer.
-  window.movableByWindowBackground = YES;
+      NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable |
+      NSWindowStyleMaskFullSizeContentView;
+  window.titlebarAppearsTransparent = YES;
+  window.titleVisibility = NSWindowTitleHidden;
+  window.title = @"";
+  window.toolbarStyle = NSWindowToolbarStyleUnified;
+  window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+  window.movableByWindowBackground = NO;
   window.level = NSNormalWindowLevel;
   window.hidesOnDeactivate = NO;
   window.contentMinSize = NSMakeSize(800.0, 680.0);
   if (!self.omiWindowGeometryApplied) {
-    [window setContentSize:NSMakeSize(960.0, 700.0)];
+    [window setContentSize:NSMakeSize(900.0, 700.0)];
     [window center];
     self.omiWindowGeometryApplied = YES;
   }
@@ -96,6 +112,8 @@ static NSColor *OmiTitlebarFillColor(void) {
   behavior |= NSWindowCollectionBehaviorMoveToActiveSpace | NSWindowCollectionBehaviorFullScreenAuxiliary;
   behavior &= ~NSWindowCollectionBehaviorFullScreenPrimary;
   window.collectionBehavior = behavior;
+  [self installOmiWindowGlass:window];
+  [self installOmiTitlebarAccessory:window];
   [window standardWindowButton:NSWindowCloseButton].hidden = NO;
   [window standardWindowButton:NSWindowMiniaturizeButton].hidden = NO;
   [window standardWindowButton:NSWindowZoomButton].hidden = NO;
@@ -117,7 +135,8 @@ static NSColor *OmiTitlebarFillColor(void) {
   NSView *container = closeButton.superview;
   CGFloat buttonWidth = NSWidth(closeButton.frame);
   CGFloat buttonHeight = NSHeight(closeButton.frame);
-  CGFloat y = floor((NSHeight(container.bounds) - buttonHeight) / 2.0);
+  CGFloat y = NSHeight(container.bounds) - OmiTrafficLightChromeHeight +
+      floor((OmiTrafficLightChromeHeight - buttonHeight) / 2.0);
   CGFloat x = OmiTrafficLightLeading;
   for (NSButton *button in @[ closeButton, miniaturizeButton, zoomButton ]) {
     NSRect frame = button.frame;
@@ -211,11 +230,6 @@ static NSColor *OmiTitlebarFillColor(void) {
 #endif
 }
 
-/// This method controls whether the `concurrentRoot`feature of React18 is turned on or off.
-///
-/// @see: https://reactjs.org/blog/2022/03/29/react-v18.html
-/// @note: This requires to be rendering on Fabric (i.e. on the New Architecture).
-/// @return: `true` if the `concurrentRoot` feature is enabled. Otherwise, it returns `false`.
 - (BOOL)concurrentRootEnabled
 {
 #ifdef RN_FABRIC_ENABLED

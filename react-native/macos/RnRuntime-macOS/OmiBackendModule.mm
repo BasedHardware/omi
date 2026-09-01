@@ -6,6 +6,7 @@
 
 static NSString *const OmiContractVersion = @"1.0.0";
 static NSString *const OmiDevelopmentBackendUnsupportedBody = @"{\"error\":{\"code\":\"development_backend_unsupported\",\"retryable\":false,\"action\":\"none\"}}";
+static NSString *const OmiSoftwarePlaneDefaultsKey = @"omi.backend.softwarePlane";
 
 typedef NS_ENUM(NSInteger, OmiBackendCredentialKind) {
   OmiBackendCredentialKindCloud,
@@ -43,6 +44,15 @@ static BOOL OmiIsAllowedV5Host(NSString *host) {
       normalized.length > [@".workers.dev" length];
 }
 
+static BOOL OmiSoftwarePlaneIsNew(void) {
+  return [[NSUserDefaults.standardUserDefaults stringForKey:OmiSoftwarePlaneDefaultsKey]
+      isEqualToString:@"new"];
+}
+
+static NSString *OmiSoftwarePlaneValue(void) {
+  return OmiSoftwarePlaneIsNew() ? @"new" : @"old";
+}
+
 static BOOL OmiIsCaptureBackendPath(NSString *path) {
   NSURLComponents *components = [NSURLComponents componentsWithString:path];
   NSString *route = components.path;
@@ -67,9 +77,10 @@ static NSURL *OmiValidatedV5URL(NSString *value) {
 }
 
 static NSURL *OmiRequestBaseURL(OmiBackendPolicy *policy, NSString *path) {
-  if (OmiIsCaptureBackendPath(path) && policy.captureOriginRequired) {
+  if (policy.captureOriginRequired && policy.captureURL != nil) {
     return policy.captureURL;
   }
+  (void)path;
   return policy.url;
 }
 
@@ -284,6 +295,7 @@ static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSStr
     }
     return nil;
   }
+  OmiAuthImportShippingSessionIfNeeded();
   NSDictionary *session = OmiOwnKeychainCloudSession();
   NSString *ownKeychainToken = OmiOwnKeychainCloudToken(session);
   NSString *cloud = ownKeychainToken;
@@ -297,9 +309,11 @@ static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSStr
   policy.clientId = @"omi-macos";
   policy.kind = OmiBackendCredentialKindCloud;
   NSString *v5URL = environment[@"OMI_V5_BACKEND_URL"];
-  if (v5URL.length > 0) {
+  NSURL *v5 = v5URL.length > 0 ? OmiValidatedV5URL(v5URL) : nil;
+  if (OmiSoftwarePlaneIsNew() && v5 != nil) {
+    policy.url = v5;
     policy.captureOriginRequired = YES;
-    policy.captureURL = OmiValidatedV5URL(v5URL);
+    policy.captureURL = v5;
   }
   return policy;
 }
@@ -309,7 +323,8 @@ static BOOL OmiBackendPolicyIsValid(OmiBackendPolicy *policy) {
   NSString *scheme = policy.url.scheme.lowercaseString;
   if (policy.kind == OmiBackendCredentialKindCloud) {
     NSInteger port = policy.url.port != nil ? policy.url.port.integerValue : 443;
-    return [scheme isEqualToString:@"https"] && OmiIsCloudHost(policy.url.host) && port == 443;
+    BOOL allowedHost = OmiIsCloudHost(policy.url.host) || OmiIsAllowedV5Host(policy.url.host);
+    return [scheme isEqualToString:@"https"] && allowedHost && (port == 443 || OmiIsLoopbackHost(policy.url.host));
   }
   return ([scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"]) &&
       OmiIsLoopbackHost(policy.url.host) && policy.clientId.length > 0;
@@ -780,6 +795,29 @@ RCT_REMAP_METHOD(cancelGenerationEvents,
   }];
   [task resume];
   }];
+}
+
+RCT_REMAP_METHOD(getSoftwarePlane,
+                 getSoftwarePlaneWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  resolve(OmiSoftwarePlaneValue());
+}
+
+RCT_REMAP_METHOD(setSoftwarePlane,
+                 setSoftwarePlane:(NSString *)plane
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  NSString *value = [plane isEqualToString:@"new"] ? @"new" : @"old";
+  [NSUserDefaults.standardUserDefaults setObject:value forKey:OmiSoftwarePlaneDefaultsKey];
+  self.policy = OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment);
+  resolve(value);
+}
+
+RCT_REMAP_METHOD(stampedV5BackendOrigin,
+                 stampedV5BackendOriginWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  NSURL *url = OmiValidatedV5URL(NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"]);
+  resolve(url.absoluteString ?: [NSNull null]);
 }
 
 - (void)URLSession:(NSURLSession *)session

@@ -41,6 +41,10 @@
 	<string>NSApplication</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Omi uses Bluetooth to connect to your device.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Omi records meeting audio when you turn Audio Recording on.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Omi captures your screen when you turn Screen Capture on.</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<true/>
 	<key>NSSupportsSuddenTermination</key>

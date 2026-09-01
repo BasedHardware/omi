@@ -66,7 +66,12 @@ test('macOS first paint and session probe do not require native devices or BLE',
 });
 
 test('DesktopApp owns sign-in inside the search-first shell', () => {
-  expect(desktopApp).toContain("Search what you've seen and heard");
+  const chrome = readFileSync(
+    resolve(__dirname, 'src/desktop/desktopChrome.ts'),
+    'utf8',
+  );
+  expect(chrome).toContain("Search what you've seen and heard");
+  expect(desktopApp).toContain('desktopSearchPlaceholder');
   expect(desktopApp).toContain('signed-out');
   expect(desktopApp).toContain('Restoring your session');
   expect(desktopApp).not.toContain('Saved data unavailable');

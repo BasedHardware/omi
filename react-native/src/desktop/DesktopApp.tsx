@@ -3,18 +3,18 @@ import {
   ActivityIndicator,
   FlatList,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import Archive from 'lucide-react-native/icons/archive';
-import Bell from 'lucide-react-native/icons/bell';
 import CalendarDays from 'lucide-react-native/icons/calendar-days';
 import CheckCircle2 from 'lucide-react-native/icons/circle-check';
+import Clock from 'lucide-react-native/icons/clock';
 import FileText from 'lucide-react-native/icons/file-text';
 import Folder from 'lucide-react-native/icons/folder';
 import Grid2X2 from 'lucide-react-native/icons/grid-2x2';
+import House from 'lucide-react-native/icons/house';
 import Library from 'lucide-react-native/icons/library';
 import ListFilter from 'lucide-react-native/icons/list-filter';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
@@ -24,7 +24,6 @@ import Puzzle from 'lucide-react-native/icons/puzzle';
 import Search from 'lucide-react-native/icons/search';
 import Settings from 'lucide-react-native/icons/settings';
 import Sparkles from 'lucide-react-native/icons/sparkles';
-import Volume2 from 'lucide-react-native/icons/volume-2';
 import type {ChatMessage} from '../chatClient';
 import type {
   ConversationProjection,
@@ -36,10 +35,27 @@ import type {
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
 import {GlassPanel} from '../ui/GlassPanel';
+import {
+  desktopNavItems,
+  desktopSearchPlaceholder,
+  desktopTrafficLightRowWidth,
+  visibleChatError,
+  type DesktopNavItem,
+  type DesktopSession,
+} from './desktopChrome';
+
+export type {DesktopSession};
+import {DesktopSettings} from './DesktopSettings';
+import {ShippingPressable} from './ShippingPressable';
+import {
+  ShippingGlassMount,
+  ShippingListInsert,
+  ShippingSearchFocus,
+  ShippingStage,
+} from './ShippingStage';
 import {desktopTokens as token} from './tokens';
 
-export type DesktopSession = 'probing' | 'signed-out' | 'ready';
-type DesktopRoute = 'Chat' | 'Memories' | 'Tasks' | 'Apps' | 'Settings';
+type DesktopRoute = DesktopNavItem | 'Settings';
 type MemoryHub =
   | 'Activity'
   | 'Conversations'
@@ -64,15 +80,13 @@ type Props = {
   onSend: () => void;
 };
 
-const navItems: Array<{
-  label: Exclude<DesktopRoute, 'Settings'>;
-  Icon: typeof Search;
-}> = [
-  {label: 'Chat', Icon: MessageCircle},
-  {label: 'Memories', Icon: Library},
-  {label: 'Tasks', Icon: ListFilter},
-  {label: 'Apps', Icon: Puzzle},
-];
+const navIcons: Record<DesktopNavItem, typeof Search> = {
+  Home: House,
+  Library: Library,
+  Tasks: ListFilter,
+  Rewind: Clock,
+  Apps: Puzzle,
+};
 
 function GlassSurface({
   children,
@@ -82,14 +96,14 @@ function GlassSurface({
   style?: object;
 }) {
   return (
-    <View style={[styles.glassSurface, style]}>
+    <ShippingGlassMount style={[styles.glassSurface, style]}>
       <GlassPanel
         glassCornerRadius={token.radius.panel}
         pointerEvents="none"
         style={StyleSheet.absoluteFill}
       />
       {children}
-    </View>
+    </ShippingGlassMount>
   );
 }
 
@@ -105,20 +119,17 @@ function Chip({
   onPress?: () => void;
 }) {
   return (
-    <FocusPressable
+    <ShippingPressable
       accessibilityRole="button"
       accessibilityState={{selected: active}}
+      active={active}
       onPress={onPress}
-      style={({pressed}) => [
-        styles.chip,
-        active && styles.chipActive,
-        pressed && styles.pressed,
-      ]}>
-      {Icon === undefined ? null : <Icon color={token.color.ink} size={16} />}
+      style={styles.chip}>
+      {Icon === undefined ? null : <Icon color={token.color.ink} size={13} />}
       <Text style={[styles.chipText, active && styles.chipTextActive]}>
         {label}
       </Text>
-    </FocusPressable>
+    </ShippingPressable>
   );
 }
 
@@ -145,7 +156,7 @@ function ResultRow({item}: {item: DesktopReadProjection}) {
   return (
     <View style={styles.resultRow}>
       <View style={styles.glyph}>
-        <Icon color={token.color.ink} size={18} />
+        <Icon color={token.color.ink} size={16} />
       </View>
       <View style={styles.resultCopy}>
         <Text numberOfLines={1} style={styles.rowTitle}>
@@ -173,7 +184,7 @@ const ConversationRow = memo(function ConversationRow({
   return (
     <View style={styles.resultRow}>
       <View style={styles.glyph}>
-        <MessageCircle color={token.color.ink} size={18} />
+        <MessageCircle color={token.color.ink} size={16} />
       </View>
       <View style={styles.resultCopy}>
         <Text style={styles.rowTitle}>{item.title}</Text>
@@ -299,6 +310,7 @@ function ChatHome({
   signingIn,
 }: Props) {
   const [query, setQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [filter, setFilter] = useState<
     'All' | 'Conversations' | 'Memories' | 'Tasks' | 'Rewind'
   >('All');
@@ -318,19 +330,24 @@ function ChatHome({
       );
     });
   }, [filter, query, reads]);
+  const error = visibleChatError(session, chatError);
   return (
     <View style={styles.page}>
-      <GlassSurface style={styles.omnisearch}>
-        <Search color={token.color.inkMuted} size={22} />
-        <TextInput
-          accessibilityLabel="Search what you have seen and heard"
-          onChangeText={setQuery}
-          placeholder="Search what you've seen and heard…"
-          placeholderTextColor={token.color.inkMuted}
-          style={styles.omnisearchInput}
-          value={query}
-        />
-      </GlassSurface>
+      <ShippingSearchFocus expanded={searchFocused || searching}>
+        <GlassSurface style={styles.omnisearch}>
+          <Search color={token.color.inkMuted} size={15} />
+          <TextInput
+            accessibilityLabel="Search what you have seen and heard"
+            onBlur={() => setSearchFocused(false)}
+            onChangeText={setQuery}
+            onFocus={() => setSearchFocused(true)}
+            placeholder={desktopSearchPlaceholder}
+            placeholderTextColor={token.color.inkMuted}
+            style={styles.omnisearchInput}
+            value={query}
+          />
+        </GlassSurface>
+      </ShippingSearchFocus>
       <GlassSurface style={styles.homePanel}>
         <View style={styles.filterBar}>
           <Text style={styles.filterLabel}>Filter</Text>
@@ -354,73 +371,81 @@ function ChatHome({
           session={session}
           signingIn={signingIn}
         />
-        {searching ? (
-          <FlatList
-            contentContainerStyle={styles.list}
-            data={filtered}
-            keyExtractor={item => `${item.kind}-${item.id}`}
-            ListEmptyComponent={
-              readsPhase === 'ready' ? (
-                <Text style={styles.emptyCopy}>
-                  Nothing captured matches this search.
-                </Text>
-              ) : null
-            }
-            renderItem={({item}) => <ResultRow item={item} />}
-          />
-        ) : (
-          <View style={styles.chatStage}>
-            {messages.length === 0 && !chatBusy ? (
-              <View style={styles.resting}>
-                <Text style={styles.emptyTitle}>I'm ready.</Text>
+        <ShippingStage
+          stageKey={searching ? 'search' : 'chat'}
+          variant={searching ? 'search' : 'hub'}>
+          {searching ? (
+            <FlatList
+              contentContainerStyle={styles.list}
+              data={filtered}
+              keyExtractor={item => `${item.kind}-${item.id}`}
+              ListEmptyComponent={
+                readsPhase === 'ready' ? (
+                  <Text style={styles.emptyCopy}>
+                    Nothing captured matches this search.
+                  </Text>
+                ) : null
+              }
+              renderItem={({item}) => (
+                <ShippingListInsert itemKey={`${item.kind}-${item.id}`}>
+                  <ResultRow item={item} />
+                </ShippingListInsert>
+              )}
+            />
+          ) : (
+            <View style={styles.chatStage}>
+              {messages.length === 0 && !chatBusy ? (
+                <View style={styles.resting}>
+                  <Text style={styles.emptyTitle}>I'm ready.</Text>
+                </View>
+              ) : (
+                <FlatList
+                  contentContainerStyle={styles.list}
+                  data={messages}
+                  keyExtractor={item => item.id}
+                  renderItem={({item}) => (
+                    <View style={styles.chatRow}>
+                      <Text style={styles.rowMeta}>
+                        {item.sender === 'human' ? 'You' : 'Omi'}
+                      </Text>
+                      <Text style={styles.rowTitle}>{item.text}</Text>
+                    </View>
+                  )}
+                />
+              )}
+              {error !== null ? (
+                <Text style={styles.errorText}>{error}</Text>
+              ) : null}
+              <View style={styles.composer}>
+                <TextInput
+                  accessibilityLabel="Ask a follow-up"
+                  onChangeText={onDraftChange}
+                  onSubmitEditing={onSend}
+                  placeholder="Ask a follow-up…"
+                  placeholderTextColor={token.color.inkFaint}
+                  style={styles.composerInput}
+                  value={draft}
+                />
+                <FocusPressable
+                  accessibilityLabel="Send"
+                  accessibilityRole="button"
+                  onPress={onSend}
+                  style={({pressed}) => [
+                    styles.sendButton,
+                    pressed && styles.pressed,
+                  ]}>
+                  <Text style={styles.sendText}>Ask</Text>
+                </FocusPressable>
               </View>
-            ) : (
-              <FlatList
-                contentContainerStyle={styles.list}
-                data={messages}
-                keyExtractor={item => item.id}
-                renderItem={({item}) => (
-                  <View style={styles.chatRow}>
-                    <Text style={styles.rowMeta}>
-                      {item.sender === 'human' ? 'You' : 'Omi'}
-                    </Text>
-                    <Text style={styles.rowTitle}>{item.text}</Text>
-                  </View>
-                )}
-              />
-            )}
-            {chatError !== null ? (
-              <Text style={styles.errorText}>{chatError}</Text>
-            ) : null}
-            <View style={styles.composer}>
-              <TextInput
-                accessibilityLabel="Ask a follow-up"
-                onChangeText={onDraftChange}
-                onSubmitEditing={onSend}
-                placeholder="Ask a follow-up…"
-                placeholderTextColor={token.color.inkFaint}
-                style={styles.composerInput}
-                value={draft}
-              />
-              <FocusPressable
-                accessibilityLabel="Send"
-                accessibilityRole="button"
-                onPress={onSend}
-                style={({pressed}) => [
-                  styles.sendButton,
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={styles.sendText}>Ask</Text>
-              </FocusPressable>
             </View>
-          </View>
-        )}
+          )}
+        </ShippingStage>
       </GlassSurface>
     </View>
   );
 }
 
-function MemoriesPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
+function LibraryPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
   const [hub, setHub] = useState<MemoryHub>('Activity');
   const conversations =
     outcomes?.conversations.status === 'success'
@@ -460,7 +485,11 @@ function MemoriesPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
               Nothing captured in this window yet.
             </Text>
           }
-          renderItem={({item}) => <ConversationRow item={item} />}
+          renderItem={({item}) => (
+            <ShippingListInsert itemKey={item.id}>
+              <ConversationRow item={item} />
+            </ShippingListInsert>
+          )}
         />
       ) : hub === 'Memories' ? (
         <FlatList
@@ -472,21 +501,17 @@ function MemoriesPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
               Nothing captured in this window yet.
             </Text>
           }
-          renderItem={({item}) => <MemoryRow item={item} />}
+          renderItem={({item}) => (
+            <ShippingListInsert itemKey={item.id}>
+              <MemoryRow item={item} />
+            </ShippingListInsert>
+          )}
         />
       ) : hub === 'Rewind' ? (
-        <View style={styles.centerState}>
-          <Monitor color={token.color.inkMuted} size={36} />
-          <Text style={styles.emptyTitle}>
-            Screen history is ready when capture is on
-          </Text>
-          <Text style={styles.emptyCopy}>
-            Captured frames stay navigable by time and application.
-          </Text>
-        </View>
+        <RewindState />
       ) : hub === 'Brain Map' ? (
         <View style={styles.centerState}>
-          <Grid2X2 color={token.color.inkMuted} size={36} />
+          <Grid2X2 color={token.color.inkMuted} size={28} />
           <Text style={styles.emptyTitle}>No connections to show yet.</Text>
         </View>
       ) : (
@@ -502,15 +527,34 @@ function MemoriesPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
           ListHeaderComponent={
             <Text style={styles.sectionTitle}>Activity</Text>
           }
-          renderItem={({item}) => <ConversationRow item={item} />}
+          renderItem={({item}) => (
+            <ShippingListInsert itemKey={item.id}>
+              <ConversationRow item={item} />
+            </ShippingListInsert>
+          )}
         />
       )}
     </GlassSurface>
   );
 }
 
+function RewindState() {
+  return (
+    <View style={styles.centerState}>
+      <Monitor color={token.color.inkMuted} size={28} />
+      <Text style={styles.emptyTitle}>
+        Screen history is ready when capture is on
+      </Text>
+      <Text style={styles.emptyCopy}>
+        Captured frames stay navigable by time and application.
+      </Text>
+    </View>
+  );
+}
+
 function TasksPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
   const [query, setQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const tasks =
     outcomes?.tasks.status === 'success' ? outcomes.tasks.value.items : [];
   const normalized = query.trim().toLocaleLowerCase();
@@ -523,16 +567,21 @@ function TasksPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
     <GlassSurface style={styles.singlePanel}>
       <View style={styles.tasksHeader}>
         <Text style={styles.pageTitle}>Tasks</Text>
-        <View style={styles.searchControl}>
-          <Search color={token.color.inkMuted} size={18} />
+        <ShippingSearchFocus
+          expanded={searchFocused || query.trim() !== ''}
+          radius={token.radius.control}
+          style={styles.searchControl}>
+          <Search color={token.color.inkMuted} size={15} />
           <TextInput
+            onBlur={() => setSearchFocused(false)}
             onChangeText={setQuery}
+            onFocus={() => setSearchFocused(true)}
             placeholder="Search tasks…"
             placeholderTextColor={token.color.inkFaint}
             style={styles.searchInput}
             value={query}
           />
-        </View>
+        </ShippingSearchFocus>
       </View>
       <Text style={styles.sectionTitle}>Today</Text>
       <FlatList
@@ -540,7 +589,11 @@ function TasksPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
         data={visible}
         keyExtractor={item => item.id}
         ListEmptyComponent={<Text style={styles.emptyCopy}>No tasks yet</Text>}
-        renderItem={({item}) => <TaskRow item={item} />}
+        renderItem={({item}) => (
+          <ShippingListInsert itemKey={item.id}>
+            <TaskRow item={item} />
+          </ShippingListInsert>
+        )}
       />
     </GlassSurface>
   );
@@ -568,7 +621,7 @@ function AppsPage() {
           <View style={styles.appCard}>
             <View style={styles.appCardHeader}>
               <View style={styles.appIcon}>
-                <Icon color={token.color.ink} size={22} />
+                <Icon color={token.color.ink} size={18} />
               </View>
               <View>
                 <Text style={styles.rowTitle}>{name}</Text>
@@ -579,101 +632,6 @@ function AppsPage() {
           </View>
         )}
       />
-    </GlassSurface>
-  );
-}
-
-function SettingsPage({
-  session,
-  signingIn,
-  onSignIn,
-  onSignOut,
-}: {
-  session: DesktopSession;
-  signingIn: boolean;
-  onSignIn: () => void;
-  onSignOut: () => void;
-}) {
-  const [screenCapture, setScreenCapture] = useState(false);
-  const [audio, setAudio] = useState(false);
-  const [notifications, setNotifications] = useState(false);
-  return (
-    <GlassSurface style={styles.singlePanel}>
-      <Text style={styles.pageTitle}>General</Text>
-      <View style={styles.settingsList}>
-        <View style={styles.settingRow}>
-          <View style={styles.settingIcon}>
-            <Monitor color={token.color.ink} size={20} />
-          </View>
-          <View style={styles.resultCopy}>
-            <Text style={styles.rowTitle}>Screen Capture</Text>
-            <Text style={styles.rowMeta}>
-              {screenCapture
-                ? 'Screen capture is active'
-                : 'Screen capture is paused'}
-            </Text>
-          </View>
-          <Switch onValueChange={setScreenCapture} value={screenCapture} />
-        </View>
-        <View style={styles.settingRow}>
-          <View style={styles.settingIcon}>
-            <Mic color={token.color.ink} size={20} />
-          </View>
-          <View style={styles.resultCopy}>
-            <Text style={styles.rowTitle}>Audio Recording</Text>
-            <Text style={styles.rowMeta}>
-              {audio
-                ? 'Audio recording is active'
-                : 'Audio recording is paused'}
-            </Text>
-          </View>
-          <Switch onValueChange={setAudio} value={audio} />
-        </View>
-        <View style={styles.settingRow}>
-          <View style={styles.settingIcon}>
-            <Bell color={token.color.ink} size={20} />
-          </View>
-          <View style={styles.resultCopy}>
-            <Text style={styles.rowTitle}>Notifications</Text>
-            <Text style={styles.rowMeta}>
-              {notifications
-                ? 'Notifications are enabled'
-                : 'Notifications are disabled'}
-            </Text>
-          </View>
-          <Switch onValueChange={setNotifications} value={notifications} />
-        </View>
-        <View style={styles.settingRow}>
-          <View style={styles.settingIcon}>
-            <Volume2 color={token.color.ink} size={20} />
-          </View>
-          <View style={styles.resultCopy}>
-            <Text style={styles.rowTitle}>Account</Text>
-            <Text style={styles.rowMeta}>
-              {session === 'ready'
-                ? 'Signed in to Omi'
-                : 'Sign in to load conversations and memories.'}
-            </Text>
-          </View>
-          <FocusPressable
-            accessibilityLabel={session === 'ready' ? 'Sign out' : 'Sign in'}
-            accessibilityRole="button"
-            disabled={signingIn}
-            onPress={session === 'ready' ? onSignOut : onSignIn}
-            style={({pressed}) => [
-              styles.signInButton,
-              pressed && styles.pressed,
-            ]}>
-            <Text style={styles.signInText}>
-              {session === 'ready'
-                ? 'Sign out'
-                : signingIn
-                ? 'Signing in…'
-                : 'Sign in'}
-            </Text>
-          </FocusPressable>
-        </View>
-      </View>
     </GlassSurface>
   );
 }
@@ -694,80 +652,89 @@ export function DesktopApp({
   onDraftChange,
   onSend,
 }: Props) {
-  const [route, setRoute] = useState<DesktopRoute>('Chat');
+  const [route, setRoute] = useState<DesktopRoute>('Home');
   const navigate = useCallback((next: DesktopRoute) => setRoute(next), []);
   return (
     <View accessibilityLabel="Omi desktop" style={styles.root}>
       <GlassSurface style={styles.navbar}>
+        <View
+          accessibilityLabel="Window controls"
+          style={styles.trafficLights}
+        />
         <View style={styles.navItems}>
-          {navItems.map(({label, Icon}) => (
-            <FocusPressable
-              accessibilityRole="button"
-              accessibilityState={{selected: route === label}}
-              key={label}
-              onPress={() => navigate(label)}
-              style={({pressed}) => [
-                styles.navItem,
-                route === label && styles.navItemActive,
-                pressed && styles.pressed,
-              ]}>
-              <Icon color={token.color.ink} size={18} />
-              <Text
-                style={[
-                  styles.navText,
-                  route === label && styles.navTextActive,
-                ]}>
-                {label}
-              </Text>
-            </FocusPressable>
-          ))}
+          {desktopNavItems.map(label => {
+            const Icon = navIcons[label];
+            return (
+              <ShippingPressable
+                accessibilityRole="button"
+                accessibilityState={{selected: route === label}}
+                active={route === label}
+                key={label}
+                onPress={() => navigate(label)}
+                style={styles.navItem}>
+                <Icon color={token.color.ink} size={14} />
+                <Text
+                  style={[
+                    styles.navText,
+                    route === label && styles.navTextActive,
+                  ]}>
+                  {label}
+                </Text>
+              </ShippingPressable>
+            );
+          })}
         </View>
         <View style={styles.navUtilities}>
-          <Mic color={token.color.inkMuted} size={18} />
-          <Monitor color={token.color.inkMuted} size={18} />
-          <FocusPressable
+          <Mic color={token.color.inkMuted} size={14} />
+          <Monitor color={token.color.inkMuted} size={14} />
+          <ShippingPressable
             accessibilityLabel="Settings"
+            active={route === 'Settings'}
             onPress={() => navigate('Settings')}
-            style={({pressed}) => [
-              styles.utilityButton,
-              route === 'Settings' && styles.navItemActive,
-              pressed && styles.pressed,
-            ]}>
-            <Settings color={token.color.ink} size={18} />
-          </FocusPressable>
+            style={styles.utilityButton}>
+            <Settings color={token.color.ink} size={14} />
+          </ShippingPressable>
         </View>
       </GlassSurface>
-      {route === 'Chat' ? (
-        <ChatHome
-          chatBusy={chatBusy}
-          chatError={chatError}
-          draft={draft}
-          messages={messages}
-          onDraftChange={onDraftChange}
-          onRefresh={onRefresh}
-          onSend={onSend}
-          onSignIn={onSignIn}
-          onSignOut={onSignOut}
-          outcomes={outcomes}
-          reads={reads}
-          readsPhase={readsPhase}
-          session={session}
-          signingIn={signingIn}
-        />
-      ) : route === 'Memories' ? (
-        <MemoriesPage outcomes={outcomes} />
-      ) : route === 'Tasks' ? (
-        <TasksPage outcomes={outcomes} />
-      ) : route === 'Apps' ? (
-        <AppsPage />
-      ) : (
-        <SettingsPage
-          onSignIn={onSignIn}
-          onSignOut={onSignOut}
-          session={session}
-          signingIn={signingIn}
-        />
-      )}
+      <ShippingStage stageKey={route} variant="page">
+        {route === 'Home' ? (
+          <ChatHome
+            chatBusy={chatBusy}
+            chatError={chatError}
+            draft={draft}
+            messages={messages}
+            onDraftChange={onDraftChange}
+            onRefresh={onRefresh}
+            onSend={onSend}
+            onSignIn={onSignIn}
+            onSignOut={onSignOut}
+            outcomes={outcomes}
+            reads={reads}
+            readsPhase={readsPhase}
+            session={session}
+            signingIn={signingIn}
+          />
+        ) : route === 'Library' ? (
+          <LibraryPage outcomes={outcomes} />
+        ) : route === 'Tasks' ? (
+          <TasksPage outcomes={outcomes} />
+        ) : route === 'Rewind' ? (
+          <GlassSurface style={styles.singlePanel}>
+            <RewindState />
+          </GlassSurface>
+        ) : route === 'Apps' ? (
+          <AppsPage />
+        ) : (
+          <GlassSurface style={styles.singlePanel}>
+            <DesktopSettings
+              onSignIn={onSignIn}
+              onSignOut={onSignOut}
+              session={session}
+              signingIn={signingIn}
+            />
+          </GlassSurface>
+        )}
+      </ShippingStage>
     </View>
   );
 }
@@ -776,248 +743,283 @@ const styles = StyleSheet.create({
   root: {
     backgroundColor: 'transparent',
     flex: 1,
-    gap: 14,
-    padding: 16,
+    gap: 8,
+    padding: 8,
   },
   glassSurface: {
-    backgroundColor: token.color.glass,
-    borderColor: token.color.line,
+    backgroundColor: 'transparent',
     borderRadius: token.radius.panel,
-    borderWidth: 1,
     overflow: 'hidden',
   },
   navbar: {
     alignItems: 'center',
     flexDirection: 'row',
-    height: 62,
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    height: 52,
+    paddingHorizontal: 8,
   },
-  navItems: {alignItems: 'center', flexDirection: 'row', gap: 6},
+  trafficLights: {height: 14, width: desktopTrafficLightRowWidth},
+  navItems: {alignItems: 'center', flex: 1, flexDirection: 'row', gap: 4},
   navItem: {
     alignItems: 'center',
-    borderRadius: token.radius.control,
+    borderRadius: 15,
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 6,
+    height: 30,
+    paddingHorizontal: 12,
   },
-  navItemActive: {backgroundColor: token.color.glassSelected},
-  navText: {color: token.color.inkMuted, fontSize: 15, fontWeight: '600'},
-  navTextActive: {color: token.color.ink, fontWeight: '700'},
-  navUtilities: {alignItems: 'center', flexDirection: 'row', gap: 16},
-  utilityButton: {borderRadius: token.radius.control, padding: 8},
-  page: {flex: 1, gap: 14},
+  navText: {
+    color: token.color.inkMuted,
+    fontFamily: token.font,
+    fontSize: token.type.nav,
+    fontWeight: '600',
+  },
+  navTextActive: {color: token.color.ink},
+  navUtilities: {alignItems: 'center', flexDirection: 'row', gap: 12},
+  utilityButton: {borderRadius: 16, height: 32, padding: 8, width: 32},
+  page: {flex: 1, gap: 8},
   omnisearch: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
-    minHeight: 72,
-    paddingHorizontal: 20,
+    gap: 10,
+    minHeight: 48,
+    paddingHorizontal: 14,
   },
   omnisearchInput: {
     color: token.color.ink,
     flex: 1,
-    fontSize: token.type.hero,
-    fontWeight: '600',
-    paddingVertical: 16,
+    fontFamily: token.font,
+    fontSize: token.type.search,
+    fontWeight: '400',
+    paddingVertical: 12,
   },
-  homePanel: {flex: 1, padding: 18},
-  filterBar: {gap: 10},
-  filterLabel: {color: token.color.ink, fontSize: 16, fontWeight: '600'},
-  filterChips: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+  homePanel: {flex: 1, padding: 14},
+  filterBar: {gap: 8},
+  filterLabel: {
+    color: token.color.inkMuted,
+    fontFamily: token.font,
+    fontSize: token.type.caption,
+    fontWeight: '600',
+  },
+  filterChips: {flexDirection: 'row', flexWrap: 'wrap', gap: 6},
   chip: {
     alignItems: 'center',
-    borderColor: token.color.line,
-    borderRadius: token.radius.chip,
-    borderWidth: 1,
+    borderRadius: 14,
     flexDirection: 'row',
     gap: 6,
-    minHeight: 34,
+    height: 28,
     paddingHorizontal: 12,
   },
-  chipActive: {
-    backgroundColor: token.color.glassSelected,
-    borderColor: token.color.lineStrong,
+  chipText: {
+    color: token.color.inkMuted,
+    fontFamily: token.font,
+    fontSize: token.type.caption,
+    fontWeight: '600',
   },
-  chipText: {color: token.color.inkMuted, fontSize: 14, fontWeight: '600'},
-  chipTextActive: {color: token.color.ink, fontWeight: '700'},
-  pressed: {opacity: 0.66},
+  chipTextActive: {color: token.color.ink},
+  pressed: {opacity: 0.78},
   banner: {
     alignItems: 'center',
     backgroundColor: token.color.glassQuiet,
     borderRadius: token.radius.control,
     flexDirection: 'row',
     gap: 10,
-    marginTop: 16,
-    minHeight: 44,
-    paddingHorizontal: 14,
+    marginTop: 12,
+    minHeight: 40,
+    paddingHorizontal: 12,
   },
-  bannerText: {color: token.color.inkMuted, flex: 1, fontSize: 14},
-  bannerAction: {color: token.color.ink, fontSize: 14, fontWeight: '700'},
+  bannerText: {
+    color: token.color.inkMuted,
+    flex: 1,
+    fontFamily: token.font,
+    fontSize: token.type.meta,
+  },
+  bannerAction: {
+    color: token.color.ink,
+    fontFamily: token.font,
+    fontSize: token.type.meta,
+    fontWeight: '600',
+  },
   signInButton: {
     backgroundColor: token.color.dark,
     borderRadius: token.radius.control,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
-  signInText: {color: token.color.white, fontSize: 13, fontWeight: '700'},
-  list: {paddingBottom: 28, paddingTop: 12},
+  signInText: {
+    color: token.color.white,
+    fontFamily: token.font,
+    fontSize: token.type.caption,
+    fontWeight: '600',
+  },
+  list: {paddingBottom: 24, paddingTop: 8},
   resultRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
-    minHeight: 72,
+    gap: 10,
+    minHeight: 56,
   },
   glyph: {
     alignItems: 'center',
     backgroundColor: token.color.glassQuiet,
-    borderColor: token.color.line,
-    borderRadius: token.radius.control,
-    borderWidth: 1,
-    height: 40,
+    borderRadius: 12,
+    height: 32,
     justifyContent: 'center',
-    width: 40,
+    width: 32,
   },
   resultCopy: {flex: 1},
-  rowTitle: {color: token.color.ink, fontSize: 16, fontWeight: '700'},
-  rowMeta: {color: token.color.inkMuted, fontSize: 13, marginTop: 3},
-  emptyTitle: {
+  rowTitle: {
     color: token.color.ink,
-    fontSize: 22,
-    fontWeight: '700',
+    fontFamily: token.font,
+    fontSize: token.type.title,
+    fontWeight: '500',
+  },
+  rowMeta: {
+    color: token.color.inkMuted,
+    fontFamily: token.font,
+    fontSize: token.type.meta,
+    marginTop: 2,
+  },
+  emptyTitle: {
+    color: token.color.inkMuted,
+    fontFamily: token.font,
+    fontSize: token.type.search,
+    fontWeight: '400',
     textAlign: 'center',
   },
   emptyCopy: {
     color: token.color.inkMuted,
-    fontSize: 14,
-    lineHeight: 20,
+    fontFamily: token.font,
+    fontSize: token.type.meta,
+    lineHeight: 18,
     marginTop: 6,
     textAlign: 'center',
   },
-  chatStage: {flex: 1, marginTop: 16},
+  chatStage: {flex: 1, marginTop: 12},
   resting: {alignItems: 'center', flex: 1, justifyContent: 'center'},
-  chatRow: {gap: 4, paddingVertical: 10},
-  errorText: {color: token.color.red, fontSize: 13, marginTop: 8},
+  chatRow: {gap: 4, paddingVertical: 8},
+  errorText: {
+    color: token.color.inkMuted,
+    fontFamily: token.font,
+    fontSize: token.type.meta,
+    marginTop: 8,
+  },
   composer: {
     alignItems: 'center',
-    borderColor: token.color.line,
+    backgroundColor: token.color.glassQuiet,
     borderRadius: token.radius.control,
-    borderWidth: 1,
     flexDirection: 'row',
     gap: 10,
     marginTop: 'auto',
-    minHeight: 52,
-    paddingHorizontal: 14,
+    minHeight: 48,
+    paddingHorizontal: 12,
   },
-  composerInput: {color: token.color.ink, flex: 1, fontSize: 15},
+  composerInput: {
+    color: token.color.ink,
+    flex: 1,
+    fontFamily: token.font,
+    fontSize: token.type.body,
+  },
   sendButton: {
     backgroundColor: token.color.dark,
     borderRadius: token.radius.control,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
-  sendText: {color: token.color.white, fontSize: 13, fontWeight: '700'},
-  singlePanel: {flex: 1, padding: 24},
-  hubRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+  sendText: {
+    color: token.color.white,
+    fontFamily: token.font,
+    fontSize: token.type.caption,
+    fontWeight: '600',
+  },
+  singlePanel: {flex: 1, padding: 18},
+  hubRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 6},
   pageTitle: {
     color: token.color.ink,
+    fontFamily: token.font,
     fontSize: token.type.title,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   sectionTitle: {
-    color: token.color.ink,
-    fontSize: 17,
-    fontWeight: '700',
-    marginTop: 20,
+    color: token.color.inkMuted,
+    fontFamily: token.font,
+    fontSize: token.type.caption,
+    fontWeight: '600',
+    marginTop: 16,
   },
   searchControl: {
     alignItems: 'center',
-    borderColor: token.color.line,
+    backgroundColor: token.color.glassQuiet,
     borderRadius: token.radius.control,
-    borderWidth: 1,
     flex: 1,
     flexDirection: 'row',
-    gap: 10,
-    minHeight: 44,
-    paddingHorizontal: 12,
+    gap: 8,
+    minHeight: 36,
+    paddingHorizontal: 10,
   },
-  searchInput: {color: token.color.ink, flex: 1, fontSize: 15},
+  searchInput: {
+    color: token.color.ink,
+    flex: 1,
+    fontFamily: token.font,
+    fontSize: token.type.body,
+  },
   memoryCard: {
     backgroundColor: token.color.glassQuiet,
-    borderColor: token.color.line,
     borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 12,
-    padding: 16,
+    marginBottom: 10,
+    padding: 14,
   },
-  memoryText: {color: token.color.ink, fontSize: 16, lineHeight: 23},
+  memoryText: {
+    color: token.color.ink,
+    fontFamily: token.font,
+    fontSize: token.type.body,
+    lineHeight: 21,
+  },
   centerState: {
     alignItems: 'center',
     flex: 1,
-    justifyContent: 'center',
     gap: 8,
+    justifyContent: 'center',
   },
   tasksHeader: {alignItems: 'center', flexDirection: 'row', gap: 12},
   taskRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 14,
-    minHeight: 58,
+    gap: 12,
+    minHeight: 48,
   },
   taskCircle: {
     borderColor: token.color.inkMuted,
-    borderRadius: 13,
-    borderWidth: 2,
-    height: 26,
-    width: 26,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    height: 22,
+    width: 22,
   },
   taskCircleDone: {backgroundColor: token.color.ink},
-  taskText: {color: token.color.ink, fontSize: 16},
+  taskText: {
+    color: token.color.ink,
+    fontFamily: token.font,
+    fontSize: token.type.body,
+  },
   taskTextDone: {
     color: token.color.inkFaint,
     textDecorationLine: 'line-through',
   },
-  appGrid: {paddingTop: 18},
+  appGrid: {paddingTop: 14},
   appCard: {
     backgroundColor: token.color.glassQuiet,
-    borderColor: token.color.line,
     borderRadius: 16,
-    borderWidth: 1,
     flex: 1,
     margin: 6,
-    minHeight: 120,
-    padding: 14,
+    minHeight: 108,
+    padding: 12,
   },
   appCardHeader: {alignItems: 'center', flexDirection: 'row', gap: 10},
   appIcon: {
     alignItems: 'center',
     backgroundColor: token.color.glassStrong,
-    borderColor: token.color.line,
-    borderRadius: 12,
-    borderWidth: 1,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  settingsList: {gap: 14, marginTop: 24},
-  settingRow: {
-    alignItems: 'center',
-    backgroundColor: token.color.glassQuiet,
-    borderColor: token.color.line,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 14,
-    minHeight: 80,
-    padding: 16,
-  },
-  settingIcon: {
-    alignItems: 'center',
-    backgroundColor: token.color.glassStrong,
     borderRadius: 10,
-    height: 36,
+    height: 32,
     justifyContent: 'center',
-    width: 36,
+    width: 32,
   },
 });
