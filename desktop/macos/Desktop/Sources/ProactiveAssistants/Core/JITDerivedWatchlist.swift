@@ -53,8 +53,8 @@ enum JITDerivedWatchlistCompiler {
   static let minKeywordCharacters = 4
   static let maxLabelCharacters = 160
   /// A derived entry matches only when at least this many of its keywords
-  /// appear in the observation (or all of them when it has fewer). One shared
-  /// token such as "review" must never buy a nano call by itself.
+  /// appear in the observation. Entries with fewer discriminating keywords are
+  /// not compiled at all, so one shared token can never buy a nano call.
   static let minimumKeywordHits = 2
 
   static let stopwords: Set<String> = [
@@ -67,6 +67,11 @@ enum JITDerivedWatchlistCompiler {
     "follow", "send", "email", "update", "call", "task", "todo", "goal", "reminder", "remind",
     "today", "tomorrow", "week", "next", "last", "also", "like", "look", "into", "back",
     "done", "work", "working", "things", "thing", "still", "maybe", "want", "please",
+    // Generic workflow verbs and nouns: they name what every task is, not which.
+    "review", "pull", "request", "merge", "issue", "ticket", "meeting", "discuss", "write",
+    "read", "open", "close", "create", "remove", "delete", "test", "plan", "project",
+    "document", "file", "page", "link", "message", "reply", "respond", "schedule", "book",
+    "order", "finish", "start", "continue", "prepare", "draft", "share", "ask", "confirm",
   ]
 
   /// Deterministic keyword extraction: lowercase alphanumeric tokens, at least
@@ -97,7 +102,7 @@ enum JITDerivedWatchlistCompiler {
     let label = boundedLabel(text)
     guard !label.isEmpty else { return nil }
     let keywords = keywords(from: text)
-    guard !keywords.isEmpty else { return nil }
+    guard keywords.count >= minimumKeywordHits else { return nil }
     let normalizedIdentity = identity.trimmingCharacters(in: .whitespacesAndNewlines)
     // Identity is opaque on purpose: a task without a backend id is keyed by
     // its content through the same one-way identifier used for reservations.
@@ -147,11 +152,9 @@ enum JITDerivedWatchlistMatcher {
     let corpus = [observation.text, observation.windowTitle ?? ""].joined(separator: "\n")
     let observed = Set(JITDerivedWatchlistCompiler.tokens(in: corpus))
     var matched: [JITDerivedIntentEntry] = []
-    for entry in entries {
-      let required = min(JITDerivedWatchlistCompiler.minimumKeywordHits, entry.keywords.count)
-      guard required > 0 else { continue }
+    for entry in entries where entry.keywords.count >= JITDerivedWatchlistCompiler.minimumKeywordHits {
       let hits = entry.keywords.filter { observed.contains($0) }.count
-      if hits >= required { matched.append(entry) }
+      if hits >= JITDerivedWatchlistCompiler.minimumKeywordHits { matched.append(entry) }
     }
     if !observation.calendarEvents.isEmpty {
       matched.append(

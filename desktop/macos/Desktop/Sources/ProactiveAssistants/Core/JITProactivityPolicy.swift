@@ -23,10 +23,21 @@ enum JITProactivityLane: String, Equatable, Sendable {
 /// switch remain the only enrolment path.
 @MainActor
 enum JITProactivityLaneState {
-  private(set) static var isActive = false
+  private static var activeOwnerID: String?
 
-  static func update(active: Bool) {
-    isActive = active
+  /// True only for the owner the backend last admitted. A different or absent
+  /// owner reads false, so sign-out and account transitions need no reset.
+  static func isActive(ownerID: String?) -> Bool {
+    guard let ownerID, !ownerID.isEmpty else { return false }
+    return activeOwnerID == ownerID
+  }
+
+  static func update(ownerID: String, active: Bool) {
+    if active {
+      activeOwnerID = ownerID
+    } else if activeOwnerID == ownerID {
+      activeOwnerID = nil
+    }
   }
 }
 

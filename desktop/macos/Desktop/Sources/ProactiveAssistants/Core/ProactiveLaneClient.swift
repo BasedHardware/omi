@@ -550,13 +550,7 @@ enum ContextProactivityTelemetry {
       "empty_watchlist",
       "ambient_local_gate", "ambient_nano_receipt_unavailable", "ambient_nano_budget",
       "ambient_nano_rejected", "ambient_duplicate_or_budget", "ambient_receipt_unavailable",
-      "ambient_paced", "ambient_reserved_for_intent",
-      // Delivery phase (outcome delivered / delivery_failed / delivery_suppressed).
-      "planned", "ambient",
-      "owner_changed", "stale_fence", "surface_unavailable", "delivery_gate",
-      "attempt_rejected", "jit_trigger_authority_changed", "jit_paid_boundary_invalid",
-      "jit_notification_budget", "jit_full_turn_budget", "jit_suppressed",
-      "candidate_graduation", "notification_dropped", "jit_execution",
+      "ambient_paced", "ambient_reserved_for_intent", "ambient_server_denied",
     ])
     await MainActor.run {
       let boundedOutcome = allowedOutcomes.contains(outcome) ? outcome : "other"
@@ -567,6 +561,31 @@ enum ContextProactivityTelemetry {
         properties: [
           "outcome": boundedOutcome,
           "reason": boundedReason,
+        ])
+    }
+  }
+
+  /// One content-free event per admitted full turn's terminal outcome. Unlike
+  /// admission this is never deduped: delivered-per-kind-per-day is the
+  /// measurement that judges the JIT lane, so every delivery must count.
+  static func recordJITDelivery(outcome: String, reason: String, lane: String, decision: String) async {
+    let allowedOutcomes = Set(["delivered", "delivery_failed", "delivery_suppressed"])
+    let allowedReasons = Set([
+      "planned", "ambient",
+      "owner_changed", "stale_fence", "surface_unavailable", "delivery_gate",
+      "attempt_rejected", "jit_trigger_authority_changed", "jit_paid_boundary_invalid",
+      "jit_notification_budget", "jit_full_turn_budget", "jit_suppressed",
+      "candidate_graduation", "notification_dropped", "jit_execution",
+    ])
+    let allowedDecisions = Set(["insight", "task_candidate", "focus_nudge", "silence"])
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "jit_proactivity_delivery",
+        properties: [
+          "outcome": allowedOutcomes.contains(outcome) ? outcome : "other",
+          "reason": allowedReasons.contains(reason) ? reason : "other",
+          "lane": lane == "planned" || lane == "ambient" ? lane : "other",
+          "decision": allowedDecisions.contains(decision) ? decision : "other",
         ])
     }
   }

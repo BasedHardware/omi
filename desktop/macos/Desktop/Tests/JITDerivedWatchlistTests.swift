@@ -7,6 +7,7 @@ final class JITDerivedWatchlistTests: XCTestCase {
     let keywords = JITDerivedWatchlistCompiler.keywords(
       from: "Follow up with Martin Lange about the Grafana dashboard before Thursday 2026, then update the runbook")
     XCTAssertEqual(keywords, ["martin", "lange", "grafana", "dashboard", "thursday", "runbook"])
+    XCTAssertTrue(JITDerivedWatchlistCompiler.keywords(from: "Review the pull request and reply").isEmpty)
     XCTAssertEqual(keywords.count, JITDerivedWatchlistCompiler.maxKeywordsPerEntry)
     XCTAssertTrue(JITDerivedWatchlistCompiler.keywords(from: "call them back today").isEmpty)
   }
@@ -46,16 +47,25 @@ final class JITDerivedWatchlistTests: XCTestCase {
     XCTAssertTrue(oneHit.isEmpty)
   }
 
-  func testSingleKeywordEntryMatchesOnItsOnlyKeyword() throws {
-    let entry = try XCTUnwrap(
-      JITDerivedWatchlistCompiler.entry(source: .goal, identity: "g", text: "Learn Rust"))
-    XCTAssertEqual(entry.keywords, ["learn", "rust"])
+  func testEntriesNeedTwoDiscriminatingKeywordsAndGenericTasksNeverMatchPRWindows() throws {
+    XCTAssertNil(JITDerivedWatchlistCompiler.entry(source: .goal, identity: "g", text: "Learn"))
+    XCTAssertNil(
+      JITDerivedWatchlistCompiler.entry(source: .task, identity: "t", text: "Review pull request"),
+      "generic workflow words are stopwords, so this task has no discriminating keyword")
     let short = try XCTUnwrap(
       JITDerivedWatchlistCompiler.entry(source: .goal, identity: "g2", text: "Meditate daily"))
     XCTAssertEqual(short.keywords, ["meditate", "daily"])
     let match = JITDerivedWatchlistMatcher.match(
       entries: [short], observation: KnowledgeLedgerTriggerObservation(text: "daily meditate timer"))
     XCTAssertEqual(match.entries, [short])
+
+    let gateway = try XCTUnwrap(
+      JITDerivedWatchlistCompiler.entry(
+        source: .task, identity: "t2", text: "Review pull request for gateway routing"))
+    XCTAssertEqual(gateway.keywords, ["gateway", "routing"])
+    let unrelatedPR = KnowledgeLedgerTriggerObservation(
+      text: "Fix typo in README · Pull Request #12 · BasedHardware/omi", windowTitle: "Pull Request #12")
+    XCTAssertTrue(JITDerivedWatchlistMatcher.match(entries: [gateway], observation: unrelatedPR).isEmpty)
   }
 
   func testCalendarPresenceMatchesWithoutLeakingEventTitles() throws {
@@ -72,7 +82,7 @@ final class JITDerivedWatchlistTests: XCTestCase {
 
   func testPromptSectionIsStableAndBounded() throws {
     let entries = (0..<10).map {
-      JITDerivedIntentEntry(id: "id-\($0)", source: .task, label: "task \($0)", keywords: ["task"])
+      JITDerivedIntentEntry(id: "id-\($0)", source: .task, label: "task \($0)", keywords: ["alpha", "beta"])
     }
     let match = JITDerivedIntentMatch(entries: entries)
     let section = try XCTUnwrap(match.promptSection())

@@ -209,6 +209,44 @@ final class JITProactivityRuntimeTests: XCTestCase {
     XCTAssertEqual(capped, .suppressed(reason: "ambient_nano_budget"))
   }
 
+  func testServerNanoDenialBacksOffInsteadOfRetryingEveryVisit() async throws {
+    let reserves = ReservationRecorder()
+    let now = Date(timeIntervalSince1970: 1_777_248_000)
+    let runtime = try wiredRuntime(
+      triggers: [],
+      reserve: { reservation, _ in
+        await reserves.record(reservation)
+        return false
+      },
+      ambientNanoUsage: { _, _ in JITAmbientNanoUsage(used: 0, lastSpentAt: nil) },
+      claimAmbientNano: { request in
+        JITTriggerWakeupClaim(
+          continuityKey: "jit-nano:\(request.contextID):\(request.semanticFingerprint)",
+          triggerID: "ambient-nano", leaseToken: "lease")
+      })
+
+    let first = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "lunch", occurredAt: now),
+      ambient: validAmbient())
+    XCTAssertEqual(first, .suppressed(reason: "ambient_nano_budget"))
+
+    let second = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "dinner", occurredAt: now.addingTimeInterval(60)),
+      ambient: validAmbient(fingerprint: String(repeating: "b", count: 64)))
+    XCTAssertEqual(second, .suppressed(reason: "ambient_server_denied"))
+    let recorded = await reserves.values
+    XCTAssertEqual(recorded.count, 1, "a denied day must not re-reserve on the next visit")
+
+    let later = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(
+        text: "dinner", occurredAt: now.addingTimeInterval(JITProactivityRuntime.ambientServerDenialBackoff + 1)),
+      ambient: validAmbient(fingerprint: String(repeating: "c", count: 64)))
+    XCTAssertEqual(later, .suppressed(reason: "ambient_nano_budget"))
+  }
+
   func testAmbientUsageReadFailureFailsClosedBeforeAnySpend() async throws {
     let runtime = try wiredRuntime(
       triggers: [],
@@ -673,7 +711,8 @@ final class JITProactivityRuntimeTests: XCTestCase {
     ambientNanoUsage: JITProactivityRuntime.AmbientNanoUsageReader? = { _, _ in
       JITAmbientNanoUsage(used: 0, lastSpentAt: nil)
     },
-    derivedIntent: @escaping JITProactivityRuntime.DerivedIntentResolver = { _, _ in .none }
+    derivedIntent: @escaping JITProactivityRuntime.DerivedIntentResolver = { _, _ in .none },
+    claimAmbientNano: JITProactivityRuntime.ClaimAmbientNano? = nil
   ) throws -> JITProactivityRuntime {
     let rows = try triggers.map { try snapshotRow(for: $0) }
     let serverSnapshot = serverSnapshot(sequence: 4, revision: "revision", rows: rows)
@@ -698,7 +737,8 @@ final class JITProactivityRuntimeTests: XCTestCase {
       reserve: reserve,
       authorizationCurrent: { _ in authorizationCurrent },
       derivedIntent: derivedIntent,
-      ambientNanoUsage: ambientNanoUsage)
+      ambientNanoUsage: ambientNanoUsage,
+      claimAmbientNano: claimAmbientNano)
   }
 
   private func compiledTrigger(
@@ -726,10 +766,10 @@ final class JITProactivityRuntimeTests: XCTestCase {
     return trigger
   }
 
-  private func validAmbient() -> JITAmbientRuntimeContext {
+  private func validAmbient(fingerprint: String = String(repeating: "a", count: 64)) -> JITAmbientRuntimeContext {
     JITAmbientRuntimeContext(
       id: "bucket",
-      semanticFingerprint: String(repeating: "a", count: 64),
+      semanticFingerprint: fingerprint,
       locallyRelevant: true,
       boundedEvidence: "validated local change")
   }

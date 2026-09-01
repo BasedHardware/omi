@@ -32,7 +32,8 @@ actor SuggestionAssistant: ProactiveAssistant {
       // The migration is judged by delivered-per-kind-per-day on the dogfood account, not
       // by the flag flipping.
       await MainActor.run {
-        SuggestionAssistantSettings.shared.isEnabled && !JITProactivityLaneState.isActive
+        SuggestionAssistantSettings.shared.isEnabled
+          && !JITProactivityLaneState.isActive(ownerID: RuntimeOwnerIdentity.currentOwnerId())
       }
     }
   }

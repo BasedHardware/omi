@@ -286,7 +286,7 @@ actor JITProactivityDelivery {
     let ambientEvidence = await ambientPromptContext(
       execution: execution, fence: fence, snapshot: snapshot, currentFrame: currentFrame)
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
-      await terminalize(deliveryID, failure: "owner_changed", state: "failed")
+      await terminalize(deliveryID, failure: "owner_changed", state: "failed", lane: execution.lane)
       return await finish(execution, delivered: false)
     }
     let label = execution.lane == .planned ? "standing proactive instruction" : "ambient proactive brief"
@@ -319,11 +319,11 @@ actor JITProactivityDelivery {
       Cite at least one exact fact:<id> handle from current validated context for non-silence.
       """
     guard await JITProactivityRuntime.shared.beginExecution(execution) else {
-      await terminalize(deliveryID, failure: "jit_trigger_authority_changed", state: "suppressed")
+      await terminalize(deliveryID, failure: "jit_trigger_authority_changed", state: "suppressed", lane: execution.lane)
       return await finish(execution, delivered: false)
     }
     guard let paidPlan = JITProactivityPaidBoundaryPlan.make(for: execution) else {
-      await terminalize(deliveryID, failure: "jit_paid_boundary_invalid", state: "suppressed")
+      await terminalize(deliveryID, failure: "jit_paid_boundary_invalid", state: "suppressed", lane: execution.lane)
       return await finish(execution, delivered: false)
     }
     do {
@@ -354,7 +354,7 @@ actor JITProactivityDelivery {
       guard decision.decision != "silence", !decision.title.isEmpty, !decision.message.isEmpty,
         !factIDs.isEmpty, await store.fenceFreshness(fence).fresh
       else {
-        await terminalize(deliveryID, failure: "jit_suppressed", state: "suppressed")
+        await terminalize(deliveryID, failure: "jit_suppressed", state: "suppressed", lane: execution.lane)
         return await finish(execution, delivered: false)
       }
       if decision.decision == "task_candidate" {
@@ -367,7 +367,7 @@ actor JITProactivityDelivery {
           CandidateSinkDeliveryGate.mayPresentInteractively(
             decisionType: decision.decision, graduation: graduation)
         else {
-          await terminalize(deliveryID, failure: "candidate_graduation", state: "suppressed")
+          await terminalize(deliveryID, failure: "candidate_graduation", state: "suppressed", lane: execution.lane)
           return await finish(execution, delivered: false)
         }
       }
@@ -405,26 +405,28 @@ actor JITProactivityDelivery {
               _ = try? await self?.store.completeDelivery(
                 id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
                 message: decision.message, state: "delivered")
-              await ContextProactivityTelemetry.recordJITAdmission(
-                outcome: "delivered", reason: execution.lane.rawValue)
+              await ContextProactivityTelemetry.recordJITDelivery(
+                outcome: "delivered", reason: execution.lane.rawValue,
+                lane: execution.lane.rawValue, decision: decision.decision)
               await JITProactivityRuntime.shared.finish(execution, delivered: true)
             }
           },
           onDropped: { [weak self] in
             Task {
-              await self?.terminalize(deliveryID, failure: "notification_dropped", state: "failed")
+              await self?.terminalize(
+                deliveryID, failure: "notification_dropped", state: "failed", lane: execution.lane)
               await JITProactivityRuntime.shared.finish(execution, delivered: false)
             }
           })
       }
     } catch JITProactivityPaidBoundaryError.notificationReservationDenied {
-      await terminalize(deliveryID, failure: "jit_notification_budget", state: "suppressed")
+      await terminalize(deliveryID, failure: "jit_notification_budget", state: "suppressed", lane: execution.lane)
       await finish(execution, delivered: false)
     } catch JITProactivityPaidBoundaryError.fullTurnReservationDenied {
-      await terminalize(deliveryID, failure: "jit_full_turn_budget", state: "suppressed")
+      await terminalize(deliveryID, failure: "jit_full_turn_budget", state: "suppressed", lane: execution.lane)
       await finish(execution, delivered: false)
     } catch {
-      await terminalize(deliveryID, failure: "jit_execution", state: "failed")
+      await terminalize(deliveryID, failure: "jit_execution", state: "failed", lane: execution.lane)
       await finish(execution, delivered: false)
     }
   }
@@ -499,18 +501,22 @@ actor JITProactivityDelivery {
     return output
   }
 
-  private func terminalize(_ deliveryID: String, failure: String, state: String) async {
+  private func terminalize(
+    _ deliveryID: String, failure: String, state: String, lane: JITProactivityLane
+  ) async {
     _ = try? await store.completeDelivery(
       id: deliveryID, decisionType: "silence",
       provenanceJSON: "{\"failure\":\"\(failure)\"}", message: nil, state: state)
-    await ContextProactivityTelemetry.recordJITAdmission(
-      outcome: state == "failed" ? "delivery_failed" : "delivery_suppressed", reason: failure)
+    await ContextProactivityTelemetry.recordJITDelivery(
+      outcome: state == "failed" ? "delivery_failed" : "delivery_suppressed", reason: failure,
+      lane: lane.rawValue, decision: "silence")
   }
 
   /// A full turn that was admitted but never reached a delivery attempt. The
   /// wakeup receipt is released and the reason is recorded, content-free.
   private func abandon(_ execution: JITPlannedExecution, reason: String) async {
-    await ContextProactivityTelemetry.recordJITAdmission(outcome: "delivery_suppressed", reason: reason)
+    await ContextProactivityTelemetry.recordJITDelivery(
+      outcome: "delivery_suppressed", reason: reason, lane: execution.lane.rawValue, decision: "silence")
     await finish(execution, delivered: false)
   }
 
