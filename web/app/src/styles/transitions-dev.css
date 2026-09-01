@@ -10,6 +10,10 @@
   will-change: width, height;
 }
 
+.t-resize[data-dragging="true"] {
+  transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .t-resize { transition: none !important; }
 }
@@ -101,11 +105,36 @@
     opacity   var(--dropdown-open-dur) var(--dropdown-ease);
   will-change: transform, opacity;
 }
+.t-dropdown[data-side="bottom"] { transform-origin: top center; }
+.t-dropdown[data-side="bottom"][data-align="start"] { transform-origin: top left; }
+.t-dropdown[data-side="bottom"][data-align="end"] { transform-origin: top right; }
+.t-dropdown[data-side="top"] { transform-origin: bottom center; }
+.t-dropdown[data-side="top"][data-align="start"] { transform-origin: bottom left; }
+.t-dropdown[data-side="top"][data-align="end"] { transform-origin: bottom right; }
+.t-dropdown[data-side="right"] { transform-origin: left center; }
+.t-dropdown[data-side="left"] { transform-origin: right center; }
 .t-dropdown[data-origin="top-right"]     { transform-origin: top right; }
 .t-dropdown[data-origin="top-center"]    { transform-origin: top center; }
 .t-dropdown[data-origin="bottom-left"]   { transform-origin: bottom left; }
 .t-dropdown[data-origin="bottom-center"] { transform-origin: bottom center; }
 .t-dropdown[data-origin="bottom-right"]  { transform-origin: bottom right; }
+
+@keyframes t-dropdown-in {
+  from { transform: scale(var(--dropdown-pre-scale)); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+@keyframes t-dropdown-out {
+  from { transform: scale(1); opacity: 1; }
+  to   { transform: scale(var(--dropdown-closing-scale)); opacity: 0; }
+}
+.t-dropdown[data-state="open"] {
+  animation: t-dropdown-in var(--dropdown-open-dur) var(--dropdown-ease) both;
+  pointer-events: auto;
+}
+.t-dropdown[data-state="closed"] {
+  animation: t-dropdown-out var(--dropdown-close-dur) var(--dropdown-ease) both;
+  pointer-events: none;
+}
 
 .t-dropdown.is-open {
   transform: scale(1);
@@ -122,7 +151,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .t-dropdown { transition: none !important; }
+  .t-dropdown { transition: none !important; animation: none !important; }
+  .t-dropdown[data-state="open"],
+  .t-dropdown.is-open {
+    transform: scale(1);
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 
@@ -214,6 +249,11 @@
   transform: translateX(0);
   filter: blur(0);
   transition-delay: var(--page-stagger);
+}
+.t-page-slide[data-settled] .t-page {
+  transform: none;
+  filter: none;
+  will-change: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {

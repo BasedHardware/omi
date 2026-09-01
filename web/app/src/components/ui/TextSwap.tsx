@@ -15,7 +15,10 @@ export function TextSwap({
   const [phase, setPhase] = useState<'idle' | 'exit' | 'enter-start'>('idle');
 
   useEffect(() => {
-    if (text === display) return;
+    if (text === display) {
+      if (phase !== 'idle') setPhase('idle');
+      return;
+    }
     if (prefersReducedMotion()) {
       setDisplay(text);
       setPhase('idle');
@@ -28,7 +31,7 @@ export function TextSwap({
       setPhase('enter-start');
     }, dur);
     return () => window.clearTimeout(timer);
-  }, [text, display]);
+  }, [text, display, phase]);
 
   useLayoutEffect(() => {
     if (phase !== 'enter-start') return;

@@ -145,4 +145,12 @@ describe('notification badge', () => {
     expect(badge).toHaveAttribute('data-open', 'true');
     expect(container.querySelector('.t-badge-dot')).toHaveTextContent('4');
   });
+
+  it('keeps the t-badge closed when there is no unread mail', async () => {
+    notificationState.unreadCount = 0;
+    const { container } = render(<Sidebar isOpen onClose={vi.fn()} />);
+    await screen.findByTitle('Home');
+    expect(container.querySelector('.t-badge')).toHaveAttribute('data-open', 'false');
+  });
 });
+

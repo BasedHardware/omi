@@ -105,6 +105,7 @@ export function ConversationSplitView() {
     DEFAULT_PANEL_WIDTH,
   );
   const splitViewRef = useRef<HTMLDivElement>(null);
+  const [detailResizing, setDetailResizing] = useState(false);
 
   // Selection mode state (for merge feature)
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -840,6 +841,8 @@ export function ConversationSplitView() {
         {selection && (
           <ResizeHandle
             onResize={handleResize}
+            onResizeStart={() => setDetailResizing(true)}
+            onResizeEnd={() => setDetailResizing(false)}
             onDoubleClick={handleResetWidth}
             className="hidden lg:flex"
           />
@@ -851,6 +854,7 @@ export function ConversationSplitView() {
             style={{
               width: `min(${panelWidth}px, calc(100% - ${MIN_CONVERSATION_GALLERY_WIDTH}px))`,
             }}
+            data-dragging={detailResizing ? 'true' : undefined}
             className="t-resize w-full lg:w-auto flex-shrink-0 flex flex-col h-full overflow-hidden bg-bg-pane border-l border-stroke"
           >
             <AnimatePresence mode="wait">

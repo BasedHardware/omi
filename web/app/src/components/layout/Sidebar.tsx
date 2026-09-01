@@ -787,8 +787,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
 
           {/* Collapsed: the menu is a popover beside the rail. */}
-          {!showText && menuOpen && (
+          {!showText && (
             <OpenSurface
+              open={menuOpen}
               data-origin="bottom-left"
               className={cn(
                 't-dropdown',

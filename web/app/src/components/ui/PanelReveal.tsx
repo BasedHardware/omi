@@ -17,7 +17,14 @@ export function PanelReveal({
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.setAttribute('data-open', open ? 'true' : 'false');
+    if (!open) {
+      el.setAttribute('data-open', 'false');
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      el.setAttribute('data-open', 'true');
+    });
+    return () => cancelAnimationFrame(frame);
   }, [open]);
 
   return (

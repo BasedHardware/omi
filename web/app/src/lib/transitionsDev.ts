@@ -11,6 +11,7 @@ export function prefersReducedMotion(): boolean {
 }
 
 export function replayErrorShake(input: HTMLElement): void {
+  if (prefersReducedMotion()) return;
   input.classList.remove('is-shaking');
   void input.offsetWidth;
   input.classList.add('is-shaking');

@@ -39,4 +39,38 @@ describe('TextSwap', () => {
     });
     expect(screen.getByText('Cancel')).toBeInTheDocument();
   });
+
+  it('returns to idle when the text reverses before the exit finishes', () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<TextSwap text="Select" />);
+    const el = screen.getByText('Select');
+
+    rerender(<TextSwap text="Cancel" />);
+    expect(el).toHaveClass('is-exit');
+
+    rerender(<TextSwap text="Select" />);
+    expect(el).not.toHaveClass('is-exit');
+    expect(el).toHaveTextContent('Select');
+  });
+
+  it('swaps immediately when reduced motion is requested', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: true,
+        media: '(prefers-reduced-motion: reduce)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+        onchange: null,
+      })),
+    );
+    const { rerender } = render(<TextSwap text="Select" />);
+    rerender(<TextSwap text="Cancel" />);
+    const el = screen.getByText('Cancel');
+    expect(el).not.toHaveClass('is-exit');
+  });
 });
+

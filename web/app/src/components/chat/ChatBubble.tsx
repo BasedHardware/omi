@@ -22,7 +22,7 @@ function ChatIconButton({
     <button
       type="button"
       onClick={onClick}
-      className={fabClass}
+      className={cn(fabClass, 'pointer-events-auto')}
       aria-label={isOpen ? 'Close chat' : 'Open chat'}
     >
       <span className="t-icon-swap" data-state={isOpen ? 'b' : 'a'}>
@@ -77,7 +77,7 @@ export function ChatBubble() {
 
   return (
     <div
-      className="fixed bottom-20 right-6 z-50 h-[136px] w-14 lg:bottom-6"
+      className="pointer-events-none fixed bottom-20 right-6 z-50 h-[136px] w-14 lg:bottom-6"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -93,10 +93,11 @@ export function ChatBubble() {
           <button
             type="button"
             onClick={toggleNotificationCenter}
-            className={fabClass}
+            className={cn(fabClass, fan ? 'pointer-events-auto' : 'pointer-events-none opacity-0')}
             aria-label="Notifications"
             tabIndex={fan ? 0 : -1}
             aria-hidden={!fan}
+            inert={!fan}
           >
             <span className="relative">
               <Bell className="h-6 w-6" />

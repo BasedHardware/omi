@@ -6,6 +6,19 @@ describe('transitionsDev helpers', () => {
     document.documentElement.style.setProperty('--text-swap-dur', '150ms');
     document.documentElement.style.setProperty('--shake-dur-a', '80ms');
     document.documentElement.style.setProperty('--shake-dur-b', '60ms');
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: false,
+        media: '(prefers-reduced-motion: reduce)',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+        onchange: null,
+      })),
+    );
   });
 
   afterEach(() => {
@@ -14,7 +27,8 @@ describe('transitionsDev helpers', () => {
   });
 
   it('reads duration tokens from :root', () => {
-    expect(readDurationToken('--text-swap-dur', 200)).toBe(150);
+    document.documentElement.style.setProperty('--text-swap-dur', '180ms');
+    expect(readDurationToken('--text-swap-dur', 200)).toBe(180);
     expect(readDurationToken('--missing-token', 42)).toBe(42);
   });
 
@@ -46,6 +60,29 @@ describe('transitionsDev helpers', () => {
 
     vi.advanceTimersByTime(300);
     expect(input.classList.contains('is-shaking')).toBe(false);
+
+    replayErrorShake(input);
+    expect(input.classList.contains('is-shaking')).toBe(true);
     input.remove();
   });
+
+  it('skips the error shake when reduced motion is requested', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+        onchange: null,
+      })),
+    );
+    const input = document.createElement('div');
+    replayErrorShake(input);
+    expect(input.classList.contains('is-shaking')).toBe(false);
+  });
 });
+

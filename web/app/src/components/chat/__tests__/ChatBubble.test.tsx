@@ -63,7 +63,7 @@ describe('ChatBubble', () => {
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       value: vi.fn().mockImplementation((query: string) => ({
-        matches: query.includes('pointer: coarse') ? false : false,
+        matches: false,
         media: query,
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
@@ -82,6 +82,7 @@ describe('ChatBubble', () => {
 
     const items = screen.getAllByTestId('liquid-item');
     expect(items[0]).toHaveAttribute('data-y', '0');
+    expect(screen.queryByRole('button', { name: 'Notifications' })).toBeNull();
 
     fireEvent.mouseEnter(container.firstChild as HTMLElement);
     expect(screen.getAllByTestId('liquid-item')[0]).toHaveAttribute('data-y', '-72');

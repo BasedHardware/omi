@@ -35,13 +35,15 @@ export function FolderTabs({
     x: number;
     y: number;
   } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleContextMenu = (e: React.MouseEvent, folder: Folder) => {
     e.preventDefault();
     setContextMenu({ folder, x: e.clientX, y: e.clientY });
+    setMenuOpen(true);
   };
 
-  const closeContextMenu = () => setContextMenu(null);
+  const closeContextMenu = () => setMenuOpen(false);
 
   return (
     <div className="relative">
@@ -95,12 +97,13 @@ export function FolderTabs({
       </div>
 
       {/* Context menu for folder options */}
+      {contextMenu && menuOpen && (
+        <div className="fixed inset-0 z-50" onClick={closeContextMenu} />
+      )}
       {contextMenu && (
-        <>
-          {/* Backdrop */}
-          <div className="fixed inset-0 z-50" onClick={closeContextMenu} />
-          {/* Menu */}
           <OpenSurface
+            open={menuOpen}
+            onExited={() => setContextMenu(null)}
             data-origin="top-left"
             className={cn(
               't-dropdown',
@@ -139,7 +142,6 @@ export function FolderTabs({
               <span>Delete folder</span>
             </button>
           </OpenSurface>
-        </>
       )}
     </div>
   );
