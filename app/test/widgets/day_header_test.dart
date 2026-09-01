@@ -25,9 +25,9 @@ void main() {
     expect(map.options.initialCameraFit, isNotNull);
     expect(map.options.keepAlive, isTrue);
 
-    // The basemap alone: the place-name reference layer is deliberately off.
-    expect(find.byType(TileLayer), findsOneWidget);
-    final tileLayer = tester.widget<TileLayer>(find.byType(TileLayer));
+    // The basemap plus its street/place-name reference layer.
+    expect(find.byType(TileLayer), findsNWidgets(2));
+    final tileLayer = tester.widget<TileLayer>(find.byType(TileLayer).first);
     expect(tileLayer.keepBuffer, 0);
     expect(tileLayer.panBuffer, 0);
     expect(tileLayer.tileDisplay, isA<InstantaneousTileDisplay>());

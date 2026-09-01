@@ -68,9 +68,7 @@ class DayHeader extends StatelessWidget {
     final summary = headline?.trim();
 
     final content = Padding(
-      // The day name clears the app bar controls rather than sitting flush
-      // under them, and the headline gets room before the first conversation.
-      padding: EdgeInsets.fromLTRB(24, topInset + 16, 16, 26),
+      padding: EdgeInsets.fromLTRB(24, topInset, 16, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -87,9 +85,9 @@ class DayHeader extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.4,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.6,
                     ),
                   ),
                 ),
@@ -105,12 +103,7 @@ class DayHeader extends StatelessWidget {
                 summary,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.92),
-                  fontSize: 17,
-                  height: 1.35,
-                  letterSpacing: -0.1,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 19, height: 1.35, letterSpacing: -0.2),
               ),
             ),
           ],
@@ -132,26 +125,13 @@ class DayHeader extends StatelessWidget {
           minHeight: points.isEmpty ? 0 : topInset + math.min(96, MediaQuery.sizeOf(context).height * 0.11),
         ),
         child: Stack(
-          clipBehavior: Clip.none,
           children: [
-            Positioned(
-              // Pull-to-refresh translates the whole sliver down. With nothing
-              // above the header there is only the black page up there, so the
-              // backdrop reaches past the top of the screen to cover the pull.
-              top: -_overscrollBleed,
-              left: 0,
-              right: 0,
-              bottom: 0,
+            Positioned.fill(
               child: AnimatedSwitcher(
                 duration: _dayTransition,
                 child: points.isEmpty
                     ? const SizedBox.shrink(key: ValueKey('day-map-none'))
-                    : _DayMapBackdrop(
-                        key: ValueKey(day),
-                        points: points,
-                        topBleed: _overscrollBleed,
-                        tileProvider: tileProvider,
-                      ),
+                    : _DayMapBackdrop(key: ValueKey(day), points: points, tileProvider: tileProvider),
               ),
             ),
             content,
@@ -165,10 +145,6 @@ class DayHeader extends StatelessWidget {
 /// Long enough to read as a transition between two days, short enough that
 /// paging through a week with the arrows never feels held up.
 const Duration _dayTransition = Duration(milliseconds: 260);
-
-/// How far the map reaches above the header, off screen, so a pull-to-refresh
-/// overscroll drags map into view instead of the page behind it.
-const double _overscrollBleed = 220;
 
 /// "Today" / "Yesterday" / "Fri, Sep 5" for the day navigator.
 String dayLabel(BuildContext context, DateTime day) {
@@ -256,8 +232,7 @@ TileLayer _esriCanvasLayer(String service, TileProvider? tileProvider) {
     urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/$service/MapServer/tile/{z}/{y}/{x}',
     userAgentPackageName: 'me.omi.app',
     minNativeZoom: 0,
-    // Never even request a tile that would carry labels.
-    maxNativeZoom: 14,
+    maxNativeZoom: 16,
     keepBuffer: 0,
     panBuffer: 0,
     tileDisplay: const TileDisplay.instantaneous(),
@@ -297,13 +272,9 @@ class _PlaceLabel extends StatelessWidget {
 /// The day's map, dimmed and faded into the page so the header text stays the
 /// thing you read.
 class _DayMapBackdrop extends StatefulWidget {
-  const _DayMapBackdrop({super.key, required this.points, required this.topBleed, this.tileProvider});
+  const _DayMapBackdrop({super.key, required this.points, this.tileProvider});
 
   final List<LatLng> points;
-
-  /// Height drawn above the header, off screen until an overscroll drags it in.
-  final double topBleed;
-
   final TileProvider? tileProvider;
 
   @override
@@ -316,12 +287,8 @@ class _DayMapBackdropState extends State<_DayMapBackdrop> {
   // after layout makes the tile layer load the fitted bounds.
   static const double _tileLoadZoomDelta = 0.000001;
 
-  // Esri's dark canvas bakes road and place names into the *base* tiles from
-  // zoom 15 up (its separate reference layer is not the only source). Capping
-  // the camera and the tiles below that keeps the backdrop wordless.
-  static const double _labelFreeMaxZoom = 14;
-  static const double _singlePointZoom = _labelFreeMaxZoom;
-  static const double _boundsMaxZoom = _labelFreeMaxZoom;
+  static const double _singlePointZoom = 14;
+  static const double _boundsMaxZoom = 15;
   static const EdgeInsets _boundsPadding = EdgeInsets.all(48);
 
   final MapController _mapController = MapController();
@@ -390,7 +357,6 @@ class _DayMapBackdropState extends State<_DayMapBackdrop> {
                       padding: _boundsPadding,
                       maxZoom: _boundsMaxZoom,
                     ),
-              maxZoom: _labelFreeMaxZoom,
               interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
               keepAlive: true,
               backgroundColor: Colors.black,
@@ -399,37 +365,25 @@ class _DayMapBackdropState extends State<_DayMapBackdrop> {
             children: [
               // Carto's basemaps now stamp "API KEY REQUIRED" across keyless
               // tiles; Esri's dark canvas serves the same look without one. Its
-              // reference (place-name) layer is left off and the zoom is capped
-              // at _labelFreeMaxZoom: the backdrop is a sense of place, not a
-              // map to read, and names competed with the text sitting over them.
+              // street and place names ship as a separate reference layer.
               _esriCanvasLayer('World_Dark_Gray_Base', widget.tileProvider),
+              _esriCanvasLayer('World_Dark_Gray_Reference', widget.tileProvider),
             ],
           ),
-          // The scrim is anchored to the header, not to the backdrop: the bleed
-          // above it stays at the top alpha so the fade lands in the same place
-          // whether or not the user is pulling the list down.
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final height = constraints.maxHeight;
-              final bleed = height <= 0 ? 0.0 : (widget.topBleed / height).clamp(0.0, 0.9);
-              double at(double headerStop) => bleed + headerStop * (1 - bleed);
-              return DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.2),
-                      Colors.black.withValues(alpha: 0.2),
-                      Colors.black.withValues(alpha: 0.45),
-                      Colors.black.withValues(alpha: 0.9),
-                      Colors.black,
-                    ],
-                    stops: [0, at(0), at(0.4), at(0.85), 1],
-                  ),
-                ),
-              );
-            },
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.2),
+                  Colors.black.withValues(alpha: 0.45),
+                  Colors.black.withValues(alpha: 0.9),
+                  Colors.black,
+                ],
+                stops: const [0, 0.4, 0.85, 1],
+              ),
+            ),
           ),
         ],
       ),
