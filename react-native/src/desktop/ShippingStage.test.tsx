@@ -36,6 +36,9 @@ test('page stage uses 80ms ease-out on route change and never springs', () => {
   expect(timing).toHaveBeenCalled();
   const durations = timing.mock.calls.map(call => call[1]?.duration);
   expect(durations).toContain(80);
+  expect(
+    timing.mock.calls.every(call => call[1]?.useNativeDriver === false),
+  ).toBe(true);
   act(() => {
     renderer.unmount();
   });
@@ -66,6 +69,30 @@ test('search stage uses the 240ms hub-to-results step', () => {
     renderer.unmount();
   });
   timing.mockRestore();
+});
+
+test('keeps a visible fallback when the stage child throws', () => {
+  function Boom(): React.JSX.Element {
+    throw new Error('stage exploded');
+  }
+  const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+  let renderer: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ShippingStage stageKey="Tasks" variant="page">
+        <Boom />
+      </ShippingStage>,
+    );
+  });
+  expect(
+    renderer!.root
+      .findAllByType(Text)
+      .some(node => node.props.children === 'This page could not be shown.'),
+  ).toBe(true);
+  act(() => {
+    renderer.unmount();
+  });
+  spy.mockRestore();
 });
 
 test('reduce-motion keeps stage and list insert instant', () => {
