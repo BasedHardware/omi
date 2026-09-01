@@ -24,6 +24,45 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 
+/// The one line of live transcript on the capture card.
+///
+/// Speech recognition grows the *same* segment word by word, so an ellipsized
+/// line kept showing the words that arrived first and hid everything said
+/// since — the preview only appeared to move when a new segment began. This
+/// stays pinned to the end of the text instead, so what you read is what was
+/// just said. Short text still reads from the left.
+class LiveTranscriptPreview extends StatelessWidget {
+  const LiveTranscriptPreview({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          // Anchors the viewport to the end of the line, and keeps it there as
+          // more words arrive.
+          reverse: true,
+          physics: const NeverScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            // Until the line overflows there is nothing to follow, so it should
+            // sit against the left edge like ordinary text.
+            constraints: BoxConstraints(minWidth: constraints.maxWidth),
+            child: Text(
+              '... $text',
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+              maxLines: 1,
+              softWrap: false,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class ConversationCaptureWidget extends StatefulWidget {
   const ConversationCaptureWidget({super.key});
 
@@ -475,12 +514,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-                child: Text(
-                  '... ${provider.segments.last.text} ...',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: LiveTranscriptPreview(text: provider.segments.last.text),
               ),
             )
           else

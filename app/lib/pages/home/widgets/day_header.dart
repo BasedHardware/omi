@@ -147,7 +147,15 @@ class DayHeader extends StatelessWidget {
                 child: points.isEmpty
                     ? const SizedBox.shrink(key: ValueKey('day-map-none'))
                     : _DayMapBackdrop(
-                        key: ValueKey(day),
+                        // Deliberately not keyed by day. Re-keying built a
+                        // fresh map for every day, so stepping days cross-faded
+                        // a loaded map out and an empty one in and the tiles
+                        // popped back as they downloaded — the flicker. One map
+                        // persists across days and re-frames itself instead
+                        // (see didUpdateWidget), keeping the tiles it already
+                        // has. The switcher is left to do what it is for: days
+                        // with a map versus days without one.
+                        key: const ValueKey('day-map'),
                         points: points,
                         topBleed: _overscrollBleed,
                         tileProvider: tileProvider,
