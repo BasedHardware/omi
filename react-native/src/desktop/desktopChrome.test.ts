@@ -63,30 +63,37 @@ test('window chrome geometry is one even inset with an inline light cluster', ()
   expect(desktopTrafficLightRowWidth).toBe(74);
 });
 
-test('shipping motion constants stay put', () => {
-  expect(desktopMotion.navMs).toBe(80);
-  expect(desktopMotion.pressMs).toBe(90);
-  expect(desktopMotion.stepMs).toBe(240);
-  expect(desktopMotion.settleMs).toBe(280);
-  expect(desktopMotion.overlayMs).toBe(300);
-  expect(desktopMotion.checkboxMs).toBe(180);
-  expect(desktopMotion.searchExpandMs).toBe(160);
+test('shipping motion constants follow the transitions.dev token scale', () => {
+  expect(desktopMotion.staggerMs).toBe(40);
+  expect(desktopMotion.microMs).toBe(80);
+  expect(desktopMotion.quickMs).toBe(150);
+  expect(desktopMotion.fastMs).toBe(250);
+  expect(desktopMotion.mediumMs).toBe(350);
+  expect(desktopMotion.slowMs).toBe(400);
+  expect(desktopMotion.verySlowMs).toBe(500);
+  expect(desktopMotion.navMs).toBe(desktopMotion.fastMs);
+  expect(desktopMotion.pressMs).toBe(desktopMotion.microMs);
+  expect(desktopMotion.stepMs).toBe(desktopMotion.fastMs);
+  expect(desktopMotion.settleMs).toBe(desktopMotion.mediumMs);
+  expect(desktopMotion.overlayMs).toBe(desktopMotion.slowMs);
+  expect(desktopMotion.checkboxMs).toBe(desktopMotion.quickMs);
+  expect(desktopMotion.searchExpandMs).toBe(desktopMotion.quickMs);
   expect(desktopMotion.listInsertMs).toBe(0);
   expect(desktopMotion.glassMs).toBe(0);
   expect(desktopStageFade.hubOffsetY).toBe(14);
   expect(desktopStageFade.chatRiseY).toBe(54);
   expect(desktopStageFade.dropScale).toBe(0.98);
   expect(motionDuration(desktopMotion.pressMs, true)).toBe(0);
-  expect(motionDuration(desktopMotion.pressMs, false)).toBe(90);
+  expect(motionDuration(desktopMotion.pressMs, false)).toBe(80);
   expect(navMotionDuration(true)).toBe(0);
   expect(stepMotionDuration(true)).toBe(0);
   expect(searchExpandMotionDuration(true)).toBe(0);
   expect(overlayMotionDuration(true)).toBe(0);
   expect(listInsertMotionDuration(false)).toBe(0);
   expect(glassMotionDuration(false)).toBe(0);
-  expect(navMotionDuration(false)).toBe(80);
-  expect(stepMotionDuration(false)).toBe(240);
-  expect(searchExpandMotionDuration(false)).toBe(160);
+  expect(navMotionDuration(false)).toBe(250);
+  expect(stepMotionDuration(false)).toBe(250);
+  expect(searchExpandMotionDuration(false)).toBe(150);
 });
 
 test('settings IA keeps wired panes and drops no-op duplicates', () => {

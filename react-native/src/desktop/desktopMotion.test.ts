@@ -18,7 +18,7 @@ test('chrome motion snaps under reduce-motion and never uses a spring', () => {
   expect(animation).not.toBeNull();
   expect(timing).toHaveBeenCalledTimes(1);
   expect(timing.mock.calls[0]?.[1]).toMatchObject({
-    duration: 80,
+    duration: 250,
     toValue: 1,
     useNativeDriver: true,
   });

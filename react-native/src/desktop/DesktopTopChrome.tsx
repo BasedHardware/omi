@@ -20,6 +20,7 @@ import {
   type DesktopNavFrame,
   type DesktopNavItem,
 } from './desktopChrome';
+import {desktopEaseSmoothOut} from './desktopMotion';
 import {ShippingPressable} from './ShippingPressable';
 import {desktopTokens as token} from './tokens';
 
@@ -89,19 +90,23 @@ export function DesktopChrome({
       return;
     }
     animating.current = true;
+    const ease = desktopEaseSmoothOut();
     Animated.parallel([
       Animated.timing(pillX, {
-        duration: desktopMotion.stepMs,
+        duration: desktopMotion.navMs,
+        easing: ease,
         toValue: target.x,
         useNativeDriver: false,
       }),
       Animated.timing(pillW, {
-        duration: desktopMotion.stepMs,
+        duration: desktopMotion.navMs,
+        easing: ease,
         toValue: target.width,
         useNativeDriver: false,
       }),
       Animated.timing(pillOpacity, {
-        duration: desktopMotion.navMs,
+        duration: desktopMotion.quickMs,
+        easing: ease,
         toValue: 1,
         useNativeDriver: false,
       }),
