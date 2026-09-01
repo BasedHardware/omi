@@ -16,7 +16,7 @@ import logging
 import hashlib
 import os
 import uuid
-from typing import Any, Dict, Literal, NamedTuple, Optional
+from typing import Any, Dict, NamedTuple, Optional
 
 from fastapi import HTTPException, Request
 from google.api_core.exceptions import AlreadyExists, NotFound
