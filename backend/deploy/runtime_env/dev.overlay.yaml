@@ -526,6 +526,12 @@ overlay:
             value: '3'
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             value: 'true'
+      knowledge-ledger-drain-job:
+        env:
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware
+          MEMORY_ENABLED:
+            value: 'on'
       day3-reengagement-email-job:
         flags:
           --task-timeout: 900s

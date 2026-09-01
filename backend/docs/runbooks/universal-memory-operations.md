@@ -19,6 +19,8 @@ mutated.
 | `MEMORY_CANONICAL_MAINTENANCE_ENABLED` | `memory-maintenance-job` only | Enables scheduled Short-term normalization, TTL audit, consolidation, and outbox drain. |
 | `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` | maintenance job | Global L2 cost/incident switch. Required processing, TTL audit, and outbox ownership remain independent. |
 | consolidation batch/candidate caps | maintenance job | Bound one L2 call and one pass. |
+| shared JIT admission + kill switch | `knowledge-ledger-drain-job` | Re-authorizes every account and row before migration; unavailable authority fails closed. |
+| ledger drain page cap/cursor | `knowledge-ledger-drain-job` | Scans at most 20 apply-control documents per hourly run and advances only after the page returns. |
 | cursor secret/version/TTL | backend | Unused by the live route; removal requires confirming no separate consumer owns the binding. |
 
 `MEMORY_ENABLED_USERS` and code-owned product UID lists are retired. Runtime
@@ -37,9 +39,12 @@ validation rejects a reintroduced per-user memory inventory.
 4. Verify the dedicated maintenance job and Scheduler identity/cadence. The job
    must advance the bounded, content-free account-registry cursor without
    scanning the users collection or repeating one fixed page.
-5. Exercise the global stop and restore path. Record revision, image digest,
+5. Verify `knowledge-ledger-drain-job` and `knowledge-ledger-drain-hourly` are
+   independent of maintenance, then confirm its content-free counters show
+   bounded cursor progress and compatibility-to-ledger cutovers.
+6. Exercise the global stop and restore path. Record revision, image digest,
    project/database identity, Scheduler/job result, and content-free counters.
-6. Deploy the same universal reader before enabling canonical intake or
+7. Deploy the same universal reader before enabling canonical intake or
    maintenance in production. Do not add a canary UID or enrollment document.
 
 ## Content-free observations

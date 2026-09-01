@@ -32,4 +32,5 @@ modal/                  # Serverless GPU services (deployed on Modal) + Cloud Ru
                         #   - VAD: voice activity detection (pyannote/voice-activity-detection)
                         #   - notifications-job: hourly push notifications + X sync (Cloud Run Job)
                         #   - memory-maintenance-job: canonical ST→LT maintenance (Cloud Run Job)
+                        #   - knowledge-ledger-drain-job: bounded writer-mode migration (Cloud Run Job)
 ```

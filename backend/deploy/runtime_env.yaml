@@ -1163,6 +1163,29 @@ environments:
               category: memory_rollout
           forbidden_env:
           - HOSTED_PUSHER_API_URL
+        knowledge-ledger-drain-job:
+          flags:
+            --task-timeout: 1200s
+            --max-retries: '1'
+          secrets:
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
+          env:
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            MEMORY_ENABLED:
+              value: 'on'
+              category: memory_rollout
         day3-reengagement-email-job:
           flags:
             --remove-env-vars: HOSTED_PUSHER_API_URL
@@ -2305,6 +2328,29 @@ environments:
               category: memory_rollout
           forbidden_env:
           - HOSTED_PUSHER_API_URL
+        knowledge-ledger-drain-job:
+          flags:
+            --task-timeout: 1200s
+            --max-retries: '1'
+          secrets:
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
+          env:
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            MEMORY_ENABLED:
+              value: 'on'
+              category: memory_rollout
         day3-reengagement-email-job:
           flags:
             --remove-env-vars: HOSTED_PUSHER_API_URL
