@@ -9914,12 +9914,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Άνοιγμα καταστήματος';
 
   @override
-  String get chatScopeToday => 'Σήμερα';
-
-  @override
-  String get chatScopeThisWeek => 'Αυτή την εβδομάδα';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Σχετικά με: $title';
   }

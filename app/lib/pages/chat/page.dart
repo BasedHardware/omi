@@ -20,6 +20,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
+import 'package:omi/pages/chat/chat_scroll_policy.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/jump_to_latest_button.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
@@ -39,8 +40,6 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
-
-enum _ChatScrollMode { followingBottom, freeScrolling }
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
@@ -69,7 +68,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   bool _hasInitialScrolled = false;
   MessageProvider? _messageProvider;
 
-  _ChatScrollMode _chatScrollMode = _ChatScrollMode.followingBottom;
+  ChatScrollMode _chatScrollMode = ChatScrollMode.followingBottom;
   final List<Timer> _pendingScrollTimers = [];
   bool _isProgrammaticScroll = false;
   int _lastObservedMessageCount = 0;
@@ -86,7 +85,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   String? _pendingDeleteAppId;
   String? _selectedContext;
   bool _quotaSheetShown = false;
-  String? _timeframePreset; // 'today' | 'week' | null
   ChatPageContext? _chatScope;
 
   @override
@@ -282,11 +280,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 shrinkWrap: false,
                                                 reverse: false,
                                                 controller: scrollController,
-                                                padding: EdgeInsets.fromLTRB(
+                                                padding: const EdgeInsets.fromLTRB(
                                                   18,
                                                   16,
                                                   18,
-                                                  _chatScrollMode == _ChatScrollMode.freeScrolling ? 72 : 10,
+                                                  ChatScrollPolicy.transcriptBottomPadding,
                                                 ),
                                                 itemCount: provider.messages.length,
                                                 itemBuilder: (context, chatIndex) {
@@ -341,7 +339,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               ),
                                             ),
                                           ),
-                                          if (_chatScrollMode == _ChatScrollMode.freeScrolling)
+                                          if (_chatScrollMode == ChatScrollMode.freeScrolling)
                                             _buildJumpToLatestButton(),
                                         ],
                                       ),
@@ -459,11 +457,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               }
                             },
                           ),
-                          // Scope chips (#4515) — conversation and/or Today / This week
+                          // Scope chip (#4515) — clears an active conversation scope (Ask about this)
                           Builder(
                             builder: (context) {
                               final scope = _chatScope;
                               final hasConversation = scope?.type == 'conversation' && (scope?.id?.isNotEmpty ?? false);
+                              if (!hasConversation) return const SizedBox.shrink();
                               final l10n = context.l10n;
                               return Padding(
                                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
@@ -471,29 +470,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                   scrollDirection: Axis.horizontal,
                                   child: Row(
                                     children: [
-                                      if (hasConversation) ...[
-                                        _scopeChip(
-                                          label: l10n.chatScopeAbout(scope!.title ?? l10n.conversationTab),
-                                          selected: true,
-                                          onTap: () {
-                                            setState(() {
-                                              _timeframePreset = null;
-                                              _chatScope = null;
-                                            });
-                                          },
-                                        ),
-                                        const SizedBox(width: 8),
-                                      ],
                                       _scopeChip(
-                                        label: l10n.chatScopeToday,
-                                        selected: _timeframePreset == 'today',
-                                        onTap: () => _toggleTimeframe('today'),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      _scopeChip(
-                                        label: l10n.chatScopeThisWeek,
-                                        selected: _timeframePreset == 'week',
-                                        onTap: () => _toggleTimeframe('week'),
+                                        label: l10n.chatScopeAbout(scope!.title ?? l10n.conversationTab),
+                                        selected: true,
+                                        onTap: () => setState(() => _chatScope = null),
                                       ),
                                     ],
                                   ),
@@ -1011,47 +991,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     );
   }
 
-  void _toggleTimeframe(String preset) {
-    if (_timeframePreset == preset) {
-      setState(() {
-        _timeframePreset = null;
-        final existing = _chatScope;
-        if (existing != null && existing.type == 'conversation') {
-          _chatScope = existing.copyWith(clearDates: true);
-        } else {
-          _chatScope = null;
-        }
-      });
-      return;
-    }
-
-    final now = DateTime.now();
-    final end = DateTime(now.year, now.month, now.day + 1).subtract(const Duration(microseconds: 1));
-    late DateTime start;
-    if (preset == 'today') {
-      start = DateTime(now.year, now.month, now.day);
-    } else {
-      final mondayOffset = now.weekday == DateTime.sunday ? -6 : 1 - now.weekday;
-      final monday = now.add(Duration(days: mondayOffset));
-      start = DateTime(monday.year, monday.month, monday.day);
-    }
-
-    final existing = _chatScope;
-    final l10n = context.l10n;
-    final next = (existing != null && existing.type == 'conversation')
-        ? existing.copyWith(startDate: start.toUtc().toIso8601String(), endDate: end.toUtc().toIso8601String())
-        : ChatPageContext(
-            type: 'recap',
-            title: preset == 'today' ? l10n.chatScopeToday : l10n.chatScopeThisWeek,
-            startDate: start.toUtc().toIso8601String(),
-            endDate: end.toUtc().toIso8601String(),
-          );
-    setState(() {
-      _timeframePreset = preset;
-      _chatScope = next;
-    });
-  }
-
   void _showPlansSheetOnQuotaExceeded() {
     if (!mounted) return;
     // Refresh subscription data so the plans sheet is up-to-date
@@ -1101,7 +1040,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       return;
     }
 
-    if (_chatScrollMode == _ChatScrollMode.followingBottom &&
+    if (_chatScrollMode == ChatScrollMode.followingBottom &&
         (addedMessages || lastMessageChanged || streamedTextChanged || streamedBlocksChanged)) {
       _scheduleModeAwareScroll(delayMs: 0, animated: streamedTextChanged || streamedBlocksChanged);
     }
@@ -1115,24 +1054,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     if (_isProgrammaticScroll && !isUserScroll && !isDragScroll) return false;
 
-    // Resume live following when the reader scrolls back to the live edge.
-    // maxScrollExtent - pixels <= threshold means we're at/near the bottom.
-    if (notification.metrics.maxScrollExtent - notification.metrics.pixels <= 24 &&
-        notification.metrics.maxScrollExtent > 0) {
-      if (_chatScrollMode == _ChatScrollMode.freeScrolling) {
-        _chatScrollMode = _ChatScrollMode.followingBottom;
-        _cancelPendingScrolls();
-        if (mounted) setState(() {});
-      }
-      return false;
-    }
+    final next = ChatScrollPolicy.nextMode(
+      current: _chatScrollMode,
+      isUserOrDragScroll: isUserScroll || isDragScroll,
+      atLiveEdge: ChatScrollPolicy.atLiveEdge(notification.metrics),
+    );
+    if (next == null) return false;
 
-    if (isUserScroll || isDragScroll) {
-      _chatScrollMode = _ChatScrollMode.freeScrolling;
-      _cancelPendingScrolls();
-      if (mounted) setState(() {});
-    }
-
+    _chatScrollMode = next;
+    _cancelPendingScrolls();
+    if (mounted) setState(() {});
     return false;
   }
 
@@ -1146,7 +1077,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   void _resumeFollowingAndScroll({int delayMs = 0, bool animated = false}) {
     _cancelPendingScrolls();
-    _chatScrollMode = _ChatScrollMode.followingBottom;
+    _chatScrollMode = ChatScrollMode.followingBottom;
     if (mounted) setState(() {});
     _scheduleModeAwareScroll(delayMs: delayMs, animated: animated, force: true);
   }
@@ -1180,7 +1111,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   void _scrollToBottom({bool animated = false, bool force = false}) {
     if (!scrollController.hasClients) return;
-    if (!force && _chatScrollMode != _ChatScrollMode.followingBottom) return;
+    if (!force && _chatScrollMode != ChatScrollMode.followingBottom) return;
 
     final position = scrollController.position;
     final target = position.maxScrollExtent;

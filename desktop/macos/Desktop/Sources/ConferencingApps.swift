@@ -17,16 +17,26 @@ enum ConferencingApps {
     "ru.keepcoder.telegram",
   ]
 
+  /// Chat apps whose native voice/video calls are meetings. Identity extraction
+  /// treats a name-shaped call-window title as roster-equivalent only for this set —
+  /// not for browsers, where a capitalized tab title is usually something else.
+  static let messagingCallApps: Set<String> = [
+    "Telegram",
+    "Discord",
+    "Slack",
+    "WhatsApp",
+  ]
+
   /// Apps that host audio/video calls. Matched by app/owner name, which is
   /// available from `NSRunningApplication` and `CGWindowList` **without** Screen Recording
   /// permission.
   ///
   /// Includes chat apps whose calls hold the microphone (Discord voice, Slack huddles,
-  /// WhatsApp calls) — same shape as Teams. Meeting gating still requires the app to be
-  /// *using the microphone* (`nativeCallBundleIDs` + `callAppIsUsingMicrophone()`), so an
-  /// idle Slack/Discord/WhatsApp window does not start capture; this owner-name list only
-  /// feeds the call-window/share-indicator screen paths.
-  static let nativeCallApps: Set<String> = [
+  /// WhatsApp calls, Telegram calls) — same shape as Teams. Meeting gating still requires
+  /// the app to be *using the microphone* (`nativeCallBundleIDs` + `callAppIsUsingMicrophone()`),
+  /// so an idle Slack/Discord/WhatsApp/Telegram window does not start capture; this
+  /// owner-name list only feeds the call-window/share-indicator screen paths.
+  static let nativeCallApps: Set<String> = Set([
     "Microsoft Teams",
     "zoom.us",
     "FaceTime",
@@ -34,10 +44,19 @@ enum ConferencingApps {
     "Cisco Webex Meetings",
     "GoTo Meeting",
     "GoToMeeting",
-    "Discord",
-    "Slack",
-    "WhatsApp",
-  ]
+  ]).union(messagingCallApps)
+
+  /// Whether `appName` is a native messaging-call app (Telegram / Discord / Slack / WhatsApp).
+  static func isMessagingCallApp(appName: String) -> Bool {
+    let lower = appName.lowercased()
+    return messagingCallApps.contains { $0.lowercased() == lower }
+  }
+
+  /// Canonical platform label for a native call app name, or nil if it is not in the catalog.
+  static func nativeCallPlatform(forAppName appName: String) -> String? {
+    let lower = appName.lowercased()
+    return nativeCallApps.first { $0.lowercased() == lower }
+  }
 
   /// Browser app names. Browser-based calls are matched by window title.
   static let browserApps: Set<String> = [

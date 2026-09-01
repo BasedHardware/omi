@@ -4023,32 +4023,6 @@ actor AgentRuntimeProcess {
     request.continuation.resume(throwing: bridgeError)
   }
 
-  private func queryResult(from message: RuntimeMessage) -> AgentBridge.QueryResult {
-    let payload = message.payload
-    let omiSessionId = payload["sessionId"] as? String ?? ""
-    let adapterSessionId = payload["adapterSessionId"] as? String
-    return AgentBridge.QueryResult(
-      text: payload["text"] as? String ?? "",
-      costUsd: payload["costUsd"] as? Double ?? 0,
-      omiSessionId: omiSessionId,
-      runId: payload["runId"] as? String ?? "",
-      attemptId: payload["attemptId"] as? String ?? "",
-      adapterSessionId: adapterSessionId,
-      terminalStatus: payload["terminalStatus"] as? String,
-      failure: AgentRuntimeFailure.parse(from: payload["failure"]),
-      inputTokens: payload["inputTokens"] as? Int ?? 0,
-      outputTokens: payload["outputTokens"] as? Int ?? 0,
-      cacheReadTokens: payload["cacheReadTokens"] as? Int ?? 0,
-      cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0,
-      artifacts: AgentArtifactProjection.parseList(
-        fromJSONArray: payload["artifacts"] as? [[String: Any]] ?? []
-      ),
-      completionDeltaArtifacts: AgentArtifactProjection.parseList(
-        fromJSONArray: payload["completionDeltaArtifacts"] as? [[String: Any]] ?? []
-      )
-    )
-  }
-
   @discardableResult
   func sendJson(_ dict: [String: Any]) -> Bool {
     guard let stdinPipe else { return false }

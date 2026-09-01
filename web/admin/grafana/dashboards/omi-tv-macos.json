@@ -2572,7 +2572,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Sessions/user"
+              "options": "Queries/user"
             },
             "properties": [
               {
@@ -2656,8 +2656,8 @@
               "type": "timestamp"
             },
             {
-              "selector": "avg_sessions_per_user",
-              "text": "Sessions/user",
+              "selector": "avg_per_user",
+              "text": "Queries/user",
               "type": "number"
             },
             {
@@ -2684,7 +2684,7 @@
         }
       ],
       "timeFrom": "30d",
-      "title": "Floating bar sessions per user  \u00b7  ${d_fbs}",
+      "title": "Floating bar queries per user  \u00b7  ${d_fbs}",
       "type": "timeseries"
     },
     {
@@ -4597,7 +4597,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Ffloating-bar-usage%3Fdays%3D30&root=data&fields=avg_sessions_per_user&agg=avg&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Ffloating-bar-usage%3Fdays%3D30&root=data&fields=avg_per_user&agg=avg&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"

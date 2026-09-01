@@ -9680,12 +9680,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get accountCutoverOpenStore => '스토어 열기';
 
   @override
-  String get chatScopeToday => '오늘';
-
-  @override
-  String get chatScopeThisWeek => '이번 주';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title에 대해';
   }

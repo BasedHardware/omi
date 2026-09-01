@@ -9914,12 +9914,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
-  String get chatScopeToday => 'இன்று';
-
-  @override
-  String get chatScopeThisWeek => 'இந்த வாரம்';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title பற்றி';
   }

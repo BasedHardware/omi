@@ -127,6 +127,68 @@ final class OnDeviceMeetingIdentityExtractorTests: XCTestCase {
     XCTAssertEqual(payload.title, "Video meeting")
   }
 
+  func testTelegramCallWindowTitleWithCallControlOCRYieldsParticipant() throws {
+    let snapshot = MeetingScreenActivitySnapshot(
+      timestamp: start,
+      appName: "Telegram",
+      windowTitle: "Alice Chen",
+      ocrText: "Mute\nEnd Call\nVideo")
+    let payload = try XCTUnwrap(
+      OnDeviceMeetingIdentityExtractor.payload(
+        from: [snapshot], overlapping: DateInterval(start: start, end: end)))
+    XCTAssertEqual(payload.participants.compactMap(\.name), ["Alice Chen"])
+    XCTAssertEqual(payload.platform, "Telegram")
+    XCTAssertFalse(payload.participants.contains { $0.name == "Speaker 1" })
+  }
+
+  func testTelegramChatTitlesWithoutCallControlYieldNoParticipants() {
+    let chats: [(String, String)] = [
+      ("Saved Messages", "sticker"),
+      ("Alice Chen", "yesterday"),
+      ("Bob Martinez", "photo"),
+      ("Design Review", "ok"),
+      ("Nikita Petrov", "typing"),
+    ]
+    let snapshots = chats.enumerated().map { index, pair in
+      MeetingScreenActivitySnapshot(
+        timestamp: start.addingTimeInterval(TimeInterval(index)),
+        appName: "Telegram",
+        windowTitle: pair.0,
+        ocrText: pair.1)
+    }
+    XCTAssertNil(
+      OnDeviceMeetingIdentityExtractor.payload(
+        from: snapshots, overlapping: DateInterval(start: start, end: end)))
+  }
+
+  func testChromeCalendarTileWithoutMeetRosterYieldsNoParticipants() {
+    let snapshot = MeetingScreenActivitySnapshot(
+      timestamp: start,
+      appName: "Google Chrome",
+      windowTitle: "Meet - amc-iajq-asx",
+      ocrText: "Aryan Gupta and Nik\nBlocked users\nCoinflow Portal")
+    XCTAssertNil(
+      OnDeviceMeetingIdentityExtractor.payload(
+        from: [snapshot], overlapping: DateInterval(start: start, end: end)))
+  }
+
+  func testTelegramCallControlDoesNotIngestUnrelatedChatTitles() throws {
+    let call = MeetingScreenActivitySnapshot(
+      timestamp: start,
+      appName: "Telegram",
+      windowTitle: "Alice Chen",
+      ocrText: "Mute\nEnd Call")
+    let chat = MeetingScreenActivitySnapshot(
+      timestamp: start.addingTimeInterval(1),
+      appName: "Telegram",
+      windowTitle: "Bob Martinez",
+      ocrText: "hey")
+    let payload = try XCTUnwrap(
+      OnDeviceMeetingIdentityExtractor.payload(
+        from: [call, chat], overlapping: DateInterval(start: start, end: end)))
+    XCTAssertEqual(payload.participants.compactMap(\.name), ["Alice Chen"])
+  }
+
   private func rows(_ texts: String...) -> [MeetingScreenActivitySnapshot] {
     texts.enumerated().map { index, text in
       MeetingScreenActivitySnapshot(

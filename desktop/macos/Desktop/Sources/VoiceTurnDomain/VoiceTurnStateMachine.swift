@@ -200,6 +200,18 @@ package struct VoiceOutputSnapshot: Equatable, Sendable {
   }
 }
 
+package enum VoicePlaybackStopAdmission: Equatable, Sendable {
+  case apply
+  case alreadyComplete
+  case stale
+}
+
+package enum VoicePlaybackDrainAdmission: Equatable, Sendable {
+  case failClosed
+  case alreadyComplete
+  case keepPlaying
+}
+
 package enum VoiceOutputHandoffPolicy {
   package static func fillerCanYield(
     active: VoiceOutputLease,
@@ -207,6 +219,34 @@ package enum VoiceOutputHandoffPolicy {
     turnID: VoiceTurnID
   ) -> Bool {
     active.turnID == turnID && active.lane == .filler && incomingLane != .filler
+  }
+
+  /// A fallback TTS stop for the active turn is never stale, even when the
+  /// service already released or rotated the exact lease id.
+  package static func playbackStopAdmission(
+    activeLease: VoiceOutputLease?,
+    requestedLeaseID: VoiceLeaseID?,
+    activeTurnID: VoiceTurnID?
+  ) -> VoicePlaybackStopAdmission {
+    guard let requestedLeaseID else { return .apply }
+    if activeLease?.id == requestedLeaseID { return .apply }
+    if activeLease == nil { return .alreadyComplete }
+    if let activeTurnID, activeLease?.turnID == activeTurnID {
+      return .apply
+    }
+    return .stale
+  }
+
+  /// Native realtime uses PCM progress to refresh the watchdog, so silence is
+  /// fail-closed. A still-owned fallback lease is a live owner, not a hang.
+  package static func playbackDrainAdmission(
+    phase: VoiceTurnPhase,
+    activeLease: VoiceOutputLease?
+  ) -> VoicePlaybackDrainAdmission {
+    guard case .playing = phase else { return .alreadyComplete }
+    guard let activeLease else { return .alreadyComplete }
+    if activeLease.lane == .nativeRealtime { return .failClosed }
+    return .keepPlaying
   }
 }
 
@@ -1493,6 +1533,12 @@ struct VoiceTurnReducer {
       model.turn?.providerConnection = .ready
       model.turn?.sessionID = sessionID
       bindProviderReadyHubRoute(sessionID: sessionID, in: &model)
+      // A hubWarm fire during recording+replacing consumes the deadline so
+      // replacement can still be admitted. Restore the manager-owned warm
+      // rescue now that the socket is ready.
+      if model.turn?.route == .hubWarmWait, model.turn?.deadlines.contains(.hubWarm) != true {
+        schedule(.hubWarm, after: deadlines.hubWarm, in: &model, effects: &effects)
+      }
       if shouldProjectProviderConnectionAsAwaitingResponse(turn) {
         model.turn?.phase = .awaitingResponse
       }
@@ -1956,6 +2002,12 @@ struct VoiceTurnReducer {
       case .captureStart:
         terminate(&model, reason: .captureFailed, effects: &effects)
       case .hubWarm:
+        if shouldDeferHubWarmFallback(turn) {
+          // Replacement is still connecting while the user holds. Do not
+          // commit omni; keep `.replacing` so provider_replacement_ready stays
+          // admissible. bargeInReplacement remains the omni fence.
+          return VoiceTurnReduction(model: model, effects: effects)
+        }
         // A replacement may still be connecting when the bounded warm window
         // expires. Once batch STT owns the turn, a late provider-ready callback
         // must not restore the hub route or replay the same capture there.
@@ -2001,7 +2053,30 @@ struct VoiceTurnReducer {
           in: &model,
           effects: &effects)
       case .playbackDrain:
-        terminate(&model, reason: .playbackFailed, effects: &effects)
+        switch VoiceOutputHandoffPolicy.playbackDrainAdmission(
+          phase: turn.phase,
+          activeLease: turn.activeLease
+        ) {
+        case .alreadyComplete:
+          model.turn?.activeLease = nil
+          model.turn?.projection.isResponseActive = false
+          if completionFencesSatisfied(model.turn) {
+            terminate(&model, reason: .success, effects: &effects)
+          } else if model.turn?.providerFinished == true {
+            model.turn?.phase = .awaitingJournal
+            model.turn?.projection.isThinking = true
+            model.turn?.projection.isResponseWaiting = false
+          } else {
+            model.turn?.phase = .awaitingResponse
+            model.turn?.projection.isResponseWaiting = true
+            schedule(
+              .providerResponse, after: deadlines.providerResponse, in: &model, effects: &effects)
+          }
+        case .keepPlaying:
+          schedule(.playbackDrain, after: deadlines.playbackDrain, in: &model, effects: &effects)
+        case .failClosed:
+          terminate(&model, reason: .playbackFailed, effects: &effects)
+        }
       case .providerReconnect:
         guard turn.phase.isRecording || turn.phase == .finalizing || turn.hubCommitPending else {
           terminate(&model, reason: .providerFailed, effects: &effects)
@@ -2110,6 +2185,14 @@ struct VoiceTurnReducer {
   /// response projection during connection churn.
   private func shouldProjectProviderConnectionAsAwaitingResponse(_ turn: VoiceTurn) -> Bool {
     acceptsProviderOutput(turn.phase) || turn.hubCommitPending
+  }
+
+  /// A barge-in replacement that is still connecting during recording must not
+  /// treat the generic one-second warm hint as a committed omni fallback.
+  private func shouldDeferHubWarmFallback(_ turn: VoiceTurn) -> Bool {
+    guard turn.phase.isRecording else { return false }
+    if case .replacing = turn.providerConnection { return true }
+    return false
   }
 
   /// Binds a freshly ready provider session to the hub route without stealing a
