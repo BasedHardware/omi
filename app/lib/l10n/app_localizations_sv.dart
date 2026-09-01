@@ -9929,7 +9929,7 @@ class AppLocalizationsSv extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count korta konversationer',
-      one: '1 kort konversation',
+      one: '$count kort konversation',
     );
     return '$_temp0';
   }

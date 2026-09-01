@@ -11745,7 +11745,7 @@
             }
         }
     },
-    "shortConversationsCount": "{count, plural, =1{1 short conversation} other{{count} short conversations}}",
+    "shortConversationsCount": "{count, plural, =1{{count} short conversation} other{{count} short conversations}}",
     "@shortConversationsCount": {
         "description": "Collapsed group of the day’s short conversations on the home timeline",
         "placeholders": {

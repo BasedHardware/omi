@@ -9962,7 +9962,7 @@ class AppLocalizationsRu extends AppLocalizations {
       count,
       locale: localeName,
       other: 'Короткие разговоры: $count',
-      one: '1 короткий разговор',
+      one: '$count короткий разговор',
     );
     return '$_temp0';
   }

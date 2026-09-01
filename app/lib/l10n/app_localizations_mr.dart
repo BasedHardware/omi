@@ -9934,7 +9934,7 @@ class AppLocalizationsMr extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count छोटी संभाषणे',
-      one: '1 छोटे संभाषण',
+      one: '$count छोटे संभाषण',
     );
     return '$_temp0';
   }

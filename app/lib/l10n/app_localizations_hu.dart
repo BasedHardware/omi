@@ -9966,7 +9966,7 @@ class AppLocalizationsHu extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count rövid beszélgetés',
-      one: '1 rövid beszélgetés',
+      one: '$count rövid beszélgetés',
     );
     return '$_temp0';
   }

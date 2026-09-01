@@ -9941,7 +9941,7 @@ class AppLocalizationsSr extends AppLocalizations {
       count,
       locale: localeName,
       other: 'Кратки разговори: $count',
-      one: '1 кратак разговор',
+      one: '$count кратак разговор',
     );
     return '$_temp0';
   }

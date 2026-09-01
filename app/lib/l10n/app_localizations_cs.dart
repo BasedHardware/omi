@@ -9926,7 +9926,7 @@ class AppLocalizationsCs extends AppLocalizations {
       count,
       locale: localeName,
       other: 'Krátké konverzace: $count',
-      one: '1 krátká konverzace',
+      one: '$count krátká konverzace',
     );
     return '$_temp0';
   }

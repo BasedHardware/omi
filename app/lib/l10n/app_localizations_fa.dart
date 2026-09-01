@@ -9925,7 +9925,7 @@ class AppLocalizationsFa extends AppLocalizations {
       count,
       locale: localeName,
       other: 'گفتگوهای کوتاه: $count',
-      one: '۱ گفتگوی کوتاه',
+      one: '$count گفتگوی کوتاه',
     );
     return '$_temp0';
   }

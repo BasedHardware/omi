@@ -9919,7 +9919,7 @@ class AppLocalizationsEt extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count lühikest vestlust',
-      one: '1 lühike vestlus',
+      one: '$count lühike vestlus',
     );
     return '$_temp0';
   }

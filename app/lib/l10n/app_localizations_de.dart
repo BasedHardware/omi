@@ -10008,7 +10008,7 @@ class AppLocalizationsDe extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count kurze Unterhaltungen',
-      one: '1 kurze Unterhaltung',
+      one: '$count kurze Unterhaltung',
     );
     return '$_temp0';
   }

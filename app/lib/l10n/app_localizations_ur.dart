@@ -9937,7 +9937,7 @@ class AppLocalizationsUr extends AppLocalizations {
       count,
       locale: localeName,
       other: 'مختصر گفتگوئیں: $count',
-      one: '1 مختصر گفتگو',
+      one: '$count مختصر گفتگو',
     );
     return '$_temp0';
   }

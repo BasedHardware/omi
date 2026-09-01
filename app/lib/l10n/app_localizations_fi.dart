@@ -9926,7 +9926,7 @@ class AppLocalizationsFi extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count lyhyttä keskustelua',
-      one: '1 lyhyt keskustelu',
+      one: '$count lyhyt keskustelu',
     );
     return '$_temp0';
   }

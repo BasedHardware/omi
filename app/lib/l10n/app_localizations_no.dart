@@ -9923,7 +9923,7 @@ class AppLocalizationsNo extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count korte samtaler',
-      one: '1 kort samtale',
+      one: '$count kort samtale',
     );
     return '$_temp0';
   }

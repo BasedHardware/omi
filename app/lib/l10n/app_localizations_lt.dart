@@ -9945,7 +9945,7 @@ class AppLocalizationsLt extends AppLocalizations {
       count,
       locale: localeName,
       other: 'Trumpi pokalbiai: $count',
-      one: '1 trumpas pokalbis',
+      one: '$count trumpas pokalbis',
     );
     return '$_temp0';
   }

@@ -18468,7 +18468,7 @@ abstract class AppLocalizations {
   /// Collapsed group of the day’s short conversations on the home timeline
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 short conversation} other{{count} short conversations}}'**
+  /// **'{count, plural, =1{{count} short conversation} other{{count} short conversations}}'**
   String shortConversationsCount(int count);
 }
 

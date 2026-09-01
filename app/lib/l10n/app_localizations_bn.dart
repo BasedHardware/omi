@@ -9930,7 +9930,7 @@ class AppLocalizationsBn extends AppLocalizations {
       count,
       locale: localeName,
       other: '$countটি সংক্ষিপ্ত কথোপকথন',
-      one: '১টি সংক্ষিপ্ত কথোপকথন',
+      one: '$countটি সংক্ষিপ্ত কথোপকথন',
     );
     return '$_temp0';
   }

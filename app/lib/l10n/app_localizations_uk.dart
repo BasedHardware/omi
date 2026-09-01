@@ -9947,7 +9947,7 @@ class AppLocalizationsUk extends AppLocalizations {
       count,
       locale: localeName,
       other: 'Короткі розмови: $count',
-      one: '1 коротка розмова',
+      one: '$count коротка розмова',
     );
     return '$_temp0';
   }

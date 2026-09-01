@@ -9957,7 +9957,7 @@ class AppLocalizationsKn extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count ಚಿಕ್ಕ ಸಂಭಾಷಣೆಗಳು',
-      one: '1 ಚಿಕ್ಕ ಸಂಭಾಷಣೆ',
+      one: '$count ಚಿಕ್ಕ ಸಂಭಾಷಣೆ',
     );
     return '$_temp0';
   }

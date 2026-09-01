@@ -9982,7 +9982,7 @@ class AppLocalizationsCa extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count converses curtes',
-      one: '1 conversa curta',
+      one: '$count conversa curta',
     );
     return '$_temp0';
   }

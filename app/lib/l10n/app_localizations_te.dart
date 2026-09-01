@@ -9974,7 +9974,7 @@ class AppLocalizationsTe extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count చిన్న సంభాషణలు',
-      one: '1 చిన్న సంభాషణ',
+      one: '$count చిన్న సంభాషణ',
     );
     return '$_temp0';
   }

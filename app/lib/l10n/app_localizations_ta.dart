@@ -9995,7 +9995,7 @@ class AppLocalizationsTa extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count சிறு உரையாடல்கள்',
-      one: '1 சிறு உரையாடல்',
+      one: '$count சிறு உரையாடல்',
     );
     return '$_temp0';
   }

@@ -9961,7 +9961,7 @@ class AppLocalizationsHr extends AppLocalizations {
       count,
       locale: localeName,
       other: 'Kratki razgovori: $count',
-      one: '1 kratak razgovor',
+      one: '$count kratak razgovor',
     );
     return '$_temp0';
   }

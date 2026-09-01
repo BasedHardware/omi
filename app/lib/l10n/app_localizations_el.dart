@@ -9995,7 +9995,7 @@ class AppLocalizationsEl extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count σύντομες συνομιλίες',
-      one: '1 σύντομη συνομιλία',
+      one: '$count σύντομη συνομιλία',
     );
     return '$_temp0';
   }

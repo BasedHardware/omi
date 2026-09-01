@@ -9904,7 +9904,7 @@ class AppLocalizationsHi extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count छोटी बातचीत',
-      one: '1 छोटी बातचीत',
+      one: '$count छोटी बातचीत',
     );
     return '$_temp0';
   }

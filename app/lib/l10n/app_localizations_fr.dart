@@ -10012,7 +10012,7 @@ class AppLocalizationsFr extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count conversations courtes',
-      one: '1 conversation courte',
+      one: '$count conversation courte',
     );
     return '$_temp0';
   }

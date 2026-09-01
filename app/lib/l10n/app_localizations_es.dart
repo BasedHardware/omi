@@ -9949,7 +9949,7 @@ class AppLocalizationsEs extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count conversaciones cortas',
-      one: '1 conversación corta',
+      one: '$count conversación corta',
     );
     return '$_temp0';
   }
