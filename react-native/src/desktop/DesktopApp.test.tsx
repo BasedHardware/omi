@@ -1,7 +1,10 @@
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Text, TextInput} from 'react-native';
 import {DesktopApp} from './DesktopApp';
+import type {TaskProjection} from '../desktopReadClient';
 
 jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
@@ -337,6 +340,100 @@ test('Settings opens the shipping multi-pane IA including Advanced', async () =>
   expect(advanced).toContain('old');
   expect(advanced).toContain('new');
   expect(advanced).not.toContain('workers.dev');
+});
+
+const sampleTask: TaskProjection = {
+  kind: 'task',
+  id: 'task-1',
+  title: 'Ship the glass chrome',
+  summary: 'Pending',
+  searchableText: 'Ship the glass chrome',
+  completed: false,
+  completedAt: null,
+  dueAt: null,
+  owner: null,
+  source: 'desktop',
+  provenance: [],
+  sortOrder: 0,
+  indentLevel: 0,
+  createdAt: 1_725_000_000,
+  updatedAt: 1_725_000_000,
+  revision: null,
+};
+
+function pressLabeledButton(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  label: string,
+) {
+  const match = renderer.root
+    .findAll(node => node.props.accessibilityRole === 'button')
+    .find(node =>
+      node.findAllByType(Text).some(text => text.props.children === label),
+    );
+  expect(match).toBeDefined();
+  act(() => {
+    match!.props.onPress();
+  });
+}
+
+test('renders Tasks with empty outcomes and with a success list', () => {
+  const empty = renderDesktop({
+    outcomes: null,
+    reads: [],
+    readsPhase: 'unavailable',
+    session: 'signed-out',
+  });
+  pressLabeledButton(empty, 'Tasks');
+  expect(renderedText(empty)).toContain('No tasks yet');
+
+  const failed = renderDesktop({
+    outcomes: {
+      conversations: {status: 'error', error: 'unavailable'},
+      memories: {status: 'error', error: 'unavailable'},
+      tasks: {status: 'error', error: 'unavailable'},
+    },
+    reads: [],
+    readsPhase: 'unavailable',
+  });
+  pressLabeledButton(failed, 'Tasks');
+  expect(renderedText(failed)).toContain('No tasks yet');
+
+  const loaded = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      tasks: {
+        status: 'success',
+        value: {
+          items: [sampleTask],
+          page: outcomes.tasks.value.page,
+        },
+      },
+    },
+  });
+  pressLabeledButton(loaded, 'Tasks');
+  expect(renderedText(loaded)).toContain('Ship the glass chrome');
+});
+
+test('Home Tasks Library Rewind Apps never throw for empty outcomes', () => {
+  const renderer = renderDesktop({
+    outcomes: null,
+    reads: [],
+    readsPhase: 'unavailable',
+    session: 'signed-out',
+  });
+  for (const label of ['Tasks', 'Library', 'Rewind', 'Apps', 'Home'] as const) {
+    expect(() => pressLabeledButton(renderer, label)).not.toThrow();
+  }
+});
+
+test('Tasks page does not mount FlatList inside the shipping stage', () => {
+  const source = readFileSync(resolve(__dirname, './DesktopApp.tsx'), 'utf8');
+  const start = source.indexOf('function TasksPage');
+  const end = source.indexOf('const imports');
+  const tasksPage = source.slice(start, end);
+  expect(start).toBeGreaterThan(-1);
+  expect(tasksPage).not.toContain('FlatList');
+  expect(tasksPage).toContain('ScrollView');
 });
 
 test('searches real projections instead of a fake timeline', () => {

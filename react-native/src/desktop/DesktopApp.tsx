@@ -2,6 +2,7 @@ import React, {memo, useCallback, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -25,12 +26,13 @@ import Search from 'lucide-react-native/icons/search';
 import Settings from 'lucide-react-native/icons/settings';
 import Sparkles from 'lucide-react-native/icons/sparkles';
 import type {ChatMessage} from '../chatClient';
-import type {
-  ConversationProjection,
-  DesktopReadOutcomes,
-  DesktopReadProjection,
-  MemoryProjection,
-  TaskProjection,
+import {
+  desktopTaskItems,
+  type ConversationProjection,
+  type DesktopReadOutcomes,
+  type DesktopReadProjection,
+  type MemoryProjection,
+  type TaskProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
@@ -215,13 +217,13 @@ const MemoryRow = memo(function MemoryRow({item}: {item: MemoryProjection}) {
 });
 
 const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
+  const title = typeof item.title === 'string' ? item.title : '';
+  const completed = item.completed === true;
   return (
     <View style={styles.taskRow}>
-      <View
-        style={[styles.taskCircle, item.completed && styles.taskCircleDone]}
-      />
-      <Text style={[styles.taskText, item.completed && styles.taskTextDone]}>
-        {item.title}
+      <View style={[styles.taskCircle, completed && styles.taskCircleDone]} />
+      <Text style={[styles.taskText, completed && styles.taskTextDone]}>
+        {title}
       </Text>
     </View>
   );
@@ -558,14 +560,15 @@ function RewindState() {
 function TasksPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
-  const tasks =
-    outcomes?.tasks.status === 'success' ? outcomes.tasks.value.items : [];
+  const tasks = desktopTaskItems(outcomes);
   const normalized = query.trim().toLocaleLowerCase();
-  const visible = tasks.filter(
-    item =>
-      normalized === '' ||
-      item.searchableText.toLocaleLowerCase().includes(normalized),
-  );
+  const visible = tasks.filter(item => {
+    if (normalized === '') {
+      return true;
+    }
+    const haystack = item.searchableText ?? item.title ?? '';
+    return haystack.toLocaleLowerCase().includes(normalized);
+  });
   return (
     <GlassSurface style={styles.singlePanel}>
       <View style={styles.tasksHeader}>
@@ -587,17 +590,17 @@ function TasksPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
         </ShippingSearchFocus>
       </View>
       <Text style={styles.sectionTitle}>Today</Text>
-      <FlatList
-        contentContainerStyle={styles.list}
-        data={visible}
-        keyExtractor={item => item.id}
-        ListEmptyComponent={<Text style={styles.emptyCopy}>No tasks yet</Text>}
-        renderItem={({item}) => (
-          <ShippingListInsert itemKey={item.id}>
-            <TaskRow item={item} />
-          </ShippingListInsert>
+      <ScrollView contentContainerStyle={styles.list} style={styles.taskList}>
+        {visible.length === 0 ? (
+          <Text style={styles.emptyCopy}>No tasks yet</Text>
+        ) : (
+          visible.map(item => (
+            <ShippingListInsert itemKey={item.id} key={item.id}>
+              <TaskRow item={item} />
+            </ShippingListInsert>
+          ))
         )}
-      />
+      </ScrollView>
     </GlassSurface>
   );
 }
@@ -986,6 +989,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tasksHeader: {alignItems: 'center', flexDirection: 'row', gap: 12},
+  taskList: {flex: 1},
   taskRow: {
     alignItems: 'center',
     flexDirection: 'row',
