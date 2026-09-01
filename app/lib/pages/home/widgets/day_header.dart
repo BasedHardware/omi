@@ -127,6 +127,10 @@ class DayHeader extends StatelessWidget {
       duration: _dayTransition,
       curve: Curves.easeOutCubic,
       alignment: Alignment.topCenter,
+      // Defaults to Clip.hardEdge, which would cut off the backdrop's bleed
+      // above the header and leave the overscroll showing the page again. The
+      // viewport still clips what is genuinely off screen.
+      clipBehavior: Clip.none,
       child: ConstrainedBox(
         constraints: BoxConstraints(
           minHeight: points.isEmpty ? 0 : topInset + math.min(96, MediaQuery.sizeOf(context).height * 0.11),
@@ -372,7 +376,12 @@ class _DayMapBackdropState extends State<_DayMapBackdrop> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final camera = _mapController.camera;
-      _mapController.move(camera.center, camera.zoom + _tileLoadZoomDelta);
+      // Nudging *up* from the cap is clamped straight back to it, which is no
+      // camera change and schedules no tiles — and the cap is exactly where a
+      // single-location day lands, so that is the common case, not the edge.
+      final nudged =
+          camera.zoom >= _labelFreeMaxZoom ? camera.zoom - _tileLoadZoomDelta : camera.zoom + _tileLoadZoomDelta;
+      _mapController.move(camera.center, nudged);
     });
   }
 

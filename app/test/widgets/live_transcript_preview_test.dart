@@ -16,18 +16,28 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('follows the end of the line as words arrive', (tester) async {
-    // Recognition grows one segment; an ellipsized line would keep showing the
-    // words that arrived first and hide everything said since.
+  testWidgets('keeps the newest words in view as the line grows', (tester) async {
+    // Recognition grows one segment, so the words that matter are the ones at
+    // the end. Assert where the line actually sits, not just which flags are
+    // set: the tail has to be against the trailing edge and the head off view.
+    await pump(tester, 'To make it feel like you had already been there');
+    var viewport = tester.getRect(find.byType(SingleChildScrollView));
+    var line = tester.getRect(find.byType(Text));
+    expect(line.right, moreOrLessEquals(viewport.right, epsilon: 0.5));
+    expect(line.left, lessThan(viewport.left), reason: 'the older words scroll off, not the newer ones');
+
+    // The same segment keeps growing — the view has to follow it.
     await pump(tester, 'To make it feel like you had already been there before you ever walked in');
+    viewport = tester.getRect(find.byType(SingleChildScrollView));
+    line = tester.getRect(find.byType(Text));
+    expect(line.right, moreOrLessEquals(viewport.right, epsilon: 0.5));
+    expect(line.width, greaterThan(viewport.width));
 
-    final scrollView = tester.widget<SingleChildScrollView>(find.byType(SingleChildScrollView));
-    expect(scrollView.reverse, isTrue);
-    expect(scrollView.scrollDirection, Axis.horizontal);
-
-    final line = tester.widget<Text>(find.byType(Text));
-    expect(line.overflow, isNot(TextOverflow.ellipsis), reason: 'ellipsis would cut the newest words');
-    expect(line.data, endsWith('you ever walked in'));
+    expect(
+      tester.widget<Text>(find.byType(Text)).overflow,
+      isNot(TextOverflow.ellipsis),
+      reason: 'an ellipsis would cut exactly the words just spoken',
+    );
   });
 
   testWidgets('leaves a short line against the left edge', (tester) async {
