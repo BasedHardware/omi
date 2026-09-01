@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/models/local_recording.dart';
+import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart';
 import 'package:omi/providers/conversation_provider.dart';
 
 /// Everything the home day view renders for one day, plus a fingerprint of the
@@ -14,7 +16,8 @@ import 'package:omi/providers/conversation_provider.dart';
 class HomeDaySnapshot {
   const HomeDaySnapshot({
     required this.conversations,
-    required this.highlights,
+    required this.recordings,
+    required this.entries,
     required this.shortOnes,
     required this.tasksByConversation,
     required this.isNewUser,
@@ -25,8 +28,16 @@ class HomeDaySnapshot {
   /// discarded ones included — they still carry the day's map locations.
   final List<ServerConversation> conversations;
 
-  /// The day's real conversations, and the ones folded behind the short line.
-  final List<ServerConversation> highlights;
+  /// The day's Transcribe Later captures, still on the phone. They carry their
+  /// own start-location snapshot, so they belong to the header's map too.
+  final List<LocalRecording> recordings;
+
+  /// The day as it is rendered, in the order it happened: its conversations
+  /// interleaved with recordings still waiting to be transcribed.
+  final List<ConversationGroupEntry> entries;
+
+  /// Conversations folded behind the short-conversations line. Recordings are
+  /// never folded away — an untranscribed one is asking the user for something.
   final List<ServerConversation> shortOnes;
 
   final Map<String, List<ActionItemWithMetadata>> tasksByConversation;
@@ -36,7 +47,7 @@ class HomeDaySnapshot {
   /// same pixels, so the page can skip the rebuild.
   final String fingerprint;
 
-  bool get isEmpty => conversations.isEmpty;
+  bool get isEmpty => entries.isEmpty;
 
   @override
   bool operator ==(Object other) => other is HomeDaySnapshot && other.fingerprint == fingerprint;
@@ -49,12 +60,18 @@ class HomeDaySnapshot {
 ///
 /// Only tasks belonging to the day's own conversations are carried, so a task
 /// edited on another day cannot force the timeline to rebuild.
+///
+/// [recordings] are Transcribe Later captures still on the phone. They belong
+/// on the day they were recorded even though no conversation exists for them
+/// yet — without them a day spent recording offline reads as empty until the
+/// files upload and transcribe.
 HomeDaySnapshot buildHomeDaySnapshot({
   required DateTime day,
   required List<ServerConversation> conversations,
   required List<ActionItemWithMetadata> tasks,
   required int shortThreshold,
   required bool isNewUser,
+  List<LocalRecording> recordings = const [],
   DateTime? now,
 }) {
   final current = now ?? DateTime.now();
@@ -63,6 +80,8 @@ HomeDaySnapshot buildHomeDaySnapshot({
       .toList()
     // The day reads top to bottom the way it was lived.
     ..sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
+
+  final dayRecordings = recordings.where((recording) => conversationLocalDayKey(recording.startedAt) == day).toList();
 
   final highlights = <ServerConversation>[];
   final shortOnes = <ServerConversation>[];
@@ -110,9 +129,23 @@ HomeDaySnapshot buildHomeDaySnapshot({
       ..write(task.dueAt?.millisecondsSinceEpoch);
   }
 
+  for (final recording in dayRecordings) {
+    fingerprint
+      ..write('|r:')
+      ..write(recording.id)
+      ..write(recording.state.name)
+      ..write(recording.seconds)
+      ..write(recording.geolocation?.latitude)
+      ..write(recording.geolocation?.longitude);
+  }
+
   return HomeDaySnapshot(
     conversations: dayConversations,
-    highlights: highlights,
+    recordings: dayRecordings,
+    // The conversations page already defines what "everything that happened
+    // that day, in order" means; reusing it keeps home from drifting into a
+    // second answer. That helper orders newest first, home reads forwards.
+    entries: buildConversationGroupEntries(conversations: highlights, recordings: dayRecordings).reversed.toList(),
     shortOnes: shortOnes,
     tasksByConversation: tasksByConversation,
     isNewUser: isNewUser,
