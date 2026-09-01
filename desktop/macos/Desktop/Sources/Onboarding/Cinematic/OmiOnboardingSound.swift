@@ -95,6 +95,15 @@ struct OmiSoundAssetLocator: Sendable {
     return nil
   }
 
+  /// Any flat bundled resource (not only sounds), searched on the same roots.
+  func url(forFileName fileName: String) -> URL? {
+    for root in roots {
+      let candidate = root.appendingPathComponent(fileName)
+      if FileManager.default.isReadableFile(atPath: candidate.path) { return candidate }
+    }
+    return nil
+  }
+
   /// Every place an installed app, a locally built app, or a test host can be keeping `Sounds/`.
   static let bundled = OmiSoundAssetLocator(roots: bundledRoots())
 

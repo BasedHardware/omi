@@ -10,6 +10,7 @@ app: non-prod
 # make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e DESKTOP_USER=omi-local-emulator-chat-first-enabled-v1
 # Run with --lane ui --bundle-id com.omi.omi-chat-first-e2e for AX steps.
 covers:
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+ScreenTextFallback.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   # S1a exercises the real Node -> authorized Swift tool dispatch, backend
   # validation, and journal append; it is not a local card-insertion mapping.
