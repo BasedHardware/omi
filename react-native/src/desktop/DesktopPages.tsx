@@ -83,7 +83,9 @@ export function LibraryPage({
         ))}
       </View>
       {hub === 'Conversations' || hub === 'Activity' ? (
-        <ScrollView contentContainerStyle={styles.listContent} style={styles.list}>
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          style={styles.list}>
           {hub === 'Activity' ? <SectionTitle>Activity</SectionTitle> : null}
           {conversations.length > 0 ? (
             conversations.map(item => (
@@ -96,7 +98,9 @@ export function LibraryPage({
           )}
         </ScrollView>
       ) : hub === 'Memories' ? (
-        <ScrollView contentContainerStyle={styles.listContent} style={styles.list}>
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          style={styles.list}>
           {memories.length > 0 ? (
             memories.map(item => (
               <ShippingListInsert itemKey={item.id} key={item.id}>
@@ -119,11 +123,7 @@ export function LibraryPage({
   );
 }
 
-export function TasksPage({
-  outcomes,
-}: {
-  outcomes: DesktopReadOutcomes | null;
-}) {
+export function TasksPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
   const [query, setQuery] = useState('');
   const tasks =
     outcomes?.tasks.status === 'success' ? outcomes.tasks.value.items : [];
@@ -149,7 +149,9 @@ export function TasksPage({
         </View>
       </View>
       <SectionTitle>Today</SectionTitle>
-      <ScrollView contentContainerStyle={styles.listContent} style={styles.list}>
+      <ScrollView
+        contentContainerStyle={styles.listContent}
+        style={styles.list}>
         {visible.length > 0 ? (
           visible.map(item => (
             <ShippingListInsert itemKey={item.id} key={item.id}>

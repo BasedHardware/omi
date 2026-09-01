@@ -31,9 +31,7 @@ test('DesktopApp keeps an even window inset around one chrome row', () => {
   expect(desktopChrome).toMatch(/navItem:\s*\{[^}]*justifyContent:\s*'center'/);
   expect(desktopChrome).toContain('desktopSearchPlaceholder');
   expect(desktopChrome).toMatch(/omnibar:\s*\{/);
-  expect(desktopChrome).toMatch(
-    /omnibar:\s*\{[^}]*minWidth:\s*220/,
-  );
+  expect(desktopChrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
   expect(desktopChrome).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
   expect(desktopChrome).toMatch(
     /navTextActive:[^}]*textDecorationLine:\s*'underline'/,

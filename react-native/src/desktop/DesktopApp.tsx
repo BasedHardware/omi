@@ -7,7 +7,11 @@ import type {
   DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
-import {visibleChatError, desktopWindowInset, type DesktopSession} from './desktopChrome';
+import {
+  visibleChatError,
+  desktopWindowInset,
+  type DesktopSession,
+} from './desktopChrome';
 import {DesktopChrome, type DesktopRoute} from './DesktopTopChrome';
 import {DesktopHome, RewindPanel} from './DesktopHome';
 import {AppsPage, LibraryPage, TasksPage} from './DesktopPages';
