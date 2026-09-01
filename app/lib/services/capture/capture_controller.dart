@@ -33,6 +33,7 @@ import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
 import 'package:omi/services/capture/native_ble_stream_config.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
+import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
@@ -83,6 +84,7 @@ class CaptureController extends ChangeNotifier
   bool _sessionGeolocationPublishedToWal = false;
   late final NativeBatchGeolocationPreferenceFence _phoneBatchGeolocationPreference =
       NativeBatchGeolocationPreferenceFence(writer: _writePhoneBatchGeolocationPreference);
+  final RecordingLifecycleTelemetry _recordingTelemetry;
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -202,13 +204,15 @@ class CaptureController extends ChangeNotifier
     Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
     Future<bool> Function()? microphonePermissionRequester,
     IMicRecorderService? phoneMicBatchRecorder,
+    RecordingLifecycleTelemetry? recordingTelemetry,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ??
             ConversationLocationCapture(onNewlyGranted: _startAndroidLocationForegroundTask),
         _inProgressConversationLoader = inProgressConversationLoader,
         _audioCodecLoader = audioCodecLoader,
         _microphonePermissionRequester = microphonePermissionRequester,
-        _phoneMicBatchRecorder = phoneMicBatchRecorder {
+        _phoneMicBatchRecorder = phoneMicBatchRecorder,
+        _recordingTelemetry = recordingTelemetry ?? RecordingLifecycleTelemetry() {
     // Restore a persisted device mute so it survives an app kill/restart. When
     // the device reconnects, streamDeviceRecording() reads _isPaused as
     // `wasPaused` and re-applies the mute instead of silently resuming.
@@ -331,6 +335,7 @@ class CaptureController extends ChangeNotifier
   }
 
   BtDevice? _recordingDevice;
+  BtDevice? _sessionRecordingDevice;
 
   String? _getConversationSourceFromDevice() {
     return conversationSourceForDeviceType(_recordingDevice?.type);
@@ -348,6 +353,10 @@ class CaptureController extends ChangeNotifier
   /// segment ID, this does not change when the backend revises or deletes
   /// segments during the capture.
   String? get activeCaptureSessionId => _sessionStartSeconds == 0 ? null : 'live-$_sessionStartSeconds';
+
+  /// Client-minted UUID shared by capture, `/v4/listen`, and the resulting
+  /// conversation so the pipeline can be joined without timing heuristics.
+  String? get activeRecordingId => _recordingTelemetry.recordingId;
 
   @visibleForTesting
   set testSessionStartSeconds(int v) => _sessionStartSeconds = v;
@@ -435,6 +444,7 @@ class CaptureController extends ChangeNotifier
   /// an attempt with different parameters is a new intent (starting phone mic,
   /// a codec change), and a forced one replaces the socket outright.
   final Map<String, int> _websocketInitInFlight = {};
+  int _websocketInitGeneration = 0;
 
   /// Returns unsynced WALs belonging to the current capture session.
   /// Empty when all frames have been streamed successfully (clean UI).
@@ -601,7 +611,7 @@ class CaptureController extends ChangeNotifier
     final phoneMicSessionActive = _phoneMicBatchActive || _activeSource is PhoneMicSource;
     if (phoneMicSessionActive) {
       try {
-        await stopStreamRecording();
+        await stopStreamRecording(reason: 'mode_changed');
         await streamRecording();
       } catch (e, st) {
         Logger.error('[CaptureProvider] mode-switch session roll failed: $e\n$st');
@@ -711,7 +721,8 @@ class CaptureController extends ChangeNotifier
     final effectiveSampleRate = sampleRate ?? mapCodecToSampleRate(audioCodec);
     final effectiveChannels =
         channels ?? ((audioCodec == BleAudioCodec.pcm16 || audioCodec == BleAudioCodec.pcm8) ? 1 : 2);
-    final attemptKey = '$audioCodec|$effectiveSampleRate|$effectiveChannels|$isPcm|$source';
+    final attemptKey =
+        '$audioCodec|$effectiveSampleRate|$effectiveChannels|$isPcm|$source|${_recordingTelemetry.recordingId}';
 
     if (!force && _websocketInitInFlight.containsKey(attemptKey)) {
       Logger.debug('initiateWebsocket skipped - an identical connection attempt is already in flight');
@@ -720,6 +731,7 @@ class CaptureController extends ChangeNotifier
     // Counted, because a forced attempt can share the key of the non-forced one
     // it is replacing; whichever finishes first must not ungate the other.
     _websocketInitInFlight.update(attemptKey, (running) => running + 1, ifAbsent: () => 1);
+    final generation = ++_websocketInitGeneration;
     try {
       await _connectTranscriptionSocket(
         audioCodec: audioCodec,
@@ -728,6 +740,7 @@ class CaptureController extends ChangeNotifier
         isPcm: isPcm,
         force: force,
         source: source,
+        generation: generation,
       );
     } finally {
       final running = (_websocketInitInFlight[attemptKey] ?? 1) - 1;
@@ -748,6 +761,7 @@ class CaptureController extends ChangeNotifier
     required String language,
     required bool force,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
   }) {
     return ServiceManager.instance().socket.conversation(
@@ -756,6 +770,7 @@ class CaptureController extends ChangeNotifier
           language: language,
           force: force,
           source: source,
+          clientConversationId: clientConversationId,
           customSttConfig: customSttConfig,
           geolocation: _sessionGeolocation,
         );
@@ -768,6 +783,7 @@ class CaptureController extends ChangeNotifier
     bool? isPcm,
     bool force = false,
     String? source,
+    required int generation,
   }) async {
     Logger.debug('initiateWebsocket in capture_provider');
 
@@ -816,19 +832,25 @@ class CaptureController extends ChangeNotifier
     }
 
     // Connect to the transcript socket
-    _socket = await openConversationSocket(
+    final socket = await openConversationSocket(
       codec: codec,
       sampleRate: sampleRate,
       language: language,
       force: force,
       source: source,
+      clientConversationId: _recordingTelemetry.recordingId,
       customSttConfig: effectiveConfig,
     );
-    if (_socket == null) {
+    if (socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
       return;
     }
+    if (generation != _websocketInitGeneration) {
+      await socket.stop(reason: 'stale transcription socket attempt');
+      return;
+    }
+    _socket = socket;
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
     if (_sessionStartSeconds == 0) {
@@ -1482,6 +1504,7 @@ class CaptureController extends ChangeNotifier
   void dispose() {
     _phoneBatchGeolocationPreference.invalidateSession();
     _clearSessionLocation();
+    _recordingTelemetry.complete(reason: 'pipeline_closed');
     _bleBytesStream?.cancel();
     _blePhotoStream?.cancel();
     _bleButtonStream?.cancel();
@@ -1562,6 +1585,7 @@ class CaptureController extends ChangeNotifier
   }
 
   streamRecording() async {
+    _sessionRecordingDevice = null;
     // Drain any tail from the preceding phone session before replacing its
     // location. A stale session snapshot must never be applied to a later WAL.
     await _wal.getSyncs().phone.finalizeCurrentSession();
@@ -1576,9 +1600,14 @@ class CaptureController extends ChangeNotifier
       hasNetwork: ConnectivityService().isConnected,
     );
     if (mode != PhoneMicSessionMode.live) {
+      _recordingTelemetry.prepare(
+        source: mode == PhoneMicSessionMode.batchAuto ? 'phone_mic_batch_auto' : 'phone_mic_batch',
+      );
       await _startPhoneMicBatch(auto: mode == PhoneMicSessionMode.batchAuto);
       return;
     }
+
+    _recordingTelemetry.prepare(source: 'phone_mic_live');
 
     updateRecordingState(RecordingState.initialising);
     final micPermission = await Permission.microphone.request();
@@ -1586,6 +1615,7 @@ class CaptureController extends ChangeNotifier
       Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic');
       _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
+      _recordingTelemetry.failStart(failureClass: 'permission_denied');
       return;
     }
 
@@ -1617,6 +1647,7 @@ class CaptureController extends ChangeNotifier
             },
             onRecording: () {
               updateRecordingState(RecordingState.record);
+              _recordingTelemetry.markStarted();
             },
             onStop: () {
               if (!_micInterrupted) {
@@ -1644,10 +1675,11 @@ class CaptureController extends ChangeNotifier
       _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
       await _socket?.stop(reason: 'phone mic start failed');
+      _recordingTelemetry.failStart(failureClass: 'capture_unavailable');
     }
   }
 
-  stopStreamRecording() async {
+  stopStreamRecording({String reason = 'user_stopped'}) async {
     // Batch (Transcribe Later) phone-mic session: no WAL flush or socket to
     // close. Native stop() finalizes the current .bin before it resolves; the
     // recordings list refreshes from onBatchRecordingFinalized.
@@ -1660,6 +1692,7 @@ class CaptureController extends ChangeNotifier
       _phoneMicBatchActive = false;
       _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
+      _recordingTelemetry.complete(reason: reason);
       return;
     }
 
@@ -1682,6 +1715,7 @@ class CaptureController extends ChangeNotifier
     _clearSessionLocation();
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream recording');
+    _recordingTelemetry.complete(reason: reason);
   }
 
   /// Start a phone-mic Transcribe Later (batch) session. Native opus-encodes and
@@ -1696,6 +1730,7 @@ class CaptureController extends ChangeNotifier
       Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic batch');
       _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
+      _recordingTelemetry.failStart(failureClass: 'permission_denied');
       return;
     }
 
@@ -1738,6 +1773,7 @@ class CaptureController extends ChangeNotifier
       // before showing an OS location prompt. Native writers retry the bounded
       // preference while the file is open, so a later fix still gets a sidecar.
       unawaited(_capturePhoneBatchSessionLocation(batchLocationGeneration));
+      _recordingTelemetry.markStarted();
     } catch (e, st) {
       // No socket to clean in batch — fail visibly instead of recording nothing.
       Logger.error('[CaptureProvider] phone mic batch start failed: $e\n$st');
@@ -1746,6 +1782,7 @@ class CaptureController extends ChangeNotifier
       _clearSessionLocation();
       _endOfflineSession();
       updateRecordingState(RecordingState.stop);
+      _recordingTelemetry.failStart(failureClass: 'capture_unavailable');
     }
   }
 
@@ -1785,6 +1822,11 @@ class CaptureController extends ChangeNotifier
       await restoreBatchModeAfterOnboarding();
     }
     if (device != null) _updateRecordingDevice(device);
+    _sessionRecordingDevice = _recordingDevice;
+
+    _recordingTelemetry.prepare(
+      source: SharedPreferencesUtil().batchModeEnabled ? 'pendant_batch' : 'pendant_live',
+    );
 
     bool wasPaused = _isPaused;
 
@@ -1803,6 +1845,12 @@ class CaptureController extends ChangeNotifier
     await _resetStateVariables();
     await _resetState();
 
+    if (recordingState == RecordingState.deviceRecord) {
+      _recordingTelemetry.markStarted();
+    } else {
+      _recordingTelemetry.failStart(failureClass: 'capture_unavailable');
+    }
+
     if (wasPaused) {
       await pauseDeviceRecording();
     }
@@ -1819,6 +1867,7 @@ class CaptureController extends ChangeNotifier
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
     await _socket?.stop(reason: 'stop stream device recording');
+    _recordingTelemetry.complete(reason: cleanDevice ? 'device_disconnected' : 'user_stopped');
   }
 
   @override
@@ -2309,7 +2358,7 @@ class CaptureController extends ChangeNotifier
     }
 
     externalActions.upsertConversation(conversation);
-    PlatformManager.instance.analytics.conversationCreated(conversation);
+    PlatformManager.instance.analytics.conversationCreated(conversation, recordingDevice: _sessionRecordingDevice);
   }
 
   Future<void> _handleLastConvoEvent(String memoryId) async {

@@ -5,6 +5,7 @@ import time
 
 import httpx
 import pytest
+from pydantic import BaseModel
 
 from llm_gateway.gateway import providers as provider_module
 from llm_gateway.gateway.auth import ServiceCaller
@@ -13,8 +14,8 @@ from llm_gateway.gateway.providers import (
     ProviderFailure,
     VertexAccessTokenSupplier,
     VertexGeminiProvider,
-    _vertex_request,
 )
+from llm_gateway.gateway.vertex_wire import _json_schema_to_vertex_response_schema, _vertex_request
 from llm_gateway.gateway.schemas import FailureClass, ProviderRef
 from llm_gateway.routers import dependencies
 from utils.executors import critical_executor
@@ -416,6 +417,97 @@ def test_vertex_request_never_emits_a_message_with_zero_parts():
     payload = _vertex_request({"messages": [{"role": "assistant", "content": None}, {"role": "user", "content": []}]})
     assert payload["contents"][0] == {"role": "model", "parts": [{"text": ""}]}
     assert payload["contents"][1] == {"role": "user", "parts": [{"text": ""}]}
+
+
+def test_vertex_response_schema_inlines_nested_translation_json_schema():
+    """Nested Pydantic json_schema must not be copied into Vertex responseSchema.
+
+    Vertex responseSchema is an OpenAPI subset. JSON Schema $defs/$ref is the
+    400 that made omi:auto:translation 100% InvalidArgument. Local models match
+    GeminiTranslationBatch / GeminiTranslationItem so this stays a cheap unit
+    test (importing translation providers pulls langchain into call-phase CPU).
+    """
+
+    class GeminiTranslationItem(BaseModel):
+        text: str
+        detected_language: str
+
+    class GeminiTranslationBatch(BaseModel):
+        translations: list[GeminiTranslationItem]
+
+    schema = GeminiTranslationBatch.model_json_schema()
+    assert '$defs' in schema
+    assert schema['properties']['translations']['items'] == {'$ref': '#/$defs/GeminiTranslationItem'}
+
+    converted = _json_schema_to_vertex_response_schema(schema)
+    dumped = json.dumps(converted)
+    assert '$ref' not in dumped
+    assert '$defs' not in dumped
+    assert converted['type'] == 'object'
+    assert converted['properties']['translations']['items'] == {
+        'properties': {
+            'text': {'title': 'Text', 'type': 'string'},
+            'detected_language': {'title': 'Detected Language', 'type': 'string'},
+        },
+        'required': ['text', 'detected_language'],
+        'title': 'GeminiTranslationItem',
+        'type': 'object',
+    }
+
+    payload = _vertex_request(
+        {
+            'messages': [{'role': 'user', 'content': 'translate'}],
+            'response_format': {
+                'type': 'json_schema',
+                'json_schema': {'name': 'GeminiTranslationBatch', 'schema': schema},
+            },
+        }
+    )
+    response_schema = payload['generationConfig']['responseSchema']
+    assert '$ref' not in json.dumps(response_schema)
+    assert '$defs' not in json.dumps(response_schema)
+    assert response_schema['properties']['translations']['items']['type'] == 'object'
+
+
+def test_vertex_response_schema_inlines_openai_strict_nested_schema():
+    schema = {
+        '$defs': {
+            'GeminiTranslationItem': {
+                'properties': {
+                    'text': {'title': 'Text', 'type': 'string'},
+                    'detected_language': {'title': 'Detected Language', 'type': 'string'},
+                },
+                'required': ['text', 'detected_language'],
+                'title': 'GeminiTranslationItem',
+                'type': 'object',
+                'additionalProperties': False,
+            }
+        },
+        'properties': {
+            'translations': {
+                'items': {'$ref': '#/$defs/GeminiTranslationItem'},
+                'title': 'Translations',
+                'type': 'array',
+            }
+        },
+        'required': ['translations'],
+        'title': 'GeminiTranslationBatch',
+        'type': 'object',
+        'additionalProperties': False,
+    }
+
+    converted = _json_schema_to_vertex_response_schema(schema)
+    dumped = json.dumps(converted)
+    assert '$ref' not in dumped
+    assert '$defs' not in dumped
+    assert converted['additionalProperties'] is False
+    assert converted['properties']['translations']['items']['additionalProperties'] is False
+    assert converted['properties']['translations']['items']['required'] == ['text', 'detected_language']
+
+
+def test_vertex_response_schema_leaves_flat_schemas_unchanged():
+    schema = {'type': 'object', 'properties': {'title': {'type': 'string'}}}
+    assert _json_schema_to_vertex_response_schema(schema) == schema
 
 
 # --- Desktop company-paid PT policy (moved from the desktop proxy) ---------

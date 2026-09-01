@@ -138,8 +138,10 @@ class NllbTranslationProvider:
         except httpx.HTTPStatusError as error:
             reason = _http_reason(error.response.status_code)
             raise TranslationProviderError(self.provider, reason, 'NLLB translation request failed') from error
-        except (httpx.RequestError, ValueError, TypeError) as error:
+        except httpx.RequestError as error:
             raise TranslationProviderError(self.provider, 'other', 'NLLB translation request failed') from error
+        except (ValueError, TypeError) as error:
+            raise TranslationProviderError(self.provider, 'invalid_response', 'NLLB response is malformed') from error
 
         if not isinstance(body, dict):
             raise TranslationProviderError(self.provider, 'invalid_response', 'NLLB response has no translations')
@@ -234,13 +236,17 @@ class TranslationProviderChain:
             if first_failure is None:
                 first_failure = failure
                 first_failed_provider = provider_name
-            if index == len(profile.providers) - 1:
+            remaining = profile.providers[index + 1 :]
+            if not remaining:
                 if first_failed_provider is not None and first_failed_provider != provider_name:
                     self._record_fallback(first_failed_provider, provider_name, first_failure.reason, 'exhausted')
                 raise failure
+            next_provider = remaining[0]
+            if not _should_continue_fallback(failure, next_provider):
+                raise failure
 
         raise TranslationProviderError(
-            TranslationProvider.gemini, 'config_incomplete', 'No translation provider configured'
+            TranslationProvider.nllb, 'config_incomplete', 'No translation provider configured'
         )
 
     def _record_fallback(
@@ -368,7 +374,18 @@ def _http_reason(status_code: int) -> str:
         return 'provider_429'
     if status_code >= 500:
         return 'provider_5xx'
-    return 'other'
+    return 'provider_4xx'
+
+
+# Gemini is the capacity/outage fallback only. Application failures (unsupported
+# language, invalid_response, 4xx) must not storm the Vertex translation lane.
+_GEMINI_FALLBACK_REASONS = frozenset({'timeout', 'provider_429', 'provider_5xx', 'other', 'config_incomplete'})
+
+
+def _should_continue_fallback(error: TranslationProviderError, next_provider: TranslationProvider) -> bool:
+    if next_provider != TranslationProvider.gemini:
+        return True
+    return error.reason in _GEMINI_FALLBACK_REASONS
 
 
 def _metric_error(reason: str) -> str:
