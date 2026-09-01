@@ -20,9 +20,11 @@ test('keeps a transparent glass window over the desktop', () => {
   expect(source).toContain(
     'window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];',
   );
-  expect(source).toContain('NSVisualEffectView');
-  expect(source).toContain('NSVisualEffectMaterialUnderWindowBackground');
-  expect(source).toContain('NSVisualEffectBlendingModeBehindWindow');
+  expect(source).toContain('OmiGlassPanelView');
+  expect(source).toContain('setGlassCornerRadius:0');
+  expect(source).toContain('hideOmiTitlebarMaterial');
+  expect(source).not.toContain('NSVisualEffectMaterialUnderWindowBackground');
+  expect(source).not.toContain('NSWindowToolbarStyleUnified');
   expect(source).not.toContain('OmiTitlebarFillColor');
   expect(source).not.toContain('NSAppearanceNameVibrantDark');
 });
@@ -52,6 +54,8 @@ test('puts traffic lights in the content chrome next to Home', () => {
   expect(source).toContain('installOmiTitlebarAccessory');
   expect(source).toContain('addTitlebarAccessoryViewController');
   expect(source).toMatch(/OmiTrafficLightChromeHeight\s*=\s*52\.0/);
+  expect(source).toContain('hideOmiTitlebarMaterial');
+  expect(source).not.toContain('NSWindowToolbarStyleUnified');
   expect(source).not.toContain('accessibilityLabel="Window drag handle"');
 });
 
@@ -418,7 +422,10 @@ test('keeps the glass reduce-transparency fallback intact', () => {
 
   expect(source).toContain('@property (nonatomic, strong) NSView *fallback;');
   expect(source).toContain('self.fallback.hidden = !reduceTransparency;');
-  expect(source).toContain('self.material.hidden = reduceTransparency;');
+  expect(source).toContain(
+    'self.material.hidden = reduceTransparency || hasLiquid;',
+  );
+  expect(source).toContain('self.sheen.hidden = reduceTransparency;');
   expect(source).toContain(
     'CGFloat alpha = reduceTransparency ? 1.0 : OmiGlassScrimAlpha;',
   );
@@ -428,25 +435,28 @@ test('keeps the shared HUD material translucent with a semantic opaque fallback'
   const source = readNativeSource('OmiGlassPanelView.mm');
 
   expect(source).toContain('static const CGFloat OmiGlassScrimAlpha = 0.46;');
+  expect(source).toContain('NSAppearanceNameAqua');
+  expect(source).toContain('NSClassFromString(@"NSGlassEffectView")');
+  expect(source).toContain('self.liquidGlass');
+  expect(source).toContain('self.sheen');
+  expect(source).toContain('NSMaxY(self.bounds) - OmiGlassSheenHeight');
+  expect(source).toContain(
+    '[NSColor.whiteColor colorWithAlphaComponent:OmiGlassSheenAlpha]',
+  );
   expect(source).toContain(
     'self.fallback.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;',
   );
   expect(source).toContain(
     'self.material.material = NSVisualEffectMaterialHUDWindow;',
   );
-  expect(source).toContain('self.appearance = nil;');
-  expect(source).toContain('self.layer.borderWidth = 0;');
-  expect(source).not.toContain('NSAppearanceNameAqua');
-  expect(source).not.toContain('self.sheen');
+  expect(source).not.toContain('self.appearance = nil;');
+  expect(source).not.toContain('NSVisualEffectMaterialUnderWindowBackground');
+  expect(source).not.toContain('NSAppearanceNameVibrantDark');
   expect(source).not.toContain('shadowColor');
   expect(source).not.toContain('shadowRadius');
   expect(source).not.toContain('shadowOpacity');
   expect(source).not.toContain('shadowOffset');
   expect(source).not.toContain('shadowPath');
-  expect(source).not.toContain('NSMaxY(self.bounds) - 1.0');
-  expect(source).not.toContain(
-    '[NSColor.whiteColor colorWithAlphaComponent:0.5]',
-  );
   expect(source).toContain(
     'self.scrim.backgroundColor = [NSColor.controlBackgroundColor colorWithAlphaComponent:alpha].CGColor;',
   );

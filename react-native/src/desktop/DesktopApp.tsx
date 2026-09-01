@@ -36,9 +36,12 @@ import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
 import {GlassPanel} from '../ui/GlassPanel';
 import {
+  desktopNavBarHeight,
   desktopNavItems,
+  desktopNavTopInset,
   desktopSearchPlaceholder,
   desktopTrafficLightRowWidth,
+  desktopWindowInset,
   visibleChatError,
   type DesktopNavItem,
   type DesktopSession,
@@ -743,8 +746,10 @@ const styles = StyleSheet.create({
   root: {
     backgroundColor: 'transparent',
     flex: 1,
-    gap: 8,
-    padding: 8,
+    gap: desktopWindowInset,
+    paddingBottom: desktopWindowInset,
+    paddingHorizontal: desktopWindowInset,
+    paddingTop: desktopNavTopInset,
   },
   glassSurface: {
     backgroundColor: 'transparent',
@@ -754,8 +759,8 @@ const styles = StyleSheet.create({
   navbar: {
     alignItems: 'center',
     flexDirection: 'row',
-    height: 52,
-    paddingHorizontal: 8,
+    height: desktopNavBarHeight,
+    paddingHorizontal: desktopWindowInset,
   },
   trafficLights: {height: 14, width: desktopTrafficLightRowWidth},
   navItems: {alignItems: 'center', flex: 1, flexDirection: 'row', gap: 4},

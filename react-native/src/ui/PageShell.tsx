@@ -1,7 +1,6 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {GlassPanel} from './GlassPanel';
 import {tokens} from './tokens';
 
 export function PageShell({
@@ -15,10 +14,10 @@ export function PageShell({
   macDesktop: boolean;
   workspaceMaterial?: boolean;
 }) {
-  const content = (
-    <SafeAreaView style={[styles.safe, macDesktop && styles.macSafe]}>
-      {children}
-    </SafeAreaView>
+  const content = macDesktop ? (
+    <View style={[styles.safe, styles.macSafe]}>{children}</View>
+  ) : (
+    <SafeAreaView style={styles.safe}>{children}</SafeAreaView>
   );
   if (!macDesktop) {
     return content;
@@ -26,9 +25,8 @@ export function PageShell({
   return (
     <View pointerEvents="box-none" style={styles.macRoot}>
       {workspaceMaterial ? (
-        <GlassPanel
+        <View
           accessibilityLabel="Desktop workspace material"
-          glassCornerRadius={tokens.radius.none}
           pointerEvents="none"
           style={styles.glass}
         />

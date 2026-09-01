@@ -28,6 +28,8 @@ export const desktopSearchPlaceholder = "Search what you've seen and heard…";
 export const desktopTrafficLightLeading = 16;
 export const desktopTrafficLightRowWidth = 78;
 export const desktopNavBarHeight = 52;
+export const desktopWindowInset = 8;
+export const desktopNavTopInset = 0;
 export const desktopGlassCornerRadius = 22;
 export const desktopSystemFontFamily = 'System';
 

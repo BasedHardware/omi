@@ -1,7 +1,9 @@
 import {
   desktopGlassCornerRadius,
   desktopMotion,
+  desktopNavBarHeight,
   desktopNavItems,
+  desktopNavTopInset,
   desktopSearchPlaceholder,
   desktopSettingsPanes,
   desktopStageFade,
@@ -41,6 +43,8 @@ test('desktop chrome uses the shipping Home Library IA', () => {
   expect(desktopSearchPlaceholder).toBe("Search what you've seen and heard…");
   expect(desktopSystemFontFamily).toBe('System');
   expect(desktopGlassCornerRadius).toBe(22);
+  expect(desktopNavBarHeight).toBe(52);
+  expect(desktopNavTopInset).toBe(0);
   expect(desktopTrafficLightRowWidth).toBeGreaterThan(70);
   expect(desktopMotion.navMs).toBe(80);
   expect(desktopMotion.pressMs).toBe(90);
