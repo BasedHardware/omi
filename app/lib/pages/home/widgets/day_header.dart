@@ -23,6 +23,7 @@ class DayHeader extends StatelessWidget {
     required this.onNextDay,
     this.headline,
     this.onHeadlineTap,
+    this.onPickDay,
     this.tileProvider,
   });
 
@@ -47,6 +48,10 @@ class DayHeader extends StatelessWidget {
   final String? headline;
   final VoidCallback? onHeadlineTap;
 
+  /// Tapping the day name jumps to a date instead of stepping there one
+  /// arrow press at a time.
+  final VoidCallback? onPickDay;
+
   /// Test seam: lets a widget test serve map tiles without network access.
   final TileProvider? tileProvider;
 
@@ -65,15 +70,19 @@ class DayHeader extends StatelessWidget {
             children: [
               _DayArrow(icon: Icons.chevron_left_rounded, onTap: onPreviousDay),
               Flexible(
-                child: Text(
-                  dayLabel(context, day),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.6,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onPickDay,
+                  child: Text(
+                    dayLabel(context, day),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.6,
+                    ),
                   ),
                 ),
               ),

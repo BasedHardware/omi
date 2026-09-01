@@ -90,6 +90,15 @@ void main() {
     expect(find.text('San Francisco'), findsOneWidget);
   });
 
+  testWidgets('tapping the day name asks for a date to jump to', (tester) async {
+    var picks = 0;
+    await _pumpHeader(tester, [], onPickDay: () => picks++);
+
+    // The arrows step one day; the name is the shortcut to any day.
+    await tester.tap(find.text('Wed, Jul 15'));
+    expect(picks, 1);
+  });
+
   test('collapses a full address to its neighbourhood component', () {
     expect(shortPlaceLabel('1234 Mission St, San Francisco, CA 94110, USA'), 'San Francisco');
     expect(shortPlaceLabel('Mission District, San Francisco, USA'), 'Mission District');
@@ -104,6 +113,7 @@ Future<void> _pumpHeader(
   WidgetTester tester,
   List<ServerConversation> conversations, {
   List<String?> summaryAddresses = const [],
+  VoidCallback? onPickDay,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -120,6 +130,7 @@ Future<void> _pumpHeader(
           canGoForward: true,
           onPreviousDay: () {},
           onNextDay: () {},
+          onPickDay: onPickDay,
           tileProvider: _MemoryTileProvider(),
         ),
       ),

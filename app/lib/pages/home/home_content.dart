@@ -26,6 +26,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 
 /// A day is mostly made of half-minute captures — a stray "yeah, ok" picked up on
 /// the way to lunch. Below this they collapse behind the short-conversations line
@@ -52,8 +53,13 @@ class HomeContentPage extends StatefulWidget {
 }
 
 class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliveClientMixin {
-  /// Days the user can page back through before the timeline stops loading more.
-  static const int _maxPagesPerDayJump = 5;
+  /// Conversation pages to pull when stepping a day at a time with the arrows.
+  static const int _maxPagesPerDayStep = 5;
+
+  /// A date picked from the calendar can be months behind the loaded window, so
+  /// a deliberate jump is allowed to walk further back than an arrow press.
+  /// Past this the timeline offers to keep loading rather than paging forever.
+  static const int _maxPagesPerDayJump = 12;
 
   final ScrollController _scrollController = ScrollController();
   final Map<String, DailySummary> _summariesByDate = {};
@@ -61,6 +67,10 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   DateTime _selectedDay = _startOfToday();
   bool _loadingOlderDays = false;
   bool _shortConversationsExpanded = false;
+
+  /// True when paging stopped on its page budget with the selected day still
+  /// outside the loaded window — the day is not empty, it is just not fetched.
+  bool _dayLoadStoppedEarly = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -104,30 +114,42 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     }
   }
 
-  void _goToDay(DateTime day) {
+  void _goToDay(DateTime day, {bool isJump = false}) {
     if (day.isAfter(_startOfToday())) return;
     HapticFeedback.selectionClick();
     setState(() {
       _selectedDay = day;
       _shortConversationsExpanded = false;
+      _dayLoadStoppedEarly = false;
     });
     if (_scrollController.hasClients) _scrollController.jumpTo(0);
-    unawaited(_loadDayIfNeeded(day));
+    unawaited(_loadDayIfNeeded(day, maxPages: isJump ? _maxPagesPerDayJump : _maxPagesPerDayStep));
+  }
+
+  Future<void> _pickDay() async {
+    HapticFeedback.selectionClick();
+    final picked = await showDayJumpPicker(context, selectedDay: _selectedDay);
+    if (picked == null || !mounted || picked == _selectedDay) return;
+    _goToDay(picked, isJump: true);
   }
 
   /// Conversations arrive newest-first in pages. Stepping back past the oldest
   /// loaded day pulls more pages so an older day isn't shown as empty just
   /// because it hasn't been fetched yet.
-  Future<void> _loadDayIfNeeded(DateTime day) async {
+  Future<void> _loadDayIfNeeded(DateTime day, {required int maxPages}) async {
     final provider = context.read<ConversationProvider>();
     if (_isDayLoaded(provider, day) || !provider.hasMoreConversations) return;
 
     setState(() => _loadingOlderDays = true);
     var pages = 0;
-    while (mounted && pages++ < _maxPagesPerDayJump && !_isDayLoaded(provider, day) && provider.hasMoreConversations) {
+    while (mounted && pages++ < maxPages && !_isDayLoaded(provider, day) && provider.hasMoreConversations) {
       if (!await provider.getMoreConversationsFromServer()) break;
     }
-    if (mounted) setState(() => _loadingOlderDays = false);
+    if (!mounted) return;
+    setState(() {
+      _loadingOlderDays = false;
+      _dayLoadStoppedEarly = !_isDayLoaded(provider, day) && provider.hasMoreConversations;
+    });
   }
 
   bool _isDayLoaded(ConversationProvider provider, DateTime day) {
@@ -194,6 +216,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   canGoForward: day.isBefore(_startOfToday()),
                   onPreviousDay: () => _goToDay(DateTime(day.year, day.month, day.day - 1)),
                   onNextDay: () => _goToDay(DateTime(day.year, day.month, day.day + 1)),
+                  onPickDay: _pickDay,
                   onHeadlineTap: summary == null ? null : () => _openSummary(summary),
                 ),
               ),
@@ -222,7 +245,10 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                           _buildEntry(shortOnes[index], tasksByConversation, tasksProvider, dimmed: true),
                     ),
                   ),
-                if (dayConversations.isEmpty && !_loadingOlderDays) SliverToBoxAdapter(child: _buildEmptyDay(context)),
+                if (dayConversations.isEmpty && !_loadingOlderDays)
+                  SliverToBoxAdapter(
+                    child: _dayLoadStoppedEarly ? _buildKeepLoading(context, day) : _buildEmptyDay(context),
+                  ),
                 if (_loadingOlderDays)
                   const SliverToBoxAdapter(
                     child: Padding(
@@ -293,6 +319,27 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
         child: Text(
           context.l10n.shortConversationsCount(count),
           style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 14),
+        ),
+      ),
+    );
+  }
+
+  /// A jump can outrun the page budget. Say so and offer to keep going rather
+  /// than claiming a day the client simply has not fetched yet is empty.
+  Widget _buildKeepLoading(BuildContext context, DateTime day) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 40, 24, 0),
+      child: Center(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            unawaited(_loadDayIfNeeded(day, maxPages: _maxPagesPerDayJump));
+          },
+          child: Text(
+            context.l10n.showMore,
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 15),
+          ),
         ),
       ),
     );
