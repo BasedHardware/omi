@@ -19,7 +19,6 @@ import { serializeArtifact } from "./artifact-serialization.js";
 import { defaultArtifactRoot, maybePruneExpiredToolOutputs, TOOL_OUTPUT_DIRECTORY_NAME } from "./artifact-storage.js";
 import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
 import {
-  DEFAULT_MODEL_TOOL_RESULT_BUDGET_BYTES,
   projectToolResultPayload,
   toolResultBudgetBytes,
 } from "./tool-result-projector.js";
@@ -1962,7 +1961,6 @@ function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId:
   }
 }
 
-const MAX_REALTIME_TOOL_RESULT_BYTES = DEFAULT_MODEL_TOOL_RESULT_BUDGET_BYTES;
 // Direct desktop control is authenticated local IPC, not a provider tool
 // response. It still has a bounded payload so UI reconciliation cannot be held
 // hostage by historical state, but it must not inherit the provider budget and
@@ -2179,6 +2177,9 @@ function stringifyToolResult(
       if (status === "succeeded") {
         return stringifyProjectedControlSuccess(toolName, JSON.stringify(payload), envelope.originalBytes, envelope.fullOutputRef, scope?.context);
       }
+      if (status === "cancelled") {
+        return stringifyProjectedControlCancellation(toolName, envelope.originalBytes, envelope.fullOutputRef, scope?.context);
+      }
       return stringifyProviderBudgetFailure(toolName, envelope.originalBytes, envelope.fullOutputRef, scope?.context);
     } catch {
       // An invalid envelope is itself an untrusted transport value. Continue
@@ -2212,6 +2213,9 @@ function stringifyToolResult(
       if (status === "succeeded") {
         return stringifyProjectedControlSuccess(toolName, fullJson, originalBytes, null, scope?.context);
       }
+      if (status === "cancelled") {
+        return stringifyProjectedControlCancellation(toolName, originalBytes, null, scope?.context);
+      }
       return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
     }
     const toolResultEnvelope = makeToolResultEnvelope({
@@ -2233,6 +2237,11 @@ function stringifyToolResult(
   if (status === "succeeded") {
     return stringifyProjectedControlSuccess(toolName, fullJson, originalBytes, persistedFullOutputRef ?? null, scope?.context);
   }
+  if (status === "cancelled") {
+    return stringifyProjectedControlCancellation(
+      toolName, originalBytes, persistedFullOutputRef ?? null, scope?.context,
+    );
+  }
   return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
 }
 
@@ -2253,7 +2262,9 @@ function stringifyProjectedControlSuccess(
     const projection = projectToolResultPayload({
       toolName,
       result: fullJson,
-      purpose: context?.authorizedToolInvocation?.purpose,
+      purpose: context?.authorizedToolInvocation?.purpose
+        ? truncateUtf8(context.authorizedToolInvocation.purpose, 256).text
+        : undefined,
       maxBytes: Math.max(0, budget - reserve),
     });
     const projectedBytes = Buffer.byteLength(JSON.stringify(projection), "utf8");
@@ -2266,13 +2277,67 @@ function stringifyProjectedControlSuccess(
         originalBytes: Math.max(originalBytes, projectedBytes + 1),
         projectedBytes,
         fullOutputRef,
-        purpose: context?.authorizedToolInvocation?.purpose,
+        purpose: context?.authorizedToolInvocation?.purpose
+          ? truncateUtf8(context.authorizedToolInvocation.purpose, 256).text
+          : undefined,
         provenance: controlToolResultProvenance(context, toolName),
       }),
     });
-    if (Buffer.byteLength(result, "utf8") <= budget) return result;
+    if (Buffer.byteLength(result, "utf8") <= budget) {
+      recordControlProjectionFallback(toolName, originalBytes, projectedBytes);
+      return result;
+    }
   }
-  throw new Error(`Tool result manifest budget is too small for its canonical envelope: ${toolName}`);
+  const projection = { text: "Tool result available via fullOutputRef.", omitted: {} };
+  const projectedBytes = Buffer.byteLength(JSON.stringify(projection), "utf8");
+  recordControlProjectionFallback(toolName, originalBytes, projectedBytes);
+  return JSON.stringify({
+    ok: true,
+    ...projection,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status: "succeeded",
+      truncated: true,
+      originalBytes: Math.max(originalBytes, projectedBytes + 1),
+      projectedBytes,
+      fullOutputRef,
+      provenance: controlToolResultProvenance(context, toolName),
+    }),
+  });
+}
+
+function recordControlProjectionFallback(toolName: string, originalBytes: number, projectedBytes: number): void {
+  console.error(JSON.stringify({
+    event: "fallback",
+    area: "tool_result_projection",
+    outcome: "degraded",
+    toolName,
+    originalBytes,
+    projectedBytes,
+  }));
+}
+
+function stringifyProjectedControlCancellation(
+  toolName: string,
+  originalBytes: number,
+  existingRef: string | null,
+  context: AgentControlToolContext | undefined,
+): string {
+  const cancellation = {
+    cancellation: { code: "cancelled", message: "The tool operation was cancelled." },
+  };
+  const projectedBytes = Buffer.byteLength(JSON.stringify(cancellation), "utf8");
+  return JSON.stringify({
+    ok: false,
+    ...cancellation,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status: "cancelled",
+      truncated: true,
+      originalBytes: Math.max(originalBytes, projectedBytes + 1),
+      projectedBytes,
+      fullOutputRef: existingRef ?? "artifact:unavailable",
+      provenance: controlToolResultProvenance(context, toolName),
+    }),
+  });
 }
 
 /**
@@ -2298,13 +2363,22 @@ function stringifyRealtimeSpawnPrecompactResult(
   // can preserve the complete control result while replacing its projection.
   // A missing artifact is not silently relabeled as an untruncated success.
   if (!fullOutputRef) {
+    if (status === "succeeded") {
+      return stringifyProjectedControlSuccess("spawn_agent", fullJson, bytes, null, context);
+    }
+    if (status === "cancelled") {
+      return stringifyProjectedControlCancellation("spawn_agent", bytes, null, context);
+    }
     return stringifyProviderBudgetFailure("spawn_agent", bytes, null, context);
   }
   const envelope = makeToolResultEnvelope({
     status,
     truncated: true,
     originalBytes: bytes,
-    projectedBytes: Math.min(Math.max(0, bytes - 1), MAX_REALTIME_TOOL_RESULT_BYTES),
+    projectedBytes: Math.min(
+      Math.max(0, bytes - 1),
+      toolResultBudgetBytes("spawn_agent", "realtime_voice"),
+    ),
     fullOutputRef,
     provenance: controlToolResultProvenance(context, "spawn_agent"),
   });
@@ -2401,19 +2475,18 @@ function providerBudgetFailure(
 
 /** A compact projection for detail endpoints whose stored JSON can be huge. */
 function projectProviderPayload(fullPayload: Record<string, unknown>, toolName: string): Record<string, unknown> {
-  const originalBytes = Buffer.byteLength(JSON.stringify(fullPayload), "utf8");
-  const maximumProjectedBytes = 5 * 1024;
+  // Preserve structural roots used by the coordinator while deriving the
+  // compaction target from the manifest-owned provider budget. The canonical
+  // projector below remains the sole final fit check.
+  const maximumProjectedBytes = Math.max(
+    256,
+    toolResultBudgetBytes(toolName, "realtime_voice") - 3 * 1024,
+  );
   for (const limits of [[512, 24, 32], [256, 16, 24], [128, 10, 16], [64, 6, 10]] as const) {
     const compact = compactProviderPayload(fullPayload, ...limits);
     if (Buffer.byteLength(JSON.stringify(compact), "utf8") <= maximumProjectedBytes) return compact;
   }
-  const preview = truncateUtf8(JSON.stringify(compactProviderPayload(fullPayload, 64, 6, 10)), maximumProjectedBytes).text;
-  return {
-    projection: "bounded_json_preview",
-    toolName,
-    originalBytes,
-    preview,
-  };
+  return compactProviderPayload(fullPayload, 64, 6, 10);
 }
 
 /**

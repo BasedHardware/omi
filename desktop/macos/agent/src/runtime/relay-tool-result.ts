@@ -10,6 +10,7 @@ import {
   DEFAULT_MODEL_TOOL_RESULT_BUDGET_BYTES,
   projectToolResultPayload,
   toolResultBudgetBytes,
+  utf8Excerpt,
 } from "./tool-result-projector.js";
 
 /** One budget applies to every result put back on a model-facing stdio relay. */
@@ -45,6 +46,7 @@ export interface FinalizeRelayToolResultInput {
  * fit are persisted before a typed successful projection is returned.
  */
 export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): string {
+  const purpose = input.identity.purpose ? utf8Excerpt(input.identity.purpose, 256) : undefined;
   const rawBytes = Buffer.byteLength(input.result, "utf8");
   const parsed = parseObject(input.result);
   const sourceEnvelope = parsed ? validEnvelope(parsed.toolResultEnvelope) : undefined;
@@ -73,12 +75,13 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
   // A pre-enveloped source measures its payload, not the JSON bytes occupied
   // by its previous envelope. Rewrapping it must not turn every normal result
   // into a needless artifact-backed truncation.
-  const originalBytes = sourceEnvelope
+  const executorBytes = sourceEnvelope
     ? Math.max(sourceEnvelope.originalBytes, payloadBytes)
     : Math.max(rawBytes, payloadBytes);
+  const originalBytes = sourceEnvelope ? executorBytes : payloadBytes;
   let fullOutputRef = sourceEnvelope?.fullOutputRef ?? null;
   const sourceWasTruncated = sourceEnvelope?.truncated === true;
-  const needsArtifact = sourceWasTruncated || (!sourceEnvelope && originalBytes > payloadBytes);
+  const needsArtifact = sourceWasTruncated;
 
   if (needsArtifact && !fullOutputRef) {
     fullOutputRef = persistRelayToolOutput(input, input.result);
@@ -114,11 +117,11 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
     const projection = projectToolResultPayload({
       toolName: input.identity.toolName,
       result: input.result,
-      purpose: input.identity.purpose,
+      purpose,
       maxBytes: Math.max(0, budget - reserve),
     });
     const projectedBytes = Buffer.byteLength(JSON.stringify(projection), "utf8");
-    const boundedOriginalBytes = Math.max(originalBytes, projectedBytes + 1);
+    const boundedOriginalBytes = Math.max(executorBytes, projectedBytes + 1);
     const projected = JSON.stringify({
       ok: status === "succeeded",
       ...projection,
@@ -128,7 +131,7 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
         originalBytes: boundedOriginalBytes,
         projectedBytes,
         fullOutputRef: recoveredRef,
-        purpose: input.identity.purpose,
+        purpose,
         provenance: provenance(input.identity),
       }),
     });
@@ -137,7 +140,22 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
       return projected;
     }
   }
-  throw new Error(`Tool result manifest budget is too small for its canonical envelope: ${input.identity.toolName}`);
+  const minimalProjection = { text: "Tool result available via fullOutputRef.", omitted: {} };
+  const minimalBytes = Buffer.byteLength(JSON.stringify(minimalProjection), "utf8");
+  const minimal = JSON.stringify({
+    ok: status === "succeeded",
+    ...minimalProjection,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status,
+      truncated: true,
+      originalBytes: Math.max(executorBytes, minimalBytes + 1),
+      projectedBytes: minimalBytes,
+      fullOutputRef: recoveredRef,
+      provenance: provenance(input.identity),
+    }),
+  });
+  input.onDegraded?.({ toolName: input.identity.toolName, originalBytes: executorBytes, projectedBytes: minimalBytes });
+  return minimal;
 }
 
 /**

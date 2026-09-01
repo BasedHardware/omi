@@ -53,8 +53,6 @@ extension RealtimeHubController {
       return
     }
     toolEffectIdentityByTransportKey.removeValue(forKey: key)
-    DesktopDiagnosticsManager.shared.finishVoiceToolLatency(
-      key: key, toolName: name, provider: providerTag, resultBytes: output.utf8.count)
     let turnID = VoiceTurnID(identity.generation)
     let deferredScreenProtocol =
       name == HubTool.screenshot.rawValue
@@ -79,6 +77,8 @@ extension RealtimeHubController {
       provider: effectiveProvider,
       name: name,
       output: output)
+    DesktopDiagnosticsManager.shared.finishVoiceToolLatency(
+      key: key, toolName: name, provider: providerTag, resultBytes: providerResult.originalByteCount)
     if providerResult.wasTruncated {
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "realtime_hub",
@@ -98,6 +98,7 @@ extension RealtimeHubController {
         "RealtimeHub[\(providerTag)]: INVARIANT VIOLATION unprojected tool result \(name) "
           + "provider_bytes=\(providerResult.output.utf8.count) limit=\(RealtimeProviderToolResultPolicy.maximumByteCount)"
       )
+      assertionFailure("Unprojected realtime tool result exceeded the transport invariant")
     }
     log(
       "RealtimeHub[\(providerTag)]: tool result \(name) raw_bytes=\(providerResult.originalByteCount) "

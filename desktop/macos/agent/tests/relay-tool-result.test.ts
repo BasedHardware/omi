@@ -84,6 +84,22 @@ describe("normal pending stdio tool-result boundary", () => {
     }
   });
 
+  it("clamps an unbounded originating utterance without stranding projection", () => {
+    const result = finalize(
+      JSON.stringify({ ok: true, text: "x".repeat(MAX_RELAY_TOOL_RESULT_BYTES * 2) }),
+      "succeeded",
+      { ...identity, purpose: "🧠".repeat(10_000) },
+    );
+    const payload = JSON.parse(result) as {
+      ok: boolean;
+      toolResultEnvelope: { status: string; purpose?: string };
+    };
+    expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(MAX_RELAY_TOOL_RESULT_BYTES);
+    expect(payload.ok).toBe(true);
+    expect(payload.toolResultEnvelope.status).toBe("succeeded");
+    expect(Buffer.byteLength(payload.toolResultEnvelope.purpose ?? "", "utf8")).toBeLessThanOrEqual(256);
+  });
+
   it("emits one degraded fallback record for a truncated projection", () => {
     const artifactRoot = mkdtempSync(join(tmpdir(), "omi-relay-tool-result-"));
     roots.push(artifactRoot);

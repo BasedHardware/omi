@@ -231,7 +231,7 @@ function boundedResult(sections: string[]): OmiToolResultContract {
     sections,
     ranking: "purpose_then_recency",
     maxItemsPerSection: 500,
-    digest: { enabledByFlag: "OMI_TOOL_RESULT_DIGEST_ENABLED", timeoutMs: 750 },
+    digest: null,
   };
 }
 

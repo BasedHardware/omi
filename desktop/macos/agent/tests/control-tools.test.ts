@@ -1072,6 +1072,7 @@ describe("agent control tools", () => {
     vi.spyOn(kernel, "persistArtifact").mockImplementation(() => {
       throw new Error("deterministic artifact persistence failure");
     });
+    const degraded = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
       ownerId: "owner",
@@ -1088,6 +1089,14 @@ describe("agent control tools", () => {
         fullOutputRef: "artifact:unavailable",
       },
     });
+    expect(degraded.mock.calls.some(([entry]) => {
+      try {
+        return JSON.parse(String(entry)).outcome === "degraded";
+      } catch {
+        return false;
+      }
+    })).toBe(true);
+    degraded.mockRestore();
     store.close();
   });
 

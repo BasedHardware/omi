@@ -2,7 +2,6 @@ import { toolManifestEntry, type OmiToolSurface } from "./omi-tool-manifest.js";
 
 export const DEFAULT_MODEL_TOOL_RESULT_BUDGET_BYTES = 8 * 1024;
 export const PURPOSE_RANKING_FLAG = "OMI_TOOL_RESULT_PURPOSE_RANKING_ENABLED";
-export const DIGEST_FLAG = "OMI_TOOL_RESULT_DIGEST_ENABLED";
 
 export interface ProjectedToolPayload {
   text: string;
@@ -21,9 +20,9 @@ export function toolResultBudgetBytes(toolName: string, surface: OmiToolSurface)
 }
 
 /**
- * Total, deterministic projection. A budget can reduce detail but can never
- * change executor success into failure. Every section closes with its total
- * and omitted count so absence is never confused with an empty executor result.
+ * Total, deterministic projection. The first item in every non-empty section is
+ * reserved before lower-priority sections may consume the remaining budget.
+ * Oversize items are UTF-8-safely excerpted and still count as one shown item.
  */
 export function projectToolResultPayload(input: {
   toolName: string;
@@ -32,64 +31,91 @@ export function projectToolResultPayload(input: {
   maxBytes: number;
   purposeRankingEnabled?: boolean;
 }): ProjectedToolPayload {
-  const sections = extractSections(input.result, input.toolName);
+  const contract = toolManifestEntry(input.toolName)?.resultContract;
   const rankByPurpose = input.purposeRankingEnabled
     ?? process.env[PURPOSE_RANKING_FLAG] === "1";
-  const ranked = sections.map((section) => ({
-    ...section,
-    items: rankByPurpose && input.purpose ? rankItems(section.items, input.purpose) : section.items,
-  }));
-  const omitted: Record<string, number> = Object.fromEntries(ranked.map((section) => [section.name, section.total]));
-  const lines: string[] = [];
+  const sectionPriority = new Map((contract?.sections ?? []).map((name, index) => [name, index]));
+  const maxItems = contract?.maxItemsPerSection ?? Number.MAX_SAFE_INTEGER;
+  const sections = extractSections(input.result, input.toolName)
+    .sort((a, b) => (sectionPriority.get(a.name) ?? Number.MAX_SAFE_INTEGER)
+      - (sectionPriority.get(b.name) ?? Number.MAX_SAFE_INTEGER))
+    .map((section) => ({
+      ...section,
+      items: (rankByPurpose && input.purpose ? rankItems(section.items, input.purpose) : section.items)
+        .slice(0, maxItems),
+    }));
+  const populated = sections.filter((section) => section.items.length > 0).length;
+  const fairItemBytes = Math.min(1_024, Math.max(64, Math.floor(input.maxBytes / Math.max(1, populated * 3))));
+  const shown = new Map(sections.map((section) => [section.name, 0]));
+  const rendered = new Map<string, string[]>();
 
-  for (const section of ranked) {
-    const header = `${section.name} (${section.total} total)`;
-    if (fits({ text: [...lines, header].join("\n"), omitted }, input.maxBytes)) lines.push(header);
-    let included = 0;
-    for (const item of section.items) {
-      const line = `- ${renderItem(item)}`;
-      const nextOmitted = { ...omitted, [section.name]: Math.max(0, section.total - included - 1) };
-      if (!fits({ text: [...lines, line].join("\n"), omitted: nextOmitted }, input.maxBytes)) break;
-      lines.push(line);
-      included += 1;
-      omitted[section.name] = Math.max(0, section.total - included);
+  // Reserve useful content for every populated section before filling by priority.
+  for (const section of sections) {
+    if (section.items.length > 0) {
+      rendered.set(section.name, [renderItemExcerpt(section.items[0], fairItemBytes)]);
+      shown.set(section.name, 1);
+    } else {
+      rendered.set(section.name, []);
     }
-    const closure = `[${section.name}: ${included} shown, ${omitted[section.name] ?? 0} omitted]`;
-    if (fits({ text: [...lines, closure].join("\n"), omitted }, input.maxBytes)) lines.push(closure);
   }
 
-  let payload: ProjectedToolPayload = { text: lines.join("\n"), omitted };
-  if (fits(payload, input.maxBytes)) return payload;
-  payload = { text: "Tool result projected to fit the surface budget.", omitted };
-  if (fits(payload, input.maxBytes)) return payload;
-  return { text: "", omitted: {} };
+  let payload = renderProjection(sections, rendered, shown);
+  while (!fits(payload, input.maxBytes) && fairItemBytes > 0) {
+    const longest = sections
+      .filter((section) => (rendered.get(section.name)?.length ?? 0) > 0)
+      .sort((a, b) => Buffer.byteLength(rendered.get(b.name)![0], "utf8")
+        - Buffer.byteLength(rendered.get(a.name)![0], "utf8"))[0];
+    if (!longest) break;
+    const current = rendered.get(longest.name)![0];
+    const nextLimit = Buffer.byteLength(current, "utf8") - 16;
+    if (nextLimit < 16) break;
+    rendered.get(longest.name)![0] = utf8Excerpt(renderItem(longest.items[0]), nextLimit);
+    payload = renderProjection(sections, rendered, shown);
+  }
+
+  if (!fits(payload, input.maxBytes)) {
+    // This is only reachable for an unrealistically tiny budget. It remains a
+    // successful, fitting projection rather than throwing or manufacturing ok:false.
+    const omitted = Object.fromEntries(sections.map((section) => [section.name, section.total]));
+    const minimal = { text: "Tool result available via fullOutputRef.", omitted };
+    return fits(minimal, input.maxBytes) ? minimal : { text: "", omitted: {} };
+  }
+
+  for (const section of sections) {
+    for (let index = 1; index < section.items.length; index += 1) {
+      const current = rendered.get(section.name)!;
+      current.push(renderItemExcerpt(section.items[index], fairItemBytes));
+      shown.set(section.name, current.length);
+      const candidate = renderProjection(sections, rendered, shown);
+      if (!fits(candidate, input.maxBytes)) {
+        current.pop();
+        shown.set(section.name, current.length);
+        break;
+      }
+      payload = candidate;
+    }
+  }
+  return payload;
 }
 
-/** Optional digest lane. Timeout, rejection, or oversize returns the ranked projection. */
-export async function projectToolResultWithDigest(input: {
-  fallback: ProjectedToolPayload;
-  budgetBytes: number;
-  timeoutMs: number;
-  digest: () => Promise<string>;
-  enabled?: boolean;
-}): Promise<ProjectedToolPayload> {
-  const enabled = input.enabled ?? process.env[DIGEST_FLAG] === "1";
-  if (!enabled) return input.fallback;
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    const text = await Promise.race([
-      input.digest(),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("digest_timeout")), input.timeoutMs);
-      }),
-    ]);
-    const candidate = { text, omitted: input.fallback.omitted };
-    return fits(candidate, input.budgetBytes) ? candidate : input.fallback;
-  } catch {
-    return input.fallback;
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
+function renderProjection(
+  sections: TypedSection[],
+  rendered: Map<string, string[]>,
+  shown: Map<string, number>,
+): ProjectedToolPayload {
+  const omitted = Object.fromEntries(sections.map((section) => [
+    section.name,
+    Math.max(0, section.total - (shown.get(section.name) ?? 0)),
+  ]));
+  const text = sections.flatMap((section) => {
+    const count = shown.get(section.name) ?? 0;
+    return [
+      `${section.name} (${section.total} total)`,
+      ...(rendered.get(section.name) ?? []).map((item) => `- ${item}`),
+      `[${section.name}: ${count} shown, ${omitted[section.name]} omitted]`,
+    ];
+  }).join("\n");
+  return { text, omitted };
 }
 
 function extractSections(result: string, toolName: string): TypedSection[] {
@@ -113,9 +139,28 @@ function extractSections(result: string, toolName: string): TypedSection[] {
   return [{ name: "text", total: 1, items: [result] }];
 }
 
+function renderItemExcerpt(value: unknown, maxBytes: number): string {
+  return utf8Excerpt(renderItem(value), maxBytes);
+}
+
 function renderItem(value: unknown): string {
   if (typeof value === "string") return value.replace(/\s+/g, " ").trim();
   try { return JSON.stringify(value); } catch { return String(value); }
+}
+
+export function utf8Excerpt(value: string, maxBytes: number): string {
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
+  const ellipsis = "…";
+  const contentBudget = Math.max(0, maxBytes - Buffer.byteLength(ellipsis, "utf8"));
+  let bytes = 0;
+  let result = "";
+  for (const character of value) {
+    const size = Buffer.byteLength(character, "utf8");
+    if (bytes + size > contentBudget) break;
+    result += character;
+    bytes += size;
+  }
+  return `${result}${ellipsis}`;
 }
 
 function rankItems(items: unknown[], purpose: string): unknown[] {
