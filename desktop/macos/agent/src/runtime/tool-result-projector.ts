@@ -2,6 +2,7 @@ import { toolManifestEntry, type OmiToolSurface } from "./omi-tool-manifest.js";
 
 export const DEFAULT_MODEL_TOOL_RESULT_BUDGET_BYTES = 8 * 1024;
 export const PURPOSE_RANKING_FLAG = "OMI_TOOL_RESULT_PURPOSE_RANKING_ENABLED";
+export const DIGEST_FLAG = "OMI_TOOL_RESULT_DIGEST_ENABLED";
 
 export interface ProjectedToolPayload {
   text: string;
@@ -62,6 +63,33 @@ export function projectToolResultPayload(input: {
   payload = { text: "Tool result projected to fit the surface budget.", omitted };
   if (fits(payload, input.maxBytes)) return payload;
   return { text: "", omitted: {} };
+}
+
+/** Optional digest lane. Timeout, rejection, or oversize returns the ranked projection. */
+export async function projectToolResultWithDigest(input: {
+  fallback: ProjectedToolPayload;
+  budgetBytes: number;
+  timeoutMs: number;
+  digest: () => Promise<string>;
+  enabled?: boolean;
+}): Promise<ProjectedToolPayload> {
+  const enabled = input.enabled ?? process.env[DIGEST_FLAG] === "1";
+  if (!enabled) return input.fallback;
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const text = await Promise.race([
+      input.digest(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("digest_timeout")), input.timeoutMs);
+      }),
+    ]);
+    const candidate = { text, omitted: input.fallback.omitted };
+    return fits(candidate, input.budgetBytes) ? candidate : input.fallback;
+  } catch {
+    return input.fallback;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function extractSections(result: string, toolName: string): TypedSection[] {

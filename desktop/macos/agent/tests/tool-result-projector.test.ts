@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { toolManifestEntry } from "../src/runtime/omi-tool-manifest.js";
 import {
   projectToolResultPayload,
+  projectToolResultWithDigest,
   toolResultBudgetBytes,
 } from "../src/runtime/tool-result-projector.js";
 
@@ -51,6 +52,21 @@ describe("manifest-owned tool result projection", () => {
       maxBytes: 300,
     });
     expect(result.text.indexOf("Ada Lovelace")).toBeLessThan(result.text.indexOf("routine planning"));
+  });
+
+  it("returns the ranked fallback when the flagged digest lane times out", async () => {
+    vi.useFakeTimers();
+    const fallback = { text: "ranked fallback", omitted: { conversations: 42 } };
+    const promise = projectToolResultWithDigest({
+      fallback,
+      budgetBytes: 1024,
+      timeoutMs: 25,
+      enabled: true,
+      digest: () => new Promise<string>(() => undefined),
+    });
+    await vi.advanceTimersByTimeAsync(25);
+    await expect(promise).resolves.toEqual(fallback);
+    vi.useRealTimers();
   });
 
 });
