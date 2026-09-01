@@ -291,10 +291,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       case ConversationTab.transcript:
         return context.l10n.transcriptTab;
       case ConversationTab.summary:
-        // The summary tab is this page's default view, so a "Conversation"
-        // label restates the screen the user is already on and crowds a header
-        // that already carries the back button and three actions.
-        return '';
+        return context.l10n.conversationTab;
       case ConversationTab.actionItems:
         return context.l10n.actionItemsTab;
     }
@@ -704,19 +701,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
               ),
             ),
-            title: switch (_getTabTitle(context, selectedTab)) {
-              '' => null,
-              final tabTitle => Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Text(
-                      tabTitle,
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-            },
+            // No title: the tab bar below already names the active view, so a
+            // header label only crowds the row with the back button and actions.
+            // _getTabTitle still backs the `active_tab` search analytics property.
             titleSpacing: 0,
             actions: [
               Consumer<ConversationDetailProvider>(
