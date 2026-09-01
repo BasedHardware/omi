@@ -127,4 +127,40 @@ final class PermissionsPagePresentationTests: XCTestCase {
   func testAccessibilitySettlesOnlyWhenGrantedAndWorking() {
     XCTAssertFalse(PermissionsPageChrome.accessibilityNeedsAction(granted: true, broken: false))
   }
+
+  // MARK: - Notifications: notDetermined must never read as denied
+
+  /// The exact bug: `isNotificationPermissionDenied()` used to return
+  /// `hasCompletedOnboarding && !hasNotificationPermission`, which is true for
+  /// BOTH `.notDetermined` and `.denied`. A user who was simply never asked then
+  /// saw "previously denied, open System Settings" — a dead end, because macOS
+  /// typically does not even list an app under System Settings > Notifications
+  /// until it has called `requestAuthorization` once. Only a real `.denied`
+  /// answer may read as denied.
+  func testIsNotificationPermissionDeniedIsFalseForNotDeterminedAndTrueForDenied() {
+    let appState = AppState()
+    appState.hasCompletedOnboarding = true
+
+    appState.notificationAuthorizationStatus = .notDetermined
+    XCTAssertFalse(
+      appState.isNotificationPermissionDenied(),
+      "notDetermined (never asked) must not read as denied")
+
+    appState.notificationAuthorizationStatus = .denied
+    XCTAssertTrue(
+      appState.isNotificationPermissionDenied(),
+      "a real denied answer must still read as denied")
+
+    appState.notificationAuthorizationStatus = .authorized
+    XCTAssertFalse(appState.isNotificationPermissionDenied())
+  }
+
+  /// Before onboarding completes, a never-asked user must not be told they were
+  /// denied either — the flag was never meant to fire ahead of onboarding.
+  func testIsNotificationPermissionDeniedStaysFalseBeforeOnboardingCompletes() {
+    let appState = AppState()
+    appState.hasCompletedOnboarding = false
+    appState.notificationAuthorizationStatus = .denied
+    XCTAssertFalse(appState.isNotificationPermissionDenied())
+  }
 }

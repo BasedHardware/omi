@@ -332,6 +332,70 @@ import XCTest
       recorder.captureStartResolved(outcome: .accepted, statusClass: .ok)
     }
 
+    // MARK: - Instrument honesty: measurements are real or absent, never literal
+
+    func testCommittedTurnReportsItsRealEnergy() {
+      // Committed turns reported peak/rms/seconds of literal 0 while rejected turns
+      // reported real values, so admitted and rejected audio were on different
+      // scales and the speech gate could not be tuned against its own traffic.
+      let recorder = makeRecorder()
+      begin(recorder)
+      recorder.captureStartRequested()
+      recorder.captureStartResolved(outcome: .accepted, statusClass: .ok)
+      recorder.ingestAudioChunk(Self.audiblePCM(sampleCount: 1600))
+
+      let snap = terminate(
+        recorder, disposition: .committed, peak: 4200, rms: 900, seconds: 1.4, judgeable: true)
+
+      XCTAssertEqual(snap.peak, 4200)
+      XCTAssertEqual(snap.rms, 900)
+      XCTAssertEqual(snap.turnAudioSeconds, 1.4)
+      XCTAssertEqual(snap.properties["peak"] as? Int, 4200)
+      XCTAssertEqual(snap.properties["turn_audio_seconds"] as? Double, 1.4)
+    }
+
+    func testUnknownEnergyIsOmittedRatherThanReportedAsZero() {
+      // Some terminal paths genuinely no longer hold the turn's PCM. Absent is
+      // honest; a literal 0 is indistinguishable from a real dead mic.
+      let recorder = makeRecorder()
+      begin(recorder)
+      recorder.captureStartRequested()
+      recorder.captureStartResolved(outcome: .accepted, statusClass: .ok)
+      recorder.ingestAudioChunk(Self.audiblePCM(sampleCount: 1600))
+
+      let snap = recorder.terminate(
+        disposition: .committed, source: "omni_stt", peak: nil, rms: nil,
+        turnAudioSeconds: nil, voicedAudioSeconds: nil, judgeable: true)
+
+      XCTAssertNil(snap.peak)
+      XCTAssertNil(snap.isNearZero)
+      XCTAssertNil(snap.properties["peak"])
+      XCTAssertNil(snap.properties["rms"])
+      XCTAssertNil(snap.properties["turn_audio_seconds"])
+      XCTAssertNil(snap.properties["is_near_zero"])
+    }
+
+    func testNearZeroVerdictIsDerivedFromReportedEnergy() {
+      // Derived, never supplied: a caller cannot report loud audio and a near-zero
+      // verdict in the same call.
+      let recorder = makeRecorder()
+      begin(recorder)
+      recorder.captureStartRequested()
+      recorder.captureStartResolved(outcome: .accepted, statusClass: .ok)
+
+      let silent = terminate(
+        recorder, disposition: .silentRejected, peak: 2, rms: 1, seconds: 1.0, judgeable: true)
+      XCTAssertEqual(silent.isNearZero, true)
+
+      let loud = makeRecorder()
+      begin(loud)
+      loud.captureStartRequested()
+      loud.captureStartResolved(outcome: .accepted, statusClass: .ok)
+      let audible = terminate(
+        loud, disposition: .committed, peak: 5000, rms: 800, seconds: 1.0, judgeable: true)
+      XCTAssertEqual(audible.isNearZero, false)
+    }
+
     private func terminate(
       _ recorder: PTTAttemptLifecycleRecorder,
       disposition: PTTAttemptLifecycleRecorder.TurnDisposition,
@@ -347,7 +411,6 @@ import XCTest
         rms: rms,
         turnAudioSeconds: seconds,
         voicedAudioSeconds: nil,
-        isNearZero: peak <= 5 && rms <= 5,
         judgeable: judgeable)
     }
 

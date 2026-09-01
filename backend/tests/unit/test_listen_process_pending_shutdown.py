@@ -319,7 +319,9 @@ class _CreateConversationHost:
         conversation_snapshot_known: bool = False,
         binding_conversation_id: str | None = None,
     ) -> None:
-        self.request = SimpleNamespace(uid='uid-1', source='omi', call_id=None, conversation_role=None)
+        self.request = SimpleNamespace(
+            uid='uid-1', source='omi', call_id=None, conversation_role=None, geolocation=None
+        )
         self.client_device_context = SimpleNamespace(client_device_id='dev-1', platform='desktop')
         self.language = 'en'
         self.use_custom_stt = False

@@ -461,12 +461,100 @@ enum GeneratedToolCapabilities {
       "Pass a clean standalone fact: strip the command and lightly clean pronouns. Do not invent names, dates, or facts the user did not ask to persist, and do not infer from the rest of the chat.",
       "Do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
       "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
+      "For a durable fact correction, a reusable multi-step playbook, or a standing watch request, use the knowledge-ledger tools instead.",
       "When the current user message explicitly and affirmatively asks Omi to remember or save something, call this tool with a clean standalone fact.",
       "Strip the command (for example, 'Please remember that I prefer tea' → 'I prefer tea'). Light rewrite and pronoun cleanup are OK; do not invent names, dates, or facts the user did not ask to persist.",
       "Do not infer from the rest of the chat, and do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
       "Confirm the save in one line. Never tell the user about validators or internal save rules.",
       "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
-      "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory."
+      "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory.",
+      "For a durable fact correction ('that's no longer true'), a reusable multi-step playbook, or a standing watch request, use the knowledge-ledger tools (close_fact / save_playbook / create_standing_trigger) instead of create_memory."
+    ]
+    ),
+    Capability(
+      toolName: "search_knowledge",
+      title: "Search Knowledge",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Search current facts, playbook handles, and trigger descriptions in the knowledge ledger.",
+      bullets: [
+      "Use for durable user facts, saved playbooks, and standing triggers — not short-term memory or filesystem documents.",
+      "For a document result, call read_playbook with its memory id to load the full body.",
+      "For a durable user fact, correction, saved playbook, or standing watch, use the knowledge-ledger tools (this one, read_playbook, save_playbook, create_standing_trigger, close_fact) rather than create_memory or a filesystem document.",
+      "Use a comma-separated kinds filter (fact, document, trigger) to narrow to one ledger kind."
+    ]
+    ),
+    Capability(
+      toolName: "read_playbook",
+      title: "Read Playbook",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Load the full body of one current playbook found via search_knowledge.",
+      bullets: [
+      "Only active, non-rejected, non-locked playbooks are readable.",
+      "Call only after search_knowledge returns a document handle; never guess a memory id."
+    ]
+    ),
+    Capability(
+      toolName: "search_historical_facts",
+      title: "Search Historical Facts",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Search closed, superseded, or historical canonical facts when current knowledge is insufficient.",
+      bullets: [
+      "Rejected facts are audit-only negative evidence and must never be treated as true user knowledge.",
+      "Call only after search_knowledge shows current knowledge is insufficient; do not call from historical keywords alone.",
+      "Facts marked rejected are audit-only negative evidence; request include_rejected only for an explicit audit and never treat those rows as true."
+    ]
+    ),
+    Capability(
+      toolName: "get_entity_timeline_tool",
+      title: "Get Entity Timeline",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Read a bounded multi-source timeline for one canonical entity.",
+      bullets: [
+      "Never exposes transcripts, OCR text, alias emails, playbook bodies, or trigger conditions.",
+      "Set include_history only when current knowledge is insufficient and closed/superseded/rejected ledger facts are actually needed.",
+      "The response never includes transcripts, OCR text, alias emails, playbook bodies, or trigger conditions."
+    ]
+    ),
+    Capability(
+      toolName: "save_playbook",
+      title: "Save Playbook",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Save a reusable step-by-step playbook for a recurring, multi-step workflow.",
+      bullets: [
+      "Use when the user asks to save a playbook, checklist, or repeatable procedure — never write it to the filesystem instead.",
+      "Call only after the multi-step workflow has actually been reconstructed end to end.",
+      "Call this — not a filesystem document and not create_memory — whenever the user asks to save a playbook, checklist, or repeatable procedure.",
+      "Call only after you have actually reconstructed the multi-step workflow end to end; do not call for a one-off task or a simple fact or preference."
+    ]
+    ),
+    Capability(
+      toolName: "create_standing_trigger",
+      title: "Create Standing Trigger",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Create a standing watch that notifies the user when a described condition recurs.",
+      bullets: [
+      "Only from explicit standing intent the user stated in this conversation, never an inferred habit.",
+      "Call this for an explicit standing-intent request such as 'watch for X and tell me' or 'let me know whenever Y happens'.",
+      "Never call it from a pattern you merely noticed in passive behavior; an inferred habit is not standing intent.",
+      "Embedding/semantic selectors are not supported; use keywords, regex, apps, windows, time, or calendar selectors instead."
+    ]
+    ),
+    Capability(
+      toolName: "close_fact",
+      title: "Close Fact",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Close a current ledger fact that is no longer true, with no replacement.",
+      bullets: [
+      "If a new fact replaces it, save the new fact instead so the ledger supersedes the old one.",
+      "Call this for 'that's no longer true' when nothing should replace the closed fact.",
+      "If something replaces it, that is an update: save the new fact instead so the ledger supersedes the old one, and do not call close_fact."
     ]
     ),
     Capability(

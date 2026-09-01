@@ -39,13 +39,24 @@ It seeds private-cloud mode only to make the real 103 + 101 audio frames flow;
 the provider/storage leaves are disabled because this harness has no cloud
 credentials.
 
-The pusher entrypoint (for inline scenarios) and the Cloud Tasks entrypoint
-(for durable scenarios) replace only these provider-side leaves:
+The Cloud Tasks entrypoint replaces only provider-side leaves below the real
+processing persistence and memory safety fence:
 
-- conversation LLM processing;
-- memory extraction;
+- conversation summary generation;
+- canonical memory provider/store work after `MemoryService.ensure_canonical_mutation_ready`;
 - external-integration delivery.
-- private-cloud audio storage (the queue and 101/103 frame handling remain real).
+- other credentialed derived effects such as vector writes and webhooks.
+
+The inline pusher entrypoint retains its older whole-processing and memory
+mocks for protocol/lifecycle race scenarios. Those scenarios are explicitly
+protocol evidence, not memory-safety evidence. The mandatory Cloud Tasks path
+sets `MEMORY_ENABLED=on`, executes the production parser and fence, then proves
+the post-fence leaf runs. A negative scenario unsets the flag and proves the
+durable job stays retryable, the post-fence leaf does not run, and the bounded
+`memory_fence` diagnostic is emitted without identifiers.
+
+Private-cloud audio storage is also local-only; the queue and 101/103 frame
+handling remain real.
 
 The real finalizer still persists through the lifecycle owner and claims and
 completes durable fanout. Inline pusher scenarios also send the real pusher

@@ -52,7 +52,7 @@ GKE_CONFIG_MAP_KEYS_PROD_ONLY = [
 
 STT_LITERALS = {
     'STT_PRERECORDED_MODEL': 'parakeet,modulate-velma-2',
-    'STT_SERVICE_MODELS': 'dg-nova-3,modulate-velma-2,parakeet',
+    'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,dg-nova-3,parakeet',
 }
 
 

@@ -55,6 +55,31 @@ enum RealtimeExternalRunTerminalPolicy {
   }
 }
 
+/// Journal status as a total function of the reducer's terminal reason.
+///
+/// The journal is the model's only memory across push-to-talk presses, and the
+/// kernel prompt calls it canonical. A turn that was cut off — barge-in, provider
+/// error, timeout — must therefore not be recorded as a completed answer: the
+/// model reads its own half-sentence back as finished work and re-asks or moves on.
+///
+/// `KernelJournalTurnStatus` has no `cancelled` case, so every non-success reason
+/// maps to `.failed` and the precise reason travels in `metadata.terminalReason`.
+/// That distinction matters for measurement (a barge-in is not a defect), never for
+/// whether the turn may claim completion.
+enum VoiceTurnJournalStatusPolicy {
+  static func status(for reason: VoiceTurnTerminalReason) -> KernelJournalTurnStatus {
+    switch reason {
+    case .success:
+      return .completed
+    case .tooShort, .silentRejected, .cancelled, .ownerChanged, .interruptedByBargeIn,
+      .explicitInterrupt, .cleanup, .permissionDenied, .captureFailed, .transcriptionFailed,
+      .providerFailed, .providerNoResponse, .hubWarmTimeout, .deferredCommitTimeout,
+      .bargeInReplacementTimeout, .toolTimeout, .playbackFailed, .journalFailed:
+      return .failed
+    }
+  }
+}
+
 enum RealtimeExternalRunPromptPolicy {
   enum Source: Equatable {
     case finalizedTranscript

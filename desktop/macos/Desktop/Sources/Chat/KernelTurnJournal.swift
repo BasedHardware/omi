@@ -285,7 +285,7 @@ extension KernelJournalTurn {
     case "task_chat", "workstream": owner = .taskChat(externalRefId)
     default: owner = .mainChat
     }
-    return ChatMessage(
+    var message = ChatMessage(
       id: turnId,
       clientTurnId: continuityKey,
       text: content,
@@ -305,6 +305,16 @@ extension KernelJournalTurn {
       journalStatus: status,
       hidesEmptyStreamingPlaceholder: metadata["hiddenUntilOutput"] as? Bool ?? false
     )
+    // Persisted served-model attribution: lets a journaled voice turn (or a
+    // restored one) show the Response Context Model row that in-memory
+    // metadata would otherwise lose.
+    if message.sender == .ai, let models = metadata["modelsUsed"] as? [String], !models.isEmpty {
+      message.metadata = MessageMetadata(
+        adapterId: origin == "realtime_voice" ? "realtime" : "",
+        modelsUsed: models
+      )
+    }
+    return message
   }
 
   private static func metadataObject(_ raw: String) -> [String: Any] {
@@ -323,16 +333,19 @@ extension ChatMessage {
     continuityKey: String? = nil,
     appId: String? = nil,
     sessionId: String? = nil,
-    messageSource: String? = nil
+    messageSource: String? = nil,
+    terminalReason: String? = nil
   ) -> KernelJournalTurnWrite {
     var metadata: [String: Any] = [:]
     if let continuityKey, !continuityKey.isEmpty { metadata["continuityKey"] = continuityKey }
+    if let models = self.metadata?.modelsUsed, !models.isEmpty { metadata["modelsUsed"] = models }
     if let notificationContext { metadata["notificationContext"] = notificationContext }
     // These rollback-compatible fields are consumed only by the kernel outbox
     // renderer for the existing /v2/desktop/messages POST shape.
     if let appId { metadata["appId"] = appId }
     if let sessionId { metadata["sessionId"] = sessionId }
     if let messageSource { metadata["messageSource"] = messageSource }
+    if let terminalReason { metadata["terminalReason"] = terminalReason }
     let metadataJSON: String
     let encodedMetadata: String
     if let data = try? JSONSerialization.data(withJSONObject: metadata),
@@ -360,8 +373,18 @@ extension ChatMessage {
     )
   }
 
-  func journalUpdate(status: KernelJournalTurnStatus? = nil) -> KernelJournalTurnUpdate {
-    KernelJournalTurnUpdate(
+  func journalUpdate(
+    status: KernelJournalTurnStatus? = nil,
+    terminalReason: String? = nil
+  ) -> KernelJournalTurnUpdate {
+    var metadataJSON: String?
+    if let terminalReason,
+      let data = try? JSONSerialization.data(withJSONObject: ["terminalReason": terminalReason]),
+      let encoded = String(data: data, encoding: .utf8)
+    {
+      metadataJSON = encoded
+    }
+    return KernelJournalTurnUpdate(
       turnId: id,
       status: status,
       content: text,
@@ -369,7 +392,7 @@ extension ChatMessage {
       appendContentBlocksJSON: nil,
       resourcesJSON: ChatResource.encodeResourcesForPersistence(displayResources) ?? "[]",
       appendResourcesJSON: nil,
-      metadataJSON: nil
+      metadataJSON: metadataJSON
     )
   }
 }

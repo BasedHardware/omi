@@ -1,4 +1,5 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/utils/batch_recording.dart';
 
 /// Lifecycle of a local recording captured in batch/offline mode.
@@ -41,6 +42,9 @@ class LocalRecording {
   /// Estimated duration in seconds (the backend computes the exact value).
   final int seconds;
 
+  /// Canonical start-location snapshot copied beside the native batch file.
+  final Geolocation? geolocation;
+
   /// Server job id once uploaded (HTTP 202); null while [LocalRecordingState.pending].
   final String? jobId;
 
@@ -55,6 +59,7 @@ class LocalRecording {
     required this.sizeBytes,
     required this.seconds,
     required this.state,
+    this.geolocation,
     this.jobId,
   });
 
@@ -73,6 +78,7 @@ class LocalRecording {
     required String filePath,
     required int sizeBytes,
     int? seconds,
+    Geolocation? geolocation,
     String? jobId,
     required LocalRecordingState state,
   }) {
@@ -86,6 +92,7 @@ class LocalRecording {
       frameSize: info.frameSize,
       sizeBytes: sizeBytes,
       seconds: seconds ?? info.estimateSeconds(sizeBytes),
+      geolocation: geolocation,
       jobId: jobId,
       state: state,
     );

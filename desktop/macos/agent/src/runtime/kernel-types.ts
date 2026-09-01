@@ -103,6 +103,8 @@ export interface BeginExternalSurfaceRunInput {
   sessionId: string;
   turnId: string;
   prompt: string;
+  /** The prompt is an internal instruction, not user speech. */
+  promptIsSynthetic?: boolean;
   mode: RunMode;
   clientId: string;
   requestId: string;

@@ -96,13 +96,13 @@ surfaces:
     gateway_lane_capability_needed: generated feature lanes
     migration_status: gateway_capable_central_flip
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
-  - surface: anthropic_agentic_chat
-    code_path: backend/utils/llm/gateway_anthropic.py:_GatewayAnthropicStream
-    current_provider_model: anthropic/chat_agent
-    request_shape: streaming, native tool calling, server-side web search
-    gateway_lane_capability_needed: native anthropic.messages surface with streaming and tools on omi:auto:chat-agent
-    migration_status: gateway_only_fail_closed; transport failures and an open circuit return a typed gateway-unavailable error without constructing or calling a direct Anthropic client
-    test_guardrail_coverage: backend/tests/unit/test_gateway_anthropic_client.py
+  - surface: openai_agentic_chat
+    code_path: backend/utils/retrieval/agentic.py:_run_openai_agent_stream
+    current_provider_model: gateway lane omi:auto:chat-agent (openai/gpt-5.6-luna); direct OpenAI only when OMI_LLM_CHAT_AGENT_ROUTE=direct
+    request_shape: streaming OpenAI chat-completions with function tools; independent tool_use blocks run concurrently
+    gateway_lane_capability_needed: openai.chat_completions surface with streaming and tools on omi:auto:chat-agent
+    migration_status: gateway_luna_chat_agent; Omi-managed traffic is get_llm('chat_agent') through the generated OpenAI lane and fails closed on gateway transport / open circuit. Anthropic Messages (gateway_anthropic / anthropic_messages router) remains for desktop specialist/BYOK callers, not this chat lane.
+    test_guardrail_coverage: backend/tests/unit/test_chat_agent_provider_retry.py and backend/tests/unit/test_chat_agent_loop_guard.py
   - surface: perplexity_web_search_tool
     code_path: backend/utils/retrieval/tools/perplexity_tools.py:perplexity_web_search_tool
     current_provider_model: perplexity/web_search

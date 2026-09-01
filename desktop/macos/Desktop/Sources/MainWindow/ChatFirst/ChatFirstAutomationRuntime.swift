@@ -162,23 +162,23 @@ final class ChatFirstAutomationRuntime: ObservableObject {
 
     registry.register(
       name: "chat_first_discuss_capture",
-      summary: "Start the ordinary main-Chat turn from the selected capture detail",
+      summary: "Stage the selected capture as a reference in the main-Chat composer",
       category: "chat",
       surfaces: ["conversations", "main_chat"],
-      safety: "chat_turn",
-      sideEffects: ["creates one main-Chat turn"]
+      safety: "local_ui_state",
+      sideEffects: ["navigates to main Chat", "stages one removable composer reference"]
     ) { [weak self] _ in
       guard let self, let discussCapture = self.discussCapture else {
         throw DesktopAutomationActionError.invalidParams("chat_first_capture_detail_not_visible")
       }
-      let messageCount = self.chatProvider.messages.count
       guard await discussCapture() else {
-        return ["capture_discussion_started": "false"]
+        return ["capture_reference_staged": "false"]
       }
       let chatIsVisible = await self.waitForVisibleRoute(.chat)
-      let turnStarted = await self.waitForMainChatTurnStart(sinceMessageCount: messageCount)
       return [
-        "capture_discussion_started": chatIsVisible && turnStarted ? "true" : "false"
+        "capture_reference_staged": chatIsVisible && !self.chatProvider.pendingComposerReferences.isEmpty
+          ? "true" : "false",
+        "composer_reference_count": "\(self.chatProvider.pendingComposerReferences.count)",
       ]
     }
 
@@ -282,6 +282,7 @@ final class ChatFirstAutomationRuntime: ObservableObject {
       "visible_task_count": "\(tasksStore.tasks.filter { !$0.isRetired }.count)",
       "completed_visible_task_count": "\(tasksStore.tasks.filter { !$0.isRetired && $0.completed }.count)",
       "capture_detail_visible": captureDetailIsVisible?() == true ? "true" : "false",
+      "composer_reference_count": "\(chatProvider.pendingComposerReferences.count)",
       "actionable_question_at_tail": actionableQuestionCard() ? "true" : "false",
       "actionable_question_available": questionOptionIsAvailable(for: .first) ? "true" : "false",
       "deferrable_question_available": questionOptionIsAvailable(for: .deferred) ? "true" : "false",
@@ -330,15 +331,6 @@ final class ChatFirstAutomationRuntime: ObservableObject {
       try? await Task.sleep(nanoseconds: 100_000_000)
     }
     return actionableQuestionCard()
-  }
-
-  private func waitForMainChatTurnStart(sinceMessageCount: Int) async -> Bool {
-    let deadline = Date().addingTimeInterval(5)
-    while Date() < deadline {
-      if chatProvider.isSending || chatProvider.messages.count > sinceMessageCount { return true }
-      try? await Task.sleep(nanoseconds: 50_000_000)
-    }
-    return chatProvider.isSending || chatProvider.messages.count > sinceMessageCount
   }
 
   private func waitForQuestionSelectionToBegin(

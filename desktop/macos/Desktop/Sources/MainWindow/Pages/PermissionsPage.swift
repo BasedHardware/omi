@@ -1042,9 +1042,17 @@ struct SystemAudioPermissionSection: View {
 struct NotificationPermissionSection: View {
   @ObservedObject var appState: AppState
 
-  // Check if permission was explicitly denied
+  // What the primary action should do right now — the same policy the
+  // onboarding notifications step and `AppState.requestNotificationPermission()`
+  // read, so this card can never disagree with what a click actually does.
+  private var enableAction: NotificationPermissionEnableAction {
+    NotificationPermissionPolicy.enableAction(for: appState.notificationAuthorizationStatus)
+  }
+
+  // Only a real `.denied` answer routes to "open System Settings" — `notDetermined`
+  // must render the native-prompt copy, never the "previously denied" dead end.
   private var isPermissionDenied: Bool {
-    return appState.isNotificationPermissionDenied()
+    enableAction == .openSystemSettings
   }
 
   // Colors based on state. A refuse is still "Not Granted" in the chip; System Settings

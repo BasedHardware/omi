@@ -20,6 +20,7 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     private let gapMs: Int64 = 30_000 // start a new file after this silence gap
 
     private var lastAppendMs: Int64 = 0
+    private var currentAudioURL: URL?
     /// Session total of frames durably written (each = one 20ms opus packet). Drives
     /// onBatchProgress; muted/interrupted/storage-full periods never advance it.
     private(set) var sessionFramesWritten: Int64 = 0
@@ -27,6 +28,24 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     /// emits a single onCaptureError per session transition.
     private var pendingStorageFullReport = false
     private var wasStorageFull = false
+
+    override func onOpenedLocked(_ partURL: URL) {
+        currentAudioURL = partURL.deletingPathExtension()
+        persistCurrentGeolocationSidecar()
+    }
+
+    private func persistCurrentGeolocationSidecar() {
+        guard let currentAudioURL,
+              let raw = UserDefaults.standard.string(forKey: "flutter.phoneBatchGeolocation"),
+              let data = raw.data(using: .utf8),
+              (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
+        else { return }
+
+        persistRecordingGeolocationSidecar(
+            rawGeolocation: raw,
+            audioURL: currentAudioURL
+        )
+    }
 
     /// `dir` is resolved once at bring-up (a missing/empty `flutter.batchAudioDir`
     /// fails the session with batch_dir_unavailable before this writer is created),
@@ -77,9 +96,13 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
         }
 
         if !isOpen {
-            let startSec = nowMs / 1000
             // codec opus_fs320 (20ms frames), 16kHz mono — mirrors the BLE/pendant
             // batch naming so the Dart scanner (`audio_omibatch*`) and backend both match.
+            var startSec = nowMs / 1000
+            while FileManager.default.fileExists(atPath: "\(dir)/audio_\(marker)_opus_fs320_16000_1_fs320_\(startSec).bin") ||
+                FileManager.default.fileExists(atPath: "\(dir)/audio_\(marker)_opus_fs320_16000_1_fs320_\(startSec).bin.\(partSuffix)") {
+                startSec += 1
+            }
             let name = "audio_\(marker)_opus_fs320_16000_1_fs320_\(startSec).bin.\(partSuffix)"
             guard openLocked(dirPath: dir, fileName: name, startSec: startSec, nowMs: nowMs) else {
                 noteStorageFullTransition() // open refused — most likely the free-space guard tripped
@@ -89,6 +112,9 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
         }
 
         guard writeFramesLocked(opusPackets) else { return }
+        // Location capture intentionally starts after native audio. Retry until
+        // its fenced preference arrives; an existing sidecar always wins.
+        persistCurrentGeolocationSidecar()
         sessionFramesWritten += Int64(opusPackets.count)
         lastAppendMs = nowMs
         maybeFsyncLocked(nowMs: nowMs)
@@ -111,6 +137,8 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     }
 
     override func onClosedLocked() {
+        persistCurrentGeolocationSidecar()
+        currentAudioURL = nil
         lastAppendMs = 0
     }
 

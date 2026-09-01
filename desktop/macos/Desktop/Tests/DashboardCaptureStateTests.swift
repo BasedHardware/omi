@@ -215,71 +215,19 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertFalse(exportMethod.contains("navigate(to: .apps)"))
   }
 
-  func testHomeMoreUsesAppsPopup() throws {
+  func testHomeMoreUsesTheCanonicalAppsPage() throws {
     let source = try dashboardSource()
-    let normalizedSource = normalizedWhitespace(source)
-    let popupMethod = try methodBody(named: "openAppsPopup", in: source)
-    let appSelectionMethod = try methodBody(named: "openAppFromAppsPopup", in: source)
-    let importSelectionMethod = try methodBody(named: "openImportConnectorFromAppsPopup", in: source)
-    let exportSelectionMethod = try methodBody(named: "openExportDestinationFromAppsPopup", in: source)
+    let openAppsMethod = try methodBody(named: "openAppsPage", in: source)
 
-    XCTAssertTrue(source.contains("@State private var isShowingAppsPopup = false"))
-    XCTAssertTrue(source.contains("@State private var selectedCatalogApp: OmiApp?"))
-    XCTAssertTrue(source.contains("@State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports"))
-    XCTAssertTrue(source.contains("@State private var appsPopupPresentationID = UUID()"))
-    XCTAssertTrue(source.contains("private func appsPopupOverlay("))
-    XCTAssertTrue(normalizedSource.contains("AppsPage( appProvider: appProvider, appState: appState,"))
-    XCTAssertTrue(source.contains("initialSection: appsPopupInitialSection"))
-    XCTAssertTrue(normalizedSource.contains("onSelectApp: { app in openAppFromAppsPopup(app) }"))
-    XCTAssertTrue(
-      normalizedSource.contains("onSelectConnector: { connector in openImportConnectorFromAppsPopup(connector) }"))
-    XCTAssertTrue(
-      normalizedSource.contains(
-        "onSelectDestination: { destination in openExportDestinationFromAppsPopup(destination) }"))
-    XCTAssertTrue(source.contains(".id(appsPopupPresentationID)"))
-    XCTAssertTrue(normalizedSource.contains("onDismiss: { dismissAppsPopup()"))
-    XCTAssertTrue(source.contains(".frame(width: popupSize.width, height: popupSize.height)"))
-    XCTAssertTrue(
-      source.contains(".clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))"))
-    // omi-test-quality: source-inspection -- static contract: whether Home hands its dim a dismiss
-    // action. `isShowingAppsPopup` is private `@State` on a view that needs five live providers to
-    // mount, so the popup cannot be raised and clicked from the test host. That a click on the dim
-    // then runs this action — anywhere on the host, including the undimmed band beside the paint —
-    // is exercised for real in `ShellModalScrimDismissTests`; this is only the wiring that reaches
-    // it. It reads Home's own file because Home is what must do the wiring.
-    XCTAssertTrue(
-      normalizedSource.contains("ShellModalScrim(onTap: dismissAppsPopup)"),
-      "The dim behind the apps popup must carry Home's dismiss action, or clicking outside the "
-        + "popup stops closing it")
-    XCTAssertTrue(
-      normalizedSource.contains("OverlayModalEscapeCatcher { dismissAppsPopup()"))
     XCTAssertTrue(
       source.contains(
-        "HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n        openAppsPopup(initialSection: .imports)"
+        "HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n        openAppsPage()"
       ))
-    XCTAssertTrue(
-      source.contains(
-        "HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n        openAppsPopup(initialSection: .exports)"
-      ))
-    XCTAssertFalse(source.contains("@State private var dashboardContentSize"))
-    XCTAssertFalse(source.contains(".dismissableSheet(isPresented: $isShowingAppsPopup)"))
-    XCTAssertFalse(source.contains("HomeMoreConnectorsSheet"))
-    XCTAssertFalse(source.contains("openAppsPage()"))
-    XCTAssertTrue(
-      popupMethod.contains("appProvider.clearFilters()"),
-      "Opening the Home popup must clear stale marketplace filters or they replace the Imports/Exports sections"
-    )
-    XCTAssertTrue(popupMethod.contains("appsPopupInitialSection = initialSection"))
-    XCTAssertTrue(popupMethod.contains("appsPopupPresentationID = UUID()"))
-    XCTAssertTrue(popupMethod.contains("appsPopupAcceptsInput = true"))
-    XCTAssertTrue(popupMethod.contains("isShowingAppsPopup = true"))
-    XCTAssertFalse(popupMethod.contains("navigate(to: .apps)"))
-    XCTAssertTrue(appSelectionMethod.contains("dismissAppsPopup()"))
-    XCTAssertTrue(appSelectionMethod.contains("presentCatalogApp(app)"))
-    XCTAssertTrue(importSelectionMethod.contains("dismissAppsPopup()"))
-    XCTAssertTrue(importSelectionMethod.contains("presentImportConnector(connector)"))
-    XCTAssertTrue(exportSelectionMethod.contains("dismissAppsPopup()"))
-    XCTAssertTrue(exportSelectionMethod.contains("presentExportDestination(destination)"))
+    XCTAssertFalse(source.contains("private func appsPopupOverlay("))
+    XCTAssertFalse(source.contains("@State private var isShowingAppsPopup"))
+    XCTAssertFalse(source.contains("\n        AppsPage("))
+    XCTAssertTrue(openAppsMethod.contains("appProvider.clearFilters()"))
+    XCTAssertTrue(openAppsMethod.contains("navigate(to: .apps)"))
   }
 
   func testHomeConnectSheetsUseHomeScopedPresentation() throws {
@@ -294,8 +242,8 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(
       source.contains("let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)"))
     XCTAssertTrue(source.contains(".position(x: contentWidth / 2, y: panelTop + panelHeight / 2)"))
-    // omi-test-quality: source-inspection -- static contract: same wiring as the apps popup above,
-    // for the sheet stacked on top of it, and unreachable for the same reason —
+    // omi-test-quality: source-inspection -- static contract: wiring for the contextual connector
+    // sheet, which is unreachable for the same reason —
     // `selectedImportConnector` and its siblings are private `@State`. The click that runs it is
     // behavioural in `ShellModalScrimDismissTests`.
     XCTAssertTrue(
@@ -308,17 +256,11 @@ final class DashboardCaptureStateTests: XCTestCase {
 
   func testHomeOverlaysStopHitTestingWhenDismissStarts() throws {
     let source = try dashboardSource()
-    let popupDismissMethod = try methodBody(named: "dismissAppsPopup", in: source)
     let connectDismissMethod = try methodBody(named: "dismissHomeConnectSheet", in: source)
 
-    XCTAssertTrue(source.contains("@State private var appsPopupAcceptsInput = false"))
     XCTAssertTrue(source.contains("@State private var homeConnectSheetAcceptsInput = false"))
-    XCTAssertTrue(source.contains(".allowsHitTesting(appsPopupAcceptsInput && !homeConnectSheetIsPresented)"))
-    XCTAssertTrue(source.contains("if appsPopupAcceptsInput && !homeConnectSheetIsPresented"))
     XCTAssertTrue(source.contains(".allowsHitTesting(homeConnectSheetAcceptsInput)"))
     XCTAssertTrue(source.contains("if homeConnectSheetAcceptsInput"))
-    XCTAssertTrue(popupDismissMethod.contains("appsPopupAcceptsInput = false"))
-    XCTAssertTrue(popupDismissMethod.contains("isShowingAppsPopup = false"))
     XCTAssertTrue(connectDismissMethod.contains("homeConnectSheetAcceptsInput = false"))
     XCTAssertTrue(connectDismissMethod.contains("selectedImportConnector = nil"))
     XCTAssertTrue(connectDismissMethod.contains("selectedExportDestination = nil"))
@@ -346,29 +288,21 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertFalse(source.contains("resultMessage = .failure(error.localizedDescription)"))
   }
 
-  func testAppsPageSupportsPopupDismissalAndFocusedSections() throws {
+  func testAppsPageOwnsItsCatalogAndDetailPresentations() throws {
     let appsPageSource = try appsSource()
 
-    XCTAssertTrue(appsPageSource.contains("enum AppsCatalogInitialSection"))
-    XCTAssertTrue(appsPageSource.contains("var initialSection: AppsCatalogInitialSection = .imports"))
-    XCTAssertTrue(appsPageSource.contains("var onDismiss: (() -> Void)? = nil"))
-    XCTAssertTrue(appsPageSource.contains("var onSelectApp: ((OmiApp) -> Void)? = nil"))
-    XCTAssertTrue(appsPageSource.contains("var onSelectConnector: ((ImportConnector) -> Void)? = nil"))
-    XCTAssertTrue(appsPageSource.contains("var onSelectDestination: ((MemoryExportDestination) -> Void)? = nil"))
-    XCTAssertTrue(appsPageSource.contains("private var dismissControl: some View"))
-    XCTAssertTrue(appsPageSource.contains("DismissButton(action: onDismiss)"))
-    XCTAssertTrue(appsPageSource.contains("case .imports:"))
-    XCTAssertTrue(appsPageSource.contains("case .exports:"))
+    XCTAssertFalse(appsPageSource.contains("enum AppsCatalogInitialSection"))
+    XCTAssertFalse(appsPageSource.contains("var initialSection:"))
+    XCTAssertFalse(appsPageSource.contains("var onSelectApp: ((OmiApp) -> Void)?"))
+    XCTAssertFalse(appsPageSource.contains("var onSelectConnector: ((ImportConnector) -> Void)?"))
+    XCTAssertFalse(appsPageSource.contains("var onSelectDestination: ((MemoryExportDestination) -> Void)?"))
     XCTAssertTrue(appsPageSource.contains("ImportsSection("))
     XCTAssertTrue(appsPageSource.contains("ExportsSection("))
     XCTAssertTrue(appsPageSource.contains("private func selectApp(_ app: OmiApp)"))
     XCTAssertTrue(appsPageSource.contains("private func selectConnector(_ connector: ImportConnector)"))
     XCTAssertTrue(appsPageSource.contains("private func selectDestination(_ destination: MemoryExportDestination)"))
-    XCTAssertTrue(appsPageSource.contains("onSelectApp(app)"))
     XCTAssertTrue(appsPageSource.contains("selectedApp = app"))
-    XCTAssertTrue(appsPageSource.contains("onSelectConnector(connector)"))
     XCTAssertTrue(appsPageSource.contains("selectedConnector = connector"))
-    XCTAssertTrue(appsPageSource.contains("onSelectDestination(destination)"))
     XCTAssertTrue(appsPageSource.contains("selectedExportDestination = destination"))
     XCTAssertTrue(appsPageSource.contains("if appProvider.apps.isEmpty && !appProvider.isLoading"))
     // Responsive layout was extracted into AppsHeaderRow (AppsPageHeaderControls.swift);
@@ -416,11 +350,6 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(escapeKeyHandler.contains("struct EscapeKeyHandler: NSViewRepresentable"))
     XCTAssertTrue(escapeKeyHandler.contains("NSEvent.addLocalMonitorForEvents(matching: .keyDown)"))
     XCTAssertTrue(escapeKeyHandler.contains("registration.window === window"))
-    XCTAssertTrue(
-      dashboard.contains("if appsPopupAcceptsInput && !homeConnectSheetIsPresented"),
-      "The apps popup owns Esc only while the connect sheet is not presented"
-    )
-    XCTAssertTrue(normalizedDashboard.contains("OverlayModalEscapeCatcher { dismissAppsPopup()"))
     XCTAssertTrue(
       normalizedDashboard.contains("OverlayModalEscapeCatcher { dismissHomeConnectSheet()"))
     XCTAssertFalse(

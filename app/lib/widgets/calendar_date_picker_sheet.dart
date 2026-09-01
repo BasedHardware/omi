@@ -49,7 +49,7 @@ CalendarDatePicker2Config getDefaultCalendarConfig({
 /// Extracted from two near-identical inline copies (search widget + home
 /// page shortcut button) so the range-picker behavior only needs to be
 /// correct in one place. The "Done" action intentionally uses a neutral
-/// (white) color per INV-UI-1 (see docs/product/invariants/brand-ui.md)
+/// (white) color per INV-UI-1 (see product/invariants/brand-ui.md)
 /// rather than the off-brand accent the two originals used, since this file
 /// already references that accent color for calendar highlighting.
 Future<void> showConversationDateRangePicker(BuildContext context) async {

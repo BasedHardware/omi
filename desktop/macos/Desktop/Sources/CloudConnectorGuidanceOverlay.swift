@@ -411,7 +411,7 @@ final class CloudConnectorGuidanceOverlay {
   }
 
   static func dragInstructionAccessibilityText(appName: String) -> String {
-    "Press and drag \(appName) into the Screen & System Audio Recording app list, then release"
+    "Press and drag \(appName) into the privacy permission app list, then release"
   }
 
   static func dragToGrantAutomationState(
@@ -607,6 +607,10 @@ final class CloudConnectorGuidanceOverlay {
 
   var automationWindow: NSWindow? {
     window
+  }
+
+  var isDragToGrantCardVisible: Bool {
+    window?.isVisible == true && lastAutomationState?["kind"] == "dragToGrant"
   }
 
   func automationState() -> [String: String] {
@@ -970,6 +974,12 @@ private struct ScreenRecordingDragCardView: View {
     let amount: CGFloat = hintUp ? 6 : 0
     return CGSize(width: direction.vector.width * amount, height: direction.vector.height * amount)
   }
+  private var iconGlowOpacity: Double {
+    reduceMotion ? 0.42 : (hintUp ? 0.54 : 0.34)
+  }
+  private var iconGlowScale: CGFloat {
+    reduceMotion ? 1.08 : (hintUp ? 1.18 : 1.04)
+  }
 
   var body: some View {
     ZStack {
@@ -982,16 +992,38 @@ private struct ScreenRecordingDragCardView: View {
 
       VStack(spacing: 7) {
         Image(systemName: direction.systemImage)
-          .scaledFont(size: 14, weight: .bold)
-          .foregroundColor(Ink.secondary.opacity(hintUp ? 1 : 0.6))
+          .scaledFont(size: 15, weight: .black)
+          .foregroundStyle(Color.white)
+          .padding(7)
+          .background(Circle().fill(Color.black.opacity(hintUp ? 0.9 : 0.78)))
+          .overlay(
+            Circle()
+              .stroke(Color.white.opacity(hintUp ? 0.95 : 0.78), lineWidth: 1.5)
+          )
+          .shadow(color: Color.black.opacity(0.65), radius: 4, y: 2)
           .offset(hintOffset)
 
-        AppBundleDragSource(icon: appIcon, appURL: appURL, targetState: targetState)
-          .frame(width: 64, height: 64)
-          .shadow(color: Color.black.opacity(0.58), radius: 12, y: 5)
-          .offset(iconHintOffset)
-          .help(CloudConnectorGuidanceOverlay.dragInstructionAccessibilityText(appName: appName))
-          .accessibilityLabel(CloudConnectorGuidanceOverlay.dragInstructionAccessibilityText(appName: appName))
+        ZStack {
+          RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(Ink.listeningGreen.opacity(iconGlowOpacity))
+            .frame(width: 72, height: 72)
+            .scaleEffect(iconGlowScale)
+            .blur(radius: 11)
+
+          RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(Ink.listeningGreen.opacity(hintUp ? 0.92 : 0.68), lineWidth: 2)
+            .frame(width: 70, height: 70)
+            .blur(radius: 1.5)
+
+          AppBundleDragSource(icon: appIcon, appURL: appURL, targetState: targetState)
+            .frame(width: 64, height: 64)
+            .shadow(color: Color.white.opacity(hintUp ? 0.38 : 0.22), radius: 5)
+            .shadow(color: Color.black.opacity(0.58), radius: 12, y: 5)
+        }
+        .frame(width: 80, height: 80)
+        .offset(iconHintOffset)
+        .help(CloudConnectorGuidanceOverlay.dragInstructionAccessibilityText(appName: appName))
+        .accessibilityLabel(CloudConnectorGuidanceOverlay.dragInstructionAccessibilityText(appName: appName))
 
         // On the glass, not on whatever is behind it. This copy floats over the *System Settings*
         // window, whose appearance this app does not control, so a bare run of ink plus a drop

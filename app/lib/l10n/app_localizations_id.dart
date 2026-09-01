@@ -9855,12 +9855,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
-  String get chatScopeToday => 'Hari ini';
-
-  @override
-  String get chatScopeThisWeek => 'Minggu ini';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Tentang: $title';
   }
@@ -9924,4 +9918,9 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Penyimpanan Pendant penuh dan masih dalam mode perekaman, sehingga audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Tidak direkam ($count)';
+  }
 }

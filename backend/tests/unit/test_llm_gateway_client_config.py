@@ -528,6 +528,58 @@ def test_perplexity_gateway_response_preserves_top_level_citations():
     assert 'https://example.com/source' in formatted
 
 
+def test_get_llm_chat_agent_uses_generated_auto_lane_in_gateway_mode(monkeypatch):
+    captured = {}
+    gateway = FakeChatModel(name='gateway', calls=[])
+    legacy = FakeChatModel(name='legacy', calls=[])
+
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
+        captured['lane_id'] = lane_id
+        captured['streaming'] = streaming
+        captured['feature'] = feature
+        return gateway
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'luna')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', fake_gateway)
+    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
+
+    result = clients.get_llm('chat_agent', streaming=True)
+
+    assert result is gateway
+    assert captured == {
+        'lane_id': feature_auto_lane_id('chat_agent'),
+        'streaming': True,
+        'feature': 'chat_agent',
+    }
+    assert captured['lane_id'] == 'omi:auto:chat-agent'
+    assert legacy.calls == []
+
+
+def test_get_llm_chat_agent_kill_switch_stays_on_direct_openai(monkeypatch):
+    captured = {}
+    gateway = FakeChatModel(name='gateway', calls=[])
+    legacy = FakeChatModel(name='legacy', calls=[])
+
+    def fake_gateway(*args, **kwargs):
+        captured['used_gateway'] = True
+        return gateway
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'direct')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', fake_gateway)
+    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
+
+    result = clients.get_llm('chat_agent', streaming=True)
+
+    assert result is legacy
+    assert captured == {}
+
+
 def test_chat_agent_route_direct_while_feature_mode_gateway(monkeypatch):
     """Chat can stay direct while other features use the gateway."""
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')

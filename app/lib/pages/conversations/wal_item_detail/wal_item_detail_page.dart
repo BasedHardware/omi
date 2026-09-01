@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:provider/provider.dart';
@@ -492,7 +493,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       }
     } catch (e) {
       if (mounted) {
-        _showSnackBar(context.l10n.transferFailedMessage(e.toString()), Colors.red);
+        _showSnackBar(context.l10n.transferFailedMessage(readableError(e)), Colors.red);
       }
     }
   }

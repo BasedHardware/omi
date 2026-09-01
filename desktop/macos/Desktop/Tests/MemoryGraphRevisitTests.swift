@@ -53,13 +53,6 @@ final class MemoryGraphRevisitTests: XCTestCase {
       MemoryHubDestination.destination(for: .conversations),
       .conversations
     )
-    XCTAssertEqual(
-      MemoryHubDestination.destination(
-        for: .conversations,
-        requestedRawValue: MemoryHubDestination.brainMap.rawValue
-      ),
-      .brainMap
-    )
     XCTAssertNil(MemoryHubDestination.destination(for: .tasks))
   }
 

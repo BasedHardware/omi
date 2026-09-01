@@ -34,20 +34,6 @@ class KnowledgeGraphApi {
     }
   }
 
-  static Future<void> deleteKnowledgeGraph() async {
-    final response = await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/knowledge-graph',
-      headers: {},
-      body: '{}',
-      method: 'DELETE',
-    );
-
-    if (response == null || response.statusCode != 200) {
-      throw Exception('Failed to delete knowledge graph: ${response?.body}');
-    }
-    wire.GeneratedDeleteKnowledgeGraphResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
   /// Polls the graph endpoint until the node count stabilizes or timeout is reached.
   /// Returns the final graph data.
   static Future<Map<String, dynamic>> waitForGraphStability({

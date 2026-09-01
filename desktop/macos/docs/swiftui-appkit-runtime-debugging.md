@@ -170,7 +170,7 @@ OMI_APP_NAME="omi-runtime-debug" ./run.sh --yolo --no-wait
 ## Worked example: chat scroll geometry
 
 The governing product contract is
-[`INV-CHAT-2`](../../../docs/product/invariants/chat-scroll-placement.md), and
+[`INV-CHAT-2`](../../../product/invariants/chat-scroll-placement.md), and
 the mounted boundary lives in
 `Desktop/Tests/ChatTranscriptGestureHarnessTests.swift`.
 

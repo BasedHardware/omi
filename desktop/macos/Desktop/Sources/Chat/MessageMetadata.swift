@@ -26,6 +26,10 @@ struct MessageMetadata: Equatable {
   var offeredToolCount: Int
   var adapterId: String
   var credentialScopeLabel: String
+  /// Served model identities observed on this turn's completions — captured
+  /// from the provider RESPONSE stream (e.g. the gateway lane's resolved
+  /// upstream model), never assumed from the request. Empty = unobserved.
+  var modelsUsed: [String]
 
   init(
     hasScreenshot: Bool = false,
@@ -39,7 +43,8 @@ struct MessageMetadata: Equatable {
     omittedTurnCount: Int = 0,
     offeredToolCount: Int = 0,
     adapterId: String = "",
-    credentialScopeLabel: String = ""
+    credentialScopeLabel: String = "",
+    modelsUsed: [String] = []
   ) {
     self.hasScreenshot = hasScreenshot
     self.screenshotSizeBytes = screenshotSizeBytes
@@ -53,6 +58,7 @@ struct MessageMetadata: Equatable {
     self.offeredToolCount = offeredToolCount
     self.adapterId = adapterId
     self.credentialScopeLabel = credentialScopeLabel
+    self.modelsUsed = modelsUsed
   }
 
   static func fromCompletedTurn(
@@ -61,7 +67,8 @@ struct MessageMetadata: Equatable {
     imageByteCount: Int?,
     toolNames: [String],
     sqlRowsReturned: Int,
-    sqlQueryCount: Int
+    sqlQueryCount: Int,
+    modelsUsed: [String] = []
   ) -> MessageMetadata {
     let allowedToolNames = snapshot.capabilities["allowedToolNames"] as? [String] ?? []
     return MessageMetadata(
@@ -76,7 +83,8 @@ struct MessageMetadata: Equatable {
       omittedTurnCount: snapshot.contextPlan.omittedTurnCount,
       offeredToolCount: allowedToolNames.count,
       adapterId: profile.adapterId,
-      credentialScopeLabel: Self.credentialLabel(profile.credentialScope)
+      credentialScopeLabel: Self.credentialLabel(profile.credentialScope),
+      modelsUsed: modelsUsed
     )
   }
 
@@ -97,6 +105,12 @@ struct MessageMetadata: Equatable {
 
   var offeredToolsSummary: String {
     offeredToolCount == 1 ? "1 tool" : "\(offeredToolCount) tools"
+  }
+
+  /// "Model" row: the observed served identities, comma-joined. Empty string
+  /// = none observed (the row is hidden rather than guessed).
+  var modelsSummary: String {
+    modelsUsed.joined(separator: ", ")
   }
 
   var pathSummary: String {

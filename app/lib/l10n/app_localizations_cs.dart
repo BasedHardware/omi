@@ -9846,12 +9846,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
-  String get chatScopeToday => 'Dnes';
-
-  @override
-  String get chatScopeThisWeek => 'Tento týden';
-
-  @override
   String chatScopeAbout(String title) {
     return 'O: $title';
   }
@@ -9914,4 +9908,9 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Úložiště Pendantu je plné a stále je v režimu nahrávání, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu zastavte nahrávání a poté znovu synchronizujte.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nezaznamenáno ($count)';
+  }
 }

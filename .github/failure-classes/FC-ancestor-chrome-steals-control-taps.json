@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-ancestor-chrome-steals-control-taps",
+  "violated_contract": "A control that owns a tap must remain the hit-test target for its own bounds, and a tap that cannot complete must surface a failure. An ancestor installed for an orthogonal concern — wrapping SelectionArea, a full-width jump-to-latest overlay, or a last-message min-height spacer — must not absorb those hits or shove the control under another surface. A lookup miss must not return silently.",
+  "canonical_prevention": "Keep text selection on markdown only so citation GestureDetectors are not SelectionArea descendants; size overlay chrome to the visible chip and pad the list so it does not cover sources; drop last-message min-height spacers that bury citations; resolve a cited conversation from the local map then fetch by id, and show a snackbar when the fetch returns null.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/chat_citation_taps_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/chat/**"
+  ],
+  "status": "open"
+}

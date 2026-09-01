@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class FirmwareUpdateStep {
@@ -74,7 +75,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
       widget.onUpdateStart();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.failedToStartUpdate(e.toString())), backgroundColor: Colors.red),
+        SnackBar(content: Text(context.l10n.failedToStartUpdate(readableError(e))), backgroundColor: Colors.red),
       );
     }
   }

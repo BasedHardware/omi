@@ -31,7 +31,7 @@ import tempfile
 from pathlib import Path
 
 # Docs whose references must resolve. Component AGENTS.md files are discovered.
-EXTRA_DOCS = ("CLAUDE.md", "PRODUCT.md", "docs/agents", ".cursor/cloud-agent-environment.md")
+EXTRA_DOCS = ("CLAUDE.md", "PRODUCT.md", ".github/agent-docs", ".cursor/cloud-agent-environment.md")
 
 SOURCE_SUFFIXES = {
     ".md", ".py", ".sh", ".yaml", ".yml", ".json", ".dart", ".swift",
@@ -41,7 +41,7 @@ SOURCE_SUFFIXES = {
 # Top-level directories that make a backticked token unambiguously a repo path.
 REPO_ROOTS = (
     ".github/", ".cursor/", "app/", "backend/", "desktop/", "docs/",
-    "infrastructure/", "omi/", "scripts/", "web/",
+    "infrastructure/", "omi/", "product/", "scripts/", "web/",
 )
 
 MD_LINK = re.compile(r"\[[^\]]*\]\(\s*(?!https?:|mailto:|#)([^)\s#]+)")
@@ -107,7 +107,11 @@ def collect_docs(repo: Path) -> list[Path]:
     for extra in EXTRA_DOCS:
         target = repo / extra
         if target.is_dir():
-            docs.extend(sorted(target.rglob("*.md")))
+            # Historical design notes under superpowers/ are not live agent
+            # pointers; scanning them would fail closed on stale eval paths.
+            docs.extend(
+                sorted(p for p in target.rglob("*.md") if "superpowers" not in p.parts)
+            )
         elif target.exists():
             docs.append(target)
     return docs

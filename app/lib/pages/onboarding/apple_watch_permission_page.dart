@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -158,7 +159,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
 
       if (mounted) {
         AppSnackbar.showSnackbar(
-          context.l10n.errorRequestingPermission(e.toString()),
+          context.l10n.errorRequestingPermission(readableError(e)),
           duration: const Duration(seconds: 3),
         );
       }
@@ -186,7 +187,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
     } catch (e) {
       if (mounted) {
         AppSnackbar.showSnackbar(
-          context.l10n.errorStartingRecording(e.toString()),
+          context.l10n.errorStartingRecording(readableError(e)),
           duration: const Duration(seconds: 3),
         );
       }

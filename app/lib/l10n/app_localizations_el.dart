@@ -9914,12 +9914,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Άνοιγμα καταστήματος';
 
   @override
-  String get chatScopeToday => 'Σήμερα';
-
-  @override
-  String get chatScopeThisWeek => 'Αυτή την εβδομάδα';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Σχετικά με: $title';
   }
@@ -9983,4 +9977,9 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Ο αποθηκευτικός χώρος του Pendant είναι πλήρης και βρίσκεται ακόμα σε λειτουργία εγγραφής, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την εγγραφή και μετά συγχρονίστε ξανά.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Δεν καταγράφηκε ($count)';
+  }
 }

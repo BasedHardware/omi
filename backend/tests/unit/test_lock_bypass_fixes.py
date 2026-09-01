@@ -863,22 +863,30 @@ class TestMcpSseLockRedaction:
     """M5: MCP SSE get_conversations must redact locked conversation structured data."""
 
     def test_mcp_sse_redacts_locked(self):
-        """MCP SSE execute_tool('get_conversations') must clear action_items/events for locked."""
-        import database.conversations as conversations_db
+        """MCP SSE conversation cards must expose no action items or events for locked rows."""
+        from routers import mcp_sse
 
-        conversations_db.get_conversations = MagicMock(
-            return_value=[_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
-        )
-
-        from routers.mcp_sse import execute_tool
-
-        result = execute_tool('test-uid', 'get_conversations', {})
+        conversations = [
+            _make_conversation(locked=True),
+            _make_conversation(locked=False, conversation_id='conv-2'),
+        ]
+        with patch.object(mcp_sse.conversations_db, 'get_mcp_conversation_cards', return_value=conversations) as fetch:
+            result = mcp_sse.execute_tool('test-uid', 'get_conversations', {})
         convs = result['conversations']
 
-        assert convs[0]['structured']['action_items'] == []
-        assert convs[0]['structured']['events'] == []
+        fetch.assert_called_once_with(
+            'test-uid',
+            20,
+            0,
+            start_date=None,
+            end_date=None,
+            categories=[],
+        )
+        assert 'action_items' not in convs[0]['structured']
+        assert 'events' not in convs[0]['structured']
         assert convs[0]['structured']['title'] == 'Test Conversation'
-        assert len(convs[1]['structured']['action_items']) == 1
+        assert 'action_items' not in convs[1]['structured']
+        assert 'events' not in convs[1]['structured']
 
     def test_mcp_sse_search_memories_filters_locked_and_backfills_limit(self):
         """MCP SSE search delegates filtering and limiting to universal authority."""

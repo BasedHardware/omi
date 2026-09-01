@@ -115,6 +115,90 @@ final class ChatResourceTests: XCTestCase {
     XCTAssertEqual(message.displayResources, [explicit])
   }
 
+  func testConversationReferenceRoundTripsAsADurableUserResource() throws {
+    let reference = ChatComposerReference(
+      kind: .conversation,
+      sourceID: "capture-42",
+      title: "Planning session",
+      preview: "Discussed the launch plan.",
+      momentTimestampMs: 74_000
+    )
+    let resource = ChatResource.conversation(reference)
+
+    let encoded = try XCTUnwrap(ChatResource.encodeResourcesForPersistence([resource]))
+    let decoded = try XCTUnwrap(ChatResource.decodeResourcesFromPersistence(encoded).first)
+
+    XCTAssertEqual(decoded.origin, .conversationReference)
+    XCTAssertEqual(decoded.id, "reference:conversation:capture-42")
+    XCTAssertEqual(decoded.conversationReference, reference)
+    XCTAssertEqual(decoded.title, "Planning session")
+    XCTAssertEqual(decoded.subtitle, "Conversation · 01:14")
+    XCTAssertTrue(decoded.canOpen)
+    XCTAssertFalse(decoded.canRevealInFinder)
+    XCTAssertNil(decoded.fileURL)
+  }
+
+  func testAcceptedUserMessageResourcesKeepFilesAndConversationPillsTogether() {
+    let attachment = ChatAttachment(
+      id: "file-local",
+      fileName: "notes.txt",
+      mimeType: "text/plain",
+      serverId: "file-server",
+      state: .uploaded
+    )
+    let reference = ChatComposerReference(
+      kind: .conversation,
+      sourceID: "capture-42",
+      title: "Planning session"
+    )
+
+    let resources = ChatResource.userMessageResources(
+      attachments: [attachment],
+      references: [reference]
+    )
+    let message = ChatMessage(
+      text: "Compare these",
+      sender: .user,
+      attachments: [attachment],
+      resources: resources
+    )
+
+    XCTAssertEqual(
+      message.displayResources.map(\.id),
+      [
+        "attachment:file-server", "reference:conversation:capture-42",
+      ])
+    XCTAssertEqual(message.displayResources.last?.conversationReference, reference)
+  }
+
+  @MainActor
+  func testUserJournalWritePersistsConversationPillAfterComposerClears() throws {
+    let reference = ChatComposerReference(
+      kind: .conversation,
+      sourceID: "capture-42",
+      title: "Planning session"
+    )
+    let message = ChatMessage(
+      id: "turn-user",
+      clientTurnId: "attempt-1",
+      text: "What stands out?",
+      sender: .user,
+      resources: [ChatResource.conversation(reference)]
+    )
+
+    let write = message.journalWrite(
+      origin: "typed",
+      status: .completed,
+      continuityKey: "attempt-1"
+    )
+    let persisted = try XCTUnwrap(
+      ChatResource.decodeResourcesFromPersistence(write.resourcesJSON).first
+    )
+
+    XCTAssertEqual(persisted.conversationReference, reference)
+    XCTAssertEqual(persisted.origin, .conversationReference)
+  }
+
   func testMessageMetadataRoundTripsArtifactResources() {
     let resource = ChatResource(
       id: "artifact:artifact-1",

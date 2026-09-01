@@ -33,6 +33,53 @@ final class ConversationDetailAutomationStateTests: XCTestCase {
     XCTAssertEqual(ConversationDetailView.visiblePane(transcriptOpen: true), .transcript)
   }
 
+  func testCanonicalDetailScopesCapturePlaybackToOmiTranscriptOnly() {
+    XCTAssertFalse(ConversationDetailView.showsCapturePlayback(for: .omi, in: .summary))
+    XCTAssertTrue(ConversationDetailView.showsCapturePlayback(for: .omi, in: .transcript))
+    XCTAssertFalse(ConversationDetailView.showsCapturePlayback(for: .desktop, in: .transcript))
+    XCTAssertFalse(ConversationDetailView.showsCapturePlayback(for: nil, in: .transcript))
+  }
+
+  func testDetailRequestGateRejectsCancelledAndSupersededWork() {
+    XCTAssertTrue(
+      ConversationDetailRequestGate.canApply(
+        requestGeneration: 2,
+        currentGeneration: 2,
+        isCancelled: false
+      ))
+    XCTAssertFalse(
+      ConversationDetailRequestGate.canApply(
+        requestGeneration: 1,
+        currentGeneration: 2,
+        isCancelled: false
+      ))
+    XCTAssertFalse(
+      ConversationDetailRequestGate.canApply(
+        requestGeneration: 2,
+        currentGeneration: 2,
+        isCancelled: true
+      ))
+  }
+
+  func testSameConversationVisibleRevisionRestartsCanonicalDetailLoading() {
+    let original = ConversationDetailRequestToken(
+      conversationID: "conversation-1",
+      updatedAt: Date(timeIntervalSince1970: 100),
+      title: "Original",
+      folderID: nil,
+      status: "completed"
+    )
+    let renamed = ConversationDetailRequestToken(
+      conversationID: "conversation-1",
+      updatedAt: Date(timeIntervalSince1970: 101),
+      title: "Renamed",
+      folderID: "folder-1",
+      status: "completed"
+    )
+
+    XCTAssertNotEqual(original, renamed)
+  }
+
   func testPendingOpenSurvivesUntilTheConversationsPageConsumesIt() {
     let state = ConversationDetailAutomationState()
 

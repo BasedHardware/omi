@@ -62,7 +62,7 @@ async def _collect_agentic_chunks(producer, callback_data=None):
         stack.enter_context(patch.object(agentic, '_convert_tools', lambda _core, _app: ([], {})))
         stack.enter_context(patch.object(agentic, '_messages_to_anthropic', lambda _messages: []))
         stack.enter_context(patch.object(agentic, '_inject_current_datetime', lambda messages, _block: messages))
-        stack.enter_context(patch.object(agentic, '_run_anthropic_agent_stream', producer))
+        stack.enter_context(patch.object(agentic, '_run_openai_agent_stream', producer))
         return [
             chunk
             async for chunk in agentic.execute_agentic_chat_stream(
@@ -410,7 +410,7 @@ async def test_agentic_setup_reads_run_off_loop():
     ), patch.object(
         agentic, '_inject_current_datetime', lambda anthropic_messages, block: []
     ), patch.object(
-        agentic, '_run_anthropic_agent_stream', fake_agent_stream
+        agentic, '_run_openai_agent_stream', fake_agent_stream
     ):
         chunks = []
         async for chunk in agentic.execute_agentic_chat_stream(
@@ -461,7 +461,7 @@ async def test_agentic_chat_uses_server_rollout_for_jit_gate_and_config():
     ), patch.object(
         agentic, '_inject_current_datetime', side_effect=lambda messages, _block: messages
     ), patch.object(
-        agentic, '_run_anthropic_agent_stream', new=fake_agent_stream
+        agentic, '_run_openai_agent_stream', new=fake_agent_stream
     ):
         chunks = [
             chunk
@@ -689,7 +689,7 @@ async def test_agentic_setup_budget_does_not_consume_first_event_deadline():
     ), patch.object(
         agentic, '_inject_current_datetime', lambda messages, _block: messages
     ), patch.object(
-        agentic, '_run_anthropic_agent_stream', quick_producer
+        agentic, '_run_openai_agent_stream', quick_producer
     ), patch.object(
         agentic, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 2.0
     ), patch.object(

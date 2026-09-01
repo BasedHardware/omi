@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional, Union, cast
 
 from google.cloud import firestore
 
-from ._client import db
+from ._client import data_plane_db as db
 import logging
 
 logger = logging.getLogger(__name__)

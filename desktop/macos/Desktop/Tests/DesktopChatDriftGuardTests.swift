@@ -188,7 +188,10 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     // top-navigation and the single QueryShellHome chat surface, while rich-block capability and
     // visible-transcript lifecycle remain threaded through the shared answer view.
     XCTAssertTrue(shellSource.contains("DesktopTopBar("))
-    XCTAssertTrue(shellSource.contains("case .chat:\n      QueryShellHome("))
+    // The shell keeps the modern chat surface in one shared destination so
+    // the legacy Dashboard alias cannot drift into a second implementation.
+    XCTAssertTrue(shellSource.contains("case .chat, .more(.dashboard):"))
+    XCTAssertTrue(shellSource.contains("private var chatDestination: some View"))
     XCTAssertFalse(shellSource.contains("case .chat:\n      DashboardPage("))
     XCTAssertTrue(shellSource.contains("forceModernPresentation: true"))
     XCTAssertTrue(shellSource.contains("chatFirstRichBlockContext: richBlockContext"))

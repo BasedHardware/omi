@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-loop-guard-aborts-collected-answer",
+  "violated_contract": "A chat-agent safety guard may emit the canned stuck abort only when the next tool call is an exact repeat of a recent (tool_name, canonical params) pair and no retrieval context has been collected. Treating shared defaults or overlapping keys as a loop, or showing \"stuck, rephrase\" after conversations_collected (or equivalent) is already non-empty, replaces a deliverable answer with a user-facing abort.",
+  "canonical_prevention": "Compare loop membership on exact canonical (tool_name, params) with None treated as missing. When a repeat is detected and collected results are non-empty, raise CollectedContextReady so the runner stops tools and lets the model answer. Keep the hard max_tool_calls and context-size caps. Pin the cases with behavioral tests: different queries sharing a window do not trip; identical params still guard; collected results raise CollectedContextReady; the canned stuck text is forbidden once results exist.",
+  "canonical_prevention_artifact": [
+    "backend/utils/retrieval/safety.py",
+    "backend/tests/unit/test_chat_agent_loop_guard.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/retrieval/safety.py",
+    "backend/utils/retrieval/agentic.py",
+    "backend/tests/unit/test_chat_agent_loop_guard.py"
+  ],
+  "status": "open"
+}

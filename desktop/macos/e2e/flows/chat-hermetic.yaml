@@ -24,6 +24,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/MessageMetadata.swift
   - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/StableChatCardHeader.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubbleSupport.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ToolActivityTimelineLayout.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
@@ -41,6 +42,9 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdownChatTypography.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+AutomationSnapshot.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge+ResponseContext.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+MemoryCreation.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+OrphanRepair.swift
@@ -49,6 +53,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/ChatComposerDraft.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatDraftScope.swift
   - desktop/macos/Desktop/Sources/Chat/SQLQueryResultProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/DesktopChatTimestampFormat.swift
   # The marker query enters AgentClient.Session through the serialized context
   # admission path before the exact stub reply is asserted below.
   - desktop/macos/Desktop/Sources/Chat/AgentContextAdmissionGate.swift
@@ -59,6 +64,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeJournalContracts.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeMessageKind.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+BackendRouting.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+JITKnowledgeToolsGate.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
 preconditions:

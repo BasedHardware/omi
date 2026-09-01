@@ -109,11 +109,6 @@ private struct DismissButtonPressStyle: ButtonStyle {
   }
 }
 
-enum AppsCatalogInitialSection {
-  case imports
-  case exports
-}
-
 /// The Apps surface contains three different catalog kinds. Keeping the kind
 /// explicit prevents marketplace filters from looking like they also refine
 /// local imports and memory exports.
@@ -210,12 +205,7 @@ struct AppsPage: View {
   @ObservedObject var connectorStatusStore: ImportConnectorStatusStore = ImportConnectorStatusStore()
   @ObservedObject private var automationPresentationCoordinator =
     DesktopAutomationPresentationCoordinator.shared
-  var initialSection: AppsCatalogInitialSection = .imports
   var handlesAutomationPresentations = false
-  var onDismiss: (() -> Void)? = nil
-  var onSelectApp: ((OmiApp) -> Void)? = nil
-  var onSelectConnector: ((ImportConnector) -> Void)? = nil
-  var onSelectDestination: ((MemoryExportDestination) -> Void)? = nil
   @State private var searchText = ""
   @State private var selectedApp: OmiApp?
   @State private var selectedConnector: ImportConnector?
@@ -352,27 +342,15 @@ struct AppsPage: View {
   }
 
   private func selectApp(_ app: OmiApp) {
-    if let onSelectApp {
-      onSelectApp(app)
-    } else {
-      selectedApp = app
-    }
+    selectedApp = app
   }
 
   private func selectConnector(_ connector: ImportConnector) {
-    if let onSelectConnector {
-      onSelectConnector(connector)
-    } else {
-      selectedConnector = connector
-    }
+    selectedConnector = connector
   }
 
   private func selectDestination(_ destination: MemoryExportDestination) {
-    if let onSelectDestination {
-      onSelectDestination(destination)
-    } else {
-      selectedExportDestination = destination
-    }
+    selectedExportDestination = destination
   }
 
   private func consumeAutomationPresentationCommand() {
@@ -459,7 +437,6 @@ struct AppsPage: View {
       },
       actions: {
         appsMoreMenu
-        dismissControl
       }
     )
   }
@@ -644,13 +621,6 @@ struct AppsPage: View {
   }
 
   @ViewBuilder
-  private var dismissControl: some View {
-    if let onDismiss {
-      DismissButton(action: onDismiss)
-    }
-  }
-
-  @ViewBuilder
   private var catalogContent: some View {
     switch selectedKind {
     case .imports:
@@ -731,21 +701,11 @@ struct AppsPage: View {
 
   @ViewBuilder
   private var localAndMarketplaceContent: some View {
-    switch initialSection {
-    case .imports:
-      ImportsSection(statusStore: connectorStatusStore) { connector in
-        selectConnector(connector)
-      }
-      ExportsSection(statuses: exportStatuses) { destination in
-        selectDestination(destination)
-      }
-    case .exports:
-      ExportsSection(statuses: exportStatuses) { destination in
-        selectDestination(destination)
-      }
-      ImportsSection(statusStore: connectorStatusStore) { connector in
-        selectConnector(connector)
-      }
+    ImportsSection(statusStore: connectorStatusStore) { connector in
+      selectConnector(connector)
+    }
+    ExportsSection(statuses: exportStatuses) { destination in
+      selectDestination(destination)
     }
 
     marketplaceSections

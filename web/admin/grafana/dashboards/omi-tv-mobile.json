@@ -2481,7 +2481,7 @@
     {
       "id": 36,
       "type": "text",
-      "title": "Floating bar sessions per user",
+      "title": "Floating bar queries per user",
       "gridPos": {
         "x": 0,
         "y": 42,

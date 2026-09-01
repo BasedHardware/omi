@@ -9839,12 +9839,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get accountCutoverOpenStore => 'Avaa kauppa';
 
   @override
-  String get chatScopeToday => 'Täna';
-
-  @override
-  String get chatScopeThisWeek => 'Sel nädalal';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Teave: $title';
   }
@@ -9907,4 +9901,9 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendanti mälu on täis ja see on endiselt salvestusrežiimis, seega salvestatud heli ei saa üle kanda. Salvestamise peatamiseks vajuta Pendanti nuppu ja seejärel sünkrooni uuesti.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Salvestamata ($count)';
+  }
 }

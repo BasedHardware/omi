@@ -65,6 +65,13 @@ class FilterBottomSheet extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Apps
+                      _buildSectionTitle(AppLocalizations.of(context).apps),
+                      const SizedBox(height: 12),
+                      _buildAuthorshipChip(context, provider),
+
+                      const SizedBox(height: 32),
+
                       // Rating
                       _buildSectionTitle(AppLocalizations.of(context).rating),
                       const SizedBox(height: 12),
@@ -202,6 +209,39 @@ class FilterBottomSheet extends StatelessWidget {
           ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildAuthorshipChip(BuildContext context, AppProvider provider) {
+    final isSelected = provider.isFilterSelected('My Apps', 'Apps');
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        GestureDetector(
+          onTap: () {
+            provider.addOrRemoveFilter('My Apps', 'Apps');
+            provider.applyFilters();
+            PlatformManager.instance.analytics.appsTypeFilter('My Apps', !isSelected);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.white.withValues(alpha: 0.22) : const Color(0xFF35343B),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              AppLocalizations.of(context).myApps,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isSelected ? Colors.white : Colors.grey.shade300,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

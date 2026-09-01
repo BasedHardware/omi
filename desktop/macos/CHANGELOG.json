@@ -2,6 +2,110 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.253",
+      "date": "2026-09-01",
+      "changes": [
+        "Every answer now shows which model actually produced it: the Response Context (i) popover — including on the latest message and on voice answers — gains a Model row reporting the served model observed on the response itself (e.g. the managed chat lane's real model), never the requested alias.",
+        "Stop meeting notes from labeling Telegram (and other native messaging-app) calls as Speaker 1 when the other party's name is on the call window."
+      ]
+    },
+    {
+      "version": "0.12.252",
+      "date": "2026-08-31",
+      "changes": [
+        "Fixed Interject reply cards shrinking into an unreadable notch island, and follow-up PTT no longer drops to a fallback voice that then fails"
+      ]
+    },
+    {
+      "version": "0.12.251",
+      "date": "2026-08-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.250",
+      "date": "2026-08-31",
+      "changes": [
+        "Fixed push-to-talk replies going silent after an audio device change"
+      ]
+    },
+    {
+      "version": "0.12.249",
+      "date": "2026-08-31",
+      "changes": [
+        "Connecting Calendar now signs you in with Google instead of relying on a Chrome-family browser session, so it works on Safari and Firefox too — and when a connection does fail, Omi tells you what went wrong instead of just \"try again\"",
+        "Stopped ambient proactive notifications when you have no standing watches"
+      ]
+    },
+    {
+      "version": "0.12.248",
+      "date": "2026-08-31",
+      "changes": [
+        "Desktop Chat now shows SQL and search times in your timezone instead of unlabeled UTC"
+      ]
+    },
+    {
+      "version": "0.12.247",
+      "date": "2026-08-31",
+      "changes": [
+        "Added a hold-to-reply hint, reading-time card timing, and voice feedback on proactive notifications (Interject, flag-gated). Hold-⌥ keeps the classification inject through PTT-up so Gemini can accept it when the activity window opens.",
+        "Added a notifications step to onboarding so you're actually asked once, instead of never getting proactive alerts with no way to grant access"
+      ]
+    },
+    {
+      "version": "0.12.246",
+      "date": "2026-08-30",
+      "changes": [
+        "Asking Omi by voice what's on your list now returns tasks you added without a date, and Omi no longer assumes you only speak your Mac's menu-bar language"
+      ]
+    },
+    {
+      "version": "0.12.245",
+      "date": "2026-08-30",
+      "changes": [
+        "Voice turns that get cut off are no longer recorded as finished answers, so Omi stops re-asking what you already said, and a task that fails to save is no longer spoken as saved"
+      ]
+    },
+    {
+      "version": "0.12.244",
+      "date": "2026-08-30",
+      "changes": [
+        "Stopped proactive chat rows from repeating the category (Focus, Insight, Memory) above the same word in the body"
+      ]
+    },
+    {
+      "version": "0.12.243",
+      "date": "2026-08-30",
+      "changes": [
+        "Startup timing is measured and reported again, from real process start, and no longer calls every clean launch a crash"
+      ]
+    },
+    {
+      "version": "0.12.242",
+      "date": "2026-08-29",
+      "changes": [
+        "Fixed chat responses sometimes stopping before the complete answer appeared",
+        "Unified conversation, task, app, and settings navigation around one familiar UI, with working transcript playback and durable attach-to-chat conversation references",
+        "Chat can now save playbooks, standing watches, and durable facts to your knowledge ledger",
+        "Fixed onboarding permission guidance so working access is never requested twice, Omi returns to the foreground after a successful drag, and the draggable app icon and arrow are easier to spot"
+      ]
+    },
+    {
+      "version": "0.12.241",
+      "date": "2026-08-29",
+      "changes": [
+        "Fixed just-in-time proactive triggers never syncing on launch because the trigger snapshot download waited for a screen-capture context visit; signed-in startups now reconcile the snapshot directly"
+      ]
+    },
+    {
+      "version": "0.12.240",
+      "date": "2026-08-29",
+      "changes": [
+        "Fixed just-in-time proactive triggers never activating for admitted accounts because the app ignored the server's rollout verdict and blocked its snapshot download on an unrelated sync step"
+      ]
+    },
+    {
       "version": "0.12.239",
       "date": "2026-08-29",
       "changes": [

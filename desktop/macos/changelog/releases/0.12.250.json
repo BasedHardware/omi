@@ -1,0 +1,7 @@
+{
+  "version": "0.12.250",
+  "date": "2026-08-31",
+  "changes": [
+    "Fixed push-to-talk replies going silent after an audio device change"
+  ]
+}

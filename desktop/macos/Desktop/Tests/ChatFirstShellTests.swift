@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import XCTest
 
 @testable import Omi_Computer
@@ -123,7 +125,7 @@ final class ChatFirstShellTests: XCTestCase {
     let focus = ChatFirstPendingFocus.capture(id: "capture-1", momentTs: 42)
     navigation.open(focus: focus)
     navigation.toggleSidebar()
-    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.route, .memories)
     XCTAssertEqual(navigation.pendingFocus, focus)
     XCTAssertEqual(navigation.focusedEntityID, "capture-1")
     XCTAssertFalse(navigation.isFocusedEntityAcknowledged)
@@ -136,7 +138,7 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertTrue(navigation.isFocusedEntityAcknowledged)
 
     let restored = ChatFirstShellNavigation(defaults: defaults)
-    XCTAssertEqual(restored.route, .conversations)
+    XCTAssertEqual(restored.route, .memories)
     XCTAssertTrue(restored.isSidebarCollapsed)
     XCTAssertNil(restored.pendingFocus)
     XCTAssertNil(restored.focusedEntityID)
@@ -152,9 +154,64 @@ final class ChatFirstShellTests: XCTestCase {
     let fetched = conversation(id: "older-meeting-42")
     navigation.open(conversation: fetched)
 
-    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.route, .memories)
     XCTAssertEqual(navigation.pendingConversation, fetched)
     XCTAssertNil(navigation.pendingFocus)
+  }
+
+  func testActivityConversationDeepLinkStaysOnTheHubOwnedConversationsDestination() throws {
+    let suiteName = "ChatFirstShellTests.activity-conversation-route.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    let fetched = conversation(id: "activity-meeting-42")
+    navigation.open(conversation: fetched, destination: .memories)
+
+    XCTAssertEqual(navigation.route, .memories)
+    XCTAssertEqual(navigation.pendingConversation, fetched)
+    XCTAssertNil(navigation.pendingFocus)
+  }
+
+  func testStagingConversationReferencePreservesDraftAndDoesNotSubmitATurn() throws {
+    let suiteName = "ChatFirstShellTests.capture-reference.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    let provider = ChatProvider()
+    provider.draftText = "Keep this draft"
+    let messageCount = provider.messages.count
+
+    navigation.stageCaptureReference(conversation(id: "capture-42"), using: provider)
+
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertEqual(provider.draftText, "Keep this draft")
+    XCTAssertEqual(provider.messages.count, messageCount)
+    XCTAssertEqual(provider.pendingComposerReferences.map(\.sourceID), ["capture-42"])
+  }
+
+  func testRuntimeOwnerChangeClearsTransientConversationAndFocusRouting() throws {
+    let suiteName = "ChatFirstShellTests.owner-change.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    navigation.open(conversation: conversation(id: "owner-a-conversation"))
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertNil(navigation.pendingConversation)
+
+    navigation.open(focus: .capture(id: "owner-a-capture", momentTs: 12))
+    let staleGeneration = navigation.beginConversationLinkResolution()
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertNil(navigation.pendingFocus)
+    XCTAssertNil(navigation.focusedEntityID)
+    XCTAssertFalse(navigation.isFocusedEntityAcknowledged)
+    XCTAssertFalse(navigation.isCurrentConversationLinkResolution(staleGeneration))
   }
 
   func testBackNavigationReturnsToChatFromPrimaryAndSettingsRoutes() throws {
@@ -183,19 +240,11 @@ final class ChatFirstShellTests: XCTestCase {
       .appendingPathComponent("Sources/MainWindow/ChatFirst/ChatFirstShell.swift")
     // omi-test-quality: source-inspection -- static contract: SwiftUI settings composition wiring
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
-    let moreDestination = try XCTUnwrap(
-      source.components(separatedBy: "private func moreDestination").last
-    )
-    let settingsTail = try XCTUnwrap(
-      moreDestination.components(separatedBy: "case .settings:").dropFirst().first
-    )
-    let settingsDestination = try XCTUnwrap(
-      settingsTail.components(separatedBy: "/// Existing Dashboard").first
-    )
-
-    XCTAssertTrue(settingsDestination.contains("SettingsSidebar("))
-    XCTAssertTrue(settingsDestination.contains("SettingsPage("))
-    XCTAssertTrue(settingsDestination.contains("navigation.handleEscapeNavigation()"))
+    XCTAssertTrue(source.contains("private var settingsDestination: some View"))
+    XCTAssertTrue(source.contains("SettingsSidebar("))
+    XCTAssertTrue(source.contains("SettingsPage("))
+    XCTAssertTrue(source.contains("case .permissions, .settings:"))
+    XCTAssertTrue(source.contains("navigation.handleEscapeNavigation()"))
   }
 
   func testMemoryFocusRequiresTheRequestedMemoryToBeVisibleBeforeAcknowledgement() {
@@ -381,7 +430,7 @@ final class ChatFirstShellTests: XCTestCase {
       navigation.completeConversationLinkResolution(
         conversation: conversation(id: "meeting-new"),
         generation: currentResolution))
-    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.route, .memories)
     XCTAssertEqual(navigation.pendingConversation?.id, "meeting-new")
   }
 
@@ -433,6 +482,7 @@ final class ChatFirstShellTests: XCTestCase {
   }
 
   func testPrimaryAutomationRouteIncludesGoalsWithoutRepurposingLegacyPages() {
+    XCTAssertEqual(ChatFirstRoute.primaryAutomationDestination(named: "conversations"), .memories)
     XCTAssertEqual(ChatFirstRoute.primaryAutomationDestination(named: "goals"), .goals)
     XCTAssertEqual(ChatFirstRoute.primaryAutomationDestination(named: "GOALS"), .goals)
     XCTAssertNil(ChatFirstRoute.primaryAutomationDestination(named: "dashboard"))
@@ -584,23 +634,16 @@ final class ChatFirstShellTests: XCTestCase {
 
   func testChatFirstGlassBoundaryWrapsOnlyRoutesWithoutTheirOwnPanels() {
     let wrapped: [ChatFirstRoute] = [
-      .conversations, .goals, .memories,
+      .goals,
       .more(.permissions), .more(.settings),
     ]
     let selfContained: [ChatFirstRoute] = [
-      .chat, .tasks, .more(.dashboard), .more(.rewind), .more(.apps),
+      .chat, .conversations, .tasks, .memories, .more(.dashboard), .more(.rewind),
+      .more(.apps),
     ]
 
     for route in wrapped {
       XCTAssertTrue(ChatFirstPageGlassLanePolicy.shouldWrap(route), route.stableName)
-      XCTAssertNotEqual(
-        ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: route),
-        SidebarNavItem.dashboard.rawValue,
-        route.stableName)
-      XCTAssertNotEqual(
-        ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: route),
-        SidebarNavItem.rewind.rawValue,
-        route.stableName)
     }
     for route in selfContained {
       XCTAssertFalse(ChatFirstPageGlassLanePolicy.shouldWrap(route), route.stableName)
@@ -609,9 +652,84 @@ final class ChatFirstShellTests: XCTestCase {
     // Every hub page carries the shared search panel and a navigation-first content panel.
     for destination in MemoryHubDestination.allCases {
       XCTAssertFalse(
-        ChatFirstPageGlassLanePolicy.shouldWrap(
-          .memories, memoryDestinationRawValue: destination.rawValue),
+        ChatFirstPageGlassLanePolicy.shouldWrap(.memories),
         destination.title)
+    }
+  }
+
+  /// Conversation links and the Memories tab mount the same hub-owned surface,
+  /// so both aliases pass through the shell without a second glass lane.
+  func testChatFirstConversationAliasesUseTheMemoryHubSurface() throws {
+    let size = CGSize(width: 1_400, height: 800)
+
+    let recorder = ChatFirstGlassFrameRecorder()
+    let host = NSHostingView(
+      rootView: ChatFirstPageGlassLane(route: .conversations) {
+        ChatFirstGlassFrameProbe(recorder: recorder)
+      }
+      .frame(width: size.width, height: size.height)
+    )
+    host.frame = NSRect(origin: .zero, size: size)
+    host.layoutSubtreeIfNeeded()
+
+    let placed = try XCTUnwrap(recorder.frame)
+    XCTAssertEqual(placed.width, size.width, accuracy: 0.5)
+    XCTAssertEqual(placed.height, size.height, accuracy: 0.5)
+  }
+
+  func testChatFirstMemoryHubKeepsItsOwnPanels() throws {
+    let size = CGSize(width: 1_400, height: 800)
+    let recorder = ChatFirstGlassFrameRecorder()
+    let host = NSHostingView(
+      rootView: ChatFirstPageGlassLane(route: .memories) {
+        ChatFirstGlassFrameProbe(recorder: recorder)
+      }
+      .frame(width: size.width, height: size.height)
+    )
+    host.frame = NSRect(origin: .zero, size: size)
+    host.layoutSubtreeIfNeeded()
+
+    let placed = try XCTUnwrap(recorder.frame)
+    XCTAssertEqual(placed.width, size.width, accuracy: 0.5)
+    XCTAssertEqual(placed.height, size.height, accuracy: 0.5)
+  }
+
+  func testEveryChatFirstRouteMountsTheGroundItsPolicyDeclares() throws {
+    let size = CGSize(width: 1_400, height: 800)
+    let cases: [(ChatFirstRoute, Bool)] = [
+      (.chat, false),
+      (.conversations, false),
+      (.tasks, false),
+      (.goals, true),
+      (.memories, false),
+      (.more(.dashboard), false),
+      (.more(.rewind), false),
+      (.more(.apps), false),
+      (.more(.permissions), true),
+      (.more(.settings), true),
+    ]
+
+    for (route, expectsSharedLane) in cases {
+      let recorder = ChatFirstGlassFrameRecorder()
+      let host = NSHostingView(
+        rootView: ChatFirstPageGlassLane(route: route) {
+          ChatFirstGlassFrameProbe(recorder: recorder)
+        }
+        .frame(width: size.width, height: size.height)
+      )
+      host.frame = NSRect(origin: .zero, size: size)
+      host.layoutSubtreeIfNeeded()
+
+      let placed = try XCTUnwrap(recorder.frame, route.stableName)
+      let expectedHeight =
+        expectsSharedLane
+        ? size.height - PageGlassLaneLayout.topGap - PageGlassLaneLayout.bottomGap
+        : size.height
+      XCTAssertEqual(placed.height, expectedHeight, accuracy: 0.5, route.stableName)
+      XCTAssertEqual(
+        ChatFirstPageGlassLanePolicy.shouldWrap(route),
+        expectsSharedLane,
+        route.stableName)
     }
   }
 
@@ -635,6 +753,44 @@ final class ChatFirstShellTests: XCTestCase {
           chatFirstRoute: route,
           lastPublishedMode: "connect"),
         "\(route.stableName) must not keep reporting the mode the stage had before we left it")
+    }
+  }
+}
+
+private final class ChatFirstGlassFrameRecorder: @unchecked Sendable {
+  private(set) var frame: CGRect?
+
+  func record(_ frame: CGRect) {
+    self.frame = frame
+  }
+}
+
+private struct ChatFirstGlassFrameProbe: View {
+  let recorder: ChatFirstGlassFrameRecorder
+
+  var body: some View {
+    ChatFirstGlassFrameProbeLayout(recorder: recorder) {
+      Color.clear
+    }
+  }
+}
+
+private struct ChatFirstGlassFrameProbeLayout: Layout {
+  let recorder: ChatFirstGlassFrameRecorder
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    CGSize(width: proposal.width ?? 0, height: proposal.height ?? 0)
+  }
+
+  func placeSubviews(
+    in bounds: CGRect,
+    proposal: ProposedViewSize,
+    subviews: Subviews,
+    cache: inout ()
+  ) {
+    recorder.record(bounds)
+    for subview in subviews {
+      subview.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
   }
 }

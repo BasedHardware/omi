@@ -731,7 +731,8 @@ extension RealtimeHubController {
     if live.supportsInputTranscriptionLanguage, !candidates.isEmpty {
       live.setInputTranscriptionLanguage(candidates.count == 1 ? candidates[0] : turnEarlyVerdictCode)
     }
-    live.beginInputTurn(
+    beginLiveInputTurn(
+      live,
       turnID: pending.turnID,
       responseID: pending.responseID,
       interrupting: pending.interrupting)
@@ -800,7 +801,9 @@ extension RealtimeHubController {
         ownerID: ownerID,
         userText: userText,
         assistantText: assistantText,
-        interrupted: false,
+        // A screen-evidence failure answer is a complete local reply, not a cut-off
+        // turn: the reducer terminates it `.success`.
+        terminal: .success,
         idempotencyKey: idempotencyKey,
         acceptedSpawnOwnerID: nil) ?? false
     }
@@ -809,14 +812,23 @@ extension RealtimeHubController {
   /// The kernel journal and its SQLite outbox are the only durable transcript
   /// authority. Swift may retry this idempotent RPC in-process, but never stores
   /// a second durable queue.
+  /// The single funnel every realtime voice turn is journaled through.
+  ///
+  /// `terminal` is required and is the only thing that decides the assistant row's
+  /// status: no caller can assert completion. It replaced an `interrupted: Bool`
+  /// that this body never read, which is why every cut-off turn — barge-in, provider
+  /// error, timeout — was sealed as a completed answer and fed back to the model as
+  /// canonical history on the next press.
   func persistTurnDirectlyToKernel(
     ownerID: String,
     userText: String,
     assistantText: String,
-    interrupted: Bool,
+    terminal: VoiceTurnTerminalReason,
     idempotencyKey: String,
     acceptedSpawnOwnerID: String?
   ) async -> Bool {
+    let journalStatus = VoiceTurnJournalStatusPolicy.status(for: terminal)
+    let terminalReason = journalStatus == .completed ? nil : terminal.rawValue
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
       log("RealtimeHub: refusing voice journal write after authenticated owner changed")
       return false
@@ -844,7 +856,9 @@ extension RealtimeHubController {
       ownerID: ownerID,
       userText: userText,
       assistantText: assistantText,
-      continuityKey: idempotencyKey
+      continuityKey: idempotencyKey,
+      assistantStatus: journalStatus,
+      terminalReason: terminalReason
     ) {
     case .completed(let accepted):
       return accepted
@@ -871,7 +885,9 @@ extension RealtimeHubController {
             userText: userText,
             assistantText: assistantText,
             origin: "realtime_voice",
-            continuityKey: idempotencyKey)
+            continuityKey: idempotencyKey,
+            assistantStatus: journalStatus,
+            terminalReason: terminalReason)
           guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
           if accepted { return true }
           if attempt == 0 { try? await Task.sleep(nanoseconds: 250_000_000) }
@@ -1093,7 +1109,7 @@ extension RealtimeHubController {
               ownerID: turn.ownerID,
               userText: turn.userText,
               assistantText: turn.assistantText,
-              interrupted: true,
+              terminal: .interruptedByBargeIn,
               idempotencyKey: turn.idempotencyKey,
               acceptedSpawnOwnerID: turn.acceptedSpawnOwnerID) ?? false
           }
@@ -1372,7 +1388,8 @@ extension RealtimeHubController {
       return
     }
     if let live = session {
-      live.beginInputTurn(
+      beginLiveInputTurn(
+        live,
         turnID: pending.turnID,
         responseID: pending.responseID,
         interrupting: false)
@@ -1448,7 +1465,8 @@ extension RealtimeHubController {
     if live.supportsInputTranscriptionLanguage, !candidates.isEmpty {
       live.setInputTranscriptionLanguage(candidates.count == 1 ? candidates[0] : turnEarlyVerdictCode)
     }
-    live.beginInputTurn(
+    beginLiveInputTurn(
+      live,
       turnID: pending.turnID,
       responseID: pending.responseID,
       interrupting: pending.interrupting)

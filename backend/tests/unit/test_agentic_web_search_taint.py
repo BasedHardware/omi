@@ -178,11 +178,15 @@ def test_unknown_producer_is_treated_as_private(monkeypatch):
 
 
 def test_withheld_path_is_recorded_once_per_loop(monkeypatch):
-    """Telemetry marks the transition, not every subsequent request."""
+    """Telemetry marks the transition, not every subsequent request.
+
+    The second memories call must use different params so the shared exact-repeat
+    loop guard does not abort the leftover Anthropic runner mid-loop.
+    """
     registry = {'get_memories_tool': _FakeTool('get_memories_tool', 'private')}
     turns = [
-        (_response('tool_use', [_tool_use('use_1', 'get_memories_tool')]), []),
-        (_response('tool_use', [_tool_use('use_2', 'get_memories_tool')]), []),
+        (_response('tool_use', [_tool_use('use_1', 'get_memories_tool', {'query': 'deck'})]), []),
+        (_response('tool_use', [_tool_use('use_2', 'get_memories_tool', {'query': 'passphrase'})]), []),
         (_response('end_turn', [_answer('done')]), [_text_delta('done')]),
     ]
     requests, fallbacks = _drive_loop(monkeypatch, turns=turns, registry=registry)
@@ -193,10 +197,13 @@ def test_withheld_path_is_recorded_once_per_loop(monkeypatch):
     assert len(fallbacks) == 1
 
 
-def test_convert_tools_still_offers_web_search():
-    """The gate belongs in the loop; composition keeps offering the capability."""
+def test_convert_tools_does_not_offer_anthropic_server_web_search():
+    """Live composition is OpenAI function tools; Anthropic web_search is leftover-only."""
     schemas, _ = agentic._convert_tools([], [])
-    assert WEB_SEARCH_NAME in [schema.get('name') for schema in schemas]
+    top_level_names = [schema.get('name') for schema in schemas]
+    function_names = [schema.get('function', {}).get('name') for schema in schemas if isinstance(schema, dict)]
+    assert WEB_SEARCH_NAME not in top_level_names
+    assert WEB_SEARCH_NAME not in function_names
 
 
 @pytest.mark.parametrize(
@@ -239,17 +246,23 @@ def test_anthropic_classifier_reads_wire_shape(messages, expected):
 
 
 def test_managed_lane_never_ships_the_provider_executed_tool():
-    """The gate is scoped to the direct Anthropic lane on purpose.
+    """The gate is scoped to the leftover Anthropic lane on purpose.
 
-    The managed (OpenAI-compatible) lane drops server tools when it converts the
-    schemas — they carry no ``input_schema`` — and reaches the public web through
-    the in-process Perplexity function tool instead, which does pass through
-    ``_execute_tool``. If that conversion ever started forwarding server tools,
-    the managed lane would acquire the same unguarded egress path with no gate in
-    front of it.
+    Live ``_convert_tools`` emits OpenAI function schemas only. The leftover
+    converter still drops Anthropic server tools (no ``input_schema``) so a
+    specialist fixture cannot smuggle ``web_search`` onto the managed lane.
+    Public web search on the live path is the in-process Perplexity function
+    tool, which does pass through ``_execute_tool``.
     """
     schemas, _ = agentic._convert_tools([], [])
-    converted = agentic._convert_anthropic_tools_to_openai(schemas)
+    live_names = [
+        schema.get('function', {}).get('name') if isinstance(schema.get('function'), dict) else schema.get('name')
+        for schema in schemas
+    ]
+    assert WEB_SEARCH_NAME not in live_names
 
-    assert WEB_SEARCH_NAME in [schema.get('name') for schema in schemas]
+    converted = agentic._convert_anthropic_tools_to_openai(
+        [agentic.WEB_SEARCH_TOOL, agentic.TOOL_SEARCH_TOOL, _schema('lookup')]
+    )
     assert WEB_SEARCH_NAME not in [tool['function']['name'] for tool in converted]
+    assert [tool['function']['name'] for tool in converted] == ['lookup']

@@ -7,13 +7,15 @@ unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY G
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/scripts/pre-commit"
+BACKEND_FORMATTER="$ROOT/scripts/backend-python-format"
 TMPDIR="$(mktemp -d)"
 cleanup() { rm -rf "$TMPDIR"; }
 trap cleanup EXIT
 
 REPO="$TMPDIR/repo"
 STUBS="$TMPDIR/stubs"
-mkdir -p "$REPO/web/frontend/src" "$REPO/app/lib" "$REPO/.github/workflows" "$REPO/.github/scripts" "$STUBS"
+mkdir -p "$REPO/web/frontend/src" "$REPO/app/lib" "$REPO/.github/workflows" "$REPO/.github/scripts" "$REPO/scripts" "$STUBS"
+cp "$BACKEND_FORMATTER" "$REPO/scripts/backend-python-format"
 git -C "$REPO" init -q
 git -C "$REPO" config user.email test@example.com
 git -C "$REPO" config user.name test
@@ -111,6 +113,22 @@ for f in "$@"; do
 done
 STUB
   chmod +x "$STUBS/flutter" "$STUBS/dart"
+}
+
+make_black_stub() {
+  cat >"$STUBS/black" <<'STUB'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  echo "black, 26.5.1 (compiled: yes)"
+  exit 0
+fi
+for arg in "$@"; do
+  case "$arg" in
+    *.py) printf 'PYTHON_FORMATTED\n' >"$arg" ;;
+  esac
+done
+STUB
+  chmod +x "$STUBS/black"
 }
 
 run_hook() {
@@ -287,5 +305,16 @@ printf 'const nolock = {b:1}\n' >"$REPO/web/nolock/src/a.ts"
 git -C "$REPO" add web/nolock/src/a.ts web/nolock/package.json
 expect_refusal "missing lockfile with same-major prettier"
 test "$(cat "$REPO/web/nolock/src/a.ts")" = "const nolock = {b:1}"
+
+# --- Backend Python uses the shared pinned formatter and re-stages its output ---
+git -C "$REPO" reset -q --hard
+mkdir -p "$REPO/backend"
+printf 'x=  1\n' >"$REPO/backend/example.py"
+git -C "$REPO" add backend/example.py
+make_black_stub
+run_hook >/dev/null
+test "$(cat "$REPO/backend/example.py")" = "PYTHON_FORMATTED"
+git -C "$REPO" diff --exit-code -- backend/example.py >/dev/null
+git -C "$REPO" diff --cached -- backend/example.py | grep -q 'PYTHON_FORMATTED'
 
 echo "pre-commit pinned-toolchain refusal tests passed"

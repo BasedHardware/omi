@@ -165,7 +165,7 @@ def test_provider_readiness_proof_cases_cover_oracle_p0_7_matrix_without_claimin
 
 def test_provider_readiness_docs_reference_non_claims_and_runner():
     root = Path(__file__).resolve().parents[2].parent
-    evidence_markers = (root / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text()
+    evidence_markers = (root / "backend" / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text()
 
     assert "vector_search_provider_readiness.py" in evidence_markers
     assert "provider pagination/refill" in evidence_markers

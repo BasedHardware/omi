@@ -7,11 +7,15 @@ import Foundation
 // execution profile, and durable run identity before Swift executes anything.
 
 enum RealtimeHubTools {
-  static func resolvedVoiceLanguages(
-    explicit codes: [String],
-    preferredLanguages: [String] = Locale.preferredLanguages
-  ) -> [String] {
-    let source = codes.isEmpty ? preferredLanguages : codes
+  /// Only what the user actually configured. There is deliberately no fallback to
+  /// `Locale.preferredLanguages`: the macOS UI language is a claim about the
+  /// interface, not about the person, and the line built from this asserts the user
+  /// speaks ONLY these languages and that anything else "was misheard". Pinning an
+  /// unconfigured bilingual user to their menu-bar language told the model to
+  /// reinterpret their real speech as a mishearing. The Windows port already omits
+  /// the line for an unconfigured user; this brings macOS to parity.
+  static func resolvedVoiceLanguages(explicit codes: [String]) -> [String] {
+    let source = codes
     var seen = Set<String>()
     var resolved: [String] = []
     for code in source {
@@ -25,8 +29,8 @@ enum RealtimeHubTools {
 
   /// One line telling the model which languages the user actually speaks, so a short or
   /// ambiguous utterance is never interpreted (or transcribed, where the provider allows
-  /// it) as some third language. Falls back to the Mac's preferred language when the user
-  /// has not configured an explicit voice-language set.
+  /// it) as some third language. Empty when the user has configured no voice languages —
+  /// a user who has claimed nothing must not have a claim made for them.
   private static func userLanguagesLine(_ codes: [String]) -> String {
     let resolved = resolvedVoiceLanguages(explicit: codes)
     guard !resolved.isEmpty else { return "" }

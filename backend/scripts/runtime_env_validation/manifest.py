@@ -14,6 +14,7 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     validate_listen_finalization_dispatch_contract as _validate_listen_finalization_dispatch_contract,
 )
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
+from scripts.runtime_env_capability_contracts import validate_conversation_finalization_capabilities  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
     _fetch_live_cloud_run_state,
@@ -43,6 +44,7 @@ from scripts.runtime_env_validation.common import (
     _validate_cloud_run_secret_entries,
     _validate_env_entries,
     _validate_forbidden_env_entries,
+    data_plane_project,
 )
 
 _MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV = {
@@ -286,8 +288,13 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     for forbidden_name in ('POSTHOG_HOST',):
         if forbidden_name in job_env:
             errors.append(ValidationError(scope, f'env {forbidden_name} belongs only on daily-memory-sweep-job'))
-    if 'POSTHOG_PROJECT_API_KEY' in job_secrets:
-        errors.append(ValidationError(scope, 'secret POSTHOG_PROJECT_API_KEY belongs only on daily-memory-sweep-job'))
+    if 'POSTHOG_PROJECT_API_KEY' not in job_secrets:
+        errors.append(
+            ValidationError(
+                scope,
+                'missing secret POSTHOG_PROJECT_API_KEY; ledger drain evaluates jit-processing-v1',
+            )
+        )
     if env == 'dev':
         job_flags = _as_config_dict(job.get('flags')) or {}
         for flag_name, expected_value in _MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS.items():
@@ -481,6 +488,34 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                     f'memory-maintenance-job {job_state!r}',
                 )
             )
+    return errors
+
+
+def _validate_jit_admission_surface_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Listen and maintenance must see PostHog; GKE listen must pin the data plane."""
+    errors: list[ValidationError] = []
+    expected_data_plane = data_plane_project(env_config)
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    listen = _as_config_dict(gke.get('backend-listen')) or {}
+    listen_env = _as_config_dict(listen.get('env')) or {}
+    listen_scope = f'{env}/gke/backend-listen'
+    posthog = _as_config_dict(listen_env.get('POSTHOG_PROJECT_API_KEY'))
+    posthog_secret = _as_config_dict(posthog.get('secret')) if posthog is not None else None
+    if posthog_secret is None or posthog_secret.get('key') != 'POSTHOG_PROJECT_API_KEY':
+        errors.append(
+            ValidationError(
+                listen_scope,
+                'missing secret POSTHOG_PROJECT_API_KEY; live finalization evaluates jit-processing-v1',
+            )
+        )
+    actual_data_plane = _manifest_literal_env_value(listen_env, 'OMI_FIRESTORE_DATA_PLANE_PROJECT')
+    if actual_data_plane != expected_data_plane:
+        errors.append(
+            ValidationError(
+                listen_scope,
+                f'OMI_FIRESTORE_DATA_PLANE_PROJECT must be {expected_data_plane!r}',
+            )
+        )
     return errors
 
 
@@ -707,10 +742,12 @@ def validate_runtime_env(
 
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    errors.extend(validate_conversation_finalization_capabilities(env, env_config))
     errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(validate_parakeet_admission_contract(env, env_config))
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
+    errors.extend(_validate_jit_admission_surface_contract(env, env_config))
     errors.extend(_validate_daily_memory_sweep_job_contract(env, env_config))
     errors.extend(_validate_account_deletion_dispatch_contract(env, env_config))
     errors.extend(_validate_listen_finalization_dispatch_contract(env, env_config))

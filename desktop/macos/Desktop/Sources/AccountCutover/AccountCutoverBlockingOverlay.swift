@@ -54,8 +54,7 @@ struct AccountCutoverBlockingOverlay: View {
     policy: DesktopUpdatePolicyResponse,
     onDownload: @escaping () -> Void
   ) -> some View {
-    Color.black.opacity(0.62)
-      .ignoresSafeArea()
+    ShellModalScrim(opacity: ShellModalScrimLayout.blocking)
       .zIndex(20)
     DesktopRequiredUpdatePrompt(policy: policy, onDownload: onDownload)
       .zIndex(21)

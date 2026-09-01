@@ -9830,12 +9830,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get accountCutoverOpenStore => 'Åbn butik';
 
   @override
-  String get chatScopeToday => 'I dag';
-
-  @override
-  String get chatScopeThisWeek => 'Denne uge';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Om: $title';
   }
@@ -9897,4 +9891,9 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Din Pendants lager er fuldt, og den er stadig i optagetilstand, så den gemte lyd kan ikke overføres. Tryk på Pendantens knap for at stoppe optagelsen, og synkroniser derefter igen.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Ikke optaget ($count)';
+  }
 }

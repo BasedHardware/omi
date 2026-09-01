@@ -9885,12 +9885,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get accountCutoverOpenStore => 'Áruház megnyitása';
 
   @override
-  String get chatScopeToday => 'Ma';
-
-  @override
-  String get chatScopeThisWeek => 'Ezen a héten';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Erről: $title';
   }
@@ -9954,4 +9948,9 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nincs rögzítve ($count)';
+  }
 }

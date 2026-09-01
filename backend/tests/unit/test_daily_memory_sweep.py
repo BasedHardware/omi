@@ -377,6 +377,46 @@ def test_runner_uses_local_completed_days_and_cursor(monkeypatch):
     assert second.status == "not_due"
 
 
+def test_unknown_slot_fails_that_candidate_not_the_day(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    written = []
+
+    def apply(_uid, _local_date, candidate, **_kwargs):
+        if candidate.candidate_id == "fact-bad-slot":
+            raise ValueError("unsupported knowledge ledger slot: mystery")
+        written.append(candidate.candidate_id)
+        return "mem-ok", None
+
+    monkeypatch.setattr("utils.memory.daily_memory_sweep._apply_candidate", apply)
+    monkeypatch.setattr("utils.memory.daily_memory_sweep._finish_receipt", lambda *args, **kwargs: None)
+
+    packet = DailySweepInput(
+        uid="user-1",
+        local_date=date(2026, 8, 23),
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        **_packet_kwargs(date(2026, 8, 23)),
+        candidates=(
+            _candidate(candidate_id="fact-bad-slot", source_id="conversation-bad"),
+            _candidate(candidate_id="fact-ok", source_id="conversation-ok", content="Alice ships Fridays", slot=None),
+        ),
+    )
+    output = run_daily_memory_sweep(
+        "user-1",
+        "America/New_York",
+        datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        {packet.local_date: packet},
+        db_client=db,
+        authority=SweepAuthorityState(enabled=True),
+    )
+
+    assert output.status == "committed"
+    assert output.skipped_count == 1
+    assert written == ["fact-ok"]
+
+
 def test_runner_limits_missed_day_catch_up(monkeypatch):
     db = _Db()
     control = _open_control(monkeypatch)

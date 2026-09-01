@@ -24,6 +24,7 @@ from config.stt_provider_policy import (
     modulate_supports_language,
     normalized_stt_language,
     parakeet_supports_language,
+    provider_for_model_token,
     provider_is_enabled,
     supports_live_multilingual_mode,
 )
@@ -479,8 +480,13 @@ def get_stt_service_for_language(
     *,
     surface: STTServingSurface = STTServingSurface.STREAMING,
     preferred_service: Optional[str] = None,
+    exclude: frozenset[str] = frozenset(),
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a serving STT provider allowed for the requested product surface.
+
+    ``exclude`` holds provider tokens that already died for this session, so a
+    mid-session failover asks for the next provider down the chain rather than
+    reselecting the one that just failed.
 
     A ``dg-*`` configuration serves from whichever Deepgram deployment the
     runtime is configured for — self-hosted when its endpoint is set, otherwise
@@ -503,6 +509,8 @@ def get_stt_service_for_language(
         parakeet_fallback_reason: Optional[str] = None
         for model in _models_with_preferred_service(models, preferred_service=preferred_service):
             model = model.strip()
+            if provider_for_model_token(model) in exclude:
+                continue
             if (
                 model.startswith('dg-')
                 and provider_is_enabled(deepgram_provider_for_runtime(is_dg_self_hosted), surface)

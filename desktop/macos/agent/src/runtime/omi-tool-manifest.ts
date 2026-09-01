@@ -15,7 +15,8 @@ export type OmiToolCondition =
   | "coordinatorOnly"
   | "typedChatCoordinatorOnly"
   | "screenContext"
-  | "screenContextOrOnboarding";
+  | "screenContextOrOnboarding"
+  | "jitKnowledgeToolsEnabled";
 export type OmiToolExecutorKind = "swiftTool" | "runtimeControl" | "nodeTool" | "localApiOnly";
 export type OmiToolTimeoutClass = "normal" | "long";
 export type OmiToolSurface = "desktop_chat" | "realtime_voice" | "onboarding" | "task_chat";
@@ -102,6 +103,17 @@ interface OmiToolSurfacePatch {
 export interface OmiToolProjectionContext {
   onboarding?: boolean;
   screenContext?: boolean;
+  /**
+   * Client-side UX gate for the backend JIT knowledge-ledger tools
+   * (search_knowledge, read_playbook, search_historical_facts,
+   * get_entity_timeline_tool, save_playbook, create_standing_trigger,
+   * close_fact). Sourced from `QueryMessage.jitKnowledgeToolsEnabled`, a
+   * per-turn boolean the desktop app computes from its own JIT rollout
+   * decision. The backend independently re-checks entitlement on every
+   * `/v1/agent/execute-tool` call, so an absent/stale value here only hides
+   * or shows tools — it never grants or denies access.
+   */
+  jitKnowledgeToolsEnabled?: boolean;
   executionRole?: "coordinator" | "leaf";
   surfaceKind?: string;
   chatFirstUi?: boolean;
@@ -426,7 +438,70 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         "Pass a clean standalone fact: strip the command and lightly clean pronouns. Do not invent names, dates, or facts the user did not ask to persist, and do not infer from the rest of the chat.",
         "Do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
         "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
+        "For a durable fact correction, a reusable multi-step playbook, or a standing watch request, use the knowledge-ledger tools instead.",
       ],
+    ),
+  },
+  search_knowledge: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Search Knowledge",
+      "Search current facts, playbook handles, and trigger descriptions in the knowledge ledger.",
+      [
+        "Use for durable user facts, saved playbooks, and standing triggers — not short-term memory or filesystem documents.",
+        "For a document result, call read_playbook with its memory id to load the full body.",
+      ],
+    ),
+  },
+  read_playbook: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Read Playbook",
+      "Load the full body of one current playbook found via search_knowledge.",
+      ["Only active, non-rejected, non-locked playbooks are readable."],
+    ),
+  },
+  search_historical_facts: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Search Historical Facts",
+      "Search closed, superseded, or historical canonical facts when current knowledge is insufficient.",
+      ["Rejected facts are audit-only negative evidence and must never be treated as true user knowledge."],
+    ),
+  },
+  get_entity_timeline_tool: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Get Entity Timeline",
+      "Read a bounded multi-source timeline for one canonical entity.",
+      ["Never exposes transcripts, OCR text, alias emails, playbook bodies, or trigger conditions."],
+    ),
+  },
+  save_playbook: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Save Playbook",
+      "Save a reusable step-by-step playbook for a recurring, multi-step workflow.",
+      [
+        "Use when the user asks to save a playbook, checklist, or repeatable procedure — never write it to the filesystem instead.",
+        "Call only after the multi-step workflow has actually been reconstructed end to end.",
+      ],
+    ),
+  },
+  create_standing_trigger: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Create Standing Trigger",
+      "Create a standing watch that notifies the user when a described condition recurs.",
+      ["Only from explicit standing intent the user stated in this conversation, never an inferred habit."],
+    ),
+  },
+  close_fact: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Close Fact",
+      "Close a current ledger fact that is no longer true, with no replacement.",
+      ["If a new fact replaces it, save the new fact instead so the ledger supersedes the old one."],
     ),
   },
   get_action_items: {
@@ -1125,6 +1200,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       "Confirm the save in one line. Never tell the user about validators or internal save rules.",
       "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
       "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory.",
+      "For a durable fact correction ('that's no longer true'), a reusable multi-step playbook, or a standing watch request, use the knowledge-ledger tools (close_fact / save_playbook / create_standing_trigger) instead of create_memory.",
     ],
     latency: "fast network",
     inputSchema: schema(
@@ -1146,6 +1222,203 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       "The Swift executor selects the new short-term-memory endpoint and legacy-memory fallback as supported by the installed app/backend.",
     ],
     adapters: piAndStdio("typedChatCoordinatorOnly"),
+  },
+  {
+    name: "search_knowledge",
+    label: "Search Knowledge",
+    description:
+      "Search current facts, playbook handles, and trigger descriptions in the user's knowledge ledger. Use for 'what do you know about X', 'do we have a playbook for Y', or checking whether a standing trigger already exists.",
+    promptSnippet: "search_knowledge - Search current ledger facts, playbooks, and triggers",
+    promptGuidelines: [
+      "For a durable user fact, correction, saved playbook, or standing watch, use the knowledge-ledger tools (this one, read_playbook, save_playbook, create_standing_trigger, close_fact) rather than create_memory or a filesystem document.",
+      "Use a comma-separated kinds filter (fact, document, trigger) to narrow to one ledger kind.",
+      "For a document result, call read_playbook with its memory id to load the full body.",
+    ],
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        query: { type: "string", description: "Search text; matches current facts, playbook handles, and trigger descriptions." },
+        kinds: { type: "string", description: "Optional comma-separated filter: fact, document, trigger." },
+        limit: { type: "number", description: "Maximum results, 1-20 (default 8)." },
+      },
+      ["query"],
+    ),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires authenticated backend access and the desktop JIT knowledge-ledger rollout."],
+    adapters: piAndStdio("jitKnowledgeToolsEnabled"),
+  },
+  {
+    name: "read_playbook",
+    label: "Read Playbook",
+    description:
+      "Load the full body of one current playbook returned by search_knowledge. Only active, non-rejected, non-locked playbooks are readable; other ids are reported unavailable.",
+    promptSnippet: "read_playbook - Load a playbook body found via search_knowledge",
+    promptGuidelines: ["Call only after search_knowledge returns a document handle; never guess a memory id."],
+    latency: "fast network",
+    inputSchema: schema(
+      { memory_id: { type: "string", description: "The playbook's memory id, from search_knowledge." } },
+      ["memory_id"],
+    ),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires authenticated backend access and the desktop JIT knowledge-ledger rollout."],
+    adapters: piAndStdio("jitKnowledgeToolsEnabled"),
+  },
+  {
+    name: "search_historical_facts",
+    label: "Search Historical Facts",
+    description:
+      "Search closed, superseded, or historical canonical facts when current knowledge is insufficient. Rejected facts are excluded by default and are audit-only negative evidence, never true user knowledge.",
+    promptSnippet: "search_historical_facts - Search bounded historical/closed facts",
+    promptGuidelines: [
+      "Call only after search_knowledge shows current knowledge is insufficient; do not call from historical keywords alone.",
+      "Facts marked rejected are audit-only negative evidence; request include_rejected only for an explicit audit and never treat those rows as true.",
+    ],
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        query: { type: "string", description: "Search text; matches exact lexical tokens in historical fact content." },
+        limit: { type: "number", description: "Maximum results, 1-20 (default 8)." },
+        offset: { type: "number", description: "Pagination offset for a repeated call (default 0)." },
+        include_rejected: {
+          type: "boolean",
+          description: "Include rejected facts for explicit audit only; never treat them as true (default false).",
+        },
+      },
+      ["query"],
+    ),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires authenticated backend access and the desktop JIT knowledge-ledger rollout."],
+    adapters: piAndStdio("jitKnowledgeToolsEnabled"),
+  },
+  {
+    name: "get_entity_timeline_tool",
+    label: "Get Entity Timeline",
+    description:
+      "Read a bounded multi-source timeline (ledger, conversations, calendar, screen) for one canonical entity such as 'user'/'me' or 'person:<stable_person_id>'.",
+    promptSnippet: "get_entity_timeline_tool - Read a bounded multi-source timeline for one entity",
+    promptGuidelines: [
+      "Set include_history only when current knowledge is insufficient and closed/superseded/rejected ledger facts are actually needed.",
+      "The response never includes transcripts, OCR text, alias emails, playbook bodies, or trigger conditions.",
+    ],
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        entity: { type: "string", description: "'user'/'me', or a stable reference such as 'person:<stable_person_id>' or 'project:<name>'." },
+        sources: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional subset of: ledger, conversations, calendar, screen.",
+        },
+        include_history: { type: "boolean", description: "Include closed, superseded, or historical ledger facts (default false)." },
+        include_rejected: { type: "boolean", description: "Include rejected facts for audit only; requires include_history (default false)." },
+        limit: { type: "number", description: "Maximum timeline entries (default 20)." },
+        start_date: { type: "string", description: "Optional ISO-8601 start date bound." },
+        end_date: { type: "string", description: "Optional ISO-8601 end date bound." },
+      },
+      ["entity"],
+    ),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires authenticated backend access and the desktop JIT knowledge-ledger rollout."],
+    adapters: piAndStdio("jitKnowledgeToolsEnabled"),
+  },
+  {
+    name: "save_playbook",
+    label: "Save Playbook",
+    description:
+      "Save a reusable step-by-step playbook for a recurring, multi-step workflow the user repeats, so it can be recalled verbatim next time.",
+    promptSnippet: "save_playbook - Save a reusable step-by-step playbook to the knowledge ledger",
+    promptGuidelines: [
+      "Call this — not a filesystem document and not create_memory — whenever the user asks to save a playbook, checklist, or repeatable procedure.",
+      "Call only after you have actually reconstructed the multi-step workflow end to end; do not call for a one-off task or a simple fact or preference.",
+    ],
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        description: {
+          type: "string",
+          description: "Short single-line handle for this playbook, e.g. 'Cut a release candidate' (at most 360 characters).",
+        },
+        body: { type: "string", description: "Full step-by-step playbook content (at most 24,000 characters)." },
+      },
+      ["description", "body"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires authenticated backend access and the desktop JIT knowledge-ledger rollout."],
+    adapters: piAndStdio("jitKnowledgeToolsEnabled"),
+  },
+  {
+    name: "create_standing_trigger",
+    label: "Create Standing Trigger",
+    description:
+      "Create a standing watch that notifies the user when a described condition recurs, using deterministic keyword/app/window/time/calendar selectors.",
+    promptSnippet: "create_standing_trigger - Create a standing watch for a described condition",
+    promptGuidelines: [
+      "Call this for an explicit standing-intent request such as 'watch for X and tell me' or 'let me know whenever Y happens'.",
+      "Never call it from a pattern you merely noticed in passive behavior; an inferred habit is not standing intent.",
+      "Embedding/semantic selectors are not supported; use keywords, regex, apps, windows, time, or calendar selectors instead.",
+    ],
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        description: {
+          type: "string",
+          description: "What to tell the user when this trigger fires, in your own words (at most 2000 characters).",
+        },
+        condition: {
+          type: "object",
+          properties: {},
+          additionalProperties: true,
+          description:
+            "Deterministic selector payload: match_mode, entity_aliases, keywords, regex, apps, windows, time, calendar.",
+        },
+      },
+      ["description", "condition"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires authenticated backend access and the desktop JIT knowledge-ledger rollout."],
+    adapters: piAndStdio("jitKnowledgeToolsEnabled"),
+  },
+  {
+    name: "close_fact",
+    label: "Close Fact",
+    description: "Close a current ledger fact that is no longer true, with no replacement fact.",
+    promptSnippet: "close_fact - Close a current fact that no longer holds",
+    promptGuidelines: [
+      "Call this for 'that's no longer true' when nothing should replace the closed fact.",
+      "If something replaces it, that is an update: save the new fact instead so the ledger supersedes the old one, and do not call close_fact.",
+    ],
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        memory_id: { type: "string", description: "The current ledger fact's memory id, e.g. from search_knowledge." },
+        reason: { type: "string", description: "Short explanation of why the fact no longer holds (kept for audit, at most 500 characters)." },
+      },
+      ["memory_id", "reason"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires authenticated backend access and the desktop JIT knowledge-ledger rollout."],
+    adapters: piAndStdio("jitKnowledgeToolsEnabled"),
   },
   {
     name: "get_action_items",
@@ -1943,6 +2216,7 @@ export function isToolAvailableForContext(
   }
   if (availability.condition === "screenContext") return context.screenContext === true;
   if (availability.condition === "screenContextOrOnboarding") return context.screenContext === true || context.onboarding === true;
+  if (availability.condition === "jitKnowledgeToolsEnabled") return context.jitKnowledgeToolsEnabled === true;
   return true;
 }
 

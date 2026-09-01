@@ -37,6 +37,7 @@ REQUIRED_SOURCE_IDS = {
     'mcp_tools',
     'developer_api',
     'backend_conversation_extraction',
+    'mobile_conversation_extraction',
     'desktop_screen_extraction',
     'sharing_imports',
     'recurrence',

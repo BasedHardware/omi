@@ -9679,12 +9679,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get accountCutoverOpenStore => 'ストアを開く';
 
   @override
-  String get chatScopeToday => '今日';
-
-  @override
-  String get chatScopeThisWeek => '今週';
-
-  @override
   String chatScopeAbout(String title) {
     return '$titleについて';
   }
@@ -9744,4 +9738,9 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendantのストレージが満杯で、まだ録音モードのままのため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return '未記録 ($count)';
+  }
 }

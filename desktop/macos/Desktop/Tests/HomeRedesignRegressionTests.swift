@@ -365,12 +365,135 @@ final class ChatRowPresentationTests: XCTestCase {
   func testNotificationJournalTextPreservesTheHeadlineAndBody() {
     XCTAssertEqual(
       FloatingControlBarManager.notificationJournalText(
-        title: "Insight",
-        body: "PR blocked, needs review"),
-      "Insight\nPR blocked, needs review")
+        title: "PR blocked, needs review",
+        body: "The deploy is waiting on your approval."),
+      "PR blocked, needs review\nThe deploy is waiting on your approval.")
     XCTAssertEqual(
       FloatingControlBarManager.notificationJournalText(title: "Meeting notes ready", body: ""),
       "Meeting notes ready")
+  }
+
+  /// Producers send the category word as `title` so the system banner has a
+  /// headline. The chat row already draws that category as a badge, so journaling
+  /// it again is the "Focus / Focus / meet with…" row observed in history.
+  func testJournalDropsACategoryTitleTheBadgeAlreadyNames() {
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Focus",
+        body: "Meet with Aryan Gupta for Omi project discussion",
+        kind: .suggestion),
+      "Meet with Aryan Gupta for Omi project discussion")
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Insight",
+        body: "PR blocked, needs review",
+        kind: .insight),
+      "PR blocked, needs review")
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Insight",
+        body: "PR blocked, needs review"),
+      "PR blocked, needs review")
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Memory Saved",
+        body: "New memory: David prefers morning reviews",
+        kind: .memory),
+      "David prefers morning reviews")
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "New Goal",
+        body: "Ship 200k users",
+        kind: .goal),
+      "Ship 200k users")
+    // A unique task headline is content, not the category word — keep it.
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Send the quarterly report",
+        body: "You promised it by 5pm.",
+        kind: .task),
+      "Send the quarterly report\nYou promised it by 5pm.")
+  }
+
+  /// Historical rows already contain the redundant first line; the renderer must
+  /// drop it even when the journaled text is never rewritten.
+  func testChatDisplayDropsARedundantCategoryFirstLineForEveryKind() {
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "Focus\nMeet with Aryan Gupta for Omi project discussion",
+        kind: .suggestion),
+      "Meet with Aryan Gupta for Omi project discussion")
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "**Focus**\nMeet with Aryan Gupta for Omi project discussion",
+        kind: .suggestion),
+      "Meet with Aryan Gupta for Omi project discussion")
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "Insight\nPR blocked, needs review",
+        kind: .insight),
+      "PR blocked, needs review")
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "Memory Saved\nNew memory: David prefers morning reviews",
+        kind: .memory),
+      "David prefers morning reviews")
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "New Goal\nShip 200k users",
+        kind: .goal),
+      "Ship 200k users")
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "Task\nSend the quarterly report",
+        kind: .task),
+      "Send the quarterly report")
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "Integration\nOmi can read your inbox",
+        kind: .integration),
+      "Omi can read your inbox")
+    // Unique headlines stay, including when they share a function word with the badge.
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "Send the quarterly report\nYou promised it by 5pm.",
+        kind: .task),
+      "Send the quarterly report\nYou promised it by 5pm.")
+  }
+
+  func testFloatingBarCardPromotesTheMessageWhenTheTitleIsCategoryChrome() {
+    let focus = FloatingControlBarManager.notificationCardCopy(
+      title: "Focus",
+      message: "Meet with Aryan Gupta for Omi project discussion",
+      kind: .suggestion)
+    XCTAssertEqual(focus.caption, "Focus")
+    XCTAssertEqual(focus.heading, "Meet with Aryan Gupta for Omi project discussion")
+    XCTAssertNil(focus.detail)
+    XCTAssertEqual(focus.systemImage, ProactiveNotificationBadge.suggestionSystemImage)
+
+    let insight = FloatingControlBarManager.notificationCardCopy(
+      title: "Insight",
+      message: "PR blocked, needs review",
+      kind: .insight)
+    XCTAssertEqual(insight.caption, "Insight")
+    XCTAssertEqual(insight.heading, "PR blocked, needs review")
+    XCTAssertNil(insight.detail)
+
+    let memory = FloatingControlBarManager.notificationCardCopy(
+      title: "Memory Saved",
+      message: "New memory: David prefers morning reviews",
+      kind: .memory)
+    XCTAssertEqual(memory.caption, "Memory")
+    XCTAssertEqual(memory.heading, "David prefers morning reviews")
+    XCTAssertNil(memory.detail)
+
+    let task = FloatingControlBarManager.notificationCardCopy(
+      title: "Send the quarterly report",
+      message: "You promised it by 5pm.",
+      kind: .task)
+    XCTAssertNil(task.caption)
+    XCTAssertEqual(task.heading, "Send the quarterly report")
+    XCTAssertEqual(task.detail, "You promised it by 5pm.")
   }
 
   /// The director's copy contract makes the title and the message both name the same

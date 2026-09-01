@@ -11,6 +11,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistantTelemetry.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistantTelemetry.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationDeliveryTelemetry.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/MeetingActionItemBannerService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationSpeech.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/FloatingBarNotificationPreviewPolicy.swift

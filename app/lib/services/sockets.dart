@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/logger.dart';
@@ -19,7 +20,9 @@ abstract class ISocketService {
     required String language,
     bool force = false,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   });
 
   Future<TranscriptSegmentSocketService?> speechProfile({
@@ -55,7 +58,9 @@ class SocketServicePool extends ISocketService {
     required String language,
     bool force = false,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async {
     await _mutex.acquire();
     try {
@@ -66,7 +71,9 @@ class SocketServicePool extends ISocketService {
           _socket?.codec == codec &&
           _socket?.sampleRate == sampleRate &&
           _socket?.state == SocketServiceState.connected &&
-          _socket?.sttConfigId == sttConfigId) {
+          _socket?.sttConfigId == sttConfigId &&
+          _socket?.geolocation?.time == geolocation?.time &&
+          _socket?.clientConversationId == clientConversationId) {
         Logger.debug("Reusing existing socket connection");
         return _socket;
       }
@@ -85,6 +92,8 @@ class SocketServicePool extends ISocketService {
           language,
           customSttConfig,
           source: source,
+          geolocation: geolocation,
+          clientConversationId: clientConversationId,
         );
       } else {
         _socket = TranscriptSocketServiceFactory.createDefault(
@@ -93,6 +102,8 @@ class SocketServicePool extends ISocketService {
           language,
           source: source,
           sttConfigId: sttConfigId,
+          geolocation: geolocation,
+          clientConversationId: clientConversationId,
         );
       }
 
@@ -114,7 +125,9 @@ class SocketServicePool extends ISocketService {
     required String language,
     bool force = false,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async {
     Logger.debug(
       "socket conversation > $codec $sampleRate $force source: $source customStt: ${customSttConfig?.provider}",
@@ -125,7 +138,9 @@ class SocketServicePool extends ISocketService {
       language: language,
       force: force,
       source: source,
+      clientConversationId: clientConversationId,
       customSttConfig: customSttConfig,
+      geolocation: geolocation,
     );
   }
 

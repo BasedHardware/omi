@@ -18339,18 +18339,6 @@ abstract class AppLocalizations {
   /// **'Open store'**
   String get accountCutoverOpenStore;
 
-  /// Chat timeframe scope chip for today
-  ///
-  /// In en, this message translates to:
-  /// **'Today'**
-  String get chatScopeToday;
-
-  /// Chat timeframe scope chip for this week
-  ///
-  /// In en, this message translates to:
-  /// **'This week'**
-  String get chatScopeThisWeek;
-
   /// Chat scope chip when asking about a specific conversation
   ///
   /// In en, this message translates to:
@@ -18458,6 +18446,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
   String get pendantFullSyncBlocked;
+
+  /// Header for the calendar capture-gap group in the conversations list
+  ///
+  /// In en, this message translates to:
+  /// **'Not captured ({count})'**
+  String conversationsNotCapturedCount(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

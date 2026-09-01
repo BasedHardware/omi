@@ -63,7 +63,7 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     let normalized = target.lowercased().replacingOccurrences(of: "-", with: "_")
     switch normalized {
     case "chat": return .chat
-    case "conversations": return .conversations
+    case "conversations": return .memories
     case "tasks": return .tasks
     case "goals": return .goals
     case "memories": return .memories
@@ -131,7 +131,7 @@ enum ChatFirstPendingFocus: Equatable, Sendable {
     switch self {
     case .task: return .tasks
     case .goal: return .goals
-    case .capture: return .conversations
+    case .capture: return .memories
     case .memory: return .memories
     }
   }
@@ -163,7 +163,6 @@ enum ChatFirstDiscussionContext: Equatable, Sendable {
   case tasks
   case goals
   case goal(id: String)
-  case capture(id: String, momentTimestamp: TimeInterval?)
 
   var userMessage: String {
     switch self {
@@ -173,11 +172,6 @@ enum ChatFirstDiscussionContext: Equatable, Sendable {
       return "Help me create a goal."
     case .goal(let id):
       return "Help me continue working on goal \(id)."
-    case .capture(let id, let momentTimestamp):
-      if let momentTimestamp {
-        return "Discuss Omi capture \(id) at \(Int(momentTimestamp)) seconds."
-      }
-      return "Discuss Omi capture \(id)."
     }
   }
 }
@@ -220,6 +214,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   private let analytics: @MainActor (ChatFirstAnalyticsEvent) -> Void
   private var goalLinkResolutionGeneration: UInt = 0
   private var conversationLinkResolutionGeneration: UInt = 0
+  private nonisolated(unsafe) var ownerChangeObserver: NSObjectProtocol?
 
   init(
     defaults: UserDefaults = .standard,
@@ -246,6 +241,19 @@ final class ChatFirstShellNavigation: ObservableObject {
     lastAcknowledgedFocusKind = nil
     focusedEntityID = nil
     isFocusedEntityAcknowledged = false
+    ownerChangeObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange, object: nil, queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.resetOwnerScopedTransientState()
+      }
+    }
+  }
+
+  deinit {
+    if let ownerChangeObserver {
+      NotificationCenter.default.removeObserver(ownerChangeObserver)
+    }
   }
 
   func selectPrimary(
@@ -320,10 +328,18 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// Opens a conversation whose detail was already validated by ID. Keeping
   /// the fetched record on the navigation owner lets the Conversations page
   /// present it even when the paginated list does not currently contain it.
+  ///
+  /// Every caller defaults to the Memory hub, which owns the only
+  /// ConversationsPageHost and navigation chrome.
   func open(conversation: ServerConversation) {
+    open(conversation: conversation, destination: .memories)
+  }
+
+  func open(conversation: ServerConversation, destination: ChatFirstRoute) {
+    guard destination.isPrimaryDestination else { return }
     guard !conversation.id.isEmpty else { return }
     invalidateLinkResolutions()
-    route = .conversations
+    route = destination
     visibleRoute = nil
     pendingFocus = nil
     pendingFocusDestination = nil
@@ -331,7 +347,7 @@ final class ChatFirstShellNavigation: ObservableObject {
     isFocusedEntityAcknowledged = false
     pendingConversation = conversation
     persistNavigation()
-    analytics(.routeEntered(route: .conversations, origin: .chatDeeplink))
+    analytics(.routeEntered(route: destination.analyticsRoute, origin: .chatDeeplink))
   }
 
   /// A Goal link validates asynchronously before it opens a typed focus. The
@@ -385,6 +401,29 @@ final class ChatFirstShellNavigation: ObservableObject {
     }
   }
 
+  /// Opens the canonical main chat with a conversation source staged in its
+  /// composer. The existing draft is intentionally untouched and no turn is
+  /// submitted until the user types and presses Send.
+  func stageCaptureReference(
+    _ conversation: ServerConversation,
+    using chatProvider: ChatProvider,
+    momentTimestamp: TimeInterval? = nil
+  ) {
+    let preview =
+      conversation.structured.overview.isEmpty
+      ? (conversation.transcriptSegments.first?.text ?? "")
+      : conversation.structured.overview
+    chatProvider.stageComposerReference(
+      ChatComposerReference(
+        kind: .conversation,
+        sourceID: conversation.id,
+        title: conversation.displayTitle,
+        preview: preview,
+        momentTimestampMs: momentTimestamp.map { Int($0 * 1_000) }
+      ))
+    selectPrimary(.chat, origin: .chatDeeplink)
+  }
+
   @discardableResult
   func acknowledgeFocus(_ focus: ChatFirstPendingFocus) -> Bool {
     guard route == pendingFocusDestination, pendingFocus == focus else { return false }
@@ -420,7 +459,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   func selectLegacyDestination(_ item: SidebarNavItem) {
     switch item {
     case .dashboard: selectPrimary(.chat)
-    case .conversations: selectPrimary(.conversations)
+    case .conversations: selectPrimary(.memories)
     case .memories: selectPrimary(.memories)
     case .tasks: selectPrimary(.tasks)
     case .rewind: selectMore(.rewind)
@@ -440,6 +479,16 @@ final class ChatFirstShellNavigation: ObservableObject {
     pendingFocusDestination = nil
     focusedEntityID = nil
     isFocusedEntityAcknowledged = false
+  }
+
+  /// Persisted route preference is owner-neutral, but fetched records and
+  /// entity focus are not. An in-place account switch must invalidate both the
+  /// values and any async link resolution that could repopulate them.
+  private func resetOwnerScopedTransientState() {
+    invalidateLinkResolutions()
+    pendingConversation = nil
+    clearFocus()
+    lastAcknowledgedFocusKind = nil
   }
 
   private func invalidateLinkResolutions() {

@@ -604,15 +604,6 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraph> {
   return fetchWithAuth<KnowledgeGraph>('/v1/knowledge-graph');
 }
 
-/**
- * Trigger knowledge graph rebuild
- */
-export async function rebuildKnowledgeGraph(): Promise<void> {
-  await fetchWithAuth('/v1/knowledge-graph/rebuild', {
-    method: 'POST',
-  });
-}
-
 // ============================================================================
 // Chat sessions API
 // ============================================================================

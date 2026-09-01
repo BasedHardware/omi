@@ -6,7 +6,19 @@ enum SQLQueryResultProjection {
   private static let maxCellCharacters = 500
   private static let maxOutputCharacters = 12_000
 
-  nonisolated static func format(rows: [Row], query: String) -> (text: String, count: Int) {
+  nonisolated static func format(
+    rows: [Row],
+    query: String,
+    timeZone: TimeZone = .current
+  ) -> (text: String, count: Int) {
+    if projectsSQLiteLocalTime(query) {
+      return (
+        "Error: keep timestamp result expressions in UTC. "
+          + "Select raw timestamp/*At columns so execute_sql can localize them once with an explicit zone. "
+          + "Use localtime only when computing UTC WHERE bounds.",
+        rows.count
+      )
+    }
     guard let firstRow = rows.first else {
       let hint =
         referencesScreenshots(query)
@@ -30,8 +42,9 @@ enum SQLQueryResultProjection {
     var truncated = false
 
     for row in rows.prefix(maxRows) {
-      let line = row.map { (columnName, value) in renderedValue(value, columnName: columnName) }
-        .joined(separator: " | ")
+      let line = columns.map { name in
+        renderedValue(row[name], column: name, timeZone: timeZone)
+      }.joined(separator: " | ")
       guard characterCount + line.count + 1 <= maxOutputCharacters else {
         truncated = true
         break
@@ -53,6 +66,33 @@ enum SQLQueryResultProjection {
 
   private nonisolated static func referencesScreenshots(_ query: String) -> Bool {
     query.range(of: #"\bscreenshots\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+  }
+
+  /// Timestamp-shaped result columns are localized below. Applying SQLite's
+  /// `localtime` modifier inside the SELECT projection would apply the offset
+  /// twice. WHERE-clause boundary conversion remains valid and is not rejected.
+  private nonisolated static func projectsSQLiteLocalTime(_ query: String) -> Bool {
+    let options: NSRegularExpression.Options = [.caseInsensitive, .dotMatchesLineSeparators]
+    guard
+      let selectRegex = try? NSRegularExpression(
+        pattern: #"\bselect\b(.*?)(?=\bfrom\b|$)"#,
+        options: options
+      ),
+      let localTimeFunctionRegex = try? NSRegularExpression(
+        pattern: #"\b(?:date|time|datetime|julianday|unixepoch|strftime)\s*\([^;]*?['\"]localtime['\"]"#,
+        options: options
+      )
+    else {
+      return false
+    }
+
+    let queryRange = NSRange(query.startIndex..<query.endIndex, in: query)
+    return selectRegex.matches(in: query, range: queryRange).contains { match in
+      guard let projectionRange = Range(match.range(at: 1), in: query) else { return false }
+      let projection = String(query[projectionRange])
+      let range = NSRange(projection.startIndex..<projection.endIndex, in: projection)
+      return localTimeFunctionRegex.firstMatch(in: projection, range: range) != nil
+    }
   }
 
   private nonisolated static func projectsUnboundedOCR(_ query: String, columns: [String]) -> Bool {
@@ -98,7 +138,16 @@ enum SQLQueryResultProjection {
     }
   }
 
-  private nonisolated static func renderedValue(_ databaseValue: DatabaseValue, columnName: String) -> String {
+  private nonisolated static func renderedValue(
+    _ databaseValue: DatabaseValue,
+    column: String,
+    timeZone: TimeZone
+  ) -> String {
+    if let formatted = DesktopChatTimestampFormat.formatSQLCell(
+      column: column, value: databaseValue, timeZone: timeZone)
+    {
+      return formatted
+    }
     let value: String
     switch databaseValue.storage {
     case .null:
@@ -108,7 +157,7 @@ enum SQLQueryResultProjection {
     case .double(let double):
       value = String(double)
     case .string(let string):
-      value = localTimeString(forUTCDatetime: string, columnName: columnName) ?? string
+      value = string
     case .blob(let data):
       value = "<\(data.count) bytes>"
     }
@@ -116,30 +165,4 @@ enum SQLQueryResultProjection {
     return String(value.prefix(maxCellCharacters)) + "..."
   }
 
-  /// GRDB stores `Date` columns as naive UTC text ("yyyy-MM-dd HH:mm:ss.SSS", no zone marker).
-  /// Rendered verbatim, the chat model reads a UTC wall-clock string as if it were already
-  /// local time (see #12321: "7:59:51 PM" shown for a 3:59:51 PM EDT event). Convert
-  /// datetime-shaped columns to the user's local zone with an explicit abbreviation here,
-  /// mechanically, rather than relying on the model to apply the offset itself.
-  private nonisolated static func localTimeString(forUTCDatetime raw: String, columnName: String) -> String? {
-    guard looksLikeDatetimeColumn(columnName) else { return nil }
-    let utcFormatter = DateFormatter()
-    utcFormatter.locale = Locale(identifier: "en_US_POSIX")
-    utcFormatter.timeZone = TimeZone(identifier: "UTC")
-    utcFormatter.dateFormat = raw.contains(".") ? "yyyy-MM-dd HH:mm:ss.SSS" : "yyyy-MM-dd HH:mm:ss"
-    guard let date = utcFormatter.date(from: raw) else { return nil }
-
-    let localFormatter = DateFormatter()
-    localFormatter.locale = Locale(identifier: "en_US_POSIX")
-    localFormatter.timeZone = .current
-    localFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss zzz"
-    return localFormatter.string(from: date)
-  }
-
-  /// Matches `timestamp` and camelCase `*At` columns (`createdAt`, `startedAt`, `completedAt`)
-  /// without catching unrelated names that merely end in the letters "at" (`format`, `chat`).
-  private nonisolated static func looksLikeDatetimeColumn(_ columnName: String) -> Bool {
-    if columnName.caseInsensitiveCompare("timestamp") == .orderedSame { return true }
-    return columnName.range(of: #"[a-z]At$"#, options: .regularExpression) != nil
-  }
 }

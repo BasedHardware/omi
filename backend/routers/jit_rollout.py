@@ -30,6 +30,7 @@ from models.jit_proactivity import (
     JITProactivityOperation,
 )
 from models.jit_trigger_feedback import JITTriggerFeedbackAction, JITTriggerFeedbackReceipt
+from database._client import get_data_plane_firestore_client
 from database.jit_proactivity_store import JITProactivityReservationError, reserve_jit_proactivity_event
 from database.memory_apply_store import MemoryFirestoreApplyError
 from database.read_boundary import MalformedDocError
@@ -235,6 +236,21 @@ async def get_jit_trigger_snapshot(
     )
 
 
+def _apply_trigger_feedback_on_data_plane(uid: str, memory_id: str, **kwargs):
+    """Apply trigger feedback against the plane the trigger snapshot reads.
+
+    The canonical adapter defaults to the compute-plane client. This router is
+    mounted on desktop-backend, whose compute project differs from the customer
+    data plane in development, so that default would look for the trigger row
+    in the wrong project and fail every retraction.
+
+    Resolving the client here rather than in the route keeps the (blocking)
+    first-use client construction off the event loop.
+    """
+
+    return apply_canonical_trigger_feedback(uid, memory_id, db_client=get_data_plane_firestore_client(), **kwargs)
+
+
 @router.post(_TRIGGER_FEEDBACK_PATH, response_model=JITTriggerFeedbackEnvelope)
 async def post_jit_trigger_feedback(
     request: JITTriggerFeedbackRequest,
@@ -257,7 +273,7 @@ async def post_jit_trigger_feedback(
         )
         result = await run_blocking(
             db_executor,
-            apply_canonical_trigger_feedback,
+            _apply_trigger_feedback_on_data_plane,
             uid,
             request.trigger_memory_id,
             event_id=request.event_id,

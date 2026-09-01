@@ -71,6 +71,7 @@ def build_transcript_match_snippets(
     *,
     context_neighbors: int = 1,
     max_snippets: int = 3,
+    max_chars: int = _MAX_SNIPPET_CHARS,
 ) -> List[Dict[str, Any]]:
     """Return grep-style transcript snippets for segments matching ``query``.
 
@@ -128,8 +129,12 @@ def build_transcript_match_snippets(
             end_f = None
 
         snippet_text = "\n".join(lines)
-        if len(snippet_text) > _MAX_SNIPPET_CHARS:
-            snippet_text = snippet_text[:_MAX_SNIPPET_CHARS].rstrip() + "..."
+        max_chars = max(1, min(max_chars, _MAX_SNIPPET_CHARS))
+        if len(snippet_text) > max_chars:
+            if max_chars > 3:
+                snippet_text = snippet_text[: max_chars - 3].rstrip() + "..."
+            else:
+                snippet_text = snippet_text[:max_chars]
         snippets.append(
             {
                 "text": snippet_text,
@@ -255,6 +260,8 @@ def merge_typesense_page_with_transcript_hits(
 def attach_match_snippets_to_conversations(
     conversations: Sequence[Any],
     query: str,
+    *,
+    max_chars: int = _MAX_SNIPPET_CHARS,
 ) -> List[Dict[str, Any]]:
     """Copy conversations and attach ``match_snippets`` from transcript_segments."""
     enriched: List[Dict[str, Any]] = []
@@ -264,6 +271,6 @@ def attach_match_snippets_to_conversations(
         item = dict(conv)
         segments_raw = item.get("transcript_segments") or []
         segments: List[Any] = segments_raw if isinstance(segments_raw, list) else []
-        item["match_snippets"] = build_transcript_match_snippets(segments, query)
+        item["match_snippets"] = build_transcript_match_snippets(segments, query, max_chars=max_chars)
         enriched.append(item)
     return enriched

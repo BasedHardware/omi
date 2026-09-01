@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Mapping
 from typing import List
 import os
 import time
@@ -66,7 +67,7 @@ from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
-from utils.conversations.render import conversation_to_dict, serialize_datetimes
+from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration, serialize_datetimes
 from utils.log_sanitizer import sanitize
 from utils.mentor_notifications import process_mentor_notification
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
@@ -257,7 +258,7 @@ async def trigger_external_integrations(
         if await run_blocking(db_executor, is_app_webhook_disabled, app.id):
             return
 
-        conversation_dict = conversation_to_dict(conversation)
+        conversation_dict = redact_conversation_for_integration(conversation_to_dict(conversation))
 
         # Ignore external data on workflow
         if conversation.source == ConversationSource.workflow and 'external_data' in conversation_dict:
@@ -707,9 +708,36 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
 
 def _process_proactive_notification(uid: str, app: App, data):
-    """Process proactive notifications for external/third-party apps."""
-    if not app.has_capability("proactive_notification") or not data:
-        logger.error(f"App {app.id} is not proactive_notification or data invalid {uid}")
+    """Process proactive notifications for external/third-party apps.
+
+    ``data`` is the webhook response's ``notification`` object. The realtime
+    webhook contract (docs/doc/developer/apps/Notifications.mdx) documents a
+    response shape without one — "Response (when no notification needed):
+    {"session_id": ...}" — so an absent payload is a documented no-op, not an
+    error. The dispatcher below already skips that shape before calling here;
+    the explicit ``is None`` arm keeps any other caller from logging it at
+    ERROR level, which is the exact signature this guard used to emit for
+    every no-notification webhook response in production.
+    """
+    if not app.has_capability("proactive_notification"):
+        logger.error(f"App {app.id} lacks proactive_notification capability {uid}")
+        return None
+    if data is None:
+        # Documented no-notification response: nothing to process.
+        return None
+    if not isinstance(data, Mapping):
+        # A present payload must be a JSON object; anything else (a bare
+        # string, list, number) cannot carry 'prompt'/'params' keys and used
+        # to crash on data.get(...) with the attribute error swallowed by the
+        # dispatch boundary. Reject typed, once.
+        logger.error(f"App {app.id} notification payload data invalid type={type(data).__name__} {uid}")
+        return None
+    if not data:
+        # A present-but-empty JSON object ("notification": {}) carries no
+        # prompt or params: nothing to process. The old truthiness guard
+        # rejected this shape; the typed Mapping check above must not become
+        # a regression that invokes the LLM on an empty prompt.
+        logger.info(f"App {app.id} notification payload empty {uid}")
         return None
 
     # rate limits
@@ -988,15 +1016,20 @@ async def _async_trigger_realtime_integrations(
                     results[app.id] = message
 
                 # proactive_notification
-                noti = response_data.get('notification', None)
-                if app.has_capability("proactive_notification"):
+                # The webhook contract (docs/doc/developer/apps/Notifications.mdx)
+                # documents a response shape with no ``notification`` object —
+                # "Response (when no notification needed): {"session_id": ...}".
+                # An absent notification is that documented no-op, not an error:
+                # skip dispatch instead of forwarding ``None`` into a processor
+                # whose old guard logged it at ERROR level on every such call.
+                if app.has_capability("proactive_notification") and 'notification' in response_data:
                     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
                         message = await run_blocking(
                             postprocess_executor,
                             _process_proactive_notification,
                             uid,
                             app,
-                            noti,
+                            response_data.get('notification'),
                         )
                     if message:
                         results[app.id] = message

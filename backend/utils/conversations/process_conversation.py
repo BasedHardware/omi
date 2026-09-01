@@ -30,7 +30,11 @@ import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
 import database.screen_activity as screen_activity_db
-from database.vector_db import find_similar_action_items
+from database.vector_db import (
+    find_similar_action_items,
+    upsert_action_item_vectors_batch,
+    delete_action_item_vectors_batch,
+)
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
 from utils.conversations.transcript_chunks import build_transcript_chunks
@@ -62,6 +66,8 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
+from utils.metrics import record_jit_first_open
+from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
@@ -121,6 +127,7 @@ from utils.other.hume import (
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
+from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
@@ -291,6 +298,16 @@ def _primary_user_name(uid: str) -> Optional[str]:
     return raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else None
 
 
+def _proposes_task_candidates(conversation: Any) -> bool:
+    """Whether this conversation's action items become Candidates instead of tasks.
+
+    Desktop has a Suggested surface to review them on. Every other client — phone,
+    pendant, watch — has none, so a proposal there is invisible and expires unseen:
+    what the extractor admits is a task.
+    """
+    return getattr(conversation, 'source', None) == ConversationSource.desktop
+
+
 def _get_structured(
     uid: str,
     language_code: str,
@@ -300,7 +317,7 @@ def _get_structured(
     conversation_id: Optional[str] = None,
 ) -> Tuple[Structured, bool]:
     try:
-        task_intelligence_capture = conversation_capture.capture_enabled(uid)
+        task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
         user_language = users_db.get_user_language_preference(uid) or language_code
@@ -469,7 +486,20 @@ def _get_structured(
                 trusted_wake_word_markers=has_wake_word_marker,
             )
         if discarded:
-            return Structured(emoji=random.choice(['🧠', '🎉'])), True
+            # Calendar overlap outranks discard (SCA-381): a scrap recorded
+            # inside a booked meeting is evidence, never noise. Only a positive
+            # overlap hit keeps it; a disconnected calendar, a missing token, or
+            # a failed lookup leaves the discard verdict standing.
+            if _calendar_overlap_retains_conversation(uid, main_conv.started_at, main_conv.finished_at):
+                logger.info(
+                    'Calendar overlap overrides discard for uid=%s conversation=%s window=[%s, %s]',
+                    uid,
+                    getattr(conversation, 'id', '?'),
+                    main_conv.started_at,
+                    main_conv.finished_at,
+                )
+            else:
+                return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         conv_started_at = cast(datetime, main_conv.started_at)
@@ -877,6 +907,12 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     Finalization workers use this public boundary while holding their durable
     lease. Keep the private helper below for existing in-module async callers.
     """
+    # The deployment-wide capability fence is mandatory even when this
+    # account's non-compatibility writer delegates formation to the sweep.
+    # Otherwise a reused release-probe principal could skip the exact static
+    # configuration contract that Pusher qualification is meant to exercise.
+    db_client = getattr(db_client_module, 'db', None)
+    MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
     sweep_owned_mode = _sweep_owned_writer_mode(uid)
     if sweep_owned_mode is not None:
         logger.info(
@@ -1223,6 +1259,7 @@ def _canonical_extraction_unavailable(
         reason='provider_5xx',
         outcome='degraded',
     )
+    record_finalization_failure(FinalizationFailureReason.provider)
     return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
 
 
@@ -1589,15 +1626,85 @@ def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> No
     send_notification(user_id, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
-    """Propose a conversation's extracted action items as Candidates.
+def _write_action_items(uid: str, conversation: Conversation):
+    """Write the extracted items as tasks, replacing whatever this conversation wrote before."""
+    if not conversation.structured.action_items:
+        return
 
-    INVARIANT I1: nothing here writes an ``action_item``. Extraction produces
-    suggestions only; a task exists when the user says so. The items also stay
-    on ``conversation.structured``, which is what the summary view renders and
-    what its "Add to Tasks" button acts on.
+    now = datetime.now(timezone.utc)
+    is_locked = conversation.is_locked
+    action_items_data: List[Dict[str, Any]] = [
+        {
+            'description': action_item.description,
+            'completed': action_item.completed,
+            'created_at': action_item.created_at or now,
+            'updated_at': action_item.updated_at or now,
+            'due_at': action_item.due_at,
+            'completed_at': action_item.completed_at,
+            'conversation_id': conversation.id,
+            'is_locked': is_locked,
+            **conversation_capture.canonical_conversation_fields(action_item, conversation),
+        }
+        for action_item in conversation.structured.action_items
+    ]
+
+    old_ids = [item['id'] for item in action_items_db.get_action_items_by_conversation(uid, conversation.id)]
+    if old_ids:
+        delete_action_item_vectors_batch(uid, old_ids)
+    action_items_db.delete_action_items_for_conversation(uid, conversation.id)
+
+    action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+    logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
+
+    emit_product_event(
+        uid=uid,
+        event='Task Extracted',
+        properties={
+            'task_count': len(action_item_ids),
+            'conversation_id': conversation.id,
+            'task_source': 'transcript',
+            'persistence_path': 'action_items',
+        },
+    )
+
+    for idx, action_item in enumerate(conversation.structured.action_items):
+        if action_item.due_at and idx < len(action_item_ids):
+            send_action_item_data_message(
+                user_id=uid,
+                action_item_id=action_item_ids[idx],
+                description=action_item.description,
+                due_at=action_item.due_at.isoformat(),
+            )
+
+    created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
+
+    def _run_auto_sync():
+        asyncio.run(auto_sync_action_items_batch(uid, created_items))
+
+    submit_with_context(postprocess_executor, _run_auto_sync)
+
+    upsert_action_item_vectors_batch(
+        uid,
+        [
+            {'action_item_id': aid, 'description': data['description']}
+            for aid, data in zip(action_item_ids, action_items_data)
+        ],
+    )
+
+
+def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
+    """Persist a conversation's extracted action items.
+
+    Desktop conversations propose Candidates for its Suggested surface. Everywhere
+    else the conservative extraction prompt is the filter — it admits explicit
+    commands and the few real commitments, or nothing — and what it admits is
+    written as a task.
     """
     if not conversation.structured:
+        return
+
+    if not _proposes_task_candidates(conversation):
+        _write_action_items(uid, conversation)
         return
 
     try:
@@ -1810,6 +1917,37 @@ def _meeting_context_from_redis_mapping(uid: str, conversation: Any) -> Optional
         return None
 
 
+def _calendar_overlap_retains_conversation(
+    uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
+) -> bool:
+    """Whether a non-declined calendar meeting overlaps [started_at, finished_at].
+
+    The discard override's only source of truth (SCA-381): stored meeting intent
+    in `users/{uid}/meetings` first (a cheap Firestore read, no provider
+    traffic), then a read-only Google Calendar lookup restricted to events the
+    user has not declined or cancelled. Fails closed to False on every error —
+    the override must never keep a conversation *because* a lookup failed, and
+    must never fail the conversation itself. No writes in this path.
+    """
+    if not isinstance(started_at, datetime) or not isinstance(finished_at, datetime):
+        return False
+
+    try:
+        tolerance = timedelta(minutes=MEETING_SEARCH_TOLERANCE_MINUTES)
+        records = calendar_db.get_meetings_in_time_range(uid, started_at - tolerance, finished_at + tolerance)
+        if select_overlapping_meeting(records, started_at=started_at, finished_at=finished_at) is not None:
+            return True
+    except Exception as exc:
+        logger.error('Error reading stored meetings for discard override uid=%s: %s', uid, exc)
+
+    try:
+        linked = asyncio.run(get_overlapping_calendar_event(uid, started_at, finished_at, require_accepted=True))
+        return linked is not None
+    except Exception as exc:
+        logger.error('Error reading Google Calendar for discard override uid=%s: %s', uid, exc)
+        return False
+
+
 def _meeting_context_from_time_overlap(
     uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
 ) -> Optional[CalendarMeetingContext]:
@@ -1909,6 +2047,7 @@ def process_conversation(
     defer_memory_extraction: bool = False,
     defer_derived_effects: bool = False,
     derived_effects_observer: Callable[[Callable[[], None]], None] | None = None,
+    bypass_jit_first_open: bool = False,
 ) -> Conversation:
     if app_usage_attribution is None:
         app_usage_attribution = (
@@ -2000,6 +2139,9 @@ def process_conversation(
     # force_process=True). Paid desktop plans (Operator / Architect), BYOK users, and all
     # non-desktop sources are processed normally here. force_process / is_reprocess — the lazy
     # trigger and manual reprocess — bypass this so the enrichment actually runs.
+    # force_process does not bypass JIT first-open: Flutter create and macOS
+    # finalize need it to still defer folders/apps when rollout admits. Explicit
+    # "run everything now" paths pass bypass_jit_first_open=True.
     if (
         not force_process
         and not is_reprocess
@@ -2054,12 +2196,14 @@ def process_conversation(
     # conversation source. We create the durable obligation before omitting a
     # single effect; authority/Firestore failure preserves full-eager behavior.
     jit_defer_expensive = False
-    if not force_process and not is_reprocess and not discarded:
+    if not bypass_jit_first_open and not is_reprocess and not discarded:
         source_value = getattr(conversation.source, 'value', conversation.source)
         first_open_plan = resolve_authorized_first_open_plan(uid=uid, source=str(source_value))
         if first_open_plan.defer_derived_work:
             try:
                 jit_defer_expensive = conversations_db.initialize_first_open_work(uid, conversation.id)
+                if jit_defer_expensive:
+                    record_jit_first_open(event='claim', effect='obligation')
             except Exception as error:
                 logger.warning(
                     'JIT first-open initialization failed; using eager path uid=%s conv=%s: %s',
@@ -2067,6 +2211,10 @@ def process_conversation(
                     conversation.id,
                     error,
                 )
+                try:
+                    record_jit_first_open(event='fail', effect='obligation')
+                except Exception:
+                    pass
 
     # Wrap every post-persistence derived effect so the durable finalizer can
     # defer the bundle until it transactionally claims ownership (#10468 r5).

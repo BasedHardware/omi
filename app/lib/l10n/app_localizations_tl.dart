@@ -9935,12 +9935,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
-  String get chatScopeToday => 'Ngayon';
-
-  @override
-  String get chatScopeThisWeek => 'Ngayong linggo';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Tungkol sa: $title';
   }
@@ -10004,4 +9998,9 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Hindi na-record ($count)';
+  }
 }

@@ -561,8 +561,8 @@ struct ActionItem: Codable, Identifiable, Equatable {
   /// locally cached rows predate the field.
   let captureOwner: String?
   /// Canonical task linkage is optional on legacy captures. When present, the
-  /// chat-first archive uses this opaque ID for a typed deep link rather than
-  /// inferring a task from the description.
+  /// canonical conversation detail uses this opaque ID for a typed deep link
+  /// rather than inferring a task from the description.
   let targetTaskID: String?
   let sourceSegmentIDs: [String]
 

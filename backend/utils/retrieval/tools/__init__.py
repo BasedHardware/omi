@@ -68,6 +68,11 @@ from .knowledge_ledger_tools import (
     search_knowledge,
     search_historical_facts,
 )
+from .knowledge_ledger_write_tools import (
+    close_fact_tool,
+    create_standing_trigger,
+    save_playbook,
+)
 
 __all__ = [
     'get_conversations_tool',
@@ -102,4 +107,7 @@ __all__ = [
     'search_knowledge',
     'read_playbook',
     'search_historical_facts',
+    'save_playbook',
+    'create_standing_trigger',
+    'close_fact_tool',
 ]

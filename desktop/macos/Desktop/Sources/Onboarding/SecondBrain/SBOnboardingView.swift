@@ -287,6 +287,10 @@ struct SBOnboardingView: View {
       permStepWidget("automation", "Automation", "help with tasks in the apps you choose") {
         model.answerAutomation()
       }
+    case .notifications:
+      permStepWidget("notifications", "Notifications", "tell you when I notice something worth flagging") {
+        model.answerNotifications()
+      }
     case .shortcutOpen: shortcutWidget(isTalk: false)
     case .shortcutTalk: shortcutWidget(isTalk: true)
     case .screenDemo: screenDemoWidget

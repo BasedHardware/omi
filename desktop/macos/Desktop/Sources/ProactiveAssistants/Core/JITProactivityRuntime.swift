@@ -183,13 +183,16 @@ actor JITProactivityRuntime {
       let allTriggers = try await compiledSnapshot(
         receipt: receipt, authorizationSnapshot: authorizationSnapshot)
       let now = observation.occurredAt ?? Date()
-      let triggers = allTriggers.filter { trigger in
+      // Snooze eligibility is evaluated inside the watchlist runtime so a
+      // snoozed-only snapshot stays a standing watchlist (ambient after miss),
+      // not an empty one. Wakeup counters still skip ineligible IDs.
+      let eligibleTriggers = allTriggers.filter { trigger in
         guard let snoozedUntil = trigger.snoozedUntil else { return true }
         return now >= snoozedUntil
       }
       let day = day(for: now)
       let counts = try await wakeupCounts(
-        triggerIDs: triggers.map(\.id), budgetDay: day, now: now)
+        triggerIDs: eligibleTriggers.map(\.id), budgetDay: day, now: now)
       let receiptMatchesSnapshot =
         snapshot.complete
         && receipt.ownerID == snapshot.ownerID
@@ -209,7 +212,7 @@ actor JITProactivityRuntime {
         snapshotIsAuthoritative: receiptMatchesSnapshot,
         authorizationIsCurrent: authorizationCurrent(authorizationSnapshot))
       let runtimeResult = KnowledgeLedgerTriggerWatchlistRuntime.evaluate(
-        projection: .init(entries: triggers, quarantined: []),
+        projection: .init(entries: allTriggers, quarantined: []),
         observation: observation,
         day: day,
         authority: authority,
@@ -236,6 +239,9 @@ actor JITProactivityRuntime {
         else { return .suppressed(reason: "planned_match_ambiguous") }
         winner = ambiguous
       case .none:
+        if allTriggers.isEmpty {
+          return .suppressed(reason: "empty_watchlist")
+        }
         return .suppressed(reason: "planned_runtime_rejected")
       case .plannedTrigger:
         guard let matched = runtimeResult.matches.first else {
@@ -243,7 +249,7 @@ actor JITProactivityRuntime {
         }
         winner = matched
       }
-      guard let trigger = triggers.first(where: { $0.id == winner.triggerID }),
+      guard let trigger = allTriggers.first(where: { $0.id == winner.triggerID }),
         let triggerRow = snapshot.rows.first(where: { $0.memoryID == winner.triggerID }),
         let action = trigger.action,
         action.isValid
@@ -295,6 +301,28 @@ actor JITProactivityRuntime {
       return .deliver(lane: .planned, id: trigger.id, continuityKey: continuityKey)
     } catch {
       return .suppressed(reason: "authoritative_snapshot_unavailable")
+    }
+  }
+
+  /// Signed-in startup mirror sync: fetch and reconcile the authoritative
+  /// trigger snapshot before any context visit exists, so the snapshot (and
+  /// its receipt) never depends on screen capture being live, a
+  /// notify-worthy visit, or calendar access. Shares admission's
+  /// flag → fetch → reconcile chain and its fail-closed gate; a non-permitting
+  /// authority performs no snapshot read. No evaluation, no delivery — the
+  /// next context visit still owns those. One shot per signed-in startup:
+  /// a transport failure is logged (bounded, content-free) and retried only
+  /// by the next owner change or launch.
+  func syncTriggerSnapshot(authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot) async {
+    let resolved = await flags(authorizationSnapshot)
+    guard resolved.permitsNewLane else { return }
+    do {
+      let snapshot = try await snapshots(authorizationSnapshot)
+      _ = try await reconcile(snapshot, authorizationSnapshot: authorizationSnapshot)
+    } catch {
+      NSLog(
+        "JIT trigger snapshot: startup sync failed error_type=%@",
+        ProactiveLaneFailureClassification.boundedNetworkErrorType(error))
     }
   }
 

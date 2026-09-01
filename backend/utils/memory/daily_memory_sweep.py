@@ -73,6 +73,7 @@ from utils.memory.knowledge_ledger import (
     LedgerProvenance,
     LedgerWrite,
     amend_fact,
+    evidence_id_for_ledger_provenance,
     save_ledger_write,
 )
 from utils.memory.memory_system import ensure_canonical_apply_control_state
@@ -2652,6 +2653,29 @@ def _apply_candidate(
     if candidate.operation == "add":
         occupant = _find_active_slot_or_subject(uid, candidate, db_client=db_client)
         if occupant is not None:
+            # Crash-replay recognition: if the occupant already carries this
+            # exact plan/candidate's evidence identity, the canonical write for
+            # this receipt landed before a crash prevented receipt
+            # finalization. Re-applying would supersede our own row with a
+            # duplicate; recognize the landed effect and complete as a skip.
+            # A next-day sweep derives a different ``_plan_id`` and therefore a
+            # different evidence identity, so legitimate same-slot refreshes
+            # are unaffected.
+            replay_evidence_id = evidence_id_for_ledger_provenance(
+                uid,
+                LedgerProvenance(
+                    source_id=candidate.source_id,
+                    source_type=candidate.source_type,
+                    source_version=candidate.source_version,
+                    action_id=f"{_plan_id(uid, local_date)}:{candidate.source_key}",
+                ),
+            )
+            # An occupant without readable evidence cannot be proven to be our
+            # own replay, so fall through to the ordinary authority rules
+            # rather than suppressing a write we cannot account for.
+            occupant_evidence = getattr(occupant, "evidence", None) or ()
+            if any(getattr(item, "evidence_id", None) == replay_evidence_id for item in occupant_evidence):
+                return occupant.memory_id, "existing_active_slot" if candidate.slot else "existing_active_subject"
             occupant_rank = _target_authority(occupant)
             # A slot is a standing attribute the daily run maintains: a
             # sweep-authored occupant may be refreshed by an equal-rank sweep
@@ -2712,39 +2736,49 @@ def _apply_candidate(
         reason = candidate.authority.ledger_reason
     if effective_operation == "amend":
         assert target is not None
-        memory_id = amend_fact(
-            uid,
-            target.memory_id,
-            candidate.content,
-            provenance=provenance,
-            write_reason=reason,
-            slot=candidate.slot,
-            subject_scope=candidate.subject_scope,
-            subject_entity_id=candidate.subject_entity_id,
-            valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
-            db_client=db_client,
-            required_source_item=target,
-        )
+        try:
+            memory_id = amend_fact(
+                uid,
+                target.memory_id,
+                candidate.content,
+                provenance=provenance,
+                write_reason=reason,
+                slot=candidate.slot,
+                subject_scope=candidate.subject_scope,
+                subject_entity_id=candidate.subject_entity_id,
+                valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+                db_client=db_client,
+                required_source_item=target,
+            )
+        except ValueError as exc:
+            if "unsupported knowledge ledger slot" not in str(exc):
+                raise
+            return None, "unknown_slot"
         return memory_id, None
 
-    write = LedgerWrite(
-        kind=MemoryKind.trigger if candidate.kind == "trigger" else MemoryKind.fact,
-        content=candidate.content,
-        provenance=provenance,
-        write_reason=reason,
-        subject_scope=candidate.subject_scope,
-        subject_entity_id=candidate.subject_entity_id,
-        slot=candidate.slot,
-        trigger_condition=candidate.trigger_condition,
-        # A completed-day replay must derive identical mutation metadata.  The
-        # ledger otherwise defaults ``valid_from`` to wall-clock ``now`` and a
-        # crash after canonical apply would produce a different operation ID.
-        valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
-        # Inference-backed rows stay out of the user-asserted profile path.
-        user_asserted=candidate.authority == SweepAuthority.direct_user_statement,
-        supersedes=([target.memory_id] if effective_operation == "repair" and target is not None else []),
-    )
-    return save_ledger_write(uid, write, db_client=db_client, required_source_item=target), None
+    try:
+        write = LedgerWrite(
+            kind=MemoryKind.trigger if candidate.kind == "trigger" else MemoryKind.fact,
+            content=candidate.content,
+            provenance=provenance,
+            write_reason=reason,
+            subject_scope=candidate.subject_scope,
+            subject_entity_id=candidate.subject_entity_id,
+            slot=candidate.slot,
+            trigger_condition=candidate.trigger_condition,
+            # A completed-day replay must derive identical mutation metadata.  The
+            # ledger otherwise defaults ``valid_from`` to wall-clock ``now`` and a
+            # crash after canonical apply would produce a different operation ID.
+            valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+            # Inference-backed rows stay out of the user-asserted profile path.
+            user_asserted=candidate.authority == SweepAuthority.direct_user_statement,
+            supersedes=([target.memory_id] if effective_operation == "repair" and target is not None else []),
+        )
+        return save_ledger_write(uid, write, db_client=db_client, required_source_item=target), None
+    except ValueError as exc:
+        if "unsupported knowledge ledger slot" not in str(exc):
+            raise
+        return None, "unknown_slot"
 
 
 def _blocked_output(
@@ -2917,6 +2951,10 @@ def run_daily_memory_sweep(
                 )
             except SweepAuthoritativeQueryUnavailable:
                 return _blocked_output(normalized_uid, "canonical_occupant_query_unavailable")
+            except ValueError as exc:
+                if "unsupported knowledge ledger slot" not in str(exc):
+                    raise
+                memory_id, skip_reason = None, "unknown_slot"
             if skip_reason:
                 skipped_count += 1
                 try:

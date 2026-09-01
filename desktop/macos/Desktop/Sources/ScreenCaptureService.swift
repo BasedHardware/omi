@@ -215,6 +215,7 @@ final class ScreenCaptureService: Sendable {
         log("Opened Screen Recording preferences via URL scheme")
         settingsApp.activate()
         await PermissionDragGuidance.presentDragToGrantHelper(
+          for: .screenRecording,
           settingsPID: settingsApp.processIdentifier)
       } catch {
         log("Failed to open Screen Recording preferences via URL scheme — trying fallback")

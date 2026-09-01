@@ -121,6 +121,7 @@ def wire_common_stubs(install) -> SimpleNamespace:
     gateway_client.CHAT_AGENT_ROUTE_DIRECT = 'direct'
     gateway_client.CHAT_AGENT_ROUTE_GATEWAY = 'gateway'
     gateway_client.get_chat_agent_route = MagicMock(return_value='direct')
+    gateway_client.GatewayDirectModelSurfaceBlocked = type('GatewayDirectModelSurfaceBlocked', (Exception,), {})
     # chat_file's gateway-mode helpers; the upload suite loads the real chat_file,
     # so the imports must resolve even though these tests never call them.
     gateway_client.should_route_features_through_gateway = MagicMock(return_value=False)
@@ -128,6 +129,7 @@ def wire_common_stubs(install) -> SimpleNamespace:
     gateway_client.file_chat_feature_header = MagicMock(return_value={})
     gateway_client.get_file_chat_gateway_async_client = MagicMock()
     gateway_client.get_file_chat_gateway_sync_client = MagicMock()
+    gateway_client.is_gateway_model_not_found = MagicMock(return_value=False)
     users = install('utils.users', ModuleType('utils.users'))
     users.get_user_display_name = MagicMock(return_value='Test User')
     sanitizer = install('utils.log_sanitizer', ModuleType('utils.log_sanitizer'))
@@ -269,14 +271,6 @@ def wire_common_stubs(install) -> SimpleNamespace:
         CHAT = 'chat'
 
     usage_tracker.Features = Features
-
-    # routers.chat imports gateway_client at module load. Keep a package-safe stub
-    # so isolated file runs never pull the real client (which imports get_current_context).
-    gateway_client = install('utils.llm.gateway_client', ModuleType('utils.llm.gateway_client'))
-    gateway_client.CHAT_AGENT_ROUTE_DIRECT = 'direct'
-    gateway_client.get_chat_agent_route = MagicMock(return_value='direct')
-    gateway_client.should_route_features_through_gateway = MagicMock(return_value=False)
-    gateway_client.GatewayDirectModelSurfaceBlocked = type('GatewayDirectModelSurfaceBlocked', (Exception,), {})
 
     limiter = install('utils.voice_duration_limiter', ModuleType('utils.voice_duration_limiter'))
     limiter.compute_pcm_duration_ms = MagicMock(return_value=1000)

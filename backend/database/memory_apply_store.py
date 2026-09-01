@@ -20,7 +20,7 @@ try:
 except ImportError:  # pragma: no cover - local unit tests mock Firestore.
     _firestore_transactional = None
 
-from database._client import db
+from database._client import data_plane_db as db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.legal_holds import (
     assert_destructive_operation_transaction,

@@ -277,7 +277,9 @@ struct QueryShellHome: View {
       onAsk: ask,
       onStop: { chatProvider.stopAgent(owner: .mainChat) },
       onAttachmentsAdded: stageAttachments,
-      onAttachmentRemoved: { chatProvider.removePendingAttachment(id: $0) }
+      onAttachmentRemoved: { chatProvider.removePendingAttachment(id: $0) },
+      references: chatProvider.pendingComposerReferences,
+      onReferenceRemoved: { chatProvider.removeComposerReference(id: $0) }
     )
     .background {
       GeometryReader { composer in

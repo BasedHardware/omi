@@ -23,6 +23,9 @@ from utils.observability.journeys import (
 
 logger = logging.getLogger('routers.pusher')
 
+FINALIZATION_RESULT_PROTOCOL_LEGACY = 1
+FINALIZATION_RESULT_PROTOCOL_V2 = 2
+
 
 async def process_conversation_task(
     uid: str,
@@ -33,6 +36,7 @@ async def process_conversation_task(
     finalization_job_id: Optional[str] = None,
     dispatch_generation: Optional[int] = None,
     client_kind: str = 'unknown',
+    finalization_result_protocol: int = FINALIZATION_RESULT_PROTOCOL_LEGACY,
 ) -> None:
     """Process a leased conversation job and send a minimal result to listen.
 
@@ -138,6 +142,20 @@ async def process_conversation_task(
             return
         if claim_status == 'completed':
             await send_result({'conversation_id': conversation_id, 'success': True})
+            return
+        if claim_status == 'stale_generation':
+            # The generation-aware response is opt-in so either side can be
+            # rolled out first. Legacy listeners treat unknown non-terminal
+            # errors as their existing bounded retry path; only a v2 listener
+            # can safely match and drop the superseded pending generation.
+            result: Dict[str, Any] = {
+                'conversation_id': conversation_id,
+                'error': 'job_stale_generation',
+                'terminal': False,
+            }
+            if finalization_result_protocol >= FINALIZATION_RESULT_PROTOCOL_V2:
+                result['dispatch_generation'] = generation
+            await send_result(result)
             return
         if claim_status != 'claimed':
             await send_result(

@@ -75,6 +75,7 @@ enum AgentClient {
     let outputTokens: Int
     let cacheReadTokens: Int
     let cacheWriteTokens: Int
+    let modelsUsed: [String]
     let artifacts: [AgentArtifactProjection]
     let completionDeltaArtifacts: [AgentArtifactProjection]
 
@@ -91,6 +92,7 @@ enum AgentClient {
       outputTokens = result.outputTokens
       cacheReadTokens = result.cacheReadTokens
       cacheWriteTokens = result.cacheWriteTokens
+      modelsUsed = result.modelsUsed
       artifacts = result.artifacts
       completionDeltaArtifacts = result.completionDeltaArtifacts
     }
