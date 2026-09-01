@@ -226,6 +226,16 @@ def is_sensitive_memory(memory: Dict[str, Any]) -> bool:
     return bool(level and level not in {'standard', 'none'})
 
 
+def resolve_mcp_pending_visibility(*, include_pending_processing: bool, include_sensitive: bool) -> bool:
+    """Keep pending submissions readable unless the caller requests classified-only data.
+
+    Required-processing submissions have not completed sensitivity classification.
+    A caller that excludes sensitive memories must therefore also exclude pending
+    submissions rather than treating an unclassified row as standard protection.
+    """
+    return include_pending_processing and include_sensitive
+
+
 def filter_and_sort_memories(
     memories: List[Dict[str, Any]],
     *,

@@ -59,6 +59,7 @@ from utils.mcp_memories import (
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
+    resolve_mcp_pending_visibility,
 )
 import database.mcp_oauth as mcp_oauth_db
 import logging
@@ -70,6 +71,16 @@ router = APIRouter()
 
 class McpStatusResponse(BaseModel):
     status: str
+
+
+class McpCreatedMemory(Memory):
+    """Public create response: stable identity without internal user metadata."""
+
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    memory_tier: Optional[str] = None
+    layer: Optional[str] = None
 
 
 class McpOauthGrantsResponse(BaseModel):
@@ -108,7 +119,7 @@ def revoke_oauth_grant(grant_id: str, uid: str = Depends(get_current_user_id)):
     return
 
 
-@router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
+@router.post("/v1/mcp/memories", tags=["mcp"], response_model=McpCreatedMemory)
 def create_memory(
     memory: Memory,
     auth_context: ProductAuthorizationContext = Depends(
@@ -299,6 +310,7 @@ def get_memories(
     updated_after: Optional[str] = None,
     include_activity: bool = False,
     include_sensitive: bool = True,
+    include_pending_processing: bool = True,
 ):
     uid = auth_context.uid
     try:
@@ -308,6 +320,11 @@ def get_memories(
         manually_added = parse_optional_mcp_bool(manually_added, "manually_added")
         include_activity = parse_mcp_bool(include_activity, "include_activity", default=False)
         include_sensitive = parse_mcp_bool(include_sensitive, "include_sensitive", default=True)
+        include_pending_processing = parse_mcp_bool(
+            include_pending_processing,
+            "include_pending_processing",
+            default=True,
+        )
         parsed_updated_after = parse_mcp_datetime(updated_after, "updated_after")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -330,10 +347,19 @@ def get_memories(
             detail=app_key_grant.observability,
         )
 
+    read_pending_processing = resolve_mcp_pending_visibility(
+        include_pending_processing=include_pending_processing,
+        include_sensitive=include_sensitive,
+    )
     result = collect_filtered_memories(
         lambda batch_offset, batch_limit: [
             memory.model_dump(mode='json')
-            for memory in MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
+            for memory in MemoryService(db_client=db).read(
+                uid,
+                limit=batch_limit,
+                offset=batch_offset,
+                include_pending_processing=read_pending_processing,
+            )
         ],
         limit=limit,
         offset=offset,

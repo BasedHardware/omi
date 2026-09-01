@@ -86,6 +86,9 @@ class GetMemories(BaseModel):
     categories: List[MemoryCategory] = Field(description="The categories of memories to filter by.", default=[])
     limit: int = Field(description="The number of memories to retrieve.", default=100)
     offset: int = Field(description="The offset of the memories to retrieve.", default=0)
+    include_pending_processing: bool = Field(
+        description="Include accepted memories that are still in required processing.", default=True
+    )
 
 
 class CreateMemory(BaseModel):
@@ -139,9 +142,10 @@ def get_memories(
     offset: int = 0,
     limit: int = 100,
     categories: List[MemoryCategory] = [],
+    include_pending_processing: bool = True,
 ) -> List:
     logger.info(f"Getting memories with params: {offset}, {limit}, {categories}")
-    params = {"offset": offset, "limit": limit}
+    params = {"offset": offset, "limit": limit, "include_pending_processing": include_pending_processing}
     if categories:
         params["categories"] = ",".join([c.value for c in categories])
     logger.info(f"get_memories params: {params}")
@@ -344,6 +348,7 @@ async def serve(uid: str | None) -> None:
                 offset=arguments.get("offset", 0),
                 limit=arguments.get("limit", 100),
                 categories=categories_enum,
+                include_pending_processing=arguments.get("include_pending_processing", True),
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 

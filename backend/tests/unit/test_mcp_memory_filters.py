@@ -8,6 +8,7 @@ from utils.mcp_memories import (
     is_sensitive_memory,
     parse_mcp_bool,
     parse_mcp_int,
+    resolve_mcp_pending_visibility,
 )
 
 
@@ -22,6 +23,12 @@ def test_sensitive_memory_detection_uses_data_protection_level():
     assert is_sensitive_memory({"data_protection_level": "enhanced"})
     assert not is_sensitive_memory({"data_protection_level": "standard"})
     assert not is_sensitive_memory({})
+
+
+def test_pending_visibility_fails_closed_before_sensitivity_classification():
+    assert resolve_mcp_pending_visibility(include_pending_processing=True, include_sensitive=True)
+    assert not resolve_mcp_pending_visibility(include_pending_processing=True, include_sensitive=False)
+    assert not resolve_mcp_pending_visibility(include_pending_processing=False, include_sensitive=True)
 
 
 def test_filter_and_sort_memories_defaults_exclude_activity_but_keep_sensitive_for_compatibility():

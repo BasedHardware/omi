@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-accepted-write-hidden-by-reader-filter",
+  "violated_contract": "When a create endpoint returns an accepted record and its identifier, the same authenticated surface must provide an immediate read path to that record. A default reader that filters out the write's initial lifecycle state turns a committed asynchronous submission into an apparent silent write failure: the caller receives success but cannot verify, inspect, or distinguish the record from a dropped mutation.",
+  "canonical_prevention": "Keep create and list lifecycle exposure in one surface contract. If explicit submissions enter a pending-processing state, the corresponding list includes that state by default to preserve historical read-after-write behavior and exposes an explicit opt-out for processed-only consumers. Pin the default and opt-out behavior across every transport that projects the same MCP memory list.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_mcp_data_endpoints.py",
+    "backend/tests/unit/test_mcp_memory_filters.py",
+    "mcp/tests/test_get_memories.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/mcp.py",
+    "backend/routers/mcp_sse.py",
+    "backend/utils/mcp_memories.py",
+    "backend/utils/memory/required_promotion.py",
+    "mcp/src/mcp_server_omi/server.py"
+  ],
+  "status": "open"
+}

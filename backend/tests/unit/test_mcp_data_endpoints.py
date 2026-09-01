@@ -7,6 +7,7 @@ stubbing pattern in test_mcp_search_memories.py.
 """
 
 from datetime import datetime, timezone
+from inspect import signature
 import json
 from unittest.mock import patch, MagicMock
 import os
@@ -189,7 +190,50 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
         assert rest.get_memories(auth_context=auth_context) == []
 
     authorize.assert_called_once_with(auth_context, db_client=rest.db)
-    memory_service.read.assert_called_once_with("auth-user", limit=100, offset=0)
+    memory_service.read.assert_called_once_with(
+        "auth-user",
+        limit=100,
+        offset=0,
+        include_pending_processing=True,
+    )
+
+
+def test_memory_list_can_exclude_pending_processing_submissions():
+    auth_context = SimpleNamespace(uid="auth-user")
+    authorization = SimpleNamespace(allowed=True)
+    memory_service = MagicMock()
+    memory_service.read.return_value = []
+    with (
+        patch.object(rest, "authorize_memory_external_default_memory_read", return_value=authorization),
+        patch.object(rest, "MemoryService", return_value=memory_service),
+    ):
+        assert rest.get_memories(auth_context=auth_context, include_pending_processing=False) == []
+
+    memory_service.read.assert_called_once_with(
+        "auth-user",
+        limit=100,
+        offset=0,
+        include_pending_processing=False,
+    )
+
+
+def test_memory_list_excludes_unclassified_pending_submissions_when_sensitive_data_is_excluded():
+    auth_context = SimpleNamespace(uid="auth-user")
+    authorization = SimpleNamespace(allowed=True)
+    memory_service = MagicMock()
+    memory_service.read.return_value = []
+    with (
+        patch.object(rest, "authorize_memory_external_default_memory_read", return_value=authorization),
+        patch.object(rest, "MemoryService", return_value=memory_service),
+    ):
+        assert rest.get_memories(auth_context=auth_context, include_sensitive=False) == []
+
+    assert memory_service.read.call_args.kwargs['include_pending_processing'] is False
+
+
+def test_memory_service_read_supports_the_pending_visibility_contract():
+    parameter = signature(rest.MemoryService.read).parameters['include_pending_processing']
+    assert parameter.default is False
 
 
 async def _run_blocking_inline(_executor, func, *args, **kwargs):
@@ -387,9 +431,10 @@ def test_sse_initialize_teaches_every_agent_to_retrieve_full_omi_context_safely(
     assert 'user clearly asked' in instructions
 
 
-def test_get_memories_advertises_and_executes_default_limit_20():
+def test_get_memories_advertises_and_executes_default_limit_20_with_pending_submissions():
     tool = next(tool for tool in sse.MCP_TOOLS if tool['name'] == 'get_memories')
     assert tool['inputSchema']['properties']['limit']['default'] == 20
+    assert tool['inputSchema']['properties']['include_pending_processing']['default'] is True
 
     service = MagicMock()
     service.read.return_value = []
@@ -401,12 +446,111 @@ def test_get_memories_advertises_and_executes_default_limit_20():
 
     assert result['limit'] == 20
     assert result['scanned_count'] == 0
+    assert service.read.call_args.kwargs['include_pending_processing'] is True
+
+
+def test_get_memories_can_exclude_pending_processing_submissions():
+    service = MagicMock()
+    service.read.return_value = []
+    with (
+        patch.object(sse, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()),
+        patch.object(sse, 'MemoryService', return_value=service),
+    ):
+        sse.execute_tool(
+            UID,
+            'get_memories',
+            {'include_pending_processing': False},
+            auth_context=_sse_auth_context(),
+        )
+
+    assert service.read.call_args.kwargs['include_pending_processing'] is False
+
+
+def test_get_memories_excludes_unclassified_pending_submissions_when_sensitive_data_is_excluded():
+    service = MagicMock()
+    service.read.return_value = []
+    with (
+        patch.object(sse, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()),
+        patch.object(sse, 'MemoryService', return_value=service),
+    ):
+        sse.execute_tool(
+            UID,
+            'get_memories',
+            {'include_sensitive': False},
+            auth_context=_sse_auth_context(),
+        )
+
+    assert service.read.call_args.kwargs['include_pending_processing'] is False
+
+
+def test_created_pending_memory_is_immediately_readable_by_id():
+    stored = []
+    service = MagicMock()
+
+    def _create(_uid, memory_db, **_kwargs):
+        stored.append(memory_db)
+        return memory_db
+
+    def _read(_uid, *, limit, offset, include_pending_processing):
+        if not include_pending_processing:
+            return []
+        return stored[offset : offset + limit]
+
+    service.create_external_memory.side_effect = _create
+    service.read.side_effect = _read
+    with (
+        patch.object(sse, 'authorize_memory_external_default_memory_write', return_value=_allowed_empty_result()),
+        patch.object(sse, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()),
+        patch.object(sse, 'MemoryService', return_value=service),
+        patch.object(sse, 'capture_memory_write'),
+    ):
+        created = sse.execute_tool(
+            UID,
+            'create_memory',
+            {'content': 'Read-after-write regression canary'},
+            auth_context=_sse_auth_context(),
+        )
+        listed = sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
+
+    created_id = created['memory']['id']
+    assert any(memory['id'] == created_id for memory in listed['memories'])
+
+
+@pytest.mark.asyncio
+async def test_rest_create_response_serializes_identity_and_excludes_internal_uid():
+    from fastapi.routing import APIRoute, serialize_response
+    from models.product_memory import MemoryTier
+
+    route = next(
+        route
+        for route in rest.router.routes
+        if isinstance(route, APIRoute) and route.path == "/v1/mcp/memories" and "POST" in route.methods
+    )
+    memory_db = rest.MemoryDB.from_memory(
+        rest.Memory(content="Read-after-write contract", category=rest.MemoryCategory.manual),
+        "internal-user-id",
+        None,
+        True,
+    )
+    memory_db.memory_tier = MemoryTier.short_term
+    payload = await serialize_response(
+        field=route.response_field,
+        response_content=memory_db,
+        is_coroutine=True,
+    )
+
+    assert route.response_model is rest.McpCreatedMemory
+    assert payload["id"] == memory_db.id
+    assert payload["memory_tier"] == "short_term"
+    assert payload["layer"] == "short_term"
+    assert "uid" not in payload
 
 
 def test_get_memories_created_desc_scan_is_capped_for_hosted_mcp():
     service = MagicMock()
 
-    def _read(_uid, *, limit, offset):
+    def _read(_uid, *, limit, offset, include_pending_processing):
+        assert include_pending_processing is True
         return [
             SimpleNamespace(
                 model_dump=lambda mode, memory_id=offset + index: {
