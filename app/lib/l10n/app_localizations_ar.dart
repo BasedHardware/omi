@@ -9856,5 +9856,16 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'محادثات قصيرة: $count',
+      one: 'محادثة قصيرة واحدة',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get transcriptionNoAudio => 'النسخ لا يستلم الصوت';
 }

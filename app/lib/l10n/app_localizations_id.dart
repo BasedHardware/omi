@@ -9925,5 +9925,15 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count percakapan singkat',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';
 }

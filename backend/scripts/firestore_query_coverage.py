@@ -474,6 +474,38 @@ def check_ratchet(report: Mapping[str, Any], baseline: Mapping[str, Any]) -> lis
     return errors
 
 
+REGENERATE_HINT = (
+    'regenerate with: python3 backend/scripts/firestore_query_coverage.py --format baseline '
+    '> backend/scripts/firestore_query_coverage_baseline.json'
+)
+
+
+def check_baseline_freshness(report: Mapping[str, Any], baseline: Mapping[str, Any]) -> list[str]:
+    """Report ways the committed baseline no longer describes the current inventory.
+
+    The ratchet only asks whether today's debt is a subset of the baselined debt, so a
+    baseline drifts silently in the safe direction: shapes that were registered or
+    rewritten stay listed as permitted debt, and the summary counts keep reporting an
+    older, lower coverage floor.  Both are enforcement surface, not just reporting
+    surface -- a stale entry re-permits the exact shape it was recorded for, and stale
+    counts hold the percentage ratchet below the coverage already achieved.
+    """
+    errors: list[str] = []
+    if baseline.get('schema_version') != 1:
+        return ['Firestore query coverage baseline has an unsupported schema version']
+    current = baseline_for(report)
+    for key in ('raw_unregistered', 'unsupported'):
+        stale = sorted(set(baseline.get(key, [])) - set(current[key]))
+        if stale:
+            errors.append(f'baselined {key} shape(s) no longer present: {", ".join(stale)}')
+    for key in ('registered_serving', 'eligible_serving'):
+        if int(baseline.get(key, 0)) != current[key]:
+            errors.append(f'baseline {key} is {baseline.get(key)}, current inventory reports {current[key]}')
+    if errors:
+        errors.append(REGENERATE_HINT)
+    return errors
+
+
 def _render_human(report: Mapping[str, Any]) -> str:
     serving = report['counts']['serving']
     non_serving = report['counts']['non_serving']
@@ -504,7 +536,7 @@ def main() -> int:
         report = report_for(inventory(waiver_ids=_load_waivers(args.waivers.resolve())))
         if args.check_ratchet:
             baseline = json.loads(args.baseline.resolve().read_text(encoding='utf-8'))
-            errors = check_ratchet(report, baseline)
+            errors = check_ratchet(report, baseline) + check_baseline_freshness(report, baseline)
             if errors:
                 for error in errors:
                     print(f'ERROR: {error}', file=sys.stderr)

@@ -9908,5 +9908,16 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lühikest vestlust',
+      one: '$count lühike vestlus',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get transcriptionNoAudio => 'Transkriptsioon ei saa heli';
 }

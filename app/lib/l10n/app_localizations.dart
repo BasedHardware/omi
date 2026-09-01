@@ -18453,6 +18453,12 @@ abstract class AppLocalizations {
   /// **'Not captured ({count})'**
   String conversationsNotCapturedCount(int count);
 
+  /// Collapsed group of the day’s short conversations on the home timeline
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{{count} short conversation} other{{count} short conversations}}'**
+  String shortConversationsCount(int count);
+
   /// Status when an active call transcription socket receives no audio frames
   ///
   /// In en, this message translates to:

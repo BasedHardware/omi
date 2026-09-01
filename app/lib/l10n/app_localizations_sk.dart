@@ -9907,5 +9907,16 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Krátke konverzácie: $count',
+      one: '$count krátka konverzácia',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get transcriptionNoAudio => 'Transkripcia neprijíma zvuk';
 }

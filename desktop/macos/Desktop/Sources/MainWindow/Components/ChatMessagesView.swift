@@ -398,7 +398,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Set immediately by the scroll wheel monitor to win the race against
   /// throttled programmatic scrolls during streaming.
   @State private var userIsScrolling = false
-  @State private var userScrollEndWorkItem: DispatchWorkItem?
   /// Tracks work items for delayed initial bottom scrolls so they can be
   /// canceled on user scroll or disappear.
   @State private var initialScrollWorkItems: [DispatchWorkItem] = []
@@ -890,7 +889,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     }
   }
 
-  /// Cancels all pending scheduled scrolls (throttle, initial, user-scroll-end).
+  /// Cancels all pending scheduled scrolls (throttle and initial placement).
   private func cancelAllPendingScrolls() {
     scrollThrottleWorkItem?.cancel()
     scrollThrottleWorkItem = nil
@@ -900,8 +899,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // when it changes: this runs on every scroll event, and an unconditional
     // `@State` write there is a body invalidation per event.
     if hasQueuedFollowScroll { hasQueuedFollowScroll = false }
-    userScrollEndWorkItem?.cancel()
-    userScrollEndWorkItem = nil
     for item in initialScrollWorkItems {
       item.cancel()
     }
@@ -1068,24 +1065,16 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         transcriptGeometry.setFollowingLiveEdge(false)
         transcriptGeometry.releaseSelection()
         cancelPendingScrollsForUserInteraction()
-        let endWork = DispatchWorkItem {
-          userIsScrolling = false
-        }
-        userScrollEndWorkItem = endWork
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
+      } onUserScrollEnded: {
+        userIsScrolling = false
       } onScrollSettledAtBottom: {
         // The detector reports a settle only once the input that produced it
         // genuinely finished: AppKit's `didEndLiveScroll` for wheel/trackpad
         // (momentum included), or the bounded timer for keyboard and scrollbar
         // input. Both are stronger evidence than the wall-clock
-        // `userIsScrolling` latch, which exists only to stop programmatic
-        // scrolls fighting a gesture still in flight. Consulting the latch here
-        // made this resume unreachable: `didEndLiveScroll` delivers on the very
-        // next main-thread turn, ~0.3s before the latch clears, so a reader who
-        // returned to the live edge could never resume live following.
-        userScrollEndWorkItem?.cancel()
-        userScrollEndWorkItem = nil
-        userIsScrolling = false
+        // `userIsScrolling` state, which the detector's native end-of-input
+        // callback releases immediately before this bottom-only callback.
+        // A separate timer here let reader ownership expire during long input.
         guard
           ChatScrollLiveEdge.canResumeFollowing(
             source: .settledUserScroll,

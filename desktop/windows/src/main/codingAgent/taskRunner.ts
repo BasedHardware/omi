@@ -178,6 +178,9 @@ export async function runCodingAgentTask(
             mode: 'act'
           },
           (event) => {
+            // Internal managed-cloud lifecycle signal for main-chat quota
+            // ownership; it is not part of the user-facing CodingAgentEvent wire.
+            if (event.type === 'hosted_request_started') return
             if (event.type === 'text_delta' && event.text) producedOutput = true
             emit({ ...event, taskId: args.taskId })
           },

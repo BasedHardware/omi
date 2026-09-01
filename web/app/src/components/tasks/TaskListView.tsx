@@ -84,7 +84,7 @@ export function TaskListView({
   return (
     <div className="flex flex-col">
       {/* Pending tasks - flat list */}
-      <div className="border border-bg-tertiary rounded-lg overflow-hidden">
+      <div className="border border-bg-tertiary rounded-lg">
         <AnimatePresence mode="popLayout">
           {filteredPending.map((task, index) => (
             <TaskRow
