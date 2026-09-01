@@ -129,9 +129,9 @@ describe('MobileAppSurface', () => {
   });
 
   test.each([
-    ['chat', 'What can I help you find?'],
+    ['chat', 'Omi gets simpler'],
     ['tasks', 'Prepare product demo'],
-    ['apps', 'Your connected apps'],
+    ['apps', 'No apps connected yet'],
   ] as const)('renders the shipping %s destination', (route, copy) => {
     const tree = renderedText(render({activeRoute: route}));
     expect(tree).toContain(copy);

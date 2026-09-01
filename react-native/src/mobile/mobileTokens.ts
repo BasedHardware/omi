@@ -1,15 +1,15 @@
 export const mobileColor = {
-  background: '#000000',
-  surface: '#1d1d23',
-  surfaceRaised: '#25252d',
+  background: '#0f0f0f',
+  surface: '#1a1a1a',
+  surfaceRaised: '#1f1f25',
   surfaceQuiet: '#111114',
-  border: '#34343d',
-  text: '#f7f7f8',
-  textMuted: '#aaaab2',
-  textSubtle: '#74747d',
+  border: '#35343b',
+  text: '#ffffff',
+  textMuted: '#b0b0b0',
+  textSubtle: '#888888',
   accent: '#ffffff',
   recording: '#ff5a62',
-  connected: '#00ed35',
+  connected: '#10b981',
   warning: '#f0b56d',
 } as const;
 
@@ -23,10 +23,11 @@ export const mobileSpace = {
 } as const;
 
 export const mobileRadius = {
-  sm: 14,
-  md: 22,
-  lg: 30,
-  round: 999,
+  sm: 12,
+  md: 16,
+  lg: 22,
+  chip: 16,
+  round: 18,
 } as const;
 
 export const mobileType = {

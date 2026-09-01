@@ -10,6 +10,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import House from 'lucide-react-native/icons/house';
+import ListFilter from 'lucide-react-native/icons/list-filter';
+import MessageCircle from 'lucide-react-native/icons/message-circle';
+import Mic from 'lucide-react-native/icons/mic';
+import Phone from 'lucide-react-native/icons/phone';
+import Puzzle from 'lucide-react-native/icons/puzzle';
+import Settings from 'lucide-react-native/icons/settings';
 import {
   mobileColor,
   mobileRadius,
@@ -18,11 +25,7 @@ import {
 } from './mobileTokens';
 
 export type MobileProjectionStatus =
-  | 'ready'
-  | 'loading'
-  | 'empty'
-  | 'offline'
-  | 'error';
+  'ready' | 'loading' | 'empty' | 'offline' | 'error';
 
 export type MobileRoute = 'home' | 'chat' | 'tasks' | 'apps';
 
@@ -85,8 +88,8 @@ const StatePanel = memo(function StatePanel({
 }) {
   const copy = {
     loading: `Loading ${noun}…`,
-    empty: `No ${noun} yet`,
-    offline: `${noun} will return when you’re online`,
+    empty: noun === 'tasks' ? "Nothing's waiting on you." : `No ${noun} yet`,
+    offline: `Couldn’t refresh ${noun}`,
     error: `Couldn’t load ${noun}`,
   }[status];
   return (
@@ -136,6 +139,42 @@ const RecapCard = memo(function RecapCard({recap}: {recap: MobileRecap}) {
     </View>
   );
 });
+
+const tabItems = [
+  {route: 'home' as const, label: 'Home', Icon: House},
+  {route: 'chat' as const, label: 'Conversations', Icon: MessageCircle},
+  {route: 'tasks' as const, label: 'Tasks', Icon: ListFilter},
+  {route: 'apps' as const, label: 'Apps', Icon: Puzzle},
+];
+
+function MobileTabBar({
+  activeRoute,
+  onRouteChange,
+}: {
+  activeRoute: MobileRoute;
+  onRouteChange: (route: MobileRoute) => void;
+}) {
+  return (
+    <View accessibilityRole="tablist" style={styles.tabBar}>
+      {tabItems.map(({route, label, Icon}) => (
+        <Pressable
+          accessibilityLabel={label}
+          accessibilityRole="tab"
+          accessibilityState={{selected: activeRoute === route}}
+          key={route}
+          onPress={() => onRouteChange(route)}
+          style={styles.tabButton}>
+          <Icon
+            color={
+              activeRoute === route ? mobileColor.text : mobileColor.textSubtle
+            }
+            size={22}
+          />
+        </Pressable>
+      ))}
+    </View>
+  );
+}
 
 function SectionHeader({
   action,
@@ -213,7 +252,7 @@ export function MobileAppSurface({
                   : 'Capture is paused')}
             </Text>
             <View style={styles.microphoneButton}>
-              <Text style={styles.microphoneGlyph}>●</Text>
+              <Mic color={mobileColor.text} size={18} />
             </View>
           </View>
         );
@@ -309,10 +348,10 @@ export function MobileAppSurface({
   if (activeRoute !== 'home') {
     const title =
       activeRoute === 'chat'
-        ? 'Chat'
+        ? 'Conversations'
         : activeRoute === 'tasks'
-        ? 'Tasks'
-        : 'Apps';
+          ? 'Tasks'
+          : 'Apps';
     return (
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
@@ -325,7 +364,7 @@ export function MobileAppSurface({
               accessibilityRole="button"
               onPress={onOpenSettings}
               style={styles.roundButton}>
-              <Text style={styles.roundGlyph}>⚙</Text>
+              <Settings color={mobileColor.text} size={20} />
             </Pressable>
           </View>
           {activeRoute === 'tasks' ? (
@@ -345,69 +384,29 @@ export function MobileAppSurface({
               </View>
             )
           ) : activeRoute === 'chat' ? (
-            <View style={styles.secondaryEmpty}>
-              <Text style={styles.secondaryPrompt}>
-                What can I help you find?
-              </Text>
-              <Text style={styles.secondaryCopy}>
-                Ask across your conversations, memories, and tasks.
-              </Text>
-            </View>
+            recaps.length > 0 ? (
+              <FlatList
+                contentContainerStyle={styles.secondaryList}
+                data={recaps}
+                keyExtractor={recap => recap.id}
+                renderItem={({item}) => <RecapCard recap={item} />}
+              />
+            ) : (
+              <View style={styles.secondaryEmpty}>
+                <Text style={styles.secondaryPrompt}>
+                  Your timeline is empty
+                </Text>
+              </View>
+            )
           ) : (
             <View style={styles.secondaryEmpty}>
-              <Text style={styles.secondaryPrompt}>Your connected apps</Text>
-              <Text style={styles.secondaryCopy}>
-                Connected sources and available imports appear here.
-              </Text>
+              <Text style={styles.secondaryPrompt}>No apps connected yet</Text>
             </View>
           )}
-          {activeRoute === 'chat' ? (
-            <View style={styles.secondaryAskDock}>
-              <TextInput
-                accessibilityLabel="Ask Omi"
-                onChangeText={onAskChange}
-                onSubmitEditing={onAskSubmit}
-                placeholder="Ask Omi anything…"
-                placeholderTextColor={mobileColor.textSubtle}
-                returnKeyType="send"
-                style={styles.askInput}
-                value={askValue}
-              />
-              <Pressable
-                accessibilityLabel="Send to Omi"
-                accessibilityRole="button"
-                onPress={onAskSubmit}
-                style={styles.askButton}>
-                <Text style={styles.askGlyph}>●</Text>
-              </Pressable>
-            </View>
-          ) : null}
-          <View accessibilityRole="tablist" style={styles.tabBar}>
-            {(
-              [
-                ['home', '⌂', 'Home'],
-                ['chat', '◯', 'Chat'],
-                ['tasks', '☷', 'Tasks'],
-                ['apps', '✚', 'Apps'],
-              ] as const
-            ).map(([route, glyph, label]) => (
-              <Pressable
-                accessibilityLabel={label}
-                accessibilityRole="tab"
-                accessibilityState={{selected: activeRoute === route}}
-                key={route}
-                onPress={() => onRouteChange(route)}
-                style={styles.tabButton}>
-                <Text
-                  style={[
-                    styles.tabGlyph,
-                    activeRoute === route && styles.tabGlyphActive,
-                  ]}>
-                  {glyph}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          <MobileTabBar
+            activeRoute={activeRoute}
+            onRouteChange={onRouteChange}
+          />
         </KeyboardAvoidingView>
       </SafeAreaView>
     );
@@ -439,7 +438,7 @@ export function MobileAppSurface({
               accessibilityRole="button"
               onPress={onOpenCalls}
               style={styles.roundButton}>
-              <Text style={styles.roundGlyph}>⌕</Text>
+              <Phone color={mobileColor.text} size={20} />
             </Pressable>
           </View>
           <Pressable
@@ -447,7 +446,7 @@ export function MobileAppSurface({
             accessibilityRole="button"
             onPress={onOpenSettings}
             style={styles.roundButton}>
-            <Text style={styles.roundGlyph}>⚙</Text>
+            <Settings color={mobileColor.text} size={20} />
           </Pressable>
         </View>
         <FlatList
@@ -473,35 +472,10 @@ export function MobileAppSurface({
             accessibilityRole="button"
             onPress={onAskSubmit}
             style={styles.askButton}>
-            <Text style={styles.askGlyph}>●</Text>
+            <Mic color={mobileColor.background} size={18} />
           </Pressable>
         </View>
-        <View accessibilityRole="tablist" style={styles.tabBar}>
-          {(
-            [
-              ['home', '⌂', 'Home'],
-              ['chat', '◯', 'Chat'],
-              ['tasks', '☷', 'Tasks'],
-              ['apps', '✚', 'Apps'],
-            ] as const
-          ).map(([route, glyph, label]) => (
-            <Pressable
-              accessibilityLabel={label}
-              accessibilityRole="tab"
-              accessibilityState={{selected: activeRoute === route}}
-              key={route}
-              onPress={() => onRouteChange(route)}
-              style={styles.tabButton}>
-              <Text
-                style={[
-                  styles.tabGlyph,
-                  activeRoute === route && styles.tabGlyphActive,
-                ]}>
-                {glyph}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <MobileTabBar activeRoute={activeRoute} onRouteChange={onRouteChange} />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -705,14 +679,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   mapNodeLarge: {
-    backgroundColor: '#343f78',
-    borderRadius: mobileRadius.round,
+    backgroundColor: mobileColor.surfaceRaised,
+    borderColor: mobileColor.border,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
     height: 44,
     width: 44,
   },
   mapNode: {
-    backgroundColor: '#73446f',
-    borderRadius: mobileRadius.round,
+    backgroundColor: mobileColor.surface,
+    borderColor: mobileColor.border,
+    borderRadius: 11,
+    borderWidth: StyleSheet.hairlineWidth,
     height: 22,
     position: 'absolute',
     width: 22,
