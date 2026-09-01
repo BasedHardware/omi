@@ -47,6 +47,7 @@ test('puts traffic lights in the content chrome next to Home', () => {
   expect(source).toContain('positionOmiTrafficLights');
   expect(source).toContain('OmiTrafficLightLeading');
   expect(source).toMatch(/OmiTrafficLightLeading\s*=\s*16\.0/);
+  expect(source).toMatch(/OmiWindowInset\s*=\s*8\.0/);
   expect(source).toContain('NSWindowStyleMaskFullSizeContentView');
   expect(source).toContain('titlebarAppearsTransparent = YES');
   expect(source).toContain('NSTitlebarSeparatorStyleNone');
@@ -77,6 +78,12 @@ test('keeps every traffic light at its native standard size and moves only its o
   );
   expect(methodSource).toContain('frame.origin = NSMakePoint(x, y);');
   expect(methodSource).toContain('x += buttonWidth + OmiTrafficLightSpacing;');
+  expect(methodSource).toContain(
+    'CGFloat x = OmiWindowInset + OmiTrafficLightLeading;',
+  );
+  expect(methodSource).toContain(
+    'NSHeight(container.bounds) - OmiWindowInset - OmiTrafficLightChromeHeight',
+  );
   expect(methodSource).not.toContain('frame.size =');
   expect(methodSource).not.toMatch(/button\.frame\s*=\s*NSMakeRect/);
 });
