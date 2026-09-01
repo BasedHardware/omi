@@ -3099,6 +3099,11 @@ async function main(): Promise<void> {
             suppressedByStreamingTail: result.results.some((candidate) => candidate.suppressedByStreamingTail),
             materializationStoppedByTail: result.stoppedByTail,
             materializationReceipts: result.results.flatMap((candidate) => candidate.receipt ? [candidate.receipt] : []),
+            materializationRejections: result.results.flatMap((candidate, index) => candidate.rejected ? [{
+              intentId: intents[index]!.intentId,
+              code: candidate.rejectionCode ?? "kernel_materialization_failed",
+              message: candidate.rejectionMessage ?? "Chat-first intent materialization failed",
+            }] : []),
           });
           if (committedTurns.length > 0) {
             for (const turn of committedTurns) for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {

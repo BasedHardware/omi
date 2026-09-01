@@ -1,8 +1,9 @@
 """Durable Chat-first proactive intent state, separate from the chat journal."""
 
 import hashlib
+import json
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable
 
 from google.cloud import firestore
@@ -30,6 +31,28 @@ DEFERRALS_COLLECTION = 'chat_first_deferrals'
 STATE_COLLECTION = 'chat_first_proactive_state'
 BUDGET_DOCUMENT = 'budget'
 _DEFERRAL_DUE_AFTER = timedelta(hours=24)
+
+# A ready intent must reach a terminal state under bounded identical retries:
+# typed kernel failures park it after three reports, while fetch-only clients
+# cannot keep any head item live beyond twenty unacknowledged deliveries.
+MATERIALIZATION_REJECTION_BUDGET = 3
+UNACKNOWLEDGED_FETCH_BUDGET = 20
+STALLED_READY_AGE = timedelta(hours=24)
+PERMANENT_REJECTION_CODES = frozenset({'invalid_intent', 'identity_conflict'})
+
+
+@dataclass(frozen=True)
+class IntentLifecycleEvent:
+    event: str
+    source: ProactiveIntentSource
+    reason: str
+
+
+@dataclass(frozen=True)
+class ReadyIntentBatch:
+    intents: list[ProactiveIntent]
+    lifecycle_events: tuple[IntentLifecycleEvent, ...]
+    stalled_source: ProactiveIntentSource | None
 
 
 class ChatFirstIntentStoreError(RuntimeError):
@@ -528,17 +551,119 @@ def has_active_sparse_cold_start_sequence(
     return False
 
 
-def fetch_ready_intents(
+def _stable_chat_first_turn_id(intent_id: str) -> str:
+    return f'turn_cfi_{hashlib.sha256(intent_id.encode()).hexdigest()[:24]}'
+
+
+def _synthetic_reconciliation_receipt_id(intent_id: str) -> str:
+    return f'cfi_reconciled_{hashlib.sha256(intent_id.encode()).hexdigest()[:24]}'
+
+
+def _message_has_intent_identity(uid: str, intent_id: str, *, firestore_client: Any) -> bool:
+    """Point-read the stable chat row and verify its embedded intent identity."""
+
+    snapshot = (
+        _user_ref(uid, firestore_client=firestore_client)
+        .collection('messages')
+        .document(_stable_chat_first_turn_id(intent_id))
+        .get()
+    )
+    if not snapshot.exists:
+        return False
+    metadata = (snapshot.to_dict() or {}).get('metadata')
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except (TypeError, ValueError):
+            return False
+    return isinstance(metadata, dict) and metadata.get('chatFirstIntentId') == intent_id
+
+
+def _fetch_priority(intent: ProactiveIntent) -> int:
+    if intent.source == 'daily_opener' or any(block.type == 'conversationLink' for block in intent.blocks):
+        return 0
+    if intent.source == 'capture_arrival' and all(block.type == 'captureLink' for block in intent.blocks):
+        return 2
+    return 1
+
+
+def _advance_fetched_intent(
+    uid: str,
+    intent_id: str,
+    *,
+    account_generation: int,
+    now: datetime,
+    reconcile: bool,
+    firestore_client: Any,
+) -> tuple[ProactiveIntent | None, IntentLifecycleEvent | None]:
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=firestore_client)
+    transaction = firestore_client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> tuple[ProactiveIntent | None, IntentLifecycleEvent | None]:
+        control_snapshot = _control_ref(uid, firestore_client=firestore_client).get(transaction=write_transaction)
+        _require_control(control_snapshot, uid=uid, account_generation=account_generation)
+        snapshot = intent_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return None, None
+        intent = _intent_from_snapshot(snapshot)
+        if intent.account_generation != account_generation or intent.delivery_state not in {
+            'ready',
+            'pending_kernel_receipt',
+        }:
+            return None, None
+
+        fetch_count = intent.fetch_count + 1
+        common = {'fetch_count': fetch_count, 'last_fetched_at': now}
+        if reconcile:
+            budget_ref = _budget_ref(uid, firestore_client=firestore_client)
+            budget_snapshot = budget_ref.get(transaction=write_transaction) if intent.consumes_turn_budget else None
+            delivered = intent.model_copy(
+                update={
+                    **common,
+                    'delivery_state': 'delivered',
+                    'delivered_at': now,
+                    'materialization_receipt_id': _synthetic_reconciliation_receipt_id(intent.intent_id),
+                }
+            )
+            if intent.consumes_turn_budget:
+                assert budget_snapshot is not None
+                budget = _budget_from_snapshot(budget_snapshot, account_generation=account_generation, now=now)
+                write_transaction.set(
+                    budget_ref, account_materialization(budget, intent_id=intent_id, now=now).model_dump(mode='python')
+                )
+            write_transaction.set(intent_ref, _intent_payload(delivered))
+            return None, IntentLifecycleEvent('reconciled', intent.source, 'existing_chat_row')
+        if fetch_count > UNACKNOWLEDGED_FETCH_BUDGET:
+            dead_lettered = intent.model_copy(
+                update={
+                    **common,
+                    'delivery_state': 'dead_letter',
+                    'dead_letter_reason': 'unacknowledged_after_fetch_budget',
+                }
+            )
+            write_transaction.set(intent_ref, _intent_payload(dead_lettered))
+            return None, IntentLifecycleEvent('dead_letter', intent.source, 'unacknowledged_after_fetch_budget')
+        fetched = intent.model_copy(update=common)
+        write_transaction.set(intent_ref, _intent_payload(fetched))
+        return fetched, None
+
+    return apply(transaction)
+
+
+def fetch_ready_intent_batch(
     uid: str,
     *,
     account_generation: int,
     limit: int = 8,
     exclude_block_types: set[str] | frozenset[str] | None = None,
+    now: datetime | None = None,
     firestore_client: Any = None,
-) -> list[ProactiveIntent]:
-    """Return ready intents only; this never changes delivery or writes Chat."""
+) -> ReadyIntentBatch:
+    """Fetch a priority batch while bounding poison retries and reconciling stable rows."""
 
     client = _db(firestore_client)
+    fetched_at = now or datetime.now(timezone.utc)
     _require_current_control(uid, account_generation=account_generation, firestore_client=client)
     collection = _user_ref(uid, firestore_client=client).collection(INTENTS_COLLECTION)
     # Push the delivery-state filter to Firestore so delivered historical rows
@@ -546,7 +671,7 @@ def fetch_ready_intents(
     # ever needs ready or pending-receipt intents, which are bounded; the full
     # collection otherwise grows with account age.
     query = collection.where(filter=FieldFilter('delivery_state', 'in', ['ready', 'pending_kernel_receipt']))
-    ready: list[ProactiveIntent] = []
+    candidates: list[ProactiveIntent] = []
     for snapshot in query.stream():
         intent = _intent_from_snapshot(snapshot)
         if intent.account_generation != account_generation:
@@ -557,9 +682,110 @@ def fetch_ready_intents(
         # legacy-compatible intents behind them.
         if exclude_block_types and any(block.type in exclude_block_types for block in intent.blocks):
             continue
-        ready.append(intent)
-    ready.sort(key=lambda intent: (intent.created_at, intent.intent_id))
-    return ready[:limit]
+        candidates.append(intent)
+    candidates.sort(key=lambda intent: (_fetch_priority(intent), intent.created_at, intent.intent_id))
+    oldest_candidate = min(candidates, key=lambda intent: (intent.created_at, intent.intent_id), default=None)
+
+    ready: list[ProactiveIntent] = []
+    lifecycle_events: list[IntentLifecycleEvent] = []
+    # Process beyond the response limit when earlier candidates terminalize;
+    # the caller still receives up to eight live items in this same fetch.
+    for intent in candidates:
+        reconcile = intent.fetch_count > 0 and _message_has_intent_identity(
+            uid, intent.intent_id, firestore_client=client
+        )
+        advanced, event = _advance_fetched_intent(
+            uid,
+            intent.intent_id,
+            account_generation=account_generation,
+            now=fetched_at,
+            reconcile=reconcile,
+            firestore_client=client,
+        )
+        if event is not None:
+            lifecycle_events.append(event)
+        if advanced is not None and len(ready) < limit:
+            ready.append(advanced)
+        if len(ready) >= limit:
+            break
+
+    stalled_source = (
+        oldest_candidate.source
+        if oldest_candidate is not None and fetched_at - oldest_candidate.created_at > STALLED_READY_AGE
+        else None
+    )
+    return ReadyIntentBatch(ready, tuple(lifecycle_events), stalled_source)
+
+
+def fetch_ready_intents(
+    uid: str,
+    *,
+    account_generation: int,
+    limit: int = 8,
+    exclude_block_types: set[str] | frozenset[str] | None = None,
+    now: datetime | None = None,
+    firestore_client: Any = None,
+) -> list[ProactiveIntent]:
+    """Compatibility wrapper for callers that only consume the live intents."""
+
+    return fetch_ready_intent_batch(
+        uid,
+        account_generation=account_generation,
+        limit=limit,
+        exclude_block_types=exclude_block_types,
+        now=now,
+        firestore_client=firestore_client,
+    ).intents
+
+
+def record_materialization_rejection(
+    uid: str,
+    *,
+    intent_id: str,
+    code: str,
+    account_generation: int,
+    now: datetime,
+    firestore_client: Any = None,
+) -> tuple[ProactiveIntent, str | None]:
+    """Record a typed kernel rejection and park deterministic poison within budget."""
+
+    client = _db(firestore_client)
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> tuple[ProactiveIntent, str | None]:
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
+        _require_control(control_snapshot, uid=uid, account_generation=account_generation)
+        snapshot = intent_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            raise ProactiveIntentNotReady('proactive intent is not ready')
+        intent = _intent_from_snapshot(snapshot)
+        if intent.account_generation != account_generation:
+            raise ChatFirstIntentGenerationMismatch('intent account generation changed')
+        if intent.delivery_state == 'dead_letter':
+            return intent, None
+        if intent.delivery_state not in {'ready', 'pending_kernel_receipt'}:
+            raise ProactiveIntentNotReady('proactive intent is not ready')
+
+        attempts = intent.materialization_attempts + 1
+        reason: str | None = None
+        if code in PERMANENT_REJECTION_CODES:
+            reason = f'permanent_rejection:{code}'
+        elif attempts >= MATERIALIZATION_REJECTION_BUDGET:
+            reason = 'rejection_budget_exhausted'
+        rejected = intent.model_copy(
+            update={
+                'materialization_attempts': attempts,
+                'last_rejection_code': code,
+                'last_rejection_at': now,
+                **({'delivery_state': 'dead_letter', 'dead_letter_reason': reason} if reason else {}),
+            }
+        )
+        write_transaction.set(intent_ref, _intent_payload(rejected))
+        return rejected, reason
+
+    return apply(transaction)
 
 
 def acknowledge_materialization(
@@ -814,6 +1040,7 @@ __all__ = [
     'acknowledge_sparse_cold_start_sequence_terminal',
     'has_active_sparse_cold_start_sequence',
     'fetch_ready_intents',
+    'fetch_ready_intent_batch',
     'get_budget_state',
     'iter_ready_intent_ids',
     'proactive_deferral_id',
@@ -821,4 +1048,5 @@ __all__ = [
     'release_agent_judgment_admission',
     'record_deferral',
     'release_due_deferrals',
+    'record_materialization_rejection',
 ]

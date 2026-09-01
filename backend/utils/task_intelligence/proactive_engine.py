@@ -466,7 +466,7 @@ def _deterministic_shortlist(trigger: ProactiveWakeTrigger) -> list[ProactiveCan
 def _meter(event: str, source: str) -> None:
     """Emit only bounded shape labels; never content, prompts, or subject IDs."""
 
-    CHAT_FIRST_PROACTIVE_TOTAL.labels(event=event, source=source).inc()
+    CHAT_FIRST_PROACTIVE_TOTAL.labels(event=event, source=source, reason='none').inc()
 
 
 __all__ = [

@@ -11,6 +11,7 @@ from models.chat_first import (
     CaptureLinkSpec,
     ChatFirstSubject,
     ColdStartSequence,
+    ConversationLinkSpec,
     QuestionCardSpec,
     QuestionOption,
 )
@@ -394,6 +395,169 @@ def test_capture_arrival_retry_creates_one_deterministic_receipt_intent(firestor
     assert retry.source == 'capture_arrival'
 
 
+def test_poison_item_contract_one_bad_item_never_blocks_rest_and_is_parked_with_reason_within_budget(firestore):
+    poison, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:poison',
+        subject=ChatFirstSubject(kind='capture', id='poison'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='poison', summary='Poison')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    healthy, _ = intents_db.create_intent(
+        UID,
+        source='daily_opener',
+        continuity_key='daily:healthy',
+        subject=None,
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='healthy', summary='Healthy')],
+        account_generation=GENERATION,
+        now=NOW + timedelta(seconds=1),
+        firestore_client=firestore,
+    )
+
+    for attempt in range(1, intents_db.MATERIALIZATION_REJECTION_BUDGET + 1):
+        rejected, reason = intents_db.record_materialization_rejection(
+            UID,
+            intent_id=poison.intent_id,
+            code='kernel_materialization_failed',
+            account_generation=GENERATION,
+            now=NOW + timedelta(minutes=attempt),
+            firestore_client=firestore,
+        )
+        assert rejected.materialization_attempts == attempt
+
+    assert reason == 'rejection_budget_exhausted'
+    assert rejected.delivery_state == 'dead_letter'
+    assert rejected.last_rejection_code == 'kernel_materialization_failed'
+    fetched = intents_db.fetch_ready_intents(
+        UID,
+        account_generation=GENERATION,
+        now=NOW + timedelta(minutes=10),
+        firestore_client=firestore,
+    )
+    assert [intent.intent_id for intent in fetched] == [healthy.intent_id]
+    assert poison.intent_id not in [intent.intent_id for intent in fetched]
+
+
+def test_fetch_budget_dead_letters_an_unacknowledged_intent(firestore):
+    intent, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:never-acknowledged',
+        subject=ChatFirstSubject(kind='capture', id='never-acknowledged'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='never-acknowledged', summary='Capture')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+
+    for fetch_index in range(intents_db.UNACKNOWLEDGED_FETCH_BUDGET):
+        assert intents_db.fetch_ready_intents(
+            UID,
+            account_generation=GENERATION,
+            now=NOW + timedelta(minutes=fetch_index),
+            firestore_client=firestore,
+        )
+    parked = intents_db.fetch_ready_intents(
+        UID,
+        account_generation=GENERATION,
+        now=NOW + timedelta(hours=1),
+        firestore_client=firestore,
+    )
+
+    assert parked == []
+    stored = intents_db._intent_from_snapshot(
+        intents_db._intent_ref(UID, intent.intent_id, firestore_client=firestore).get()
+    )
+    assert stored.delivery_state == 'dead_letter'
+    assert stored.fetch_count == intents_db.UNACKNOWLEDGED_FETCH_BUDGET + 1
+    assert stored.dead_letter_reason == 'unacknowledged_after_fetch_budget'
+
+
+def test_fetch_reconciles_a_stable_chat_row_after_an_earlier_delivery(firestore):
+    intent, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='capture:reconciled',
+        subject=ChatFirstSubject(kind='capture', id='reconciled'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='reconciled', summary='Capture')],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    first = intents_db.fetch_ready_intents(UID, account_generation=GENERATION, now=NOW, firestore_client=firestore)
+    turn_id = intents_db._stable_chat_first_turn_id(intent.intent_id)
+    firestore.rows[('users', UID, 'messages', turn_id)] = {
+        'metadata': '{"chatFirstIntentId":"' + intent.intent_id + '"}'
+    }
+
+    batch = intents_db.fetch_ready_intent_batch(
+        UID,
+        account_generation=GENERATION,
+        now=NOW + timedelta(minutes=1),
+        firestore_client=firestore,
+    )
+
+    assert [item.intent_id for item in first] == [intent.intent_id]
+    assert batch.intents == []
+    assert batch.lifecycle_events == (
+        intents_db.IntentLifecycleEvent('reconciled', 'capture_arrival', 'existing_chat_row'),
+    )
+    stored = intents_db._intent_from_snapshot(
+        intents_db._intent_ref(UID, intent.intent_id, firestore_client=firestore).get()
+    )
+    assert stored.delivery_state == 'delivered'
+    assert stored.materialization_receipt_id.startswith('cfi_reconciled_')
+
+
+def test_fetch_orders_daily_and_meeting_intents_ahead_of_capture_link_backlog(firestore):
+    for index in range(9):
+        intents_db.create_intent(
+            UID,
+            source='capture_arrival',
+            continuity_key=f'capture:backlog:{index}',
+            subject=ChatFirstSubject(kind='capture', id=f'backlog-{index}'),
+            blocks=[CaptureLinkSpec(type='captureLink', conversation_id=f'backlog-{index}', summary='Capture')],
+            account_generation=GENERATION,
+            now=NOW + timedelta(seconds=index),
+            firestore_client=firestore,
+        )
+    daily, _ = intents_db.create_intent(
+        UID,
+        source='daily_opener',
+        continuity_key='daily:priority',
+        subject=None,
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='daily-priority', summary='Daily')],
+        account_generation=GENERATION,
+        now=NOW + timedelta(minutes=10),
+        firestore_client=firestore,
+    )
+    meeting, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key='meeting:priority',
+        subject=ChatFirstSubject(kind='capture', id='meeting-priority'),
+        blocks=[
+            ConversationLinkSpec(
+                type='conversationLink', conversation_id='meeting-priority', summary='Meeting notes ready'
+            )
+        ],
+        account_generation=GENERATION,
+        now=NOW + timedelta(minutes=11),
+        firestore_client=firestore,
+    )
+
+    batch = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(days=2), firestore_client=firestore
+    )
+
+    assert [intent.intent_id for intent in batch.intents[:2]] == [daily.intent_id, meeting.intent_id]
+    assert len(batch.intents) == 8
+    assert batch.stalled_source == 'capture_arrival'
+
+
 def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_receipt(firestore):
     sequence_id = f'cold-start:{GENERATION}'
     question = QuestionCardSpec(
@@ -433,7 +597,8 @@ def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_recei
         intents_db.has_active_sparse_cold_start_sequence(UID, account_generation=GENERATION, firestore_client=firestore)
         is True
     )
-    assert intents_db.fetch_ready_intents(UID, account_generation=GENERATION, firestore_client=firestore) == [first]
+    fetched = intents_db.fetch_ready_intents(UID, account_generation=GENERATION, now=NOW, firestore_client=firestore)
+    assert fetched == [first.model_copy(update={'fetch_count': 1, 'last_fetched_at': NOW})]
     delivered = intents_db.acknowledge_materialization(
         UID,
         intent_id=first.intent_id,

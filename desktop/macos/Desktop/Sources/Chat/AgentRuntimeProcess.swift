@@ -3696,8 +3696,8 @@ actor AgentRuntimeProcess {
         suppressedByStreamingTail: message.payload["suppressedByStreamingTail"] as? Bool ?? false,
         materializationStoppedByTail: message.payload["materializationStoppedByTail"] as? Bool ?? false,
         materializationReceipts: Self.chatFirstMaterializationReceipts(
-          from: message.payload["materializationReceipts"]
-        ),
+          from: message.payload["materializationReceipts"]),
+        materializationRejections: Self.chatFirstRejections(from: message.payload["materializationRejections"]),
         coldStartSequenceTerminalReceipts: Self.chatFirstColdStartSequenceTerminalReceipts(
           from: message.payload["coldStartSequenceTerminalReceipts"]
         ),
@@ -3987,7 +3987,7 @@ actor AgentRuntimeProcess {
         journalRequest.continuation.resume(throwing: BridgeError.authMissing)
         return
       }
-      log("AgentRuntimeProcess: journal operation failed (code-only)")
+      log(Self.chatFirstJournalFailureLog(failure: failure, payload: message.payload, raw: raw))
       journalRequest.continuation.resume(
         throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
       )

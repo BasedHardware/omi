@@ -107,6 +107,7 @@ extension AgentRuntimeProcess {
     let suppressedByStreamingTail: Bool
     let materializationStoppedByTail: Bool
     let materializationReceipts: [ChatFirstMaterializationReceipt]
+    let materializationRejections: [ChatFirstMaterializationRejection]
     let coldStartSequenceTerminalReceipts: [ChatFirstColdStartSequenceTerminalReceipt]
     let acknowledgedReceiptCount: Int
 
@@ -126,6 +127,7 @@ extension AgentRuntimeProcess {
       suppressedByStreamingTail: Bool = false,
       materializationStoppedByTail: Bool = false,
       materializationReceipts: [ChatFirstMaterializationReceipt] = [],
+      materializationRejections: [ChatFirstMaterializationRejection] = [],
       coldStartSequenceTerminalReceipts: [ChatFirstColdStartSequenceTerminalReceipt] = [],
       acknowledgedReceiptCount: Int = 0
     ) {
@@ -144,6 +146,7 @@ extension AgentRuntimeProcess {
       self.suppressedByStreamingTail = suppressedByStreamingTail
       self.materializationStoppedByTail = materializationStoppedByTail
       self.materializationReceipts = materializationReceipts
+      self.materializationRejections = materializationRejections
       self.coldStartSequenceTerminalReceipts = coldStartSequenceTerminalReceipts
       self.acknowledgedReceiptCount = acknowledgedReceiptCount
     }
@@ -162,6 +165,7 @@ extension AgentRuntimeProcess {
     let accepted: Bool
     let stoppedByTail: Bool
     let receipts: [ChatFirstMaterializationReceipt]
+    let rejections: [ChatFirstMaterializationRejection]
   }
 
   /// Append server-validated structured blocks to exactly the assistant turn
@@ -362,7 +366,8 @@ extension AgentRuntimeProcess {
     return ChatFirstIntentsMaterialization(
       accepted: result.accepted == true,
       stoppedByTail: result.materializationStoppedByTail,
-      receipts: result.materializationReceipts
+      receipts: result.materializationReceipts,
+      rejections: result.materializationRejections
     )
   }
 
@@ -446,6 +451,31 @@ extension AgentRuntimeProcess {
       else { return nil }
       return ChatFirstMaterializationReceipt(intentID: intentID, receiptID: receiptID)
     }
+  }
+
+  nonisolated static func chatFirstRejections(
+    from payload: Any?
+  ) -> [ChatFirstMaterializationRejection] {
+    guard let values = payload as? [[String: Any]] else { return [] }
+    return values.compactMap { value in
+      guard let intentID = value["intentId"] as? String,
+        !intentID.isEmpty,
+        let code = value["code"] as? String,
+        !code.isEmpty
+      else { return nil }
+      return ChatFirstMaterializationRejection(
+        intentID: intentID,
+        code: code,
+        message: value["message"] as? String
+      )
+    }
+  }
+
+  nonisolated static func chatFirstJournalFailureLog(
+    failure: AgentRuntimeFailure?, payload: [String: Any], raw: String
+  ) -> String {
+    let code = failure?.code ?? payload["errorCode"] as? String ?? "journal_operation_failed"
+    return "AgentRuntimeProcess: journal operation failed code=\(code) message=\(raw)"
   }
 
   nonisolated static func chatFirstColdStartSequenceTerminalReceipts(

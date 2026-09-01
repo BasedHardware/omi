@@ -3,6 +3,20 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
+  func testKernelMaterializationRejectionsDecodeWithTypedIdentityAndReason() {
+    let decoded = AgentRuntimeProcess.chatFirstRejections(
+      from: [
+        ["intentId": "intent-poison", "code": "invalid_intent", "message": "Invalid block"],
+        ["intentId": "", "code": "invalid_intent", "message": "Dropped malformed row"],
+      ]
+    )
+
+    XCTAssertEqual(
+      decoded,
+      [ChatFirstMaterializationRejection(intentID: "intent-poison", code: "invalid_intent", message: "Invalid block")]
+    )
+  }
+
   func testMaterializationFallsBackOnlyWhenV2RouteIsMissing() {
     XCTAssertTrue(
       ChatFirstMaterializationEndpointPolicy.shouldFallbackToV1(

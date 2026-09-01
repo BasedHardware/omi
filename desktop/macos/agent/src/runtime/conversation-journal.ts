@@ -191,6 +191,9 @@ export interface MaterializeChatFirstIntentInput {
 export interface ChatFirstIntentMaterializationResult {
   accepted: boolean;
   duplicate: boolean;
+  rejected: boolean;
+  rejectionCode: string | null;
+  rejectionMessage: string | null;
   suppressedByTailQuestion: boolean;
   suppressedByStreamingTail: boolean;
   turn: ConversationTurn | null;
@@ -198,9 +201,8 @@ export interface ChatFirstIntentMaterializationResult {
 }
 
 /**
- * One ordered server batch becomes one kernel transaction. The server owns
- * creation order; the kernel owns whether the current transcript tail admits
- * the next intent and records the only visible rows.
+ * The server owns creation order; the kernel gives each item its own fault
+ * domain while preserving tail suppression across the ordered batch.
  */
 export interface ChatFirstIntentsMaterializationResult {
   results: ChatFirstIntentMaterializationResult[];
@@ -1090,9 +1092,41 @@ function materializeChatFirstIntentInTransaction(
     return {
       accepted: true,
       duplicate: true,
+      rejected: false,
+      rejectionCode: null,
+      rejectionMessage: null,
       suppressedByTailQuestion: false,
       suppressedByStreamingTail: false,
       turn: requireJournalTurn(store, input.conversationId, turnId),
+      receipt: { intentId, receiptId },
+    };
+  }
+
+  // Chat-first identity is the stable turn ID, not the importing client's
+  // origin or producer. A second device may already have committed this turn
+  // and the backend reconciler may have imported it before its receipt landed.
+  // Adopt that canonical row without weakening ordinary producer/payload
+  // collision checks in recordJournalTurn.
+  const existingTurn = findJournalTurnById(store, turnId);
+  if (existingTurn) {
+    if (existingTurn.conversationId !== input.conversationId) {
+      throw new Error("Chat-first stable turn ID belongs to a different conversation");
+    }
+    store.execute(
+      `INSERT INTO chat_first_materialization_receipts(
+         intent_id, owner_id, conversation_id, control_generation, receipt_id, turn_id, created_at_ms
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [intentId, input.ownerId, input.conversationId, input.controlGeneration, receiptId, turnId, now],
+    );
+    return {
+      accepted: true,
+      duplicate: true,
+      rejected: false,
+      rejectionCode: null,
+      rejectionMessage: null,
+      suppressedByTailQuestion: false,
+      suppressedByStreamingTail: false,
+      turn: existingTurn,
       receipt: { intentId, receiptId },
     };
   }
@@ -1102,6 +1136,9 @@ function materializeChatFirstIntentInTransaction(
     return {
       accepted: false,
       duplicate: false,
+      rejected: false,
+      rejectionCode: null,
+      rejectionMessage: null,
       suppressedByTailQuestion: tail.unansweredQuestion,
       suppressedByStreamingTail: tail.streaming,
       turn: null,
@@ -1138,6 +1175,9 @@ function materializeChatFirstIntentInTransaction(
   return {
     accepted: true,
     duplicate: recorded.duplicate,
+    rejected: false,
+    rejectionCode: null,
+    rejectionMessage: null,
     suppressedByTailQuestion: false,
     suppressedByStreamingTail: false,
     turn: recorded.turn,
@@ -1159,23 +1199,41 @@ export function materializeChatFirstIntents(
   if (inputs.length < 1 || inputs.length > 8) {
     throw new Error("Chat-first materialization batch requires one to eight intents");
   }
-  return store.withTransaction(() => {
-    const results: ChatFirstIntentMaterializationResult[] = [];
-    for (const input of inputs) {
-      const result = materializeChatFirstIntentInTransaction(store, input);
-      results.push(result);
-      // Do not submit an additional intent after a current tail suppresses the
-      // batch, or after this intent itself becomes the new unanswered tail.
-      if (
-        result.suppressedByTailQuestion
-        || result.suppressedByStreamingTail
-        || materializationTailState(store, input.conversationId).unansweredQuestion
-      ) {
-        return { results, stoppedByTail: true };
-      }
+  const results: ChatFirstIntentMaterializationResult[] = [];
+  for (const input of inputs) {
+    let result: ChatFirstIntentMaterializationResult;
+    try {
+      result = store.withTransaction(() => materializeChatFirstIntentInTransaction(store, input));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown chat-first materialization failure";
+      const identityConflict = /reused|different conversation/i.test(message);
+      const invalidIntent = /invalid|requires|unsupported/i.test(message);
+      result = {
+        accepted: false,
+        duplicate: false,
+        rejected: true,
+        rejectionCode: identityConflict
+          ? "identity_conflict"
+          : invalidIntent ? "invalid_intent" : "kernel_materialization_failed",
+        rejectionMessage: message,
+        suppressedByTailQuestion: false,
+        suppressedByStreamingTail: false,
+        turn: null,
+        receipt: null,
+      };
     }
-    return { results, stoppedByTail: false };
-  });
+    results.push(result);
+    // Rejections are parked independently and never stop later items. A real
+    // transcript tail remains an intentional batch deferral.
+    if (
+      result.suppressedByTailQuestion
+      || result.suppressedByStreamingTail
+      || (result.accepted && materializationTailState(store, input.conversationId).unansweredQuestion)
+    ) {
+      return { results, stoppedByTail: true };
+    }
+  }
+  return { results, stoppedByTail: false };
 }
 
 /** Receipts remain pending locally until Swift receives a successful server acknowledgement. */

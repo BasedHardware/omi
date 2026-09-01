@@ -19,6 +19,10 @@ from models.task_intelligence import TaskWorkflowControl
 import routers.chat_first as chat_first_router
 
 
+def _batch(intents):
+    return chat_first_router.chat_first_intents_db.ReadyIntentBatch(intents, (), None)
+
+
 def _client() -> TestClient:
     app = FastAPI()
     app.include_router(chat_first_router.router)
@@ -35,7 +39,9 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def _request(*, generation: int = 7, owner_fence: str = 'user-1', receipts=None, terminal_receipts=None) -> dict:
+def _request(
+    *, generation: int = 7, owner_fence: str = 'user-1', receipts=None, terminal_receipts=None, rejections=None
+) -> dict:
     return {
         'source_surface': 'main_chat',
         'control_generation': generation,
@@ -43,6 +49,7 @@ def _request(*, generation: int = 7, owner_fence: str = 'user-1', receipts=None,
         'window_foreground': True,
         'initial_page_loaded': True,
         'receipts': receipts or [],
+        'rejections': rejections or [],
         'cold_start_sequence_terminal_receipts': terminal_receipts or [],
     }
 
@@ -86,8 +93,9 @@ def test_materialize_capability_off_does_zero_feature_store_or_metric_work(monke
     for name in (
         'acknowledge_materialization',
         'acknowledge_sparse_cold_start_sequence_terminal',
+        'record_materialization_rejection',
         'release_due_deferrals',
-        'fetch_ready_intents',
+        'fetch_ready_intent_batch',
     ):
         monkeypatch.setattr(
             chat_first_router.chat_first_intents_db,
@@ -110,7 +118,7 @@ def test_materialize_rejects_wrong_owner_or_generation_before_feature_store_read
     _enable_chat_first(monkeypatch)
     monkeypatch.setattr(
         chat_first_router.chat_first_intents_db,
-        'fetch_ready_intents',
+        'fetch_ready_intent_batch',
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('feature store must not run')),
     )
 
@@ -148,7 +156,7 @@ def test_materialize_returns_ready_intents_and_acknowledges_only_kernel_receipts
     monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
     monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        chat_first_router.chat_first_intents_db, 'fetch_ready_intents', lambda *args, **kwargs: [intent]
+        chat_first_router.chat_first_intents_db, 'fetch_ready_intent_batch', lambda *args, **kwargs: _batch([intent])
     )
 
     response = _client().post(
@@ -180,6 +188,56 @@ def test_materialize_returns_ready_intents_and_acknowledges_only_kernel_receipts
     assert response.json()['intents'][0]['delivery_state'] == 'ready'
 
 
+def test_materialize_records_typed_rejections_and_dead_letter_metric(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    intent = ProactiveIntent(
+        intent_id='intent-poison',
+        continuity_key='capture:poison',
+        account_generation=7,
+        source='capture_arrival',
+        subject=ChatFirstSubject(kind='capture', id='poison'),
+        blocks=[_question()],
+        created_at=datetime(2026, 7, 15, tzinfo=timezone.utc),
+    )
+    recorded = []
+    metric_events = []
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db,
+        'record_materialization_rejection',
+        lambda *args, **kwargs: recorded.append(kwargs) or (intent, 'permanent_rejection:invalid_intent'),
+    )
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db,
+        'fetch_ready_intent_batch',
+        lambda *args, **kwargs: _batch([]),
+    )
+    monkeypatch.setattr(
+        chat_first_router,
+        'CHAT_FIRST_PROACTIVE_TOTAL',
+        SimpleNamespace(labels=lambda **kwargs: SimpleNamespace(inc=lambda: metric_events.append(kwargs))),
+    )
+
+    response = _client().post(
+        '/v2/chat/materialize-prompts',
+        json=_request(
+            rejections=[{'intent_id': intent.intent_id, 'code': 'invalid_intent', 'message': 'Invalid block'}]
+        ),
+    )
+
+    assert response.status_code == 200
+    assert recorded[0]['intent_id'] == intent.intent_id
+    assert recorded[0]['code'] == 'invalid_intent'
+    assert {'event': 'rejected', 'source': 'capture_arrival', 'reason': 'invalid_intent'} in metric_events
+    assert {
+        'event': 'dead_letter',
+        'source': 'capture_arrival',
+        'reason': 'permanent_rejection:invalid_intent',
+    } in metric_events
+
+
 def test_v1_leaves_conversation_link_pending_and_v2_later_acknowledges_it(monkeypatch):
     _enable_chat_first(monkeypatch)
     intent = ProactiveIntent(
@@ -203,8 +261,8 @@ def test_v1_leaves_conversation_link_pending_and_v2_later_acknowledges_it(monkey
     monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     monkeypatch.setattr(
         chat_first_router.chat_first_intents_db,
-        'fetch_ready_intents',
-        lambda *args, **kwargs: [] if kwargs.get('exclude_block_types') else [intent],
+        'fetch_ready_intent_batch',
+        lambda *args, **kwargs: _batch([] if kwargs.get('exclude_block_types') else [intent]),
     )
     monkeypatch.setattr(
         chat_first_router.chat_first_intents_db,
