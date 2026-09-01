@@ -9969,4 +9969,15 @@ class AppLocalizationsIt extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Non registrato ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversazioni brevi',
+      one: '$count conversazione breve',
+    );
+    return '$_temp0';
+  }
 }

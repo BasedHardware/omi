@@ -9855,4 +9855,14 @@ class AppLocalizationsTh extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'ไม่ได้บันทึก ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'การสนทนาสั้น $count รายการ',
+    );
+    return '$_temp0';
+  }
 }

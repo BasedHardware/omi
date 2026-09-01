@@ -9724,4 +9724,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return '未记录 ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 段简短对话',
+    );
+    return '$_temp0';
+  }
 }

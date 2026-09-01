@@ -9913,4 +9913,15 @@ class AppLocalizationsFi extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Ei tallennettu ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lyhyttä keskustelua',
+      one: '$count lyhyt keskustelu',
+    );
+    return '$_temp0';
+  }
 }

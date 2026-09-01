@@ -9953,4 +9953,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Nincs rögzítve ($count)';
   }
+
+  @override
+  String shortConversationsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rövid beszélgetés',
+      one: '$count rövid beszélgetés',
+    );
+    return '$_temp0';
+  }
 }
