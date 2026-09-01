@@ -6,6 +6,7 @@
 #import <React/RCTUIKit.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 
+static const CGFloat OmiWindowInset = 8.0;
 static const CGFloat OmiTrafficLightLeading = 16.0;
 static const CGFloat OmiTrafficLightSpacing = 8.0;
 static const CGFloat OmiTrafficLightChromeHeight = 52.0;
@@ -82,7 +83,8 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
   if (self.omiTitlebarAccessory != nil) {
     return;
   }
-  NSView *spacer = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 0, OmiTrafficLightChromeHeight)];
+  NSView *spacer = [[NSView alloc]
+      initWithFrame:NSMakeRect(0, 0, 0, OmiTrafficLightChromeHeight + OmiWindowInset)];
   NSTitlebarAccessoryViewController *accessory = [[NSTitlebarAccessoryViewController alloc] init];
   accessory.view = spacer;
   accessory.layoutAttribute = NSLayoutAttributeTop;
@@ -149,9 +151,9 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
   NSView *container = closeButton.superview;
   CGFloat buttonWidth = NSWidth(closeButton.frame);
   CGFloat buttonHeight = NSHeight(closeButton.frame);
-  CGFloat y = NSHeight(container.bounds) - OmiTrafficLightChromeHeight +
+  CGFloat y = NSHeight(container.bounds) - OmiWindowInset - OmiTrafficLightChromeHeight +
       floor((OmiTrafficLightChromeHeight - buttonHeight) / 2.0);
-  CGFloat x = OmiTrafficLightLeading;
+  CGFloat x = OmiWindowInset + OmiTrafficLightLeading;
   for (NSButton *button in @[ closeButton, miniaturizeButton, zoomButton ]) {
     NSRect frame = button.frame;
     frame.origin = NSMakePoint(x, y);
