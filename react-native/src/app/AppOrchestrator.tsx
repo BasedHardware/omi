@@ -28,20 +28,12 @@ import {
   type ChatMessage,
 } from '../chatClient';
 import {omiBackend} from '../omiNative';
-import {
-  desktopBackendConfigurationCopy,
-  desktopBackendUnauthorizedCopy,
-  desktopRecoveryCopy,
-} from '../desktopReadClient';
+import {desktopRecoveryCopy} from '../desktopReadClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 import {styles} from '../ui/styles';
 import {OutcomeStatus} from '../ui/ReadStatus';
 import {ProjectionList, ProjectionRow} from '../ui/ProjectionList';
-import {HomeRecovery} from '../ui/Recovery';
-import {HomeTimeline} from '../ui/Timeline';
 import {HomeSearchField} from '../ui/SearchField';
-import {Toolbar} from '../ui/Toolbar';
-import {Sheet} from '../ui/Sheet';
 import {Onboarding} from '../ui/Onboarding';
 import {PageShell} from '../ui/PageShell';
 import {FocusPressable} from '../ui/Pressable';
@@ -50,7 +42,6 @@ import {MemoriesPage} from '../pages/Memories';
 import {TasksPage} from '../pages/Tasks';
 import {ConnectorsPage} from '../pages/Connectors';
 import {SettingsPage} from '../pages/Settings';
-import {HomeSurface} from '../pages/Home';
 import {resolveInitialRoute, type Route} from './routes';
 import {DeviceSession, homeConnectionStatus} from './DeviceSession';
 import {useDesktopReads} from './useDesktopReads';
@@ -114,7 +105,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [homeChatOpen, setHomeChatOpen] = useState(false);
   const {
     allHomeReadsUnavailable,
-    homeReadsLoadedRef,
     readOutcomes,
     reads,
     readsPhase,
@@ -130,7 +120,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchArmed, setSearchArmed] = useState(false);
-  const [macMenuOpen, setMacMenuOpen] = useState(false);
   const [homeSearchFocusNonce, setHomeSearchFocusNonce] = useState(0);
   const [composerFocused, setComposerFocused] = useState(false);
   const {
@@ -207,7 +196,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   // An unavailable Omi cloud read is a single truthful empty state, not a result row. Keeping the
   // results panel content-sized here preserves the upstream two-island hierarchy instead of
   // turning an error into a window-filling modal.
-  const homeSpineHasRows = homeResults.length > 0 && !allHomeReadsUnavailable;
+  // A retry from the unavailable state must never flash the resting "none yet"
+  // claim: while nothing has loaded, a refresh reads as continued loading.
   useEffect(() => {
     homeResultsOpacity.setValue(0);
     if (!homeSearching) {
@@ -307,30 +297,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       }}
       reduceMotion={reduceMotion}
       route={route}
-    />
-  );
-
-  const macDesktopNav = (
-    <Toolbar
-      inputRef={searchRef}
-      menuOpen={macMenuOpen}
-      onOpenChat={() => {
-        setRoute('Home');
-        setHomeChatOpen(true);
-      }}
-      onQueryChange={value => {
-        setRoute('Home');
-        setHomeChatOpen(false);
-        setSearchQuery(value);
-      }}
-      onSearchBlur={() => setSearchFocused(false)}
-      onSearchFocus={() => setSearchFocused(true)}
-      onSearchPress={() => setSearchArmed(true)}
-      onToggleMenu={() => setMacMenuOpen(value => !value)}
-      query={searchQuery}
-      route={route}
-      searchArmed={searchArmed}
-      searchFocused={searchFocused}
     />
   );
 
@@ -485,112 +451,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     nativeSnapshot === null
       ? '#b4ad9f'
       : nativeSnapshot.bluetooth === 'poweredOn'
-      ? '#45b79b'
-      : '#d9826f';
+        ? '#45b79b'
+        : '#d9826f';
   const currentItems = reads.slice(0, 2);
-
-  const homeDesktopReadStatus = (
-    <View style={styles.macHomeReadStatuses}>
-      {readsPhase !== 'ready' &&
-        readsPhase !== 'initial-loading' &&
-        readsPhase !== 'unavailable' && (
-          <View style={styles.macHomeReadStatus}>
-            <Text style={styles.macHomeReadStatusText}>
-              {readsPhase === 'refreshing'
-                ? 'Refreshing saved data…'
-                : 'Showing saved data. Could not refresh.'}
-            </Text>
-            {readsPhase === 'saved-but-refresh-failed' && (
-              <FocusPressable
-                accessibilityLabel="Retry saved data"
-                accessibilityRole="button"
-                onPress={() => refreshReads(false)}
-                style={({pressed}) => [
-                  styles.retryButton,
-                  styles.macHomeRetryButton,
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={styles.macHomeRetryButtonText}>Retry</Text>
-              </FocusPressable>
-            )}
-          </View>
-        )}
-      {readOutcomes !== null && !allHomeReadsUnavailable && (
-        <View style={styles.macHomeReadStatuses}>
-          <OutcomeStatus
-            label="Conversations"
-            mac
-            outcome={readOutcomes.conversations}
-          />
-          <OutcomeStatus label="Memories" mac outcome={readOutcomes.memories} />
-        </View>
-      )}
-    </View>
-  );
-
-  const homeDesktopDeviceAffordance = (
-    <DeviceSession
-      deviceBusy={deviceBusy}
-      deviceScanMessage={deviceScanMessage}
-      homeStatus={homeStatus}
-      homeStatusColor={homeStatusColor}
-      nativeSnapshot={nativeSnapshot}
-      onScan={scanForOmi}
-      onToggle={toggleDevice}
-      variant="affordance"
-    />
-  );
-
-  const homeDesktopEmptyTitle =
-    readsPhase === 'unavailable'
-      ? 'Saved data unavailable'
-      : homeSearching
-      ? 'No results'
-      : 'No saved conversations or memories yet.';
-  const homeDesktopEmptyCopy =
-    readsPhase === 'unavailable' && readOutcomes !== null
-      ? desktopRecoveryCopy(readOutcomes.conversations, readOutcomes.memories)
-      : homeSearching
-      ? 'Filter covers loaded conversations and memories only.'
-      : 'Loaded conversations and memories will appear here.';
-
-  const homeDesktopRecovery =
-    readsPhase === 'unavailable' ? (
-      <HomeRecovery
-        copy={homeDesktopEmptyCopy}
-        onSignIn={
-          homeDesktopEmptyCopy === desktopBackendConfigurationCopy ||
-          homeDesktopEmptyCopy === desktopBackendUnauthorizedCopy
-            ? () => {
-                signInAndRefresh().catch(() => undefined);
-              }
-            : undefined
-        }
-        onRetry={() => {
-          refreshReads(false).catch(() => undefined);
-        }}
-        signingIn={signingIn}
-        title={homeDesktopEmptyTitle}
-      />
-    ) : null;
-  // A retry from the unavailable state must never flash the resting "none yet"
-  // claim: while nothing has loaded, a refresh reads as continued loading.
-  const homeTimelineLoading =
-    readsPhase === 'initial-loading' ||
-    (readsPhase === 'refreshing' && !homeReadsLoadedRef.current);
-
-  const homeDesktop = (
-    <HomeSurface footer={homeDesktopDeviceAffordance}>
-      <HomeTimeline
-        emptyCopy={homeDesktopEmptyCopy}
-        emptyTitle={homeDesktopEmptyTitle}
-        footer={homeDesktopReadStatus}
-        items={homeSpineHasRows ? homeResults : []}
-        loading={homeTimelineLoading}
-        recovery={homeDesktopRecovery}
-      />
-    </HomeSurface>
-  );
 
   const firstRunOnboarding = (
     <Onboarding
@@ -681,20 +544,38 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     </ScrollView>
   );
 
-  if (macDesktop && onboardingRequired === false) {
+  if (macDesktop) {
     return (
       <PageShell macDesktop workspaceMaterial={false}>
         <DesktopApp
-          onOpenChat={() => {
-            setRoute('Home');
-            setHomeChatOpen(true);
-          }}
+          chatBusy={chatBusy}
+          chatError={chatError}
+          draft={draft}
+          messages={messages}
+          onDraftChange={setDraft}
           onRefresh={() => {
             refreshReads(false).catch(() => undefined);
+          }}
+          onSend={() => {
+            send().catch(() => undefined);
+          }}
+          onSignIn={() => {
+            signInAndRefresh().catch(() => undefined);
+          }}
+          onSignOut={() => {
+            signOutAndRefresh().catch(() => undefined);
           }}
           outcomes={readOutcomes}
           reads={reads}
           readsPhase={readsPhase}
+          session={
+            onboardingRequired === null
+              ? 'probing'
+              : onboardingRequired
+                ? 'signed-out'
+                : 'ready'
+          }
+          signingIn={signingIn}
         />
       </PageShell>
     );
@@ -723,17 +604,17 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       readsPhase === 'initial-loading' || readsPhase === 'refreshing'
         ? 'loading'
         : readsPhase === 'unavailable' ||
-          readsPhase === 'saved-but-refresh-failed'
-        ? 'offline'
-        : 'ready';
+            readsPhase === 'saved-but-refresh-failed'
+          ? 'offline'
+          : 'ready';
     const activeMobileRoute: MobileRoute =
       route === 'Tasks'
         ? 'tasks'
         : route === 'Connectors'
-        ? 'apps'
-        : homeChatOpen || route === 'Conversations'
-        ? 'chat'
-        : 'home';
+          ? 'apps'
+          : homeChatOpen || route === 'Conversations'
+            ? 'chat'
+            : 'home';
     return (
       <MobileAppSurface
         activeRoute={activeMobileRoute}
@@ -759,10 +640,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             destination === 'tasks'
               ? 'Tasks'
               : destination === 'apps'
-              ? 'Connectors'
-              : destination === 'chat'
-              ? 'Conversations'
-              : 'Home',
+                ? 'Connectors'
+                : destination === 'chat'
+                  ? 'Conversations'
+                  : 'Home',
           );
         }}
         onTaskToggle={() => undefined}
@@ -784,13 +665,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         !compact && !macDesktop && styles.shellWide,
         macDesktop && styles.macShell,
       ]}>
-      {macDesktop
-        ? onboardingRequired === false
-          ? macDesktopNav
-          : null
-        : !compact
-        ? nav
-        : null}
+      {!compact ? nav : null}
       <View
         style={[
           styles.paneInset,
@@ -846,154 +721,146 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     style={styles.stage}
                   />
                 ) : route === 'Home' && !homeChatOpen ? (
-                  desktopWorkspace ? (
-                    homeDesktop
-                  ) : (
-                    <View style={styles.searchHome}>
-                      {!compact && (
-                        <View style={styles.homeHeading}>
-                          <Text
-                            accessibilityRole="header"
-                            style={styles.homeTitle}>
-                            Your Omi, at a glance
-                          </Text>
-                          <Text style={styles.homeSubtitle}>
-                            Device status and the conversations and memories
-                            saved for you.
-                          </Text>
-                        </View>
-                      )}
-                      {!homeSearching && homeOverview}
-                      {homeSearching && (
-                        <Animated.View
-                          accessibilityLabel="Home search results"
-                          style={[
-                            styles.homeResults,
-                            !compact && styles.homeResultsWide,
-                            {opacity: homeResultsOpacity},
-                          ]}>
-                          <ProjectionList
-                            emptyCopy={
-                              homeSearching
-                                ? 'Clear the search to see saved items.'
-                                : 'Start typing to search what is saved.'
-                            }
-                            emptyTitle={
-                              homeSearching ? 'No results' : 'Nothing saved yet'
-                            }
-                            error={null}
-                            footer={
-                              <View style={styles.readStatuses}>
-                                {readsPhase !== 'ready' && (
-                                  <View
+                  <View style={styles.searchHome}>
+                    {!compact && (
+                      <View style={styles.homeHeading}>
+                        <Text
+                          accessibilityRole="header"
+                          style={styles.homeTitle}>
+                          Your Omi, at a glance
+                        </Text>
+                        <Text style={styles.homeSubtitle}>
+                          Device status and the conversations and memories saved
+                          for you.
+                        </Text>
+                      </View>
+                    )}
+                    {!homeSearching && homeOverview}
+                    {homeSearching && (
+                      <Animated.View
+                        accessibilityLabel="Home search results"
+                        style={[
+                          styles.homeResults,
+                          !compact && styles.homeResultsWide,
+                          {opacity: homeResultsOpacity},
+                        ]}>
+                        <ProjectionList
+                          emptyCopy={
+                            homeSearching
+                              ? 'Clear the search to see saved items.'
+                              : 'Start typing to search what is saved.'
+                          }
+                          emptyTitle={
+                            homeSearching ? 'No results' : 'Nothing saved yet'
+                          }
+                          error={null}
+                          footer={
+                            <View style={styles.readStatuses}>
+                              {readsPhase !== 'ready' && (
+                                <View
+                                  style={[
+                                    styles.readStatus,
+                                    macDesktop && styles.macReadStatus,
+                                  ]}>
+                                  <Text
                                     style={[
-                                      styles.readStatus,
-                                      macDesktop && styles.macReadStatus,
+                                      styles.readStatusText,
+                                      macDesktop && styles.macReadStatusText,
                                     ]}>
-                                    <Text
-                                      style={[
-                                        styles.readStatusText,
-                                        macDesktop && styles.macReadStatusText,
-                                      ]}>
-                                      {readsPhase === 'initial-loading'
-                                        ? 'Loading saved data…'
-                                        : readsPhase === 'refreshing'
+                                    {readsPhase === 'initial-loading'
+                                      ? 'Loading saved data…'
+                                      : readsPhase === 'refreshing'
                                         ? 'Refreshing saved data…'
                                         : readsPhase ===
-                                          'saved-but-refresh-failed'
-                                        ? 'Showing saved data. Could not refresh.'
-                                        : 'Saved data is unavailable.'}
+                                            'saved-but-refresh-failed'
+                                          ? 'Showing saved data. Could not refresh.'
+                                          : 'Saved data is unavailable.'}
+                                  </Text>
+                                  {allHomeReadsUnavailable && (
+                                    <Text
+                                      style={[
+                                        styles.readStatusCopy,
+                                        macDesktop && styles.macReadStatusText,
+                                      ]}>
+                                      {readOutcomes === null
+                                        ? ''
+                                        : desktopRecoveryCopy(
+                                            readOutcomes.conversations,
+                                            readOutcomes.memories,
+                                          )}
                                     </Text>
-                                    {allHomeReadsUnavailable && (
+                                  )}
+                                  {(readsPhase === 'saved-but-refresh-failed' ||
+                                    readsPhase === 'unavailable') && (
+                                    <FocusPressable
+                                      accessibilityLabel="Retry saved data"
+                                      accessibilityRole="button"
+                                      onPress={() => refreshReads(false)}
+                                      style={({pressed}) => [
+                                        styles.retryButton,
+                                        macDesktop && styles.macRetryButton,
+                                        pressed && styles.pressed,
+                                      ]}>
                                       <Text
                                         style={[
-                                          styles.readStatusCopy,
+                                          styles.retryButtonText,
                                           macDesktop &&
-                                            styles.macReadStatusText,
+                                            styles.macRetryButtonText,
                                         ]}>
-                                        {readOutcomes === null
-                                          ? ''
-                                          : desktopRecoveryCopy(
-                                              readOutcomes.conversations,
-                                              readOutcomes.memories,
-                                            )}
+                                        Retry
                                       </Text>
-                                    )}
-                                    {(readsPhase ===
-                                      'saved-but-refresh-failed' ||
-                                      readsPhase === 'unavailable') && (
-                                      <FocusPressable
-                                        accessibilityLabel="Retry saved data"
-                                        accessibilityRole="button"
-                                        onPress={() => refreshReads(false)}
-                                        style={({pressed}) => [
-                                          styles.retryButton,
-                                          macDesktop && styles.macRetryButton,
-                                          pressed && styles.pressed,
-                                        ]}>
-                                        <Text
-                                          style={[
-                                            styles.retryButtonText,
-                                            macDesktop &&
-                                              styles.macRetryButtonText,
-                                          ]}>
-                                          Retry
-                                        </Text>
-                                      </FocusPressable>
-                                    )}
+                                    </FocusPressable>
+                                  )}
+                                </View>
+                              )}
+                              {readOutcomes !== null &&
+                                !allHomeReadsUnavailable && (
+                                  <View style={styles.readStatuses}>
+                                    <OutcomeStatus
+                                      label="Conversations"
+                                      outcome={readOutcomes.conversations}
+                                    />
+                                    <OutcomeStatus
+                                      label="Memories"
+                                      outcome={readOutcomes.memories}
+                                    />
                                   </View>
                                 )}
-                                {readOutcomes !== null &&
-                                  !allHomeReadsUnavailable && (
-                                    <View style={styles.readStatuses}>
-                                      <OutcomeStatus
-                                        label="Conversations"
-                                        outcome={readOutcomes.conversations}
-                                      />
-                                      <OutcomeStatus
-                                        label="Memories"
-                                        outcome={readOutcomes.memories}
-                                      />
-                                    </View>
-                                  )}
-                              </View>
-                            }
-                            header={
-                              <View style={styles.homeOverview}>
-                                <DeviceSession
-                                  deviceBusy={deviceBusy}
-                                  deviceScanMessage={deviceScanMessage}
-                                  nativeSnapshot={nativeSnapshot}
-                                  onScan={scanForOmi}
-                                  onToggle={toggleDevice}
-                                  variant="overview"
-                                />
-                                <Text style={styles.sectionLabel}>
-                                  Currents
-                                </Text>
-                              </View>
-                            }
-                            items={homeResults}
-                            loading={readsPhase === 'initial-loading'}
-                            suppressEmpty={readsPhase !== 'ready'}
-                          />
-                        </Animated.View>
-                      )}
-                      <HomeSearchField
-                        compact={compact}
-                        desktop={false}
-                        inputRef={searchRef}
-                        onBlur={() => setSearchFocused(false)}
-                        onChangeText={setSearchQuery}
-                        onFocus={() => setSearchFocused(true)}
-                        onOpenChat={() => setHomeChatOpen(true)}
-                        onPressIn={() => setSearchArmed(true)}
-                        query={searchQuery}
-                        searchArmed={searchArmed}
-                        searchFocused={searchFocused}
-                      />
-                    </View>
-                  )
+                            </View>
+                          }
+                          header={
+                            <View style={styles.homeOverview}>
+                              <DeviceSession
+                                deviceBusy={deviceBusy}
+                                deviceScanMessage={deviceScanMessage}
+                                nativeSnapshot={nativeSnapshot}
+                                onScan={scanForOmi}
+                                onToggle={toggleDevice}
+                                variant="overview"
+                              />
+                              <Text style={styles.sectionLabel}>Currents</Text>
+                            </View>
+                          }
+                          items={homeResults}
+                          loading={readsPhase === 'initial-loading'}
+                          suppressEmpty={readsPhase !== 'ready'}
+                        />
+                      </Animated.View>
+                    )}
+                    <HomeSearchField
+                      compact={compact}
+                      desktop={false}
+                      inputRef={searchRef}
+                      onBlur={() => setSearchFocused(false)}
+                      onChangeText={setSearchQuery}
+                      onFocus={() => setSearchFocused(true)}
+                      onOpenChat={() => setHomeChatOpen(true)}
+                      onPressIn={() => setSearchArmed(true)}
+                      query={searchQuery}
+                      searchArmed={searchArmed}
+                      searchFocused={searchFocused}
+                    />
+                  </View>
                 ) : route === 'Home' ? (
                   <ScrollView
                     accessibilityLabel="Chat scroll region"
@@ -1022,8 +889,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                 : styles.chatHistoryCompact,
                             ]
                           : messages.length === 0 && !chatBusy
-                          ? styles.home
-                          : styles.chatHistory
+                            ? styles.home
+                            : styles.chatHistory
                       }>
                       <FocusPressable
                         accessibilityLabel="Back to Home"
@@ -1168,26 +1035,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     </View>
   );
 
-  const macDestinationMenu =
-    macMenuOpen && onboardingRequired === false ? (
-      <Sheet
-        onDismiss={() => setMacMenuOpen(false)}
-        onSelect={destination => {
-          setRoute(destination);
-          if (destination === 'Home') {
-            setHomeChatOpen(false);
-          }
-          setMacMenuOpen(false);
-        }}
-        route={route}
-      />
-    ) : null;
-
   return (
-    <PageShell
-      desktopOverlay={macDestinationMenu}
-      macDesktop={macDesktop}
-      workspaceMaterial>
+    <PageShell macDesktop={macDesktop} workspaceMaterial>
       {shell}
     </PageShell>
   );

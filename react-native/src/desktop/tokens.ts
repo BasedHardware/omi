@@ -14,7 +14,7 @@ export const desktopTokens = {
     blue: '#168bf2',
     red: '#ff4148',
   },
-  radius: {window: 24, panel: 22, control: 18, pill: 999},
+  radius: {window: 24, panel: 22, control: 18, chip: 18},
   space: {xs: 6, sm: 10, md: 16, lg: 24, xl: 32},
   type: {
     hero: 28,

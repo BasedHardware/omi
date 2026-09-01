@@ -47,26 +47,28 @@ test('keeps first-run onboarding copy off the retired host', () => {
     resolve(__dirname, '../src/ui/Onboarding.tsx'),
     'utf8',
   );
-  const recoverySource = readFileSync(
-    resolve(__dirname, '../src/ui/Recovery.tsx'),
+  const desktopSource = readFileSync(
+    resolve(__dirname, '../src/desktop/DesktopApp.tsx'),
     'utf8',
   );
 
   expect(onboardingSource).toContain('First-run onboarding');
   expect(onboardingSource).not.toContain('h.omi.me');
   expect(onboardingSource).not.toContain('8787');
-  expect(recoverySource).not.toContain('h.omi.me');
-  expect(recoverySource).not.toContain('8787');
+  expect(desktopSource).not.toContain('h.omi.me');
+  expect(desktopSource).not.toContain('8787');
 });
 
-test('gates the macOS search toolbar off first-run onboarding', () => {
+test('macOS mounts DesktopApp for every session state', () => {
   const orchestrator = readFileSync(
     resolve(__dirname, '../src/app/AppOrchestrator.tsx'),
     'utf8',
   );
 
   expect(orchestrator).toContain('onboardingRequired');
-  expect(orchestrator).toMatch(
+  expect(orchestrator).toMatch(/if \(macDesktop\) \{/);
+  expect(orchestrator).toContain('<DesktopApp');
+  expect(orchestrator).not.toMatch(
     /onboardingRequired === false\s*\?\s*macDesktopNav\s*:\s*null/,
   );
 });

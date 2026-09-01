@@ -28,7 +28,7 @@ export const radius = {
   md: 10,
   lg: 14,
   xl: 26,
-  pill: 999,
+  pill: 18,
 } as const;
 
 export const space = {
