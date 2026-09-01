@@ -10800,6 +10800,5 @@
     "pendantRecordingSyncBlocked": "Pendant усё яшчэ запісвае, таму захаваны гук нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а потым сінхранізуйце зноў.",
     "pendantFullSyncBlocked": "Памяць Pendant запоўнена, і ён усё яшчэ ў рэжыме запісу, таму захаванае аўдыя нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а затым сінхранізуйце зноў.",
     "conversationsNotCapturedCount": "Не запісана ({count})",
-    "shortConversationsCount": "{count, plural, =1{{count} кароткая размова} other{Кароткія размовы: {count}}}",
     "transcriptionNoAudio": "Транскрыпцыя не атрымлівае аўдыё"
 }

@@ -817,10 +817,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
               resizeToAvoidBottomInset: false,
-              // Home draws its day map full-bleed under the status bar and the
-              // app bar; every other tab keeps the app bar as a solid surface.
-              extendBodyBehindAppBar: selectedIndex == 0,
-              appBar: selectedIndex == 5 ? null : _buildAppBar(context, overMap: selectedIndex == 0),
+              appBar: selectedIndex == 5 ? null : _buildAppBar(context),
               body: GestureDetector(
                 onTap: () {
                   primaryFocus?.unfocus();
@@ -956,24 +953,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, {bool overMap = false}) {
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
       automaticallyImplyLeading: false,
-      backgroundColor: overMap ? Colors.transparent : Theme.of(context).colorScheme.surface,
-      // Home's day map runs to the top of the screen behind these controls. The
-      // scrim keeps them legible over the map and fades timeline rows out as
-      // they scroll under it, instead of letting them slide behind the pills.
-      flexibleSpace: overMap
-          ? DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.black.withValues(alpha: 0.75), Colors.black.withValues(alpha: 0.0)],
-                ),
-              ),
-            )
-          : null,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -1179,16 +1162,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   );
                 },
               ),
-              // Settings button - always visible. Bordered for the same reason as
-              // the battery/connect pills: it sits over home's day map.
+              // Settings button - always visible
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1F1F25),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-                ),
+                decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
                 child: IconButton(
                   padding: EdgeInsets.zero,
                   icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),

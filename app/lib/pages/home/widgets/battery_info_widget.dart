@@ -21,11 +21,6 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
-/// Home draws its day map behind the app bar, and these controls share the map's
-/// darkness closely enough that their edges disappear into it. A hairline keeps
-/// them readable as buttons over the map, and is invisible over a solid app bar.
-final Color _controlBorderColor = Colors.white.withValues(alpha: 0.14);
-
 class BatteryInfoWidget extends StatefulWidget {
   const BatteryInfoWidget({super.key});
 
@@ -113,11 +108,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                 child: Container(
                   height: 36,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1F1F25),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: _controlBorderColor),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -180,7 +171,6 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                       decoration: BoxDecoration(
                         color: const Color(0xFF1F1F25),
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: _controlBorderColor),
                       ),
                       child: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
                     ),
@@ -196,11 +186,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                 child: Container(
                   height: 36,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1F1F25),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: _controlBorderColor),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -245,7 +231,6 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                       decoration: BoxDecoration(
                         color: const Color(0xFF1F1F25),
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: _controlBorderColor),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,

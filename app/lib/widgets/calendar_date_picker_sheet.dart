@@ -25,8 +25,6 @@ CalendarDatePicker2Config getDefaultCalendarConfig({
   CalendarDatePicker2Type calendarType = CalendarDatePicker2Type.single,
   bool disableMonthPicker = true,
   CalendarYearBuilder? yearBuilder,
-  Color? selectedDayHighlightColor,
-  TextStyle? selectedDayTextStyle,
 }) {
   final now = DateTime.now();
   return CalendarDatePicker2Config(
@@ -36,12 +34,9 @@ CalendarDatePicker2Config getDefaultCalendarConfig({
     lastDate: lastDate ?? now.add(const Duration(days: 365 * 5)),
     disableMonthPicker: disableMonthPicker,
     yearBuilder: yearBuilder,
-    // The two range sheets keep the legacy accent; new surfaces pass a neutral
-    // highlight instead (INV-UI-1, product/invariants/brand-ui.md).
-    selectedDayHighlightColor: selectedDayHighlightColor ?? ResponsiveHelper.purplePrimary,
+    selectedDayHighlightColor: ResponsiveHelper.purplePrimary,
     dayTextStyle: const TextStyle(color: ResponsiveHelper.textPrimary),
-    selectedDayTextStyle:
-        selectedDayTextStyle ?? const TextStyle(color: ResponsiveHelper.textPrimary, fontWeight: FontWeight.bold),
+    selectedDayTextStyle: const TextStyle(color: ResponsiveHelper.textPrimary, fontWeight: FontWeight.bold),
     todayTextStyle: const TextStyle(color: ResponsiveHelper.purplePrimary, fontWeight: FontWeight.bold),
     weekdayLabelTextStyle: const TextStyle(color: ResponsiveHelper.textTertiary, fontWeight: FontWeight.w500),
     controlsTextStyle: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
@@ -139,73 +134,6 @@ Future<void> showConversationDateRangePicker(BuildContext context) async {
                     value: range,
                     onValueChanged: (dates) {
                       range = dates;
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
-}
-
-/// Single-day picker for jumping the home timeline to a date.
-///
-/// Sibling of [showConversationDateRangePicker]: that sheet owns the
-/// conversation list's date *filter*, while this one only answers "which day"
-/// and hands the answer back, so the caller keeps ownership of what it does
-/// with it. Picking a day closes the sheet — a jump is one decision, and
-/// making it a two-tap select-then-confirm is what the arrows already felt
-/// like. Returns null when the sheet is dismissed.
-Future<DateTime?> showDayJumpPicker(BuildContext context, {required DateTime selectedDay, DateTime? firstDate}) {
-  return showCupertinoModalPopup<DateTime>(
-    context: context,
-    builder: (BuildContext sheetContext) {
-      return Container(
-        height: 420,
-        padding: const EdgeInsets.only(top: 6.0),
-        color: const Color(0xFF1F1F25),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1F1F25),
-                  border: Border(bottom: BorderSide(color: Color(0xFF35343B), width: 0.5)),
-                ),
-                child: Row(
-                  children: [
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: () => Navigator.of(sheetContext).pop(),
-                      child: Text(
-                        context.l10n.cancel,
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Material(
-                  color: ResponsiveHelper.backgroundSecondary,
-                  child: CalendarDatePicker2(
-                    config: getDefaultCalendarConfig(
-                      firstDate: firstDate ?? DateTime(2020),
-                      lastDate: DateTime.now(),
-                      currentDate: DateTime.now(),
-                      selectedDayHighlightColor: Colors.white,
-                      selectedDayTextStyle: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-                    ),
-                    value: [selectedDay],
-                    onValueChanged: (dates) {
-                      final picked = dates.isEmpty ? null : dates.first;
-                      if (picked == null) return;
-                      Navigator.of(sheetContext).pop(DateTime(picked.year, picked.month, picked.day));
                     },
                   ),
                 ),
