@@ -41,6 +41,7 @@ def _phone_call_host(**overrides):
     host = SimpleNamespace(
         stt_service='modulate',
         is_multi_channel=True,
+        start_live_transcription=lambda: None,
         use_custom_stt=False,
         audio_bytes_send=None,
         request=SimpleNamespace(
@@ -50,6 +51,7 @@ def _phone_call_host(**overrides):
             fair_use_dg_budget_exhausted=False,
             fair_use_track_dg_usage=False,
             dg_usage_ms_pending=0,
+            first_audio_byte_timestamp=None,
         ),
         client_device_context=SimpleNamespace(platform='ios'),
     )
@@ -79,7 +81,7 @@ async def test_pcm48_multi_channel_frames_resample_and_reach_stt(monkeypatch):
 
     # 960 bytes of pcm at 48 kHz mono 16-bit = 480 samples -> 160 samples at 16 kHz.
     frame = b'\x01' + b'\x00\x01' * 480
-    decoded = await receiver._handle_multi_channel_audio(frame)
+    decoded = await receiver._handle_multi_channel_audio(frame, now=1000.0)
 
     args, kwargs = sent.await_args
     assert len(args) == 2  # websocket, session state
@@ -95,7 +97,7 @@ async def test_unknown_channel_prefix_counts_and_does_not_crash(monkeypatch):
         OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL, transcription_source='phone_call', client_platform='ios'
     )
 
-    decoded = await receiver._handle_multi_channel_audio(b'\x07' + b'\x00\x01' * 16)
+    decoded = await receiver._handle_multi_channel_audio(b'\x07' + b'\x00\x01' * 16, now=1000.0)
 
     assert decoded == 0
     assert (
@@ -105,12 +107,13 @@ async def test_unknown_channel_prefix_counts_and_does_not_crash(monkeypatch):
         == before + 1
     )
     # The stream must stay usable after the dropped frame.
-    assert await receiver._handle_multi_channel_audio(b'\x02' + b'\x00\x01' * 16) == 32
+    assert await receiver._handle_multi_channel_audio(b'\x02' + b'\x00\x01' * 16, now=1000.0) == 32
 
 
 @pytest.mark.anyio
 async def test_first_audio_byte_records_first_audio_outcome():
     host = _phone_call_host()
+    host.is_multi_channel = False
     receiver = ListenReceiver(host, [], {})
     receiver.opus_decoder = None
     websocket = SimpleNamespace(receive=AsyncMock(side_effect=[{'bytes': b'\x01\x00\x00'}, _disconnect()]))
@@ -148,11 +151,65 @@ async def test_first_audio_byte_records_first_audio_outcome():
     )
 
 
+@pytest.mark.anyio
+async def test_unknown_prefix_only_session_never_counts_first_audio():
+    """Frames with unrecognized prefixes must leave the session at zero audio.
+
+    Only then can teardown still classify it as a silent no-audio phone call —
+    marking first audio on raw receipt would hide exactly that failure.
+    """
+
+    host = _phone_call_host()
+    receiver = _phone_call_receiver(host)
+    websocket = SimpleNamespace(
+        receive=AsyncMock(
+            side_effect=[
+                {'bytes': b'\x07' + b'\x00\x01' * 16},
+                {'bytes': b'\x09' + b'\x00\x01' * 16},
+                _disconnect(),
+            ]
+        )
+    )
+    host.request.websocket = websocket
+    host.limits = SimpleNamespace(ws_receive_timeout=1.0)
+    host.state.active = True
+    host.state.close_code = None
+    host.state.last_audio_received_time = None
+    host.state.last_activity_time = None
+    host.state.first_audio_byte_timestamp = None
+    host.state.last_usage_record_timestamp = None
+    host.state.audio_ring_buffer = None
+    live_started = []
+    host.start_live_transcription = lambda: live_started.append(True)
+    host.use_custom_stt = True
+    host.audio_bytes_send = None
+    before = _counter_value(
+        OMI_LISTEN_AUDIO_OUTCOME_TOTAL,
+        transcription_source='phone_call',
+        outcome='first_audio',
+        client_platform='ios',
+    )
+
+    await receiver.receive_data()
+
+    assert host.state.first_audio_byte_timestamp is None
+    assert live_started == []
+    assert (
+        _counter_value(
+            OMI_LISTEN_AUDIO_OUTCOME_TOTAL,
+            transcription_source='phone_call',
+            outcome='first_audio',
+            client_platform='ios',
+        )
+        == before
+    )
+
+
 def _disconnect():
     return {'type': 'websocket.disconnect', 'code': 1000}
 
 
-def _teardown_controller(monkeypatch, *, first_audio_byte_timestamp, multi_channel=True):
+def _teardown_controller(monkeypatch, *, first_audio_byte_timestamp, multi_channel=True, empty_delete_wins=True):
     outcomes = []
     monkeypatch.setattr(conversations_module, 'record_listen_audio_outcome', lambda **kwargs: outcomes.append(kwargs))
     deleted = []
@@ -161,8 +218,8 @@ def _teardown_controller(monkeypatch, *, first_audio_byte_timestamp, multi_chann
         if fn.__name__ == 'get_conversation':
             return {'id': 'conversation-1'}
         if fn.__name__ == 'delete_empty_recording_conversation':
-            deleted.append(True)
-            return True
+            deleted.append(empty_delete_wins)
+            return empty_delete_wins
         raise AssertionError(f'unexpected persistence call: {fn.__name__}')
 
     host = SimpleNamespace(
@@ -187,6 +244,19 @@ async def test_teardown_without_first_audio_records_no_audio_outcome(monkeypatch
     assert outcome['source'] == 'phone_call'
     assert outcome['outcome'] == 'no_audio_teardown'
     assert outcome['platform'] == 'ios'
+
+
+@pytest.mark.anyio
+async def test_no_audio_outcome_waits_for_the_fenced_delete_to_win(monkeypatch):
+    controller, outcomes, deleted = _teardown_controller(
+        monkeypatch, first_audio_byte_timestamp=None, empty_delete_wins=False
+    )
+
+    result = await controller.process_conversation('conversation-1')
+
+    assert deleted == [False]
+    assert outcomes == [], 'a delete that lost the race to content must not claim no-audio'
+    assert result is False
 
 
 @pytest.mark.anyio

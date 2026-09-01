@@ -168,20 +168,9 @@ class LiveConversationController:
         recording_session_id = recording_session_id_for_lifecycle_event(
             self.host.recording_session_ids_by_conversation, conversation_id
         )
-        if self._should_report_no_audio_teardown():
-            # The empty conversation is about to be deleted, which is correct —
-            # but a phone_call that stayed silent for its whole duration must be
-            # distinguishable from a call that was never transcribed at all.
-            logger.warning(
-                'Listen session tore down with no audio received source=%s platform=%s',
-                self.host.request.source,
-                self.host.client_device_context.platform,
-            )
-            record_listen_audio_outcome(
-                source=self.host.request.source,
-                outcome='no_audio_teardown',
-                platform=self.host.client_device_context.platform,
-            )
+        # Snapshot before the fenced delete: the outcome is only truthful if the
+        # delete actually wins the race to content, so emit after `deleted`.
+        was_no_audio_session = self._should_report_no_audio_teardown()
         deleted = await self.host.persistence.call(
             lifecycle_service.delete_empty_recording_conversation,
             self.host.request.uid,
@@ -189,6 +178,20 @@ class LiveConversationController:
             recording_session_id,
         )
         if deleted:
+            if was_no_audio_session:
+                # A phone_call that stayed silent for its whole duration must be
+                # distinguishable from a call that was never transcribed at all;
+                # the empty-conversation deletion itself is unchanged.
+                logger.warning(
+                    'Listen session tore down with no audio received source=%s platform=%s',
+                    self.host.request.source,
+                    self.host.client_device_context.platform,
+                )
+                record_listen_audio_outcome(
+                    source=self.host.request.source,
+                    outcome='no_audio_teardown',
+                    platform=self.host.client_device_context.platform,
+                )
             return True
         latest = await self.host.persistence.call(
             conversations_db.get_conversation,

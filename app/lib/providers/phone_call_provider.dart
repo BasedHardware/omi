@@ -86,6 +86,7 @@ class PhoneCallProvider extends ChangeNotifier {
   int _audioChannel1Frames = 0;
   int _audioChannel2Frames = 0;
   bool _transcriptStallReported = false;
+  bool _transcriptSessionReported = false;
   DateTime? _wsAcceptedAt;
   Timer? _noAudioWatchdog;
 
@@ -127,6 +128,7 @@ class PhoneCallProvider extends ChangeNotifier {
   Future<void> get initialLoad => _initialLoad ?? Future.value();
   int _sessionGeneration = 0;
   bool _sessionEnabled = true;
+  bool _disposed = false;
 
   PhoneCallProvider() {
     _wireNativeCallbacks();
@@ -412,10 +414,12 @@ class PhoneCallProvider extends ChangeNotifier {
     }
 
     try {
-      // Flush buffered audio first
+      // Flush buffered audio first; buffered frames count the same as live
+      // ones so session telemetry matches bytes actually on the socket.
       if (_audioBuffer.isNotEmpty) {
         for (var buffered in _audioBuffer) {
           socket.sink.add(buffered);
+          _countFrameSent(buffered);
         }
         _audioBuffer.clear();
       }
@@ -424,24 +428,36 @@ class PhoneCallProvider extends ChangeNotifier {
       data[0] = channel; // 0x01 = user, 0x02 = remote
       data.setRange(1, data.length, audioData);
       socket.sink.add(data);
-      _audioFramesSent++;
-      _audioBytesSent += data.length;
-      if (channel == 1) {
-        _audioChannel1Frames++;
-      } else if (channel == 2) {
-        _audioChannel2Frames++;
+      _countFrameSent(data);
+
+      if (_transcriptionStatus == TranscriptionStatus.noAudio) {
+        // Frames are flowing again; leave the stall state instead of parking
+        // the chip on a condition that no longer holds.
+        _transcriptionStatus = TranscriptionStatus.active;
+        notifyListeners();
       }
     } catch (e) {
       Logger.error('PhoneCallProvider: failed to send audio data: $e');
     }
   }
 
-  /// Arm the no-audio watchdog: once the transcription socket is accepted, an
-  /// active call must deliver prefixed frames, or the UI has to admit it.
+  void _countFrameSent(Uint8List prefixedFrame) {
+    _audioFramesSent++;
+    _audioBytesSent += prefixedFrame.length;
+    if (prefixedFrame[0] == 1) {
+      _audioChannel1Frames++;
+    } else if (prefixedFrame[0] == 2) {
+      _audioChannel2Frames++;
+    }
+  }
+
+  /// Arm the no-audio watchdog only once the server has accepted the socket
+  /// (`_wsAccepted`): a still-connecting socket must not read as no-audio.
   void _armNoAudioWatchdog() {
     _noAudioWatchdog?.cancel();
     _noAudioWatchdog = Timer(noAudioStallTimeout, () {
       if (_callState != PhoneCallState.active || !_sessionEnabled) return;
+      if (!_wsAccepted) return;
       if (_transcriptionSocket == null) return; // reconnecting/failed own their status
       if (_audioFramesSent > 0) return;
       _transcriptionStatus = TranscriptionStatus.noAudio;
@@ -453,7 +469,11 @@ class PhoneCallProvider extends ChangeNotifier {
     });
   }
 
+  /// One `Phone Call Transcript Session` per call: `_onCallEnded` can fire twice
+  /// (native ended event plus `endCall()`), and a stalled call already reported.
   void _reportTranscriptSession({String? reason}) {
+    if (_transcriptSessionReported) return;
+    _transcriptSessionReported = true;
     PlatformManager.instance.analytics.phoneCallTranscriptSession(
       wsAccepted: _wsAccepted,
       audioFramesSent: _audioFramesSent,
@@ -484,6 +504,7 @@ class PhoneCallProvider extends ChangeNotifier {
 
     // Reset state after a short delay so UI can show "Call Ended"
     Future.delayed(const Duration(seconds: 2), () {
+      if (_disposed) return;
       _callState = PhoneCallState.idle;
       _currentCallId = null;
       _remoteNumber = null;
@@ -610,7 +631,6 @@ class PhoneCallProvider extends ChangeNotifier {
           _scheduleReconnect();
         },
       );
-      _armNoAudioWatchdog();
       _wsReconnectAttempts = 0;
     } on AuthTokenUnavailableException catch (e) {
       Logger.debug('PhoneCallProvider: authenticated WebSocket blocked before connect: ${e.result.runtimeType}');
@@ -644,6 +664,7 @@ class PhoneCallProvider extends ChangeNotifier {
     _audioChannel1Frames = 0;
     _audioChannel2Frames = 0;
     _transcriptStallReported = false;
+    _transcriptSessionReported = false;
     _wsAcceptedAt = null;
     _noAudioWatchdog?.cancel();
     _noAudioWatchdog = null;
@@ -752,6 +773,9 @@ class PhoneCallProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _noAudioWatchdog?.cancel();
+    _noAudioWatchdog = null;
     _stopDurationTimer();
     _disconnectTranscriptionSocket();
     _tokenRefreshTimer?.cancel();

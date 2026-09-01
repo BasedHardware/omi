@@ -22,6 +22,7 @@ class PhoneCallService {
   StreamSubscription? _eventSubscription;
   bool _listening = false;
   int _resubscribeDelayMs = 100;
+  Timer? _resubscribeTimer;
   Function(PhoneCallState state)? onCallStateChanged;
   Function(Uint8List audioData, int channel)? onAudioData;
   Function(PhoneCallError error)? onError;
@@ -102,9 +103,14 @@ class PhoneCallService {
   /// Start listening for call events from native side.
   ///
   /// The subscription survives malformed events and resubscribes after a
-  /// platform-side error or done until [stopListening] cancels it.
+  /// platform-side error or done until [stopListening] cancels it. Calling this
+  /// again replaces any existing subscription (never duplicates) and resets the
+  /// resubscribe backoff.
   void startListening() {
     _listening = true;
+    _resubscribeDelayMs = 100;
+    _resubscribeTimer?.cancel();
+    _resubscribeTimer = null;
     _eventSubscription?.cancel();
     _eventSubscription = _eventChannel.receiveBroadcastStream().listen(
       (event) => _handleEvent(event),
@@ -119,6 +125,8 @@ class PhoneCallService {
   /// Stop listening for call events and cancel any pending resubscribe.
   void stopListening() {
     _listening = false;
+    _resubscribeTimer?.cancel();
+    _resubscribeTimer = null;
     _eventSubscription?.cancel();
     _eventSubscription = null;
   }
@@ -127,17 +135,23 @@ class PhoneCallService {
   void resetEventStats() {
     eventChannelErrors = 0;
     eventChannelCoerced = 0;
+    _resubscribeDelayMs = 100;
   }
 
   /// Dispatch one raw platform event through the production path.
   @visibleForTesting
   void handleEventForTesting(Object? event) => _handleEvent(event);
 
+  /// Exactly one resubscribe may be pending at a time; a second error/done
+  /// before the timer fires replaces the timer instead of stacking a second
+  /// subscription attempt on top of it.
   void _scheduleResubscribe() {
     if (!_listening) return;
+    _resubscribeTimer?.cancel();
     var delay = Duration(milliseconds: _resubscribeDelayMs);
     _resubscribeDelayMs = (_resubscribeDelayMs * 2).clamp(100, 2000);
-    Timer(delay, () {
+    _resubscribeTimer = Timer(delay, () {
+      _resubscribeTimer = null;
       if (_listening) {
         Logger.info('PhoneCallService: resubscribing to event stream');
         startListening();

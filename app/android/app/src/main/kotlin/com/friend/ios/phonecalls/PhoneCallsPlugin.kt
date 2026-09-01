@@ -104,6 +104,7 @@ class PhoneCallsPlugin private constructor(
 
         override fun onDisconnected(call: Call, callException: CallException?) {
             resetAudioMode()
+            audioEventCoalescer.flush()
             audioEventCoalescer.reset()
             if (callException != null) {
                 Log.e(TAG, "Call disconnected with error: ${callException.message}")
@@ -304,8 +305,10 @@ class PhoneCallsPlugin private constructor(
 /**
  * Batches 20 ms call-audio buffers into bounded events before they cross the
  * EventChannel: one main-looper post per ~100 ms per channel instead of one
- * per buffer. Pending bytes are hard-capped; a saturated consumer drops the
- * pending batch rather than growing without bound.
+ * per buffer. The hard cap is checked FIRST so it can never be shadowed by the
+ * flush threshold; a saturated consumer drops the pending batch rather than
+ * growing without bound. A generation counter invalidates work queued by a
+ * previous call after [reset], so a new call cannot emit the old call's tail.
  */
 private class AudioEventCoalescer(
     private val flushBytes: Int = 10_240,
@@ -314,27 +317,50 @@ private class AudioEventCoalescer(
 ) {
     private val lock = Any()
     private val pending = HashMap<Int, java.io.ByteArrayOutputStream>()
+    private var generation = 0
 
     fun append(data: ByteArray, channel: Int) {
+        val entryGeneration = generation
         var toEmit: ByteArray? = null
         synchronized(lock) {
             val stream = pending.getOrPut(channel) { java.io.ByteArrayOutputStream() }
             stream.write(data)
             when {
-                stream.size() >= flushBytes -> {
-                    toEmit = stream.toByteArray()
-                    pending.remove(channel)
-                }
+                // Hard cap first: it must win when both thresholds would match.
                 stream.size() > maxPendingBytes -> {
                     Log.w("AudioEventCoalescer", "dropping ${stream.size()} stalled bytes (channel $channel)")
                     pending.remove(channel)
                 }
+                stream.size() >= flushBytes -> {
+                    toEmit = stream.toByteArray()
+                    pending.remove(channel)
+                }
             }
         }
-        toEmit?.let { emit(it, channel) }
+        // A reset()/flush() that landed while this frame was coalescing ends the
+        // previous call's emission eligibility; drop instead of crossing calls.
+        if (toEmit != null && generation == entryGeneration) emit(toEmit!!, channel)
     }
 
+    /** Emit each channel's partial buffer now (teardown must not lose the last ~100 ms),
+     * then invalidate everything still associated with this call. */
+    fun flush() {
+        val toEmit = mutableListOf<Pair<ByteArray, Int>>()
+        synchronized(lock) {
+            for ((channel, stream) in pending) {
+                toEmit.add(stream.toByteArray() to channel)
+            }
+            pending.clear()
+            generation++
+        }
+        toEmit.forEach { (bytes, channel) -> emit(bytes, channel) }
+    }
+
+    /** Drop any partial buffer and invalidate everything still queued for this call. */
     fun reset() {
-        synchronized(lock) { pending.clear() }
+        synchronized(lock) {
+            pending.clear()
+            generation++
+        }
     }
 }

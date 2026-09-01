@@ -21,9 +21,8 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
 
     // 20 ms Core Audio buffers are coalesced (~100 ms per channel) before they
     // become EventChannel events; one Map per buffer saturated the main queue.
-    private lazy var audioEventCoalescer = OmiAudioEventCoalescer { [weak self] data, channel in
-        self?.sendAudioDataEvent(data, channel: channel)
-    }
+    // Created eagerly in init() (not lazily at the first Core Audio callback).
+    private let audioEventCoalescer: OmiAudioEventCoalescer
     // Call coordinator (manages CallKit or direct audio, swappable via protocol)
     fileprivate let callCoordinator: OmiCallCoordinatorProtocol
     fileprivate var callUUID: UUID?
@@ -32,6 +31,10 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     fileprivate let proximitySensor = OmiProximitySensor()
 
     override init() {
+        // Eager init: the coalescer exists before any Core Audio callback can run.
+        audioEventCoalescer = OmiAudioEventCoalescer { [weak self] data, channel in
+            self?.sendAudioDataEvent(data, channel: channel)
+        }
         // Select coordinator based on region
         if OmiRegionCheck.isCallKitRestricted {
             callCoordinator = OmiDirectCallCoordinator()
@@ -341,8 +344,10 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     // MARK: - Cleanup
 
     fileprivate func cleanup() {
-        audioEventCoalescer.reset()
         activeCall = nil
+        // Emit the final partial buffers so teardown does not drop the last
+        // ~100 ms of the call, then invalidate anything still queued.
+        audioEventCoalescer.flush()
         callDelegate = nil
         callUUID = nil
         currentCallId = nil

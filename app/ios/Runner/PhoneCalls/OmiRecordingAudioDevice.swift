@@ -294,14 +294,40 @@ extension OmiRecordingAudioDevice: AudioDevice {
             print("OmiAudioDevice: start deferred — audio unit not created yet")
             return false
         }
-        _pendingStartRequested = false
-        return AudioOutputUnitStart(unit) == noErr
+        let started = AudioOutputUnitStart(unit) == noErr
+        // Only clear the deferred request on success: a failed start must stay
+        // pending so the capturer retry can still honor it.
+        if started {
+            _pendingStartRequested = false
+        }
+        return started
     }
 
     func stop() -> Bool {
+        // Clear the deferred request BEFORE stopping so a concurrent retry that
+        // already passed its check cannot restart the unit after teardown.
         _pendingStartRequested = false
         guard let unit = _audioUnit else { return false }
         return AudioOutputUnitStop(unit) == noErr
+    }
+
+    /// Honor a deferred `start()` now that the audio unit exists. The whole
+    /// check-start-clear runs under the pending flag's lock, so it is strictly
+    /// ordered against `stop()` clearing the same flag.
+    private func retryDeferredStart(site: String) {
+        guard _pendingStartRequested else { return }
+        guard let unit = _audioUnit else { return }
+        var didStart = false
+        $_pendingStartRequested.withLock { pending in
+            guard pending else { return }
+            didStart = AudioOutputUnitStart(unit) == noErr
+            if didStart {
+                pending = false
+            }
+        }
+        if didStart {
+            print("OmiAudioDevice: honored deferred start (\(site))")
+        }
     }
 }
 
@@ -330,13 +356,10 @@ extension OmiRecordingAudioDevice: AudioDeviceRenderer {
 extension OmiRecordingAudioDevice: AudioDeviceCapturer {
     func initializeCapturer() -> Bool {
         let created = setupAudioUnit()
-        if created && _pendingStartRequested && !isStarted() {
+        if created {
             // A start() arrived before the unit existed (CallKit activation can
             // precede Twilio's capturer init); honor it now that the unit is live.
-            print("OmiAudioDevice: retrying deferred start after initializeCapturer")
-            if AudioOutputUnitStart(_audioUnit!) == noErr {
-                _pendingStartRequested = false
-            }
+            retryDeferredStart(site: "initializeCapturer")
         }
         return created
     }
@@ -350,12 +373,7 @@ extension OmiRecordingAudioDevice: AudioDeviceCapturer {
             maxFrames: framesPerBuffer,
             bytesPerFrame: bytesPerFrame
         )
-        if _pendingStartRequested && !isStarted() {
-            print("OmiAudioDevice: retrying deferred start after startCapturing")
-            if AudioOutputUnitStart(unit) == noErr {
-                _pendingStartRequested = false
-            }
-        }
+        retryDeferredStart(site: "startCapturing")
         return true
     }
 

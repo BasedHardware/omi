@@ -242,4 +242,121 @@ void main() {
     expect(session.$2?['audio_channel_2_frames'], 0);
     expect(session.$2?['transcription_status_final'], 'active', reason: 'status at the moment of hangup');
   });
+
+  test('audio resuming after a stall restores the active status', () async {
+    final socket = _FakeWebSocketChannel();
+    PhoneCallProvider.socketFactoryForTesting = (_, __) => socket;
+    PhoneCallProvider.headerBuilderForTesting = (_) async => <String, String>{};
+
+    final provider = PhoneCallProvider.forTesting();
+    provider.debugSetCallIdForTesting('call-1');
+    provider.noAudioStallTimeout = const Duration(milliseconds: 150);
+    addTearDown(provider.dispose);
+
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await emitEvent({'type': 'callStateChanged', 'state': 'active'});
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    socket.incoming.add('ping');
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(provider.transcriptionStatus, TranscriptionStatus.noAudio);
+
+    await emitEvent({
+      'type': 'audioData',
+      'data': Uint8List.fromList([1, 2, 3, 4]),
+      'channel': 1
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    expect(provider.transcriptionStatus, TranscriptionStatus.active,
+        reason: 'frames flowing again must clear the stall chip');
+    expect(socket.sent.length, 1);
+  });
+
+  test('a still-connecting socket is never reported as noAudio', () async {
+    final socket = _FakeWebSocketChannel();
+    PhoneCallProvider.socketFactoryForTesting = (_, __) => socket;
+    PhoneCallProvider.headerBuilderForTesting = (_) async => <String, String>{};
+
+    final provider = PhoneCallProvider.forTesting();
+    provider.debugSetCallIdForTesting('call-1');
+    provider.noAudioStallTimeout = const Duration(milliseconds: 150);
+    addTearDown(provider.dispose);
+
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await emitEvent({'type': 'callStateChanged', 'state': 'active'});
+    await Future<void>.delayed(const Duration(milliseconds: 400)); // no server message yet
+
+    expect(provider.transcriptionStatus, TranscriptionStatus.connecting);
+    expect(analytics.events.map((event) => event.$1), isNot(contains('Phone Call Transcript Session')));
+  });
+
+  test('double hangup still emits Phone Call Transcript Session exactly once', () async {
+    final socket = _FakeWebSocketChannel();
+    PhoneCallProvider.socketFactoryForTesting = (_, __) => socket;
+    PhoneCallProvider.headerBuilderForTesting = (_) async => <String, String>{};
+
+    final provider = PhoneCallProvider.forTesting();
+    provider.debugSetCallIdForTesting('call-1');
+    provider.noAudioStallTimeout = const Duration(seconds: 60);
+    addTearDown(provider.dispose);
+
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await emitEvent({'type': 'callStateChanged', 'state': 'active'});
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    socket.incoming.add('ping');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    // Native 'ended' event and the endCall() path can both fire.
+    await emitEvent({'type': 'callStateChanged', 'state': 'ended'});
+    await emitEvent({'type': 'callStateChanged', 'state': 'ended'});
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    final sessionEvents = analytics.events.where((event) => event.$1 == 'Phone Call Transcript Session').toList();
+    expect(sessionEvents.length, 1);
+  });
+
+  test('reconnect-buffered frames count toward the session stats when flushed', () async {
+    final socket = _FakeWebSocketChannel();
+    PhoneCallProvider.socketFactoryForTesting = (_, __) => socket;
+    PhoneCallProvider.headerBuilderForTesting = (_) async => <String, String>{};
+
+    final provider = PhoneCallProvider.forTesting();
+    provider.debugSetCallIdForTesting('call-1');
+    provider.noAudioStallTimeout = const Duration(seconds: 60);
+    addTearDown(provider.dispose);
+
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // Two frames arrive while no socket exists (reconnect window): buffered.
+    await emitEvent({
+      'type': 'audioData',
+      'data': Uint8List.fromList([1, 2, 3, 4]),
+      'channel': 1
+    });
+    await emitEvent({
+      'type': 'audioData',
+      'data': Uint8List.fromList([5, 6, 7, 8]),
+      'channel': 1
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    await emitEvent({'type': 'callStateChanged', 'state': 'active'});
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    socket.incoming.add('ping');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    // Next frame flushes the two buffered ones ahead of itself.
+    await emitEvent({
+      'type': 'audioData',
+      'data': Uint8List.fromList([9, 10, 11, 12]),
+      'channel': 1
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await emitEvent({'type': 'callStateChanged', 'state': 'ended'});
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    expect(socket.sent.length, 3, reason: 'buffered frames must reach the socket on flush');
+    final session = analytics.events.firstWhere((event) => event.$1 == 'Phone Call Transcript Session');
+    expect(session.$2?['audio_frames_sent'], 3);
+    expect(session.$2?['audio_channel_1_frames'], 3);
+    expect(session.$2?['audio_bytes_sent'], 3 * 5 /* 4-byte payload + 1 prefix byte */);
+  });
 }
