@@ -32,7 +32,8 @@ extension RealtimeHubController {
     let projection = RealtimeStreamingJournalProjection(
       ownerID: ownerID, continuityKey: turnIdempotencyKey,
       admissionSurface: FloatingControlBarManager.shared.mainChatSurfaceReference(),
-      modelsUsed: [sessionProvider?.modelID].compactMap { $0 })
+      modelsUsed: [sessionProvider?.modelID].compactMap { $0 },
+      screenContext: screenContextByContinuityKey[turnIdempotencyKey])
     guard
       streamingJournalWriteLedger.begin(
         projection: projection,

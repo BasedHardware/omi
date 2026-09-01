@@ -106,6 +106,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Authoritative owner is the kernel journal / voice-context turn IDs; restore
   /// through `RealtimeHubContinuityRestore` + `RealtimeTurnJournalAuthority`.
   var acceptedSpawnJournalReceiptByContinuityKey: [String: AcceptedSpawnJournalReceipt] = [:]
+  /// Accepted screen observation per voice turn (continuity key), journaled with the user row.
+  var screenContextByContinuityKey: [String: String] = [:]
   /// One bounded same-turn recovery after a failed spawn. The first failure
   /// returns typed guidance to the provider; a repeat closes the turn.
   var spawnFailureContinuationPolicy = RealtimeSpawnFailureContinuationPolicy()

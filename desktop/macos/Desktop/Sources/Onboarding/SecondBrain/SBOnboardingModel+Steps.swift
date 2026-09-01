@@ -765,10 +765,19 @@ extension SBOnboardingModel {
   func startScreenDemo() {
     screenDemoDone = false
     threeDoorsOpened = false
+    chatProvider.onboardingDemoContext = ThreeDoorsDemoPage.modelNote
     openDoorsObserver = NotificationCenter.default.addObserver(
       forName: .onboardingOpenDoorsRequested, object: nil, queue: .main
     ) { [weak self] _ in
       MainActor.assumeIsolated { self?.openThreeDoorsPage() }
+    }
+    doorsCompletedObserver = NotificationCenter.default.addObserver(
+      forName: .onboardingDoorsCompleted, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        guard let self, self.step == .screenDemo else { return }
+        self.screenDemoDone = true
+      }
     }
     screenDemoPTTReady = false
     screenDemoPTTUnavailable = false
@@ -869,8 +878,11 @@ extension SBOnboardingModel {
   }
 
   func teardownVoiceDemo() {
+    chatProvider.onboardingDemoContext = nil
     if let openDoorsObserver { NotificationCenter.default.removeObserver(openDoorsObserver) }
     openDoorsObserver = nil
+    if let doorsCompletedObserver { NotificationCenter.default.removeObserver(doorsCompletedObserver) }
+    doorsCompletedObserver = nil
     screenDemoSetupTask?.cancel()
     screenDemoSetupTask = nil
     voiceTimeout?.cancel()

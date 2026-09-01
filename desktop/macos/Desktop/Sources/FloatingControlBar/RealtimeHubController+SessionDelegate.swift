@@ -993,6 +993,9 @@ extension RealtimeHubController {
     }
     screenGroundingState = .accepted(receipt)
     logScreenEvidence(stage: "report_accepted", evidence: receipt.descriptor, callID: callID)
+    if !turnIdempotencyKey.isEmpty {
+      screenContextByContinuityKey[turnIdempotencyKey] = observation
+    }
     return acceptScreenEvidenceReport(
       receipt.protocolToken,
       reportCallID: VoiceToolCallID(callID),

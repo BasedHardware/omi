@@ -406,10 +406,15 @@ extension RealtimeHubController {
       }
     #endif
     sessionVoiceContextFreshnessIdentity = topLevelContext.snapshotFreshnessIdentity
+    let onboardingDemoContext = FloatingControlBarManager.shared.sharedFloatingProvider?.onboardingDemoContext
+    if let onboardingDemoContext, !onboardingDemoContext.isEmpty {
+      log("RealtimeHub: onboarding demo note included in voice instructions (\(onboardingDemoContext.count) chars)")
+    }
     let instructions = RealtimeHubTools.systemInstruction(
       kernelContext: topLevelContext.rendered,
       kernelSemanticGuidance: topLevelContext.semanticGuidance,
-      userLanguages: AssistantSettings.shared.voiceBaseLanguages)
+      userLanguages: AssistantSettings.shared.voiceBaseLanguages,
+      onboardingDemoContext: onboardingDemoContext)
     let s = RealtimeHubSession(
       provider: provider,
       auth: auth,
@@ -887,7 +892,8 @@ extension RealtimeHubController {
             origin: "realtime_voice",
             continuityKey: idempotencyKey,
             assistantStatus: journalStatus,
-            terminalReason: terminalReason)
+            terminalReason: terminalReason,
+            userScreenContext: self.screenContextByContinuityKey[idempotencyKey])
           guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
           if accepted { return true }
           if attempt == 0 { try? await Task.sleep(nanoseconds: 250_000_000) }

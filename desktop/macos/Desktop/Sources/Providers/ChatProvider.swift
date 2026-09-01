@@ -1201,6 +1201,10 @@ class ChatProvider: ObservableObject {
 
   /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
   var isOnboarding = false
+  /// Onboarding screen-demo fallback: while the three-doors step is active, the kernel receives the
+  /// demo's own content so "what was the last word of the first riddle?" is answerable even when
+  /// screen history has no frame yet (capture just started, OCR/embedding still pending).
+  var onboardingDemoContext: String?
   var preOnboardingMainMessages: [ChatMessage]?
   @Published var sessionsLoadError: String?
   @Published var selectedAppId: String? {
@@ -1958,6 +1962,7 @@ class ChatProvider: ObservableObject {
     }
     let responseContext = [
       systemPromptSuffix?.trimmingCharacters(in: .whitespacesAndNewlines),
+      onboardingDemoContext?.trimmingCharacters(in: .whitespacesAndNewlines),
       AssistantSettings.shared.hasExplicitVoiceLanguages
         ? Self.responseLanguageInstruction(languageCodes: AssistantSettings.shared.voiceLanguages)
         : nil,

@@ -7,7 +7,9 @@ final class ThreeDoorsDemoPageTests: XCTestCase {
   private func makeTemplateRoot() throws -> URL {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    let html = "<title>Three Doors</title><div>Hold " + ThreeDoorsDemoPage.templateKeyMarkup + " and say</div>"
+    let html =
+      "<title>Three Doors</title><div>Hold " + ThreeDoorsDemoPage.templateKeyMarkup + " and say</div><div "
+      + ThreeDoorsDemoPage.templateReturnMarkup + "></div>"
     try Data(html.utf8).write(to: root.appendingPathComponent(ThreeDoorsDemoPage.fileName))
     return root
   }
@@ -23,9 +25,13 @@ final class ThreeDoorsDemoPageTests: XCTestCase {
     }
 
     let url = try XCTUnwrap(
-      ThreeDoorsDemoPage.url(locator: OmiSoundAssetLocator(roots: [root]), pttTokens: ["⌃"], outputDirectory: out))
+      ThreeDoorsDemoPage.url(
+        locator: OmiSoundAssetLocator(roots: [root]), pttTokens: ["⌃"], urlScheme: "omi-test", outputDirectory: out))
     let rendered = try String(contentsOf: url, encoding: .utf8)
     XCTAssertTrue(rendered.contains(#"<span class="key">⌃</span>"#), rendered)
+    XCTAssertTrue(rendered.contains(#"data-return="omi-test://onboarding/doors-complete""#), rendered)
+    XCTAssertTrue(ThreeDoorsDemoPage.isReturnURL(URL(string: "omi-test://onboarding/doors-complete")!))
+    XCTAssertFalse(ThreeDoorsDemoPage.isReturnURL(URL(string: "omi-test://auth/callback?code=x")!))
     XCTAssertFalse(rendered.contains("⌥"), rendered)
     XCTAssertNil(url.fragment)
   }
@@ -41,6 +47,21 @@ final class ThreeDoorsDemoPageTests: XCTestCase {
     XCTAssertNil(ThreeDoorsDemoPage.url(locator: OmiSoundAssetLocator(roots: [empty]), pttTokens: ["fn"]))
   }
 
+  func testModelNoteMatchesTheBundledRiddles() throws {
+    // The kernel fallback note must describe the same riddles the page shows.
+    let here = URL(fileURLWithPath: #filePath)
+    let template = here.deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("Sources/Resources/\(ThreeDoorsDemoPage.fileName)")
+    let html = try String(contentsOf: template, encoding: .utf8)
+    for phrase in [
+      "I have keys but open no locks", "Which planet has a day longer than its year", "last word of the first riddle",
+    ] {
+      XCTAssertTrue(html.contains(phrase), phrase)
+      XCTAssertTrue(ThreeDoorsDemoPage.modelNote.contains(phrase), phrase)
+    }
+    XCTAssertTrue(ThreeDoorsDemoPage.modelNote.contains("(answer: inside)"))
+  }
+
   func testBundledTemplateContainsTheReplaceableKeyMarkup() throws {
     // Static tripwire, not behavioral: the template must keep the exact markup the renderer replaces.
     let here = URL(fileURLWithPath: #filePath)
@@ -48,5 +69,6 @@ final class ThreeDoorsDemoPageTests: XCTestCase {
       .appendingPathComponent("Sources/Resources/\(ThreeDoorsDemoPage.fileName)")
     let html = try String(contentsOf: template, encoding: .utf8)
     XCTAssertTrue(html.contains(ThreeDoorsDemoPage.templateKeyMarkup))
+    XCTAssertTrue(html.contains(ThreeDoorsDemoPage.templateReturnMarkup))
   }
 }

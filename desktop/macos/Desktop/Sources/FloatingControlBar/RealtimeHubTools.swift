@@ -48,10 +48,14 @@ enum RealtimeHubTools {
   static func systemInstruction(
     kernelContext: String = "",
     kernelSemanticGuidance: String = "",
-    userLanguages: [String] = []
+    userLanguages: [String] = [],
+    onboardingDemoContext: String? = nil
   ) -> String {
     let canonicalContext = kernelContext.trimmingCharacters(in: .whitespacesAndNewlines)
     let semanticGuidance = kernelSemanticGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
+    let demoNote = onboardingDemoContext?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let demoBlock =
+      demoNote.isEmpty ? "" : "\n## Onboarding demo (authoritative for questions about the doors)\n\(demoNote)\n"
 
     return """
       You are Omi, a fast spoken-voice assistant on the user's Mac. You hear the user's \
@@ -59,7 +63,7 @@ enum RealtimeHubTools {
       \(userLanguagesLine(userLanguages))Reply in the same language the user is speaking.
 
       \(canonicalContext)
-
+      \(demoBlock)
       \(semanticGuidance)
 
       \(DesktopCapabilityRegistry.realtimeSelfModelPrompt)

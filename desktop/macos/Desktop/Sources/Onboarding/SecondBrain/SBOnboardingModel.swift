@@ -167,6 +167,7 @@ final class SBOnboardingModel: ObservableObject {
   /// The three-doors demo page was opened for the current visit to the screen-demo step.
   @Published var threeDoorsOpened = false
   var openDoorsObserver: NSObjectProtocol?
+  var doorsCompletedObserver: NSObjectProtocol?
   var voiceCancellable: AnyCancellable?
   var voiceTimeout: Task<Void, Never>?
   var screenDemoSetupTask: Task<Void, Never>?

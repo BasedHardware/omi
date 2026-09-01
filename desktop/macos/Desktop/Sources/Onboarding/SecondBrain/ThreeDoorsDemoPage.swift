@@ -11,18 +11,26 @@ enum ThreeDoorsDemoPage {
   static let fileName = "three-doors.html"
   /// Exact markup of the default key in the bundled template; replaced per user.
   static let templateKeyMarkup = #"<span id="keys"><span class="key">⌥</span></span>"#
+  /// Exact return-link attribute in the template; replaced with this bundle's registered URL scheme so
+  /// "Back to Omi" reaches this app and not a sibling bundle.
+  static let templateReturnMarkup = #"data-return="omi-computer-dev://onboarding/doors-complete""#
+  static let returnPath = "onboarding/doors-complete"
 
   /// Render the bundled template with the user's push-to-talk chord and return the file to open.
   /// `nil` when the resource is missing from the bundle; the step then opens nothing and logs.
   static func url(
     locator: OmiSoundAssetLocator = .bundled,
     pttTokens: [String],
+    urlScheme: String = bundleURLScheme(),
     outputDirectory: URL = FileManager.default.temporaryDirectory
   ) -> URL? {
     guard let template = locator.url(forFileName: fileName),
       let html = try? String(contentsOf: template, encoding: .utf8)
     else { return nil }
-    let rendered = html.replacingOccurrences(of: templateKeyMarkup, with: keyMarkup(for: pttTokens))
+    let rendered =
+      html
+      .replacingOccurrences(of: templateKeyMarkup, with: keyMarkup(for: pttTokens))
+      .replacingOccurrences(of: templateReturnMarkup, with: returnMarkup(scheme: urlScheme))
     let dir = outputDirectory.appendingPathComponent("omi-onboarding", isDirectory: true)
     let out = dir.appendingPathComponent(fileName)
     do {
@@ -33,6 +41,37 @@ enum ThreeDoorsDemoPage {
       // Fall back to the untouched template rather than opening nothing.
       return template
     }
+  }
+
+  /// Handed to the kernel while the demo step is active (see `ChatProvider.onboardingDemoContext`).
+  /// Mirrors the bundled page exactly; update both together.
+  static let modelNote = """
+    Onboarding demo in progress: the user is solving three riddle doors on a web page Omi opened. \
+    Door 1 riddle: "I have keys but open no locks. I have space but no room. You can enter, but never go inside." (answer: keyboard). \
+    Door 2: "Which planet has a day longer than its year?" (answer: Venus). \
+    Door 3 asks for the last word of the first riddle (answer: inside). \
+    If the user asks about any of these doors or riddles, answer directly and briefly from this note. \
+    Never say you don't remember the riddle or that it was never mentioned.
+    """
+
+  static func returnMarkup(scheme: String) -> String {
+    #"data-return="\#(scheme)://\#(returnPath)""#
+  }
+
+  /// The URL scheme this bundle registered (run.sh rewrites it per named bundle).
+  static func bundleURLScheme() -> String {
+    if let urlTypes = Bundle.main.infoDictionary?["CFBundleURLTypes"] as? [[String: Any]],
+      let schemes = urlTypes.first?["CFBundleURLSchemes"] as? [String],
+      let scheme = schemes.first, !scheme.isEmpty
+    {
+      return scheme
+    }
+    return "omi-computer-dev"
+  }
+
+  /// True for the URL the finished page opens to hand the user back to Omi.
+  static func isReturnURL(_ url: URL) -> Bool {
+    (url.host ?? "") + url.path == "onboarding/doors-complete"
   }
 
   static func keyMarkup(for tokens: [String]) -> String {

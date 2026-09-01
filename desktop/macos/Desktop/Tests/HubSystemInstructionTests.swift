@@ -3,6 +3,16 @@ import XCTest
 @testable import Omi_Computer
 
 final class HubSystemInstructionTests: XCTestCase {
+  func testOnboardingDemoNoteIsIncludedWhenPresentAndAbsentOtherwise() {
+    let with = RealtimeHubTools.systemInstruction(
+      kernelContext: "ctx", onboardingDemoContext: "Door 3 asks for the last word of the first riddle (answer: inside)."
+    )
+    XCTAssertTrue(with.contains("## Onboarding demo"))
+    XCTAssertTrue(with.contains("(answer: inside)"))
+    let without = RealtimeHubTools.systemInstruction(kernelContext: "ctx")
+    XCTAssertFalse(without.contains("## Onboarding demo"))
+  }
+
   func testHigherModelAuthorsAShortSpeakableAnswerForFaithfulRealtimeDelivery() {
     let instruction = RealtimeHubTools.escalationSystemPrompt()
 

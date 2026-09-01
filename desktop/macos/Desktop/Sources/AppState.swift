@@ -982,6 +982,8 @@ extension Notification.Name {
   /// Automation bridge → onboarding screen-demo step: open the three-doors page (same code path as
   /// the step's "Open the doors" button), so agents can exercise the demo without the cursor.
   static let onboardingOpenDoorsRequested = Notification.Name("onboardingOpenDoorsRequested")
+  /// The three-doors page finished and handed the user back to Omi via the app URL scheme.
+  static let onboardingDoorsCompleted = Notification.Name("onboardingDoorsCompleted")
   /// Posted when the system wakes from sleep
   static let systemDidWake = Notification.Name("systemDidWake")
   /// Posted when the screen is locked

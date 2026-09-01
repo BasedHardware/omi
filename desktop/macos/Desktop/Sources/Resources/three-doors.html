@@ -62,7 +62,9 @@
   .done{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:radial-gradient(ellipse at 50% 40%,#fff3d0,#e0b970 40%,#5c4416 100%);color:#2a1d08;text-align:center;padding:24px}
   .done h2{margin:0;font:800 clamp(34px,6vw,60px)/1.05 var(--serif)}
   .done p{margin:0;font:500 14px var(--mono);color:#4a3612}
+  .doneActions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
   .done button{appearance:none;border:2px solid #2a1d08;background:transparent;color:#2a1d08;font:800 14px var(--serif);letter-spacing:.14em;padding:12px 22px;border-radius:6px;cursor:pointer}
+  .done #back{background:#2a1d08;color:#fff3d0}
   .done button:hover{background:#2a1d08;color:#fff3d0}
   [hidden]{display:none!important}
   @media (max-width:560px){.plaques{grid-template-columns:1fr}}
@@ -83,7 +85,7 @@
   <form id="form" autocomplete="off"><input id="ans" type="text" placeholder="type the word" autofocus spellcheck="false" maxlength="24"></form>
   <div class="plaques" id="plaques" hidden></div>
   <div class="gate" id="gate" hidden><p id="gateText">The next door gives you twenty seconds.</p><button id="ready">READY</button></div>
-  <div class="done" id="done" hidden><h2>You're out.</h2><p id="doneText"></p><button id="again">AGAIN</button></div>
+  <div class="done" id="done" hidden data-return="omi-computer-dev://onboarding/doors-complete"><h2>You're out.</h2><p id="doneText"></p><div class="doneActions"><button id="back">BACK TO OMI</button><button id="again">AGAIN</button></div></div>
 </div>
 
 <div class="hint"><span class="lead">Stuck? Hold</span><span id="keys"><span class="key">⌥</span></span><span class="lead">and say</span><span class="said" id="say">Yo, what's the answer to this riddle?</span></div>
@@ -118,7 +120,7 @@
   function startTimer(sec){ tLeft=sec; const t0=performance.now(); $('sand').style.width='100%'; $('sand').style.background='var(--glow)';
     clearInterval(tmr); tmr=setInterval(()=>{ const left=Math.max(0,sec-(performance.now()-t0)/1000); $('sand').style.width=(left/sec*100)+'%'; if(left<3) $('sand').style.background='#c2410c';
       if(left<=0){ clearInterval(tmr); fail(); $('ans').value=''; $('ans').placeholder='too slow. ask omi.'; $('ans').disabled=true; setTimeout(()=>{ if(busy) return; $('ans').disabled=false; $('ans').focus(); startTimer(sec); },1800); } },100); }
-  function openDoor(){ clearInterval(tmr); busy=true; $('frame').classList.add('open'); setTimeout(()=>{ i++; if(i>=DOORS.length){ $('doneText').textContent='"Inside." Omi read it. You did not have to remember.'; $('done').hidden=false; } else show(); },2000); }
+  function openDoor(){ clearInterval(tmr); busy=true; $('frame').classList.add('open'); setTimeout(()=>{ i++; if(i>=DOORS.length){ $('doneText').textContent='"Inside." Omi read it. You did not have to remember.'; $('done').hidden=false; setTimeout(backToOmi,1500); } else show(); },2000); }
   function fail(){ $('frame').classList.add('shake'); setTimeout(()=>$('frame').classList.remove('shake'),420); }
   $('form').addEventListener('submit',e=>{ e.preventDefault(); if(busy) return;
     const v=$('ans').value.trim().toLowerCase().replace(/[^a-z0-9 ]/g,'');
@@ -126,6 +128,10 @@
   function pick(k){ if(busy) return; if(k===DOORS[i].c) openDoor(); else { fail(); $('plaques').children[k].classList.add('wrong'); } }
   $('ready').onclick=()=>{ $('gate').hidden=true; $('ans').focus(); startTimer(DOORS[i].timed); };
   $('again').onclick=()=>{ i=0; $('done').hidden=true; show(); };
+  // Finishing hands the user back to Omi: the app registers this URL scheme and brings its window forward.
+  const returnURL=$('done').dataset.return;
+  function backToOmi(){ if(returnURL) location.href=returnURL; }
+  $('back').onclick=backToOmi;
   document.addEventListener('keydown',e=>{ if(!$('gate').hidden && (e.key==='Enter'||e.key===' ')){ e.preventDefault(); $('ready').click(); return; } if(DOORS[i] && DOORS[i].kind==='pick' && $('done').hidden){ const k='ABCD'.indexOf(e.key.toUpperCase()); if(k>-1) pick(k); } });
   document.addEventListener('click',()=>{ if($('done').hidden && $('gate').hidden && DOORS[i].kind==='type') $('ans').focus(); });
   show();
