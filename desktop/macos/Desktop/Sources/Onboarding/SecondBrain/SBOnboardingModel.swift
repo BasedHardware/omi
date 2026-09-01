@@ -2,16 +2,6 @@ import AppKit
 import Combine
 import Foundation
 
-enum SBOnboardingLanguageCopy {
-  static let question = "What language should Omi listen and reply in?"
-  static let detectedLanguageDetail = "· detected from your Mac"
-  static let changeSpokenLanguageAction = "Change spoken language"
-
-  static func continueAction(for language: String) -> String {
-    "Continue in \(language)"
-  }
-}
-
 /// The height-relevant identity of a step's widget — see `SBOnboardingModel.widgetShape`.
 ///
 /// A value type rather than a set of `onChange`s in the view, so "the widget grew, scroll to it" is
@@ -101,8 +91,6 @@ final class SBOnboardingModel: ObservableObject {
     }
   }
 
-  typealias FileScanRunner = @MainActor (AppState) async -> LocalFileProfileState
-
   @Published var step: Step = .hello
   @Published var thread: [Msg] = []
   /// The current Omi message streaming in (nil once committed).
@@ -112,10 +100,6 @@ final class SBOnboardingModel: ObservableObject {
 
   // Per-step answers / state
   @Published var nameDraft = ""
-  @Published var languageDraft = ""
-  @Published private(set) var languageIsDetectedFromMac = false
-  @Published var languageName: String?
-  @Published var howHeard: String?
   @Published var roleDraft = ""
   @Published var role: String?
   @Published var cardPhase: CardPhase = .waitingForAction
@@ -203,29 +187,13 @@ final class SBOnboardingModel: ObservableObject {
   var beatStartedAt = Date()
   var beatExitRecorded = false
 
-  // Connectors — keyed by a stable id ("openclaw", "calendar", …) → state string
-  // ("idle" | "connecting" | "on" | "unavailable" | "needsSignIn").
-  @Published var agentStates: [String: String] = [:]
-  @Published var contextStates: [String: String] = [:]
-  /// Actionable connector detail replaces the generic row subtitle after a
-  /// failed functional probe. Values use bounded product copy; raw cookie,
-  /// response, and exception data never reaches this projection.
-  @Published var contextDetails: [String: String] = [:]
-
   unowned let appState: AppState
   let chatProvider: ChatProvider
-  /// The same persisted connector authority the post-onboarding Home and Apps
-  /// surfaces read. A context row is not connected until this store records a
-  /// completed import, never merely because a browser session passed a probe.
-  let importConnectorStatusStore: ImportConnectorStatusStore?
   /// Backend writes for editable answers are per-field serialized. Revisiting a
   /// question never lets an earlier request finish after the user's revision.
   private let answerWriteGate = OnboardingAnswerWriteGate()
-  let fileScanRunner: FileScanRunner
   private let onComplete: (() -> Void)?
   var streamTask: Task<Void, Never>?
-  var localFileScanTask: Task<Void, Never>?
-  var localFileScanID: UUID?
   /// Permission-grant pollers, one per permission key. Keyed so requesting a
   /// second permission (the meetings "both" mic+system-audio step) never cancels
   /// a still-running poll for the first and strands it on "macOS…".
@@ -242,47 +210,10 @@ final class SBOnboardingModel: ObservableObject {
   init(
     appState: AppState,
     chatProvider: ChatProvider,
-    importConnectorStatusStore: ImportConnectorStatusStore? = nil,
-    fileScanRunner: @escaping FileScanRunner = { appState in
-      ChatToolExecutor.onboardingAppState = appState
-      guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
-        return .failed(message: "Please sign in again before building your local profile.")
-      }
-      let outcome = await ChatToolExecutor.scanLocalFiles(
-        expectedOwnerID: authorization.ownerID,
-        authorizationSnapshot: authorization)
-      guard !Task.isCancelled, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
-        return .failed(message: "Your account changed before Omi could save your local profile.")
-      }
-      guard outcome.didCompleteSuccessfully, outcome.hasReadableUserFileTarget else {
-        return .failed(message: ConnectorImportOperations.localFilesFailureLine(for: outcome))
-      }
-
-      // Preserve the legacy post-scan owner: it derives the indexed-file
-      // snapshot, writes aggregate local-file profile evidence, and updates the
-      // knowledge graph. The conversational flow merely presents its outcome.
-      let coordinator = OnboardingPagedIntroCoordinator()
-      await coordinator.refreshSnapshotIfAvailable(
-        expectedOwnerID: authorization.ownerID,
-        authorizationSnapshot: authorization)
-      guard !Task.isCancelled, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
-        return .failed(message: "Your account changed before Omi could save your local profile.")
-      }
-      let fileCount = coordinator.scanSnapshot?.fileCount ?? outcome.indexedFileCount
-      if fileCount > 0, coordinator.localFileMemoriesSaved == 0 {
-        return .failed(message: "Your files were indexed, but Omi couldn't save your profile memories. Try again.")
-      }
-      return .complete(
-        fileCount: fileCount,
-        memoryCount: coordinator.localFileMemoriesSaved,
-        deniedFolders: outcome.deniedUserFolders)
-    },
     onComplete: (() -> Void)?
   ) {
     self.appState = appState
     self.chatProvider = chatProvider
-    self.importConnectorStatusStore = importConnectorStatusStore
-    self.fileScanRunner = fileScanRunner
     self.onComplete = onComplete
     // Isolate any onboarding chat/voice turns to the throwaway `.onboarding()`
     // journal surface so they never pollute the real Chat tab. Cleared on
@@ -306,7 +237,6 @@ final class SBOnboardingModel: ObservableObject {
       guard let action = notification.userInfo?["action"] as? String else { return }
       MainActor.assumeIsolated { self?.handleScenarioCardAction(action) }
     }
-    prefillDetectedLanguage()
   }
 
   deinit {
@@ -645,8 +575,8 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   /// Re-fill the editable drafts from already-saved answers so revisiting (via
-  /// Back) or resuming a name/language/role step shows the prior value, not an
-  /// empty field. Only fills empties — never clobbers in-progress typing.
+  /// Back) or resuming a name/role step shows the prior value, not an empty
+  /// field. Only fills empties — never clobbers in-progress typing.
   private func rehydrateDrafts() {
     if nameDraft.isEmpty {
       let n = AuthService.shared.givenName.trimmingCharacters(in: .whitespaces)
@@ -659,21 +589,9 @@ final class SBOnboardingModel: ObservableObject {
         if roleDraft.isEmpty { roleDraft = saved }
       }
     }
-    if howHeard == nil {
-      let saved = UserDefaults.standard.string(forKey: DefaultsKey.onboardingHowDidYouHearSource)
-      if let saved, !saved.isEmpty { howHeard = saved }
-    }
-    if languageDraft.isEmpty, languageName == nil, let code = AssistantSettings.shared.voiceLanguages.first,
-      let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code })
-    {
-      languageDraft = match.name
-    }
   }
 
   // MARK: scenario answers
-
-  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
-  func answerPromise() {}
 
   func answerName() {
     let trimmed = nameDraft.trimmingCharacters(in: .whitespaces)
@@ -685,69 +603,6 @@ final class SBOnboardingModel: ObservableObject {
     advance(userAnswer: trimmed, to: .see)
   }
 
-  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
-  /// Record the acquisition source (analytics + backend, like the legacy step),
-  /// then move on.
-  func pickHowHeard(_ source: String) {
-    howHeard = source
-    UserDefaults.standard.set(source, forKey: DefaultsKey.onboardingHowDidYouHearSource)
-    AnalyticsManager.shared.onboardingHowDidYouHear(source: source)
-    answerWriteGate.enqueue(.acquisitionSource) { [source] in
-      _ = try? await APIClient.shared.updateOnboardingAcquisitionSource(source)
-    }
-  }
-
-  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
-  /// Set the user's spoken language locally + on the backend (mirrors the legacy
-  /// confirmLanguages, single-primary). Advances optimistically.
-  func pickLanguage(code: String, name: String) {
-    languageName = name
-    languageDraft = name
-    languageIsDetectedFromMac = false
-    AssistantSettings.shared.voiceLanguages = [code]
-    answerWriteGate.enqueue(.language) { [code] in
-      _ = try? await APIClient.shared.updateUserLanguage(code)
-    }
-  }
-
-  /// Auto-detect the Mac's language and pre-fill it so the picker defaults to it
-  /// (the user can still type to change). Only fills an empty field once.
-  func prefillDetectedLanguage() {
-    let raw = Locale.current.language.languageCode?.identifier ?? Locale.preferredLanguages.first ?? "en"
-    prefillDetectedLanguage(from: raw)
-  }
-
-  /// Records that the draft came from the Mac locale, rather than a saved or
-  /// fallback language, so the UI can accurately disclose its source.
-  func prefillDetectedLanguage(from raw: String) {
-    guard languageDraft.isEmpty, languageName == nil else { return }
-    let code = AssistantSettings.normalizeTranscriptionLanguageCode(raw)
-    if let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code }) {
-      languageDraft = match.name
-      languageIsDetectedFromMac = true
-    }
-  }
-
-  func answerLanguageText() {
-    let raw = languageDraft.trimmingCharacters(in: .whitespaces)
-    guard !raw.isEmpty else { return }
-    let code = AssistantSettings.normalizeTranscriptionLanguageCode(raw)
-    let name = AssistantSettings.supportedLanguages.first { $0.code == code }?.name ?? raw
-    pickLanguage(code: code, name: name)
-  }
-
-  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
-  func pickRole(_ r: String) {
-    role = r
-    UserDefaults.standard.set(r, forKey: DefaultsKey.onboardingRole)
-  }
-
-  func answerRoleText() {
-    let t = roleDraft.trimmingCharacters(in: .whitespaces)
-    guard !t.isEmpty else { return }
-    pickRole(t)
-  }
-
   // MARK: capture choice → completes onboarding
 
   func capture(_ selection: CaptureSelection) {
@@ -757,11 +612,6 @@ final class SBOnboardingModel: ObservableObject {
     OnboardingScenarioJournal().append(who: "user", text: answer)
     OnboardingScenarioJournal().append(who: "system", text: "Updated the capture preference")
     recordBeatExit(skipped: false)
-    complete()
-  }
-
-  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
-  func finishReferral() {
     complete()
   }
 
@@ -893,9 +743,6 @@ final class SBOnboardingModel: ObservableObject {
     scenarioDetectionTask = nil
     scenarioCardTimeoutTask?.cancel()
     scenarioCardTimeoutTask = nil
-    localFileScanTask?.cancel()
-    localFileScanTask = nil
-    localFileScanID = nil
     for pollTask in pollTasks.values {
       pollTask.cancel()
     }

@@ -274,9 +274,7 @@ extension SBOnboardingModel {
       // after signing changes or a ScreenCaptureKit failure, so permission or
       // the onboarding row alone is not enough to promise screen access.
       canSeeScreen: CaptureListeningLogic.captureStatus(appState: appState, isCaptureMonitoring: false) != .blocked,
-      canHear: canHear,
-      connectedContextIDs: Set(contextStates.filter { $0.value == "on" }.map(\.key)),
-      connectedAgentNames: agentRows.filter { agentStates[$0.id] == "on" }.map(\.name)
+      canHear: canHear
     )
   }
 

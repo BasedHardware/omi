@@ -29,7 +29,7 @@ final class SBOnboardingLayoutTests: XCTestCase {
   /// nothing scrolled and the step read as having no way forward.
   func testFinishedFileScanChangesTheWidgetShapeSoTheColumnScrollsToIt() {
     let scanning = SBOnboardingWidgetShape(
-      step: .files,
+      step: .hello,
       localFileProfile: .scanning,
       permission: .allow,
       screenDemoReady: false,
@@ -45,7 +45,7 @@ final class SBOnboardingLayoutTests: XCTestCase {
   /// is the same growth-in-place the Files step hit.
   func testPermissionRowBecomingTheRelaunchOfferChangesTheWidgetShape() {
     let waiting = SBOnboardingWidgetShape(
-      step: .screen,
+      step: .see,
       localFileProfile: .idle,
       permission: .recheck,
       screenDemoReady: false,
@@ -60,7 +60,7 @@ final class SBOnboardingLayoutTests: XCTestCase {
   /// The demo arming its chord swaps a one-line spinner for a chord row plus two lines of copy.
   func testArmingTheScreenDemoChordChangesTheWidgetShape() {
     let preparing = SBOnboardingWidgetShape(
-      step: .screenDemo,
+      step: .talk,
       localFileProfile: .idle,
       permission: nil,
       screenDemoReady: false,
@@ -75,7 +75,7 @@ final class SBOnboardingLayoutTests: XCTestCase {
   /// Redrawing the same state must not fire a scroll animation on every publish.
   func testAnUnchangedWidgetIsNotTreatedAsGrowth() {
     let shape = SBOnboardingWidgetShape(
-      step: .capture,
+      step: .ready,
       localFileProfile: .idle,
       permission: nil,
       screenDemoReady: false,

@@ -2,10 +2,6 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
-enum SBOnboardingRepository {
-  static let url = URL(string: "https://github.com/BasedHardware/omi")!
-}
-
 enum SBOnboardingPanelLayout {
   static let maximumSize = CGSize(width: 540, height: 640)
   static let horizontalInset: CGFloat = 24
@@ -37,26 +33,18 @@ enum SBOnboardingPanelLayout {
 /// `onboardingCard()`, which is `inkGlassPanel` — the one shared piece of glass, once.
 struct SBOnboardingView: View {
   @StateObject private var model: SBOnboardingModel
-  @ObservedObject private var importConnectorStatusStore: ImportConnectorStatusStore
-  @State private var selectedImportConnector: ImportConnector?
-  /// Language step: false shows the detected default + Continue; true reveals the picker.
-  @State private var languageChanging = false
-  @State private var showAIAssistants = false
 
   init(
     appState: AppState,
     chatProvider: ChatProvider,
-    importConnectorStatusStore: ImportConnectorStatusStore,
     onComplete: (() -> Void)?
   ) {
     _model = StateObject(
       wrappedValue: SBOnboardingModel(
         appState: appState,
         chatProvider: chatProvider,
-        importConnectorStatusStore: importConnectorStatusStore,
         onComplete: onComplete
       ))
-    _importConnectorStatusStore = ObservedObject(wrappedValue: importConnectorStatusStore)
   }
 
   var body: some View {
@@ -75,18 +63,6 @@ struct SBOnboardingView: View {
       // back, so this return is the signal a grant may have landed — not a 20s
       // poll that Full Disk Access and Accessibility routinely outlive.
       model.recheckActivePermission()
-    }
-    .onReceive(importConnectorStatusStore.connectorDidSync) { connectorID in
-      model.markPersistedContextConnectorConnected(connectorID)
-    }
-    .dismissableSheet(item: $selectedImportConnector) { connector in
-      ImportConnectorSheet(
-        connector: connector,
-        appState: nil,
-        statusStore: importConnectorStatusStore,
-        onDismiss: { selectedImportConnector = nil }
-      )
-      .frame(width: 520, height: 620)
     }
     // Safety net: the `.shortcut` step suspends global hotkeys and nulls the main
     // menu (restored only via the advance/skip/complete buttons). If the view is
@@ -160,9 +136,6 @@ struct SBOnboardingView: View {
         // instructions/refusal text below the preset rows. Without this scroll trigger the new
         // content is clipped below the fold.
         .onChange(of: model.shortcutRecording) { _, _ in scrollDown(proxy) }
-        // Revealing the assistants list grows the widget *below* the fold, so without this the
-        // rows it just opened are clipped by the card's lower edge and nothing moves.
-        .onChange(of: showAIAssistants) { _, _ in scrollDown(proxy) }
         // The same rule for every widget that grows without touching the thread — a finished file
         // scan, a permission row turning into the relaunch offer, the demo arming its chord. See
         // `SBOnboardingModel.widgetShape`: without it the Files step's Continue renders below the
@@ -420,42 +393,6 @@ struct SBOnboardingView: View {
     .frame(maxWidth: 380, alignment: .leading)
   }
 
-  private var promiseWidget: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      VStack(spacing: 0) {
-        trustRow("OPEN") {
-          HStack(spacing: 0) {
-            Text("Every line of me is on ")
-            Link("GitHub", destination: SBOnboardingRepository.url)
-              .underline()
-            Text(".")
-          }
-        }
-        // `GlassSeparator`, not `Divider()`: a `Divider` inherits the host window's appearance rather
-        // than the panel's pinned one, so on a Dark machine it draws a light rule on a light card.
-        GlassSeparator()
-        trustRow("PRIVATE") { Text("Your data is encrypted, and only yours.") }
-        GlassSeparator()
-        trustRow("YOURS") { Text("Pause me anytime. Delete anything, forever.") }
-      }
-      .glassCard(cornerRadius: PageGlass.rowRadius)
-      SBInkButton(title: "Set up Omi →", isDefaultAction: true) { model.answerPromise() }
-    }
-  }
-
-  private func trustRow<Content: View>(_ tag: String, @ViewBuilder content: () -> Content) -> some View {
-    HStack(alignment: .top, spacing: 12) {
-      Text(tag).inkFont(InkType.statusLabel).foregroundStyle(Ink.secondary).frame(
-        width: 52, alignment: .leading)
-      // The promise is the copy this whole step exists for, so it never truncates — `PRIVATE` used to
-      // carry `.lineLimit(1)` and lost its second half at any narrow width.
-      content().inkStyle(InkType.rowCopy, color: Ink.primary)
-        .fixedSize(horizontal: false, vertical: true)
-      Spacer(minLength: 0)
-    }
-    .padding(.horizontal, 14).padding(.vertical, 12)
-  }
-
   private var nameWidget: some View {
     HStack(spacing: 8) {
       TextField("your name", text: $model.nameDraft)
@@ -466,98 +403,6 @@ struct SBOnboardingView: View {
       SBInkButton(title: "→", horizontalPadding: 15, verticalPadding: 9) { model.answerName() }
     }
     .frame(maxWidth: 360, alignment: .leading)
-  }
-
-  private var howHeardWidget: some View {
-    FlowChips(items: SBOnboardingModel.howHeardSources, selectedItem: model.howHeard) { source in
-      model.pickHowHeard(source)
-    }
-  }
-
-  private var languageWidget: some View {
-    let all = AssistantSettings.supportedLanguages
-    let draft = model.languageDraft.trimmingCharacters(in: .whitespaces)
-    return VStack(alignment: .leading, spacing: 12) {
-      if !languageChanging, !draft.isEmpty {
-        // Auto-detected default: accept with one tap, or reveal the picker.
-        HStack(spacing: 8) {
-          Text(draft).inkStyle(InkType.prose, color: Ink.primary)
-          if model.languageIsDetectedFromMac {
-            Text(SBOnboardingLanguageCopy.detectedLanguageDetail)
-              .inkStyle(InkType.statusLabel, color: Ink.secondary)
-              .fixedSize(horizontal: false, vertical: true)
-          }
-        }
-        SBInkButton(title: SBOnboardingLanguageCopy.continueAction(for: draft), isDefaultAction: true) {
-          if let m = all.first(where: { $0.name.lowercased() == draft.lowercased() }) {
-            model.pickLanguage(code: m.code, name: m.name)
-          } else {
-            model.answerLanguageText()
-          }
-        }
-        Button {
-          languageChanging = true
-        } label: {
-          Text(SBOnboardingLanguageCopy.changeSpokenLanguageAction)
-            .inkStyle(InkType.statusLabel, color: Ink.secondary)
-        }
-        .buttonStyle(.plain)
-      } else {
-        let filter = draft.lowercased()
-        let matches: [(code: String, name: String)] =
-          filter.isEmpty
-          ? Array(all.prefix(6))
-          : Array(
-            all.filter { $0.name.lowercased().contains(filter) || $0.code.lowercased().hasPrefix(filter) }.prefix(6))
-        TextField("Type a language…", text: $model.languageDraft)
-          .textFieldStyle(.plain).inkStyle(InkType.rowCopy, color: Ink.primary)
-          .padding(.horizontal, 13).padding(.vertical, 10)
-          .glassField()
-          .onSubmit { if let first = matches.first { model.pickLanguage(code: first.code, name: first.name) } }
-        if !matches.isEmpty {
-          VStack(spacing: 0) {
-            ForEach(matches, id: \.code) { lang in
-              Button {
-                model.pickLanguage(code: lang.code, name: lang.name)
-              } label: {
-                HStack {
-                  Text(lang.name).inkStyle(InkType.rowCopy, color: Ink.primary)
-                  Spacer()
-                  Text(lang.code).inkStyle(InkType.statusLabel, color: Ink.secondary)
-                }
-                .padding(.horizontal, 13).padding(.vertical, 9)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-              }
-              .buttonStyle(.plain)
-              if lang.code != matches.last?.code { GlassSeparator() }
-            }
-          }
-          .glassCard(cornerRadius: PageGlass.chipRadius)
-        }
-      }
-    }
-    .frame(maxWidth: 340, alignment: .leading)
-  }
-
-  private var roleWidget: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      FlowChips(
-        items: ["Student", "Sales", "Consultant", "Founder", "Engineer", "Analyst", "Creator", "Other"],
-        selectedItem: model.role
-      ) { r in
-        model.pickRole(r)
-      }
-      HStack(spacing: 8) {
-        TextField("or just say it in your own words…", text: $model.roleDraft)
-          .textFieldStyle(.plain).inkStyle(InkType.rowCopy, color: Ink.primary)
-          .padding(.horizontal, 13).padding(.vertical, 9)
-          .glassField()
-          .onSubmit { model.answerRoleText() }
-        SBInkButton(title: "→", horizontalPadding: 15, verticalPadding: 9) { model.answerRoleText() }
-      }
-      .frame(maxWidth: 360)
-    }
   }
 
   // MARK: permissions (one at a time)
@@ -640,73 +485,6 @@ struct SBOnboardingView: View {
       }
     }
     .frame(maxWidth: 380, alignment: .leading)
-  }
-
-  @ViewBuilder private var filesWidget: some View {
-    switch model.localFileProfileState {
-    case .idle:
-      permStepWidget("full_disk_access", "Full Disk Access", "cite your files · read-only, stays on this Mac") {
-        model.answerFiles()
-      }
-    case .scanning:
-      VStack(alignment: .leading, spacing: 10) {
-        Text("Building your local profile").inkStyle(InkType.rowCopy, color: Ink.primary)
-        HStack(spacing: 8) {
-          ProgressView().controlSize(.small)
-          Text("Scanning your projects and recent files…")
-            .inkStyle(InkType.statusLabel, color: Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-      }
-      .frame(maxWidth: 380, alignment: .leading)
-    case .complete(let fileCount, let memoryCount, let deniedFolders):
-      VStack(alignment: .leading, spacing: 10) {
-        Text("Your local profile is ready").inkStyle(InkType.rowCopy, color: Ink.primary)
-        Text("\(fileCount.formatted()) files indexed · \(memoryCount) profile memories saved")
-          .inkStyle(InkType.statusLabel, color: Ink.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-        if !deniedFolders.isEmpty {
-          Text("Some folders need access later: \(deniedFolders.joined(separator: ", "))")
-            .inkStyle(InkType.statusLabel, color: Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        if model.fdaState != .on {
-          // Same contract as `permStepWidget`: waiting turns the button into a
-          // re-check rather than disabling it, so a grant that lands after the
-          // poll gave up is never unreachable.
-          let fdaAction = model.permissionPrimaryAction("full_disk_access")
-          Button(
-            fdaAction == .recheck
-              ? "Waiting for Full Disk Access… check again" : "Allow Full Disk Access"
-          ) {
-            if fdaAction == .recheck {
-              model.recheckPermission("full_disk_access")
-            } else {
-              model.requestPerm("full_disk_access")
-            }
-          }
-          // A capsule, not a run of caption type: this asks macOS for a permission, which is the
-          // heaviest thing on this card after Continue. `.secondary` keeps Continue the one primary.
-          .buttonStyle(InkButtonStyle(kind: .secondary))
-        }
-        SBInkButton(title: "Continue", isDefaultAction: true) { model.finishFilesStep() }
-      }
-      .frame(maxWidth: 380, alignment: .leading)
-    case .failed(let message):
-      VStack(alignment: .leading, spacing: 10) {
-        Text("I couldn't finish scanning your files").inkStyle(InkType.rowCopy, color: Ink.primary)
-        Text(message).inkStyle(InkType.statusLabel, color: Ink.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-        HStack(spacing: 10) {
-          SBInkButton(title: "Retry") { model.retryLocalFileScan() }
-          // The way past a failed scan is the only thing on this card the user may actually want,
-          // so it is a capsule beside Retry rather than caption type trailing it.
-          Button("Continue without a scan") { model.finishFilesStep() }
-            .buttonStyle(InkButtonStyle(kind: .secondary))
-        }
-      }
-      .frame(maxWidth: 380, alignment: .leading)
-    }
   }
 
   /// A physical-looking keycap (symbol + key name for modifiers, centered glyph
@@ -906,136 +684,6 @@ struct SBOnboardingView: View {
     .frame(maxWidth: 380, alignment: .leading)
   }
 
-  // MARK: agents + context connectors
-
-  private var agentsWidget: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      VStack(spacing: 0) {
-        Button {
-          showAIAssistants.toggle()
-        } label: {
-          HStack {
-            Text("AI assistants").inkStyle(InkType.rowCopy, color: Ink.primary)
-            Spacer()
-            Image(systemName: showAIAssistants ? "chevron.up" : "chevron.down")
-              .font(.system(size: 11, weight: .semibold))
-              .foregroundStyle(Ink.secondary)
-          }
-          // **The row is the target, not the two glyphs on it.** A `.plain` button hit-tests its
-          // rendered label, and a `Spacer` renders nothing — so without this the whole span between
-          // the title and the chevron, which is most of the row, was dead. It looked like a
-          // disclosure and behaved like one only if you happened to press the word.
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding(.vertical, 12)
-        if showAIAssistants {
-          GlassSeparator()
-          ForEach(Array(model.agentRows.enumerated()), id: \.element.id) { i, row in
-            connectRow(id: row.id, row.name, row.detail, state: model.agentStates[row.id] ?? "idle") {
-              model.connectAgent(row.id)
-            }
-            if i < model.agentRows.count - 1 { GlassSeparator() }
-          }
-        }
-      }
-      .padding(.horizontal, 14)
-      .glassCard(cornerRadius: PageGlass.rowRadius)
-      SBInkButton(title: "Continue", isDefaultAction: true) { model.answerAgents() }
-    }
-    .frame(maxWidth: 380, alignment: .leading)
-  }
-
-  private var contextWidget: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      VStack(spacing: 0) {
-        ForEach(Array(model.contextRows.enumerated()), id: \.element.id) { i, row in
-          connectRow(
-            id: row.id,
-            row.name,
-            model.contextDetails[row.id] ?? row.detail,
-            state: model.contextStates[row.id] ?? "idle"
-          ) {
-            connectContext(row.id)
-          }
-          if i < model.contextRows.count - 1 { GlassSeparator() }
-        }
-      }
-      .padding(.horizontal, 14)
-      .glassCard(cornerRadius: PageGlass.rowRadius)
-      SBInkButton(title: "Continue", isDefaultAction: true) { model.answerContext() }
-    }
-    .frame(maxWidth: 380, alignment: .leading)
-  }
-
-  private func connectContext(_ id: String) {
-    switch SBOnboardingModel.contextConnectionRoute(for: id) {
-    case .importConnector(let connectorID):
-      selectedImportConnector = ImportConnector.all.first { $0.id == connectorID }
-    case .direct:
-      model.connectContext(id)
-    }
-  }
-
-  private func refreshContextStates() {
-    model.refreshContextStates()
-    importConnectorStatusStore.refreshPersistedManualImportMetrics()
-    for connectorID in ["chatgpt", "claude"] {
-      guard
-        let connector = ImportConnector.all.first(where: { $0.id == connectorID }),
-        importConnectorStatusStore.snapshot(for: connector).isConnected
-      else { continue }
-      model.markContextImportConnected(connectorID)
-    }
-  }
-
-  private func connectRow(id: String, _ name: String, _ detail: String, state: String, action: @escaping () -> Void)
-    -> some View
-  {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack(spacing: 12) {
-        ConnectorBrandIcon(brand: model.connectorBrand(id), size: 26, cornerRadius: 7)
-        VStack(alignment: .leading, spacing: 1) {
-          Text(name).inkStyle(InkType.rowCopy, color: Ink.primary)
-          Text(detail).inkStyle(InkType.statusLabel, color: Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        Spacer(minLength: 8)
-        connectTrailing(state, action: action)
-      }
-      // Once Claude Code is connected, surface the restart prompt/button so its
-      // running sessions actually reload the new MCP config (#10205).
-      if id == "claudeCode", state == "on" {
-        ClaudeCodeRestartSubtitle()
-      }
-    }
-    .padding(.vertical, 10)
-  }
-
-  @ViewBuilder
-  private func connectTrailing(_ state: String, action: @escaping () -> Void) -> some View {
-    // Every readout here is `secondary` — glass carries two rungs, so "checking…" and "not installed"
-    // cannot sit a step below "✓ on"; they all read as subordinate to the connector's name, which is
-    // `primary`. The actions are stadium capsules from the one button style, not 7 pt rounded rects.
-    switch state {
-    case "on": Text("✓ on").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
-    case "connecting": Text("…").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
-    case "checking": Text("checking…").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
-    case "unavailable": Text("not installed").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
-    case "error":
-      Button("Retry", action: action)
-        .buttonStyle(InkButtonStyle(kind: .secondary))
-    default:
-      // `.secondary`, and this is a hierarchy decision rather than a taste one. There are six
-      // connector rows on the context card and one Continue under them; filled, the six read as six
-      // primary actions and the step's actual proceed action is the seventh identical black pill —
-      // a wall of ink on a card whose whole job is to feel optional. Outlined, "Connect" is still
-      // plainly a button and Continue is the only filled thing on the card.
-      Button(state == "needsSignIn" ? "Retry" : "Connect", action: action)
-        .buttonStyle(InkButtonStyle(kind: .secondary))
-    }
-  }
-
   // MARK: capture
 
   private var captureWidget: some View {
@@ -1055,86 +703,5 @@ struct SBOnboardingView: View {
       .buttonStyle(InkButtonStyle(kind: .secondary))
     }
     .frame(maxWidth: 340, alignment: .leading)
-  }
-
-  private var referralWidget: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      ReferralProgramView(showsIntroduction: false)
-
-      SBInkButton(title: "Take me to Omi", isDefaultAction: true) {
-        model.finishReferral()
-      }
-    }
-    .frame(maxWidth: 380, alignment: .leading)
-  }
-}
-
-/// Wrapping chip row where each chip hugs its content (no wide grid cells that
-/// push short chips far apart).
-private struct FlowChips: View {
-  let items: [String]
-  var selectedItem: String? = nil
-  let onPick: (String) -> Void
-  var body: some View {
-    ChipFlowLayout(spacing: 8, lineSpacing: 8) {
-      ForEach(items, id: \.self) { item in
-        let isSelected = selectedItem == item
-        Button {
-          onPick(item)
-        } label: {
-          // Selected inverts the ladder the same way the primary button does — `Ink.primary` fill,
-          // `Ink.surface` label — so a chosen chip and a chosen anything else are the same object.
-          Text(item).inkStyle(InkType.rowCopy, color: isSelected ? Ink.surface : Ink.primary)
-            .padding(.horizontal, 15).padding(.vertical, 8)
-            .background(Capsule(style: .continuous).fill(isSelected ? Ink.primary : .clear))
-            .overlay(Capsule(style: .continuous).strokeBorder(isSelected ? .clear : Ink.hairline, lineWidth: 1))
-            .contentShape(Capsule(style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isSelected)
-      }
-    }
-    .frame(maxWidth: 380, alignment: .leading)
-  }
-}
-
-/// Minimal left-to-right wrapping flow layout (content-hugging).
-private struct ChipFlowLayout: Layout {
-  var spacing: CGFloat = 8
-  var lineSpacing: CGFloat = 8
-
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let maxWidth = proposal.width ?? 380
-    var x: CGFloat = 0
-    var y: CGFloat = 0
-    var rowHeight: CGFloat = 0
-    for sub in subviews {
-      let size = sub.sizeThatFits(.unspecified)
-      if x + size.width > maxWidth, x > 0 {
-        x = 0
-        y += rowHeight + lineSpacing
-        rowHeight = 0
-      }
-      x += size.width + spacing
-      rowHeight = max(rowHeight, size.height)
-    }
-    return CGSize(width: maxWidth, height: y + rowHeight)
-  }
-
-  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-    var x: CGFloat = bounds.minX
-    var y: CGFloat = bounds.minY
-    var rowHeight: CGFloat = 0
-    for sub in subviews {
-      let size = sub.sizeThatFits(.unspecified)
-      if x + size.width > bounds.minX + bounds.width, x > bounds.minX {
-        x = bounds.minX
-        y += rowHeight + lineSpacing
-        rowHeight = 0
-      }
-      sub.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(size))
-      x += size.width + spacing
-      rowHeight = max(rowHeight, size.height)
-    }
   }
 }

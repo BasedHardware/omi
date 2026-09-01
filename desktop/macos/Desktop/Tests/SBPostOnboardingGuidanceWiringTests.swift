@@ -57,29 +57,18 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
   }
 
   /// A model whose setup answers are the ones a real run would have produced:
-  /// Screen Recording granted, Calendar connected, Gmail skipped, one agent
-  /// connected and one merely installed.
+  /// Screen Recording granted, a role picked. Context/agent connectors are no
+  /// longer collected during onboarding (that stage was retired), so
+  /// `postOnboardingSetup` always reports them empty — see
+  /// `testSetupSnapshotReportsDeniedPermissionsAsDenied`.
   private func makeConfiguredModel() -> SBOnboardingModel {
     let model = makeModel()
     appState?.hasScreenRecordingPermission = true
     model.role = "Founder"
-    model.contextStates = ["calendar": "on", "gmail": "idle", "applenotes": "unavailable"]
-    model.agentStates = ["claudeCode": "on", "codex": "idle"]
     return model
   }
 
   // MARK: - The snapshot only claims what onboarding observed
-
-  func testSetupSnapshotCountsOnlyConnectorsObservedConnected() {
-    let model = makeConfiguredModel()
-
-    let setup = model.postOnboardingSetup
-
-    XCTAssertEqual(setup.connectedContextIDs, ["calendar"])
-    XCTAssertEqual(setup.connectedAgentNames, ["Claude Code"])
-    XCTAssertTrue(setup.canSeeScreen)
-    XCTAssertEqual(setup.role, "Founder")
-  }
 
   func testSetupSnapshotReportsDeniedPermissionsAsDenied() {
     let model = makeModel()
@@ -134,7 +123,7 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertEqual(saved, SBPostOnboardingGuidance.suggestions(for: model.postOnboardingSetup))
     XCTAssertFalse(saved.isEmpty, "The dashboard popup and banner are gated on this being non-empty")
     XCTAssertTrue(saved.contains("What's on my screen right now?"))
-    XCTAssertTrue(saved.contains("What's on my calendar today?"))
+    XCTAssertTrue(saved.contains("What did I commit to this week?"))
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldShowPopup)
     XCTAssertFalse(PostOnboardingPromptSuggestions.isDismissed)
   }
@@ -150,33 +139,6 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     let saved = PostOnboardingPromptSuggestions.suggestions()
     XCTAssertEqual(saved, SBPostOnboardingGuidance.suggestions(for: model.postOnboardingSetup))
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldShowPopup)
-  }
-
-  func testCaptureChoiceAdvancesToOptionalReferralBeforeCompletion() {
-    let model = makeConfiguredModel()
-    let previousMode = AssistantSettings.shared.audioRecordingMode
-    let previousCompletion = appState?.hasCompletedOnboarding ?? false
-    appState?.hasCompletedOnboarding = false
-    defer {
-      AssistantSettings.shared.audioRecordingMode = previousMode
-      appState?.hasCompletedOnboarding = previousCompletion
-    }
-
-    model.capture(SBOnboardingModel.defaultCaptureSelection)
-
-    XCTAssertEqual(model.step, .referral)
-    XCTAssertEqual(
-      UserDefaults.standard.integer(forKey: SBOnboardingModel.resumeStepKey),
-      SBOnboardingModel.Step.referral.rawValue)
-    XCTAssertFalse(try XCTUnwrap(appState).hasCompletedOnboarding)
-  }
-
-  func testReferralRewardCopyStaysPlanAgnostic() {
-    let model = makeModel()
-
-    XCTAssertEqual(
-      model.message(for: .referral),
-      "Want to invite a friend? They'll get one free month.")
   }
 
   func testSkippedSetupStillProducesAnswerableGuidance() {
@@ -289,7 +251,7 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
   func testTheScreenStepSaysCaptureIsOngoingNamedAndReversible() {
     let model = makeModel()
 
-    let message = model.message(for: .screen).lowercased()
+    let message = model.message(for: .see).lowercased()
 
     XCTAssertTrue(message.contains("every few seconds"), "an on-demand reading of this step is the whole bug")
     XCTAssertTrue(message.contains("rewind"), "the archive is unfindable if the step never names it")
@@ -303,7 +265,7 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
   func testTheScreenStepDoesNotClaimEverythingStaysLocal() {
     let model = makeModel()
 
-    let message = model.message(for: .screen)
+    let message = model.message(for: .see)
 
     XCTAssertFalse(message.contains("Nothing leaves"))
     XCTAssertFalse(message.contains("stays private"))

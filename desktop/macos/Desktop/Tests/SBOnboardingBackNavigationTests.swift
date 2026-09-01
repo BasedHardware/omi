@@ -8,64 +8,29 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
   // Literals, not `SBOnboardingModel.*`: setUp/tearDown are nonisolated and
   // those constants are main-actor isolated. Mirrors this file's existing style.
   private let resumeSchemaKey = "sbOnboardingResumeStepSchema"
-  private let currentResumeSchemaVersion = 2
+  private let currentResumeSchemaVersion = 3
 
   override func setUp() {
     super.setUp()
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
-    UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingHowDidYouHearSource)
-    UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingRole)
     // These tests seed resume values in the *current* `Step` numbering. Without
-    // the schema stamp, `begin()` would correctly read them as version-1 state
-    // and renumber them, so the assertions below would be about a step nobody
-    // wrote. Stamping says "this install is already current".
+    // the schema stamp, `begin()` would correctly read them as pre-scenario
+    // state and restart at `hello`, so the assertions below would be about a
+    // step nobody wrote. Stamping says "this install is already current".
     UserDefaults.standard.set(currentResumeSchemaVersion, forKey: resumeSchemaKey)
   }
 
   override func tearDown() {
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
     UserDefaults.standard.removeObject(forKey: resumeSchemaKey)
-    UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingHowDidYouHearSource)
-    UserDefaults.standard.removeObject(forKey: DefaultsKey.onboardingRole)
     super.tearDown()
-  }
-
-  func testBackFromPermissionsReturnsToRoleAndPreservesSelectedRole() {
-    let model = SBOnboardingModel(
-      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-    UserDefaults.standard.set("Student", forKey: DefaultsKey.onboardingRole)
-    model.step = .mic
-
-    model.goBack()
-
-    XCTAssertEqual(model.step, .role)
-    XCTAssertEqual(model.role, "Student")
-    XCTAssertEqual(
-      UserDefaults.standard.integer(forKey: SBOnboardingModel.resumeStepKey),
-      SBOnboardingModel.Step.role.rawValue)
-  }
-
-  func testBackPreservesEarlierAcquisitionChoiceAndStopsAtFirstStep() {
-    let model = SBOnboardingModel(
-      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-    model.howHeard = "Friend"
-    UserDefaults.standard.set("Friend", forKey: DefaultsKey.onboardingHowDidYouHearSource)
-    model.step = .language
-
-    model.goBack()
-
-    XCTAssertEqual(model.step, .howHeard)
-    XCTAssertEqual(model.howHeard, "Friend")
-
-    model.step = .promise
-    model.goBack()
-    XCTAssertEqual(model.step, .promise)
   }
 
   func testVoiceDemoArmsPTTOnlyAfterBridgeWarmupWhileStillOnDemoStage() async {
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-    model.step = .screenDemo
+    model.step = .talk
+    model.talkPhase = .demo
     var activated = false
 
     await model.activateScreenDemoPTTAfterBridgeWarmup(
@@ -76,10 +41,11 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertTrue(activated)
 
     activated = false
-    model.step = .screenDemo
+    model.step = .talk
+    model.talkPhase = .demo
     await model.activateScreenDemoPTTAfterBridgeWarmup(
       warmup: {
-        model.step = .agents
+        model.step = .write  // the user pressed Skip while the warmup ran
         return true
       },
       activate: { activated = true }
@@ -91,7 +57,8 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
   func testVoiceDemoKeepsPTTUnarmedWhenBridgeWarmupFails() async {
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-    model.step = .screenDemo
+    model.step = .talk
+    model.talkPhase = .demo
     var activated = false
 
     await model.activateScreenDemoPTTAfterBridgeWarmup(
@@ -102,41 +69,6 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertFalse(activated)
     XCTAssertFalse(model.screenDemoPTTReady)
     XCTAssertTrue(model.screenDemoPTTUnavailable)
-  }
-
-  func testCustomOpenShortcutRecordsAnArbitraryChord() throws {
-    let settings = ShortcutSettings.shared
-    let previousShortcut = settings.askOmiShortcut
-    let previousEnabled = settings.askOmiEnabled
-    defer {
-      settings.askOmiShortcut = previousShortcut
-      settings.askOmiEnabled = previousEnabled
-    }
-
-    let model = SBOnboardingModel(
-      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-    model.step = .shortcutOpen
-    model.beginShortcutRecording(isTalk: false)
-    let event = try XCTUnwrap(
-      NSEvent.keyEvent(
-        with: .keyDown,
-        location: .zero,
-        modifierFlags: [.control, .option],
-        timestamp: 0,
-        windowNumber: 0,
-        context: nil,
-        characters: "p",
-        charactersIgnoringModifiers: "p",
-        isARepeat: false,
-        keyCode: 35
-      ))
-
-    XCTAssertTrue(model.recordShortcut(from: event))
-    XCTAssertFalse(model.shortcutRecording)
-    XCTAssertEqual(model.chosenShortcut?.keyCode, 35)
-    XCTAssertEqual(model.chosenShortcut?.modifiers, [.control, .option])
-    XCTAssertEqual(settings.askOmiShortcut.keyCode, 35)
-    XCTAssertFalse(model.shortcutPressed, "Recording a shortcut must not count as exercising it.")
   }
 
   func testCustomPushToTalkShortcutRecordsAnArbitraryChord() throws {
@@ -150,7 +82,8 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
 
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-    model.step = .shortcutTalk
+    model.step = .talk
+    model.talkPhase = .shortcut
     model.beginShortcutRecording(isTalk: true)
     let modifierDown = try XCTUnwrap(
       NSEvent.keyEvent(
@@ -202,7 +135,8 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
 
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-    model.step = .shortcutTalk
+    model.step = .talk
+    model.talkPhase = .shortcut
     model.beginShortcutRecording(isTalk: true)
     let modifierDown = try XCTUnwrap(
       NSEvent.keyEvent(
@@ -239,29 +173,6 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertEqual(settings.pttShortcut, ShortcutSettings.KeyboardShortcut(modifierOnly: .option))
   }
 
-  func testPresetOpenShortcutRowSelectsItsDisplayedShortcut() throws {
-    let settings = ShortcutSettings.shared
-    let previousShortcut = settings.askOmiShortcut
-    let previousEnabled = settings.askOmiEnabled
-    defer {
-      settings.askOmiShortcut = previousShortcut
-      settings.askOmiEnabled = previousEnabled
-    }
-
-    let model = SBOnboardingModel(
-      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-    model.step = .shortcutOpen
-    let option = try XCTUnwrap(model.openShortcutOptions.last)
-
-    model.pickShortcut(option.shortcut, isTalk: false)
-
-    XCTAssertFalse(model.shortcutRecording)
-    XCTAssertTrue(model.shortcutPicked)
-    XCTAssertEqual(model.chosenShortcut, option.shortcut)
-    XCTAssertEqual(settings.askOmiShortcut, option.shortcut)
-    XCTAssertTrue(settings.askOmiEnabled)
-  }
-
   func testPresetPushToTalkShortcutRowSelectsItsDisplayedShortcut() throws {
     let settings = ShortcutSettings.shared
     let previousShortcut = settings.pttShortcut
@@ -273,7 +184,8 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
 
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-    model.step = .shortcutTalk
+    model.step = .talk
+    model.talkPhase = .shortcut
     let option = try XCTUnwrap(model.talkShortcutOptions.last)
 
     model.pickShortcut(option.shortcut, isTalk: true)
@@ -286,41 +198,36 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertTrue(settings.pttEnabled)
   }
 
-  func testShortcutStagesCannotAdvanceUntilSelectedShortcutIsExercised() {
+  /// Mirrors the retired two-stage (Open Omi + Talk) shortcut gate: picking a chord is not the
+  /// same as exercising it, so the flow must not advance on the pick alone.
+  func testTalkShortcutPhaseCannotAdvanceUntilTheSelectedChordIsExercised() {
     let settings = ShortcutSettings.shared
-    let previousOpenShortcut = settings.askOmiShortcut
-    let previousOpenEnabled = settings.askOmiEnabled
-    let previousTalkShortcut = settings.pttShortcut
-    let previousTalkEnabled = settings.pttEnabled
+    let previousShortcut = settings.pttShortcut
+    let previousEnabled = settings.pttEnabled
     defer {
-      settings.askOmiShortcut = previousOpenShortcut
-      settings.askOmiEnabled = previousOpenEnabled
-      settings.pttShortcut = previousTalkShortcut
-      settings.pttEnabled = previousTalkEnabled
+      settings.pttShortcut = previousShortcut
+      settings.pttEnabled = previousEnabled
     }
 
+    // Held for the life of the test: `finishTalkShortcut()` advances into
+    // `startScreenDemo()`, which reads `appState` (`unowned` on the model), and
+    // an inline `AppState()` temporary is deallocated the moment init returns.
+    let appState = AppState()
     let model = SBOnboardingModel(
-      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-
-    model.step = .shortcutOpen
-    model.pickShortcut(ShortcutSettings.askOmiCommandOShortcut, isTalk: false)
-    model.answerShortcutOpen()
-    XCTAssertEqual(model.step, .shortcutOpen)
-
-    model.shortcutPressed = true
-    model.answerShortcutOpen()
-    XCTAssertEqual(model.step, .shortcutTalk)
+      appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    model.step = .talk
+    model.talkPhase = .shortcut
 
     model.pickShortcut(ShortcutSettings.KeyboardShortcut(modifierOnly: .option), isTalk: true)
     model.answerShortcutTalk()
-    XCTAssertEqual(model.step, .shortcutTalk)
+    XCTAssertEqual(model.talkPhase, .shortcut, "picking a chord without pressing it must not advance")
 
     model.shortcutPressed = true
     model.answerShortcutTalk()
-    XCTAssertEqual(model.step, .screenDemo)
+    XCTAssertEqual(model.talkPhase, .demo)
   }
 
-  func testFullOnboardingSkipUnlocksOnlyAfterRequiredShortcutStages() {
+  func testFullOnboardingSkipUnlocksOnlyAfterTheTalkChord() {
     let key = SBOnboardingModel.shortcutsCompletedKey
     let previous = UserDefaults.standard.bool(forKey: key)
     defer { UserDefaults.standard.set(previous, forKey: key) }
@@ -329,21 +236,19 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
 
-    model.step = .promise
+    model.step = .hello
     XCTAssertFalse(model.canSkipOnboarding)
-    model.step = .shortcutOpen
+    model.step = .talk
+    XCTAssertFalse(model.canSkipOnboarding, "the talk chord itself is never skippable")
+    model.step = .write
+    // Without the completion flag, Skip stays hidden even past the talk beat.
     XCTAssertFalse(model.canSkipOnboarding)
-    model.step = .shortcutTalk
-    XCTAssertFalse(model.canSkipOnboarding)
-    model.step = .screenDemo
-    // Without the completion flag, Skip stays hidden even at screenDemo.
-    XCTAssertFalse(model.canSkipOnboarding)
-    // After completing both shortcut stages, Skip unlocks.
+    // After completing the talk chord, Skip unlocks.
     UserDefaults.standard.set(true, forKey: key)
     XCTAssertTrue(model.canSkipOnboarding)
   }
 
-  func testLegacyResumeStateClampedBackThroughShortcutStages() {
+  func testResumingAtTalkWithTheChordAlreadyCompletedLandsOnTheDemoPhase() {
     let resumeKey = SBOnboardingModel.resumeStepKey
     let completedKey = SBOnboardingModel.shortcutsCompletedKey
     let prevResume = UserDefaults.standard.integer(forKey: resumeKey)
@@ -353,39 +258,29 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
       UserDefaults.standard.set(prevCompleted, forKey: completedKey)
     }
 
-    // Simulate a legacy user who persisted a resume state past the shortcut stages
-    // before shortcuts were mandatory, without the completion flag.
-    UserDefaults.standard.set(SBOnboardingModel.Step.screenDemo.rawValue, forKey: resumeKey)
-    UserDefaults.standard.set(false, forKey: completedKey)
-
     // Hold a strong reference to AppState for the life of the test. SBOnboardingModel
     // stores appState as `unowned`, so a temporary would be deallocated before begin()
     // touches it.
     let appState = AppState()
-    let model = SBOnboardingModel(
-      appState: appState, chatProvider: ChatProvider(), onComplete: nil)
-    model.begin()
 
-    // The model should clamp back to the first shortcut stage, not bypass it.
-    XCTAssertEqual(model.step, .shortcutOpen)
-    XCTAssertFalse(model.canSkipOnboarding)
-
-    // A legacy resume at exactly shortcutTalk (without the completion flag) is also
-    // clamped back to shortcutOpen — completing only Talk would bypass Open Omi.
-    UserDefaults.standard.set(SBOnboardingModel.Step.shortcutTalk.rawValue, forKey: resumeKey)
+    UserDefaults.standard.set(SBOnboardingModel.Step.talk.rawValue, forKey: resumeKey)
     UserDefaults.standard.set(false, forKey: completedKey)
-    let modelMid = SBOnboardingModel(
+    let notYetCompleted = SBOnboardingModel(
       appState: appState, chatProvider: ChatProvider(), onComplete: nil)
-    modelMid.begin()
-    XCTAssertEqual(modelMid.step, .shortcutOpen)
+    notYetCompleted.begin()
+    XCTAssertEqual(notYetCompleted.step, .talk)
+    XCTAssertEqual(
+      notYetCompleted.talkPhase, .microphone,
+      "without a completed chord, resuming at talk starts over from the microphone")
 
-    // A user who genuinely completed shortcuts resumes past them.
-    UserDefaults.standard.set(SBOnboardingModel.Step.screenDemo.rawValue, forKey: resumeKey)
+    UserDefaults.standard.set(SBOnboardingModel.Step.talk.rawValue, forKey: resumeKey)
     UserDefaults.standard.set(true, forKey: completedKey)
-    let model2 = SBOnboardingModel(
+    let completed = SBOnboardingModel(
       appState: appState, chatProvider: ChatProvider(), onComplete: nil)
-    model2.begin()
-    XCTAssertGreaterThan(model2.step.rawValue, SBOnboardingModel.Step.shortcutTalk.rawValue)
-    XCTAssertTrue(model2.canSkipOnboarding)
+    completed.begin()
+    XCTAssertEqual(completed.step, .talk)
+    XCTAssertEqual(
+      completed.talkPhase, .demo,
+      "a genuinely completed chord resumes straight at the demo, not back at the microphone")
   }
 }

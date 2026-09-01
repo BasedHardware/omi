@@ -7,7 +7,7 @@ import XCTest
 /// app having lost the user's place, and the one that must: an explicit Reset
 /// Onboarding.
 final class SBOnboardingIntroGateTests: XCTestCase {
-  private let promiseRaw = SBOnboardingModel.Step.promise.rawValue
+  private let promiseRaw = SBOnboardingModel.Step.hello.rawValue
 
   private func gatePlays(_ defaults: UserDefaults) -> Bool {
     SBOnboardingIntroGate.shouldPlay(resumeStepRaw: 0, promiseStepRaw: promiseRaw, defaults: defaults)
@@ -22,8 +22,8 @@ final class SBOnboardingIntroGateTests: XCTestCase {
   /// persists a resume point. Replaying the intro on the way back to step 9 would look
   /// like the app forgot everything the user just did.
   func testAResumeNeverReplaysTheIntro() {
-    let resumed = SBOnboardingModel.Step.screen.rawValue
-    XCTAssertGreaterThan(resumed, promiseRaw, "precondition: a permission step outranks .promise")
+    let resumed = SBOnboardingModel.Step.see.rawValue
+    XCTAssertGreaterThan(resumed, promiseRaw, "precondition: a permission step outranks .hello")
     XCTAssertFalse(
       SBOnboardingIntroGate.shouldPlay(resumeStepRaw: resumed, promiseStepRaw: promiseRaw, alreadyPlayed: false))
   }
@@ -99,7 +99,7 @@ final class SBOnboardingIntroGateTests: XCTestCase {
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     SBOnboardingIntroGate.markPlayed(defaults: defaults)
-    defaults.set(SBOnboardingModel.Step.screen.rawValue, forKey: SBOnboardingModel.resumeStepKey)
+    defaults.set(SBOnboardingModel.Step.see.rawValue, forKey: SBOnboardingModel.resumeStepKey)
 
     OnboardingFlow.clearPersistedState(in: defaults)
 

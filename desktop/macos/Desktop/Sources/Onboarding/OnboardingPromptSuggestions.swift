@@ -61,31 +61,3 @@ enum PostOnboardingPromptSuggestions {
     isDismissed = true
   }
 }
-
-@MainActor
-enum OnboardingPromptSuggestionBuilder {
-  static func build(from coordinator: OnboardingPagedIntroCoordinator) -> [String] {
-    var suggestions: [String] = []
-
-    // Universal first question — always relevant, not tied to a random project
-    suggestions.append(HomeSuggestionComposer.universalFirstQuestion)
-
-    if !coordinator.emailSummary.isEmpty {
-      suggestions.append("What email follow-ups matter most today?")
-    }
-
-    if !coordinator.calendarSummary.isEmpty {
-      suggestions.append("Where can I find focus time this week?")
-    }
-
-    if !coordinator.goalDraft.isEmpty {
-      suggestions.append("Break my goal into the next 3 steps.")
-    }
-
-    suggestions.append("What on my screen matters most right now?")
-    suggestions.append("What's the highest-leverage thing I can do next?")
-
-    let deduped = Array(NSOrderedSet(array: suggestions).array as? [String] ?? suggestions)
-    return Array(deduped.prefix(6))
-  }
-}

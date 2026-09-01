@@ -151,7 +151,6 @@ struct DesktopHomeView: View {
       SBOnboardingView(
         appState: appState,
         chatProvider: viewModelContainer.chatProvider,
-        importConnectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
         onComplete: nil
       )
       .onAppear {
@@ -683,7 +682,7 @@ struct DesktopHomeView: View {
     let completed = appState.hasCompletedOnboarding
     guard completed else { return false }
     let savedRaw = UserDefaults.standard.integer(forKey: SBOnboardingModel.resumeStepKey)
-    if savedRaw > SBOnboardingModel.Step.promise.rawValue,
+    if savedRaw > SBOnboardingModel.Step.hello.rawValue,
       SBOnboardingModel.Step(rawValue: savedRaw) != nil
     {
       DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(

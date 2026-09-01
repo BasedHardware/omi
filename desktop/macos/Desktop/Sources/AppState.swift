@@ -973,12 +973,6 @@ class AppState: ObservableObject {
 
 extension Notification.Name {
   static let resetOnboardingRequested = Notification.Name("resetOnboardingRequested")
-  /// Posted by the onboarding arrow-key monitor with a "targetStep" Int in
-  /// userInfo. The mounted OnboardingView applies it to its live @AppStorage —
-  /// the monitor closure must not mutate its own captured copy (writes there
-  /// never reach UserDefaults or the UI on all macOS versions).
-  static let onboardingStepNavigationRequested = Notification.Name(
-    "onboardingStepNavigationRequested")
   /// Automation bridge → onboarding screen-demo step: open the three-doors page (same code path as
   /// the step's "Open the doors" button), so agents can exercise the demo without the cursor.
   static let onboardingOpenDoorsRequested = Notification.Name("onboardingOpenDoorsRequested")
