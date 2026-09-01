@@ -475,6 +475,21 @@ test('uses NSGlassEffectView per panel and HUD only as InkGlass fallback', () =>
   );
 });
 
+test('hosts React children in NSGlassEffectView contentView and clips to the panel', () => {
+  const source = readNativeSource('OmiGlassPanelView.mm');
+
+  expect(source).toContain(
+    '@property (nonatomic, strong) NSView *contentHost;',
+  );
+  expect(source).toContain('setContentView:');
+  expect(source).toContain('insertReactSubview');
+  expect(source).toContain('removeReactSubview');
+  expect(source).toContain('didUpdateReactSubviews');
+  expect(source).toContain('self.clipsToBounds = YES');
+  expect(source).toContain('self.layer.masksToBounds = YES');
+  expect(source).toContain('[self.contentHost addSubview:subview');
+});
+
 test('lets the host choose the glass radius so one panel can run full-bleed', () => {
   const source = readNativeSource('OmiGlassPanelView.mm');
 
