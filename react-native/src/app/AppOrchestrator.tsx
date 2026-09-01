@@ -128,7 +128,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     nativeSnapshot,
     scanForOmi,
     toggleDevice,
-  } = useNativeDevices();
+  } = useNativeDevices({enabled: !macDesktop});
   const searchRef = useRef<TextInput>(null);
   useEffect(() => {
     let active = true;

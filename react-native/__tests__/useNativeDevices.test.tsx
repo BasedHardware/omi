@@ -122,20 +122,23 @@ async function waitFor(predicate: () => boolean) {
 }
 
 function Harness({
+  enabled,
   onState,
 }: {
+  enabled?: boolean;
   onState: (state: ReturnType<typeof useNativeDevices>) => void;
 }) {
-  const state = useNativeDevices();
+  const state = useNativeDevices(enabled === undefined ? undefined : {enabled});
   onState(state);
   return null;
 }
 
-async function renderHook() {
+async function renderHook(enabled?: boolean) {
   let latest: ReturnType<typeof useNativeDevices> | null = null;
   await ReactTestRenderer.act(async () => {
     ReactTestRenderer.create(
       <Harness
+        enabled={enabled}
         onState={state => {
           latest = state;
         }}
@@ -165,6 +168,14 @@ beforeEach(() => {
     }
     return sessionResponse(201);
   });
+});
+
+test('does not probe native devices when the host disables them', async () => {
+  mockNative.getSnapshot.mockClear();
+  const hook = await renderHook(false);
+  expect(hook.latest().nativeSnapshot).toBeNull();
+  expect(mockNative.getSnapshot).not.toHaveBeenCalled();
+  expect(mockListeners).toHaveLength(0);
 });
 
 test('waits for startScan to resolve before clearing the busy flag', async () => {
