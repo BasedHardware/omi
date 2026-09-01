@@ -73,4 +73,3 @@ describe('TextSwap', () => {
     expect(el).not.toHaveClass('is-exit');
   });
 });
-

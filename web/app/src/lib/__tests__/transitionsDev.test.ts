@@ -93,4 +93,3 @@ describe('transitionsDev helpers', () => {
     expect(input.classList.contains('is-shaking')).toBe(false);
   });
 });
-

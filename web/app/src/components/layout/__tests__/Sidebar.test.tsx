@@ -153,4 +153,3 @@ describe('notification badge', () => {
     expect(container.querySelector('.t-badge')).toHaveAttribute('data-open', 'false');
   });
 });
-
