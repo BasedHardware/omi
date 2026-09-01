@@ -1401,8 +1401,9 @@ def test_gateway_body_rejects_unsupported_image_url_instead_of_dropping_it():
         )
 
 
-def test_specialist_haiku_requests_bypass_managed_chat_agent():
-    assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-haiku-4-5-20251001'})
+def test_legacy_haiku_aliases_use_structured_lane_not_chat_agent():
+    assert desktop_chat._uses_managed_chat_agent({'model': 'claude-haiku-4-5-20251001'})
+    assert desktop_chat._managed_lane_id({'model': 'claude-haiku-4-5-20251001'}) == 'omi:auto:chat-structured'
     assert desktop_chat._uses_managed_chat_agent({'model': 'omi-opus'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'claude-opus-4-6'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'claude-sonnet-4-6'})
@@ -1414,7 +1415,13 @@ def test_specialist_haiku_requests_bypass_managed_chat_agent():
 
 
 def test_structured_aliases_route_to_the_structured_lane_not_chat():
-    for alias in ('omi-structured', 'OMI-Structured', 'omi:auto:chat-structured'):
+    for alias in (
+        'omi-structured',
+        'OMI-Structured',
+        'omi:auto:chat-structured',
+        'claude-haiku-4-5',
+        'claude-haiku-4-5-20251001',
+    ):
         assert desktop_chat._uses_managed_chat_agent({'model': alias})
         assert desktop_chat._managed_lane_id({'model': alias}) == 'omi:auto:chat-structured'
 
@@ -1639,7 +1646,7 @@ async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkeypatch):
+async def test_chat_completions_legacy_haiku_alias_uses_structured_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
@@ -1647,36 +1654,37 @@ async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkey
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-
-    class Messages:
-        async def create(self, **payload):
-            assert payload['model'] == 'claude-haiku-4-5'
-            return SimpleNamespace(
-                id='msg_haiku',
-                content=[SimpleNamespace(type='text', text='specialist')],
-                stop_reason='end_turn',
-                usage=SimpleNamespace(
-                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
-                ),
-            )
-
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
     monkeypatch.setattr(
         desktop_chat,
         'get_direct_anthropic_client',
-        lambda **_: SimpleNamespace(messages=Messages()),
+        _fail_direct_anthropic('legacy Haiku aliases must not construct a direct Anthropic client'),
     )
 
     class GatewayClient:
-        async def post(self, *args, **kwargs):
-            raise AssertionError('specialist Haiku requests must not use managed gateway lane')
+        def __init__(self):
+            self.calls = []
 
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
+        async def post(self, url, *, headers, json):
+            self.calls.append(json)
+            return httpx.Response(
+                200,
+                json={
+                    'id': 'chat-haiku',
+                    'choices': [{'message': {'content': 'structured'}}],
+                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
+                },
+                request=httpx.Request('POST', url),
+            )
 
+    client = GatewayClient()
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
     response = await desktop_chat.chat_completions(
         {
             'model': 'claude-haiku-4-5-20251001',
             'messages': [{'role': 'user', 'content': 'extract this'}],
             'max_tokens': 16,
+            'omi_web_search': True,
         },
         uid='user-1',
         x_app_platform=None,
@@ -1684,7 +1692,8 @@ async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkey
         x_omi_request_id=None,
     )
 
-    assert b'"content":"specialist"' in response.body
+    assert b'structured' in response.body
+    assert client.calls[0]['model'] == 'omi:auto:chat-structured'
 
 
 @pytest.mark.asyncio
