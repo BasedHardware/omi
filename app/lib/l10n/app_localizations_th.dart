@@ -9789,12 +9789,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get accountCutoverOpenStore => 'เปิดสโตร์';
 
   @override
-  String get chatScopeToday => 'วันนี้';
-
-  @override
-  String get chatScopeThisWeek => 'สัปดาห์นี้';
-
-  @override
   String chatScopeAbout(String title) {
     return 'เกี่ยวกับ: $title';
   }

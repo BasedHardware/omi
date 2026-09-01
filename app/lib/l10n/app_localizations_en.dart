@@ -9837,12 +9837,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accountCutoverOpenStore => 'Open store';
 
   @override
-  String get chatScopeToday => 'Today';
-
-  @override
-  String get chatScopeThisWeek => 'This week';
-
-  @override
   String chatScopeAbout(String title) {
     return 'About: $title';
   }

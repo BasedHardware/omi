@@ -9679,12 +9679,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get accountCutoverOpenStore => 'ストアを開く';
 
   @override
-  String get chatScopeToday => '今日';
-
-  @override
-  String get chatScopeThisWeek => '今週';
-
-  @override
   String chatScopeAbout(String title) {
     return '$titleについて';
   }

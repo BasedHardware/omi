@@ -18339,18 +18339,6 @@ abstract class AppLocalizations {
   /// **'Open store'**
   String get accountCutoverOpenStore;
 
-  /// Chat timeframe scope chip for today
-  ///
-  /// In en, this message translates to:
-  /// **'Today'**
-  String get chatScopeToday;
-
-  /// Chat timeframe scope chip for this week
-  ///
-  /// In en, this message translates to:
-  /// **'This week'**
-  String get chatScopeThisWeek;
-
   /// Chat scope chip when asking about a specific conversation
   ///
   /// In en, this message translates to:

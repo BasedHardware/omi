@@ -9870,12 +9870,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get accountCutoverOpenStore => 'Buka toko';
 
   @override
-  String get chatScopeToday => 'Hari ini';
-
-  @override
-  String get chatScopeThisWeek => 'Minggu ini';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Perihal: $title';
   }
