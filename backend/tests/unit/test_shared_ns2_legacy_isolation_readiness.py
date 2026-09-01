@@ -109,7 +109,7 @@ def test_legacy_memory_vector_filters_exclude_memory_schema_records():
 
 def test_shared_ns2_docs_reference_non_claims_and_remaining_provider_proof():
     root = Path(__file__).resolve().parents[2].parent
-    evidence_markers = (root / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text()
+    evidence_markers = (root / "backend" / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text()
 
     assert "shared_ns2_legacy_isolation_readiness.py" in evidence_markers
     assert "legacy queries exclude memory schema" in evidence_markers

@@ -1534,7 +1534,11 @@ def write_canonical_external_memory(
     db_client: Any = None,
     review_resolution: Optional[CanonicalReviewResolution] = None,
 ) -> str:
-    """Persist a manual/API/integration memory via the canonical apply path."""
+    """Persist a manual/API/integration memory via the canonical apply path.
+
+    After writer-mode cutover these creates stay admitted as user writes so
+    POST /v3/memories and desktop create_memory do not 503 in ledger mode.
+    """
     if data.get("ledger_schema_version") is not None:
         raise ValueError("knowledge ledger writes require the dedicated ledger authority")
     client = db_client if db_client is not None else default_db_client
@@ -1578,6 +1582,7 @@ def write_canonical_external_memory(
         db_client=client,
         evidence_items=reissued_evidence,
         review_resolution=review_resolution,
+        _direct_user_authority=_DIRECT_USER_LEDGER_WRITE_AUTHORITY,
     )
 
 

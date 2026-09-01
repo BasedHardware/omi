@@ -9922,4 +9922,9 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant चे स्टोरेज भरले आहे आणि ते अजूनही रेकॉर्डिंग मोडमध्ये आहे, त्यामुळे साठवलेला ऑडिओ हस्तांतरित करता येत नाही. रेकॉर्डिंग थांबवण्यासाठी Pendant चे बटण दाबा, नंतर पुन्हा सिंक करा.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'रेकॉर्ड झाले नाही ($count)';
+  }
 }

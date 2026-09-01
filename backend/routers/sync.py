@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -40,6 +41,7 @@ from database.sync_ledger import (
 )
 from models.conversation_enums import ConversationSource
 from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
+from models.geolocation import geolocation_from_private_header
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from utils.analytics import record_usage
 from utils.other import endpoints as auth
@@ -141,7 +143,8 @@ from utils.sync.capture_manifest import (
     manifest_claims_match_paths,
     verify_capture_manifest,
 )
-from utils.sync.lanes import SyncLane, capture_times_within_window, classify_sync_lane
+from utils.sync.lanes import SyncLane, classify_sync_lane
+from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 logger = logging.getLogger(__name__)
 
@@ -151,31 +154,6 @@ AUDIO_SAMPLE_RATE = 16000
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
-
-_CAPTURE_PROVENANCE_SLOP_SECONDS = 30 * 60
-
-
-def _capture_matches_server_conversation(
-    uid: str,
-    conversation_id: Optional[str],
-    filenames: List[str],
-    client_device_id: Optional[str],
-) -> bool:
-    """Bind fresh classification to a server-created conversation time window."""
-    if not conversation_id or not client_device_id:
-        return False
-    conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
-        return False
-    if conversation.get('client_device_id') != client_device_id:
-        return False
-    started_at = conversation.get('started_at')
-    finished_at = conversation.get('finished_at') or started_at
-    if not isinstance(started_at, datetime) or not isinstance(finished_at, datetime):
-        return False
-    lower = started_at.timestamp() - _CAPTURE_PROVENANCE_SLOP_SECONDS
-    upper = finished_at.timestamp() + _CAPTURE_PROVENANCE_SLOP_SECONDS
-    return capture_times_within_window(filenames, lower, upper)
 
 
 class SyncLocalFilesResultResponse(BaseModel):
@@ -869,6 +847,7 @@ async def sync_local_files_v2(
     x_request_id: Optional[str] = Header(None, alias='X-Request-ID'),
     x_cloud_trace_context: Optional[str] = Header(None, alias='X-Cloud-Trace-Context'),
     x_omi_sync_capture_manifest: Optional[str] = Header(None, alias='X-Omi-Sync-Capture-Manifest'),
+    x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
 ):
     """
     Async version of sync-local-files. Saves raw files and returns 202
@@ -897,6 +876,7 @@ async def sync_local_files_v2(
         x_device_id_hash=x_device_id_hash if isinstance(x_device_id_hash, str) else None,
         x_app_version=x_app_version if isinstance(x_app_version, str) else None,
     )
+    geolocation = geolocation_from_private_header(x_omi_conversation_geolocation)
 
     filenames = [f.filename or '' for f in files]
     manifest_claims = verify_capture_manifest(
@@ -1188,6 +1168,7 @@ async def sync_local_files_v2(
                 'source': source.value,
                 'should_lock': should_lock,
                 'conversation_id': conversation_id,
+                'geolocation': geolocation.model_dump(mode='json') if geolocation else None,
                 'client_device_id': client_device_context.client_device_id,
                 'client_platform': client_device_context.platform,
                 'enqueued_at': time.time(),
@@ -1339,6 +1320,7 @@ async def sync_local_files_v2(
                             should_lock,
                             job_dir,
                             conversation_id,
+                            geolocation=geolocation,
                             client_device_id=client_device_context.client_device_id,
                             client_platform=client_device_context.platform,
                             sync_lane=lane_decision.lane.value,
@@ -1547,6 +1529,9 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         source = ConversationSource(payload.get('source') or 'omi')
         should_lock = bool(payload.get('should_lock', False))
         conversation_id = payload.get('conversation_id')
+        geolocation = geolocation_from_private_header(
+            json.dumps(payload.get('geolocation')) if payload.get('geolocation') else None
+        )
         client_device_id = payload.get('client_device_id')
         client_platform = payload.get('client_platform')
         sync_lane = payload.get('lane') if payload.get('lane') in ('fresh', 'backfill') else SyncLane.FRESH.value
@@ -1691,6 +1676,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                 should_lock,
                 job_dir,
                 conversation_id,
+                geolocation=geolocation,
                 task_mode=True,
                 client_device_id=client_device_id,
                 client_platform=client_platform,

@@ -2,6 +2,43 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.253",
+      "date": "2026-09-01",
+      "changes": [
+        "Every answer now shows which model actually produced it: the Response Context (i) popover — including on the latest message and on voice answers — gains a Model row reporting the served model observed on the response itself (e.g. the managed chat lane's real model), never the requested alias.",
+        "Stop meeting notes from labeling Telegram (and other native messaging-app) calls as Speaker 1 when the other party's name is on the call window."
+      ]
+    },
+    {
+      "version": "0.12.252",
+      "date": "2026-08-31",
+      "changes": [
+        "Fixed Interject reply cards shrinking into an unreadable notch island, and follow-up PTT no longer drops to a fallback voice that then fails"
+      ]
+    },
+    {
+      "version": "0.12.251",
+      "date": "2026-08-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.250",
+      "date": "2026-08-31",
+      "changes": [
+        "Fixed push-to-talk replies going silent after an audio device change"
+      ]
+    },
+    {
+      "version": "0.12.249",
+      "date": "2026-08-31",
+      "changes": [
+        "Connecting Calendar now signs you in with Google instead of relying on a Chrome-family browser session, so it works on Safari and Firefox too — and when a connection does fail, Omi tells you what went wrong instead of just \"try again\"",
+        "Stopped ambient proactive notifications when you have no standing watches"
+      ]
+    },
+    {
       "version": "0.12.248",
       "date": "2026-08-31",
       "changes": [

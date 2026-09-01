@@ -9945,4 +9945,9 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Памяць Pendant запоўнена, і ён усё яшчэ ў рэжыме запісу, таму захаванае аўдыя нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а затым сінхранізуйце зноў.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Не запісана ($count)';
+  }
 }

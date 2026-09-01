@@ -9911,4 +9911,9 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Lagringen på Pendant er full, og den er fortsatt i opptaksmodus, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Ikke fanget opp ($count)';
+  }
 }

@@ -3,13 +3,15 @@
 OMI_FIRESTORE_DATA_PLANE_PROJECT lets a service whose compute project (bare ADC /
 GOOGLE_CLOUD_PROJECT) differs from the project holding the user's actual Firestore
 data pin reads/writes to that data-plane project instead. Every service that never
-sets the var — which today is every service except desktop-backend, and even
-desktop-backend in prod, where data_plane_project == compute_project by
-construction — must see byte-identical behavior to get_firestore_client().
+sets the var — which today is every service except desktop-backend — must see
+byte-identical behavior to get_firestore_client(). desktop-backend fails closed
+when the overlay is unset so ledger writes cannot land on the compute project.
 """
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+
+import pytest
 
 import database._client as client_module
 
@@ -64,6 +66,8 @@ def test_falls_back_to_get_firestore_client_when_var_is_unset(monkeypatch):
     _reset_caches(monkeypatch)
     monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
     monkeypatch.delenv("OMI_FIRESTORE_DATA_PLANE_PROJECT", raising=False)
+    monkeypatch.delenv("K_SERVICE", raising=False)
+    monkeypatch.delenv("APP_NAME", raising=False)
 
     fake_client = SimpleNamespace()
     monkeypatch.setattr(client_module, "_build_firestore_client", MagicMock(return_value=fake_client))
@@ -83,6 +87,8 @@ def test_falls_back_when_var_is_set_to_an_empty_string(monkeypatch):
     _reset_caches(monkeypatch)
     monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
     monkeypatch.setenv("OMI_FIRESTORE_DATA_PLANE_PROJECT", "   ")
+    monkeypatch.delenv("K_SERVICE", raising=False)
+    monkeypatch.delenv("APP_NAME", raising=False)
 
     fake_client = SimpleNamespace()
     monkeypatch.setattr(client_module, "_build_firestore_client", MagicMock(return_value=fake_client))
@@ -90,6 +96,16 @@ def test_falls_back_when_var_is_set_to_an_empty_string(monkeypatch):
     result = client_module.get_data_plane_firestore_client()
 
     assert result is fake_client
+
+
+def test_desktop_backend_fails_closed_when_data_plane_project_is_unset(monkeypatch):
+    _reset_caches(monkeypatch)
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
+    monkeypatch.delenv("OMI_FIRESTORE_DATA_PLANE_PROJECT", raising=False)
+    monkeypatch.setenv("K_SERVICE", "desktop-backend")
+
+    with pytest.raises(RuntimeError, match="OMI_FIRESTORE_DATA_PLANE_PROJECT is required on desktop-backend"):
+        client_module.get_data_plane_firestore_client()
 
 
 def test_emulator_host_wins_even_when_the_var_is_set(monkeypatch):

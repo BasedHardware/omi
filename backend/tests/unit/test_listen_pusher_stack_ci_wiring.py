@@ -59,10 +59,19 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     listener_entrypoint = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'listener_app.py').read_text(
         encoding='utf-8'
     )
+    finalizer_leaves = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'finalizer_leaves.py').read_text(
+        encoding='utf-8'
+    )
     assert '_rest_finalization_survives_listener_restart' in runner
     assert "state_dir / 'cloud-rest-restart'" in runner
     assert '_stale_processing_orphan_reconciled' in runner
     assert "state_dir / 'cloud-stale-orphan'" in runner
+    assert '_memory_fence_blocks_durable_finalization' in runner
+    assert "state_dir / 'cloud-memory-fence'" in runner
+    assert 'finalization_worker_memory_enabled=None' in runner
+    assert 'finalizer.process_conversation =' not in finalizer_leaves
+    assert 'finalizer.extract_memories =' not in finalizer_leaves
+    assert 'processing._extract_memories_canonical = _offline_extract_memories_canonical' in finalizer_leaves
     assert '_stale_processing_orphan_reconciled_inline' in runner
     assert "state_dir / 'inline-stale-orphan'" in runner
     assert "'task_already_exists'" in task_seam

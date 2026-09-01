@@ -184,6 +184,19 @@ final class KnowledgeLedgerTriggerRuntimeTests: XCTestCase {
     XCTAssertEqual(result.noMatches.map(\.triggerID), ["planned"])
   }
 
+  func testEmptyCompleteWatchlistSuppressesInsteadOfAmbientFallback() throws {
+    let result = KnowledgeLedgerTriggerWatchlistRuntime.evaluate(
+      projection: try makeProjection([] as [KnowledgeLedgerTriggerRow]),
+      observation: KnowledgeLedgerTriggerObservation(text: "lunch"),
+      day: "2026-08-24",
+      authority: authority())
+
+    XCTAssertEqual(result.status, .evaluated)
+    XCTAssertEqual(result.nextLane, .none)
+    XCTAssertTrue(result.matches.isEmpty)
+    XCTAssertTrue(result.noMatches.isEmpty)
+  }
+
   func testOwnerGenerationSnapshotAndDayFailuresAreFailClosed() throws {
     let projection = try makeProjection([keywordTrigger(id: "planned", keyword: "release")])
     let observation = KnowledgeLedgerTriggerObservation(text: "release")

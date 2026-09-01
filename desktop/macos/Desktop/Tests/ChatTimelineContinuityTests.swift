@@ -1637,10 +1637,15 @@ final class ChatTimelineContinuityTests: XCTestCase {
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-    let bubble = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatBubble.swift"),
-      encoding: .utf8
-    )
+    // The chat-bubble surface spans the main file plus extracted same-module
+    // components (StableChatCardHeader moved out under the frozen-file
+    // line-count ratchet); the alignment contract scrapes the whole surface.
+    let bubble = try [
+      "Sources/MainWindow/Components/ChatBubble.swift",
+      "Sources/MainWindow/Components/StableChatCardHeader.swift",
+    ]
+    .map { try String(contentsOf: root.appendingPathComponent($0), encoding: .utf8) }
+    .joined(separator: "\n")
     let floating = try String(
       contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarView.swift"),
       encoding: .utf8

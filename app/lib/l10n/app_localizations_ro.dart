@@ -9960,4 +9960,9 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Spațiul de stocare al Pendantului este plin și acesta este încă în modul de înregistrare, așa că audio-ul stocat nu poate fi transferat. Apăsați butonul Pendantului pentru a opri înregistrarea, apoi sincronizați din nou.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Neînregistrat ($count)';
+  }
 }

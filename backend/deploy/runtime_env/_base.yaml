@@ -17,6 +17,9 @@ environment_shared:
           category: rollout
       values_file: backend/charts/parakeet/{env}_omi_parakeet_values.yaml
     backend-listen:
+      capabilities:
+      - conversation.finalize.persisted
+      - memory.canonical.mutate
       env:
         OMI_LLM_GATEWAY_URL:
           value: http://{env}-omi-llm-gateway.{env}-omi-backend.svc.cluster.local:8080
@@ -65,7 +68,7 @@ environment_shared:
           value: '{env}'
           category: runtime_identity
         STT_SERVICE_MODELS:
-          value: dg-nova-3,modulate-velma-2,parakeet
+          value: modulate-velma-2,soniox,dg-nova-3,parakeet
           category: stt_policy
         CONVERSATION_SUMMARIZED_APP_IDS:
           config_map:
@@ -125,6 +128,12 @@ environment_shared:
             key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
         GOOGLE_CLOUD_PROJECT:
           value: '{compute_project}'
+        OMI_FIRESTORE_DATA_PLANE_PROJECT:
+          value: '{data_plane_project}'
+        POSTHOG_PROJECT_API_KEY:
+          secret:
+            name: '{env}-omi-backend-secrets'
+            key: POSTHOG_PROJECT_API_KEY
         TWILIO_API_KEY_SID:
           config_map:
             name: '{env}-omi-backend-config'
@@ -272,6 +281,9 @@ environment_shared:
           GCP_LOCATION:
             value: us-central1
       backend:
+        capabilities:
+        - conversation.finalize.persisted
+        - memory.canonical.mutate
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -478,6 +490,9 @@ environment_shared:
             category: memory_rollout
         provisional: true
       backend-sync:
+        capabilities:
+        - conversation.finalize.persisted
+        - memory.canonical.mutate
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -621,6 +636,9 @@ environment_shared:
             version: latest
           SERVICE_ACCOUNT_JSON:
             secret: SERVICE_ACCOUNT_JSON
+            version: latest
+          POSTHOG_PROJECT_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
             version: latest
           PINECONE_API_KEY:
             secret: PINECONE_API_KEY

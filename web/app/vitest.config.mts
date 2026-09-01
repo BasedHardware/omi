@@ -9,6 +9,9 @@ export default defineConfig({
     globals: true,
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['./vitest.setup.ts'],
+    // userEvent typing tests measure 5-8s wall under a loaded runner (full
+    // suite + parallel checks); the 5s default timed them out non-deterministically.
+    testTimeout: 15000,
   },
   resolve: {
     alias: {

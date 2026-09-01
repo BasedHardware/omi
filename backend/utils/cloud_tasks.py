@@ -33,6 +33,30 @@ logger = logging.getLogger(__name__)
 # (HTTP_SYNC_JOBS_RUN_TIMEOUT); see the run-lock TTL invariant in sync_jobs.py.
 DISPATCH_DEADLINE_SECONDS = 1500
 
+# Shared by the production admission boundary and the hermetic recorder. A
+# recorder-local allowlist previously rejected new durable fields only after
+# admission had already returned 202.
+SYNC_JOB_TASK_PAYLOAD_KEYS = frozenset(
+    {
+        'schema_version',
+        'job_id',
+        'uid',
+        'raw_blob_paths',
+        'source',
+        'should_lock',
+        'conversation_id',
+        'geolocation',
+        'client_device_id',
+        'client_platform',
+        'enqueued_at',
+        'lane',
+        'capture_time_trust',
+        'recording_age_seconds',
+        'content_id',
+        'ledger_fence_mode',
+    }
+)
+
 _tasks_client: Optional[tasks_v2.CloudTasksClient] = None
 _google_auth_request: Optional[google_auth_requests.Request] = None
 
@@ -92,7 +116,7 @@ def is_audio_merge_dispatch_enabled() -> bool:
 
 
 # The production customer data plane, per INV-DATA-1
-# (docs/product/invariants/data-plane-continuity.md).
+# (product/invariants/data-plane-continuity.md).
 PRODUCTION_DATA_PROJECTS = frozenset({'based-hardware'})
 
 
@@ -258,6 +282,8 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     (request-based) rather than the ~4-dispatch lane that caused the incident.
     The lane label is always carried on the payload for metering and reporting.
     """
+    if frozenset(payload) != SYNC_JOB_TASK_PAYLOAD_KEYS:
+        raise ValueError('sync job payload does not match the durable worker schema')
     if payload.get('lane') == 'backfill' and is_sync_backfill_routing_enabled():
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
         handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()

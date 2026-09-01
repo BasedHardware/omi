@@ -9939,4 +9939,9 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Storan Pendant penuh dan ia masih dalam mod rakaman, jadi audio yang tersimpan tidak dapat dipindahkan. Tekan butang Pendant untuk menghentikan rakaman, kemudian segerakkan semula.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Tidak dirakam ($count)';
+  }
 }

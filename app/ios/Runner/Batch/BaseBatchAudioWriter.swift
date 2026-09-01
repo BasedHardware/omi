@@ -99,6 +99,7 @@ class BaseBatchAudioWriter {
         currentBytes = Int64(end)
         currentFrames = 0
         lastFsyncMs = nowMs
+        onOpenedLocked(url)
         NSLog("[\(tag)] opened \(fileName)")
         return true
     }
@@ -178,6 +179,7 @@ class BaseBatchAudioWriter {
                     NSLog("[\(tag)] close fsync failed — leaving \(part.lastPathComponent) unfinalized")
                 } else {
                     try? FileManager.default.removeItem(at: part) // nothing written — drop the placeholder
+                    removeRecordingGeolocationSidecars(forPartURL: part)
                 }
             }
             fileHandle = nil
@@ -191,6 +193,47 @@ class BaseBatchAudioWriter {
 
     /// Hook for subclasses to reset their gap/session tracking when a file closes.
     func onClosedLocked() {}
+
+    /// Hook for recording-owned metadata that must be copied beside a new file.
+    func onOpenedLocked(_ partURL: URL) {}
+
+    /// Extract the validated geolocation object from a native Flutter preference.
+    /// Every native sink uses this shared bound and JSON-shape check before
+    /// creating a private sidecar.
+    func recordingGeolocationJSON(fromDefaultsKey key: String) -> String? {
+        guard let raw = UserDefaults.standard.string(forKey: key),
+              let data = raw.data(using: .utf8),
+              !data.isEmpty,
+              data.count <= 4_096,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let geolocation = json["geolocation"],
+              JSONSerialization.isValidJSONObject(geolocation),
+              let geolocationData = try? JSONSerialization.data(withJSONObject: geolocation) else { return nil }
+        return String(data: geolocationData, encoding: .utf8)
+    }
+
+    /// Persist a bounded recording-owned location snapshot beside the audio file.
+    /// The sidecar is written atomically so a native crash cannot leave a partial
+    /// JSON file for the Dart scanner to ingest.
+    func persistRecordingGeolocationSidecar(rawGeolocation: String?, audioURL: URL) {
+        guard let rawGeolocation,
+              let data = rawGeolocation.data(using: .utf8),
+              !data.isEmpty,
+              data.count <= 4_096,
+              (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else { return }
+
+        let sidecarURL = URL(fileURLWithPath: audioURL.path + ".geolocation.json")
+        // A same-name part file can be reopened after a native restart. Its
+        // location belongs to that recording, so never replace an existing
+        // snapshot with the next session's config.
+        if FileManager.default.fileExists(atPath: sidecarURL.path) { return }
+        do {
+            try data.write(to: sidecarURL, options: .atomic)
+        } catch {
+            // Location is optional: never interrupt or discard audio capture.
+            NSLog("[\(tag)] failed to persist bounded recording location sidecar: \(type(of: error))")
+        }
+    }
 
     /// Notify Dart that a file finalized, so the recordings list rescans without
     /// waiting for a BLE disconnect.
@@ -218,8 +261,17 @@ class BaseBatchAudioWriter {
                 NSLog("[\(tag)] recovered stale batch file -> \(finalURL.lastPathComponent)")
             } else {
                 try? FileManager.default.removeItem(at: url)
+                removeRecordingGeolocationSidecars(forPartURL: url)
             }
         }
+    }
+
+    private func removeRecordingGeolocationSidecars(forPartURL partURL: URL) {
+        let audioURL = partURL.deletingPathExtension()
+        guard !FileManager.default.fileExists(atPath: audioURL.path) else { return }
+        let sidecarURL = URL(fileURLWithPath: audioURL.path + ".geolocation.json")
+        try? FileManager.default.removeItem(at: sidecarURL)
+        try? FileManager.default.removeItem(at: URL(fileURLWithPath: sidecarURL.path + ".part"))
     }
 
     // MARK: - Helpers

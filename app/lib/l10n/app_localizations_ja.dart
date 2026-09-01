@@ -9744,4 +9744,9 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendantのストレージが満杯で、まだ録音モードのままのため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return '未記録 ($count)';
+  }
 }

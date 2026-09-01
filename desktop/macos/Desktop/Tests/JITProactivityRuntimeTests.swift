@@ -133,7 +133,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
     let decision = await runtime.admission(
       authorizationSnapshot: try snapshot(), observation: KnowledgeLedgerTriggerObservation())
 
-    XCTAssertEqual(decision, .suppressed(reason: "ambient_local_gate"))
+    XCTAssertEqual(decision, .suppressed(reason: "empty_watchlist"))
 
     let remaining = await sequence.remaining
     XCTAssertEqual(remaining, 0, "effective-enabled authority must read the trigger snapshot")
@@ -142,6 +142,27 @@ final class JITProactivityRuntimeTests: XCTestCase {
         db, sql: "SELECT ownerID FROM jit_trigger_snapshot_receipts")
     }
     XCTAssertEqual(receipts, ["owner"])
+  }
+
+  func testEmptyCompleteWatchlistSuppressesWithoutAmbientSpend() async throws {
+    let runtime = try wiredRuntime(triggers: [])
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(text: "lunch", occurredAt: Date(timeIntervalSince1970: 1_777_248_000)),
+      ambient: validAmbient())
+
+    XCTAssertEqual(decision, .suppressed(reason: "empty_watchlist"))
+  }
+
+  func testJITAdmissionSourceDoesNotStartMemoryAssistant() throws {
+    let runtimeSource = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/ProactiveAssistants/Core/JITProactivityRuntime.swift")
+    // omi-test-quality: source-inspection -- static contract: JIT admission must not construct or start MemoryAssistant; empty watchlists suppress rather than buying another extraction lane
+    let source = try String(contentsOf: runtimeSource, encoding: .utf8)
+    XCTAssertFalse(source.contains("MemoryAssistant"))
   }
 
   // MARK: - Signed-in startup snapshot sync
@@ -428,7 +449,7 @@ final class JITProactivityRuntimeTests: XCTestCase {
     await gate.waitUntilSuspended()
     let second = await runtime.admission(
       authorizationSnapshot: try snapshot(), observation: .init(text: "anything"))
-    XCTAssertEqual(second, .suppressed(reason: "ambient_local_gate"))
+    XCTAssertEqual(second, .suppressed(reason: "empty_watchlist"))
     await gate.resumeFirstAdmission()
     let firstDecision = await first.value
 

@@ -583,6 +583,19 @@ maintained sources; `alert-rules.json` is the canonical combined Grafana import.
 with byte-for-byte equal objects when indexed by stable Grafana UID. The deterministic monitoring contract test checks
 both exports, including duplicate UIDs, before a change can land.
 
+Pusher release workflows additionally call `verify_pusher_live_alert_route.py`
+before publishing or promoting an image. The protected `GRAFANA_TOKEN` secret
+must be able to read provisioned alert rules, datasource health and queries,
+and contact points. The gate fails closed unless the committed memory-admission
+and capture-outcome pager set is live and unpaused, Prometheus reports healthy,
+both Pusher and backend-listen scrape targets are currently healthy, and the
+exact Telegram receiver exists with resolve notifications enabled. After each
+rollout it additionally requires all three finalization telemetry families from
+both jobs; zero-valued labeled failure children are initialized at process
+startup so absence is unambiguously a source failure. Production repeats this
+check after rollout so an hours-long release cannot finish on stale evidence.
+It never prints contact-point settings or token material.
+
 Every rule carries these notification fields:
 
 | Field | Purpose |
@@ -618,6 +631,7 @@ specifically for failures that stay green on every other signal, and are documen
 
 | Rule | Catches |
 |---|---|
+| `omi-capture-finalization-memory-fence` | The first real finalization rejected by a missing, disabled, or invalid canonical-memory runtime fence; zero is the only safe rate. |
 | `omi-llm-gateway-invalid-requests` | Requests rejected during validation, **before** a route is selected. These are counted by `llm_gateway_request_rejections_total` and never reach `llm_gateway_requests_total`, so the affected lane keeps reporting 100% success. |
 | `omi-llm-gateway-lane-failure-ratio` | A lane failing more than a quarter of its real requests over an hour. |
 | `omi-llm-gateway-lane-zero-success` | A lane with attempts but no successful request in six hours. The `or ... * 0` zero-fill is required: a lane that has never succeeded has no `outcome="success"` series, so a plain ratio produces no series and no alert. |

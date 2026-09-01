@@ -157,7 +157,7 @@ def main() -> int:
 
     if regressions:
         print("FAIL: INV-UI-1 — purple usage increased in changed UI files.")
-        print("Purple is off-brand. Use white/neutral accents. See docs/product/invariants/brand-ui.md")
+        print("Purple is off-brand. Use white/neutral accents. See product/invariants/brand-ui.md")
         for line in regressions:
             print(f"  - {line}")
         return 1

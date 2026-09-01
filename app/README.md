@@ -24,7 +24,7 @@ Before getting started, make sure your device is connected and unlocked. If you'
    Java runtime and `firebase-tools`/`npx`; `make dev-up` names what's missing.
 
    `make dev-status` shows what came up; `make dev-down` stops it. Ports, seeded
-   users, and troubleshooting: [`docs/runbooks/local-emulator-manual-qa.md`](../docs/runbooks/local-emulator-manual-qa.md).
+   users, and troubleshooting: [`backend/docs/runbooks/local-emulator-manual-qa.md`](../backend/docs/runbooks/local-emulator-manual-qa.md).
 
 2. Navigate to the app directory:
    ```bash

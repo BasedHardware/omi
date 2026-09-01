@@ -40,6 +40,13 @@ def _monitor_self(*, dead: bool, stt_service=STTService.parakeet):
     )
     monitor_self = SimpleNamespace(host=host, stt_socket=SimpleNamespace(is_connection_dead=dead))
     monitor_self._serving_provider = lambda: ListenReceiver._serving_provider(monitor_self)
+
+    # The monitor now offers the session to the next provider before terminating.
+    # These cases cover the terminal path, so failover declines.
+    async def _no_failover():
+        return False
+
+    monitor_self._failover_stt_socket = _no_failover
     return monitor_self
 
 

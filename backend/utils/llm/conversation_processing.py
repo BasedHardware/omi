@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
@@ -824,7 +825,10 @@ def extract_action_items(
 
     CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
     - The conversation DEFINITELY happened between the named participants
-    - NEVER use "Speaker 0", "Speaker 1", "Speaker 2", etc. when participant names are available
+    - Diarization placeholders ("Speaker 0", "Speaker 1", "Speaker 2", "SPEAKER_00", etc.) are NEVER
+      names. Do not emit them in any action item, whether or not participant names are available. Use
+      a real name only when it comes from meeting-identity metadata or a non-placeholder transcript
+      label; otherwise describe the action without a speaker label. Do not invent names.
     - Match transcript speakers to participant names by analyzing the conversation context
     - Use participant names in ALL action items (e.g., "Follow up with Sarah" NOT "Follow up with Speaker 0")
     - Reference the meeting title/context when relevant to the action item
@@ -885,7 +889,7 @@ def extract_action_items(
          * Use the actual participant names in ALL action items
          * ABSOLUTELY NEVER use "Speaker 0", "Speaker 1", "Speaker 2", etc.
          * Example: "Follow up with Sarah about budget" NOT "Follow up with Speaker 0 about budget"
-       - If no calendar context: NEVER use "Speaker 0", "Speaker 1", etc. in the final action item description
+       - Never emit "Speaker 0", "Speaker 1", "SPEAKER_00", etc. anywhere in an action item, with or without calendar context
        - If unsure about names, use natural phrasing like "Follow up on...", "Ensure...", etc.
 
     2. **Concrete Action**: The task describes a specific, actionable next step (not vague intentions)
@@ -1076,6 +1080,10 @@ def extract_action_items(
         if _should_run_conversation_action_items_shadow('conversation_action_items', started_at, conversation_context):
             _submit_conversation_action_items_shadow(prompt, prompt_values, action_items, user_tz, now)
 
+        # Speaker N is a diarization placeholder, not a person. The legacy action-item list rides the
+        # same summary card as the notes, so it gets the same scrub the v2 note path already applies
+        # (sanitize mutates the ActionItem instances in place).
+        sanitize_structured_speaker_placeholders(Structured(action_items=action_items))
         return action_items
 
     except Exception as e:
@@ -1114,6 +1122,39 @@ def render_sections_markdown(sections: List[Any]) -> str:
         elif body:
             rendered.append(body)
     return '\n\n'.join(rendered)
+
+
+# Diarization placeholders are transcript machinery, not people. Prompt wording alone
+# does not hold — v2 already forbade "Speaker 1 said that" and still leaked the token.
+_SPEAKER_PLACEHOLDER_RE = re.compile(r'(?i)\b(?:speaker[ _]\d+|SPEAKER_\d+)\b:?[ \t]*')
+
+
+def strip_speaker_placeholders(text: str) -> str:
+    """Drop leftover Speaker N / SPEAKER_00 tokens rather than inventing a name."""
+    if not text:
+        return text
+    cleaned = _SPEAKER_PLACEHOLDER_RE.sub('', text)
+    cleaned = re.sub(r'[^\S\n]+', ' ', cleaned)
+    cleaned = re.sub(r' *\n *', '\n', cleaned)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned.strip()
+
+
+def sanitize_structured_speaker_placeholders(structured: Structured) -> Structured:
+    """Strip diarization placeholders from every user-visible notes field."""
+    structured.title = strip_speaker_placeholders(structured.title)
+    structured.overview = strip_speaker_placeholders(structured.overview)
+    for section in structured.sections:
+        section.heading = strip_speaker_placeholders(section.heading)
+        section.body_markdown = strip_speaker_placeholders(section.body_markdown)
+    for item in structured.action_items:
+        item.description = strip_speaker_placeholders(item.description)
+        if item.owner_name:
+            cleaned_owner = strip_speaker_placeholders(item.owner_name)
+            item.owner_name = cleaned_owner or None
+        if item.context:
+            item.context = strip_speaker_placeholders(item.context)
+    return structured
 
 
 # Whole-transcript structuring produces the title and summary a conversation cannot be finalized
@@ -1179,6 +1220,11 @@ NOTE BODY — WRITE FOR SKIMMING, NOT FOR READING
 - Lead each bullet with the specific: the name, number, product, or decision. Never open a
   bullet with narration such as "They discussed", "The conversation turned to", or
   "Speaker 1 said that". Attribute inline only when who-said-it is the point.
+- NEVER emit diarization placeholders (`Speaker 0`, `Speaker 1`, `Speaker 2`, `SPEAKER_00`)
+  in the title, overview, section bullets, or action items, whether or not calendar or
+  screen context exists. Use a real person name only when it appears in meeting-identity
+  metadata or is already a non-placeholder transcript label. If identity is unknown,
+  write the fact without a speaker label.
 - No preamble, no scene-setting, no wrap-up bullet restating the section.
 - Merge overlapping points instead of restating them across sections.
 - Headings are short noun phrases (2-5 words), specific to this conversation.
@@ -1256,6 +1302,7 @@ DATE CONTEXT
     projected_overview = render_sections_markdown(structured.sections)
     if projected_overview:
         structured.overview = projected_overview
+    sanitize_structured_speaker_placeholders(structured)
     return structured
 
 
@@ -1285,7 +1332,11 @@ def get_transcript_structure(
 
     CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
     - The conversation DEFINITELY happened between the named participants
-    - NEVER use "Speaker 0", "Speaker 1", "Speaker 2", etc. when participant names are available
+    - Diarization placeholders ("Speaker 0", "Speaker 1", "Speaker 2", "SPEAKER_00", etc.) are NEVER
+      names. Do not emit them in the title, overview, or any generated content, whether or not
+      calendar context exists. Use a real name only when it comes from meeting-identity metadata or
+      a non-placeholder transcript label; otherwise state the fact without a speaker label. Do not
+      invent names.
     - Match transcript speakers to participant names by carefully analyzing the conversation context
     - Use participant names throughout the title, overview, and all generated content
     - Use the meeting title as a strong signal for the conversation title (but you can refine it based on the actual discussion)
@@ -1294,7 +1345,7 @@ def get_transcript_structure(
     - If there are 2-3 participants with known names, naturally mention them in the title (e.g., "Sarah and John Discuss Q2 Budget", "Team Meeting with Alex, Maria, and Chris")
 
     For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip"). If calendar context provides participant names (2-3 people), naturally include them when relevant (e.g., "John and Sarah Plan Marketing Campaign").
-    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details. When calendar context provides participant names, you MUST use their actual names instead of "Speaker 0" or "Speaker 1" to make the summary readable and personal. Analyze the transcript to understand who said what and match speakers to participant names.
+    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details. When calendar context provides participant names, you MUST use their actual names to make the summary readable and personal. Analyze the transcript to understand who said what and match speakers to participant names. Never write "Speaker 0", "Speaker 1", "SPEAKER_00", etc. in the title or overview; if a speaker's identity is unknown, state the fact without a speaker label. Do not invent names.
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
     For the category, classify the content into one of the available categories.
@@ -1381,7 +1432,7 @@ def get_transcript_structure(
             event.duration = 180
         event.created = False
 
-    return response
+    return sanitize_structured_speaker_placeholders(response)
 
 
 def get_reprocess_transcript_structure(
@@ -1412,6 +1463,7 @@ def get_reprocess_transcript_structure(
 
     For the title, generate a concise title from the current content. Do not reuse a previous title.
     For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
+    Never emit diarization placeholders ("Speaker 0", "Speaker 1", "SPEAKER_00", etc.) in the title or overview; they are transcript machinery, not names. Use a real person name only when it appears in meeting-identity metadata or a non-placeholder transcript label; otherwise state the fact without a speaker label. Do not invent names.
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
     For the category, classify the content into one of the available categories.
@@ -1481,7 +1533,7 @@ def get_reprocess_transcript_structure(
             event.duration = 180
         event.created = False
 
-    return response
+    return sanitize_structured_speaker_placeholders(response)
 
 
 def get_app_result(

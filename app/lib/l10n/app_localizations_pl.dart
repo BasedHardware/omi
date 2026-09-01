@@ -9943,4 +9943,9 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pamięć Pendanta jest pełna i wciąż jest on w trybie nagrywania, więc zapisanego dźwięku nie można przenieść. Naciśnij przycisk Pendanta, aby zatrzymać nagrywanie, a następnie zsynchronizuj ponownie.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nie nagrano ($count)';
+  }
 }

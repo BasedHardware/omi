@@ -11,9 +11,9 @@ Never raise a budget to admit detail that has a home one level down:
 
   root AGENTS.md        cross-component rules and the index, nothing else
   component AGENTS.md   that component's detail
-  docs/agents/*.md      occasional reference an agent can be pointed to
+  .github/agent-docs/*.md      occasional reference an agent can be pointed to
 
-Component guides are the pressure valve for the root file; docs/agents/ is the
+Component guides are the pressure valve for the root file; .github/agent-docs/ is the
 pressure valve for the component guides. There is always somewhere to put detail
 that is cheaper than the file you are editing.
 """
@@ -37,6 +37,7 @@ BUDGETS: dict[str, tuple[int, int]] = {
     "omi/firmware/AGENTS.md": (30, 1_500),
     "web/admin/AGENTS.md": (25, 1_500),
     "web/app/AGENTS.md": (55, 2_400),
+    "docs/AGENTS.md": (34, 1_309),
 }
 
 SKIP_PARTS = {"node_modules", ".build", ".git"}
@@ -45,9 +46,9 @@ FAILURE_HINT = (
     "AGENTS.md files are loaded into agent context every session they apply to.\n"
     "Move detail down a level instead of growing the file:\n"
     "  root AGENTS.md      -> the matching component AGENTS.md\n"
-    "  component AGENTS.md -> docs/agents/<topic>.md, linked from its index row\n"
+    "  component AGENTS.md -> .github/agent-docs/<topic>.md, linked from its index row\n"
     "Do not raise a budget to admit detail that has a home one level down.\n"
-    "See docs/agents/doc-maintenance.md."
+    "See .github/agent-docs/doc-maintenance.md."
 )
 
 

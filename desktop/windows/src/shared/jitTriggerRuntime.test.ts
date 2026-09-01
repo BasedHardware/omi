@@ -198,5 +198,22 @@ describe('Windows JIT trigger contract', () => {
         '2026-08-24'
       ).nextLane
     ).toBe('planned_trigger')
+    expect(
+      evaluateJitWatchlist(
+        {
+          mode: 'enabled',
+          killSwitchEnabled: false,
+          ownerId: 'u',
+          accountGeneration: 2,
+          snapshotOwnerId: 'u',
+          snapshotAccountGeneration: 2,
+          snapshotIsAuthoritative: true,
+          authorizationIsCurrent: true
+        },
+        [],
+        observation,
+        '2026-08-24'
+      ).nextLane
+    ).toBe('none')
   })
 })

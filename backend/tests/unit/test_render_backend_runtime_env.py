@@ -174,6 +174,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'OPENAI_API_KEY=OPENAI_API_KEY:latest' in memory_secrets
     assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in memory_secrets
     assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in memory_secrets
+    assert 'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest' in memory_secrets
 
 
 @pytest.mark.parametrize('env', ['dev', 'prod'])
@@ -196,7 +197,10 @@ def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
         'POSTHOG_HOST',
     }
     assert daily_names.isdisjoint(maintenance.get('env', {}))
-    assert 'POSTHOG_PROJECT_API_KEY' not in maintenance.get('secrets', {})
+    assert maintenance.get('secrets', {}).get('POSTHOG_PROJECT_API_KEY') == {
+        'secret': 'POSTHOG_PROJECT_API_KEY',
+        'version': 'latest',
+    }
     assert {
         'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
         'MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED',

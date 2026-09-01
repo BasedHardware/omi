@@ -1712,6 +1712,59 @@ def test_app_summary_results_reach_the_database(monkeypatch):
     assert written.get('suggested_summarization_apps') == ['app-1']
 
 
+def test_force_process_still_defers_folders_and_apps_when_jit_admits(monkeypatch):
+    completed_conversation = Conversation(
+        id='conversation-jit',
+        created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title='Title', overview='Overview'),
+        transcript_segments=[],
+        status=ConversationStatus.completed,
+        discarded=False,
+    )
+
+    claims: list[str] = []
+    input_conversation = MagicMock()
+    input_conversation.source = 'omi'
+    input_conversation.get_person_ids.return_value = []
+
+    monkeypatch.setattr(process_conversation, '_get_structured', lambda *a, **k: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', lambda *a, **k: True)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', lambda *a, **k: True)
+    monkeypatch.setattr(
+        process_conversation,
+        'resolve_authorized_first_open_plan',
+        lambda **_kwargs: SimpleNamespace(defer_derived_work=True),
+    )
+    monkeypatch.setattr(
+        process_conversation.conversations_db,
+        'initialize_first_open_work',
+        lambda uid, conversation_id, **_kwargs: claims.append(f'{uid}:{conversation_id}') or True,
+    )
+    monkeypatch.setattr(
+        process_conversation.folders_db,
+        'get_folders',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError('folders must defer under JIT')),
+    )
+    monkeypatch.setattr(
+        process_conversation,
+        'trigger_conversation_apps',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError('apps must defer under JIT')),
+    )
+    monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
+    monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', MagicMock())
+    monkeypatch.setattr(
+        process_conversation.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[])
+    )
+
+    process_conversation.process_conversation('uid', 'en', input_conversation, force_process=True)
+
+    assert claims == ['uid:conversation-jit']
+
+
 def test_finalization_survives_an_extraction_run_with_no_grounded_candidates(monkeypatch):
     """Regression: when every L1 candidate failed grounding, canonical extraction
     raised and took the rest of finalization with it — action items, goal
@@ -2058,10 +2111,55 @@ def test_ledger_writer_mode_skips_eager_extraction(monkeypatch):
     )
     inner = MagicMock(side_effect=AssertionError('extraction must not run under ledger writer mode'))
     monkeypatch.setattr(process_conversation, '_extract_memories_inner', inner)
+    admitted = []
+
+    class _MemoryService:
+        def __init__(self, *, db_client):
+            pass
+
+        def ensure_canonical_mutation_ready(self, uid):
+            admitted.append(uid)
+
+    monkeypatch.setattr(process_conversation, 'MemoryService', _MemoryService)
 
     process_conversation.extract_memories('uid-ledger', _ledger_gate_conversation('conv-ledger'))
 
+    assert admitted == ['uid-ledger']
     inner.assert_not_called()
+
+
+def test_canonical_provider_degradation_emits_bounded_finalization_reason(monkeypatch):
+    recorded = []
+    monkeypatch.setattr(process_conversation, 'record_finalization_failure', recorded.append)
+    monkeypatch.setattr(process_conversation, 'record_fallback', lambda **_fields: None)
+
+    result = process_conversation._canonical_extraction_unavailable(
+        SimpleNamespace(id='conversation-1'),
+        process_conversation.PATH_CANONICAL,
+        RuntimeError('private provider response'),
+    )
+
+    assert result.count == 0
+    assert recorded == [process_conversation.FinalizationFailureReason.provider]
+
+
+def test_memory_capability_fence_precedes_sweep_owned_writer_short_circuit(monkeypatch):
+    sweep_mode = MagicMock(side_effect=AssertionError('writer mode must not bypass static capability admission'))
+    monkeypatch.setattr(process_conversation, '_sweep_owned_writer_mode', sweep_mode)
+
+    class _MemoryService:
+        def __init__(self, *, db_client):
+            pass
+
+        def ensure_canonical_mutation_ready(self, uid):
+            raise RuntimeError('static memory admission failed')
+
+    monkeypatch.setattr(process_conversation, 'MemoryService', _MemoryService)
+
+    with pytest.raises(RuntimeError, match='static memory admission failed'):
+        process_conversation.extract_memories('uid-ledger', _ledger_gate_conversation('conv-ledger'))
+
+    sweep_mode.assert_not_called()
 
 
 def test_compatibility_writer_mode_still_runs_eager_extraction(monkeypatch):

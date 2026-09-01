@@ -9914,4 +9914,9 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Úložiště Pendantu je plné a stále je v režimu nahrávání, takže uložený zvuk nelze přenést. Stisknutím tlačítka na Pendantu zastavte nahrávání a poté znovu synchronizujte.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nezaznamenáno ($count)';
+  }
 }

@@ -25,6 +25,7 @@ from models.memory_apply import (
     WriterMode,
     require_writer_admitted,
 )
+from utils.metrics import record_jit_writer_mode_transition
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -165,7 +166,7 @@ def begin_writer_transition(
             "writer transition target is already the expected stable mode",
         )
     client = _client_or_default(db_client)
-    return _execute_transaction(
+    result = _execute_transaction(
         _begin_writer_transition_transaction,
         client,
         uid,
@@ -173,6 +174,15 @@ def begin_writer_transition(
         owner,
         MemoryWriterFence.from_control(expected_control),
     )
+    if result.writer_epoch == expected_control.writer_epoch + 1:
+        try:
+            record_jit_writer_mode_transition(
+                from_mode=expected_control.writer_mode.value,
+                to_mode=result.writer_mode.value,
+            )
+        except Exception:
+            pass
+    return result
 
 
 def _begin_writer_transition_transaction(
@@ -248,7 +258,7 @@ def complete_writer_transition(
         ) from exc
     _validate_receipt_fence(validated_receipt, MemoryWriterFence.from_control(expected_control), owner)
     client = _client_or_default(db_client)
-    return _execute_transaction(
+    result = _execute_transaction(
         _complete_writer_transition_transaction,
         client,
         uid,
@@ -256,6 +266,15 @@ def complete_writer_transition(
         MemoryWriterFence.from_control(expected_control),
         validated_receipt,
     )
+    if result.writer_mode != expected_control.writer_mode:
+        try:
+            record_jit_writer_mode_transition(
+                from_mode=expected_control.writer_mode.value,
+                to_mode=result.writer_mode.value,
+            )
+        except Exception:
+            pass
+    return result
 
 
 def _complete_writer_transition_transaction(

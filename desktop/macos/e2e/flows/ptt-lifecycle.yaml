@@ -7,6 +7,8 @@ covers:
   - desktop/macos/Desktop/Sources/AudioLevelMonitor.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchVoiceMorphMark.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+AutomationSnapshot.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift
   - desktop/macos/Desktop/Sources/Providers/RealtimeConversationToolProjection.swift
   - desktop/macos/Desktop/Sources/Chat/ExternalSurfaceRunAuthority.swift
   - desktop/macos/Desktop/Sources/DefaultsKey.swift

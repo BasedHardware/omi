@@ -790,7 +790,7 @@ def _request(
     if choice is not None and result.get('tools'):
         result['tool_choice'] = choice
     result['cache_control'] = dict(_PROMPT_CACHE_CONTROL)
-    return model, result
+    return cast(str, result['model']), result  # response.model = SERVED model, never the alias
 
 
 def _usage_field(usage: object, field: str) -> int:

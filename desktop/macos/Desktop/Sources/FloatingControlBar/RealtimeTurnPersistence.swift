@@ -54,11 +54,19 @@ struct RealtimeStreamingJournalProjection: Equatable {
   /// Pinned at admission so a mid-stream chat switch cannot redirect deltas
   /// or finalization to a different conversation surface.
   let admissionSurface: AgentSurfaceReference
+  /// Concrete model id of the realtime session answering this turn (e.g.
+  /// "gemini-3.1-flash-live-preview"), pinned at admission for the journaled
+  /// exchange's Response Context attribution.
+  let modelsUsed: [String]
 
-  init(ownerID: String, continuityKey: String, admissionSurface: AgentSurfaceReference) {
+  init(
+    ownerID: String, continuityKey: String, admissionSurface: AgentSurfaceReference,
+    modelsUsed: [String] = []
+  ) {
     self.ownerID = ownerID
     self.continuityKey = continuityKey
     self.admissionSurface = admissionSurface
+    self.modelsUsed = modelsUsed
     userTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
     assistantTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "assistant")
   }
@@ -75,7 +83,7 @@ struct RealtimeStreamingJournalProjection: Equatable {
   func assistantMessage(
     text: String, isStreaming: Bool, contentBlocks: [ChatContentBlock] = []
   ) -> ChatMessage {
-    ChatMessage(
+    var message = ChatMessage(
       id: assistantTurnID,
       clientTurnId: continuityKey,
       text: text,
@@ -83,6 +91,10 @@ struct RealtimeStreamingJournalProjection: Equatable {
       isStreaming: isStreaming,
       contentBlocks: contentBlocks
     )
+    if !modelsUsed.isEmpty {
+      message.metadata = MessageMetadata(adapterId: "realtime", modelsUsed: modelsUsed)
+    }
+    return message
   }
 }
 

@@ -45,18 +45,6 @@ def _make_chat_client():
     harness.wire_common_stubs(harness.install_module)
     harness.install_module('models.app')
 
-    # The gateway telemetry chat_file imports is out of scope here (and pulls the real gateway
-    # client stack in); keep it inert so the upload path itself is what runs.
-    gateway_client = harness.install_module('utils.llm.gateway_client', ModuleType('utils.llm.gateway_client'))
-    gateway_client.should_route_features_through_gateway = MagicMock(return_value=False)
-    gateway_client.CHAT_AGENT_ROUTE_DIRECT = 'direct'
-    gateway_client.CHAT_AGENT_ROUTE_GATEWAY = 'gateway'
-    gateway_client.get_chat_agent_route = MagicMock(return_value='direct')
-    gateway_client.file_chat_auto_lane_id = MagicMock(return_value='omi:auto:file-chat-vision')
-    gateway_client.file_chat_feature_header = MagicMock(return_value={})
-    gateway_client.get_file_chat_gateway_async_client = MagicMock()
-    gateway_client.get_file_chat_gateway_sync_client = MagicMock()
-
     # wire_common_stubs replaces chat_file with a MagicMock; this suite needs the real module,
     # because the defect lives in its PIL and provider error handling.
     harness.load_real_module('utils.other.chat_file', BACKEND_DIR / 'utils' / 'other' / 'chat_file.py')

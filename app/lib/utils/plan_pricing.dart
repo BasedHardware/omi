@@ -54,7 +54,7 @@ int? _annualMonthsFree(List<Map<String, dynamic>> plans) {
 
 /// Whether the mobile plans sheet should show Continue / Upgrade.
 ///
-/// Locked (docs/agents/plan-catalog.md) — do not restore `!isOnAnnualPlan`:
+/// Locked (.github/agent-docs/plan-catalog.md) — do not restore `!isOnAnnualPlan`:
 /// that hid Continue for every annual subscriber and blocked Plus → Unlimited.
 /// Hide only when the user is already on the selected tier's annual price.
 /// Desktop-entitled plans are manage-only on this sheet: same-tier

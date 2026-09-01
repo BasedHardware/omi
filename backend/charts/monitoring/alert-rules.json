@@ -11138,6 +11138,108 @@
     "record": null
   },
   {
+    "uid": "omi-capture-finalization-memory-fence",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Capture finalization - canonical memory admission failure",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_capture_finalization_failures_total{reason=~\"memory_fence|memory_config\"}[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-08-30T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "9",
+      "summary": "A real capture finalization was rejected by the canonical-memory runtime admission fence",
+      "threshold": "at least one memory_fence or memory_config finalization failure in 5m",
+      "user_impact": "At least one accepted voice capture could not complete finalization because its serving runtime could not safely mutate canonical memory.",
+      "scope": "Persisted conversation finalization on Pusher and Cloud Tasks workers.",
+      "verification": "Confirm the bounded reason and exact serving image/config receipt; do not infer the cause from HTTP status or workflow state alone.",
+      "safe_next_action": "Halt promotion, preserve the durable retry queue, and restore a capability-admitted image plus config bundle before replay.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-capture-finalization-memory-fence",
+      "component": "speech-processing",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
     "uid": "omi-journey-capture-success-critical",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",

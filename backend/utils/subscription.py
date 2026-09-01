@@ -551,7 +551,7 @@ def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     all four. Neo is deprecated everywhere and hidden on every platform. A
     subscriber on a hidden plan still sees it via `filter_plans_for_user`'s
     current-plan escape (Neo) or the mobile manage-only fast path (Operator /
-    Architect). See docs/agents/plan-catalog.md.
+    Architect). See .github/agent-docs/plan-catalog.md.
     """
     p = (platform or '').lower()
     if p in _MOBILE_PLATFORM_TOKENS:
@@ -570,7 +570,7 @@ def desktop_to_consumer_plan_change_error(current_plan: PlanType, target_plan: P
     period. Immediate proration onto Plus / Unlimited / Neo strips desktop.
     Same-family desktop changes (Operator ↔ Architect) stay allowed for the
     desktop and web storefronts. Do not add a "user confirmed in the app"
-    exception — confirmation is not this boundary. See docs/agents/plan-catalog.md.
+    exception — confirmation is not this boundary. See .github/agent-docs/plan-catalog.md.
     """
     if current_plan in DESKTOP_ENTITLED_PLAN_TYPES and target_plan not in DESKTOP_ENTITLED_PLAN_TYPES:
         return (
@@ -587,7 +587,7 @@ def filter_plans_for_user(
 ) -> List[Dict[str, Any]]:
     """Drop legacy / platform-hidden plans from the purchase catalog.
 
-    Locked audience rules (docs/agents/plan-catalog.md) — do not re-widen:
+    Locked audience rules (.github/agent-docs/plan-catalog.md) — do not re-widen:
 
     1. Neo (`unlimited`) is shown only when `current_plan` is already Neo
        (active or cancel-at-period-end). Never gate it on "has ever paid".

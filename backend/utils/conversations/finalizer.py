@@ -23,15 +23,21 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.jit_rollout import JITDecisionStage
 from utils.log_sanitizer import sanitize_pii
+from utils.observability.finalization import classify_finalization_failure, record_finalization_failure
 from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
 
 class ConversationFinalizationError(RuntimeError):
     """A retryable persisted-conversation finalization failure."""
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
 
 
 class ConversationFinalizationDisposition(str, Enum):
@@ -99,11 +105,25 @@ async def finalize_persisted_conversation(
         conversation.status = ConversationStatus.processing
 
     try:
-        geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
-        if geolocation:
-            geolocation = Geolocation(**geolocation)
-            # Keep the cached coordinates when the geocode lookup misses instead of dropping them.
-            conversation.geolocation = await async_resolve_geolocation(geolocation)
+        # A location persisted with the recording session or WAL is the
+        # canonical start-time snapshot. Redis remains only a compatibility
+        # fallback for clients released before that contract.
+        persisted_geolocation = getattr(conversation, 'geolocation', None)
+        if isinstance(persisted_geolocation, Geolocation):
+            conversation.geolocation = await async_resolve_geolocation(persisted_geolocation)
+        else:
+            geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
+            if geolocation:
+                record_fallback(
+                    component='conversation_finalization',
+                    from_mode='conversation_snapshot',
+                    to_mode='redis_user_cache',
+                    reason='other',
+                    outcome='degraded',
+                    log=logger,
+                )
+                geolocation = Geolocation(**geolocation)
+                conversation.geolocation = await async_resolve_geolocation(geolocation)
 
         # The post-processing bulkhead preserves request context (including
         # validated live BYOK keys) while isolating this expensive sync path
@@ -239,16 +259,13 @@ async def finalize_persisted_conversation(
             raise ConversationFinalizationError('fanout_completion_conflict')
         return ConversationFinalizationDisposition.completed
     except Exception as error:
-        # Provider and validation exceptions can contain transcript excerpts, so the job stores
-        # and logs a bounded failure code instead of the message. The exception TYPE carries no
-        # transcript and is the one thing that tells an operator where to look — provider,
-        # schema or datastore. Without it `processing_failed` is unactionable: a dead-lettered
-        # conversation reports the same nine characters whatever went wrong. The warning fifteen
-        # lines up already logs `type(error).__name__` under the same constraint.
+        # Provider and validation exceptions can contain transcript excerpts.
+        # Collapse them onto a closed operational vocabulary before emitting a
+        # metric or log; never include the exception message or user identity.
+        reason = classify_finalization_failure(error)
+        record_finalization_failure(reason)
         logger.error(
-            'persisted conversation finalization failed uid=%s conversation=%s failure=processing_failed error=%s',
-            uid,
-            conversation_id,
-            type(error).__name__,
+            'persisted conversation finalization failed failure=processing_failed reason=%s',
+            reason.value,
         )
         raise ConversationFinalizationError('processing_failed') from error

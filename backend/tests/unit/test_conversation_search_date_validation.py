@@ -107,6 +107,7 @@ _stubs = [
     # (including utils.conversations) are created by _register_module, so the
     # package itself is omitted here. See package_submodule_stubs.
     *sorted(package_submodule_stubs('utils.conversations', include_package=False)),
+    'utils.observability.fallback',
     'utils.executors',
     'utils.product_telemetry',
     'utils.llm.conversation_processing',
@@ -799,6 +800,38 @@ def test_legacy_finalize_claim_loser_returns_latest_without_processing_or_integr
     assert response.conversation.status == ConversationStatus.failed
 
 
+def test_synchronous_finalizer_records_degraded_redis_location_fallback():
+    target = _conversation(status=ConversationStatus.in_progress)
+    processed = _conversation(status=ConversationStatus.completed)
+
+    with (
+        patch.object(conv, 'retrieve_in_progress_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.lifecycle_service, 'admit_processing', return_value=True),
+        patch.object(
+            conv.redis_db,
+            'get_cached_user_geolocation',
+            return_value={'latitude': 37.7749, 'longitude': -122.4194},
+        ),
+        patch.object(conv, 'record_fallback') as fallback,
+        patch.object(conv, 'resolve_geolocation', side_effect=lambda value: value),
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='conv-1'),
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id'),
+        patch.object(conv, 'process_conversation', side_effect=_process_result(processed, persisted=True)),
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])),
+    ):
+        conv.process_in_progress_conversation(uid='test-uid')
+
+    fallback.assert_called_once_with(
+        component='conversation_finalization',
+        from_mode='conversation_snapshot',
+        to_mode='redis_user_cache',
+        reason='other',
+        outcome='degraded',
+        log=conv.logger,
+    )
+
+
 def test_finalize_conversation_returns_queued_outbox_after_uncertain_task_acknowledgement():
     target = _conversation(status=ConversationStatus.in_progress)
 
@@ -860,6 +893,8 @@ def test_finalization_status_endpoint_exposes_retryable_durable_state():
         'attempt_count': 2,
         'task_retry_count': 1,
         'meeting_treatment_eligible': False,
+        'terminal_outcome': 'unknown',
+        'fanout_status': 'unknown',
     }
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),

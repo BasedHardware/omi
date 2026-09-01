@@ -802,5 +802,6 @@ export function evaluateJitWatchlist(
     return { status: 'evaluated', nextLane: 'planned_trigger', matches, ambiguous }
   if (ambiguous.length)
     return { status: 'evaluated', nextLane: 'bounded_planned_triage', matches, ambiguous }
+  if (triggers.length === 0) return { status: 'evaluated', nextLane: 'none', matches, ambiguous }
   return { status: 'evaluated', nextLane: 'ambient_fallback', matches, ambiguous }
 }

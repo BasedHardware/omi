@@ -49,7 +49,8 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         val apiBaseUrl: String,
         val serviceUuid: String,
         val characteristicUuid: String,
-        val deviceType: String
+        val deviceType: String,
+        val geolocation: String?,
     )
 
     private val client = OkHttpClient.Builder()
@@ -152,7 +153,7 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         if (now - lastFailureAtMs < RECONNECT_BACKOFF_MS) return
 
         val url = buildUrl(config) ?: return
-        val request = buildRequest(url) ?: return
+        val request = buildRequest(url, config) ?: return
 
         synchronized(lock) {
             if ((connecting || connected) && activeUrl == url && activeConfig == config && socket != null) {
@@ -294,7 +295,8 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
                 apiBaseUrl = json.optString("apiBaseUrl"),
                 serviceUuid = serviceUuid,
                 characteristicUuid = characteristicUuid,
-                deviceType = json.optString("deviceType")
+                deviceType = json.optString("deviceType"),
+                geolocation = json.optJSONObject("geolocation")?.toString(),
             )
         } catch (e: Exception) {
             Log.w(TAG, "Invalid native BLE stream config: ${e.message}")
@@ -302,21 +304,21 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         }
     }
 
-    private fun buildRequest(url: String): Request? {
+    private fun buildRequest(url: String, config: Config): Request? {
         val token = stringPref("nativeAuthToken").ifEmpty { stringPref("authToken") }
         if (token.isEmpty()) {
             Log.w(TAG, "Cannot open background transcription socket without auth token")
             return null
         }
 
-        return Request.Builder()
+        val builder = Request.Builder()
             .url(url)
             .header("Authorization", "Bearer $token")
             .header("X-Request-Start-Time", (System.currentTimeMillis().toDouble() / 1000.0).toString())
             .header("X-App-Platform", "android")
             .header("X-Device-Id-Hash", stringPref("deviceIdHash"))
             .header("X-App-Version", BuildConfig.VERSION_NAME)
-            .build()
+        return addConversationGeolocationHeader(builder, config.geolocation).build()
     }
 
     private fun buildUrl(config: Config): String? {

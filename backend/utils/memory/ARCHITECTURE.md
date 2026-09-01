@@ -3,8 +3,8 @@
 This package owns the universal memory repository and canonical processing
 pipeline. Persistence contracts live in `backend/database/` and
 `backend/models/`; HTTP entry points live in `backend/routers/`. The normative
-data model is `docs/memory/domain_model.md`, and the convergence record is
-`docs/epics/universal_memory_task_convergence.md`.
+data model is `backend/docs/memory/domain_model.md`, and the convergence record is
+`backend/docs/epics/universal_memory_task_convergence.md`.
 
 ## One logical authority, two retained formats
 
@@ -203,7 +203,7 @@ fences prevent an old lease or retry from resurrecting a recreated account.
 ## Operational controls and rollback
 
 The supported controls and rollback floor are documented in
-`docs/runbooks/universal-memory-operations.md`.
+`backend/docs/runbooks/universal-memory-operations.md`.
 
 - `MEMORY_ENABLED=on|off` is the one user-facing product flag. Unset fail-closes
   to off. `on` enables intake and list; it does not by itself enable ST→LT

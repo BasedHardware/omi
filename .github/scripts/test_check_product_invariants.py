@@ -238,7 +238,7 @@ class FailClosedTests(unittest.TestCase):
 
     def test_malformed_doc_raises(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            inv_dir = Path(tmp) / "docs" / "product" / "invariants"
+            inv_dir = Path(tmp) / "product" / "invariants"
             inv_dir.mkdir(parents=True)
             # Missing the '# INV-XXX-N: Title' header
             (inv_dir / "broken.md").write_text(
@@ -250,7 +250,7 @@ class FailClosedTests(unittest.TestCase):
 
     def test_valid_doc_loads(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            inv_dir = Path(tmp) / "docs" / "product" / "invariants"
+            inv_dir = Path(tmp) / "product" / "invariants"
             inv_dir.mkdir(parents=True)
             (inv_dir / "chat.md").write_text(SAMPLE, encoding="utf-8")
             result = load_locked_invariants(Path(tmp))
@@ -310,7 +310,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def _registry(tmp: Path, docs: dict[str, str], index_rows: str = "") -> Path:
     """Build a throwaway registry so the audit can be tested on real shapes."""
-    directory = tmp / "docs" / "product" / "invariants"
+    directory = tmp / "product" / "invariants"
     directory.mkdir(parents=True)
     for name, body in docs.items():
         (directory / name).write_text(body, encoding="utf-8")
