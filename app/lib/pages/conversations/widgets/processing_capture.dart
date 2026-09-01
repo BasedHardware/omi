@@ -109,9 +109,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             routeToPage(context, ConversationCapturingPage(topConversationId: provider.topConversationId));
           },
           child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            // Home's day timeline is flat — no cards, entries inset 24 with a
+            // time column. A filled, rounded panel dropped between the day
+            // headline and the day's conversations read as a component from a
+            // different screen, so the live capture keeps its content and loses
+            // the card. 14 + the inner 10 lands it on the timeline's own inset.
+            margin: const EdgeInsets.fromLTRB(14, 0, 14, 4),
             width: double.maxFinite,
-            decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
             child: Padding(
               padding: EdgeInsets.fromLTRB(
                 10,
