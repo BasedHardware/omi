@@ -1,7 +1,7 @@
 """Legacy summary writers must never persist Speaker N placeholders (SCA-395).
 
 `sanitize_structured_speaker_placeholders` (#12503) only ran inside the v2 note
-path (`get_conversation_notes`). Prod runs `CONVERSATION_NOTES_V2_ENABLED=false`,
+path (`get_conversation_notes`). At the time, prod ran `CONVERSATION_NOTES_V2_ENABLED=false`,
 so the legacy writers below produced most summaries — and could persist
 `Speaker 1` / `SPEAKER_00` verbatim. Speaker N is a diarization placeholder that
 is not stable across conversations; it must never reach the saved Structured.

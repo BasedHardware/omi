@@ -1280,7 +1280,7 @@ environments:
               name: prod-omi-backend-config
               key: CONVERSATION_SUMMARIZED_APP_IDS
           CONVERSATION_NOTES_V2_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           MEETING_RECEIPT_RECONCILER_ENABLED:
             value: 'false'
@@ -1574,7 +1574,7 @@ environments:
               value: '9090'
               category: telemetry
             CONVERSATION_NOTES_V2_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             MEETING_RECEIPT_RECONCILER_ENABLED:
               value: 'false'

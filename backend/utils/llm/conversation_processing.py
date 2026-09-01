@@ -1316,6 +1316,10 @@ def get_transcript_structure(
     calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
     output_language_code: Optional[str] = None,
 ) -> Structured:
+    # Legacy writer: with CONVERSATION_NOTES_V2_ENABLED prod-on (2026-09-01) this runs
+    # only where the flag is still off. Retire 2026-09-29 after the four-week prod bake —
+    # a follow-up PR then deletes get_transcript_structure / get_reprocess_transcript_structure
+    # and makes notes v2 the only path. Do not build on this writer.
     # Keep this import at the invocation boundary: selected unit tests load
     # this pure processing module in isolation without the full LLM package.
     from utils.llm.usage_tracker import Features, track_usage
