@@ -383,9 +383,32 @@ def _cluster_embeddings(
 
 
 def _cut_to_count(tree: Any, count: int, total: int) -> List[int]:
-    """Cut the dendrogram into `count` clusters, clamped to [1, total]."""
+    """Cut the dendrogram into `count` clusters, clamped to [1, total].
+
+    The cut is expressed as a distance just below the merge that would take the
+    partition under `count`, not as `criterion="maxclust"`. maxclust resolves
+    near-tied merge heights differently across scipy releases — on 1.14.0 (what
+    backend/pylock.toml installs) three near-orthogonal embeddings at heights
+    0.99761 and 0.99900 collapse into a single cluster, while 1.18.x returns
+    three — so the speaker-count parameters would have been honoured on one
+    deployed stack and silently ignored on the other.
+    """
     bounded = max(1, min(count, total))
-    return [int(label) for label in fcluster(tree, t=bounded, criterion="maxclust")]
+    if bounded == 1:
+        return [1] * total
+
+    # `total - 1` merges, ascending. Keeping the first `total - bounded` of them
+    # leaves `bounded` clusters, so cut immediately below the next merge height.
+    heights = np.sort(np.asarray(tree)[:, 2])
+    cut = float(np.nextafter(heights[total - bounded], -np.inf))
+    labels = [int(label) for label in fcluster(tree, t=cut, criterion="distance")]
+
+    found = len(set(labels))
+    if found != bounded:
+        # Exactly-tied merge heights cannot be separated by any single distance
+        # cut. Report it rather than returning a different count in silence.
+        logger.warning(f"Speaker cut asked for {bounded} clusters but produced {found}; merge heights are tied")
+    return labels
 
 
 def _assign_speaker_labels(segments: List[Dict[str, Any]], embedded_indices: List[int], labels: List[int]) -> None:

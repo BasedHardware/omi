@@ -9,6 +9,7 @@ is arithmetic rather than luck: `_voice_at` positions two voices at a chosen
 angle to each other, and `_voice` gives each speaker its own dimension.
 """
 
+import logging
 import math
 import os
 import struct
@@ -55,8 +56,9 @@ def _voice(index: int) -> np.ndarray:
 
     Each voice owns a dimension, so different indices are near-orthogonal. The
     small shared component on the last dimension makes every pairwise distance
-    slightly different: without it the dendrogram has tied merge heights, and a
-    `maxclust` cut cannot split a tie into an exact cluster count.
+    slightly different: exactly tied merge heights cannot be separated by any
+    single distance cut, so an exact cluster count would not be reachable.
+    See `test_exactly_tied_merge_heights_report_the_shortfall` for that case.
     """
     vector = np.zeros((1, 256), dtype=np.float32)
     vector[0, index] = 1.0
@@ -234,6 +236,24 @@ class TestSpeakerConstraints:
         spans = [(float(i * 3), float(i * 3 + 2), _voice(i)) for i in range(4)]
         labels = _diarize(tmp_path, spans, num_speakers=3, min_speakers=1, max_speakers=2)
         assert len(set(labels)) == 3
+
+    def test_exactly_tied_merge_heights_report_the_shortfall(self, tmp_path, caplog):
+        """Four voices 90 degrees apart tie two merges at exactly 1.0.
+
+        No single distance cut can split an exact tie, so an exact count is not
+        always reachable. The cut errs toward more clusters — safer for diarization
+        than merging two speakers — and says so instead of silently returning a
+        different count.
+        """
+        spans = [
+            (float(i * 3), float(i * 3 + 2), _voice_at(degrees)) for i, degrees in enumerate([0.0, 90.0, 180.0, 270.0])
+        ]
+
+        with caplog.at_level(logging.WARNING):
+            labels = _diarize(tmp_path, spans, num_speakers=3)
+
+        assert len(set(labels)) == 4
+        assert 'merge heights are tied' in caplog.text
 
 
 class TestShortAndFailedSegments:
