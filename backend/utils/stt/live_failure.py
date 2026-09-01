@@ -32,8 +32,12 @@ _KNOWN_FAILURE_REASONS = frozenset(
         'connection_lost',
         'send_failed',
         'socket_unavailable',
-        # Typed in-stream provider rejections (utils.stt.soniox): a provider
-        # that accepted the upgrade and then answered an error frame.
+        # Typed in-stream provider rejections. Soniox answers typed error
+        # codes (utils.stt.soniox); Modulate/Velma answers free-text frames
+        # that the socket bounds to MODULATE_DEATH_SERVE_ERROR when the
+        # provider failed to serve the stream it had accepted
+        # (utils.stt.streaming.modulate_death_reason).
+        'modulate_serve_error',
         'soniox_account_state',
         'soniox_idle_timeout',
         'soniox_rotation',
@@ -47,6 +51,7 @@ _FAILURE_PHASE_BY_REASON = {
     # A typed in-stream rejection is the provider closing a connection it had
     # accepted. The bounded phase vocabulary has no 'serve' bucket, and 'send'
     # would claim our send failed, so 'connection' is the truthful bucket.
+    'modulate_serve_error': 'connection',
     'soniox_account_state': 'connection',
     'soniox_idle_timeout': 'connection',
     'soniox_rotation': 'connection',
@@ -62,6 +67,19 @@ _CIRCUIT_OPENING_REASONS = frozenset(
         # this session's VAD pattern and a 413 rotation serves fine on a fresh
         # connection — so they must not bench the provider for everyone.
         'soniox_account_state',
+        # Velma's mid-session "Internal server error" / "Unable to complete
+        # the request" frames: the provider accepted the stream, served audio,
+        # and then failed. This is the dominant live-STT outage shape
+        # (backend-listen #3/#10 signatures, 2026-08-31: ×11 and ×5 per 30m),
+        # and mid-session failover rescues the session — which is exactly why
+        # the death would otherwise stay invisible to selection: the surviving
+        # session never runs the terminal funnel that feeds the circuit, and
+        # the next session's successful connect resets the counter. One
+        # serve-error death opens the circuit for one cooldown window; the
+        # half-open probe restores Velma as soon as one stream serves again.
+        # Session-scoped shapes (invalid input audio) stay untyped and do not
+        # bench the provider.
+        'modulate_serve_error',
     }
 )
 
@@ -161,28 +179,33 @@ def note_typed_provider_death(stt_socket: Any, provider: str | None) -> bool:
         return False
     if typed not in _CIRCUIT_OPENING_REASONS:
         return False
-    _open_serving_provider_circuit(typed, provider)
-    return True
+    return _open_serving_provider_circuit(typed, provider)
 
 
-def _open_serving_provider_circuit(bounded_reason: str, provider: str | None) -> None:
-    """Open the process-local selection circuit of the provider that died serving.
+def _open_serving_provider_circuit(bounded_reason: str, provider: str | None) -> bool:
+    """Open the process-local selection circuit of the provider who died serving.
 
     Deliberately cheap and fail-open: the terminal close of the client session
     must never be delayed or failed by circuit bookkeeping. Imported lazily
     because ``utils.stt.streaming`` imports the socket implementations this
     module classifies, so a module-level import would be circular.
+
+    Returns whether a known provider's circuit actually opened, mirroring
+    ``open_provider_selection_circuit``: unknown provider tokens and internal
+    failures report ``False`` so the seam never claims learning that did not
+    happen.
     """
     try:
         from utils.stt.streaming import open_provider_selection_circuit
 
-        open_provider_selection_circuit(provider, reason=bounded_reason)
+        return open_provider_selection_circuit(provider, reason=bounded_reason)
     except Exception as error:  # noqa: BLE001 — telemetry-adjacent bookkeeping must not fail the terminal path
         logger.warning(
             'Unable to open selection circuit after serve-time death provider=%s error_type=%s',
             bounded_provider(provider),
             type(error).__name__,
         )
+        return False
 
 
 async def terminate_live_stt_session(
