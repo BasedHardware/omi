@@ -1,5 +1,6 @@
 #import "AppDelegate.h"
 #import "OmiDesktopCommandsModule.h"
+#import "OmiGlassPanelView.h"
 
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTUIKit.h>
@@ -52,16 +53,28 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
 {
   RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
   if (self.omiWindowGlass == nil) {
-    self.omiWindowGlass = [[NSVisualEffectView alloc] initWithFrame:rootView.bounds];
-    self.omiWindowGlass.material = NSVisualEffectMaterialUnderWindowBackground;
-    self.omiWindowGlass.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-    self.omiWindowGlass.state = NSVisualEffectStateActive;
-    self.omiWindowGlass.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    OmiGlassPanelView *glass = [[OmiGlassPanelView alloc] initWithFrame:rootView.bounds];
+    [glass setGlassCornerRadius:0];
+    glass.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    self.omiWindowGlass = glass;
   }
   self.omiWindowGlass.frame = rootView.bounds;
   if (self.omiWindowGlass.superview != rootView) {
     [rootView addSubview:self.omiWindowGlass positioned:NSWindowBelow relativeTo:nil];
   }
+}
+
+- (void)hideOmiTitlebarMaterial:(NSWindow *)window
+{
+  NSButton *closeButton = [window standardWindowButton:NSWindowCloseButton];
+  NSView *titlebar = closeButton.superview;
+  for (NSView *view in titlebar.subviews) {
+    if ([view isKindOfClass:NSVisualEffectView.class]) {
+      view.hidden = YES;
+    }
+  }
+  titlebar.wantsLayer = YES;
+  titlebar.layer.backgroundColor = NSColor.clearColor.CGColor;
 }
 
 - (void)installOmiTitlebarAccessory:(NSWindow *)window
@@ -97,7 +110,7 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
   window.titlebarAppearsTransparent = YES;
   window.titleVisibility = NSWindowTitleHidden;
   window.title = @"";
-  window.toolbarStyle = NSWindowToolbarStyleUnified;
+  window.toolbar = nil;
   window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
   window.movableByWindowBackground = NO;
   window.level = NSNormalWindowLevel;
@@ -114,6 +127,7 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
   window.collectionBehavior = behavior;
   [self installOmiWindowGlass:window];
   [self installOmiTitlebarAccessory:window];
+  [self hideOmiTitlebarMaterial:window];
   [window standardWindowButton:NSWindowCloseButton].hidden = NO;
   [window standardWindowButton:NSWindowMiniaturizeButton].hidden = NO;
   [window standardWindowButton:NSWindowZoomButton].hidden = NO;
