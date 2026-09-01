@@ -34,12 +34,15 @@ from enum import Enum
 from dataclasses import dataclass, field
 import atexit
 import importlib
+import logging
 import os
 import re
 import threading
 from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, cast
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+logger = logging.getLogger(__name__)
 
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud import firestore
@@ -58,7 +61,7 @@ from database.firestore_index_registry import (
 )
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import cleanup_expired_memory_deletion_receipts
-from models.memory_apply import MemoryControlState
+from models.memory_apply import MemoryControlState, WriterMode
 from models.memory_contracts import deterministic_contract_id
 from models.product_memory import (
     LedgerWriteReason,
@@ -4881,6 +4884,24 @@ def run_daily_memory_sweep_scheduler(
                 errors.append(f"uid={uid}:cohort_unavailable")
                 continue
             control = ensure_canonical_apply_control_state(uid, db_client=db_client)
+            if control.writer_mode is not WriterMode.ledger:
+                # An enrolled account that has not completed ledger cutover
+                # cannot commit ordinary ledger writes (require_writer_admitted
+                # refuses them in compatibility mode), so claiming its day only
+                # burns receipt leases and fails the whole hourly job with
+                # WriterAdmissionError. Pre-drain is an expected rollout state:
+                # skip quietly and retry after the maintenance drain moves the
+                # account to ledger mode. The account's day cursor does not
+                # advance, so no day is lost — pending days catch up in
+                # bounded windows once the account drains.
+                logger.info(
+                    "daily-memory-sweep skipping uid=%s: writer_mode=%s awaits ledger cutover",
+                    uid,
+                    control.writer_mode.value,
+                )
+                blocked_users += 1
+                completed_uids.append(uid)
+                continue
             timezone_name = str(timezone_resolver(uid) or "UTC")
             cursor = _read_cursor(db_client, uid, control)
             if cursor.last_completed_local_date is not None and cursor.timezone_name != timezone_name:

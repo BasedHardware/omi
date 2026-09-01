@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from google.cloud import firestore
 import pytest
 
-from models.memory_apply import MemoryControlState
+from models.memory_apply import MemoryControlState, WriterMode
 from models.memory_contracts import deterministic_contract_id
 from services.users import data_export
 from utils.memory.daily_memory_sweep import (
@@ -1934,3 +1934,88 @@ def test_legacy_compatibility_proof_still_fails_closed_above_the_scan_ceiling():
 
     with pytest.raises(SweepAuthoritativeQueryUnavailable):
         _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
+
+
+def test_scheduler_skips_predrain_accounts_without_error_or_claims(monkeypatch):
+    """Regression: enrolled-but-undrained accounts failed the job hourly.
+
+    Every beta account starts in ``compatibility`` writer mode until the
+    maintenance drain publishes its ledger cutover, and ordinary ledger writes
+    are refused there (``require_writer_admitted``). The scheduler used to
+    claim the day anyway: the write died with WriterAdmissionError, the burned
+    receipt lease shadowed the retries as ``source_idempotency_conflict``, and
+    the hourly job exited 1 — observed continuously in dev on the dogfood
+    account (still compatibility at epoch 0). Pre-drain is an expected rollout
+    state: skip quietly, advance the fair page, and leave the account's day
+    cursor untouched so pending days catch up after the drain.
+    """
+
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+    )
+    assert control.writer_mode is not WriterMode.ledger
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    db = _Db()
+    source_calls = []
+
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True),
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: True,
+    )
+
+    assert summary.errors == ()
+    assert summary.completed_uids == ("user-1",)
+    assert summary.failed_uids == ()
+    assert summary.blocked_users == 1
+    assert source_calls == []
+    # No receipt claim, cursor write, or any other document was touched.
+    assert db.store == {}
+
+
+def test_scheduler_proceeds_for_ledger_mode_accounts(monkeypatch):
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    db = _Db()
+    source_calls = []
+
+    run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True) or None,
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: True,
+    )
+
+    # The gate is passed: the scheduler advanced beyond writer-mode admission
+    # into ordinary day planning for this account (which asks the source
+    # provider for the pending day's packet).
+    assert source_calls != []
