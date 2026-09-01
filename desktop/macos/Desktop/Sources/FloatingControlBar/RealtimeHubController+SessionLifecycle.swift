@@ -406,15 +406,11 @@ extension RealtimeHubController {
       }
     #endif
     sessionVoiceContextFreshnessIdentity = topLevelContext.snapshotFreshnessIdentity
-    let onboardingDemoContext = FloatingControlBarManager.shared.sharedFloatingProvider?.onboardingDemoContext
-    if let onboardingDemoContext, !onboardingDemoContext.isEmpty {
-      log("RealtimeHub: onboarding demo note included in voice instructions (\(onboardingDemoContext.count) chars)")
-    }
     let instructions = RealtimeHubTools.systemInstruction(
       kernelContext: topLevelContext.rendered,
       kernelSemanticGuidance: topLevelContext.semanticGuidance,
       userLanguages: AssistantSettings.shared.voiceBaseLanguages,
-      onboardingDemoContext: onboardingDemoContext)
+      onboardingDemoContext: RealtimeHubTools.activeOnboardingDemoContext())
     let s = RealtimeHubSession(
       provider: provider,
       auth: auth,
@@ -925,7 +921,6 @@ extension RealtimeHubController {
         self.legacyVoiceJournalImportedOwners.insert(ownerID)
         return
       }
-
       var importedKeys = Set<String>()
       for entry in candidates {
         guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { break }
@@ -943,7 +938,6 @@ extension RealtimeHubController {
         guard accepted else { break }
         importedKeys.insert(entry.idempotencyKey)
       }
-
       self.legacyVoiceJournalImportStore.acknowledge(
         ownerID: ownerID, idempotencyKeys: importedKeys)
       if self.legacyVoiceJournalImportStore.nextBatch(ownerID: ownerID)?.isEmpty == true {

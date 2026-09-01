@@ -74,6 +74,18 @@ enum ThreeDoorsDemoPage {
     (url.host ?? "") + url.path == "onboarding/doors-complete"
   }
 
+  /// Handles the return URL (posts `.onboardingDoorsCompleted`); false for any other URL.
+  @MainActor static func handleReturnURL(_ url: URL) -> Bool {
+    guard isReturnURL(url) else { return false }
+    NotificationCenter.default.post(name: .onboardingDoorsCompleted, object: nil)
+    return true
+  }
+
+  /// Set while the onboarding screen-demo step is active. Both the typed-chat kernel context and
+  /// the voice system instruction read it, so the demo's riddles are answerable even before any
+  /// screen frame is OCR'd or embedded (capture just started at this step).
+  @MainActor static var activeModelNote: String?
+
   static func keyMarkup(for tokens: [String]) -> String {
     let keys = tokens.isEmpty ? ["⌥"] : tokens
     let spans = keys.map { #"<span class="key">\#(escape($0))</span>"# }.joined(separator: " ")

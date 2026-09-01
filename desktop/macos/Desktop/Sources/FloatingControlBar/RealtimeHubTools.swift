@@ -45,6 +45,13 @@ enum RealtimeHubTools {
       + "was misheard; interpret it as \(primary). "
   }
 
+  /// The onboarding demo note while the three-doors step is active, else nil (logged once per session build).
+  @MainActor static func activeOnboardingDemoContext() -> String? {
+    guard let note = ThreeDoorsDemoPage.activeModelNote, !note.isEmpty else { return nil }
+    log("RealtimeHub: onboarding demo note included in voice instructions (\(note.count) chars)")
+    return note
+  }
+
   static func systemInstruction(
     kernelContext: String = "",
     kernelSemanticGuidance: String = "",

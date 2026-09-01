@@ -765,7 +765,7 @@ extension SBOnboardingModel {
   func startScreenDemo() {
     screenDemoDone = false
     threeDoorsOpened = false
-    chatProvider.onboardingDemoContext = ThreeDoorsDemoPage.modelNote
+    ThreeDoorsDemoPage.activeModelNote = ThreeDoorsDemoPage.modelNote
     openDoorsObserver = NotificationCenter.default.addObserver(
       forName: .onboardingOpenDoorsRequested, object: nil, queue: .main
     ) { [weak self] _ in
@@ -878,7 +878,7 @@ extension SBOnboardingModel {
   }
 
   func teardownVoiceDemo() {
-    chatProvider.onboardingDemoContext = nil
+    ThreeDoorsDemoPage.activeModelNote = nil
     if let openDoorsObserver { NotificationCenter.default.removeObserver(openDoorsObserver) }
     openDoorsObserver = nil
     if let doorsCompletedObserver { NotificationCenter.default.removeObserver(doorsCompletedObserver) }
