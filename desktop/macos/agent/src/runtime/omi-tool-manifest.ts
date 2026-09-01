@@ -51,7 +51,6 @@ export interface OmiToolResultContract {
   sections: string[];
   ranking: "priority" | "purpose_then_recency";
   maxItemsPerSection: number;
-  digest: { enabledByFlag: string; timeoutMs: number } | null;
 }
 
 export interface OmiToolInputSchema {
@@ -231,7 +230,6 @@ function boundedResult(sections: string[]): OmiToolResultContract {
     sections,
     ranking: "purpose_then_recency",
     maxItemsPerSection: 500,
-    digest: null,
   };
 }
 

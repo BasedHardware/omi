@@ -8,6 +8,13 @@ export interface ProjectedToolPayload {
   omitted: Record<string, number>;
 }
 
+const incompleteProjections = new WeakSet<ProjectedToolPayload>();
+
+export function projectionIsComplete(payload: ProjectedToolPayload): boolean {
+  return !incompleteProjections.has(payload)
+    && Object.values(payload.omitted).every((count) => count === 0);
+}
+
 interface TypedSection {
   name: string;
   total: number;
@@ -32,8 +39,9 @@ export function projectToolResultPayload(input: {
   purposeRankingEnabled?: boolean;
 }): ProjectedToolPayload {
   const contract = toolManifestEntry(input.toolName)?.resultContract;
-  const rankByPurpose = input.purposeRankingEnabled
+  const rankingEnabled = input.purposeRankingEnabled
     ?? process.env[PURPOSE_RANKING_FLAG] === "1";
+  const rankByPurpose = rankingEnabled && contract?.ranking === "purpose_then_recency";
   const sectionPriority = new Map((contract?.sections ?? []).map((name, index) => [name, index]));
   const maxItems = contract?.maxItemsPerSection ?? Number.MAX_SAFE_INTEGER;
   const sections = extractSections(input.result, input.toolName)
@@ -78,7 +86,9 @@ export function projectToolResultPayload(input: {
     // successful, fitting projection rather than throwing or manufacturing ok:false.
     const omitted = Object.fromEntries(sections.map((section) => [section.name, section.total]));
     const minimal = { text: "Tool result available via fullOutputRef.", omitted };
-    return fits(minimal, input.maxBytes) ? minimal : { text: "", omitted: {} };
+    const fallback = fits(minimal, input.maxBytes) ? minimal : { text: "", omitted: {} };
+    incompleteProjections.add(fallback);
+    return fallback;
   }
 
   for (const section of sections) {
@@ -95,6 +105,10 @@ export function projectToolResultPayload(input: {
       payload = candidate;
     }
   }
+  const excerpted = sections.some((section) => section.items.some((item) => (
+    Buffer.byteLength(renderItem(item), "utf8") > fairItemBytes
+  )));
+  if (excerpted) incompleteProjections.add(payload);
   return payload;
 }
 

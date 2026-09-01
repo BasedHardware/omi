@@ -8,6 +8,7 @@ import { maybePruneExpiredToolOutputs, TOOL_OUTPUT_DIRECTORY_NAME } from "./arti
 import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
 import {
   DEFAULT_MODEL_TOOL_RESULT_BUDGET_BYTES,
+  projectionIsComplete,
   projectToolResultPayload,
   toolResultBudgetBytes,
   utf8Excerpt,
@@ -112,7 +113,6 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
     return candidate;
   }
 
-  const recoveredRef = fullOutputRef ?? persistRelayToolOutput(input, input.result) ?? "artifact:unavailable";
   for (let reserve = 768; reserve < budget; reserve += 256) {
     const projection = projectToolResultPayload({
       toolName: input.identity.toolName,
@@ -121,25 +121,33 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
       maxBytes: Math.max(0, budget - reserve),
     });
     const projectedBytes = Buffer.byteLength(JSON.stringify(projection), "utf8");
-    const boundedOriginalBytes = Math.max(executorBytes, projectedBytes + 1);
+    const truncated = !projectionIsComplete(projection);
+    if (truncated && projectedBytes >= executorBytes) continue;
+    const projectedOriginalBytes = truncated ? executorBytes : projectedBytes;
+    const projectedRef = truncated
+      ? fullOutputRef ?? persistRelayToolOutput(input, input.result) ?? "artifact:unavailable"
+      : null;
     const projected = JSON.stringify({
       ok: status === "succeeded",
       ...projection,
       toolResultEnvelope: makeToolResultEnvelope({
         status,
-        truncated: true,
-        originalBytes: boundedOriginalBytes,
+        truncated,
+        originalBytes: projectedOriginalBytes,
         projectedBytes,
-        fullOutputRef: recoveredRef,
+        fullOutputRef: projectedRef,
         purpose,
         provenance: provenance(input.identity),
       }),
     });
     if (Buffer.byteLength(projected, "utf8") <= budget) {
-      input.onDegraded?.({ toolName: input.identity.toolName, originalBytes: boundedOriginalBytes, projectedBytes });
+      if (truncated) {
+        input.onDegraded?.({ toolName: input.identity.toolName, originalBytes: projectedOriginalBytes, projectedBytes });
+      }
       return projected;
     }
   }
+  const recoveredRef = fullOutputRef ?? persistRelayToolOutput(input, input.result) ?? "artifact:unavailable";
   const minimalProjection = { text: "Tool result available via fullOutputRef.", omitted: {} };
   const minimalBytes = Buffer.byteLength(JSON.stringify(minimalProjection), "utf8");
   const minimal = JSON.stringify({
@@ -148,7 +156,7 @@ export function finalizeRelayToolResult(input: FinalizeRelayToolResultInput): st
     toolResultEnvelope: makeToolResultEnvelope({
       status,
       truncated: true,
-      originalBytes: Math.max(executorBytes, minimalBytes + 1),
+      originalBytes: executorBytes,
       projectedBytes: minimalBytes,
       fullOutputRef: recoveredRef,
       provenance: provenance(input.identity),

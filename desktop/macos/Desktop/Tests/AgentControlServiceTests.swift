@@ -360,7 +360,7 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
     XCTAssertLessThan(result.output.utf8.count, envelope.utf8.count)
   }
 
-  func testOverBudgetPayloadLogsInvariantButIsNotRewrittenBySwift() throws {
+  func testOverBudgetPayloadIsClampedAsSuccessfulTruncation() throws {
     let payload = String(repeating: "x", count: RealtimeProviderToolResultPolicy.maximumByteCount + 1)
     let output = try XCTUnwrap(
       String(
@@ -388,11 +388,15 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
       output: output)
 
     XCTAssertTrue(result.wasOversized)
-    XCTAssertFalse(result.wasTruncated)
-    XCTAssertEqual(result.output, output)
+    XCTAssertTrue(result.wasTruncated)
+    XCTAssertLessThanOrEqual(result.output.utf8.count, RealtimeProviderToolResultPolicy.maximumByteCount)
+    XCTAssertNotEqual(result.output, output)
     let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
     XCTAssertEqual(object["ok"] as? Bool, true)
-    XCTAssertEqual((object["toolResultEnvelope"] as? [String: Any])?["status"] as? String, "succeeded")
+    let envelope = try XCTUnwrap(object["toolResultEnvelope"] as? [String: Any])
+    XCTAssertEqual(envelope["status"] as? String, "succeeded")
+    XCTAssertEqual(envelope["truncated"] as? Bool, true)
+    XCTAssertEqual(envelope["fullOutputRef"] as? String, "artifact:unavailable")
   }
 
   func testOversizedProviderResultRetainsTheCanonicalArtifactReference() throws {
@@ -426,7 +430,8 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
 
     XCTAssertTrue(result.wasOversized)
     XCTAssertTrue(result.wasTruncated)
-    XCTAssertEqual(result.output, output)
+    XCTAssertLessThanOrEqual(result.output.utf8.count, RealtimeProviderToolResultPolicy.maximumByteCount)
+    XCTAssertNotEqual(result.output, output)
     XCTAssertEqual(object["ok"] as? Bool, true)
     XCTAssertEqual(envelope["status"] as? String, "succeeded")
     XCTAssertEqual(envelope["truncated"] as? Bool, true)

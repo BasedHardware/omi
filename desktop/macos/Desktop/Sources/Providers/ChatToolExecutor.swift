@@ -1734,15 +1734,11 @@ class ChatToolExecutor {
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
       let references = await ChatCitationProvenanceRegistry.shared.register(
         result.1, runID: runID, attemptID: attemptID)
-      var typedResult = typedReadToolResult(
+      let typedResult = typedReadToolResult(
         toolName: "get_daily_recap",
         sections: result.3,
         totals: result.2)
-      for (index, reference) in references.enumerated() {
-        typedResult = typedResult.replacingOccurrences(
-          of: "{{cite:\(index + 1)}}", with: "[\(reference.ordinal)]")
-      }
-      return typedResult
+      return resolvingCitationMarkers(in: typedResult, references: references)
     } catch {
       logError("Tool get_daily_recap failed", error: error)
       return "Error: \(error.localizedDescription)"
@@ -3264,6 +3260,114 @@ class ChatToolExecutor {
     return json
   }
 
+  /// Builds the typed read-tool boundary without discarding the backend's rendered detail.
+  /// Older servers may omit `sources`; in that case the rendered result remains the canonical
+  /// model-visible content instead of becoming a successful empty section.
+  nonisolated static func typedBackendReadToolResult(
+    toolName: String,
+    resultText: String,
+    sources: [APIClient.ToolSource]?,
+    references: [ChatCitationReference]
+  ) -> String {
+    let sources = sources ?? []
+    guard !sources.isEmpty else {
+      let content = resultText.isEmpty ? "No result text returned." : resultText
+      return typedReadToolResult(
+        toolName: toolName,
+        sections: [["name": "text", "total": 1, "items": [content]]],
+        totals: ["text": 1])
+    }
+
+    let sectionName =
+      toolName == "get_action_items"
+      ? "action_items"
+      : toolName.contains("conversation") ? "conversations" : "memories"
+    let segments = renderedRecordSegments(
+      resultText, toolName: toolName, expectedCount: sources.count)
+    let items: [[String: Any]] = sources.enumerated().map { index, source in
+      var item: [String: Any] = [
+        "title": source.title,
+        "summary": source.preview,
+        "sourceId": source.sourceID,
+      ]
+      if let createdAt = source.createdAt { item["createdAt"] = createdAt }
+      if let momentTimestampMs = source.momentTimestampMs {
+        item["momentTimestampMs"] = momentTimestampMs
+      }
+      if let appName = source.appName { item["appName"] = appName }
+      if let url = source.url { item["url"] = url }
+      if let segments { item["content"] = utf8Prefix(segments[index], maximumBytes: 2 * 1024) }
+      if references.indices.contains(index) { item["citationMarker"] = "[\(references[index].ordinal)]" }
+      return item
+    }
+    var sections: [[String: Any]] = [
+      ["name": sectionName, "total": items.count, "items": items]
+    ]
+    var totals = [sectionName: items.count]
+    if segments == nil, !resultText.isEmpty {
+      sections.append(["name": "text", "total": 1, "items": [resultText]])
+      totals["text"] = 1
+    }
+    return typedReadToolResult(toolName: toolName, sections: sections, totals: totals)
+  }
+
+  private nonisolated static func renderedRecordSegments(
+    _ resultText: String,
+    toolName: String,
+    expectedCount: Int
+  ) -> [String]? {
+    guard expectedCount > 0 else { return nil }
+    let pattern: String
+    if toolName.contains("conversation") {
+      pattern = #"(?m)^Conversation #\d+\s*$"#
+    } else if toolName == "get_action_items" {
+      pattern = #"(?m)^\d+\.\s+"#
+    } else {
+      pattern = #"(?m)^-\s+"#
+    }
+    guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
+    let range = NSRange(resultText.startIndex..., in: resultText)
+    let matches = expression.matches(in: resultText, range: range)
+    guard matches.count == expectedCount else { return nil }
+    return matches.enumerated().compactMap { index, match in
+      let start = match.range.location
+      let end = index + 1 < matches.count ? matches[index + 1].range.location : range.length
+      guard let segmentRange = Range(NSRange(location: start, length: end - start), in: resultText)
+      else { return nil }
+      return resultText[segmentRange].trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+  }
+
+  private nonisolated static func utf8Prefix(_ value: String, maximumBytes: Int) -> String {
+    guard value.utf8.count > maximumBytes else { return value }
+    let suffix = "…"
+    let contentLimit = max(0, maximumBytes - suffix.utf8.count)
+    var bytes = 0
+    var result = ""
+    for character in value {
+      let size = String(character).utf8.count
+      guard bytes + size <= contentLimit else { break }
+      result.append(character)
+      bytes += size
+    }
+    return result + suffix
+  }
+
+  nonisolated static func resolvingCitationMarkers(
+    in result: String,
+    references: [ChatCitationReference]
+  ) -> String {
+    var resolved = result
+    for (index, reference) in references.enumerated() {
+      resolved = resolved.replacingOccurrences(
+        of: "{{cite:\(index + 1)}}", with: "[\(reference.ordinal)]")
+    }
+    return resolved.replacingOccurrences(
+      of: #"\s*\{\{cite:\d+\}\}"#,
+      with: "",
+      options: .regularExpression)
+  }
+
   private static func executeBackendTool(
     _ toolCall: ToolCall,
     runID: String?,
@@ -3291,24 +3395,11 @@ class ChatToolExecutor {
       }
       let references = await ChatCitationProvenanceRegistry.shared.register(
         sources, runID: runID, attemptID: attemptID)
-      let sectionName =
-        toolCall.name == "get_action_items"
-        ? "action_items"
-        : toolCall.name.contains("conversation") ? "conversations" : "memories"
-      let items: [[String: Any]] = sources.enumerated().map { index, source in
-        var item: [String: Any] = [
-          "title": source.title,
-          "summary": source.preview,
-          "sourceId": source.sourceID,
-        ]
-        if let createdAt = source.createdAt { item["createdAt"] = createdAt }
-        if references.indices.contains(index) { item["citationMarker"] = "[\(references[index].ordinal)]" }
-        return item
-      }
-      return typedReadToolResult(
+      return typedBackendReadToolResult(
         toolName: toolCall.name,
-        sections: [["name": sectionName, "total": items.count, "items": items]],
-        totals: [sectionName: items.count])
+        resultText: response.resultText,
+        sources: sources,
+        references: references)
     }
 
     do {

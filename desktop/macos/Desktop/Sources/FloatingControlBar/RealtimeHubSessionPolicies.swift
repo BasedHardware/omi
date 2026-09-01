@@ -418,14 +418,70 @@ enum RealtimeProviderToolResultPolicy {
       providerOutput = compact
     }
     let finalized = finalize(provider: provider, name: name, output: providerOutput)
-    let envelope = parsedCanonicalToolResultEnvelope(from: finalized)
+    let wasOversized = finalized.utf8.count > maximumByteCount
+    let bounded =
+      wasOversized
+      ? clampOversizedResult(provider: provider, name: name, output: finalized)
+      : finalized
+    let envelope = parsedCanonicalToolResultEnvelope(from: bounded)
     let originalByteCount = envelope?["originalBytes"] as? Int ?? output.utf8.count
     let wasTruncated = envelope?["truncated"] as? Bool ?? false
     return RealtimeProviderToolResult(
-      output: finalized,
+      output: bounded,
       originalByteCount: originalByteCount,
-      wasOversized: finalized.utf8.count > maximumByteCount,
+      wasOversized: wasOversized,
       wasTruncated: wasTruncated)
+  }
+
+  /// Defence in depth for a kernel invariant breach. The provider still receives a successful,
+  /// bounded envelope; Swift records the breach but never crashes a dogfood build or forwards an
+  /// unbounded payload. The Node-owned artifact reference is preserved when one exists.
+  private static func clampOversizedResult(
+    provider: RealtimeHubProvider,
+    name: String,
+    output: String
+  ) -> String {
+    let sourceEnvelope = parsedCanonicalToolResultEnvelope(from: output)
+    let status = sourceEnvelope?["status"] as? String ?? "succeeded"
+    let message =
+      "Tool result was truncated at the realtime transport invariant; use fullOutputRef for complete output."
+    let projectedPayload: [String: Any] = ["ok": status == "succeeded", "text": message]
+    let projectedBytes =
+      (try? JSONSerialization.data(withJSONObject: projectedPayload, options: [.sortedKeys]))?.count
+      ?? message.utf8.count
+    let originalBytes = max(
+      sourceEnvelope?["originalBytes"] as? Int ?? output.utf8.count,
+      output.utf8.count,
+      projectedBytes + 1)
+    let provenance =
+      sourceEnvelope?["provenance"] as? [String: Any] ?? [
+        "invocationId": "realtime-\(provider.rawValue)-transport-clamp-\(String(name.prefix(64)))",
+        "runId": "unknown",
+        "attemptId": "unknown",
+        "toolName": String(name.prefix(128)),
+      ]
+    let fullOutputRef = sourceEnvelope?["fullOutputRef"] as? String ?? "artifact:unavailable"
+    let payload: [String: Any] = [
+      "ok": status == "succeeded",
+      "text": message,
+      "toolResultEnvelope": [
+        "version": 1,
+        "status": status,
+        "truncated": true,
+        "originalBytes": originalBytes,
+        "projectedBytes": projectedBytes,
+        "fullOutputRef": fullOutputRef,
+        "provenance": provenance,
+      ],
+    ]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+      data.count <= maximumByteCount,
+      let result = String(data: data, encoding: .utf8)
+    else {
+      return
+        #"{"ok":true,"text":"Tool result truncated.","toolResultEnvelope":{"version":1,"status":"succeeded","truncated":true,"originalBytes":49153,"projectedBytes":40,"fullOutputRef":"artifact:unavailable","provenance":{"invocationId":"realtime-transport-clamp","runId":"unknown","attemptId":"unknown","toolName":"unknown"}}}"#
+    }
+    return result
   }
 
   static func rejectedOutput(

@@ -96,9 +96,9 @@ extension RealtimeHubController {
     if providerResult.wasOversized {
       log(
         "RealtimeHub[\(providerTag)]: INVARIANT VIOLATION unprojected tool result \(name) "
-          + "provider_bytes=\(providerResult.output.utf8.count) limit=\(RealtimeProviderToolResultPolicy.maximumByteCount)"
+          + "original_bytes=\(providerResult.originalByteCount) provider_bytes=\(providerResult.output.utf8.count) "
+          + "limit=\(RealtimeProviderToolResultPolicy.maximumByteCount)"
       )
-      assertionFailure("Unprojected realtime tool result exceeded the transport invariant")
     }
     log(
       "RealtimeHub[\(providerTag)]: tool result \(name) raw_bytes=\(providerResult.originalByteCount) "

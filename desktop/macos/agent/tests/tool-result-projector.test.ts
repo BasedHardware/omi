@@ -53,6 +53,22 @@ describe("manifest-owned tool result projection", () => {
     expect(result.text.indexOf("Ada Lovelace")).toBeLessThan(result.text.indexOf("routine planning"));
   });
 
+  it("keeps manifest priority order when the contract does not opt into purpose ranking", () => {
+    const raw = JSON.stringify({ sections: [{
+      name: "results",
+      total: 2,
+      items: ["routine planning", "Met Ada Lovelace at the compiler meetup"],
+    }] });
+    const result = projectToolResultPayload({
+      toolName: "capture_screen",
+      result: raw,
+      purpose: "interesting person Ada",
+      purposeRankingEnabled: true,
+      maxBytes: 300,
+    });
+    expect(result.text.indexOf("routine planning")).toBeLessThan(result.text.indexOf("Ada Lovelace"));
+  });
+
   it("keeps realistic recap content and exact per-record counts", () => {
     const conversations = Array.from({ length: 52 }, (_, index) => ({
       title: `Conversation ${index + 1}`,
@@ -98,6 +114,7 @@ describe("manifest-owned tool result projection", () => {
     expect(Buffer.byteLength(JSON.stringify(projected), "utf8")).toBeLessThanOrEqual(7_424);
     expect(12 - projected.omitted.conversations).toBeGreaterThanOrEqual(5);
     expect(conversations.filter((item) => projected.text.includes(item.title)).length).toBeGreaterThanOrEqual(5);
+    expect(projected.text).toContain("long transcript evidence");
   });
 
 });

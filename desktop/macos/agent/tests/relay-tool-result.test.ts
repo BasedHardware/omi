@@ -121,6 +121,36 @@ describe("normal pending stdio tool-result boundary", () => {
     }));
   });
 
+  it("does not synthesize truncation or a degraded record for a complete projection", () => {
+    const artifactRoot = mkdtempSync(join(tmpdir(), "omi-relay-tool-result-"));
+    roots.push(artifactRoot);
+    const onDegraded = vi.fn();
+    const items = Array.from({ length: 18 }, (_, index) => ({
+      title: `Conversation ${index}`,
+      summary: `detail-${index}-${"x".repeat(270)}`,
+    }));
+    const result = finalizeRelayToolResult({
+      identity: { ...identity, toolName: "get_conversations" },
+      result: JSON.stringify({
+        ok: true,
+        transportPadding: "p".repeat(4_000),
+        sections: [{ name: "conversations", total: items.length, items }],
+      }),
+      outcome: "succeeded",
+      kernel: kernelWithArtifact(),
+      artifactRoot,
+      onDegraded,
+    });
+    const payload = JSON.parse(result) as {
+      omitted?: Record<string, number>;
+      toolResultEnvelope: { truncated: boolean; originalBytes: number; projectedBytes: number };
+    };
+    expect(payload.omitted?.conversations).toBe(0);
+    expect(payload.toolResultEnvelope.truncated).toBe(false);
+    expect(payload.toolResultEnvelope.originalBytes).toBe(payload.toolResultEnvelope.projectedBytes);
+    expect(onDegraded).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["swift_tool_timeout", "Timed out waiting for the Swift tool executor"],
     ["policy_denied", "Tool capability rejected"],
