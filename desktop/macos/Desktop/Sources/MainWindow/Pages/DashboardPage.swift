@@ -230,6 +230,7 @@ struct DashboardPage: View {
   @ObservedObject private var deviceProvider = DeviceProvider.shared
   @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
   @StateObject private var intelligenceStore = DashboardIntelligenceStore()
+  @StateObject private var dailySummaryStore = HomeDailySummaryStore()
   /// Learned insights ("things about you") — surfaced in the home hub's rotating
   /// knows-list alongside tasks and asks, not just on the Insights page.
   @ObservedObject private var insightStorage = InsightStorage.shared
@@ -749,6 +750,13 @@ struct DashboardPage: View {
 
       homeKnowsList(width: columnWidth)
         .padding(.top, OmiSpacing.xxl)
+        .transition(.homeSuggestionsFade)
+
+      // Yesterday, in the same record mobile shows, with the stats the backend fills from
+      // desktop usage. Self-loading and silent when there is nothing to show.
+      HomeDailySummarySection(store: dailySummaryStore)
+        .frame(width: columnWidth)
+        .padding(.top, OmiSpacing.lg)
         .transition(.homeSuggestionsFade)
 
       Spacer(minLength: 0)

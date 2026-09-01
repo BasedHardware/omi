@@ -1,78 +1,63 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import {
-  ALL_EVENT_NAMES,
   ENTRY_EVENT_NAME,
+  ENTRY_PROPERTY_VALUE,
+  FIRST_RUN_ENTRY_EVENT_NAME,
+  FIRST_RUN_ENTRY_PROPERTY_VALUE,
+  FIRST_RUN_STEP_DEFINITIONS,
   STEP_DEFINITIONS,
+  computeFirstRunFunnelSteps,
   computeFunnelSteps,
 } from '../onboarding-funnel';
 
-const ONBOARDING_VIEW = path.resolve(
-  __dirname,
-  '../../../../desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift',
-);
-
-/** (step index, stepName) pairs actually emitted by the app, in step order. */
-function emittedStepNames(): { step: number; stepName: string }[] {
-  const source = readFileSync(ONBOARDING_VIEW, 'utf8');
-  const re =
-    /onboardingStepCompleted\(\s*step:\s*(\d+),\s*stepName:\s*"([^"]+)"/g;
-  const out: { step: number; stepName: string }[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(source)) !== null) {
-    out.push({ step: Number(m[1]), stepName: m[2] });
-  }
-  return out.sort((a, b) => a.step - b.step);
-}
-
-describe('STEP_DEFINITIONS vs OnboardingView.swift', () => {
-  it('covers exactly the events the app emits, with no dead steps', () => {
-    const emitted = emittedStepNames();
-    expect(emitted.length).toBeGreaterThan(20); // sanity: the regex matched
-
-    const expected = new Set(
-      emitted.map(({ stepName }) => `Onboarding Step ${stepName} Completed`),
+describe('STEP_DEFINITIONS', () => {
+  it('lists the six beats in scenario order, then completed', () => {
+    expect(STEP_DEFINITIONS.map((s) => s.key)).toEqual([
+      'hello',
+      'see',
+      'card',
+      'talk',
+      'write',
+      'ready',
+      'completed',
+    ]);
+    expect(STEP_DEFINITIONS.slice(0, -1).every((s) => s.event === 'Onboarding Beat Completed')).toBe(
+      true,
     );
-    // The terminal event comes from PostHogManager.onboardingCompleted().
-    expected.add('Onboarding Completed');
-
-    expect(new Set(ALL_EVENT_NAMES)).toEqual(expected);
+    expect(STEP_DEFINITIONS[STEP_DEFINITIONS.length - 1].event).toBe('Onboarding Completed');
   });
 
-  it('orders steps the way the app advances through them', () => {
-    const emitted = emittedStepNames();
-    const swiftOrder: number[] = [];
-    for (const { step } of emitted) {
-      if (swiftOrder[swiftOrder.length - 1] !== step) swiftOrder.push(step);
-    }
+  it('enters the funnel on the hello beat', () => {
+    expect(ENTRY_EVENT_NAME).toBe('Onboarding Beat Completed');
+    expect(ENTRY_PROPERTY_VALUE).toBe('hello');
+    expect(STEP_DEFINITIONS[0].key).toBe('hello');
+  });
+});
 
-    const routeOrder = STEP_DEFINITIONS.filter((s) => s.key !== 'completed');
-    expect(routeOrder.length).toBe(swiftOrder.length);
-    routeOrder.forEach((definition, index) => {
-      const stepIndex = swiftOrder[index];
-      const names = emitted
-        .filter((e) => e.step === stepIndex)
-        .map((e) => `Onboarding Step ${e.stepName} Completed`);
-      expect(new Set(definition.eventNames)).toEqual(new Set(names));
-    });
-    expect(STEP_DEFINITIONS[STEP_DEFINITIONS.length - 1].key).toBe('completed');
+describe('FIRST_RUN_STEP_DEFINITIONS', () => {
+  it('lists the five steps in walkthrough order, then completed', () => {
+    expect(FIRST_RUN_STEP_DEFINITIONS.map((s) => s.key)).toEqual([
+      'openWork',
+      'setReminder',
+      'drift',
+      'backToWork',
+      'summary',
+      'completed',
+    ]);
+    expect(
+      FIRST_RUN_STEP_DEFINITIONS.slice(0, -1).every(
+        (s) => s.event === 'First Run Step Completed',
+      ),
+    ).toBe(true);
+    expect(FIRST_RUN_STEP_DEFINITIONS[FIRST_RUN_STEP_DEFINITIONS.length - 1].event).toBe(
+      'First Run Completed',
+    );
   });
 
-  it('pairs every skippable step with its _Skipped variant', () => {
-    // Regression: 'goal' listed only the completed event, so skippers vanished.
-    const goal = STEP_DEFINITIONS.find((s) => s.key === 'goal');
-    expect(goal?.eventNames).toContain('Onboarding Step Goal_Skipped Completed');
-  });
-
-  it('no longer lists the removed Notifications / Research steps', () => {
-    expect(ALL_EVENT_NAMES).not.toContain('Onboarding Step Notifications Completed');
-    expect(ALL_EVENT_NAMES).not.toContain('Onboarding Step Research Completed');
-  });
-
-  it('enters the funnel on the Name step', () => {
-    expect(ENTRY_EVENT_NAME).toBe('Onboarding Step Name Completed');
-    expect(STEP_DEFINITIONS[0].key).toBe('name');
+  it('enters the funnel on the openWork step', () => {
+    expect(FIRST_RUN_ENTRY_EVENT_NAME).toBe('First Run Step Completed');
+    expect(FIRST_RUN_ENTRY_PROPERTY_VALUE).toBe('openWork');
+    expect(FIRST_RUN_STEP_DEFINITIONS[0].key).toBe('openWork');
   });
 });
 
@@ -80,47 +65,122 @@ describe('computeFunnelSteps', () => {
   const byKey = (steps: { key: string; users: number }[], key: string) =>
     steps.find((s) => s.key === key)!.users;
 
-  it('counts a skipper as having reached the step', () => {
+  it('counts a skipped beat as having reached the step', () => {
     const { totalUsers, steps } = computeFunnelSteps([
-      ['a', 'Onboarding Step Name Completed'],
-      ['a', 'Onboarding Step Language Completed'],
-      ['a', 'Onboarding Step HowDidYouHear Completed'],
-      ['a', 'Onboarding Step Trust Completed'],
-      ['a', 'Onboarding Step ScreenRecording_Skipped Completed'],
+      ['a', 'Onboarding Beat Completed', 'hello'],
+      ['a', 'Onboarding Beat Completed', 'see'],
+      ['a', 'Onboarding Beat Completed', 'card'],
+      ['a', 'Onboarding Beat Completed', 'talk'],
+      // Skipped, but the row shape carries no `skipped` column — reaching the
+      // beat at all is what counts, matching the old `_Skipped` semantics.
+      ['a', 'Onboarding Beat Completed', 'write'],
     ]);
     expect(totalUsers).toBe(1);
-    expect(byKey(steps, 'screen_recording')).toBe(1);
-    expect(byKey(steps, 'full_disk_access')).toBe(0);
+    expect(byKey(steps, 'write')).toBe(1);
+    expect(byKey(steps, 'ready')).toBe(0);
   });
 
   it('stops a user at the first gap in the ordered funnel', () => {
     const { steps } = computeFunnelSteps([
-      ['a', 'Onboarding Step Name Completed'],
-      // Language missing.
-      ['a', 'Onboarding Step HowDidYouHear Completed'],
+      ['a', 'Onboarding Beat Completed', 'hello'],
+      // see missing
+      ['a', 'Onboarding Beat Completed', 'card'],
     ]);
-    expect(byKey(steps, 'name')).toBe(1);
-    expect(byKey(steps, 'language')).toBe(0);
-    expect(byKey(steps, 'how_did_you_hear')).toBe(0);
+    expect(byKey(steps, 'hello')).toBe(1);
+    expect(byKey(steps, 'see')).toBe(0);
+    expect(byKey(steps, 'card')).toBe(0);
+  });
+
+  it('handles rows arriving out of beat order', () => {
+    const { steps } = computeFunnelSteps([
+      ['a', 'Onboarding Beat Completed', 'card'],
+      ['a', 'Onboarding Beat Completed', 'hello'],
+      ['a', 'Onboarding Beat Completed', 'see'],
+    ]);
+    expect(byKey(steps, 'hello')).toBe(1);
+    expect(byKey(steps, 'see')).toBe(1);
+    expect(byKey(steps, 'card')).toBe(1);
+    expect(byKey(steps, 'talk')).toBe(0);
+  });
+
+  it('matches the terminal event by name alone, ignoring the property column', () => {
+    const { steps } = computeFunnelSteps([
+      ['a', 'Onboarding Beat Completed', 'hello'],
+      ['a', 'Onboarding Beat Completed', 'see'],
+      ['a', 'Onboarding Beat Completed', 'card'],
+      ['a', 'Onboarding Beat Completed', 'talk'],
+      ['a', 'Onboarding Beat Completed', 'write'],
+      ['a', 'Onboarding Beat Completed', 'ready'],
+      ['a', 'Onboarding Completed', ''],
+    ]);
+    expect(byKey(steps, 'completed')).toBe(1);
   });
 
   it('reports completion rates against the entrant count', () => {
     const { totalUsers, steps } = computeFunnelSteps([
-      ['a', 'Onboarding Step Name Completed'],
-      ['a', 'Onboarding Step Language Completed'],
-      ['b', 'Onboarding Step Name Completed'],
+      ['a', 'Onboarding Beat Completed', 'hello'],
+      ['a', 'Onboarding Beat Completed', 'see'],
+      ['b', 'Onboarding Beat Completed', 'hello'],
     ]);
     expect(totalUsers).toBe(2);
-    expect(steps.find((s) => s.key === 'language')!.completionRate).toBe(50);
+    expect(steps.find((s) => s.key === 'see')!.completionRate).toBe(50);
   });
 
-  it('ignores unknown events and malformed rows', () => {
+  it('ignores legacy Onboarding Step events and malformed rows', () => {
     const { totalUsers } = computeFunnelSteps([
-      ['a', 'Onboarding Step Name Completed'],
-      ['a', 'Some Other Event'],
-      [null as unknown as string, 'Onboarding Step Name Completed'],
+      ['a', 'Onboarding Beat Completed', 'hello'],
+      ['a', 'Onboarding Step Name Completed', undefined],
+      ['a', 'Onboarding Step ScreenRecording_Skipped Completed', undefined],
+      [null as unknown as string, 'Onboarding Beat Completed', 'hello'],
       [] as unknown[],
     ]);
     expect(totalUsers).toBe(1);
+  });
+});
+
+describe('computeFirstRunFunnelSteps', () => {
+  const byKey = (steps: { key: string; users: number }[], key: string) =>
+    steps.find((s) => s.key === key)!.users;
+
+  it('counts a dismissed/fallback step as having reached it', () => {
+    const { totalUsers, steps } = computeFirstRunFunnelSteps([
+      ['a', 'First Run Step Completed', 'openWork'],
+      ['a', 'First Run Step Completed', 'setReminder'],
+      ['a', 'First Run Step Completed', 'drift'],
+    ]);
+    expect(totalUsers).toBe(1);
+    expect(byKey(steps, 'drift')).toBe(1);
+    expect(byKey(steps, 'backToWork')).toBe(0);
+  });
+
+  it('stops a user at the first gap', () => {
+    const { steps } = computeFirstRunFunnelSteps([
+      ['a', 'First Run Step Completed', 'openWork'],
+      // setReminder missing
+      ['a', 'First Run Step Completed', 'drift'],
+    ]);
+    expect(byKey(steps, 'openWork')).toBe(1);
+    expect(byKey(steps, 'setReminder')).toBe(0);
+    expect(byKey(steps, 'drift')).toBe(0);
+  });
+
+  it('reaches completed via the terminal event alone', () => {
+    const { steps } = computeFirstRunFunnelSteps([
+      ['a', 'First Run Step Completed', 'openWork'],
+      ['a', 'First Run Step Completed', 'setReminder'],
+      ['a', 'First Run Step Completed', 'drift'],
+      ['a', 'First Run Step Completed', 'backToWork'],
+      ['a', 'First Run Step Completed', 'summary'],
+      ['a', 'First Run Completed', ''],
+    ]);
+    expect(byKey(steps, 'completed')).toBe(1);
+  });
+
+  it('does not mix rows from the onboarding funnel in', () => {
+    const { totalUsers } = computeFirstRunFunnelSteps([
+      ['a', 'Onboarding Beat Completed', 'hello'],
+      ['a', 'Onboarding Completed', ''],
+    ]);
+    expect(totalUsers).toBe(0);
   });
 });
