@@ -21,6 +21,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
+
 import 'percentage_bar_progress.dart';
 
 class SpeechProfilePage extends StatefulWidget {
@@ -300,9 +301,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                   return ShaderMask(
                                     shaderCallback: (bounds) {
                                       if (provider.text.split(' ').length < 10) {
-                                        return const LinearGradient(
-                                          colors: [Colors.white, Colors.white],
-                                        ).createShader(bounds);
+                                        return const LinearGradient(colors: [Colors.white, Colors.white])
+                                            .createShader(bounds);
                                       }
                                       return const LinearGradient(
                                         colors: [Colors.transparent, Colors.white],
