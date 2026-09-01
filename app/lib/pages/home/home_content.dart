@@ -13,6 +13,7 @@ import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/home/day_snapshot.dart';
 import 'package:omi/pages/home/widgets/day_header.dart';
 import 'package:omi/pages/home/widgets/day_timeline_entry.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
@@ -163,37 +164,34 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer2<ConversationProvider, ActionItemsProvider>(
-      builder: (context, convoProvider, tasksProvider, child) {
-        final day = _selectedDay;
-        final dayConversations = _conversationsOn(convoProvider, day);
-        final shortThreshold = homeShortConversationThreshold(
+    return Selector2<ConversationProvider, ActionItemsProvider, HomeDaySnapshot>(
+      selector: (_, convoProvider, tasksProvider) => buildHomeDaySnapshot(
+        day: _selectedDay,
+        conversations: convoProvider.conversations,
+        tasks: tasksProvider.actionItems,
+        shortThreshold: homeShortConversationThreshold(
           showShortConversations: convoProvider.showShortConversations,
           userThreshold: convoProvider.shortConversationThreshold,
-        );
-        final highlights = <ServerConversation>[];
-        final shortOnes = <ServerConversation>[];
-        for (final conversation in dayConversations) {
-          final isShort = conversation.discarded || conversation.getDurationInSeconds() < shortThreshold;
-          (isShort ? shortOnes : highlights).add(conversation);
-        }
-        final tasksByConversation = _tasksByConversation(tasksProvider);
+        ),
+        isNewUser: convoProvider.conversations.isEmpty &&
+            !convoProvider.isLoadingConversations &&
+            !convoProvider.isFetchingConversations &&
+            !convoProvider.isAwaitingInitialFetchRetry,
+      ),
+      builder: (context, snapshot, child) {
+        final day = _selectedDay;
         final summary = _summariesByDate[_dateKey(day)];
         // Home extends its body behind the app bar, and Scaffold folds the app
         // bar's height into the body's top padding for exactly this — adding
         // kToolbarHeight on top of it double-counts the toolbar.
         final topInset = MediaQuery.paddingOf(context).top;
-        final isNewUser = convoProvider.conversations.isEmpty &&
-            !convoProvider.isLoadingConversations &&
-            !convoProvider.isFetchingConversations &&
-            !convoProvider.isAwaitingInitialFetchRetry;
 
         return RefreshIndicator(
           onRefresh: () async {
             HapticFeedback.mediumImpact();
             await Future.wait([
-              convoProvider.getInitialConversations(),
-              tasksProvider.fetchActionItems(),
+              context.read<ConversationProvider>().getInitialConversations(),
+              context.read<ActionItemsProvider>().fetchActionItems(),
               _loadSummaries(),
             ]);
           },
@@ -210,7 +208,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                 child: DayHeader(
                   day: day,
                   topInset: topInset,
-                  conversations: dayConversations,
+                  conversations: snapshot.conversations,
                   summaryAddresses: summary?.locations.map((location) => location.address).toList() ?? const [],
                   headline: summary?.headline,
                   canGoForward: day.isBefore(_startOfToday()),
@@ -221,7 +219,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                 ),
               ),
               const SliverToBoxAdapter(child: ConversationCaptureWidget()),
-              if (isNewUser)
+              if (snapshot.isNewUser)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Padding(
@@ -232,20 +230,20 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
               else ...[
                 SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    childCount: highlights.length,
-                    (context, index) => _buildEntry(highlights[index], tasksByConversation, tasksProvider),
+                    childCount: snapshot.highlights.length,
+                    (context, index) => _buildEntry(context, snapshot.highlights[index], snapshot),
                   ),
                 ),
-                if (shortOnes.isNotEmpty) SliverToBoxAdapter(child: _buildShortConversationsToggle(shortOnes.length)),
+                if (snapshot.shortOnes.isNotEmpty)
+                  SliverToBoxAdapter(child: _buildShortConversationsToggle(snapshot.shortOnes.length)),
                 if (_shortConversationsExpanded)
                   SliverList(
                     delegate: SliverChildBuilderDelegate(
-                      childCount: shortOnes.length,
-                      (context, index) =>
-                          _buildEntry(shortOnes[index], tasksByConversation, tasksProvider, dimmed: true),
+                      childCount: snapshot.shortOnes.length,
+                      (context, index) => _buildEntry(context, snapshot.shortOnes[index], snapshot, dimmed: true),
                     ),
                   ),
-                if (dayConversations.isEmpty && !_loadingOlderDays)
+                if (snapshot.isEmpty && !_loadingOlderDays)
                   SliverToBoxAdapter(
                     child: _dayLoadStoppedEarly ? _buildKeepLoading(context, day) : _buildEmptyDay(context),
                   ),
@@ -272,38 +270,19 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     );
   }
 
-  List<ServerConversation> _conversationsOn(ConversationProvider provider, DateTime day) {
-    final conversations = provider.conversations
-        .where((conversation) => conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt) == day)
-        .toList();
-    // The day reads top to bottom the way it was lived.
-    conversations.sort((a, b) => (a.startedAt ?? a.createdAt).compareTo(b.startedAt ?? b.createdAt));
-    return conversations;
-  }
-
-  Map<String, List<ActionItemWithMetadata>> _tasksByConversation(ActionItemsProvider provider) {
-    final grouped = <String, List<ActionItemWithMetadata>>{};
-    for (final task in provider.actionItems) {
-      final conversationId = task.conversationId;
-      if (conversationId == null || conversationId.isEmpty) continue;
-      grouped.putIfAbsent(conversationId, () => []).add(task);
-    }
-    return grouped;
-  }
-
   Widget _buildEntry(
+    BuildContext context,
     ServerConversation conversation,
-    Map<String, List<ActionItemWithMetadata>> tasksByConversation,
-    ActionItemsProvider tasksProvider, {
+    HomeDaySnapshot snapshot, {
     bool dimmed = false,
   }) {
     return DayTimelineEntry(
       key: ValueKey(conversation.id),
       conversation: conversation,
-      tasks: tasksByConversation[conversation.id] ?? const [],
+      tasks: snapshot.tasksByConversation[conversation.id] ?? const [],
       dimmed: dimmed,
       onTap: () => _openConversation(conversation),
-      onToggleTask: (task) => tasksProvider.updateActionItemState(task, !task.completed),
+      onToggleTask: (task) => context.read<ActionItemsProvider>().updateActionItemState(task, !task.completed),
     );
   }
 

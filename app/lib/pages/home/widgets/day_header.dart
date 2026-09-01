@@ -106,21 +106,39 @@ class DayHeader extends StatelessWidget {
       ),
     );
 
-    if (points.isEmpty) return content;
-
-    // With a map the header is a place, not a caption: give it room to read as
-    // one instead of a strip behind two lines of text.
-    return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: topInset + math.min(96, MediaQuery.sizeOf(context).height * 0.11)),
-      child: Stack(
-        children: [
-          Positioned.fill(child: _DayMapBackdrop(key: ValueKey(day), points: points, tileProvider: tileProvider)),
-          content,
-        ],
+    // Days differ in whether they have a map at all and in how tall their
+    // headline runs, so stepping between them used to cut the map away and snap
+    // the header to its new height in one frame. Keep one structure and let the
+    // two things that actually change — the backdrop and the height — animate.
+    return AnimatedSize(
+      duration: _dayTransition,
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: points.isEmpty ? 0 : topInset + math.min(96, MediaQuery.sizeOf(context).height * 0.11),
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: AnimatedSwitcher(
+                duration: _dayTransition,
+                child: points.isEmpty
+                    ? const SizedBox.shrink(key: ValueKey('day-map-none'))
+                    : _DayMapBackdrop(key: ValueKey(day), points: points, tileProvider: tileProvider),
+              ),
+            ),
+            content,
+          ],
+        ),
       ),
     );
   }
 }
+
+/// Long enough to read as a transition between two days, short enough that
+/// paging through a week with the arrows never feels held up.
+const Duration _dayTransition = Duration(milliseconds: 260);
 
 /// "Today" / "Yesterday" / "Fri, Sep 5" for the day navigator.
 String dayLabel(BuildContext context, DateTime day) {
