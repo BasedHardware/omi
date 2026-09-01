@@ -28,7 +28,7 @@ REQUIRED_SERVERS = ("notion", "figma", "browser")
 EXACT_NPM_SPEC = re.compile(
     r"^(?:@[^/@]+/[^/@]+|[^/@][^@]*)@\d+\.\d+\.\d+" r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
-SENSITIVE_NAME = re.compile(r"(?:AUTHORIZATION|KEY|SECRET|TOKEN)", re.IGNORECASE)
+SENSITIVE_NAME = re.compile(r"(?:AUTHORIZATION|CREDENTIAL|KEY|PASSPHRASE|PASSWORD|SECRET|TOKEN)", re.IGNORECASE)
 ENV_REFERENCE = re.compile(r"^(?:Bearer )?\$\{env:[A-Za-z_][A-Za-z0-9_]*\}$")
 
 

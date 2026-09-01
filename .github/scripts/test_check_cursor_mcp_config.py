@@ -55,6 +55,26 @@ class CursorMCPConfigContractTests(unittest.TestCase):
             config_errors(self.config),
         )
 
+    def test_rejects_plaintext_credential_under_every_sensitive_name(self) -> None:
+        """The credential rule keys off the variable name, so it has to cover the
+        common spellings — not only the ones this config happens to use today."""
+        for name in (
+            "NOTION_AUTHORIZATION",
+            "NOTION_CREDENTIAL",
+            "NOTION_API_KEY",
+            "NOTION_PASSPHRASE",
+            "NOTION_PASSWORD",
+            "NOTION_SECRET",
+            "NOTION_TOKEN",
+        ):
+            with self.subTest(variable=name):
+                mutated = copy.deepcopy(self.config)
+                mutated["mcpServers"]["notion"]["env"] = {name: "secret-value"}
+                self.assertIn(
+                    f"notion.env.{name} must use a ${{env:NAME}} reference, not a committed value",
+                    config_errors(mutated),
+                )
+
     def test_rejects_credentials_forwarded_to_browser_process(self) -> None:
         self.config["mcpServers"]["browser"]["env"] = {"API_TOKEN": "${env:API_TOKEN}"}
         self.assertIn(
