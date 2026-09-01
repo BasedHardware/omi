@@ -107,9 +107,10 @@ function GlassSurface({
     <ShippingGlassMount style={[styles.glassSurface, style]}>
       <GlassPanel
         glassCornerRadius={token.radius.panel}
-        style={[styles.glassHost, style]}>
-        {children}
-      </GlassPanel>
+        pointerEvents="none"
+        style={StyleSheet.absoluteFill}
+      />
+      {children}
     </ShippingGlassMount>
   );
 }
@@ -735,13 +736,6 @@ const styles = StyleSheet.create({
     shadowOffset: {height: 3, width: 0},
     shadowOpacity: 0.1,
     shadowRadius: 10,
-  },
-  glassHost: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
   },
   glassHairline: {
     backgroundColor: token.color.sheen,
