@@ -90,6 +90,17 @@ describe('ChatBubble', () => {
     expect(container.querySelector('.t-badge')).toHaveAttribute('data-open', 'true');
   });
 
+  it('blurs the notifications control when the fan collapses', () => {
+    const { container } = render(<ChatBubble />);
+    fireEvent.mouseEnter(container.firstChild as HTMLElement);
+    const notify = screen.getByRole('button', { name: 'Notifications' });
+    notify.focus();
+    expect(document.activeElement).toBe(notify);
+
+    fireEvent.mouseLeave(container.firstChild as HTMLElement);
+    expect(document.activeElement).not.toBe(notify);
+  });
+
   it('skips the gooey fan when reduced motion is requested', () => {
     state.reduceMotion = true;
     render(<ChatBubble />);

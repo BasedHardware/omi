@@ -113,6 +113,7 @@
 .t-dropdown[data-side="top"][data-align="end"] { transform-origin: bottom right; }
 .t-dropdown[data-side="right"] { transform-origin: left center; }
 .t-dropdown[data-side="left"] { transform-origin: right center; }
+.t-dropdown[data-origin="top-left"]      { transform-origin: top left; }
 .t-dropdown[data-origin="top-right"]     { transform-origin: top right; }
 .t-dropdown[data-origin="top-center"]    { transform-origin: top center; }
 .t-dropdown[data-origin="bottom-left"]   { transform-origin: bottom left; }

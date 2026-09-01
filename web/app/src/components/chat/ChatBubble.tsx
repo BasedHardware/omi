@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Bell, MessageCircle, X } from 'lucide-react';
 import { Liquid } from 'liquid-gooey';
 import { useReducedMotion } from 'framer-motion';
@@ -43,6 +43,7 @@ export function ChatBubble() {
   const reduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState(false);
   const [coarse, setCoarse] = useState(false);
+  const notifyRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const media = window.matchMedia('(pointer: coarse)');
@@ -51,6 +52,16 @@ export function ChatBubble() {
     media.addEventListener('change', sync);
     return () => media.removeEventListener('change', sync);
   }, []);
+
+  const fan = coarse || hovered;
+
+  useEffect(() => {
+    if (fan) return;
+    const notify = notifyRef.current;
+    if (notify && document.activeElement === notify) {
+      notify.blur();
+    }
+  }, [fan]);
 
   if (reduceMotion) {
     return (
@@ -89,8 +100,6 @@ export function ChatBubble() {
     );
   }
 
-  const fan = coarse || hovered;
-
   return (
     <div
       className="pointer-events-none fixed bottom-20 right-6 z-50 h-[136px] w-14 lg:bottom-6"
@@ -107,6 +116,7 @@ export function ChatBubble() {
       >
         <Liquid.Item x={0} y={fan ? -72 : 0} transition="bouncy">
           <button
+            ref={notifyRef}
             type="button"
             onClick={toggleNotificationCenter}
             className={cn(fabClass, fan ? 'pointer-events-auto' : 'pointer-events-none opacity-0')}
