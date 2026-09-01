@@ -465,30 +465,47 @@ test('Apps page does not mount FlatList and still paints import cards', () => {
   expect(tree).toContain('Tasks');
 });
 
-test('puts shipping chrome inside GlassPanel instead of stacking it on top', () => {
+test('paints shipping chrome in front of a background-only GlassPanel', () => {
   const source = readFileSync(resolve(__dirname, './DesktopApp.tsx'), 'utf8');
   const start = source.indexOf('function GlassSurface');
   const end = source.indexOf('function GlassHairline');
   const glassSurface = source.slice(start, end);
   expect(start).toBeGreaterThan(-1);
+  expect(glassSurface).toContain('pointerEvents="none"');
+  expect(glassSurface).toContain('StyleSheet.absoluteFill');
   expect(glassSurface).toContain('{children}');
-  expect(glassSurface).not.toContain('pointerEvents="none"');
-  expect(glassSurface).not.toContain('StyleSheet.absoluteFill');
+  expect(glassSurface).toMatch(/<GlassPanel[\s\S]*\/>\s*\{children\}/);
+  expect(glassSurface).not.toMatch(
+    /<GlassPanel[^>]*>\s*\{children\}\s*<\/GlassPanel>/,
+  );
+  expect(source).not.toContain('glassHost');
 
   const renderer = renderDesktop();
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Home');
+  expect(tree).toContain('Library');
+  expect(tree).toContain('Tasks');
+  expect(tree).toContain('Rewind');
+  expect(tree).toContain('Apps');
+  expect(tree).toContain("I'm ready.");
+
+  const home = renderer.root
+    .findAllByType(Text)
+    .find(node => node.props.children === 'Home');
+  expect(home).toBeDefined();
+  let ancestor: ReactTestRenderer.ReactTestInstance | null = home!.parent;
+  while (ancestor != null) {
+    expect(ancestor.props.glassCornerRadius).toBeUndefined();
+    ancestor = ancestor.parent;
+  }
+
   const panels = renderer.root.findAll(
     node => node.props.glassCornerRadius !== undefined,
   );
-  const navbar = panels.find(panel =>
-    panel.findAllByType(Text).some(text => text.props.children === 'Home'),
+  expect(panels.length).toBeGreaterThanOrEqual(4);
+  expect(panels.every(panel => panel.props.pointerEvents === 'none')).toBe(
+    true,
   );
-  expect(navbar).toBeDefined();
-  expect(
-    navbar!
-      .findAllByType(Text)
-      .map(text => text.props.children)
-      .join(' '),
-  ).toContain('Tasks');
 });
 
 test('Home and Library chips share a sliding glass pill', () => {

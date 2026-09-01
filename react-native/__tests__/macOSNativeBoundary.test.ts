@@ -435,13 +435,16 @@ test('keeps the glass reduce-transparency fallback intact', () => {
   );
 });
 
-test('uses NSGlassEffectView per panel and HUD only as InkGlass fallback', () => {
+test('uses HUD as the only shipping panel material', () => {
   const source = readNativeSource('OmiGlassPanelView.mm');
 
   expect(source).toContain('static const CGFloat OmiGlassScrimAlpha = 0.46;');
   expect(source).toContain('NSAppearanceNameAqua');
-  expect(source).toContain('NSClassFromString(@"NSGlassEffectView")');
-  expect(source).toContain('self.liquidGlass');
+  expect(source).toContain(
+    'self.material.material = NSVisualEffectMaterialHUDWindow;',
+  );
+  expect(source).toContain('self.material = [[NSVisualEffectView alloc]');
+  expect(source).toContain('[self addSubview:self.material]');
   expect(source).toContain('self.sheen');
   expect(source).toContain('NSMaxY(self.bounds) - OmiGlassSheenHeight');
   expect(source).toContain(
@@ -450,15 +453,9 @@ test('uses NSGlassEffectView per panel and HUD only as InkGlass fallback', () =>
   expect(source).toContain(
     'self.fallback.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;',
   );
-  expect(source).toContain(
-    'self.material.material = NSVisualEffectMaterialHUDWindow;',
-  );
-  expect(source).toMatch(
-    /if \(self\.liquidGlass != nil\) \{\s*\[self addSubview:self\.liquidGlass\];/,
-  );
-  expect(source).toMatch(
-    /if \(self\.liquidGlass == nil\) \{\s*self\.material = \[\[NSVisualEffectView alloc\]/,
-  );
+  expect(source).not.toContain('NSGlassEffectView');
+  expect(source).not.toContain('liquidGlass');
+  expect(source).not.toContain('OmiMakeLiquidGlass');
   expect(source).not.toContain(
     'self.material.hidden = reduceTransparency || hasLiquid;',
   );
@@ -475,19 +472,33 @@ test('uses NSGlassEffectView per panel and HUD only as InkGlass fallback', () =>
   );
 });
 
-test('hosts React children in NSGlassEffectView contentView and clips to the panel', () => {
+test('never orphans contentHost and never hosts chrome in setContentView', () => {
   const source = readNativeSource('OmiGlassPanelView.mm');
+  const attachStart = source.indexOf('- (void)omiAttachContentHost');
+  const layoutStart = source.indexOf('- (void)layout');
+  const layoutEnd = source.indexOf('\n}', layoutStart);
+  const layoutSource = source.slice(layoutStart, layoutEnd);
 
   expect(source).toContain(
     '@property (nonatomic, strong) NSView *contentHost;',
   );
-  expect(source).toContain('setContentView:');
+  expect(source).toContain('[self addSubview:self.contentHost]');
   expect(source).toContain('insertReactSubview');
   expect(source).toContain('removeReactSubview');
   expect(source).toContain('didUpdateReactSubviews');
   expect(source).toContain('self.clipsToBounds = YES');
   expect(source).toContain('self.layer.masksToBounds = YES');
   expect(source).toContain('[self.contentHost addSubview:subview');
+  expect(source).not.toContain('setContentView:');
+  expect(layoutSource).toContain('self.contentHost.frame = self.bounds');
+  expect(layoutSource).toContain('self.contentHost.superview');
+  expect(attachStart).toBeGreaterThan(-1);
+  expect(source.slice(attachStart, attachStart + 400)).toContain(
+    '[self addSubview:self.contentHost]',
+  );
+  expect(source.slice(attachStart, attachStart + 400)).toContain(
+    'self.contentHost.superview != self',
+  );
 });
 
 test('lets the host choose the glass radius so one panel can run full-bleed', () => {
