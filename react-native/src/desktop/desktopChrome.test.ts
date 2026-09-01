@@ -50,8 +50,8 @@ test('desktop chrome uses the shipping Home Library IA', () => {
   expect(desktopGlassCornerRadius).toBe(22);
   expect(desktopNavBarHeight).toBe(52);
   expect(desktopWindowInset).toBe(8);
-  expect(desktopNavTopInset).toBe(desktopWindowInset);
-  expect(desktopNavTopInset).not.toBe(0);
+  expect(desktopNavTopInset).toBeGreaterThan(desktopWindowInset);
+  expect(desktopNavTopInset).toBe(12);
   expect(desktopTrafficLightLeading).toBe(16);
   expect(desktopTrafficLightButton).toBe(14);
   expect(desktopTrafficLightSpacing).toBe(8);
@@ -108,9 +108,9 @@ test('signed-out and probing first paint hide chat transport errors', () => {
   expect(
     visibleChatError('probing', 'Chat is temporarily unavailable.'),
   ).toBeNull();
-  expect(visibleChatError('ready', 'Chat is temporarily unavailable.')).toBe(
-    'Chat is temporarily unavailable.',
-  );
+  expect(
+    visibleChatError('ready', 'Chat is temporarily unavailable.'),
+  ).toBeNull();
   expect(visibleChatError('ready', null)).toBeNull();
 });
 

@@ -585,7 +585,7 @@ export function DesktopApp({
 }: Props) {
   const [route, setRoute] = useState<DesktopRoute>('Home');
   const navigate = useCallback((next: DesktopRoute) => setRoute(next), []);
-  const error = visibleChatError(session, chatError);
+  const omittedChatError = visibleChatError(session, chatError);
   return (
     <View accessibilityLabel="Omi desktop" style={styles.root}>
       <View style={styles.navbar}>
@@ -600,7 +600,6 @@ export function DesktopApp({
               <ShippingPressable
                 accessibilityRole="button"
                 accessibilityState={{selected: route === label}}
-                active={route === label}
                 key={label}
                 onPress={() => navigate(label)}
                 style={styles.navItem}>
@@ -640,13 +639,12 @@ export function DesktopApp({
         </View>
         <ShippingPressable
           accessibilityLabel="Settings"
-          active={route === 'Settings'}
           onPress={() => navigate('Settings')}
           style={styles.utilityButton}>
           <Settings color={token.color.ink} size={14} />
         </ShippingPressable>
       </View>
-      {error !== null ? <Text style={styles.omnibarError}>{error}</Text> : null}
+      {omittedChatError}
       <ShippingStage stageKey={route} variant="page">
         {route === 'Home' ? (
           <HomeStage
@@ -710,26 +708,28 @@ const styles = StyleSheet.create({
     marginLeft: desktopTrafficLightLeading,
     width: desktopTrafficLightRowWidth,
   },
-  navItems: {alignItems: 'center', flexDirection: 'row', flexShrink: 0, gap: 4},
+  navItems: {alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: 2},
   navItem: {
     alignItems: 'center',
-    borderRadius: 15,
     flexDirection: 'row',
-    gap: 6,
+    gap: 5,
     height: 30,
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 6,
   },
   navText: {
     color: token.color.inkMuted,
     fontFamily: token.font,
     fontSize: token.type.nav,
-    fontWeight: '600',
+    fontWeight: '500',
   },
-  navTextActive: {color: token.color.ink},
+  navTextActive: {
+    color: token.color.ink,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
   utilityButton: {
     alignItems: 'center',
-    borderRadius: 16,
     height: 32,
     justifyContent: 'center',
     padding: 8,
@@ -740,23 +740,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     flexDirection: 'row',
+    flexGrow: 1,
+    flexShrink: 1,
     gap: 8,
     minHeight: 32,
+    minWidth: 220,
     paddingHorizontal: 8,
   },
   omnibarInput: {
     color: token.color.ink,
     flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     fontFamily: token.font,
     fontSize: token.type.search,
     fontWeight: '400',
+    minWidth: 0,
     paddingVertical: 6,
-  },
-  omnibarError: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.meta,
-    paddingHorizontal: 12,
   },
   filterRow: {
     alignItems: 'center',
@@ -854,13 +854,14 @@ const styles = StyleSheet.create({
   },
   chatRow: {gap: 4, paddingVertical: 8},
   sendButton: {
-    backgroundColor: token.color.dark,
-    borderRadius: token.radius.control,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    alignItems: 'center',
+    flexShrink: 0,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
   },
   sendText: {
-    color: token.color.white,
+    color: token.color.ink,
     fontFamily: token.font,
     fontSize: token.type.caption,
     fontWeight: '600',

@@ -48,6 +48,7 @@ test('puts traffic lights in the content chrome next to Home', () => {
   expect(source).toContain('OmiTrafficLightLeading');
   expect(source).toMatch(/OmiTrafficLightLeading\s*=\s*16\.0/);
   expect(source).toMatch(/OmiWindowInset\s*=\s*8\.0/);
+  expect(source).toMatch(/OmiWindowTopInset\s*=\s*12\.0/);
   expect(source).toContain('NSWindowStyleMaskFullSizeContentView');
   expect(source).toContain('titlebarAppearsTransparent = YES');
   expect(source).toContain('NSTitlebarSeparatorStyleNone');
@@ -76,12 +77,23 @@ test('keeps every traffic light at its native standard size and moves only its o
   expect(methodSource).toContain(
     'CGFloat buttonHeight = NSHeight(closeButton.frame);',
   );
-  expect(methodSource).toContain('frame.origin = NSMakePoint(x, y);');
-  expect(methodSource).toContain('x += buttonWidth + OmiTrafficLightSpacing;');
   expect(methodSource).toContain(
-    'CGFloat x = OmiWindowInset + OmiTrafficLightLeading;',
+    'NSView *frameView = window.contentView.superview',
   );
   expect(methodSource).toContain(
+    '[container convertPoint:inFrame fromView:frameView]',
+  );
+  expect(methodSource).toContain('frame.origin = inContainer;');
+  expect(methodSource).toContain(
+    'xInFrame += buttonWidth + OmiTrafficLightSpacing;',
+  );
+  expect(methodSource).toContain(
+    'CGFloat xInFrame = OmiWindowInset + OmiTrafficLightLeading;',
+  );
+  expect(methodSource).toContain(
+    'NSHeight(frameView.bounds) - OmiWindowTopInset - OmiTrafficLightChromeHeight',
+  );
+  expect(methodSource).not.toContain(
     'NSHeight(container.bounds) - OmiWindowInset - OmiTrafficLightChromeHeight',
   );
   expect(methodSource).not.toContain('frame.size =');
@@ -93,7 +105,11 @@ test('titlebar and drag monitor do not steal chrome clicks', () => {
   const header = readNativeSource('AppDelegate.h');
 
   expect(source).toContain('OmiTitlebarPassthroughView');
-  expect(source).toContain('OmiTrafficLightChromeHeight + OmiWindowInset');
+  expect(source).toContain('OmiTrafficLightChromeHeight + OmiWindowTopInset');
+  expect(
+    source.replaceAll('NSAccessibilitySearchFieldSubrole', ''),
+  ).not.toContain('NSAccessibilitySearchFieldRole');
+  expect(source).toContain('NSAccessibilitySearchFieldSubrole');
   expect(source).toContain('installOmiTitlebarClickThrough');
   expect(source).toContain('OmiSwizzleTitlebarHitTest');
   expect(source).toContain('OmiViewBlocksWindowDrag');

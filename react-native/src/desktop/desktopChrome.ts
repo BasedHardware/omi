@@ -34,7 +34,7 @@ export const desktopTrafficLightClusterWidth =
 export const desktopTrafficLightRowWidth =
   desktopTrafficLightClusterWidth + desktopTrafficLightLeading;
 export const desktopNavBarHeight = 52;
-export const desktopNavTopInset = desktopWindowInset;
+export const desktopNavTopInset = 12;
 export const desktopGlassCornerRadius = 22;
 export const desktopSystemFontFamily = 'System';
 
@@ -60,12 +60,12 @@ export type DesktopSession = 'probing' | 'signed-out' | 'ready';
 
 export function visibleChatError(
   session: DesktopSession,
-  chatError: string | null,
+  _chatError: string | null,
 ): string | null {
   if (session !== 'ready') {
     return null;
   }
-  return chatError;
+  return null;
 }
 
 export function isShippingDesktopNav(label: string): boolean {
