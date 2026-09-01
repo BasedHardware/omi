@@ -6,3 +6,4 @@
 Fetcher, SWR, partial-failure, and subscription-scope detail: [`docs/data-contracts.md`](docs/data-contracts.md).
 
 `/dashboard` embeds uid `omi-tv` from `grafana/`; see `grafana/README.md`.
+TV kiosk share links: `/dashboard/tv-links` (admin) → `/tv/view/<token>` (no login); [`docs/tv-mode.md`](docs/tv-mode.md).
