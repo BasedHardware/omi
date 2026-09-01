@@ -29,6 +29,9 @@ static NSString *const OmiBatteryLevelUUID = @"2A19";
 @property(nonatomic, copy) RCTPromiseResolveBlock connectResolve;
 @property(nonatomic, copy) RCTPromiseRejectBlock connectReject;
 @property(nonatomic) NSInteger scanGeneration;
+@property(nonatomic) BOOL awaitingAdapterForScan;
+@property(nonatomic, strong) NSNumber *pendingScanTimeoutSeconds;
+@property(nonatomic, copy) NSArray<NSString *> *pendingScanServiceUuids;
 @end
 
 @implementation OmiNativeModule
@@ -59,9 +62,15 @@ RCT_EXPORT_MODULE(OmiNative)
     _batteries = [NSMutableDictionary dictionary];
     _connectionState = @"disconnected";
     _lastEvent = @"Bluetooth adapter not checked";
-    _central = [[CBCentralManager alloc] initWithDelegate:self queue:dispatch_get_main_queue()];
   }
   return self;
+}
+
+- (void)ensureCentral {
+  if (self.central != nil) {
+    return;
+  }
+  self.central = [[CBCentralManager alloc] initWithDelegate:self queue:dispatch_get_main_queue()];
 }
 
 RCT_REMAP_METHOD(getSnapshot,
@@ -113,7 +122,16 @@ RCT_REMAP_METHOD(startScan,
     self.scanResolve([self deviceList]);
     self.scanResolve = nil;
   }
+  self.awaitingAdapterForScan = NO;
+  [self ensureCentral];
   if (self.central.state != CBManagerStatePoweredOn) {
+    if (self.central.state == CBManagerStateUnknown || self.central.state == CBManagerStateResetting) {
+      self.awaitingAdapterForScan = YES;
+      self.pendingScanTimeoutSeconds = timeoutSeconds;
+      self.pendingScanServiceUuids = serviceUuids;
+      self.scanResolve = resolve;
+      return;
+    }
     self.lastEvent = @"Bluetooth is not powered on";
     resolve(@[]);
     return;
@@ -156,7 +174,12 @@ RCT_REMAP_METHOD(startScan,
 RCT_REMAP_METHOD(stopScan,
                  stopScanWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
-  [self.central stopScan];
+  self.awaitingAdapterForScan = NO;
+  self.pendingScanTimeoutSeconds = nil;
+  self.pendingScanServiceUuids = nil;
+  if (self.central != nil) {
+    [self.central stopScan];
+  }
   self.scanning = NO;
   self.lastEvent = @"Omi scan stopped";
   if (self.scanResolve != nil) {
@@ -170,6 +193,7 @@ RCT_REMAP_METHOD(connectDevice,
                  connectDeviceWithId:(NSString *)identifier
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureCentral];
   CBPeripheral *peripheral = self.peripherals[identifier];
   if (peripheral == nil) {
     reject(@"OMI_DEVICE_UNAVAILABLE", @"Omi device is unavailable", nil);
@@ -202,7 +226,7 @@ RCT_REMAP_METHOD(disconnectDevice,
                  disconnectDeviceWithId:(NSString *)identifier
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
-  if ([self.connectedPeripheral.identifier.UUIDString isEqualToString:identifier]) {
+  if (self.central != nil && [self.connectedPeripheral.identifier.UUIDString isEqualToString:identifier]) {
     [self.central cancelPeripheralConnection:self.connectedPeripheral];
   }
   resolve(nil);
@@ -211,6 +235,22 @@ RCT_REMAP_METHOD(disconnectDevice,
 - (void)centralManagerDidUpdateState:(CBCentralManager *)central {
   self.lastEvent = [NSString stringWithFormat:@"Bluetooth is %@", [self bluetoothState]];
   [self emitSnapshot];
+  if (!self.awaitingAdapterForScan || self.scanResolve == nil) {
+    return;
+  }
+  self.awaitingAdapterForScan = NO;
+  RCTPromiseResolveBlock pending = self.scanResolve;
+  NSNumber *timeoutSeconds = self.pendingScanTimeoutSeconds;
+  NSArray<NSString *> *serviceUuids = self.pendingScanServiceUuids;
+  self.scanResolve = nil;
+  self.pendingScanTimeoutSeconds = nil;
+  self.pendingScanServiceUuids = nil;
+  if (central.state == CBManagerStatePoweredOn) {
+    [self startScanWithTimeout:timeoutSeconds serviceUuids:serviceUuids resolver:pending rejecter:nil];
+    return;
+  }
+  self.lastEvent = @"Bluetooth is not powered on";
+  pending(@[]);
 }
 
 - (void)centralManager:(CBCentralManager *)central
@@ -429,6 +469,9 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
 }
 
 - (NSString *)bluetoothState {
+  if (self.central == nil) {
+    return @"unknown";
+  }
   switch (self.central.state) {
     case CBManagerStatePoweredOn: return @"poweredOn";
     case CBManagerStatePoweredOff: return @"poweredOff";

@@ -32,6 +32,39 @@ test('macOS chrome is DesktopApp after first paint for every session state', () 
   expect(orchestrator).not.toContain('"Saved data unavailable"');
 });
 
+test('macOS first paint and session probe do not require native devices or BLE', () => {
+  const onboarding = readFileSync(
+    resolve(__dirname, 'src/app/useOnboarding.ts'),
+    'utf8',
+  );
+
+  expect(orchestrator).toMatch(
+    /useNativeDevices\(\{\s*enabled:\s*!macDesktop\s*\}\)/,
+  );
+  expect(orchestrator).not.toMatch(/useNativeDevices\(\)/);
+  expect(onboarding).toContain('hasCloudSession');
+  expect(onboarding).toContain('setOnboardingRequired(!hasSession)');
+  expect(onboarding).not.toContain(
+    'setOnboardingRequired(!completed && !hasSession)',
+  );
+  expect(onboarding).toContain("import {omiAuth} from '../omiNative'");
+  expect(onboarding).not.toMatch(/import \{[^}]*\bomiNative\b/);
+  expect(onboarding).not.toContain('getSnapshot');
+  expect(onboarding).not.toContain('useNativeDevices');
+  expect(onboarding).not.toContain('CBCentral');
+  expect(onboarding).not.toContain('startScan');
+  const desktopMount = orchestrator.slice(
+    orchestrator.indexOf('<DesktopApp'),
+    orchestrator.indexOf('</PageShell>', orchestrator.indexOf('<DesktopApp')),
+  );
+  expect(desktopMount).toContain('onboardingRequired');
+  expect(desktopMount).toContain("? 'probing'");
+  expect(desktopMount).toContain("'signed-out'");
+  expect(desktopMount).not.toContain('nativeSnapshot');
+  expect(desktopMount).not.toContain('omiNative');
+  expect(desktopMount).not.toContain('useNativeDevices');
+});
+
 test('DesktopApp owns sign-in inside the search-first shell', () => {
   expect(desktopApp).toContain("Search what you've seen and heard");
   expect(desktopApp).toContain('signed-out');

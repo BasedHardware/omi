@@ -25,7 +25,7 @@ export function useOnboarding(
           await auth.markOnboardingComplete();
         }
         if (active) {
-          setOnboardingRequired(!completed && !hasSession);
+          setOnboardingRequired(!hasSession);
         }
       })
       .catch(() => {

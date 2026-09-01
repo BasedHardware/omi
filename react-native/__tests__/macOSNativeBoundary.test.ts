@@ -446,6 +446,55 @@ test('lets the host choose the glass radius so one panel can run full-bleed', ()
   );
 });
 
+test('does not construct CBCentralManager until an explicit scan or connect', () => {
+  const source = readNativeSource('OmiNativeModule.mm');
+  const initStart = source.indexOf('- (instancetype)init');
+  expect(initStart).toBeGreaterThan(-1);
+  const initSource = source.slice(
+    initStart,
+    source.indexOf('\n}\n', initStart),
+  );
+  expect(initSource).toContain('_lastEvent = @"Bluetooth adapter not checked"');
+  expect(initSource).not.toContain('CBCentralManager');
+  expect(initSource).not.toContain('initWithDelegate');
+
+  const snapshotStart = source.indexOf('RCT_REMAP_METHOD(getSnapshot');
+  const snapshotSource = source.slice(
+    snapshotStart,
+    source.indexOf('RCT_REMAP_METHOD(getBluetoothState', snapshotStart),
+  );
+  expect(snapshotSource).not.toContain('ensureCentral');
+  expect(snapshotSource).not.toContain('initWithDelegate');
+
+  const bluetoothStart = source.indexOf('RCT_REMAP_METHOD(getBluetoothState');
+  const bluetoothSource = source.slice(
+    bluetoothStart,
+    source.indexOf('RCT_REMAP_METHOD(requestPermissions', bluetoothStart),
+  );
+  expect(bluetoothSource).not.toContain('ensureCentral');
+  expect(bluetoothSource).not.toContain('initWithDelegate');
+
+  expect(source).toContain('- (void)ensureCentral');
+  expect(source).toContain(
+    'self.central = [[CBCentralManager alloc] initWithDelegate:self queue:dispatch_get_main_queue()]',
+  );
+  const scanStart = source.indexOf('RCT_REMAP_METHOD(startScan');
+  const scanSource = source.slice(
+    scanStart,
+    source.indexOf('RCT_REMAP_METHOD(stopScan', scanStart),
+  );
+  expect(scanSource).toContain('[self ensureCentral]');
+  const connectStart = source.indexOf('RCT_REMAP_METHOD(connectDevice');
+  const connectSource = source.slice(
+    connectStart,
+    source.indexOf('RCT_REMAP_METHOD(disconnectDevice', connectStart),
+  );
+  expect(connectSource).toContain('[self ensureCentral]');
+  expect(source).toMatch(
+    /bluetoothState \{[^]*if \(self\.central == nil\) \{[^]*return @"unknown"/,
+  );
+});
+
 test('exposes a real OmiNative CoreBluetooth module instead of a hardware stub', () => {
   const source = readNativeSource('OmiNativeModule.mm');
   const header = readNativeSource('OmiNativeModule.h');
