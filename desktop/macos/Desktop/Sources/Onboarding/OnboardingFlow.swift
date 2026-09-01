@@ -271,7 +271,11 @@ enum OnboardingFlow {
     // here a mid-onboarding sign-out leaks the prior user's resume point, shortcut-
     // completion status, and role to the next account on the same Mac.
     "sbOnboardingResumeStep",
+    "sbOnboardingResumeStepSchema",
     "sbOnboardingShortcutsCompleted",
+    OnboardingScenarioDefaults.pageAOpenedKey,
+    OnboardingScenarioDefaults.journalKey,
+    OnboardingScenarioDefaults.firstRunPendingKey,
     "onboardingRole",
     "onboardingGoalDraft",
     "onboardingJustCompleted",

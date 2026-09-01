@@ -154,7 +154,7 @@ extension SBOnboardingModel {
         guard let self, !Task.isCancelled else { return }
         // Skipping this step is an explicit choice not to surface its consent.
         // Never let a late Screen Recording grant trigger the modal elsewhere.
-        guard self.step == .systemAudio else { return }
+        guard self.step == .talk, self.talkPhase == .microphone else { return }
         self.appState.checkScreenRecordingPermission()
         if self.appState.hasScreenRecordingPermission {
           // A real process-tap attempt is the only truthful preflight for
@@ -173,10 +173,10 @@ extension SBOnboardingModel {
             return
           }
 
-          guard self.step == .systemAudio else { return }
+          guard self.step == .talk, self.talkPhase == .microphone else { return }
           self.setPermOn("system_audio")
           try? await Task.sleep(nanoseconds: 600_000_000)
-          guard !Task.isCancelled, self.step == .systemAudio else { return }
+          guard !Task.isCancelled, self.step == .talk, self.talkPhase == .microphone else { return }
           self.autoAdvanceIfCurrent("system_audio")
           return
         }
@@ -184,7 +184,7 @@ extension SBOnboardingModel {
         try? await Task.sleep(nanoseconds: 500_000_000)
       }
 
-      guard let self, !Task.isCancelled, self.step == .systemAudio else { return }
+      guard let self, !Task.isCancelled, self.step == .talk, self.talkPhase == .microphone else { return }
       self.resetPermToAsk("system_audio")
     }
   }
@@ -229,6 +229,7 @@ extension SBOnboardingModel {
     guard !Task.isCancelled, permissionKey(for: step) == key else { return }
     if isGranted(key) {
       setPermOn(key)
+      autoAdvanceIfCurrent(key)
     } else if key == "system_audio", appState.hasScreenRecordingPermission,
       appState.systemAudioPermissionStatus == .unknown
     {
@@ -324,12 +325,14 @@ extension SBOnboardingModel {
     }
   }
 
-  func answerMic() { advance(userAnswer: micState == .on ? "Allowed" : "Skip", to: .systemAudio) }
-  func answerSystemAudio() { advance(userAnswer: sysState == .on ? "Allowed" : "Skip", to: .screen) }
-  func answerScreen() { advance(userAnswer: scrState == .on ? "Allowed" : "Skip", to: .files) }
+  func answerMic() { answerTalkMicrophone() }
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
+  func answerSystemAudio() {}
+  func answerScreen() { answerSee() }
   /// Restores the legacy Files-stage contract: scan what is readable after the
   /// Full Disk Access choice, then form the aggregate local-file memories
   /// before moving on. A skipped FDA grant still scans folders macOS permits.
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func answerFiles() {
     switch localFileProfileState {
     case .idle:
@@ -342,6 +345,7 @@ extension SBOnboardingModel {
     }
   }
 
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func startLocalFileScan() {
     guard case .idle = localFileProfileState, localFileScanTask == nil else { return }
     localFileProfileState = .scanning
@@ -356,31 +360,32 @@ extension SBOnboardingModel {
         }
       }
       let result = await self.fileScanRunner(self.appState)
-      guard !Task.isCancelled, self.step == .files, self.localFileScanID == taskID else { return }
+      guard !Task.isCancelled, self.localFileScanID == taskID else { return }
       self.localFileProfileState = result
       if case .complete = result {
         UserDefaults.standard.set(true, forKey: DefaultsKey.hasCompletedFileIndexing.rawValue)
         // If the app closes before the user taps Continue, resuming at Files
         // would otherwise run the scan and import a second time. The scan is
         // complete, so resume at the next stage instead.
-        UserDefaults.standard.set(Step.accessibility.rawValue, forKey: Self.resumeStepKey)
+        UserDefaults.standard.set(Step.ready.rawValue, forKey: Self.resumeStepKey)
       }
     }
   }
 
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func retryLocalFileScan() {
     guard case .failed = localFileProfileState else { return }
     localFileProfileState = .idle
     startLocalFileScan()
   }
 
-  func finishFilesStep() {
-    guard localFileProfileState.isTerminal else { return }
-    advance(userAnswer: nil, to: .accessibility)
-  }
-  func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
-  func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .notifications) }
-  func answerNotifications() { advance(userAnswer: notifState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
+  func finishFilesStep() {}
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
+  func answerAccessibility() {}
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
+  func answerAutomation() {}
+  func answerNotifications() { answerCardNotifications() }
 
   /// Advance past a permission step automatically once its grant lands — but only
   /// when the user is still ON that step, so a late poll never skips a step they've
@@ -398,28 +403,20 @@ extension SBOnboardingModel {
     // instead (`SBPermissionRelaunchGate`).
     guard !needsRelaunch else { return }
     switch step {
-    case .mic: answerMic()
-    case .systemAudio: answerSystemAudio()
-    case .screen: answerScreen()
-    case .files: answerFiles()
-    case .accessibility: answerAccessibility()
-    case .automation: answerAutomation()
-    case .notifications: answerNotifications()
-    default: break
+    case .see where key == "screen_recording": answerSee()
+    case .card where key == "notifications" && cardPhase == .notifications: answerCardNotifications()
+    case .talk where key == "microphone" && talkPhase == .microphone: answerTalkMicrophone()
+    case .hello, .see, .card, .talk, .write, .ready: break
     }
   }
 
   /// The permission key a step gates on, or nil for non-permission steps.
   func permissionKey(for step: Step) -> String? {
     switch step {
-    case .mic: return "microphone"
-    case .systemAudio: return "system_audio"
-    case .screen: return "screen_recording"
-    case .files: return "full_disk_access"
-    case .accessibility: return "accessibility"
-    case .automation: return "automation"
-    case .notifications: return "notifications"
-    default: return nil
+    case .see: return "screen_recording"
+    case .card: return cardPhase == .notifications ? "notifications" : nil
+    case .talk: return talkPhase == .microphone ? "microphone" : nil
+    case .hello, .write, .ready: return nil
     }
   }
 
@@ -428,26 +425,10 @@ extension SBOnboardingModel {
   /// limited to the state already available on the main actor; callers that
   /// need a current TCC answer must use `firstUnaskedStepAwaitingCurrentProbes`.
   func firstUnaskedStep(from target: Step) -> Step {
-    var step = target
-    while let key = permissionKey(for: step) {
-      // These probes are local/cheap. The cross-process probes intentionally
-      // stay out of this synchronous compatibility path and are awaited by the
-      // async entry point below.
-      if ["microphone", "system_audio", "screen_recording"].contains(key) {
-        refreshPermCheck(key)
-      }
-      // A pre-granted FDA permission must still visit Files once so this flow
-      // performs the required scan and aggregate-memory formation.
-      if step == .files, isGranted(key), !localFileProfileState.isTerminal {
-        setPermOn(key)
-        break
-      }
-      guard isGranted(key), let next = Step(rawValue: step.rawValue + 1) else { break }
-      setPermOn(key)
-      step = next
-    }
-    return step
+    Self.firstUnaskedStep(from: target)
   }
+
+  static func firstUnaskedStep(from target: Step) -> Step { target }
 
   /// First-unasked scan for entry points that need a current permission answer.
   /// Every TCC/AX/Apple Events probe is awaited through the off-main refresh
@@ -456,26 +437,8 @@ extension SBOnboardingModel {
     from target: Step,
     refresh: ((String) async -> Void)? = nil
   ) async -> Step {
-    var step = target
-    while let key = permissionKey(for: step) {
-      if let refresh {
-        await refresh(key)
-      } else {
-        await refreshPermCheckOffMain(key)
-      }
-      guard !Task.isCancelled else { return step }
-
-      // A pre-granted FDA permission must still visit Files once so this flow
-      // performs the required scan and aggregate-memory formation.
-      if step == .files, isGranted(key), !localFileProfileState.isTerminal {
-        setPermOn(key)
-        break
-      }
-      guard isGranted(key), let next = Step(rawValue: step.rawValue + 1) else { break }
-      setPermOn(key)
-      step = next
-    }
-    return step
+    _ = refresh
+    return target
   }
 }
 
@@ -520,10 +483,7 @@ extension SBOnboardingModel {
     let rememberedSelection: ShortcutSettings.KeyboardShortcut?
     let isTalk: Bool
     switch step {
-    case .shortcutOpen:
-      rememberedSelection = openShortcutSelection
-      isTalk = false
-    case .shortcutTalk:
+    case .talk where talkPhase == .shortcut:
       rememberedSelection = talkShortcutSelection
       isTalk = true
     default:
@@ -590,11 +550,7 @@ extension SBOnboardingModel {
   /// The shortcuts offered on the current step — used so the user can just PRESS
   /// any offered combo to auto-select it (no need to click the row first).
   private var currentShortcutCandidates: [ShortcutSettings.KeyboardShortcut] {
-    switch step {
-    case .shortcutOpen: return openShortcutOptions.map { $0.shortcut }
-    case .shortcutTalk: return talkShortcutOptions.map { $0.shortcut }
-    default: return []
-    }
+    step == .talk && talkPhase == .shortcut ? talkShortcutOptions.map { $0.shortcut } : []
   }
 
   private func handleShortcutEvent(_ event: NSEvent) -> Bool {
@@ -612,7 +568,7 @@ extension SBOnboardingModel {
     // offered combo select itself on press, so "just press the key" works and the
     // Continue button appears without a separate pick-then-test step.
     let candidates = chosenShortcut.map { [$0] } ?? currentShortcutCandidates
-    let isTalk = step == .shortcutTalk
+    let isTalk = step == .talk && talkPhase == .shortcut
     for sc in candidates {
       let matched: Bool
       switch event.type {
@@ -667,7 +623,7 @@ extension SBOnboardingModel {
   }
 
   func recordShortcut(from event: NSEvent) -> Bool {
-    let isTalk = step == .shortcutTalk
+    let isTalk = step == .talk && talkPhase == .shortcut
     if isTalk, event.type == .flagsChanged {
       let activeModifiers = ShortcutSettings.KeyboardShortcut.normalizedModifiers(event.modifierFlags)
       if activeModifiers.isEmpty {
@@ -735,20 +691,12 @@ extension SBOnboardingModel {
     ShortcutSettings.isSafePushToTalkShortcut(shortcut)
   }
 
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func answerShortcutOpen() {
-    guard shortcutPicked, shortcutPressed else { return }
-    guard GlobalShortcutManager.shared.validateAskOmiShortcutForOnboarding() == .registered else {
-      shortcutRegistrationError =
-        "That shortcut is already in use. Choose a different Open Omi shortcut and test it again."
-      shortcutPressed = false
-      return
-    }
-    advance(userAnswer: "Works", to: .shortcutTalk)
+    // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   }
   func answerShortcutTalk() {
-    guard shortcutPicked, shortcutPressed else { return }
-    UserDefaults.standard.set(true, forKey: Self.shortcutsCompletedKey)
-    advance(userAnswer: "Works", to: .screenDemo)
+    finishTalkShortcut()
   }
 }
 
@@ -809,7 +757,7 @@ extension SBOnboardingModel {
     activate: @escaping @MainActor () -> Void
   ) async {
     let bridgeReady = await warmup()
-    guard !Task.isCancelled, step == .screenDemo else { return }
+    guard !Task.isCancelled, step == .talk, talkPhase == .demo else { return }
     guard bridgeReady else {
       screenDemoPTTUnavailable = true
       return
@@ -818,7 +766,7 @@ extension SBOnboardingModel {
   }
 
   private func activateScreenDemoPTT() {
-    guard step == .screenDemo,
+    guard step == .talk, talkPhase == .demo,
       let bar = FloatingControlBarManager.shared.barState
     else { return }
     PushToTalkManager.shared.setup(barState: bar)
@@ -903,7 +851,7 @@ extension SBOnboardingModel {
     return tokens.isEmpty ? ["fn"] : tokens
   }
 
-  func answerScreenDemo() { advance(userAnswer: "Continue", to: .agents) }
+  func answerScreenDemo() { finishTalkDemo() }
 }
 
 // MARK: - Agents (do things for you)
@@ -947,6 +895,7 @@ extension SBOnboardingModel {
     }
   }
 
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func refreshAgentStates() {
     // Show a "checking" placeholder up front so a not-installed agent never briefly
     // offers a "Connect" button that only flips to "not installed" after a click
@@ -978,6 +927,7 @@ extension SBOnboardingModel {
     await Task.detached { MemoryBankConnector.isInstalled(destination) }.value
   }
 
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func connectAgent(_ id: String) {
     guard agentStates[id] != "connecting", agentStates[id] != "checking", agentStates[id] != "on" else { return }
     agentStates[id] = "connecting"
@@ -995,7 +945,8 @@ extension SBOnboardingModel {
     }
   }
 
-  func answerAgents() { advance(userAnswer: "Continue", to: .context) }
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
+  func answerAgents() {}
 }
 
 // MARK: - Context (connect what I can see)
@@ -1023,6 +974,7 @@ extension SBOnboardingModel {
     ]
   }
 
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func refreshContextStates() {
     if appState.hasFullDiskAccess { contextStates["files"] = "on" }
     Task { [weak self] in
@@ -1134,6 +1086,7 @@ extension SBOnboardingModel {
     contextDetails[id] = resolution.detail
   }
 
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func connectContext(_ id: String) {
     guard contextStates[id] != "connecting", contextStates[id] != "on" else { return }
     // The view owns import-sheet presentation. Keep this guard so another
@@ -1253,6 +1206,7 @@ extension SBOnboardingModel {
   /// Applies an import terminal exactly once. Keeping this state transition in
   /// the onboarding model makes the durable Apps/Home status and the visible
   /// onboarding status change together, so one cannot report a false success.
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func completeGoogleContextImport(
     contextID: String,
     connectorID: String,
@@ -1290,6 +1244,7 @@ extension SBOnboardingModel {
     }
   }
 
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func markContextImportConnected(_ connectorID: String) {
     guard Self.contextConnectionRoute(for: connectorID) == .importConnector(connectorID) else { return }
     contextStates[connectorID] = "on"
@@ -1300,6 +1255,7 @@ extension SBOnboardingModel {
   /// status store. Gmail's context-row ID differs from its Apps ID (`gmail`
   /// vs `email`), so translate at this one authority boundary rather than
   /// allowing a completed shared import to leave the onboarding row stale.
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func markPersistedContextConnectorConnected(_ connectorID: String) {
     switch connectorID {
     case "calendar": markGoogleContextImported("calendar")
@@ -1308,5 +1264,6 @@ extension SBOnboardingModel {
     }
   }
 
-  func answerContext() { advance(userAnswer: "Continue", to: .capture) }
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
+  func answerContext() {}
 }

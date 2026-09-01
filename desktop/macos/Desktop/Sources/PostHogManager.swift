@@ -233,6 +233,27 @@ extension PostHogManager {
       ])
   }
 
+  func onboardingBeatCompleted(
+    beat: String,
+    index: Int,
+    elapsedMs: Int,
+    skipped: Bool,
+    permission: String?,
+    granted: Bool?,
+    detection: String?
+  ) {
+    var properties: [String: Any] = [
+      "beat": beat,
+      "index": index,
+      "elapsed_ms": max(0, elapsedMs),
+      "skipped": skipped,
+    ]
+    if let permission { properties["permission"] = permission }
+    if let granted { properties["granted"] = granted }
+    if let detection { properties["detection"] = detection }
+    track("Onboarding Beat Completed", properties: properties)
+  }
+
   func onboardingCompleted() {
     track("Onboarding Completed")
   }

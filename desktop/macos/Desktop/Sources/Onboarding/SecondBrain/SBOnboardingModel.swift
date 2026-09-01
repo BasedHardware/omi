@@ -27,11 +27,9 @@ struct SBOnboardingWidgetShape: Equatable {
   var shortcutRegistrationError: String? = nil
 }
 
-/// Drives the Second Brain conversational onboarding: a real chat with Omi that
-/// streams word-by-word, collects answers, and performs the SAME live side-effects
-/// as the legacy wizard (name/language → backend, every permission, the summon
-/// shortcut, a live screen+voice demo, agent + context connectors, capture,
-/// completion). No fake steps — every widget does real work.
+/// Drives the Second Brain scenario onboarding: a deterministic chat with Omi
+/// whose permission asks immediately precede real browser, card, PTT, memory,
+/// task, and capture payoffs.
 ///
 /// Core state + lifecycle + copy live here. The heavier per-step behavior
 /// (permissions, shortcut, screen/voice demo, connectors) lives in
@@ -53,9 +51,27 @@ final class SBOnboardingModel: ObservableObject {
   static let defaultCaptureSelection: CaptureSelection = .onlyMeetings
 
   enum Step: Int, CaseIterable {
-    case promise, name, howHeard, language, role
-    case mic, systemAudio, screen, files, accessibility, automation, notifications
-    case shortcutOpen, shortcutTalk, screenDemo, agents, context, capture, referral
+    case hello, see, card, talk, write, ready
+
+    // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
+    // DesktopHomeView still names the old initial sentinel while checking for stale resume state.
+    static let promise = Step.hello
+  }
+
+  enum CardPhase: Equatable {
+    case waitingForAction
+    case notifications
+  }
+
+  enum TalkPhase: Equatable {
+    case microphone
+    case shortcut
+    case demo
+  }
+
+  enum WritePhase: Equatable {
+    case waitingForSend
+    case review
   }
 
   /// "How did you hear about Omi?" options (mirrors the legacy step).
@@ -87,7 +103,7 @@ final class SBOnboardingModel: ObservableObject {
 
   typealias FileScanRunner = @MainActor (AppState) async -> LocalFileProfileState
 
-  @Published var step: Step = .promise
+  @Published var step: Step = .hello
   @Published var thread: [Msg] = []
   /// The current Omi message streaming in (nil once committed).
   @Published var streamingText: String?
@@ -102,6 +118,14 @@ final class SBOnboardingModel: ObservableObject {
   @Published var howHeard: String?
   @Published var roleDraft = ""
   @Published var role: String?
+  @Published var cardPhase: CardPhase = .waitingForAction
+  @Published var talkPhase: TalkPhase = .microphone
+  @Published var writePhase: WritePhase = .waitingForSend
+  @Published var scenarioTaskChips: [String] = []
+  @Published var scenarioMemoryChips: [String] = []
+  @Published var scenarioWriteNote: String?
+  @Published var scenarioWriteDetectionTimedOut = false
+  @Published var scenarioWritesPending = false
 
   // Permissions
   @Published var micState: PermState = .ask
@@ -171,6 +195,13 @@ final class SBOnboardingModel: ObservableObject {
   var voiceCancellable: AnyCancellable?
   var voiceTimeout: Task<Void, Never>?
   var screenDemoSetupTask: Task<Void, Never>?
+  var scenarioDetectionTask: Task<Void, Never>?
+  var scenarioCardTimeoutTask: Task<Void, Never>?
+  let scenarioDates = OnboardingScenarioDates.make()
+  let scenarioPageDirectory = FileManager.default.temporaryDirectory
+    .appendingPathComponent("omi-onboarding-\(UUID().uuidString)", isDirectory: true)
+  var beatStartedAt = Date()
+  var beatExitRecorded = false
 
   // Connectors — keyed by a stable id ("openclaw", "calendar", …) → state string
   // ("idle" | "connecting" | "on" | "unavailable" | "needsSignIn").
@@ -206,6 +237,7 @@ final class SBOnboardingModel: ObservableObject {
   /// `nonisolated(unsafe)` so the nonisolated `deinit` can remove it — the token is
   /// only ever written on the main actor and `removeObserver` is thread-safe.
   nonisolated(unsafe) private var nameObserver: NSObjectProtocol?
+  nonisolated(unsafe) private var scenarioCardActionObserver: NSObjectProtocol?
 
   init(
     appState: AppState,
@@ -268,10 +300,18 @@ final class SBOnboardingModel: ObservableObject {
     ) { [weak self] _ in
       MainActor.assumeIsolated { self?.adoptAsyncName() }
     }
+    scenarioCardActionObserver = NotificationCenter.default.addObserver(
+      forName: .omiFloatingBarCardAction, object: nil, queue: .main
+    ) { [weak self] notification in
+      guard let action = notification.userInfo?["action"] as? String else { return }
+      MainActor.assumeIsolated { self?.handleScenarioCardAction(action) }
+    }
+    prefillDetectedLanguage()
   }
 
   deinit {
     if let nameObserver { NotificationCenter.default.removeObserver(nameObserver) }
+    if let scenarioCardActionObserver { NotificationCenter.default.removeObserver(scenarioCardActionObserver) }
   }
 
   /// Adopt a name that landed after init — but only fill an empty field, never
@@ -287,58 +327,25 @@ final class SBOnboardingModel: ObservableObject {
   func message(for step: Step) -> String {
     let name = displayName
     switch step {
-    case .promise:
+    case .hello:
       return
-        "Hey, I'm Omi, your second brain. I hear your conversations, remember everything, and handle the follow-ups. Three quick things:"
-    case .name: return "What should I call you?"
-    case .howHeard: return "Quick one. How did you hear about Omi?"
-    case .language:
-      return SBOnboardingLanguageCopy.question
-    case .role:
+        "Hi, I'm Omi. I sit at the top of your screen and pay attention to what you're doing, "
+        + "so I can help before you ask. Rather than explain it, let's do one real thing together. "
+        + "About four minutes. What should I call you?"
+    case .see:
+      return "I'm going to open a page in your browser. To see it the way you do, I need Screen Recording."
+    case .card:
       return
-        "Nice to meet you, \(name). What do your days look like? Pick the closest, or tell me. It shapes what I make for you."
-    case .mic:
-      return "Let's give me senses. First, your microphone, so I hear your side of a conversation."
-    case .systemAudio:
-      return "Now system audio, so I hear the other side too: Zoom, Meet, calls."
-    case .screen:
-      // Says what granting this actually starts. `complete()` turns
-      // `screenAnalysisEnabled` on unconditionally, and Rewind then captures every few seconds for
-      // as long as the app runs — the single most consequential thing the product does, and the app
-      // used to state it in exactly one place the user reaches days later (Rewind's empty state).
-      // "Every few seconds" rather than a number: the interval is a setting
-      // (`RewindSettings.captureInterval`, 3s by default, tripled on battery). "The pictures" rather
-      // than "it": the images do stay on this Mac, but `ScreenActivitySyncService` syncs their OCR
-      // text and embeddings to the backend, so an unqualified "it stays on this Mac" would be false.
+        "That's a card. When I spot something on screen worth a heads-up, I show one here, at the notch, "
+        + "and then get out of the way. Try Remind me."
+    case .talk:
+      return "Now ask me about it. I need the microphone."
+    case .write:
+      return "Last one. Tell a friend about it. I opened a note to Sam; say whatever you'd actually say, then send it."
+    case .ready:
       return
-        "Let me see your screen. I'll take a picture every few seconds so you can scrub back to anything you saw — that's Rewind. The pictures stay on this Mac, and you can turn it off anytime in the top bar."
-    case .files:
-      return
-        "Let me read your files, so I can point to your real documents. Read-only, it stays on this Mac, and you can turn it off anytime."
-    case .accessibility:
-      return "Turn on Accessibility, so I can use your shortcut and click and type for you."
-    case .automation:
-      return "Turn on Automation, so I can help with tasks in the apps you choose."
-    case .notifications:
-      return
-        "Turn on Notifications, so I can tell you the moment I notice something — a mistake before you hit send, a meeting about to start, a follow-up you're about to miss."
-    // Both steps used to invite "press any key", and `acceptsRecordedChord` then refused a bare key
-    // in silence — correct (a global bare `L` is unrecoverable) but unexplained. Name the rule.
-    case .shortcutOpen:
-      return "How do you want to open me? Choose one, or pick Custom to set your own — it needs ⌘, ⌃ or ⌥."
-    case .shortcutTalk:
-      return "And to talk to me hands-free? Choose one, or pick Custom to hold your own modifier key."
-    case .screenDemo:
-      return "Here's the fun part."
-    case .agents:
-      return "Want me to do things for you? Connect an agent and I'll put it to work."
-    case .context:
-      return "The more I can see, the more I can help. Connect anything you want me to know:"
-    case .capture:
-      return
-        "You're all set, \(name). Should I listen all the time, or only during your meetings?"
-    case .referral:
-      return "Want to invite a friend? They'll get one free month."
+        "That's the whole idea: I watch, I speak up, I remember. Now let's do it with your real work. "
+        + "I'll guide you from the notch, five short steps. One question first: when should I listen, \(name)?"
     }
   }
 
@@ -389,34 +396,24 @@ final class SBOnboardingModel: ObservableObject {
   /// in System Settings) resumes where you left off instead of restarting.
   static let resumeStepKey = "sbOnboardingResumeStep"
 
-  /// Persisted when the user completes both required shortcut stages through the
-  /// new onboarding flow. Legacy resume states persisted before shortcuts were
-  /// mandatory lacked this flag, so `begin()` clamps them back through the steps.
+  /// Persisted when the talk chord is completed.
   static let shortcutsCompletedKey = "sbOnboardingShortcutsCompleted"
 
   /// Layout version of the persisted `resumeStepKey` value.
   ///
   /// `Step`'s raw values are written to disk, so inserting a case renumbers
   /// every later step and silently reinterprets any resume state written by an
-  /// older build. Version 2 added `.notifications` between `.automation` and
-  /// `.shortcutOpen`; absent (0) means the version-1 layout that predates it.
+  /// older build. Version 3 replaces the prior nineteen-stage layout wholesale
+  /// with six scenario beats, so older values deliberately restart at `hello`.
   static let resumeStepSchemaKey = "sbOnboardingResumeStepSchema"
-  static let resumeStepSchemaVersion = 2
-
-  /// Raw value `.notifications` took in version 2, frozen as a literal.
-  ///
-  /// Deliberately **not** `Step.notifications.rawValue`: this describes a
-  /// historical layout boundary, so it must not move if the enum is edited
-  /// again. A future insertion adds a version 3 rule beside this one.
-  private static let notificationsStepRawInV2 = 11
+  static let resumeStepSchemaVersion = 3
 
   /// Translate a persisted resume step into the current layout.
   ///
-  /// Pure so the renumbering is testable without `UserDefaults`. Anything at or
-  /// after the inserted case shifts up by one; earlier steps are unaffected.
+  /// Pure so the schema-3 restart rule is testable without `UserDefaults`.
   static func migratedResumeStepRaw(savedRaw: Int, storedSchema: Int) -> Int {
-    guard storedSchema < 2 else { return savedRaw }
-    return savedRaw >= notificationsStepRawInV2 ? savedRaw + 1 : savedRaw
+    guard storedSchema >= resumeStepSchemaVersion else { return Step.hello.rawValue }
+    return savedRaw
   }
 
   func begin() {
@@ -429,8 +426,8 @@ final class SBOnboardingModel: ObservableObject {
     // were already saved to the backend/settings, so we just re-enter at the saved
     // step; each permission step re-checks its grant on appear, so a permission
     // granted before the quit shows ✓ rather than prompting again.
-    // Renumber a resume state written before `.notifications` existed before
-    // anything reads it, and stamp the layout so this runs exactly once.
+    // Restart a resume state written for the retired nineteen-stage layout, and
+    // stamp the new layout before anything consumes its raw enum value.
     let persistedRaw = UserDefaults.standard.integer(forKey: Self.resumeStepKey)
     let storedSchema = UserDefaults.standard.integer(forKey: Self.resumeStepSchemaKey)
     let savedRaw = Self.migratedResumeStepRaw(savedRaw: persistedRaw, storedSchema: storedSchema)
@@ -439,14 +436,10 @@ final class SBOnboardingModel: ObservableObject {
       // are not one atomic transaction, and the two orderings fail differently
       // if the process dies between them:
       //
-      //   value first — the stamp is lost, the next launch shifts the *already*
-      //     shifted value again, and a resume at `.referral` (17 -> 18 -> 19)
-      //     lands outside `Step`, so `begin()` silently restarts onboarding
-      //     from `.promise` and the user loses their answers.
-      //   stamp first — the shift is lost, so the value keeps its version-1
-      //     meaning under version-2 numbering: at worst one step off (old
-      //     `.shortcutOpen` reads as `.notifications`), always in range, never
-      //     a restart.
+      //   value first — the stamp can be lost and the already-migrated value can
+      //     be interpreted again on the next launch.
+      //   stamp first — the old value can survive, but it is always validated
+      //     against the new enum before use.
       //
       // Neither is atomic; only one of them can throw away progress.
       UserDefaults.standard.set(Self.resumeStepSchemaVersion, forKey: Self.resumeStepSchemaKey)
@@ -455,30 +448,22 @@ final class SBOnboardingModel: ObservableObject {
       }
     }
     recordSetupStateDisagreementAtRead(savedRaw: savedRaw)
-    if savedRaw > Step.promise.rawValue, let resumed = Step(rawValue: savedRaw) {
-      // A legacy resume state persisted before shortcuts were mandatory bypasses the new
-      // required gate. Clamp it back to the first shortcut stage so the user completes both.
-      let shortcutsDone = UserDefaults.standard.bool(forKey: Self.shortcutsCompletedKey)
-      var effective = resumed
-      // Clamp values >= shortcutTalk (not just >) because a legacy resume at exactly
-      // shortcutTalk without the completion flag means the user never selected or
-      // exercised Open Omi — completing only the Talk stage would set the flag and
-      // bypass Open Omi entirely.
-      if !shortcutsDone, effective.rawValue >= Step.shortcutTalk.rawValue {
-        effective = .shortcutOpen
-        UserDefaults.standard.set(Step.shortcutOpen.rawValue, forKey: Self.resumeStepKey)
+    if savedRaw > Step.hello.rawValue, let resumed = Step(rawValue: savedRaw) {
+      let target = firstUnaskedStep(from: resumed)
+      if target == .talk,
+        UserDefaults.standard.bool(forKey: Self.shortcutsCompletedKey)
+      {
+        talkPhase = .demo
       }
-      // Skip a resumed permission step the user granted while away.
-      let target = firstUnaskedStep(from: effective)
       step = target
       streamMessage(for: target)
       return
     }
     guard
-      SBOnboardingIntroGate.shouldPlay(resumeStepRaw: savedRaw, promiseStepRaw: Step.promise.rawValue)
+      SBOnboardingIntroGate.shouldPlay(resumeStepRaw: savedRaw, promiseStepRaw: Step.hello.rawValue)
     else {
       startAmbientOnboardingMusic()
-      streamMessage(for: .promise)
+      streamMessage(for: .hello)
       return
     }
     // Marked before playing: a quit or crash mid-intro still counts as seen, so the
@@ -489,7 +474,7 @@ final class SBOnboardingModel: ObservableObject {
       // The bed carries over from the intro into the chat onboarding, so the music
       // does not stop and restart across the hand-off.
       self.startAmbientOnboardingMusic()
-      self.streamMessage(for: .promise)
+      self.streamMessage(for: .hello)
     }
   }
 
@@ -509,7 +494,7 @@ final class SBOnboardingModel: ObservableObject {
       from: "completed_flag",
       to: "sb_stage",
       direction: "completed_flag_with_active_stage")
-    if savedRaw > Step.promise.rawValue, Step(rawValue: savedRaw) != nil {
+    if savedRaw > Step.hello.rawValue, Step(rawValue: savedRaw) != nil {
       DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(
         seam: .onboardingSetupState,
         from: "completed_flag",
@@ -550,6 +535,7 @@ final class SBOnboardingModel: ObservableObject {
       }
       guard !Task.isCancelled else { return }
       self.thread.append(Msg(isOmi: true, text: full))
+      OnboardingScenarioJournal().append(who: "omi", text: full)
       self.streamingText = nil
       self.showWidget = true
       self.onStepShown(step)
@@ -560,31 +546,45 @@ final class SBOnboardingModel: ObservableObject {
   /// appears — used to kick off per-step live work (screen capture, demo setup).
   private func onStepShown(_ step: Step) {
     switch step {
-    case .language: prefillDetectedLanguage()
-    case .mic: precheckPerm("microphone")
-    case .systemAudio: precheckPerm("system_audio")
-    case .screen: precheckPerm("screen_recording")
-    case .files: precheckPerm("full_disk_access")
-    case .accessibility: precheckPerm("accessibility")
-    case .automation: precheckPerm("automation")
-    case .notifications: precheckPerm("notifications")
-    case .shortcutOpen, .shortcutTalk: armShortcutSummon()
-    case .screenDemo: startScreenDemo()
-    case .agents: refreshAgentStates()
-    case .context: refreshContextStates()
-    default: break
+    case .see: precheckPerm("screen_recording")
+    case .card:
+      if cardPhase == .notifications { precheckPerm("notifications") } else { presentScenarioCard() }
+    case .talk:
+      switch talkPhase {
+      case .microphone: precheckPerm("microphone")
+      case .shortcut: armShortcutSummon()
+      case .demo: startScreenDemo()
+      }
+    case .write:
+      if writePhase == .waitingForSend { openComposePageAndWaitForSend() }
+    case .hello, .ready: break
     }
   }
 
-  func advance(userAnswer: String?, to next: Step) {
+  func advance(
+    userAnswer: String?,
+    to next: Step,
+    skipped: Bool = false,
+    permission: String? = nil,
+    granted: Bool? = nil,
+    detection: String? = nil
+  ) {
     if let userAnswer, !userAnswer.isEmpty {
       thread.append(Msg(isOmi: false, text: userAnswer))
+      OnboardingScenarioJournal().append(who: "user", text: userAnswer)
     }
+    recordBeatExit(
+      skipped: skipped,
+      permission: permission,
+      granted: granted,
+      detection: detection)
     teardownStep(step)
     // Don't ask for a permission the user has already granted — skip straight to
     // the first step that still needs an answer.
     let target = firstUnaskedStep(from: next)
     step = target
+    beatStartedAt = Date()
+    beatExitRecorded = false
     UserDefaults.standard.set(target.rawValue, forKey: Self.resumeStepKey)
     streamMessage(for: target)
   }
@@ -599,34 +599,35 @@ final class SBOnboardingModel: ObservableObject {
     cancelPermissionPollForCurrentStep()
     rehydrateDrafts()
     step = previous
+    beatStartedAt = Date()
+    beatExitRecorded = false
     UserDefaults.standard.set(previous.rawValue, forKey: Self.resumeStepKey)
     streamMessage(for: previous)
   }
 
-  var canGoBack: Bool {
-    step != .promise
+  var canGoBack: Bool { step != .hello }
+
+  var canSkipOnboarding: Bool {
+    Self.canSkipOnboarding(
+      step: step,
+      shortcutsCompleted: UserDefaults.standard.bool(forKey: Self.shortcutsCompletedKey))
   }
 
-  /// The full-onboarding escape hatch stays unavailable until both required shortcut stages have
-  /// been completed. A persisted flag records that the user went through both stages; legacy resume
-  /// states from before shortcuts were mandatory are clamped back in `begin()`, so the only way to
-  /// reach a stage past `shortcutTalk` with this flag set is through the guarded shortcut answers.
-  var canSkipOnboarding: Bool {
-    step.rawValue > Step.shortcutTalk.rawValue
-      && UserDefaults.standard.bool(forKey: Self.shortcutsCompletedKey)
+  static func canSkipOnboarding(step: Step, shortcutsCompleted: Bool) -> Bool {
+    step.rawValue > Step.talk.rawValue && shortcutsCompleted
   }
 
   /// Tear down any live monitors/tasks a step installed before leaving it.
   private func teardownStep(_ step: Step) {
+    scenarioDetectionTask?.cancel()
+    scenarioDetectionTask = nil
+    scenarioCardTimeoutTask?.cancel()
+    scenarioCardTimeoutTask = nil
     switch step {
-    case .files:
-      localFileScanTask?.cancel()
-      if case .scanning = localFileProfileState {
-        localFileProfileState = .idle
-      }
-    case .shortcutOpen, .shortcutTalk: disarmShortcutSummon()
-    case .screenDemo: teardownVoiceDemo()
-    default: break
+    case .talk:
+      disarmShortcutSummon()
+      teardownVoiceDemo()
+    case .hello, .see, .card, .write, .ready: break
     }
   }
 
@@ -669,19 +670,22 @@ final class SBOnboardingModel: ObservableObject {
     }
   }
 
-  // MARK: promise / name / language / role
+  // MARK: scenario answers
 
-  func answerPromise() { advance(userAnswer: "Set me up", to: .name) }
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
+  func answerPromise() {}
 
   func answerName() {
     let trimmed = nameDraft.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return }
     answerWriteGate.enqueue(.name) { [trimmed] in
       await AuthService.shared.updateGivenName(trimmed)
+      OnboardingScenarioJournal().append(who: "system", text: "Updated the user's given name")
     }
-    advance(userAnswer: trimmed, to: .howHeard)
+    advance(userAnswer: trimmed, to: .see)
   }
 
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   /// Record the acquisition source (analytics + backend, like the legacy step),
   /// then move on.
   func pickHowHeard(_ source: String) {
@@ -691,9 +695,9 @@ final class SBOnboardingModel: ObservableObject {
     answerWriteGate.enqueue(.acquisitionSource) { [source] in
       _ = try? await APIClient.shared.updateOnboardingAcquisitionSource(source)
     }
-    advance(userAnswer: source, to: .language)
   }
 
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   /// Set the user's spoken language locally + on the backend (mirrors the legacy
   /// confirmLanguages, single-primary). Advances optimistically.
   func pickLanguage(code: String, name: String) {
@@ -704,7 +708,6 @@ final class SBOnboardingModel: ObservableObject {
     answerWriteGate.enqueue(.language) { [code] in
       _ = try? await APIClient.shared.updateUserLanguage(code)
     }
-    advance(userAnswer: name, to: .role)
   }
 
   /// Auto-detect the Mac's language and pre-fill it so the picker defaults to it
@@ -733,10 +736,10 @@ final class SBOnboardingModel: ObservableObject {
     pickLanguage(code: code, name: name)
   }
 
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func pickRole(_ r: String) {
     role = r
     UserDefaults.standard.set(r, forKey: DefaultsKey.onboardingRole)
-    advance(userAnswer: r, to: .mic)
   }
 
   func answerRoleText() {
@@ -749,9 +752,15 @@ final class SBOnboardingModel: ObservableObject {
 
   func capture(_ selection: CaptureSelection) {
     AssistantSettings.shared.audioRecordingMode = selection.audioRecordingMode
-    advance(userAnswer: nil, to: .referral)
+    let answer = selection == .always ? "Always" : "Only in meetings"
+    thread.append(Msg(isOmi: false, text: answer))
+    OnboardingScenarioJournal().append(who: "user", text: answer)
+    OnboardingScenarioJournal().append(who: "system", text: "Updated the capture preference")
+    recordBeatExit(skipped: false)
+    complete()
   }
 
+  // onboarding-legacy: unreferenced after scenario onboarding; removal tracked separately.
   func finishReferral() {
     complete()
   }
@@ -766,7 +775,7 @@ final class SBOnboardingModel: ObservableObject {
   ///
   /// `clearOnboardingChatFlag` is the only real difference between the two
   /// paths, and it is ordered exactly where each path had it.
-  func finishOnboardingHandoff(clearOnboardingChatFlag: Bool) {
+  func finishOnboardingHandoff(clearOnboardingChatFlag: Bool, skipped: Bool = false) {
     teardownAll()
     // Fades rather than cuts: onboarding's last beat should not end on a click.
     OmiOnboardingCinematic.stopAmbientMusic()
@@ -774,6 +783,7 @@ final class SBOnboardingModel: ObservableObject {
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: DefaultsKey.onboardingJustCompleted)
     UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
+    UserDefaults.standard.removeObject(forKey: OnboardingScenarioDefaults.pageAOpenedKey)
     if clearOnboardingChatFlag { chatProvider.isOnboarding = false }
     // Answer "what do I do now" before anything renders it. Must precede
     // `presentOnboardingOpener()`, which reads these saved suggestions to build
@@ -802,6 +812,13 @@ final class SBOnboardingModel: ObservableObject {
     // The journal is genuinely async and genuinely optional. Completion is neither.
     OnboardingFlow.markCompleted(for: RuntimeOwnerIdentity.currentOwnerId())
     appState.hasCompletedOnboarding = true
+    UserDefaults.standard.set(true, forKey: OnboardingScenarioDefaults.firstRunPendingKey)
+    OnboardingScenarioJournal().append(who: "system", text: "Completed scenario onboarding handoff")
+    NotificationCenter.default.post(
+      name: .omiOnboardingScenarioCompleted,
+      object: nil,
+      userInfo: ["skipped": skipped]
+    )
     onComplete?()
     Task { [chatProvider] in
       await chatProvider.finishOnboardingJournal()
@@ -812,11 +829,9 @@ final class SBOnboardingModel: ObservableObject {
   /// tab (with the personalized opener), without force-enabling capture or screen
   /// analysis the user chose to bypass. They can turn those on later.
   func skip() {
-    if step == .referral {
-      complete()
-      return
-    }
-    finishOnboardingHandoff(clearOnboardingChatFlag: false)
+    recordBeatExit(skipped: true)
+    OnboardingScenarioJournal().append(who: "user", text: "Skip onboarding")
+    finishOnboardingHandoff(clearOnboardingChatFlag: false, skipped: true)
   }
 
   /// Replicates the essential real side-effects of the legacy handleOnboardingComplete().
@@ -828,7 +843,7 @@ final class SBOnboardingModel: ObservableObject {
     // false) and every later rescan. Leaving it false lets that existing silent
     // backfill actually index the standard folders once the app is up, so the
     // Files connector becomes truly connected with real content.
-    finishOnboardingHandoff(clearOnboardingChatFlag: true)
+    finishOnboardingHandoff(clearOnboardingChatFlag: true, skipped: false)
 
     Task {
       await AgentVMService.shared.startPipeline()
@@ -874,6 +889,10 @@ final class SBOnboardingModel: ObservableObject {
   /// Cancel every live task/monitor this model owns. Safe to call repeatedly.
   private func teardownAll() {
     streamTask?.cancel()
+    scenarioDetectionTask?.cancel()
+    scenarioDetectionTask = nil
+    scenarioCardTimeoutTask?.cancel()
+    scenarioCardTimeoutTask = nil
     localFileScanTask?.cancel()
     localFileScanTask = nil
     localFileScanID = nil

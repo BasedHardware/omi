@@ -206,6 +206,26 @@ class AnalyticsManager {
     PostHogManager.shared.onboardingStepCompleted(step: step, stepName: stepName)
   }
 
+  func onboardingBeatCompleted(
+    beat: String,
+    index: Int,
+    elapsedMs: Int,
+    skipped: Bool,
+    permission: String?,
+    granted: Bool?,
+    detection: String?
+  ) {
+    PostHogManager.shared.onboardingBeatCompleted(
+      beat: beat,
+      index: index,
+      elapsedMs: elapsedMs,
+      skipped: skipped,
+      permission: permission,
+      granted: granted,
+      detection: detection
+    )
+  }
+
   func onboardingHowDidYouHear(source: String) {
     let props: [String: Any] = ["source": source, "is_referral": source == "Friend"]
     PostHogManager.shared.track("Onboarding How Did You Hear", properties: props)

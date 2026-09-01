@@ -577,6 +577,10 @@ struct FloatingControlBarView: View {
     {
       MeetingSummaryShareCard(
         notification: notification, conversationID: conversationID, recipients: recipients)
+    } else if let action = notification.action,
+      let descriptor = action.scenarioDescriptor
+    {
+      scenarioActionCard(notification, descriptor: descriptor)
     } else if notification.assistantId == "suggestion" {
       suggestionCard(notification)
     } else if notification.assistantId == IntegrationNudgeCoordinator.assistantID,
@@ -587,6 +591,67 @@ struct FloatingControlBarView: View {
     } else {
       notificationView(notification)
     }
+  }
+
+  @ViewBuilder
+  private func scenarioActionCard(
+    _ notification: FloatingBarNotification,
+    descriptor: FloatingBarNotificationAction.ScenarioDescriptor
+  ) -> some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      Text(notification.title)
+        .scaledFont(size: OmiType.body, weight: .semibold)
+        .foregroundColor(.white)
+      if !notification.message.isEmpty {
+        Text(notification.message)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(.white.opacity(0.72))
+          .lineLimit(2)
+      }
+      HStack(spacing: OmiSpacing.sm) {
+        switch descriptor.kind {
+        case "onboarding_remind_me":
+          scenarioCardButton("Remind me", descriptor: descriptor, selection: .primary)
+          scenarioCardButton("Not now", descriptor: descriptor, selection: .secondary, primary: false)
+        case "first_run_focus_return":
+          scenarioCardButton("Back to it", descriptor: descriptor, selection: .primary)
+          scenarioCardButton("5 more minutes", descriptor: descriptor, selection: .secondary, primary: false)
+        case "context_reminder":
+          scenarioCardButton("Done", descriptor: descriptor, selection: .primary)
+          scenarioCardButton(
+            "Remind me tomorrow", descriptor: descriptor, selection: .secondary, primary: false)
+        case "first_run_open_summary":
+          scenarioCardButton("Open", descriptor: descriptor, selection: .primary)
+        default:
+          EmptyView()
+        }
+      }
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func scenarioCardButton(
+    _ title: String,
+    descriptor: FloatingBarNotificationAction.ScenarioDescriptor,
+    selection: FloatingBarCardActionDispatcher.Selection,
+    primary: Bool = true
+  ) -> some View {
+    Button {
+      FloatingBarCardActionDispatcher.dispatch(descriptor: descriptor, selection: selection) {
+        FloatingControlBarManager.shared.dismissCurrentNotification()
+      }
+    } label: {
+      Text(title)
+        .scaledFont(size: 12, weight: .semibold)
+        .foregroundColor(primary ? .black : .white.opacity(0.8))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 5)
+        .background(primary ? Color.white : Color.white.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+    .buttonStyle(.plain)
   }
 
   /// Concrete, explicit-only controls for a planned trigger. Each action is

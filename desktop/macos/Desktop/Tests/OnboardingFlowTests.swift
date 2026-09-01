@@ -412,7 +412,7 @@ final class OnboardingFlowTests: XCTestCase {
     }
     XCTAssertEqual(
       secondBrainSource.components(separatedBy: "isDefaultAction: true").count - 1,
-      8,
+      9,
       "every visible second-brain proceed action must register Return")
     XCTAssertTrue(
       secondBrainSource.contains("SBInkButton(title: \"Take me to Omi\", isDefaultAction: true)"),

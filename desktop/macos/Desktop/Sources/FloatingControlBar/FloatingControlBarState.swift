@@ -233,6 +233,44 @@ enum FloatingBarNotificationAction: Equatable {
   /// the conversation to share and the calendar-detected recipients a
   /// one-click "Send to …" email would go to (empty = no send button).
   case meetingSummaryShare(conversationID: String, recipients: [ConversationShareRecipient])
+
+  struct ScenarioDescriptor: Equatable {
+    let kind: String
+    let id: String
+  }
+
+  private static let scenarioPrefix = "omi_card_action:"
+
+  static func onboardingRemindMe(taskTitle: String, dueDate: Date) -> Self {
+    _ = taskTitle
+    _ = dueDate
+    return .openWhatMattersNow(recommendationID: scenarioPrefix + "onboarding_remind_me")
+  }
+
+  static func firstRunFocusReturn(projectTitle: String) -> Self {
+    _ = projectTitle
+    return .openWhatMattersNow(recommendationID: scenarioPrefix + "first_run_focus_return")
+  }
+
+  static func contextReminder(reminderID: String) -> Self {
+    .openWhatMattersNow(recommendationID: scenarioPrefix + "context_reminder:" + reminderID)
+  }
+
+  static func firstRunOpenSummary(conversationID: String) -> Self {
+    .openWhatMattersNow(recommendationID: scenarioPrefix + "first_run_open_summary:" + conversationID)
+  }
+
+  var scenarioDescriptor: ScenarioDescriptor? {
+    guard case .openWhatMattersNow(let value) = self,
+      value.hasPrefix(Self.scenarioPrefix)
+    else { return nil }
+    let payload = String(value.dropFirst(Self.scenarioPrefix.count))
+    let parts = payload.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+    return ScenarioDescriptor(
+      kind: parts.first.map(String.init) ?? payload,
+      id: parts.count == 2 ? String(parts[1]) : ""
+    )
+  }
 }
 
 /// A custom in-app notification rendered directly below the floating bar.

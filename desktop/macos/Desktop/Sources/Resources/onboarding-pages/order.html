@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Omi Welcome · Order confirmed · Norrland Goods</title>
+  <style>
+    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; background: #f4f2ed; color: #171714; }
+    main { max-width: 680px; margin: 72px auto; padding: 40px; background: white; border-radius: 24px; box-shadow: 0 16px 60px #00000014; }
+    h1 { margin: 0 0 12px; font-size: 34px; }
+    .muted { color: #6d6b63; }
+    .item { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 34px 0; padding: 24px 0; border-block: 1px solid #dedbd2; }
+    .item strong { font-size: 20px; }
+    dl { display: grid; grid-template-columns: 180px 1fr; gap: 14px; }
+    dt { color: #6d6b63; } dd { margin: 0; font-weight: 600; }
+  </style>
+</head>
+<body><main>
+  <p class="muted">NORRLAND GOODS</p>
+  <h1>Thanks, {{name}}.</h1>
+  <p>Order #A2419 is on its way.</p>
+  <section class="item"><div><strong>Aurora desk lamp</strong><div class="muted">Brass</div></div><strong>$148.00</strong></section>
+  <dl>
+    <dt>Arrives</dt><dd>{{deliveryDate}}</dd>
+    <dt>Return window closes</dt><dd>{{returnDate}}</dd>
+    <dt>Ships from</dt><dd>Portland, OR</dd>
+    <dt>Sale ends</dt><dd>{{saleEndDate}}</dd>
+  </dl>
+</main></body>
+</html>

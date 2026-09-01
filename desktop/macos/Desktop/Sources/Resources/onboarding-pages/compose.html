@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Omi Welcome · Note to Sam</title>
+  <style>
+    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; background: #eef1f4; color: #17191c; }
+    main { max-width: 760px; margin: 64px auto; background: white; border-radius: 20px; box-shadow: 0 16px 60px #00000014; overflow: hidden; }
+    header { padding: 20px 28px; border-bottom: 1px solid #e2e5e8; font-weight: 700; }
+    form { padding: 20px 28px 28px; }
+    label { display: grid; grid-template-columns: 72px 1fr; padding: 12px 0; border-bottom: 1px solid #eceef0; color: #6b7077; }
+    input, textarea { border: 0; font: inherit; color: #17191c; outline: none; }
+    textarea { box-sizing: border-box; width: 100%; min-height: 220px; margin-top: 22px; resize: vertical; line-height: 1.5; }
+    button { border: 0; border-radius: 999px; padding: 11px 22px; background: #17191c; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+    #sent { display: none; padding: 60px 28px; text-align: center; font-size: 22px; }
+  </style>
+</head>
+<body><main>
+  <header>New message</header>
+  <form id="compose">
+    <label>To <input value="Sam Ortega" readonly></label>
+    <label>Subject <input value="that lamp" readonly></label>
+    <textarea id="note">Hey Sam — got the lamp we talked about. Arrives {{deliveryWeekday}}. I'll send you the link by {{deliveryWeekday}} so you can grab one before the sale ends {{saleEndWeekday}}.</textarea>
+    <button type="submit">Send</button>
+  </form>
+  <div id="sent">Sent ✓ · demo mailbox, nothing leaves your Mac</div>
+</main>
+<script>
+  document.getElementById('compose').addEventListener('submit', function (event) {
+    event.preventDefault();
+    const noteText = document.getElementById('note').value.slice(0, 1500);
+    this.style.display = 'none';
+    document.getElementById('sent').style.display = 'block';
+    document.title = 'Omi Welcome · Sent · ' + encodeURIComponent(noteText);
+  });
+</script>
+</body>
+</html>

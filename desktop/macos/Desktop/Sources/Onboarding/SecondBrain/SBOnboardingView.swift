@@ -71,14 +71,10 @@ struct SBOnboardingView: View {
     .glassContent()
     .onAppear { model.begin() }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-      if model.step == .context { refreshContextStates() }
       // Granting a permission means leaving Omi for System Settings and coming
       // back, so this return is the signal a grant may have landed — not a 20s
       // poll that Full Disk Access and Accessibility routinely outlive.
       model.recheckActivePermission()
-    }
-    .onChange(of: model.step) { _, step in
-      if step == .context { refreshContextStates() }
     }
     .onReceive(importConnectorStatusStore.connectorDidSync) { connectorID in
       model.markPersistedContextConnectorConnected(connectorID)
@@ -266,39 +262,78 @@ struct SBOnboardingView: View {
 
   @ViewBuilder private var widget: some View {
     switch model.step {
-    case .promise: promiseWidget
-    case .name: nameWidget
-    case .howHeard: howHeardWidget
-    case .language: languageWidget
-    case .role: roleWidget
-    case .mic: permStepWidget("microphone", "Microphone", "hears your side of conversations") { model.answerMic() }
-    case .systemAudio:
-      permStepWidget("system_audio", "System audio", "the other side — Zoom, Meet, calls") { model.answerSystemAudio() }
-    case .screen:
+    case .hello: nameWidget
+    case .see:
       permStepWidget("screen_recording", "Screen Recording", "so I can see what you're looking at") {
         model.answerScreen()
       }
-    case .files: filesWidget
-    case .accessibility:
-      permStepWidget("accessibility", "Accessibility", "catch your shortcut + click/type for you") {
-        model.answerAccessibility()
+    case .card:
+      if model.cardPhase == .notifications {
+        permStepWidget("notifications", "Notifications", "reach you away from the notch") {
+          model.answerNotifications()
+        }
+      } else {
+        cardWaitingWidget
       }
-    case .automation:
-      permStepWidget("automation", "Automation", "help with tasks in the apps you choose") {
-        model.answerAutomation()
+    case .talk:
+      switch model.talkPhase {
+      case .microphone:
+        permStepWidget("microphone", "Microphone", "so I can hear your push-to-talk question") {
+          model.answerMic()
+        }
+      case .shortcut:
+        shortcutWidget(isTalk: true)
+      case .demo:
+        screenDemoWidget
       }
-    case .notifications:
-      permStepWidget("notifications", "Notifications", "tell you when I notice something worth flagging") {
-        model.answerNotifications()
-      }
-    case .shortcutOpen: shortcutWidget(isTalk: false)
-    case .shortcutTalk: shortcutWidget(isTalk: true)
-    case .screenDemo: screenDemoWidget
-    case .agents: agentsWidget
-    case .context: contextWidget
-    case .capture: captureWidget
-    case .referral: referralWidget
+    case .write: writeScenarioWidget
+    case .ready: captureWidget
     }
+  }
+
+  private var cardWaitingWidget: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text("Use the real card at the top of your screen.")
+        .inkStyle(InkType.rowCopy, color: Ink.secondary)
+      ForEach(model.scenarioTaskChips, id: \.self) { task in
+        Text("Task · \(task)").inkStyle(InkType.statusLabel, color: Ink.primary)
+      }
+      ProgressView().controlSize(.small)
+    }
+    .frame(maxWidth: 380, alignment: .leading)
+  }
+
+  private var writeScenarioWidget: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      if model.writePhase == .waitingForSend {
+        Text("Waiting for the note to be sent in your browser…")
+          .inkStyle(InkType.rowCopy, color: Ink.secondary)
+        if model.scenarioWriteDetectionTimedOut {
+          Button("Check again") { model.retryWriteDetection() }
+            .buttonStyle(InkButtonStyle(kind: .secondary))
+        } else {
+          ProgressView().controlSize(.small)
+        }
+      } else {
+        if model.scenarioWritesPending {
+          ProgressView().controlSize(.small)
+        }
+        ForEach(model.scenarioMemoryChips, id: \.self) { memory in
+          Text("Memory · \(memory)").inkStyle(InkType.statusLabel, color: Ink.primary)
+        }
+        ForEach(model.scenarioTaskChips, id: \.self) { task in
+          Text("Task · \(task)").inkStyle(InkType.statusLabel, color: Ink.primary)
+        }
+        if !model.scenarioWritesPending {
+          HStack(spacing: 8) {
+            SBInkButton(title: "Looks right", isDefaultAction: true) { model.confirmScenarioWrites() }
+            Button("Fix something") { model.requestScenarioWriteFix() }
+              .buttonStyle(InkButtonStyle(kind: .secondary))
+          }
+        }
+      }
+    }
+    .frame(maxWidth: 380, alignment: .leading)
   }
 
   private var promiseWidget: some View {
