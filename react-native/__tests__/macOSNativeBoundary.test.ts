@@ -472,33 +472,27 @@ test('uses HUD as the only shipping panel material', () => {
   );
 });
 
-test('never orphans contentHost and never hosts chrome in setContentView', () => {
+test('glass view does not override RCTView subview ownership', () => {
   const source = readNativeSource('OmiGlassPanelView.mm');
-  const attachStart = source.indexOf('- (void)omiAttachContentHost');
-  const layoutStart = source.indexOf('- (void)layout');
-  const layoutEnd = source.indexOf('\n}', layoutStart);
-  const layoutSource = source.slice(layoutStart, layoutEnd);
+  const desktop = readFileSync(
+    resolve(__dirname, '../src/desktop/DesktopApp.tsx'),
+    'utf8',
+  );
+  const chipRail = readFileSync(
+    resolve(__dirname, '../src/desktop/ChipRail.tsx'),
+    'utf8',
+  );
 
-  expect(source).toContain(
-    '@property (nonatomic, strong) NSView *contentHost;',
-  );
-  expect(source).toContain('[self addSubview:self.contentHost]');
-  expect(source).toContain('insertReactSubview');
-  expect(source).toContain('removeReactSubview');
-  expect(source).toContain('didUpdateReactSubviews');
-  expect(source).toContain('self.clipsToBounds = YES');
-  expect(source).toContain('self.layer.masksToBounds = YES');
-  expect(source).toContain('[self.contentHost addSubview:subview');
+  expect(source).not.toContain('contentHost');
+  expect(source).not.toContain('didUpdateReactSubviews');
+  expect(source).not.toContain('insertReactSubview');
+  expect(source).not.toContain('removeReactSubview');
   expect(source).not.toContain('setContentView:');
-  expect(layoutSource).toContain('self.contentHost.frame = self.bounds');
-  expect(layoutSource).toContain('self.contentHost.superview');
-  expect(attachStart).toBeGreaterThan(-1);
-  expect(source.slice(attachStart, attachStart + 400)).toContain(
-    '[self addSubview:self.contentHost]',
-  );
-  expect(source.slice(attachStart, attachStart + 400)).toContain(
-    'self.contentHost.superview != self',
-  );
+  expect(source).not.toContain('omiAttachContentHost');
+  expect(source).toContain('@implementation OmiGlassPanelView');
+  expect(source).toContain('[super layout]');
+  expect(desktop).not.toContain('GlassPanel');
+  expect(chipRail).not.toContain('GlassPanel');
 });
 
 test('lets the host choose the glass radius so one panel can run full-bleed', () => {

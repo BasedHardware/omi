@@ -21,8 +21,6 @@ static NSAppearance *OmiInkGlassAppearance(void)
 
 @property (nonatomic, strong) NSVisualEffectView *material;
 @property (nonatomic, strong) NSView *fallback;
-@property (nonatomic, strong) NSView *contentHost;
-@property (nonatomic, strong) NSView *finish;
 @property (nonatomic, strong) CALayer *scrim;
 @property (nonatomic, strong) CALayer *sheen;
 @property (nonatomic, strong, nullable) id accessibilityObserver;
@@ -39,8 +37,6 @@ static NSAppearance *OmiInkGlassAppearance(void)
   }
 
   self.wantsLayer = YES;
-  self.clipsToBounds = YES;
-  self.layer.masksToBounds = YES;
   self.appearance = OmiInkGlassAppearance();
   self.layer.borderWidth = 1;
 
@@ -51,29 +47,17 @@ static NSAppearance *OmiInkGlassAppearance(void)
   self.material.state = NSVisualEffectStateActive;
   self.material.wantsLayer = YES;
   self.material.layer.masksToBounds = YES;
-  self.material.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [self addSubview:self.material];
 
   self.fallback = [[NSView alloc] initWithFrame:self.bounds];
   self.fallback.wantsLayer = YES;
   self.fallback.layer.masksToBounds = YES;
-  self.fallback.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [self addSubview:self.fallback];
 
-  self.finish = [[NSView alloc] initWithFrame:self.bounds];
-  self.finish.wantsLayer = YES;
-  self.finish.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  [self addSubview:self.finish];
-
-  self.contentHost = [[NSView alloc] initWithFrame:self.bounds];
-  self.contentHost.wantsLayer = YES;
-  self.contentHost.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  [self addSubview:self.contentHost];
-
   self.scrim = [CALayer layer];
-  [self.finish.layer addSublayer:self.scrim];
+  [self.layer addSublayer:self.scrim];
   self.sheen = [CALayer layer];
-  [self.finish.layer addSublayer:self.sheen];
+  [self.layer addSublayer:self.sheen];
 
   __weak OmiGlassPanelView *weakSelf = self;
   self.accessibilityObserver =
@@ -105,8 +89,6 @@ static NSAppearance *OmiInkGlassAppearance(void)
   self.material.layer.cornerCurve = kCACornerCurveContinuous;
   self.fallback.layer.cornerRadius = _glassCornerRadius;
   self.fallback.layer.cornerCurve = kCACornerCurveContinuous;
-  self.finish.layer.cornerRadius = _glassCornerRadius;
-  self.finish.layer.cornerCurve = kCACornerCurveContinuous;
   self.scrim.cornerRadius = _glassCornerRadius;
   self.scrim.cornerCurve = kCACornerCurveContinuous;
 }
@@ -126,47 +108,9 @@ static NSAppearance *OmiInkGlassAppearance(void)
   [super layout];
   self.material.frame = self.bounds;
   self.fallback.frame = self.bounds;
-  self.finish.frame = self.bounds;
-  if (self.contentHost.superview != self) {
-    [self omiAttachContentHost];
-  }
-  self.contentHost.frame = self.bounds;
-  self.scrim.frame = self.finish.bounds;
+  self.scrim.frame = self.bounds;
   self.sheen.frame = NSMakeRect(0, NSMaxY(self.bounds) - OmiGlassSheenHeight, NSWidth(self.bounds),
       OmiGlassSheenHeight);
-}
-
-- (void)omiAttachContentHost
-{
-  if (self.contentHost.superview != nil && self.contentHost.superview != self) {
-    [self.contentHost removeFromSuperview];
-  }
-  if (self.contentHost.superview != self) {
-    [self addSubview:self.contentHost];
-  }
-}
-
-- (void)insertReactSubview:(RCTUIView *)subview atIndex:(NSInteger)atIndex
-{
-  [super insertReactSubview:subview atIndex:atIndex];
-  if (self.contentHost.superview != self) {
-    [self omiAttachContentHost];
-  }
-  NSArray<NSView *> *siblings = self.contentHost.subviews;
-  if (atIndex >= 0 && atIndex < (NSInteger)siblings.count) {
-    [self.contentHost addSubview:subview positioned:NSWindowBelow relativeTo:siblings[atIndex]];
-    return;
-  }
-  [self.contentHost addSubview:subview];
-}
-
-- (void)removeReactSubview:(RCTUIView *)subview
-{
-  [super removeReactSubview:subview];
-}
-
-- (void)didUpdateReactSubviews
-{
 }
 
 - (void)applyAccessibilityAppearance
@@ -183,7 +127,6 @@ static NSAppearance *OmiInkGlassAppearance(void)
     self.sheen.backgroundColor = [NSColor.whiteColor colorWithAlphaComponent:OmiGlassSheenAlpha].CGColor;
     self.layer.borderColor = [NSColor.labelColor colorWithAlphaComponent:OmiGlassEdgeAlpha].CGColor;
   }];
-  [self omiAttachContentHost];
 }
 
 @end

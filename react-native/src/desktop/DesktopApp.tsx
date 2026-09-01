@@ -36,7 +36,6 @@ import {
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
-import {GlassPanel} from '../ui/GlassPanel';
 import {
   desktopNavBarHeight,
   desktopNavItems,
@@ -105,14 +104,49 @@ function GlassSurface({
 }) {
   return (
     <ShippingGlassMount style={[styles.glassSurface, style]}>
-      <GlassPanel
-        glassCornerRadius={token.radius.panel}
-        pointerEvents="none"
-        style={StyleSheet.absoluteFill}
-      />
       {children}
     </ShippingGlassMount>
   );
+}
+
+export class DesktopChromeGuard extends React.Component<
+  {children: React.ReactNode},
+  {error: string | null}
+> {
+  state = {error: null as string | null};
+
+  static getDerivedStateFromError(error: unknown): {error: string} {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Desktop chrome could not be shown.',
+    };
+  }
+
+  render(): React.ReactNode {
+    if (this.state.error !== null) {
+      return (
+        <View accessibilityLabel="Omi desktop" style={styles.root}>
+          <View style={[styles.glassSurface, styles.navbar]}>
+            <View
+              accessibilityLabel="Window controls"
+              style={styles.trafficLights}
+            />
+            <View style={styles.navItems}>
+              {desktopNavItems.map(label => (
+                <Text key={label} style={styles.navText}>
+                  {label}
+                </Text>
+              ))}
+            </View>
+          </View>
+          <Text style={styles.errorText}>{this.state.error}</Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function GlassHairline() {
@@ -634,88 +668,90 @@ export function DesktopApp({
   const [route, setRoute] = useState<DesktopRoute>('Home');
   const navigate = useCallback((next: DesktopRoute) => setRoute(next), []);
   return (
-    <View accessibilityLabel="Omi desktop" style={styles.root}>
-      <GlassSurface style={styles.navbar}>
-        <View
-          accessibilityLabel="Window controls"
-          style={styles.trafficLights}
-        />
-        <View style={styles.navItems}>
-          {desktopNavItems.map(label => {
-            const Icon = navIcons[label];
-            return (
-              <ShippingPressable
-                accessibilityRole="button"
-                accessibilityState={{selected: route === label}}
-                active={route === label}
-                key={label}
-                onPress={() => navigate(label)}
-                style={styles.navItem}>
-                <Icon color={token.color.onGlass} size={14} />
-                <Text
-                  style={[
-                    styles.navText,
-                    route === label && styles.navTextActive,
-                  ]}>
-                  {label}
-                </Text>
-              </ShippingPressable>
-            );
-          })}
-        </View>
-        <View style={styles.navUtilities}>
-          <Mic color={token.color.inkMuted} size={14} />
-          <Monitor color={token.color.inkMuted} size={14} />
-          <ShippingPressable
-            accessibilityLabel="Settings"
-            active={route === 'Settings'}
-            onPress={() => navigate('Settings')}
-            style={styles.utilityButton}>
-            <Settings color={token.color.onGlass} size={14} />
-          </ShippingPressable>
-        </View>
-      </GlassSurface>
-      <GlassHairline />
-      <ShippingStage stageKey={route} variant="page">
-        {route === 'Home' ? (
-          <ChatHome
-            chatBusy={chatBusy}
-            chatError={chatError}
-            draft={draft}
-            messages={messages}
-            onDraftChange={onDraftChange}
-            onRefresh={onRefresh}
-            onSend={onSend}
-            onSignIn={onSignIn}
-            onSignOut={onSignOut}
-            outcomes={outcomes}
-            reads={reads}
-            readsPhase={readsPhase}
-            session={session}
-            signingIn={signingIn}
+    <DesktopChromeGuard>
+      <View accessibilityLabel="Omi desktop" style={styles.root}>
+        <GlassSurface style={styles.navbar}>
+          <View
+            accessibilityLabel="Window controls"
+            style={styles.trafficLights}
           />
-        ) : route === 'Library' ? (
-          <LibraryPage outcomes={outcomes} />
-        ) : route === 'Tasks' ? (
-          <TasksPage outcomes={outcomes} />
-        ) : route === 'Rewind' ? (
-          <GlassSurface style={styles.singlePanel}>
-            <RewindState />
-          </GlassSurface>
-        ) : route === 'Apps' ? (
-          <AppsPage />
-        ) : (
-          <GlassSurface style={styles.singlePanel}>
-            <DesktopSettings
+          <View style={styles.navItems}>
+            {desktopNavItems.map(label => {
+              const Icon = navIcons[label];
+              return (
+                <ShippingPressable
+                  accessibilityRole="button"
+                  accessibilityState={{selected: route === label}}
+                  active={route === label}
+                  key={label}
+                  onPress={() => navigate(label)}
+                  style={styles.navItem}>
+                  <Icon color={token.color.onGlass} size={14} />
+                  <Text
+                    style={[
+                      styles.navText,
+                      route === label && styles.navTextActive,
+                    ]}>
+                    {label}
+                  </Text>
+                </ShippingPressable>
+              );
+            })}
+          </View>
+          <View style={styles.navUtilities}>
+            <Mic color={token.color.inkMuted} size={14} />
+            <Monitor color={token.color.inkMuted} size={14} />
+            <ShippingPressable
+              accessibilityLabel="Settings"
+              active={route === 'Settings'}
+              onPress={() => navigate('Settings')}
+              style={styles.utilityButton}>
+              <Settings color={token.color.onGlass} size={14} />
+            </ShippingPressable>
+          </View>
+        </GlassSurface>
+        <GlassHairline />
+        <ShippingStage stageKey={route} variant="page">
+          {route === 'Home' ? (
+            <ChatHome
+              chatBusy={chatBusy}
+              chatError={chatError}
+              draft={draft}
+              messages={messages}
+              onDraftChange={onDraftChange}
+              onRefresh={onRefresh}
+              onSend={onSend}
               onSignIn={onSignIn}
               onSignOut={onSignOut}
+              outcomes={outcomes}
+              reads={reads}
+              readsPhase={readsPhase}
               session={session}
               signingIn={signingIn}
             />
-          </GlassSurface>
-        )}
-      </ShippingStage>
-    </View>
+          ) : route === 'Library' ? (
+            <LibraryPage outcomes={outcomes} />
+          ) : route === 'Tasks' ? (
+            <TasksPage outcomes={outcomes} />
+          ) : route === 'Rewind' ? (
+            <GlassSurface style={styles.singlePanel}>
+              <RewindState />
+            </GlassSurface>
+          ) : route === 'Apps' ? (
+            <AppsPage />
+          ) : (
+            <GlassSurface style={styles.singlePanel}>
+              <DesktopSettings
+                onSignIn={onSignIn}
+                onSignOut={onSignOut}
+                session={session}
+                signingIn={signingIn}
+              />
+            </GlassSurface>
+          )}
+        </ShippingStage>
+      </View>
+    </DesktopChromeGuard>
   );
 }
 
@@ -729,7 +765,7 @@ const styles = StyleSheet.create({
     paddingTop: desktopNavTopInset,
   },
   glassSurface: {
-    backgroundColor: 'transparent',
+    backgroundColor: token.color.glassStrong,
     borderRadius: token.radius.panel,
     overflow: 'hidden',
     shadowColor: '#000000',

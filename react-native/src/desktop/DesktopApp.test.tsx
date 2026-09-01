@@ -3,8 +3,9 @@ import {resolve} from 'node:path';
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Text, TextInput} from 'react-native';
-import {DesktopApp} from './DesktopApp';
+import {DesktopApp, DesktopChromeGuard} from './DesktopApp';
 import type {TaskProjection} from '../desktopReadClient';
+import {desktopTokens as token} from './tokens';
 
 jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
@@ -89,15 +90,6 @@ jest.mock('../desktopCloudClient', () => ({
   setPrivateCloudSync: jest.fn(),
   setStoreRecordingPermission: jest.fn(),
 }));
-
-jest.mock('../ui/GlassPanel', () => {
-  const ReactModule = require('react');
-  const {View} = require('react-native');
-  return {
-    GlassPanel: (props: Record<string, unknown>) =>
-      ReactModule.createElement(View, props),
-  };
-});
 
 const outcomes = {
   conversations: {
@@ -465,20 +457,19 @@ test('Apps page does not mount FlatList and still paints import cards', () => {
   expect(tree).toContain('Tasks');
 });
 
-test('paints shipping chrome in front of a background-only GlassPanel', () => {
+test('paints shipping chrome as yoga children of translucent Views', () => {
   const source = readFileSync(resolve(__dirname, './DesktopApp.tsx'), 'utf8');
   const start = source.indexOf('function GlassSurface');
-  const end = source.indexOf('function GlassHairline');
+  const end = source.indexOf('export class DesktopChromeGuard');
   const glassSurface = source.slice(start, end);
   expect(start).toBeGreaterThan(-1);
-  expect(glassSurface).toContain('pointerEvents="none"');
-  expect(glassSurface).toContain('StyleSheet.absoluteFill');
   expect(glassSurface).toContain('{children}');
-  expect(glassSurface).toMatch(/<GlassPanel[\s\S]*\/>\s*\{children\}/);
-  expect(glassSurface).not.toMatch(
-    /<GlassPanel[^>]*>\s*\{children\}\s*<\/GlassPanel>/,
-  );
+  expect(glassSurface).not.toContain('GlassPanel');
+  expect(glassSurface).not.toContain('OmiGlassPanel');
+  expect(source).not.toContain("from '../ui/GlassPanel'");
   expect(source).not.toContain('glassHost');
+  expect(source).toContain('token.color.glassStrong');
+  expect(source).toContain('token.color.glassQuiet');
 
   const renderer = renderDesktop();
   const tree = renderedText(renderer);
@@ -494,18 +485,56 @@ test('paints shipping chrome in front of a background-only GlassPanel', () => {
     .find(node => node.props.children === 'Home');
   expect(home).toBeDefined();
   let ancestor: ReactTestRenderer.ReactTestInstance | null = home!.parent;
+  let foundGlassSurface = false;
   while (ancestor != null) {
     expect(ancestor.props.glassCornerRadius).toBeUndefined();
+    const styles = ([] as unknown[]).concat(ancestor.props.style ?? []);
+    if (
+      styles.some(
+        entry =>
+          entry != null &&
+          typeof entry === 'object' &&
+          'backgroundColor' in entry &&
+          (entry as {backgroundColor?: string}).backgroundColor ===
+            token.color.glassStrong,
+      )
+    ) {
+      foundGlassSurface = true;
+    }
     ancestor = ancestor.parent;
   }
+  expect(foundGlassSurface).toBe(true);
 
-  const panels = renderer.root.findAll(
-    node => node.props.glassCornerRadius !== undefined,
-  );
-  expect(panels.length).toBeGreaterThanOrEqual(4);
-  expect(panels.every(panel => panel.props.pointerEvents === 'none')).toBe(
-    true,
-  );
+  expect(
+    renderer.root.findAll(node => node.props.glassCornerRadius !== undefined),
+  ).toHaveLength(0);
+});
+
+test('root chrome guard keeps nav labels when a child throws', () => {
+  function Boom(): React.JSX.Element {
+    throw new Error('chrome exploded');
+  }
+  const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+  let renderer: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <DesktopChromeGuard>
+        <Boom />
+      </DesktopChromeGuard>,
+    );
+  });
+  const tree = renderedText(renderer!);
+  expect(tree).toContain('Home');
+  expect(tree).toContain('Library');
+  expect(tree).toContain('Tasks');
+  expect(tree).toContain('Rewind');
+  expect(tree).toContain('Apps');
+  expect(tree).toContain('chrome exploded');
+  expect(tree).not.toBe('');
+  act(() => {
+    renderer.unmount();
+  });
+  spy.mockRestore();
 });
 
 test('Home and Library chips share a sliding glass pill', () => {
@@ -517,9 +546,17 @@ test('Home and Library chips share a sliding glass pill', () => {
 
 test('uses discrete glass panels instead of one window material', () => {
   const renderer = renderDesktop();
-  const panels = renderer.root.findAll(
-    node => node.props.glassCornerRadius !== undefined,
-  );
+  const panels = renderer.root.findAll(node => {
+    const styles = ([] as unknown[]).concat(node.props.style ?? []);
+    return styles.some(
+      entry =>
+        entry != null &&
+        typeof entry === 'object' &&
+        'backgroundColor' in entry &&
+        (entry as {backgroundColor?: string}).backgroundColor ===
+          token.color.glassStrong,
+    );
+  });
   expect(panels.length).toBeGreaterThanOrEqual(4);
   expect(
     renderer.root.find(node => node.props.accessibilityLabel === 'Omi desktop')
@@ -534,6 +571,7 @@ test('uses discrete glass panels instead of one window material', () => {
   expect(source).not.toContain('UnderWindowBackground');
   expect(source.match(/<GlassSurface/g)?.length).toBeGreaterThanOrEqual(4);
   expect(source).toContain('token.color.onGlass');
+  expect(source).toContain('token.color.glassStrong');
 });
 
 test('searches real projections instead of a fake timeline', () => {
