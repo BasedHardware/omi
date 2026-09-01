@@ -47,19 +47,22 @@ test('macOS first paint and session probe do not require native devices or BLE',
   expect(onboarding).not.toContain(
     'setOnboardingRequired(!completed && !hasSession)',
   );
-  expect(onboarding).not.toContain('omiNative');
+  expect(onboarding).toContain("import {omiAuth} from '../omiNative'");
+  expect(onboarding).not.toMatch(/import \{[^}]*\bomiNative\b/);
   expect(onboarding).not.toContain('getSnapshot');
   expect(onboarding).not.toContain('useNativeDevices');
   expect(onboarding).not.toContain('CBCentral');
   expect(onboarding).not.toContain('startScan');
-  const sessionBlock = orchestrator.slice(
-    orchestrator.indexOf('session='),
-    orchestrator.indexOf('signingIn={signingIn}'),
+  const desktopMount = orchestrator.slice(
+    orchestrator.indexOf('<DesktopApp'),
+    orchestrator.indexOf('</PageShell>', orchestrator.indexOf('<DesktopApp')),
   );
-  expect(sessionBlock).toContain('onboardingRequired');
-  expect(sessionBlock).not.toContain('nativeSnapshot');
-  expect(sessionBlock).not.toContain('omiNative');
-  expect(sessionBlock).not.toContain('useNativeDevices');
+  expect(desktopMount).toContain('onboardingRequired');
+  expect(desktopMount).toContain("? 'probing'");
+  expect(desktopMount).toContain("'signed-out'");
+  expect(desktopMount).not.toContain('nativeSnapshot');
+  expect(desktopMount).not.toContain('omiNative');
+  expect(desktopMount).not.toContain('useNativeDevices');
 });
 
 test('DesktopApp owns sign-in inside the search-first shell', () => {
