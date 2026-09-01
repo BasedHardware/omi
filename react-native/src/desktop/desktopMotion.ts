@@ -33,10 +33,6 @@ export function searchExpandMotionDuration(reduceMotion: boolean): number {
   return motionDuration(desktopMotion.searchExpandMs, reduceMotion);
 }
 
-export function chipMotionDuration(reduceMotion: boolean): number {
-  return motionDuration(desktopMotion.chipMs, reduceMotion);
-}
-
 export function listInsertMotionDuration(reduceMotion: boolean): number {
   return motionDuration(desktopMotion.listInsertMs, reduceMotion);
 }

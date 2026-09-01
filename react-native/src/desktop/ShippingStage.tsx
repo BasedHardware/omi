@@ -2,14 +2,12 @@ import React, {useEffect, useRef} from 'react';
 import {
   Animated,
   StyleSheet,
-  Text,
   View,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {desktopStageFade} from './desktopChrome';
-import {desktopTokens as token} from './tokens';
 import {
   glassMotionDuration,
   listInsertMotionDuration,
@@ -38,32 +36,6 @@ function stageDuration(
   return variant === 'page'
     ? navMotionDuration(reduceMotion)
     : stepMotionDuration(reduceMotion);
-}
-
-class ShippingStageGuard extends React.Component<
-  {children: React.ReactNode},
-  {failed: boolean}
-> {
-  state = {failed: false};
-
-  static getDerivedStateFromError(): {failed: boolean} {
-    return {failed: true};
-  }
-
-  render(): React.ReactNode {
-    if (this.state.failed) {
-      return (
-        <View
-          accessibilityLabel="Desktop stage unavailable"
-          style={styles.stageFallback}>
-          <Text style={styles.stageFallbackCopy}>
-            This page could not be shown.
-          </Text>
-        </View>
-      );
-    }
-    return this.props.children;
-  }
 }
 
 export function ShippingStage({
@@ -97,8 +69,8 @@ export function ShippingStage({
     translateY.setValue(fromY);
     const animation = Animated.parallel(
       [
-        runShippingTiming(opacity, 1, duration, false),
-        runShippingTiming(translateY, 0, duration, false),
+        runShippingTiming(opacity, 1, duration, true),
+        runShippingTiming(translateY, 0, duration, true),
       ].filter((item): item is Animated.CompositeAnimation => item !== null),
     );
     animation.start();
@@ -107,7 +79,7 @@ export function ShippingStage({
   return (
     <Animated.View
       style={[styles.stage, style, {opacity, transform: [{translateY}]}]}>
-      <ShippingStageGuard key={stageKey}>{children}</ShippingStageGuard>
+      {children}
     </Animated.View>
   );
 }
@@ -223,6 +195,4 @@ const styles = StyleSheet.create({
     top: 0,
   },
   stage: {flex: 1},
-  stageFallback: {alignItems: 'center', flex: 1, justifyContent: 'center'},
-  stageFallbackCopy: {color: token.color.inkMuted, textAlign: 'center'},
 });

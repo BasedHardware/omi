@@ -3,7 +3,6 @@ import {desktopSystemFontFamily} from './desktopChrome';
 export const desktopTokens = {
   color: {
     ink: 'rgba(0, 0, 0, 0.92)',
-    onGlass: 'rgba(0, 0, 0, 0.92)',
     inkMuted: 'rgba(0, 0, 0, 0.80)',
     inkFaint: 'rgba(0, 0, 0, 0.55)',
     glass: 'transparent',
@@ -12,7 +11,6 @@ export const desktopTokens = {
     glassSelected: 'rgba(0, 0, 0, 0.085)',
     line: 'rgba(0, 0, 0, 0.06)',
     lineStrong: 'rgba(0, 0, 0, 0.22)',
-    sheen: 'rgba(255, 255, 255, 0.50)',
     dark: 'rgba(0, 0, 0, 0.88)',
     white: '#ffffff',
     blue: '#007aff',

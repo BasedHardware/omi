@@ -1,11 +1,11 @@
 #import "AppDelegate.h"
 #import "OmiDesktopCommandsModule.h"
+#import "OmiGlassPanelView.h"
 
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTUIKit.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 
-static const CGFloat OmiWindowInset = 8.0;
 static const CGFloat OmiTrafficLightLeading = 16.0;
 static const CGFloat OmiTrafficLightSpacing = 8.0;
 static const CGFloat OmiTrafficLightChromeHeight = 52.0;
@@ -53,14 +53,10 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
 {
   RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
   if (self.omiWindowGlass == nil) {
-    NSVisualEffectView *backdrop = [[NSVisualEffectView alloc] initWithFrame:rootView.bounds];
-    backdrop.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
-    backdrop.material = NSVisualEffectMaterialUnderWindowBackground;
-    backdrop.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-    backdrop.state = NSVisualEffectStateActive;
-    backdrop.wantsLayer = YES;
-    backdrop.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-    self.omiWindowGlass = backdrop;
+    OmiGlassPanelView *glass = [[OmiGlassPanelView alloc] initWithFrame:rootView.bounds];
+    [glass setGlassCornerRadius:0];
+    glass.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    self.omiWindowGlass = glass;
   }
   self.omiWindowGlass.frame = rootView.bounds;
   if (self.omiWindowGlass.superview != rootView) {
@@ -86,8 +82,7 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
   if (self.omiTitlebarAccessory != nil) {
     return;
   }
-  NSView *spacer = [[NSView alloc]
-      initWithFrame:NSMakeRect(0, 0, 0, OmiTrafficLightChromeHeight + OmiWindowInset)];
+  NSView *spacer = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 0, OmiTrafficLightChromeHeight)];
   NSTitlebarAccessoryViewController *accessory = [[NSTitlebarAccessoryViewController alloc] init];
   accessory.view = spacer;
   accessory.layoutAttribute = NSLayoutAttributeTop;
@@ -154,9 +149,9 @@ static const CGFloat OmiTrafficLightChromeHeight = 52.0;
   NSView *container = closeButton.superview;
   CGFloat buttonWidth = NSWidth(closeButton.frame);
   CGFloat buttonHeight = NSHeight(closeButton.frame);
-  CGFloat y = NSHeight(container.bounds) - OmiWindowInset - OmiTrafficLightChromeHeight +
+  CGFloat y = NSHeight(container.bounds) - OmiTrafficLightChromeHeight +
       floor((OmiTrafficLightChromeHeight - buttonHeight) / 2.0);
-  CGFloat x = OmiWindowInset + OmiTrafficLightLeading;
+  CGFloat x = OmiTrafficLightLeading;
   for (NSButton *button in @[ closeButton, miniaturizeButton, zoomButton ]) {
     NSRect frame = button.frame;
     frame.origin = NSMakePoint(x, y);
