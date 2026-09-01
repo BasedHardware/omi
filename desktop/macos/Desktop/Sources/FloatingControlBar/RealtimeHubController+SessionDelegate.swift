@@ -934,6 +934,14 @@ extension RealtimeHubController {
         expectedTurnEpoch: toolTurnEpoch)
       return
     }
+    if name == HubTool.recordInterjectFeedback.rawValue {
+      handleInterjectFeedbackReport(
+        source: source,
+        callId: callId,
+        arguments: arguments,
+        expectedTurnEpoch: toolTurnEpoch)
+      return
+    }
     invokeExternallyAuthorizedTool(
       source: source,
       turnID: turnID,
