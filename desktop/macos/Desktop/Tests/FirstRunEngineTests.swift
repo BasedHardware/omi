@@ -102,6 +102,44 @@ final class FirstRunEngineTests: XCTestCase {
     XCTAssertTrue(effects.contains(.clearPending))
   }
 
+  func testResumeReconstructsExactlyOnePersistedEffect() {
+    var state = FirstRunState.inactive
+    state.step = .openWork
+    state.startedAt = start
+    state.stepStartedAt = start
+    state.transitionPending = true
+    state.pendingEffect = .advance(step: .openWork, deadline: start.addingTimeInterval(3))
+
+    let effects = apply(&state, .resume, offset: 1)
+
+    XCTAssertEqual(effects, [.scheduleAdvance(expected: .openWork, seconds: 2)])
+  }
+
+  func testFocusControlsAndReminderDismissalsAreReducerEvents() {
+    var state = FirstRunState.inactive
+    state.step = .backToWork
+    state.startedAt = start
+    state.stepStartedAt = start
+    state.reminderID = "reminder-1"
+    state.reminderPresented = true
+    state.pendingEffect = .reminder(id: "reminder-1")
+
+    _ = apply(&state, .notificationDismissed(assistantID: "first_run_card"), offset: 1)
+    XCTAssertFalse(state.reminderPresented)
+    XCTAssertEqual(state.reminderDismissals, 1)
+
+    state.reminderPresented = true
+    let effects = apply(&state, .notificationDismissed(assistantID: "first_run_card"), offset: 2)
+    XCTAssertTrue(state.transitionPending)
+    XCTAssertTrue(effects.contains(.scheduleAdvance(expected: .backToWork, seconds: 3)))
+
+    var focus = FirstRunState.inactive
+    focus.step = .backToWork
+    _ = apply(&focus, .focusSnoozed(until: start.addingTimeInterval(300)), offset: 0)
+    XCTAssertEqual(focus.step, .drift)
+    XCTAssertEqual(focus.pendingEffect, .focusSnooze(deadline: start.addingTimeInterval(300)))
+  }
+
   func testReducerHonorsExplicitDismissal() {
     var state = FirstRunState.inactive
     _ = apply(&state, .start, offset: 0)
@@ -213,6 +251,28 @@ final class FirstRunEngineTests: XCTestCase {
     XCTAssertTrue(afterDone.isEmpty)
   }
 
+  func testContextReminderStoreRefusesWriteWhenOwnerChangesAfterLoad() async throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("first-run-owner-fence-\(UUID().uuidString)", isDirectory: true)
+    let fileURL = directory.appendingPathComponent("reminders.json")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    final class OwnerBox: @unchecked Sendable { var value = "owner-a" }
+    let owner = OwnerBox()
+    let store = ContextReminderStore(
+      fileURLProvider: { fileURL },
+      ownerIDProvider: { owner.value },
+      beforeMutationSave: { owner.value = "owner-b" })
+    let key = ContextReminderKey(bundleID: "com.apple.dt.Xcode", normalizedTitle: "Project", bucketID: nil)
+
+    do {
+      _ = try await store.create(text: "secret", for: key)
+      XCTFail("owner change must reject the write")
+    } catch {
+      // Expected: the owner observed at load no longer owns the save boundary.
+    }
+    XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+  }
+
   func testSummaryComposerMergesJournalAndObservedLogChronologically() throws {
     let journalData = try XCTUnwrap(
       """
@@ -264,6 +324,19 @@ final class FirstRunEngineTests: XCTestCase {
     XCTAssertEqual(snapshot.records[keys[0]]?.proactiveCardsShown, 1)
     XCTAssertEqual(snapshot.records[keys[0]]?.proactiveCardsActed, 2)
     XCTAssertEqual(snapshot.records[keys[0]]?.pttTurns, 1)
+  }
+
+  @MainActor
+  func testUsagePersistenceIsNamespacedByOwner() {
+    let suite = "FirstRunEngineTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let ownerA = DesktopUsageDailyReporter(defaults: defaults, ownerID: { "owner-a" })
+    ownerA.recordProactiveCardShown()
+    let ownerB = DesktopUsageDailyReporter(defaults: defaults, ownerID: { "owner-b" })
+
+    XCTAssertEqual(ownerA.snapshotForTesting().dirtyDates.count, 1)
+    XCTAssertTrue(ownerB.snapshotForTesting().dirtyDates.isEmpty)
   }
 
   private func apply(

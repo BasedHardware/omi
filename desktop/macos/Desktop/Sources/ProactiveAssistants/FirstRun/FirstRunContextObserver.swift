@@ -145,8 +145,12 @@ final class FirstRunContextObserver {
       ) { notification in
         let assistantID = notification.userInfo?["assistant_id"] as? String
         Task { @MainActor in
-          guard assistantID == "first_run_guide" else { return }
-          FirstRunCoordinator.shared.dismissByUser()
+          guard let assistantID else { return }
+          if assistantID == "first_run_guide" {
+            FirstRunCoordinator.shared.dismissByUser()
+          } else {
+            FirstRunCoordinator.shared.notificationDismissed(assistantID: assistantID)
+          }
         }
       })
   }

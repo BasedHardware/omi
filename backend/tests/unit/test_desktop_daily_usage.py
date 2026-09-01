@@ -1,7 +1,9 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
 
 import database.daily_summaries as daily_summaries_db
+import database.memories as memories_db
 
 
 def _usage_db(existing=None):
@@ -92,3 +94,26 @@ def test_get_desktop_daily_usage_sums_devices_and_returns_zero_for_missing_field
         'proactive_cards_acted': 3,
         'ptt_turns': 3,
     }
+
+
+def test_memories_created_counts_canonical_and_legacy_shapes_without_duplicates():
+    fake_db = MagicMock()
+    canonical_query = MagicMock()
+    legacy_query = MagicMock()
+    canonical_query.stream.return_value = [SimpleNamespace(id='canonical-only'), SimpleNamespace(id='shared')]
+    legacy_query.stream.return_value = [SimpleNamespace(id='legacy-only'), SimpleNamespace(id='shared')]
+    start = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    end = datetime(2026, 9, 2, tzinfo=timezone.utc)
+
+    with patch.object(
+        memories_db,
+        'CANONICAL_MEMORIES_CAPTURED_RANGE_QUERY',
+        SimpleNamespace(build=MagicMock(return_value=canonical_query)),
+    ), patch.object(
+        memories_db,
+        'MEMORIES_CREATED_RANGE_QUERY',
+        SimpleNamespace(build=MagicMock(return_value=legacy_query)),
+    ):
+        result = memories_db.count_memories_created('uid1', start, end, firestore_client=fake_db)
+
+    assert result == 3

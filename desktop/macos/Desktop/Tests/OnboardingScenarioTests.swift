@@ -72,8 +72,10 @@ final class OnboardingScenarioTests: XCTestCase {
   func testNoteTitleTransportRoundTripsBrowserEncoding() throws {
     let note = "Hey Sam — lamp is great & arrives Friday."
     let encoded = try XCTUnwrap(note.addingPercentEncoding(withAllowedCharacters: .alphanumerics))
-    let title = "Omi Welcome · Sent · \(encoded)"
-    XCTAssertEqual(OnboardingScenarioTitleTransport.note(from: title), note)
+    let nonce = "nonce-123"
+    let title = "Omi Welcome · Sent · \(nonce) · \(encoded)"
+    XCTAssertEqual(OnboardingScenarioTitleTransport.note(from: title, nonce: nonce), note)
+    XCTAssertNil(OnboardingScenarioTitleTransport.note(from: title, nonce: "wrong"))
   }
 
   func testDeterministicNoteEffects() {
@@ -145,7 +147,7 @@ final class OnboardingScenarioTests: XCTestCase {
       token: OnboardingScenarioTitleTransport.orderToken,
       maximumPolls: 4,
       useTimedFallback: false,
-      poll: { titles.removeFirst() },
+      poll: { OnboardingScenarioWindowObservation(title: titles.removeFirst(), bundleID: "com.apple.Safari") },
       wait: { waits += 1 })
     XCTAssertEqual(matched, .matched(title: "Omi Welcome · Order confirmed · Norrland Goods"))
     XCTAssertEqual(waits, 1)
@@ -154,7 +156,7 @@ final class OnboardingScenarioTests: XCTestCase {
       token: OnboardingScenarioTitleTransport.sentToken,
       maximumPolls: 3,
       useTimedFallback: false,
-      poll: { "Other" },
+      poll: { OnboardingScenarioWindowObservation(title: "Other", bundleID: "com.apple.Safari") },
       wait: {})
     XCTAssertEqual(timeout, .timedOut)
 
@@ -163,8 +165,20 @@ final class OnboardingScenarioTests: XCTestCase {
       maximumPolls: 40,
       useTimedFallback: false,
       undetectableAfterPolls: 3,
-      poll: { nil },
+      poll: { OnboardingScenarioWindowObservation(title: nil, bundleID: nil) },
       wait: {})
     XCTAssertEqual(fallback, .timedFallback)
+
+    let nonce = "nonce-123"
+    let sentTitle = "Omi Welcome · Sent · \(nonce) · hello"
+    let nonBrowser = await OnboardingScenarioDetector.waitForTitle(
+      token: OnboardingScenarioTitleTransport.sentToken,
+      nonce: nonce,
+      requireBrowser: true,
+      maximumPolls: 1,
+      useTimedFallback: false,
+      poll: { OnboardingScenarioWindowObservation(title: sentTitle, bundleID: "com.apple.TextEdit") },
+      wait: {})
+    XCTAssertEqual(nonBrowser, .timedOut)
   }
 }

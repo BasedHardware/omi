@@ -98,13 +98,32 @@ enum OnboardingScenarioTitleTransport {
     title?.localizedStandardContains(token) == true
   }
 
-  static func note(from title: String) -> String? {
-    guard matches(title, token: sentToken), let separator = title.range(of: " · ", options: .backwards) else {
+  /// Browser bundle families accepted for the local title transport. This follows the shared
+  /// conferencing browser list and keeps the fallback explicit for browsers not yet catalogued.
+  static func isBrowserBundleID(_ bundleID: String?) -> Bool {
+    guard let lower = bundleID?.lowercased(), !lower.isEmpty else { return false }
+    return ConferencingApps.isBrowserBundleID(lower)
+      || ["browser", "safari", "chrome", "firefox", "arc", "edge", "brave", "orion", "vivaldi", "opera"]
+        .contains(where: lower.contains)
+  }
+
+  static func note(from title: String, nonce: String) -> String? {
+    let prefix = "\(sentToken) · \(nonce) · "
+    guard title.hasPrefix(prefix), let decoded = String(title.dropFirst(prefix.count)).removingPercentEncoding else {
       return nil
     }
-    let encoded = String(title[separator.upperBound...])
-    return encoded.removingPercentEncoding
+    let sanitized = decoded.unicodeScalars.filter { scalar in
+      !CharacterSet.controlCharacters.contains(scalar)
+    }
+    let bounded = String(String.UnicodeScalarView(sanitized).prefix(1_500))
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return bounded.isEmpty ? nil : bounded
   }
+}
+
+struct OnboardingScenarioWindowObservation: Equatable {
+  let title: String?
+  let bundleID: String?
 }
 
 enum OnboardingScenarioDetectionResult: Equatable {
@@ -126,17 +145,28 @@ enum OnboardingScenarioDetector {
   /// Deterministic polling seam. Production injects a 500 ms sleeper; tests advance an injected poller.
   static func waitForTitle(
     token: String,
+    nonce: String? = nil,
+    requireBrowser: Bool = false,
     maximumPolls: Int,
     useTimedFallback: Bool,
     undetectableAfterPolls: Int? = nil,
-    poll: () async -> String?,
+    poll: () async -> OnboardingScenarioWindowObservation,
     wait: () async -> Void
   ) async -> OnboardingScenarioDetectionResult {
     var nilPolls = 0
     for index in 0..<max(1, maximumPolls) {
-      if let title = await poll() {
+      let observation = await poll()
+      if let title = observation.title {
         nilPolls = 0
-        if OnboardingScenarioTitleTransport.matches(title, token: token) {
+        let titleMatches: Bool
+        if let nonce {
+          titleMatches = OnboardingScenarioTitleTransport.note(from: title, nonce: nonce) != nil
+        } else {
+          titleMatches = OnboardingScenarioTitleTransport.matches(title, token: token)
+        }
+        if titleMatches,
+          !requireBrowser || OnboardingScenarioTitleTransport.isBrowserBundleID(observation.bundleID)
+        {
           return .matched(title: title)
         }
       } else {

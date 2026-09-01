@@ -28,12 +28,20 @@ actor ContextReminderStore {
 
   private let fileManager: FileManager
   private let fileURLProvider: @Sendable () -> URL
+  private let ownerIDProvider: @Sendable () -> String?
+  private let requiresRuntimeAuthorization: Bool
+  private let beforeMutationSave: (@Sendable () -> Void)?
 
   init(
     fileManager: FileManager = .default,
-    fileURLProvider: (@Sendable () -> URL)? = nil
+    fileURLProvider: (@Sendable () -> URL)? = nil,
+    ownerIDProvider: @escaping @Sendable () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
+    beforeMutationSave: (@Sendable () -> Void)? = nil
   ) {
     self.fileManager = fileManager
+    self.ownerIDProvider = ownerIDProvider
+    requiresRuntimeAuthorization = fileURLProvider == nil
+    self.beforeMutationSave = beforeMutationSave
     self.fileURLProvider =
       fileURLProvider ?? {
         let root =
@@ -56,9 +64,14 @@ actor ContextReminderStore {
     for context: ContextReminderKey,
     actionItemID: String? = nil,
     now: Date = Date(),
-    id: String = UUID().uuidString.lowercased()
+    id: String = UUID().uuidString.lowercased(),
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) throws -> ContextReminder {
-    var reminders = try load()
+    let loaded = try loadForMutation(
+      expectedOwnerID: expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot)
+    var reminders = loaded.reminders
     let reminder = ContextReminder(
       id: id,
       text: text,
@@ -68,7 +81,7 @@ actor ContextReminderStore {
       doneAt: nil,
       actionItemID: actionItemID)
     reminders.append(reminder)
-    try save(reminders)
+    try save(reminders, loadedFor: loaded.ownerID, authorization: loaded.authorization)
     return reminder
   }
 
@@ -82,20 +95,22 @@ actor ContextReminderStore {
 
   @discardableResult
   func markDone(id: String, at date: Date = Date()) throws -> ContextReminder? {
-    var reminders = try load()
+    let loaded = try loadForMutation()
+    var reminders = loaded.reminders
     guard let index = reminders.firstIndex(where: { $0.id == id }) else { return nil }
     reminders[index].doneAt = date
     reminders[index].snoozeUntil = nil
-    try save(reminders)
+    try save(reminders, loadedFor: loaded.ownerID, authorization: loaded.authorization)
     return reminders[index]
   }
 
   @discardableResult
   func snooze(id: String, until date: Date) throws -> ContextReminder? {
-    var reminders = try load()
+    let loaded = try loadForMutation()
+    var reminders = loaded.reminders
     guard let index = reminders.firstIndex(where: { $0.id == id }) else { return nil }
     reminders[index].snoozeUntil = date
-    try save(reminders)
+    try save(reminders, loadedFor: loaded.ownerID, authorization: loaded.authorization)
     return reminders[index]
   }
 
@@ -126,11 +141,46 @@ actor ContextReminderStore {
     return try decoder.decode([ContextReminder].self, from: Data(contentsOf: url))
   }
 
-  private func save(_ reminders: [ContextReminder]) throws {
+  private func loadForMutation(
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) throws -> (
+    reminders: [ContextReminder], ownerID: String, authorization: RuntimeOwnerAuthorizationSnapshot?
+  ) {
+    guard let ownerID = resolvedOwnerID() else {
+      throw CocoaError(.userCancelled)
+    }
+    guard expectedOwnerID == nil || expectedOwnerID == ownerID else { throw CocoaError(.userCancelled) }
+    let authorization =
+      authorizationSnapshot
+      ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
+    if requiresRuntimeAuthorization, authorization == nil { throw CocoaError(.userCancelled) }
+    return (try load(), ownerID, authorization)
+  }
+
+  private func save(
+    _ reminders: [ContextReminder],
+    loadedFor ownerID: String,
+    authorization: RuntimeOwnerAuthorizationSnapshot?
+  ) throws {
+    beforeMutationSave?()
+    guard resolvedOwnerID() == ownerID,
+      authorization.map(RuntimeOwnerIdentity.isAuthorizationCurrent) ?? !requiresRuntimeAuthorization
+    else {
+      log("ContextReminderStore: refusing write after runtime owner changed")
+      throw CocoaError(.userCancelled)
+    }
     let url = fileURLProvider()
     try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
     try encoder.encode(reminders).write(to: url, options: .atomic)
+  }
+
+  private func resolvedOwnerID() -> String? {
+    if let ownerID = ownerIDProvider()?.trimmingCharacters(in: .whitespacesAndNewlines), !ownerID.isEmpty {
+      return ownerID
+    }
+    return requiresRuntimeAuthorization ? nil : "test-owner"
   }
 }

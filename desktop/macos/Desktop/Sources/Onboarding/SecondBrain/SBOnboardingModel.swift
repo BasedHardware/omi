@@ -48,18 +48,18 @@ final class SBOnboardingModel: ObservableObject {
     static let promise = Step.hello
   }
 
-  enum CardPhase: Equatable {
+  enum CardPhase: String, Codable, Equatable {
     case waitingForAction
     case notifications
   }
 
-  enum TalkPhase: Equatable {
+  enum TalkPhase: String, Codable, Equatable {
     case microphone
     case shortcut
     case demo
   }
 
-  enum WritePhase: Equatable {
+  enum WritePhase: String, Codable, Equatable {
     case waitingForSend
     case review
   }
@@ -110,6 +110,7 @@ final class SBOnboardingModel: ObservableObject {
   @Published var scenarioWriteNote: String?
   @Published var scenarioWriteDetectionTimedOut = false
   @Published var scenarioWritesPending = false
+  var scenarioWriteReceipts: Set<String> = []
 
   // Permissions
   @Published var micState: PermState = .ask
@@ -178,6 +179,7 @@ final class SBOnboardingModel: ObservableObject {
   var scenarioDetectionTask: Task<Void, Never>?
   var scenarioCardTimeoutTask: Task<Void, Never>?
   let scenarioDates = OnboardingScenarioDates.make()
+  let scenarioPageNonce = UUID().uuidString.lowercased()
   let scenarioPageDirectory = FileManager.default.temporaryDirectory
     .appendingPathComponent("omi-onboarding-\(UUID().uuidString)", isDirectory: true)
   var beatStartedAt = Date()
@@ -324,6 +326,10 @@ final class SBOnboardingModel: ObservableObject {
 
   /// Persisted when the talk chord is completed.
   static let shortcutsCompletedKey = "sbOnboardingShortcutsCompleted"
+  nonisolated static let cardPhaseKey = "sbOnboardingCardPhase"
+  nonisolated static let talkPhaseKey = "sbOnboardingTalkPhase"
+  nonisolated static let writePhaseKey = "sbOnboardingWritePhase"
+  nonisolated static let writeReceiptsKey = "sbOnboardingWriteReceipts"
 
   /// Layout version of the persisted `resumeStepKey` value.
   ///
@@ -348,6 +354,7 @@ final class SBOnboardingModel: ObservableObject {
     // back to (or resuming at) name/language/role shows the prior answer instead
     // of an empty field.
     rehydrateDrafts()
+    restoreScenarioProgress()
     // Resume where the user left off. Their earlier answers (name, language, role)
     // were already saved to the backend/settings, so we just re-enter at the saved
     // step; each permission step re-checks its grant on appear, so a permission
@@ -402,6 +409,24 @@ final class SBOnboardingModel: ObservableObject {
       self.startAmbientOnboardingMusic()
       self.streamMessage(for: .hello)
     }
+  }
+
+  func persistScenarioProgress() {
+    let defaults = UserDefaults.standard
+    defaults.set(cardPhase.rawValue, forKey: Self.cardPhaseKey)
+    defaults.set(talkPhase.rawValue, forKey: Self.talkPhaseKey)
+    defaults.set(writePhase.rawValue, forKey: Self.writePhaseKey)
+    defaults.set(Array(scenarioWriteReceipts).sorted(), forKey: Self.writeReceiptsKey)
+  }
+
+  private func restoreScenarioProgress() {
+    let defaults = UserDefaults.standard
+    if let raw = defaults.string(forKey: Self.cardPhaseKey), let value = CardPhase(rawValue: raw) { cardPhase = value }
+    if let raw = defaults.string(forKey: Self.talkPhaseKey), let value = TalkPhase(rawValue: raw) { talkPhase = value }
+    if let raw = defaults.string(forKey: Self.writePhaseKey), let value = WritePhase(rawValue: raw) {
+      writePhase = value
+    }
+    scenarioWriteReceipts = Set(defaults.stringArray(forKey: Self.writeReceiptsKey) ?? [])
   }
 
   /// The ambient bed under the chat-style onboarding. Honours the user's persisted

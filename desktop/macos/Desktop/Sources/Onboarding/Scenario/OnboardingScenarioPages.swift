@@ -23,6 +23,13 @@ struct OnboardingScenarioDates: Equatable {
 struct OnboardingScenarioPageContext: Equatable {
   let name: String
   let dates: OnboardingScenarioDates
+  let nonce: String
+
+  init(name: String, dates: OnboardingScenarioDates, nonce: String = UUID().uuidString.lowercased()) {
+    self.name = name
+    self.dates = dates
+    self.nonce = nonce
+  }
 
   private static let dateFormatter: DateFormatter = {
     let formatter = DateFormatter()
@@ -56,6 +63,7 @@ struct OnboardingScenarioPageContext: Equatable {
       "{{saleEndDate}}": saleEndDateText,
       "{{deliveryWeekday}}": deliveryWeekday,
       "{{saleEndWeekday}}": saleEndWeekday,
+      "{{nonce}}": nonce,
     ]
   }
 }

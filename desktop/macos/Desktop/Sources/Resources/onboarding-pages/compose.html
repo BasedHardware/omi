@@ -56,7 +56,7 @@
       var noteText = document.getElementById('note').value.slice(0, 1500);
       this.style.display = 'none';
       document.getElementById('sent').style.display = 'block';
-      document.title = 'Omi Welcome · Sent · ' + encodeURIComponent(noteText);
+      document.title = 'Omi Welcome · Sent · {{nonce}} · ' + encodeURIComponent(noteText);
     });
   </script>
 </body>

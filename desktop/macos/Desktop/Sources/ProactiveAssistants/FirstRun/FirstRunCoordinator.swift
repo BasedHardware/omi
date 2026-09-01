@@ -28,6 +28,14 @@ struct FirstRunDwell: Codable, Equatable, Sendable {
   let startedAt: Date
 }
 
+enum FirstRunPendingEffect: Codable, Equatable, Sendable {
+  case advance(step: FirstRunStep, deadline: Date)
+  case focus(site: String, deadline: Date)
+  case focusSnooze(deadline: Date)
+  case reminder(id: String)
+  case conversation(idempotencyKey: String)
+}
+
 struct FirstRunState: Codable, Equatable, Sendable {
   static let currentVersion = 1
 
@@ -47,6 +55,8 @@ struct FirstRunState: Codable, Equatable, Sendable {
   var distractionSite: String?
   var reminderPresented = false
   var transitionPending = false
+  var pendingEffect: FirstRunPendingEffect?
+  var reminderDismissals = 0
   var dwell: FirstRunDwell?
   var instructionChipDays: [String: Int] = [:]
   var log: [FirstRunLogEntry] = []
@@ -57,6 +67,7 @@ struct FirstRunState: Codable, Equatable, Sendable {
 enum FirstRunReducerEvent: Equatable, Sendable {
   case start
   case launch
+  case resume
   case context(FirstRunObservedContext)
   case dwellElapsed(FirstRunObservedContext)
   case voiceTurn(String)
@@ -68,6 +79,10 @@ enum FirstRunReducerEvent: Equatable, Sendable {
   case conversationCreated(String)
   case conversationCreationFailed
   case presentationOpportunity
+  case focusReturnSelected
+  case focusSnoozed(until: Date)
+  case focusSnoozeElapsed
+  case notificationDismissed(assistantID: String)
   case dismiss
 }
 
@@ -81,6 +96,7 @@ enum FirstRunReducerEffect: Equatable, Sendable {
   case createReminder(text: String, context: ContextReminderKey)
   case requestFocus(site: String)
   case scheduleFocusFallback(seconds: TimeInterval)
+  case scheduleFocusSnooze(seconds: TimeInterval)
   case deliverFallback(site: String, projectTitle: String)
   case deliverReminder(id: String)
   case createConversation
@@ -153,6 +169,22 @@ enum FirstRunReducer {
         effects.append(.showInstruction)
       }
 
+    case .resume:
+      guard state.step.isActive, let pending = state.pendingEffect else { break }
+      switch pending {
+      case .advance(let step, let deadline):
+        effects.append(.scheduleAdvance(expected: step, seconds: max(0, deadline.timeIntervalSince(now))))
+      case .focus(let site, let deadline):
+        effects.append(.requestFocus(site: site))
+        effects.append(.scheduleFocusFallback(seconds: max(0, deadline.timeIntervalSince(now))))
+      case .focusSnooze(let deadline):
+        effects.append(.scheduleFocusSnooze(seconds: max(0, deadline.timeIntervalSince(now))))
+      case .reminder(let id):
+        effects.append(.deliverReminder(id: id))
+      case .conversation:
+        effects.append(.createConversation)
+      }
+
     case .context(let context):
       switch state.step {
       case .openWork where !state.transitionPending:
@@ -180,6 +212,7 @@ enum FirstRunReducer {
           break
         }
         state.reminderPresented = true
+        state.pendingEffect = .reminder(id: reminderID)
         state.log.append(
           FirstRunLogEntry(
             t: now,
@@ -200,6 +233,7 @@ enum FirstRunReducer {
         state.projectContext = project
         state.dwell = nil
         state.transitionPending = true
+        state.pendingEffect = .advance(step: .openWork, deadline: now.addingTimeInterval(3))
         state.log.append(
           FirstRunLogEntry(
             t: now,
@@ -223,6 +257,7 @@ enum FirstRunReducer {
         state.log.append(
           FirstRunLogEntry(t: now, text: "Drifted to \(site), away from \(projectTitle).", isUser: false))
         effects.append(.hideGuide)
+        state.pendingEffect = .focus(site: site, deadline: now.addingTimeInterval(60))
         effects.append(.requestFocus(site: site))
         effects.append(.scheduleFocusFallback(seconds: 60))
 
@@ -246,6 +281,7 @@ enum FirstRunReducer {
       state.reminderID = reminderID
       state.actionItemID = actionItemID
       completeStep(.setReminder)
+      state.pendingEffect = .advance(step: .setReminder, deadline: now.addingTimeInterval(3))
       effects.append(
         .showTransient(
           title: "✓ Got it. Next time you're back in \(projectTitle), I'll bring that up.",
@@ -255,6 +291,7 @@ enum FirstRunReducer {
     case .advance(let expected):
       guard state.step == expected, state.transitionPending else { break }
       state.transitionPending = false
+      state.pendingEffect = nil
       state.stepStartedAt = now
       switch expected {
       case .openWork:
@@ -265,6 +302,7 @@ enum FirstRunReducer {
         effects.append(.showInstruction)
       case .backToWork:
         state.step = .summary
+        state.pendingEffect = .conversation(idempotencyKey: "first-run-\(state.reminderID ?? "session")")
         effects.append(.createConversation)
       default:
         break
@@ -273,6 +311,7 @@ enum FirstRunReducer {
     case .focusProbeResult(let delivered):
       guard state.step == .drift, state.focusRequestedAt != nil, state.focusPath == nil, delivered else { break }
       state.focusPath = .assistant
+      state.pendingEffect = nil
       state.step = .backToWork
       state.stepStartedAt = now
       completeStep(.drift)
@@ -286,6 +325,7 @@ enum FirstRunReducer {
         let projectTitle = state.projectContext?.normalizedTitle
       else { break }
       state.focusPath = .fallback
+      state.pendingEffect = nil
       state.step = .backToWork
       state.stepStartedAt = now
       completeStep(.drift, path: "fallback")
@@ -295,6 +335,7 @@ enum FirstRunReducer {
     case .reminderResolved(let id, let snoozed):
       guard state.step == .backToWork, state.reminderPresented, state.reminderID == id else { break }
       state.transitionPending = true
+      state.pendingEffect = .advance(step: .backToWork, deadline: now.addingTimeInterval(3))
       state.log.append(
         FirstRunLogEntry(
           t: now,
@@ -307,6 +348,7 @@ enum FirstRunReducer {
     case .conversationCreated(let conversationID):
       guard state.step == .summary else { break }
       state.conversationID = conversationID
+      state.pendingEffect = nil
       completeStep(.summary)
       state.step = .done
       effects.append(.showSummary(conversationID: conversationID))
@@ -326,6 +368,39 @@ enum FirstRunReducer {
         dismiss()
       } else if state.step == .openWork || state.step == .setReminder || state.step == .drift {
         effects.append(.showInstruction)
+      }
+
+    case .focusReturnSelected:
+      guard state.step == .backToWork else { break }
+      state.pendingEffect = nil
+      state.log.append(FirstRunLogEntry(t: now, text: "Chose to return to work.", isUser: false))
+
+    case .focusSnoozed(let deadline):
+      guard state.step == .backToWork else { break }
+      state.step = .drift
+      state.stepStartedAt = deadline
+      state.focusPath = nil
+      state.focusRequestedAt = nil
+      state.dwell = nil
+      state.pendingEffect = .focusSnooze(deadline: deadline)
+      effects.append(.scheduleFocusSnooze(seconds: max(0, deadline.timeIntervalSince(now))))
+
+    case .focusSnoozeElapsed:
+      guard state.step == .drift, case .focusSnooze = state.pendingEffect else { break }
+      state.pendingEffect = nil
+      state.stepStartedAt = now
+      effects.append(.showInstruction)
+
+    case .notificationDismissed(let assistantID):
+      guard assistantID == "first_run_card", state.step == .backToWork, state.reminderPresented else { break }
+      state.reminderDismissals += 1
+      state.reminderPresented = false
+      state.pendingEffect = nil
+      if state.reminderDismissals >= 2 {
+        state.transitionPending = true
+        completeStep(.backToWork, path: "abandoned")
+        state.pendingEffect = .advance(step: .backToWork, deadline: now.addingTimeInterval(3))
+        effects.append(.scheduleAdvance(expected: .backToWork, seconds: 3))
       }
 
     case .dismiss:
@@ -405,13 +480,17 @@ final class FirstRunCoordinator {
   private let now: () -> Date
   private let calendar: Calendar
   private let executesEffects: Bool
+  private let ownerID: () -> String?
   private var meetingIsActive: () -> Bool = { false }
   private var state: FirstRunState
   private var events: [FirstRunReducerEvent] = []
   private var isDraining = false
   private var scheduled: [String: FirstRunScheduledCancellation] = [:]
   private var handoffObserver: NSObjectProtocol?
+  private var ownerObserver: NSObjectProtocol?
+  private var boundOwnerID: String?
   private var didCountLaunch = false
+  private var didResume = false
   private var effectObserverForTests: ((FirstRunReducerEffect) -> Void)?
   private var stateObserverForTests: ((FirstRunState) -> Void)?
 
@@ -419,19 +498,28 @@ final class FirstRunCoordinator {
     defaults: UserDefaults = .standard,
     now: @escaping () -> Date = { Date() },
     calendar: Calendar = .current,
-    executesEffects: Bool = true
+    executesEffects: Bool = true,
+    ownerID: @escaping () -> String? = { RuntimeOwnerIdentity.currentOwnerId() }
   ) {
     self.defaults = defaults
     self.now = now
     self.calendar = calendar
     self.executesEffects = executesEffects
-    if let data = defaults.data(forKey: Self.stateKey),
+    self.ownerID = ownerID
+    boundOwnerID = ownerID()
+    let persistedKey = boundOwnerID.map { Self.stateKey + "." + $0 } ?? Self.stateKey
+    if let data = defaults.data(forKey: persistedKey) ?? defaults.data(forKey: Self.stateKey),
       let decoded = try? JSONDecoder().decode(FirstRunState.self, from: data),
       decoded.version == FirstRunState.currentVersion
     {
       state = decoded
     } else {
       state = .inactive
+    }
+    ownerObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.resetForOwnerChange() }
     }
   }
 
@@ -440,6 +528,7 @@ final class FirstRunCoordinator {
   }
 
   func startIfNeeded(hasCompletedOnboarding: Bool) {
+    reloadForCurrentOwner()
     installHandoffObserver()
     FirstRunContextObserver.shared.start()
     guard hasCompletedOnboarding else { return }
@@ -448,6 +537,10 @@ final class FirstRunCoordinator {
       if !didCountLaunch {
         didCountLaunch = true
         send(.launch)
+      }
+      if !didResume {
+        didResume = true
+        send(.resume)
       }
     } else if defaults.bool(forKey: Self.pendingKey) {
       didCountLaunch = true
@@ -484,8 +577,10 @@ final class FirstRunCoordinator {
       resolveReminder(id: id, snoozed: true)
     case "first_run_open_summary":
       MeetingSummaryShareActions.openSummary(conversationID: id)
-    case "first_run_focus_return", "first_run_focus_snooze":
-      break
+    case "first_run_focus_return":
+      send(.focusReturnSelected)
+    case "first_run_focus_snooze":
+      send(.focusSnoozed(until: now().addingTimeInterval(5 * 60)))
     default:
       break
     }
@@ -503,6 +598,10 @@ final class FirstRunCoordinator {
 
   func sendForTesting(_ event: FirstRunReducerEvent) {
     send(event)
+  }
+
+  func notificationDismissed(assistantID: String) {
+    send(.notificationDismissed(assistantID: assistantID))
   }
 
   private func installHandoffObserver() {
@@ -569,6 +668,8 @@ final class FirstRunCoordinator {
       requestSuggestionProbe(site: site)
     case .scheduleFocusFallback(let seconds):
       schedule(key: "focus-fallback", after: seconds) { [weak self] in self?.send(.focusFallbackElapsed) }
+    case .scheduleFocusSnooze(let seconds):
+      schedule(key: "focus-snooze", after: seconds) { [weak self] in self?.send(.focusSnoozeElapsed) }
     case .deliverFallback(let site, let projectTitle):
       deliverFocusFallback(site: site, projectTitle: projectTitle)
     case .deliverReminder(let id):
@@ -675,6 +776,10 @@ final class FirstRunCoordinator {
   }
 
   private func presentLoopCompletion() {
+    guard canPresentFirstRunCard() else {
+      schedule(key: "loop-completion-retry", after: 5) { [weak self] in self?.presentLoopCompletion() }
+      return
+    }
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     NotificationService.shared.sendNotification(
       ownerID: ownerID,
@@ -713,6 +818,10 @@ final class FirstRunCoordinator {
           expectedOwnerId: ownerID,
           authorizationSnapshot: authorization)
         actionItemID = actionItem.id
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+          log("FirstRunCoordinator: owner changed after action-item write; aborting reminder")
+          return
+        }
         await TasksStore.shared.refreshDashboardTasksFromServer(
           expectedOwnerID: ownerID,
           authorizationSnapshot: authorization)
@@ -730,7 +839,13 @@ final class FirstRunCoordinator {
           text: text,
           for: context,
           actionItemID: actionItemID,
-          now: self.now())
+          now: self.now(),
+          expectedOwnerID: ownerID,
+          authorizationSnapshot: authorization)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+          log("FirstRunCoordinator: owner changed before reminder publication")
+          return
+        }
         await MainActor.run {
           self.send(.reminderCreated(reminderID: reminder.id, actionItemID: actionItemID))
         }
@@ -762,6 +877,12 @@ final class FirstRunCoordinator {
   }
 
   private func deliverFocusFallback(site: String, projectTitle: String) {
+    guard canPresentFirstRunCard() else {
+      schedule(key: "focus-card-retry", after: 5) { [weak self] in
+        self?.deliverFocusFallback(site: site, projectTitle: projectTitle)
+      }
+      return
+    }
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     NotificationService.shared.sendNotification(
       ownerID: ownerID,
@@ -774,6 +895,10 @@ final class FirstRunCoordinator {
   }
 
   private func deliverReminder(id: String) {
+    guard canPresentFirstRunCard() else {
+      schedule(key: "reminder-card-retry", after: 5) { [weak self] in self?.deliverReminder(id: id) }
+      return
+    }
     FloatingControlBarManager.shared.dismissNotifications(assistantID: "first_run_card", kind: .replaced)
     Task {
       do {
@@ -826,7 +951,10 @@ final class FirstRunCoordinator {
   }
 
   private func createConversation() {
-    guard state.step == .summary, let startedAt = state.startedAt, let reminderID = state.reminderID else { return }
+    guard state.step == .summary, let startedAt = state.startedAt, let reminderID = state.reminderID,
+      let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
+    else { return }
     let end = now()
     let journal = FirstRunSummaryComposer.decodeJournal(defaults.data(forKey: Self.scenarioJournalKey))
     let segments = FirstRunSummaryComposer.compose(
@@ -863,14 +991,23 @@ final class FirstRunCoordinator {
           finished_at: formatter.string(from: end),
           language: language,
           client_conversation_id: clientConversationID,
+          client_session_id: clientConversationID,
           conversation_role: TranscriptionConversationRole.ambient.rawValue,
           conversation_finalization_reason: TranscriptionFinalizationReason.userStop.rawValue)
       }
       do {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+          log("FirstRunCoordinator: owner changed before conversation write")
+          return
+        }
         let response: APIClient.CreateConversationFromSegmentsResponse
         do {
           response = try await APIClient.shared.createConversationFromSegments(request(source: "onboarding"))
         } catch APIError.httpError(let statusCode, _) where (400..<500).contains(statusCode) {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+            log("FirstRunCoordinator: owner changed before conversation fallback")
+            return
+          }
           DesktopDiagnosticsManager.shared.recordFallback(
             area: "conversation",
             from: "onboarding_source",
@@ -878,6 +1015,10 @@ final class FirstRunCoordinator {
             reason: "unsupported",
             outcome: .recovered)
           response = try await APIClient.shared.createConversationFromSegments(request(source: "desktop"))
+        }
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+          log("FirstRunCoordinator: owner changed before conversation result publication")
+          return
         }
         await MainActor.run { self.send(.conversationCreated(response.id)) }
       } catch {
@@ -905,8 +1046,43 @@ final class FirstRunCoordinator {
     scheduled.removeAll()
   }
 
+  private func canPresentFirstRunCard() -> Bool {
+    let current = FloatingControlBarManager.shared.currentNotificationAssistantID
+    return !meetingIsActive() && (current == nil || current == "first_run_card")
+  }
+
   private func persistState() {
-    guard let data = try? JSONEncoder().encode(state) else { return }
-    defaults.set(data, forKey: Self.stateKey)
+    guard let boundOwnerID, ownerID() == boundOwnerID,
+      let data = try? JSONEncoder().encode(state)
+    else { return }
+    defaults.set(data, forKey: Self.stateKey + "." + boundOwnerID)
+  }
+
+  private func resetForOwnerChange() {
+    cancelScheduledWork()
+    events.removeAll()
+    state = .inactive
+    boundOwnerID = nil
+    didCountLaunch = false
+    didResume = false
+    FloatingControlBarManager.shared.dismissNotifications(assistantID: "first_run_guide", kind: .replaced)
+    FloatingControlBarManager.shared.dismissNotifications(assistantID: "first_run_card", kind: .replaced)
+  }
+
+  private func reloadForCurrentOwner() {
+    let currentOwner = ownerID()
+    guard currentOwner != boundOwnerID else { return }
+    boundOwnerID = currentOwner
+    didCountLaunch = false
+    didResume = false
+    guard let currentOwner,
+      let data = defaults.data(forKey: Self.stateKey + "." + currentOwner),
+      let decoded = try? JSONDecoder().decode(FirstRunState.self, from: data),
+      decoded.version == FirstRunState.currentVersion
+    else {
+      state = .inactive
+      return
+    }
+    state = decoded
   }
 }

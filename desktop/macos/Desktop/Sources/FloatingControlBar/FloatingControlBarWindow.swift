@@ -4598,7 +4598,9 @@ class FloatingControlBarManager {
         suggestionIdentity: dismissedNotification.suggestionTelemetryIdentity,
         attention: attention
       )
-      if kind == .user, dismissedNotification.assistantId == "first_run_guide" {
+      if kind == .user,
+        ["first_run_guide", "first_run_card", "onboarding_scenario"].contains(dismissedNotification.assistantId)
+      {
         NotificationCenter.default.post(
           name: .firstRunNotificationDismissed,
           object: nil,

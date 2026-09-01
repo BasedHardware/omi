@@ -73,6 +73,8 @@ final class DesktopUsageDailyReporter {
   private let calendar: Calendar
   private let timezone: () -> TimeZone
   private let deviceID: () -> String
+  private let ownerID: () -> String?
+  private let uploadPayload: @Sendable (DesktopUsageDailyPayload) async throws -> Void
   private var isWatching: () -> Bool = { false }
   private var isListening: () -> Bool = { false }
   private var accumulator: DesktopUsageAccumulator
@@ -82,20 +84,29 @@ final class DesktopUsageDailyReporter {
   private var retryAttempts: [String: Int] = [:]
   private var retryAfter: [String: Date] = [:]
   private var started = false
+  nonisolated(unsafe) private var ownerObserver: NSObjectProtocol?
+  private var boundOwnerID: String?
 
   init(
     defaults: UserDefaults = .standard,
     now: @escaping () -> Date = { Date() },
     calendar: Calendar = .current,
     timezone: @escaping () -> TimeZone = { .current },
-    deviceID: @escaping () -> String = { ClientDeviceService.shared.clientDeviceId }
+    deviceID: @escaping () -> String = { ClientDeviceService.shared.clientDeviceId },
+    ownerID: @escaping () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
+    uploadPayload: @escaping @Sendable (DesktopUsageDailyPayload) async throws -> Void = {
+      try await APIClient.shared.postDesktopUsageDaily($0)
+    }
   ) {
     self.defaults = defaults
     self.now = now
     self.calendar = calendar
     self.timezone = timezone
     self.deviceID = deviceID
-    if let data = defaults.data(forKey: Self.persistedKey),
+    self.ownerID = ownerID
+    self.uploadPayload = uploadPayload
+    boundOwnerID = ownerID()
+    if let boundOwnerID, let data = defaults.data(forKey: Self.persistedKey + "." + boundOwnerID),
       var decoded = try? JSONDecoder().decode(DesktopUsageAccumulator.self, from: data)
     {
       decoded.retainLatestDays(7)
@@ -103,12 +114,23 @@ final class DesktopUsageDailyReporter {
     } else {
       accumulator = DesktopUsageAccumulator()
     }
+    ownerObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.resetForOwnerChange() }
+    }
+  }
+
+  deinit {
+    if let ownerObserver { NotificationCenter.default.removeObserver(ownerObserver) }
   }
 
   func start(isWatching: @escaping () -> Bool, isListening: @escaping () -> Bool) {
     self.isWatching = isWatching
     self.isListening = isListening
     guard !started else { return }
+    reloadForCurrentOwner()
+    guard boundOwnerID != nil else { return }
     started = true
     lastDateKey = dateKey(for: now())
     sampleTimer = Timer.scheduledTimer(withTimeInterval: Self.sampleInterval, repeats: true) {
@@ -185,10 +207,20 @@ final class DesktopUsageDailyReporter {
   }
 
   private func upload(dateKey: String) async {
-    guard let payload = accumulator.records[dateKey] else { return }
+    guard let payload = accumulator.records[dateKey], let boundOwnerID,
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: boundOwnerID),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+    else {
+      log("DesktopUsageDailyReporter: owner authorization changed before usage upload")
+      return
+    }
     if let retry = retryAfter[dateKey], retry > now() { return }
     do {
-      try await APIClient.shared.postDesktopUsageDaily(payload)
+      try await uploadPayload(payload)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization), self.boundOwnerID == boundOwnerID else {
+        log("DesktopUsageDailyReporter: owner authorization changed during usage upload")
+        return
+      }
       if accumulator.records[dateKey] == payload {
         accumulator.markUploaded(dateKey)
       }
@@ -210,7 +242,35 @@ final class DesktopUsageDailyReporter {
   }
 
   private func persist() {
-    guard let data = try? JSONEncoder().encode(accumulator) else { return }
-    defaults.set(data, forKey: Self.persistedKey)
+    guard let boundOwnerID, ownerID() == boundOwnerID,
+      let data = try? JSONEncoder().encode(accumulator)
+    else { return }
+    defaults.set(data, forKey: Self.persistedKey + "." + boundOwnerID)
+  }
+
+  private func resetForOwnerChange() {
+    sampleTimer?.invalidate()
+    uploadTimer?.invalidate()
+    sampleTimer = nil
+    uploadTimer = nil
+    started = false
+    accumulator = DesktopUsageAccumulator()
+    retryAttempts.removeAll()
+    retryAfter.removeAll()
+    lastDateKey = nil
+    boundOwnerID = nil
+  }
+
+  private func reloadForCurrentOwner() {
+    let currentOwner = ownerID()
+    guard currentOwner != boundOwnerID else { return }
+    boundOwnerID = currentOwner
+    accumulator = DesktopUsageAccumulator()
+    guard let currentOwner,
+      let data = defaults.data(forKey: Self.persistedKey + "." + currentOwner),
+      var decoded = try? JSONDecoder().decode(DesktopUsageAccumulator.self, from: data)
+    else { return }
+    decoded.retainLatestDays(7)
+    accumulator = decoded
   }
 }

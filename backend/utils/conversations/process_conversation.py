@@ -2157,11 +2157,13 @@ def process_conversation(
         report_persistence(False)
         return deferred
 
-    _enrich_meeting_context(uid, conversation)
+    is_onboarding_source = getattr(conversation, 'source', None) == ConversationSource.onboarding
+    if not is_onboarding_source:
+        _enrich_meeting_context(uid, conversation)
 
     person_ids = conversation.get_person_ids()
     people: List[Person] = []
-    if person_ids:
+    if person_ids and not is_onboarding_source:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
@@ -2193,6 +2195,18 @@ def process_conversation(
     if not persisted:
         logger.info(
             'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id
+        )
+        return conversation
+
+    # Onboarding transcripts contain scripted product narration and demo facts. They are a durable
+    # conversation and keep their structured summary/title, but must never fan out into user truth:
+    # no memories, task-store action items, goals, apps/plugins, calendar/people links, folders,
+    # webhooks, or semantic/vector indexes. Daily summaries count the persisted conversation itself.
+    if is_onboarding_source:
+        logger.info(
+            'onboarding source: persisted transcript and summary without derived effects uid=%s conv=%s',
+            uid,
+            conversation.id,
         )
         return conversation
 

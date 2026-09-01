@@ -246,6 +246,7 @@ actor ConversationFinalizationService {
       finished_at: bundle.session.finishedAt.map { iso.string(from: $0) },
       language: bundle.session.language,
       client_conversation_id: Self.localClientConversationId(session: bundle.session, sessionId: sessionId),
+      client_session_id: nil,
       conversation_role: bundle.session.conversationRole.rawValue,
       conversation_finalization_reason: bundle.session.finalizationReason?.rawValue
     )

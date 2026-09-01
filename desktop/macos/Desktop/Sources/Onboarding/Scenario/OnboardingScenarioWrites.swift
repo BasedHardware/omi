@@ -2,11 +2,12 @@ import Foundation
 
 @MainActor
 enum OnboardingScenarioWrites {
-  static func createMemory(_ content: String) async -> Bool {
-    guard
-      let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
-      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
-    else { return false }
+  static func createMemory(
+    _ content: String,
+    ownerID: String,
+    authorization: RuntimeOwnerAuthorizationSnapshot
+  ) async -> Bool {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return false }
     let result = await ChatToolExecutor.executeCreateMemory(
       ["content": content],
       originatingUserText: "Remember \(content)",
@@ -16,14 +17,16 @@ enum OnboardingScenarioWrites {
       authorizationSnapshot: authorization,
       api: .shared
     )
-    return result.contains(#""ok":true"#)
+    return RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) && result.contains(#""ok":true"#)
   }
 
-  static func createActionItem(title: String, dueDate: Date) async -> Bool {
-    guard
-      let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
-      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
-    else { return false }
+  static func createActionItem(
+    title: String,
+    dueDate: Date,
+    ownerID: String,
+    authorization: RuntimeOwnerAuthorizationSnapshot
+  ) async -> Bool {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return false }
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     let result = await ChatToolExecutor.execute(
@@ -37,6 +40,7 @@ enum OnboardingScenarioWrites {
       expectedOwnerID: ownerID,
       authorizationSnapshot: authorization
     )
-    return !result.hasPrefix("Error:") && !result.contains(#""ok":false"#)
+    return RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+      && !result.hasPrefix("Error:") && !result.contains(#""ok":false"#)
   }
 }
