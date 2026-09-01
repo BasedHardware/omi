@@ -4,7 +4,7 @@ Same single-use requirement as the routers/integrations.py copy: a separate GET 
 concurrent callbacks carrying the same state both read the value before either delete runs, which
 weakens replay protection. It now uses an atomic Redis GETDEL, so only one caller receives the value
 and a second consume of the same state returns None. (This handler parses the stored value with
-ast.literal_eval, so the fixture stores a Python repr rather than JSON.)
+json.loads, so the fixture stores JSON rather than a Python repr.)
 
 routers/task_integrations.py has a heavy import graph, so it is imported under a stub finder that
 auto-mocks those namespaces (keeping models/fastapi/pydantic real), then the helper is called
