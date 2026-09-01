@@ -2,7 +2,6 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Animated, StyleSheet, Text, View} from 'react-native';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {FocusPressable} from '../ui/Pressable';
-import {GlassPanel} from '../ui/GlassPanel';
 import {chipMotionDuration, runShippingTiming} from './desktopMotion';
 import {desktopTokens as token} from './tokens';
 
@@ -59,13 +58,8 @@ export function ChipRail<Label extends string>({
           styles.pill,
           ready ? styles.pillReady : styles.pillHidden,
           {height, left, top, width},
-        ]}>
-        <GlassPanel
-          glassCornerRadius={token.radius.chip}
-          pointerEvents="none"
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
+        ]}
+      />
       {labels.map(label => (
         <FocusPressable
           accessibilityRole="button"
@@ -92,6 +86,7 @@ export function ChipRail<Label extends string>({
 const styles = StyleSheet.create({
   rail: {flexDirection: 'row', flexWrap: 'wrap', gap: 6},
   pill: {
+    backgroundColor: token.color.glassStrong,
     borderRadius: token.radius.chip,
     overflow: 'hidden',
     position: 'absolute',
