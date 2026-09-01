@@ -10,7 +10,6 @@ import {
   desktopBackendServiceCopy,
   desktopReadErrorCopy,
   desktopRecoveryCopy,
-  desktopTaskItems,
   loadConversations,
   loadDesktopReads,
   loadMemories,
@@ -25,7 +24,6 @@ import type {
   DesktopReadProjection,
   DomainReadOutcome,
   MemoryProjection,
-  TaskProjection,
 } from '../src/desktopReadClient';
 import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
 import {omiAuth as browserOmiAuth} from '../src/omiNative.web';
@@ -898,53 +896,4 @@ test('loadAccountSettings keeps failed slices independent', async () => {
   expect(snapshot.trainingOptedIn).toBe(false);
   expect(snapshot.privateCloudSync).toBe(false);
   expect(snapshot.webhooks).toBeNull();
-});
-
-test('desktopTaskItems stays empty for null or failed outcomes', () => {
-  const listed: TaskProjection = {
-    kind: 'task',
-    id: 'task-1',
-    title: 'Ship the glass chrome',
-    summary: 'Pending',
-    searchableText: 'Ship the glass chrome',
-    completed: false,
-    completedAt: null,
-    dueAt: null,
-    owner: null,
-    source: 'desktop',
-    provenance: [],
-    sortOrder: 0,
-    indentLevel: 0,
-    createdAt: 1_725_000_000,
-    updatedAt: 1_725_000_000,
-    revision: null,
-  };
-  expect(desktopTaskItems(null)).toEqual([]);
-  expect(
-    desktopTaskItems({
-      conversations: {status: 'error', error: 'unavailable'},
-      memories: {status: 'error', error: 'unavailable'},
-      tasks: {status: 'error', error: 'unavailable'},
-    }),
-  ).toEqual([]);
-  expect(
-    desktopTaskItems({
-      conversations: {status: 'error', error: 'unavailable'},
-      memories: {status: 'error', error: 'unavailable'},
-      tasks: {
-        status: 'success',
-        value: {
-          items: [listed],
-          page: {
-            windowStatus: 'complete',
-            complete: true,
-            hasMore: false,
-            nextCursor: null,
-            completenessStatus: 'complete',
-            reasons: [],
-          },
-        },
-      },
-    }),
-  ).toEqual([listed]);
 });

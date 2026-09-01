@@ -1,11 +1,7 @@
-import {readFileSync} from 'node:fs';
-import {resolve} from 'node:path';
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Text, TextInput} from 'react-native';
-import {DesktopApp, DesktopChromeGuard} from './DesktopApp';
-import type {TaskProjection} from '../desktopReadClient';
-import {desktopTokens as token} from './tokens';
+import {DesktopApp} from './DesktopApp';
 
 jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
@@ -90,6 +86,15 @@ jest.mock('../desktopCloudClient', () => ({
   setPrivateCloudSync: jest.fn(),
   setStoreRecordingPermission: jest.fn(),
 }));
+
+jest.mock('../ui/GlassPanel', () => {
+  const ReactModule = require('react');
+  const {View} = require('react-native');
+  return {
+    GlassPanel: (props: Record<string, unknown>) =>
+      ReactModule.createElement(View, props),
+  };
+});
 
 const outcomes = {
   conversations: {
@@ -332,246 +337,6 @@ test('Settings opens the shipping multi-pane IA including Advanced', async () =>
   expect(advanced).toContain('old');
   expect(advanced).toContain('new');
   expect(advanced).not.toContain('workers.dev');
-});
-
-const sampleTask: TaskProjection = {
-  kind: 'task',
-  id: 'task-1',
-  title: 'Ship the glass chrome',
-  summary: 'Pending',
-  searchableText: 'Ship the glass chrome',
-  completed: false,
-  completedAt: null,
-  dueAt: null,
-  owner: null,
-  source: 'desktop',
-  provenance: [],
-  sortOrder: 0,
-  indentLevel: 0,
-  createdAt: 1_725_000_000,
-  updatedAt: 1_725_000_000,
-  revision: null,
-};
-
-function pressLabeledButton(
-  renderer: ReactTestRenderer.ReactTestRenderer,
-  label: string,
-) {
-  const match = renderer.root
-    .findAll(node => node.props.accessibilityRole === 'button')
-    .find(node =>
-      node.findAllByType(Text).some(text => text.props.children === label),
-    );
-  expect(match).toBeDefined();
-  act(() => {
-    match!.props.onPress();
-  });
-}
-
-test('renders Tasks with empty outcomes and with a success list', () => {
-  const empty = renderDesktop({
-    outcomes: null,
-    reads: [],
-    readsPhase: 'unavailable',
-    session: 'signed-out',
-  });
-  pressLabeledButton(empty, 'Tasks');
-  expect(renderedText(empty)).toContain('No tasks yet');
-
-  const failed = renderDesktop({
-    outcomes: {
-      conversations: {status: 'error', error: 'unavailable'},
-      memories: {status: 'error', error: 'unavailable'},
-      tasks: {status: 'error', error: 'unavailable'},
-    },
-    reads: [],
-    readsPhase: 'unavailable',
-  });
-  pressLabeledButton(failed, 'Tasks');
-  expect(renderedText(failed)).toContain('No tasks yet');
-
-  const loaded = renderDesktop({
-    outcomes: {
-      ...outcomes,
-      tasks: {
-        status: 'success',
-        value: {
-          items: [sampleTask],
-          page: outcomes.tasks.value.page,
-        },
-      },
-    },
-  });
-  pressLabeledButton(loaded, 'Tasks');
-  expect(renderedText(loaded)).toContain('Ship the glass chrome');
-});
-
-test('Home Tasks Library Rewind Apps never throw for empty outcomes', () => {
-  const renderer = renderDesktop({
-    outcomes: null,
-    reads: [],
-    readsPhase: 'unavailable',
-    session: 'signed-out',
-  });
-  for (const label of ['Tasks', 'Library', 'Rewind', 'Apps', 'Home'] as const) {
-    expect(() => pressLabeledButton(renderer, label)).not.toThrow();
-  }
-  pressLabeledButton(renderer, 'Library');
-  expect(renderedText(renderer)).toContain('Activity');
-  pressLabeledButton(renderer, 'Rewind');
-  expect(renderedText(renderer)).toContain(
-    'Screen history is ready when capture is on',
-  );
-  pressLabeledButton(renderer, 'Apps');
-  expect(renderedText(renderer)).toContain('Imports');
-  pressLabeledButton(renderer, 'Home');
-  expect(renderedText(renderer)).toContain("I'm ready.");
-});
-
-test('Tasks page does not mount FlatList inside the shipping stage', () => {
-  const source = readFileSync(resolve(__dirname, './DesktopApp.tsx'), 'utf8');
-  const start = source.indexOf('function TasksPage');
-  const end = source.indexOf('const imports');
-  const tasksPage = source.slice(start, end);
-  expect(start).toBeGreaterThan(-1);
-  expect(tasksPage).not.toContain('FlatList');
-  expect(tasksPage).toContain('ScrollView');
-});
-
-test('Apps page does not mount FlatList and still paints import cards', () => {
-  const source = readFileSync(resolve(__dirname, './DesktopApp.tsx'), 'utf8');
-  const start = source.indexOf('function AppsPage');
-  const end = source.indexOf('export function DesktopApp');
-  const appsPage = source.slice(start, end);
-  expect(start).toBeGreaterThan(-1);
-  expect(appsPage).not.toContain('FlatList');
-  expect(appsPage).toContain('ScrollView');
-
-  const renderer = renderDesktop();
-  pressLabeledButton(renderer, 'Apps');
-  const tree = renderedText(renderer);
-  expect(tree).toContain('Imports');
-  expect(tree).toContain('Google Calendar');
-  expect(tree).toContain('This Mac');
-  expect(tree).toContain('Home');
-  expect(tree).toContain('Tasks');
-});
-
-test('paints shipping chrome as yoga children of translucent Views', () => {
-  const source = readFileSync(resolve(__dirname, './DesktopApp.tsx'), 'utf8');
-  const start = source.indexOf('function GlassSurface');
-  const end = source.indexOf('export class DesktopChromeGuard');
-  const glassSurface = source.slice(start, end);
-  expect(start).toBeGreaterThan(-1);
-  expect(glassSurface).toContain('{children}');
-  expect(glassSurface).not.toContain('GlassPanel');
-  expect(glassSurface).not.toContain('OmiGlassPanel');
-  expect(source).not.toContain("from '../ui/GlassPanel'");
-  expect(source).not.toContain('glassHost');
-  expect(source).toContain('token.color.glassStrong');
-  expect(source).toContain('token.color.glassQuiet');
-
-  const renderer = renderDesktop();
-  const tree = renderedText(renderer);
-  expect(tree).toContain('Home');
-  expect(tree).toContain('Library');
-  expect(tree).toContain('Tasks');
-  expect(tree).toContain('Rewind');
-  expect(tree).toContain('Apps');
-  expect(tree).toContain("I'm ready.");
-
-  const home = renderer.root
-    .findAllByType(Text)
-    .find(node => node.props.children === 'Home');
-  expect(home).toBeDefined();
-  let ancestor: ReactTestRenderer.ReactTestInstance | null = home!.parent;
-  let foundGlassSurface = false;
-  while (ancestor != null) {
-    expect(ancestor.props.glassCornerRadius).toBeUndefined();
-    const styles = ([] as unknown[]).concat(ancestor.props.style ?? []);
-    if (
-      styles.some(
-        entry =>
-          entry != null &&
-          typeof entry === 'object' &&
-          'backgroundColor' in entry &&
-          (entry as {backgroundColor?: string}).backgroundColor ===
-            token.color.glassStrong,
-      )
-    ) {
-      foundGlassSurface = true;
-    }
-    ancestor = ancestor.parent;
-  }
-  expect(foundGlassSurface).toBe(true);
-
-  expect(
-    renderer.root.findAll(node => node.props.glassCornerRadius !== undefined),
-  ).toHaveLength(0);
-});
-
-test('root chrome guard keeps nav labels when a child throws', () => {
-  function Boom(): React.JSX.Element {
-    throw new Error('chrome exploded');
-  }
-  const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-  let renderer: ReactTestRenderer.ReactTestRenderer;
-  act(() => {
-    renderer = ReactTestRenderer.create(
-      <DesktopChromeGuard>
-        <Boom />
-      </DesktopChromeGuard>,
-    );
-  });
-  const tree = renderedText(renderer!);
-  expect(tree).toContain('Home');
-  expect(tree).toContain('Library');
-  expect(tree).toContain('Tasks');
-  expect(tree).toContain('Rewind');
-  expect(tree).toContain('Apps');
-  expect(tree).toContain('chrome exploded');
-  expect(tree).not.toBe('');
-  act(() => {
-    renderer.unmount();
-  });
-  spy.mockRestore();
-});
-
-test('Home and Library chips share a sliding glass pill', () => {
-  const source = readFileSync(resolve(__dirname, './DesktopApp.tsx'), 'utf8');
-  expect(source.match(/<ChipRail/g)?.length).toBeGreaterThanOrEqual(2);
-  expect(source).not.toContain('active={filter === label}');
-  expect(source).not.toContain('active={hub === label}');
-});
-
-test('uses discrete glass panels instead of one window material', () => {
-  const renderer = renderDesktop();
-  const panels = renderer.root.findAll(node => {
-    const styles = ([] as unknown[]).concat(node.props.style ?? []);
-    return styles.some(
-      entry =>
-        entry != null &&
-        typeof entry === 'object' &&
-        'backgroundColor' in entry &&
-        (entry as {backgroundColor?: string}).backgroundColor ===
-          token.color.glassStrong,
-    );
-  });
-  expect(panels.length).toBeGreaterThanOrEqual(4);
-  expect(
-    renderer.root.find(node => node.props.accessibilityLabel === 'Omi desktop')
-      .props.style,
-  ).toEqual(
-    expect.objectContaining({
-      backgroundColor: 'transparent',
-      paddingTop: expect.anything(),
-    }),
-  );
-  const source = readFileSync(resolve(__dirname, './DesktopApp.tsx'), 'utf8');
-  expect(source).not.toContain('UnderWindowBackground');
-  expect(source.match(/<GlassSurface/g)?.length).toBeGreaterThanOrEqual(4);
-  expect(source).toContain('token.color.onGlass');
-  expect(source).toContain('token.color.glassStrong');
 });
 
 test('searches real projections instead of a fake timeline', () => {

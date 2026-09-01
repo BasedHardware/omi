@@ -2,7 +2,6 @@ import React, {memo, useCallback, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -26,23 +25,21 @@ import Search from 'lucide-react-native/icons/search';
 import Settings from 'lucide-react-native/icons/settings';
 import Sparkles from 'lucide-react-native/icons/sparkles';
 import type {ChatMessage} from '../chatClient';
-import {
-  desktopTaskItems,
-  type ConversationProjection,
-  type DesktopReadOutcomes,
-  type DesktopReadProjection,
-  type MemoryProjection,
-  type TaskProjection,
+import type {
+  ConversationProjection,
+  DesktopReadOutcomes,
+  DesktopReadProjection,
+  MemoryProjection,
+  TaskProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
+import {GlassPanel} from '../ui/GlassPanel';
 import {
   desktopNavBarHeight,
   desktopNavItems,
   desktopNavTopInset,
   desktopSearchPlaceholder,
-  desktopTrafficLightButton,
-  desktopTrafficLightLeading,
   desktopTrafficLightRowWidth,
   desktopWindowInset,
   visibleChatError,
@@ -51,7 +48,6 @@ import {
 } from './desktopChrome';
 
 export type {DesktopSession};
-import {ChipRail} from './ChipRail';
 import {DesktopSettings} from './DesktopSettings';
 import {ShippingPressable} from './ShippingPressable';
 import {
@@ -104,53 +100,40 @@ function GlassSurface({
 }) {
   return (
     <ShippingGlassMount style={[styles.glassSurface, style]}>
+      <GlassPanel
+        glassCornerRadius={token.radius.panel}
+        pointerEvents="none"
+        style={StyleSheet.absoluteFill}
+      />
       {children}
     </ShippingGlassMount>
   );
 }
 
-export class DesktopChromeGuard extends React.Component<
-  {children: React.ReactNode},
-  {error: string | null}
-> {
-  state = {error: null as string | null};
-
-  static getDerivedStateFromError(error: unknown): {error: string} {
-    return {
-      error:
-        error instanceof Error
-          ? error.message
-          : 'Desktop chrome could not be shown.',
-    };
-  }
-
-  render(): React.ReactNode {
-    if (this.state.error !== null) {
-      return (
-        <View accessibilityLabel="Omi desktop" style={styles.root}>
-          <View style={[styles.glassSurface, styles.navbar]}>
-            <View
-              accessibilityLabel="Window controls"
-              style={styles.trafficLights}
-            />
-            <View style={styles.navItems}>
-              {desktopNavItems.map(label => (
-                <Text key={label} style={styles.navText}>
-                  {label}
-                </Text>
-              ))}
-            </View>
-          </View>
-          <Text style={styles.errorText}>{this.state.error}</Text>
-        </View>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-function GlassHairline() {
-  return <View style={styles.glassHairline} />;
+function Chip({
+  active = false,
+  Icon,
+  label,
+  onPress,
+}: {
+  active?: boolean;
+  Icon?: typeof Search;
+  label: string;
+  onPress?: () => void;
+}) {
+  return (
+    <ShippingPressable
+      accessibilityRole="button"
+      accessibilityState={{selected: active}}
+      active={active}
+      onPress={onPress}
+      style={styles.chip}>
+      {Icon === undefined ? null : <Icon color={token.color.ink} size={13} />}
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>
+        {label}
+      </Text>
+    </ShippingPressable>
+  );
 }
 
 function ResultRow({item}: {item: DesktopReadProjection}) {
@@ -176,7 +159,7 @@ function ResultRow({item}: {item: DesktopReadProjection}) {
   return (
     <View style={styles.resultRow}>
       <View style={styles.glyph}>
-        <Icon color={token.color.onGlass} size={16} />
+        <Icon color={token.color.ink} size={16} />
       </View>
       <View style={styles.resultCopy}>
         <Text numberOfLines={1} style={styles.rowTitle}>
@@ -204,7 +187,7 @@ const ConversationRow = memo(function ConversationRow({
   return (
     <View style={styles.resultRow}>
       <View style={styles.glyph}>
-        <MessageCircle color={token.color.onGlass} size={16} />
+        <MessageCircle color={token.color.ink} size={16} />
       </View>
       <View style={styles.resultCopy}>
         <Text style={styles.rowTitle}>{item.title}</Text>
@@ -232,13 +215,13 @@ const MemoryRow = memo(function MemoryRow({item}: {item: MemoryProjection}) {
 });
 
 const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
-  const title = typeof item.title === 'string' ? item.title : '';
-  const completed = item.completed === true;
   return (
     <View style={styles.taskRow}>
-      <View style={[styles.taskCircle, completed && styles.taskCircleDone]} />
-      <Text style={[styles.taskText, completed && styles.taskTextDone]}>
-        {title}
+      <View
+        style={[styles.taskCircle, item.completed && styles.taskCircleDone]}
+      />
+      <Text style={[styles.taskText, item.completed && styles.taskTextDone]}>
+        {item.title}
       </Text>
     </View>
   );
@@ -368,21 +351,22 @@ function ChatHome({
           />
         </GlassSurface>
       </ShippingSearchFocus>
-      <GlassHairline />
-      <GlassSurface style={styles.chipPanel}>
+      <GlassSurface style={styles.homePanel}>
         <View style={styles.filterBar}>
           <Text style={styles.filterLabel}>Filter</Text>
-          <ChipRail
-            labels={
+          <View style={styles.filterChips}>
+            {(
               ['All', 'Conversations', 'Memories', 'Tasks', 'Rewind'] as const
-            }
-            onChange={setFilter}
-            value={filter}
-          />
+            ).map(label => (
+              <Chip
+                active={filter === label}
+                key={label}
+                label={label}
+                onPress={() => setFilter(label)}
+              />
+            ))}
+          </View>
         </View>
-      </GlassSurface>
-      <GlassHairline />
-      <GlassSurface style={styles.stagePanel}>
         <SessionBanner
           onRefresh={onRefresh}
           onSignIn={onSignIn}
@@ -435,7 +419,7 @@ function ChatHome({
               {error !== null ? (
                 <Text style={styles.errorText}>{error}</Text>
               ) : null}
-              <GlassSurface style={styles.composer}>
+              <View style={styles.composer}>
                 <TextInput
                   accessibilityLabel="Ask a follow-up"
                   onChangeText={onDraftChange}
@@ -455,7 +439,7 @@ function ChatHome({
                   ]}>
                   <Text style={styles.sendText}>Ask</Text>
                 </FocusPressable>
-              </GlassSurface>
+              </View>
             </View>
           )}
         </ShippingStage>
@@ -476,8 +460,8 @@ function LibraryPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
       : [];
   return (
     <GlassSurface style={styles.singlePanel}>
-      <ChipRail
-        labels={
+      <View style={styles.hubRow}>
+        {(
           [
             'Activity',
             'Conversations',
@@ -485,10 +469,15 @@ function LibraryPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
             'Rewind',
             'Brain Map',
           ] as const
-        }
-        onChange={setHub}
-        value={hub}
-      />
+        ).map(label => (
+          <Chip
+            active={hub === label}
+            key={label}
+            label={label}
+            onPress={() => setHub(label)}
+          />
+        ))}
+      </View>
       {hub === 'Conversations' ? (
         <FlatList
           contentContainerStyle={styles.list}
@@ -569,15 +558,14 @@ function RewindState() {
 function TasksPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
-  const tasks = desktopTaskItems(outcomes);
+  const tasks =
+    outcomes?.tasks.status === 'success' ? outcomes.tasks.value.items : [];
   const normalized = query.trim().toLocaleLowerCase();
-  const visible = tasks.filter(item => {
-    if (normalized === '') {
-      return true;
-    }
-    const haystack = item.searchableText ?? item.title ?? '';
-    return haystack.toLocaleLowerCase().includes(normalized);
-  });
+  const visible = tasks.filter(
+    item =>
+      normalized === '' ||
+      item.searchableText.toLocaleLowerCase().includes(normalized),
+  );
   return (
     <GlassSurface style={styles.singlePanel}>
       <View style={styles.tasksHeader}>
@@ -599,17 +587,17 @@ function TasksPage({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
         </ShippingSearchFocus>
       </View>
       <Text style={styles.sectionTitle}>Today</Text>
-      <ScrollView contentContainerStyle={styles.list} style={styles.taskList}>
-        {visible.length === 0 ? (
-          <Text style={styles.emptyCopy}>No tasks yet</Text>
-        ) : (
-          visible.map(item => (
-            <ShippingListInsert itemKey={item.id} key={item.id}>
-              <TaskRow item={item} />
-            </ShippingListInsert>
-          ))
+      <FlatList
+        contentContainerStyle={styles.list}
+        data={visible}
+        keyExtractor={item => item.id}
+        ListEmptyComponent={<Text style={styles.emptyCopy}>No tasks yet</Text>}
+        renderItem={({item}) => (
+          <ShippingListInsert itemKey={item.id}>
+            <TaskRow item={item} />
+          </ShippingListInsert>
         )}
-      </ScrollView>
+      />
     </GlassSurface>
   );
 }
@@ -627,14 +615,16 @@ function AppsPage() {
   return (
     <GlassSurface style={styles.singlePanel}>
       <Text style={styles.pageTitle}>Imports</Text>
-      <ScrollView
+      <FlatList
         contentContainerStyle={styles.appGrid}
-        style={styles.taskList}>
-        {imports.map(([name, source, Icon]) => (
-          <View key={name} style={styles.appCard}>
+        data={imports}
+        keyExtractor={item => item[0]}
+        numColumns={3}
+        renderItem={({item: [name, source, Icon]}) => (
+          <View style={styles.appCard}>
             <View style={styles.appCardHeader}>
               <View style={styles.appIcon}>
-                <Icon color={token.color.onGlass} size={18} />
+                <Icon color={token.color.ink} size={18} />
               </View>
               <View>
                 <Text style={styles.rowTitle}>{name}</Text>
@@ -643,8 +633,8 @@ function AppsPage() {
             </View>
             <Text style={styles.rowMeta}>Not connected</Text>
           </View>
-        ))}
-      </ScrollView>
+        )}
+      />
     </GlassSurface>
   );
 }
@@ -668,90 +658,87 @@ export function DesktopApp({
   const [route, setRoute] = useState<DesktopRoute>('Home');
   const navigate = useCallback((next: DesktopRoute) => setRoute(next), []);
   return (
-    <DesktopChromeGuard>
-      <View accessibilityLabel="Omi desktop" style={styles.root}>
-        <GlassSurface style={styles.navbar}>
-          <View
-            accessibilityLabel="Window controls"
-            style={styles.trafficLights}
+    <View accessibilityLabel="Omi desktop" style={styles.root}>
+      <GlassSurface style={styles.navbar}>
+        <View
+          accessibilityLabel="Window controls"
+          style={styles.trafficLights}
+        />
+        <View style={styles.navItems}>
+          {desktopNavItems.map(label => {
+            const Icon = navIcons[label];
+            return (
+              <ShippingPressable
+                accessibilityRole="button"
+                accessibilityState={{selected: route === label}}
+                active={route === label}
+                key={label}
+                onPress={() => navigate(label)}
+                style={styles.navItem}>
+                <Icon color={token.color.ink} size={14} />
+                <Text
+                  style={[
+                    styles.navText,
+                    route === label && styles.navTextActive,
+                  ]}>
+                  {label}
+                </Text>
+              </ShippingPressable>
+            );
+          })}
+        </View>
+        <View style={styles.navUtilities}>
+          <Mic color={token.color.inkMuted} size={14} />
+          <Monitor color={token.color.inkMuted} size={14} />
+          <ShippingPressable
+            accessibilityLabel="Settings"
+            active={route === 'Settings'}
+            onPress={() => navigate('Settings')}
+            style={styles.utilityButton}>
+            <Settings color={token.color.ink} size={14} />
+          </ShippingPressable>
+        </View>
+      </GlassSurface>
+      <ShippingStage stageKey={route} variant="page">
+        {route === 'Home' ? (
+          <ChatHome
+            chatBusy={chatBusy}
+            chatError={chatError}
+            draft={draft}
+            messages={messages}
+            onDraftChange={onDraftChange}
+            onRefresh={onRefresh}
+            onSend={onSend}
+            onSignIn={onSignIn}
+            onSignOut={onSignOut}
+            outcomes={outcomes}
+            reads={reads}
+            readsPhase={readsPhase}
+            session={session}
+            signingIn={signingIn}
           />
-          <View style={styles.navItems}>
-            {desktopNavItems.map(label => {
-              const Icon = navIcons[label];
-              return (
-                <ShippingPressable
-                  accessibilityRole="button"
-                  accessibilityState={{selected: route === label}}
-                  active={route === label}
-                  key={label}
-                  onPress={() => navigate(label)}
-                  style={styles.navItem}>
-                  <Icon color={token.color.onGlass} size={14} />
-                  <Text
-                    style={[
-                      styles.navText,
-                      route === label && styles.navTextActive,
-                    ]}>
-                    {label}
-                  </Text>
-                </ShippingPressable>
-              );
-            })}
-          </View>
-          <View style={styles.navUtilities}>
-            <Mic color={token.color.inkMuted} size={14} />
-            <Monitor color={token.color.inkMuted} size={14} />
-            <ShippingPressable
-              accessibilityLabel="Settings"
-              active={route === 'Settings'}
-              onPress={() => navigate('Settings')}
-              style={styles.utilityButton}>
-              <Settings color={token.color.onGlass} size={14} />
-            </ShippingPressable>
-          </View>
-        </GlassSurface>
-        <GlassHairline />
-        <ShippingStage stageKey={route} variant="page">
-          {route === 'Home' ? (
-            <ChatHome
-              chatBusy={chatBusy}
-              chatError={chatError}
-              draft={draft}
-              messages={messages}
-              onDraftChange={onDraftChange}
-              onRefresh={onRefresh}
-              onSend={onSend}
+        ) : route === 'Library' ? (
+          <LibraryPage outcomes={outcomes} />
+        ) : route === 'Tasks' ? (
+          <TasksPage outcomes={outcomes} />
+        ) : route === 'Rewind' ? (
+          <GlassSurface style={styles.singlePanel}>
+            <RewindState />
+          </GlassSurface>
+        ) : route === 'Apps' ? (
+          <AppsPage />
+        ) : (
+          <GlassSurface style={styles.singlePanel}>
+            <DesktopSettings
               onSignIn={onSignIn}
               onSignOut={onSignOut}
-              outcomes={outcomes}
-              reads={reads}
-              readsPhase={readsPhase}
               session={session}
               signingIn={signingIn}
             />
-          ) : route === 'Library' ? (
-            <LibraryPage outcomes={outcomes} />
-          ) : route === 'Tasks' ? (
-            <TasksPage outcomes={outcomes} />
-          ) : route === 'Rewind' ? (
-            <GlassSurface style={styles.singlePanel}>
-              <RewindState />
-            </GlassSurface>
-          ) : route === 'Apps' ? (
-            <AppsPage />
-          ) : (
-            <GlassSurface style={styles.singlePanel}>
-              <DesktopSettings
-                onSignIn={onSignIn}
-                onSignOut={onSignOut}
-                session={session}
-                signingIn={signingIn}
-              />
-            </GlassSurface>
-          )}
-        </ShippingStage>
-      </View>
-    </DesktopChromeGuard>
+          </GlassSurface>
+        )}
+      </ShippingStage>
+    </View>
   );
 }
 
@@ -765,30 +752,17 @@ const styles = StyleSheet.create({
     paddingTop: desktopNavTopInset,
   },
   glassSurface: {
-    backgroundColor: token.color.glassStrong,
+    backgroundColor: 'transparent',
     borderRadius: token.radius.panel,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: {height: 3, width: 0},
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-  },
-  glassHairline: {
-    backgroundColor: token.color.sheen,
-    height: StyleSheet.hairlineWidth,
-    marginHorizontal: 14,
   },
   navbar: {
     alignItems: 'center',
     flexDirection: 'row',
     height: desktopNavBarHeight,
-    paddingRight: desktopWindowInset,
+    paddingHorizontal: desktopWindowInset,
   },
-  trafficLights: {
-    height: desktopTrafficLightButton,
-    marginLeft: desktopTrafficLightLeading,
-    width: desktopTrafficLightRowWidth,
-  },
+  trafficLights: {height: 14, width: desktopTrafficLightRowWidth},
   navItems: {alignItems: 'center', flex: 1, flexDirection: 'row', gap: 4},
   navItem: {
     alignItems: 'center',
@@ -804,7 +778,7 @@ const styles = StyleSheet.create({
     fontSize: token.type.nav,
     fontWeight: '600',
   },
-  navTextActive: {color: token.color.onGlass},
+  navTextActive: {color: token.color.ink},
   navUtilities: {alignItems: 'center', flexDirection: 'row', gap: 12},
   utilityButton: {borderRadius: 16, height: 32, padding: 8, width: 32},
   page: {flex: 1, gap: 8},
@@ -816,15 +790,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   omnisearchInput: {
-    color: token.color.onGlass,
+    color: token.color.ink,
     flex: 1,
     fontFamily: token.font,
     fontSize: token.type.search,
     fontWeight: '400',
     paddingVertical: 12,
   },
-  chipPanel: {paddingHorizontal: 14, paddingVertical: 10},
-  stagePanel: {flex: 1, padding: 14},
+  homePanel: {flex: 1, padding: 14},
   filterBar: {gap: 8},
   filterLabel: {
     color: token.color.inkMuted,
@@ -832,6 +805,22 @@ const styles = StyleSheet.create({
     fontSize: token.type.caption,
     fontWeight: '600',
   },
+  filterChips: {flexDirection: 'row', flexWrap: 'wrap', gap: 6},
+  chip: {
+    alignItems: 'center',
+    borderRadius: 14,
+    flexDirection: 'row',
+    gap: 6,
+    height: 28,
+    paddingHorizontal: 12,
+  },
+  chipText: {
+    color: token.color.inkMuted,
+    fontFamily: token.font,
+    fontSize: token.type.caption,
+    fontWeight: '600',
+  },
+  chipTextActive: {color: token.color.ink},
   pressed: {opacity: 0.78},
   banner: {
     alignItems: 'center',
@@ -850,7 +839,7 @@ const styles = StyleSheet.create({
     fontSize: token.type.meta,
   },
   bannerAction: {
-    color: token.color.onGlass,
+    color: token.color.ink,
     fontFamily: token.font,
     fontSize: token.type.meta,
     fontWeight: '600',
@@ -884,7 +873,7 @@ const styles = StyleSheet.create({
   },
   resultCopy: {flex: 1},
   rowTitle: {
-    color: token.color.onGlass,
+    color: token.color.ink,
     fontFamily: token.font,
     fontSize: token.type.title,
     fontWeight: '500',
@@ -921,6 +910,7 @@ const styles = StyleSheet.create({
   },
   composer: {
     alignItems: 'center',
+    backgroundColor: token.color.glassQuiet,
     borderRadius: token.radius.control,
     flexDirection: 'row',
     gap: 10,
@@ -929,7 +919,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   composerInput: {
-    color: token.color.onGlass,
+    color: token.color.ink,
     flex: 1,
     fontFamily: token.font,
     fontSize: token.type.body,
@@ -947,8 +937,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   singlePanel: {flex: 1, padding: 18},
+  hubRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 6},
   pageTitle: {
-    color: token.color.onGlass,
+    color: token.color.ink,
     fontFamily: token.font,
     fontSize: token.type.title,
     fontWeight: '600',
@@ -971,7 +962,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   searchInput: {
-    color: token.color.onGlass,
+    color: token.color.ink,
     flex: 1,
     fontFamily: token.font,
     fontSize: token.type.body,
@@ -983,7 +974,7 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   memoryText: {
-    color: token.color.onGlass,
+    color: token.color.ink,
     fontFamily: token.font,
     fontSize: token.type.body,
     lineHeight: 21,
@@ -995,7 +986,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tasksHeader: {alignItems: 'center', flexDirection: 'row', gap: 12},
-  taskList: {flex: 1},
   taskRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1011,7 +1001,7 @@ const styles = StyleSheet.create({
   },
   taskCircleDone: {backgroundColor: token.color.ink},
   taskText: {
-    color: token.color.onGlass,
+    color: token.color.ink,
     fontFamily: token.font,
     fontSize: token.type.body,
   },
@@ -1019,16 +1009,11 @@ const styles = StyleSheet.create({
     color: token.color.inkFaint,
     textDecorationLine: 'line-through',
   },
-  appGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingTop: 14,
-  },
+  appGrid: {paddingTop: 14},
   appCard: {
     backgroundColor: token.color.glassQuiet,
     borderRadius: 16,
-    flexBasis: '30%',
-    flexGrow: 1,
+    flex: 1,
     margin: 6,
     minHeight: 108,
     padding: 12,

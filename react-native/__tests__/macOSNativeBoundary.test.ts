@@ -20,10 +20,10 @@ test('keeps a transparent glass window over the desktop', () => {
   expect(source).toContain(
     'window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];',
   );
-  expect(source).toContain('NSVisualEffectMaterialUnderWindowBackground');
-  expect(source).not.toContain('OmiGlassPanelView');
-  expect(source).not.toContain('setGlassCornerRadius:0');
+  expect(source).toContain('OmiGlassPanelView');
+  expect(source).toContain('setGlassCornerRadius:0');
   expect(source).toContain('hideOmiTitlebarMaterial');
+  expect(source).not.toContain('NSVisualEffectMaterialUnderWindowBackground');
   expect(source).not.toContain('NSWindowToolbarStyleUnified');
   expect(source).not.toContain('OmiTitlebarFillColor');
   expect(source).not.toContain('NSAppearanceNameVibrantDark');
@@ -47,7 +47,6 @@ test('puts traffic lights in the content chrome next to Home', () => {
   expect(source).toContain('positionOmiTrafficLights');
   expect(source).toContain('OmiTrafficLightLeading');
   expect(source).toMatch(/OmiTrafficLightLeading\s*=\s*16\.0/);
-  expect(source).toMatch(/OmiWindowInset\s*=\s*8\.0/);
   expect(source).toContain('NSWindowStyleMaskFullSizeContentView');
   expect(source).toContain('titlebarAppearsTransparent = YES');
   expect(source).toContain('NSTitlebarSeparatorStyleNone');
@@ -78,12 +77,6 @@ test('keeps every traffic light at its native standard size and moves only its o
   );
   expect(methodSource).toContain('frame.origin = NSMakePoint(x, y);');
   expect(methodSource).toContain('x += buttonWidth + OmiTrafficLightSpacing;');
-  expect(methodSource).toContain(
-    'CGFloat x = OmiWindowInset + OmiTrafficLightLeading;',
-  );
-  expect(methodSource).toContain(
-    'NSHeight(container.bounds) - OmiWindowInset - OmiTrafficLightChromeHeight',
-  );
   expect(methodSource).not.toContain('frame.size =');
   expect(methodSource).not.toMatch(/button\.frame\s*=\s*NSMakeRect/);
 });
@@ -429,22 +422,22 @@ test('keeps the glass reduce-transparency fallback intact', () => {
 
   expect(source).toContain('@property (nonatomic, strong) NSView *fallback;');
   expect(source).toContain('self.fallback.hidden = !reduceTransparency;');
+  expect(source).toContain(
+    'self.material.hidden = reduceTransparency || hasLiquid;',
+  );
   expect(source).toContain('self.sheen.hidden = reduceTransparency;');
   expect(source).toContain(
     'CGFloat alpha = reduceTransparency ? 1.0 : OmiGlassScrimAlpha;',
   );
 });
 
-test('uses HUD as the only shipping panel material', () => {
+test('keeps the shared HUD material translucent with a semantic opaque fallback', () => {
   const source = readNativeSource('OmiGlassPanelView.mm');
 
   expect(source).toContain('static const CGFloat OmiGlassScrimAlpha = 0.46;');
   expect(source).toContain('NSAppearanceNameAqua');
-  expect(source).toContain(
-    'self.material.material = NSVisualEffectMaterialHUDWindow;',
-  );
-  expect(source).toContain('self.material = [[NSVisualEffectView alloc]');
-  expect(source).toContain('[self addSubview:self.material]');
+  expect(source).toContain('NSClassFromString(@"NSGlassEffectView")');
+  expect(source).toContain('self.liquidGlass');
   expect(source).toContain('self.sheen');
   expect(source).toContain('NSMaxY(self.bounds) - OmiGlassSheenHeight');
   expect(source).toContain(
@@ -453,11 +446,8 @@ test('uses HUD as the only shipping panel material', () => {
   expect(source).toContain(
     'self.fallback.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;',
   );
-  expect(source).not.toContain('NSGlassEffectView');
-  expect(source).not.toContain('liquidGlass');
-  expect(source).not.toContain('OmiMakeLiquidGlass');
-  expect(source).not.toContain(
-    'self.material.hidden = reduceTransparency || hasLiquid;',
+  expect(source).toContain(
+    'self.material.material = NSVisualEffectMaterialHUDWindow;',
   );
   expect(source).not.toContain('self.appearance = nil;');
   expect(source).not.toContain('NSVisualEffectMaterialUnderWindowBackground');
@@ -470,29 +460,6 @@ test('uses HUD as the only shipping panel material', () => {
   expect(source).toContain(
     'self.scrim.backgroundColor = [NSColor.controlBackgroundColor colorWithAlphaComponent:alpha].CGColor;',
   );
-});
-
-test('glass view does not override RCTView subview ownership', () => {
-  const source = readNativeSource('OmiGlassPanelView.mm');
-  const desktop = readFileSync(
-    resolve(__dirname, '../src/desktop/DesktopApp.tsx'),
-    'utf8',
-  );
-  const chipRail = readFileSync(
-    resolve(__dirname, '../src/desktop/ChipRail.tsx'),
-    'utf8',
-  );
-
-  expect(source).not.toContain('contentHost');
-  expect(source).not.toContain('didUpdateReactSubviews');
-  expect(source).not.toContain('insertReactSubview');
-  expect(source).not.toContain('removeReactSubview');
-  expect(source).not.toContain('setContentView:');
-  expect(source).not.toContain('omiAttachContentHost');
-  expect(source).toContain('@implementation OmiGlassPanelView');
-  expect(source).toContain('[super layout]');
-  expect(desktop).not.toContain('GlassPanel');
-  expect(chipRail).not.toContain('GlassPanel');
 });
 
 test('lets the host choose the glass radius so one panel can run full-bleed', () => {

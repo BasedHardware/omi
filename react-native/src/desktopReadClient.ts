@@ -169,21 +169,6 @@ export type DesktopReadOutcomes = {
   tasks: DomainReadOutcome<TaskProjection>;
 };
 
-export function desktopTaskItems(
-  outcomes: DesktopReadOutcomes | null,
-): TaskProjection[] {
-  if (outcomes?.tasks?.status !== 'success') {
-    return [];
-  }
-  return outcomes.tasks.value.items.filter(
-    (item): item is TaskProjection =>
-      item != null &&
-      item.kind === 'task' &&
-      typeof item.id === 'string' &&
-      typeof item.title === 'string',
-  );
-}
-
 export const desktopCloudBaseURL = 'https://api.omi.me';
 export const desktopBackendConfigurationCopy =
   'Sign in to Omi cloud to load conversations and memories.';

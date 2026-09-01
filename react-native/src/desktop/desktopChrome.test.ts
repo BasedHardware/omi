@@ -8,17 +8,11 @@ import {
   desktopSettingsPanes,
   desktopStageFade,
   desktopSystemFontFamily,
-  desktopTrafficLightButton,
-  desktopTrafficLightClusterWidth,
-  desktopTrafficLightLeading,
   desktopTrafficLightRowWidth,
-  desktopTrafficLightSpacing,
-  desktopWindowInset,
   isShippingDesktopNav,
   visibleChatError,
 } from './desktopChrome';
 import {
-  chipMotionDuration,
   glassMotionDuration,
   listInsertMotionDuration,
   motionDuration,
@@ -50,18 +44,8 @@ test('desktop chrome uses the shipping Home Library IA', () => {
   expect(desktopSystemFontFamily).toBe('System');
   expect(desktopGlassCornerRadius).toBe(22);
   expect(desktopNavBarHeight).toBe(52);
-  expect(desktopWindowInset).toBe(8);
-  expect(desktopNavTopInset).toBe(desktopWindowInset);
-  expect(desktopNavTopInset).not.toBe(0);
-  expect(desktopTrafficLightLeading).toBe(16);
-  expect(desktopTrafficLightButton).toBe(14);
-  expect(desktopTrafficLightSpacing).toBe(8);
-  expect(desktopTrafficLightClusterWidth).toBe(
-    3 * desktopTrafficLightButton + 2 * desktopTrafficLightSpacing,
-  );
-  expect(desktopTrafficLightRowWidth).toBe(
-    desktopTrafficLightClusterWidth + desktopTrafficLightLeading,
-  );
+  expect(desktopNavTopInset).toBe(0);
+  expect(desktopTrafficLightRowWidth).toBeGreaterThan(70);
   expect(desktopMotion.navMs).toBe(80);
   expect(desktopMotion.pressMs).toBe(90);
   expect(desktopMotion.stepMs).toBe(240);
@@ -69,11 +53,8 @@ test('desktop chrome uses the shipping Home Library IA', () => {
   expect(desktopMotion.overlayMs).toBe(300);
   expect(desktopMotion.checkboxMs).toBe(180);
   expect(desktopMotion.searchExpandMs).toBe(160);
-  expect(desktopMotion.chipMs).toBe(120);
   expect(desktopMotion.listInsertMs).toBe(0);
   expect(desktopMotion.glassMs).toBe(0);
-  expect(chipMotionDuration(true)).toBe(0);
-  expect(chipMotionDuration(false)).toBe(120);
   expect(desktopStageFade.hubOffsetY).toBe(14);
   expect(desktopStageFade.chatRiseY).toBe(54);
   expect(desktopStageFade.dropScale).toBe(0.98);
