@@ -1755,6 +1755,48 @@ class ChatToolExecutor {
         if count >= limit { break }
       }
 
+      // Vector search only sees frames whose OCR text has been embedded, and embeddings flush in
+      // 60-second batches. A question about something read a moment ago ("the riddle on the first
+      // page") therefore misses the frame that has it. Fall back to the exact-text FTS index, which
+      // is written with the frame, so "seen seconds ago" is answerable.
+      var matchedByText = false
+      if lines.isEmpty {
+        let textHits =
+          ((try? await RewindDatabase.shared.search(
+            query: query, appFilter: appFilter, startDate: startDate, endDate: endDate, limit: limit)) ?? [])
+          .sorted { $0.timestamp > $1.timestamp }
+        guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+        log("Tool semantic_search: text fallback returned \(textHits.count) results")
+        for screenshot in textHits {
+          guard let screenshotId = screenshot.id else { continue }
+          count += 1
+          matchedByText = true
+          let dateStr = DesktopChatTimestampFormat.userFacing(
+            screenshot.timestamp, timeZone: displayTimeZone)
+          let windowTitle = screenshot.windowTitle ?? ""
+          let titlePart = windowTitle.isEmpty ? "" : " - \(windowTitle)"
+          lines.append(
+            "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (screenshot_id: \(screenshotId), match: text)")
+          if let ocrText = screenshot.ocrText, !ocrText.isEmpty {
+            let preview = String(ocrText.prefix(300))
+              .replacingOccurrences(of: "\n", with: " ")
+              .trimmingCharacters(in: .whitespacesAndNewlines)
+            lines.append("   Content: \(preview)")
+          }
+          sources.append(
+            APIClient.ToolSource(
+              kind: ChatCitationReference.Kind.screenshot.rawValue,
+              sourceID: String(screenshotId),
+              title: windowTitle.isEmpty ? screenshot.appName : windowTitle,
+              preview: screenshot.ocrText ?? "",
+              createdAt: ISO8601DateFormatter().string(from: screenshot.timestamp),
+              momentTimestampMs: nil,
+              appName: screenshot.appName,
+              url: nil))
+          if count >= limit { break }
+        }
+      }
+
       if lines.isEmpty {
         return await emptySemanticSearchMessage(
           query: query,
@@ -1763,7 +1805,9 @@ class ChatToolExecutor {
           expectedOwnerID: expectedOwnerID)
       }
 
-      lines.insert("Found \(count) screenshot(s) matching \"\(query)\":", at: 0)
+      lines.insert(
+        "Found \(count) screenshot(s) matching \"\(query)\"\(matchedByText ? " (exact text match; newest frames may not be embedded yet)" : ""):",
+        at: 0)
 
       log("Tool semantic_search returned \(count) results")
       let references = await ChatCitationProvenanceRegistry.shared.register(

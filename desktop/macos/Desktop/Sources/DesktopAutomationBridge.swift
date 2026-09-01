@@ -1570,6 +1570,16 @@ final class DesktopAutomationActionRegistry {
     // the app. Lets agents exercise the reset→restart→onboarding flow without
     // driving menus or the cursor.
     register(
+      name: "onboarding_open_doors",
+      summary: "Onboarding screen-demo step: open the three-doors page (same path as the Open the doors button)"
+    ) { _ in
+      await MainActor.run {
+        NotificationCenter.default.post(name: .onboardingOpenDoorsRequested, object: nil)
+      }
+      return ["status": "requested"]
+    }
+
+    register(
       name: "reset_onboarding",
       summary: "Reset onboarding state and restart the app (same path as the Reset Onboarding menu item)"
     ) { _ in

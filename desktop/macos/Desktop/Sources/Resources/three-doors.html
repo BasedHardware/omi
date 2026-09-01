@@ -90,8 +90,6 @@
 
 <script>
 (function(){
-  // The app opens this page with #key=<tok>,<tok> so the hint shows the user's real push-to-talk chord.
-  try { const m=/key=([^&]+)/.exec(location.hash); if(m){ const toks=decodeURIComponent(m[1]).split(',').filter(Boolean); if(toks.length){ document.getElementById('keys').innerHTML=toks.map(t=>'<span class="key">'+t.replace(/</g,'&lt;')+'</span>').join(' '); } } } catch(e){}
   // Door 3 asks about door 1's text. Text is what Omi can recover from screen history; counts and pixels are not.
   const DOORS=[
     { kind:'type', planks:7, keystone:'VII', say:"Yo, what's the answer to this riddle?",
@@ -100,7 +98,7 @@
     { kind:'type', planks:4, keystone:'', say:"Yo, what's the answer to this riddle?", timed:20,
       r:'Which planet has a day longer than its year?',
       a:['venus','planet venus'] },
-    { kind:'type', planks:5, keystone:'', say:'Yo, what was the last word of the first riddle?',
+    { kind:'type', planks:5, keystone:'', say:'Yo, check my screen history: what was the last word of the first riddle?',
       r:'What was the last word of the first riddle? There is no way back.',
       a:['inside','go inside','never go inside'], placeholder:'type the word' },
   ];
