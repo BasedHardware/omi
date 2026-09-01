@@ -191,6 +191,7 @@ runs:
       uses: ./.github/actions/public-build-candidate-promotion
       with:
         target: ${{ inputs.target }}
+        environment: ${{ inputs.environment }}
         service: ${{ steps.contract.outputs.service }}
         project_id: ${{ inputs.project_id }}
         region: ${{ steps.contract.outputs.region }}

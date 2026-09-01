@@ -1077,5 +1077,73 @@ jobs:
         )
 
 
+class AcceptanceRouteFixture(unittest.TestCase):
+    """Restricted ingress hides the tagged candidate URL; the route must say so."""
+
+    RESTRICTED = "internal-and-cloud-load-balancing"
+
+    def load(self, contract: dict):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "public-build-contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            return STATIC.load_contract(path)
+
+    def with_public_urls(self, public_urls: dict) -> dict:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["candidate_acceptance"]["public_urls"] = public_urls
+        return contract
+
+    def test_open_ingress_smokes_the_tagged_candidate(self) -> None:
+        target = self.load(fixture_contract()).targets["fake"]
+        for ingress in ("", "all", " all "):
+            route = STATIC.acceptance_route(target, environment="prod", ingress=ingress)
+            self.assertEqual(route, STATIC.AcceptanceRoute(route="candidate_url", public_url=""))
+
+    def test_restricted_ingress_uses_the_declared_public_url(self) -> None:
+        target = self.load(self.with_public_urls({"prod": "https://fake.example"})).targets["fake"]
+        route = STATIC.acceptance_route(target, environment="prod", ingress=self.RESTRICTED)
+        self.assertEqual(route, STATIC.AcceptanceRoute(route="public_url", public_url="https://fake.example"))
+
+    def test_restricted_ingress_without_a_public_url_names_the_ingress(self) -> None:
+        target = self.load(self.with_public_urls({"prod": "https://fake.example"})).targets["fake"]
+        with self.assertRaises(ValueError) as caught:
+            STATIC.acceptance_route(target, environment="development", ingress=self.RESTRICTED)
+        self.assertIn(self.RESTRICTED, str(caught.exception))
+        self.assertIn("development", str(caught.exception))
+
+    def test_public_urls_must_be_https_for_known_environments(self) -> None:
+        for public_urls in (
+            {"staging": "https://fake.example"},
+            {"prod": "http://fake.example"},
+            {"prod": "https://fake.example/"},
+            ["https://fake.example"],
+        ):
+            with self.subTest(public_urls=public_urls):
+                with self.assertRaises(ValueError):
+                    self.load(self.with_public_urls(public_urls))
+
+    def test_serving_revision_prefers_the_largest_traffic_share(self) -> None:
+        document = {
+            "status": {
+                "traffic": [
+                    {"revisionName": "svc-old", "percent": 30},
+                    {"revisionName": "svc-live", "percent": 70},
+                    {"revisionName": "svc-candidate", "tag": "public-x", "percent": 0},
+                    {"latestRevision": True},
+                ]
+            }
+        }
+        self.assertEqual(STATIC.serving_revision(document), "svc-live")
+        self.assertEqual(STATIC.serving_revision({"status": {"traffic": []}}), "")
+        self.assertEqual(STATIC.serving_revision({}), "")
+
+    def test_shipped_frontend_contract_declares_its_balancer_hostname(self) -> None:
+        # h.omi.me fronts the `frontend` service, whose contract restricts ingress
+        # to the balancer; without this URL no prod frontend candidate can ever be accepted.
+        target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["frontend"]
+        self.assertIn("--ingress=internal-and-cloud-load-balancing", target.deployment.flags)
+        self.assertEqual(target.candidate_acceptance.public_urls.get("prod"), "https://h.omi.me")
+
+
 if __name__ == "__main__":
     unittest.main()
