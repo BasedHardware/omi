@@ -291,7 +291,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       case ConversationTab.transcript:
         return context.l10n.transcriptTab;
       case ConversationTab.summary:
-        return context.l10n.conversationTab;
+        // The summary tab is this page's default view, so a "Conversation"
+        // label restates the screen the user is already on and crowds a header
+        // that already carries the back button and three actions.
+        return '';
       case ConversationTab.actionItems:
         return context.l10n.actionItemsTab;
     }
@@ -701,16 +704,19 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
               ),
             ),
-            title: Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: Text(
-                  _getTabTitle(context, selectedTab),
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+            title: switch (_getTabTitle(context, selectedTab)) {
+              '' => null,
+              final tabTitle => Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Text(
+                      tabTitle,
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                    ),
+                  ),
                 ),
-              ),
-            ),
+            },
             titleSpacing: 0,
             actions: [
               Consumer<ConversationDetailProvider>(
