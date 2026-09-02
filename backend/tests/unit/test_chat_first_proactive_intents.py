@@ -701,9 +701,11 @@ def test_deferred_old_intent_does_not_stall_but_never_fetched_old_intent_does(fi
     )
     assert without_stall.stalled_source is None
 
+    # Not a capture receipt: one this old is retired rather than left to
+    # stall, so the stall clock is shown on a source that still waits.
     intents_db.create_intent(
         UID,
-        source='capture_arrival',
+        source='deferral_reraise',
         continuity_key='capture:old-never-fetched',
         subject=ChatFirstSubject(kind='capture', id='old-never-fetched'),
         blocks=[CaptureLinkSpec(type='captureLink', conversation_id='old-never-fetched', summary='Old')],
@@ -714,7 +716,7 @@ def test_deferred_old_intent_does_not_stall_but_never_fetched_old_intent_does(fi
     stalled = intents_db.fetch_ready_intent_batch(
         UID, account_generation=GENERATION, now=NOW, firestore_client=firestore
     )
-    assert stalled.stalled_source == 'capture_arrival'
+    assert stalled.stalled_source == 'deferral_reraise'
 
 
 def test_stall_age_restarts_at_last_deferral_but_eventually_pages(firestore):
@@ -810,7 +812,9 @@ def test_fetch_candidate_transactions_are_capped_at_twice_the_response_limit(fir
     for index in range(7):
         intents_db.create_intent(
             UID,
-            source='capture_arrival',
+            # Not a capture receipt: those collapse to the newest one, and this
+            # bound is about the candidate scan rather than that rule.
+            source='deferral_reraise',
             continuity_key=f'capture:scan-cap-{index}',
             subject=ChatFirstSubject(kind='capture', id=f'scan-cap-{index}'),
             blocks=[CaptureLinkSpec(type='captureLink', conversation_id=f'scan-cap-{index}', summary='Candidate')],
@@ -1072,7 +1076,9 @@ def test_repair_query_does_not_starve_repairable_row_behind_requeued_deaths(fire
     for index in range(20):
         intent, _ = intents_db.create_intent(
             UID,
-            source='capture_arrival',
+            # Not a capture receipt: a requeued one past its delivery window is
+            # retired, which is a different rule than the one under test here.
+            source='deferral_reraise',
             continuity_key=f'capture:repair-starvation:{index}',
             subject=ChatFirstSubject(kind='capture', id=f'repair-starvation-{index}'),
             blocks=[CaptureLinkSpec(type='captureLink', conversation_id=f'repair-{index}', summary='Repair')],
@@ -1747,9 +1753,201 @@ def test_fetch_orders_daily_and_meeting_intents_ahead_of_capture_link_backlog(fi
         UID, account_generation=GENERATION, now=NOW + timedelta(days=2), firestore_client=firestore
     )
 
-    assert [intent.intent_id for intent in batch.intents[:2]] == [daily.intent_id, meeting.intent_id]
-    assert len(batch.intents) == 8
-    assert batch.stalled_source == 'capture_arrival'
+    # The daily opener and the meeting-notes intent keep their priority, and the
+    # nine-deep capture backlog no longer follows them into the transcript: the
+    # newest receipt is two days old, so every one of them is retired.
+    assert [intent.intent_id for intent in batch.intents] == [daily.intent_id, meeting.intent_id]
+    # The stall clock now pages on the opener, which is the one row still
+    # waiting past the boundary rather than being retired at it.
+    assert batch.stalled_source == 'daily_opener'
+    dead_reasons = {
+        row['dead_letter_reason']
+        for path, row in firestore.rows.items()
+        if path[2] == intents_db.DEAD_LETTERS_COLLECTION
+    }
+    assert dead_reasons == {
+        intents_db.SUPERSEDED_CAPTURE_DEAD_LETTER_REASON,
+        intents_db.STALE_CAPTURE_DEAD_LETTER_REASON,
+    }
+
+
+def _capture_receipt(firestore, key: str, *, created_at):
+    intent, _ = intents_db.create_intent(
+        UID,
+        source='capture_arrival',
+        continuity_key=f'capture:{key}',
+        subject=ChatFirstSubject(kind='capture', id=key),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id=key, summary=f'Conversation {key}')],
+        account_generation=GENERATION,
+        now=created_at,
+        firestore_client=firestore,
+    )
+    return intent
+
+
+def _dead_letter_reason(firestore, intent_id: str) -> str | None:
+    row = firestore.rows.get(('users', UID, intents_db.DEAD_LETTERS_COLLECTION, intent_id))
+    return None if row is None else row['dead_letter_reason']
+
+
+def test_capture_receipt_backlog_collapses_to_the_newest_live_receipt(firestore):
+    """One conversation card, not the run of them a closed Chat used to accrue."""
+
+    receipts = [
+        _capture_receipt(firestore, f'backlog-{index}', created_at=NOW + timedelta(minutes=index)) for index in range(5)
+    ]
+
+    batch = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(minutes=10), firestore_client=firestore
+    )
+
+    assert [intent.intent_id for intent in batch.intents] == [receipts[-1].intent_id]
+    assert {_dead_letter_reason(firestore, intent.intent_id) for intent in receipts[:-1]} == {
+        intents_db.SUPERSEDED_CAPTURE_DEAD_LETTER_REASON
+    }
+    assert [event.event for event in batch.lifecycle_events] == ['retired'] * 4
+    # The surviving receipt is delivered, not parked for a later poll.
+    assert ('users', UID, intents_db.INTENTS_COLLECTION, receipts[-1].intent_id) in firestore.rows
+
+
+def test_capture_receipt_past_its_delivery_window_is_retired_rather_than_delivered(firestore):
+    stale = _capture_receipt(
+        firestore, 'stale', created_at=NOW - intents_db.CAPTURE_RECEIPT_DELIVERY_WINDOW - timedelta(minutes=1)
+    )
+
+    assert (
+        intents_db.fetch_ready_intent_batch(
+            UID, account_generation=GENERATION, now=NOW, firestore_client=firestore
+        ).intents
+        == []
+    )
+    assert _dead_letter_reason(firestore, stale.intent_id) == intents_db.STALE_CAPTURE_DEAD_LETTER_REASON
+
+    live = _capture_receipt(
+        firestore, 'live', created_at=NOW - intents_db.CAPTURE_RECEIPT_DELIVERY_WINDOW + timedelta(minutes=1)
+    )
+    delivered = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW, firestore_client=firestore
+    )
+    assert [intent.intent_id for intent in delivered.intents] == [live.intent_id]
+
+
+def test_meeting_notes_intents_keep_their_own_delivery_contract(firestore):
+    """``conversationLink`` shares the source but is not a per-conversation receipt."""
+
+    meetings = []
+    for index in range(2):
+        intent, _ = intents_db.create_intent(
+            UID,
+            source='capture_arrival',
+            continuity_key=f'meeting:{index}',
+            subject=ChatFirstSubject(kind='capture', id=f'meeting-{index}'),
+            blocks=[
+                ConversationLinkSpec(
+                    type='conversationLink', conversation_id=f'meeting-{index}', summary='Meeting notes ready'
+                )
+            ],
+            account_generation=GENERATION,
+            now=NOW + timedelta(minutes=index),
+            firestore_client=firestore,
+        )
+        meetings.append(intent)
+
+    batch = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(days=30), firestore_client=firestore
+    )
+
+    assert {intent.intent_id for intent in batch.intents} == {intent.intent_id for intent in meetings}
+
+
+def test_a_capture_receipt_awaiting_its_kernel_receipt_is_never_retired(firestore):
+    """The kernel already wrote that row; retiring it would strand its receipt."""
+
+    pending = _capture_receipt(firestore, 'pending', created_at=NOW - timedelta(days=30))
+    newer = _capture_receipt(firestore, 'newer', created_at=NOW)
+    firestore.rows[('users', UID, intents_db.INTENTS_COLLECTION, pending.intent_id)][
+        'delivery_state'
+    ] = 'pending_kernel_receipt'
+
+    batch = intents_db.fetch_ready_intent_batch(UID, account_generation=GENERATION, now=NOW, firestore_client=firestore)
+
+    assert _dead_letter_reason(firestore, pending.intent_id) is None
+    assert {intent.intent_id for intent in batch.intents} == {pending.intent_id, newer.intent_id}
+
+
+def test_a_capture_receipt_a_kernel_already_holds_is_not_superseded(firestore):
+    """A fetch leaves a normal intent ``ready`` -- only the sibling attempt row moves.
+
+    So ``ready`` alone does not mean undelivered, and superseding on it would
+    delete a row out from under the kernel that is about to acknowledge it.
+    """
+
+    in_flight = _capture_receipt(firestore, 'in-flight', created_at=NOW)
+    first = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(minutes=1), firestore_client=firestore
+    )
+    assert [intent.intent_id for intent in first.intents] == [in_flight.intent_id]
+    assert (
+        firestore.rows[('users', UID, intents_db.INTENTS_COLLECTION, in_flight.intent_id)]['delivery_state'] == 'ready'
+    )
+
+    newer = _capture_receipt(firestore, 'newer', created_at=NOW + timedelta(minutes=2))
+    second = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(minutes=3), firestore_client=firestore
+    )
+
+    assert _dead_letter_reason(firestore, in_flight.intent_id) is None
+    assert {intent.intent_id for intent in second.intents} == {in_flight.intent_id, newer.intent_id}
+    # The unacknowledged-fetch budget, not this rule, is what terminalizes it.
+    assert (
+        firestore.rows[('users', UID, intents_db.DELIVERY_ATTEMPTS_COLLECTION, in_flight.intent_id)]['fetch_count'] == 2
+    )
+
+
+def test_a_retired_receipt_keeps_its_delivery_attempt_history(firestore):
+    """The terminal record is written from the hydrated intent, not the bare row."""
+
+    superseded = _capture_receipt(firestore, 'superseded', created_at=NOW)
+    _capture_receipt(firestore, 'newest', created_at=NOW + timedelta(minutes=1))
+    deferred_at = NOW - timedelta(hours=2)
+    firestore.rows[('users', UID, intents_db.DELIVERY_ATTEMPTS_COLLECTION, superseded.intent_id)] = {
+        'fetch_count': 0,
+        'first_deferred_at': deferred_at,
+        'last_deferral_at': deferred_at,
+    }
+
+    intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(minutes=2), firestore_client=firestore
+    )
+
+    dead = DeadLetteredProactiveIntent.model_validate(
+        firestore.rows[('users', UID, intents_db.DEAD_LETTERS_COLLECTION, superseded.intent_id)]
+    )
+    assert dead.dead_letter_reason == intents_db.SUPERSEDED_CAPTURE_DEAD_LETTER_REASON
+    assert dead.first_deferred_at == deferred_at
+    assert dead.last_deferral_at == deferred_at
+
+
+def test_capture_retirement_writes_stay_bounded_on_one_poll(firestore):
+    limit = 2
+    for index in range(4 * intents_db.FETCH_CANDIDATE_SCAN_MULTIPLIER * limit):
+        _capture_receipt(firestore, f'flood-{index:03d}', created_at=NOW + timedelta(seconds=index))
+    transactions_before = firestore.transaction_count
+
+    batch = intents_db.fetch_ready_intent_batch(
+        UID,
+        account_generation=GENERATION,
+        limit=limit,
+        now=NOW + timedelta(minutes=1),
+        firestore_client=firestore,
+    )
+
+    # Everything but the newest is excluded from the response on this poll even
+    # though only a bounded number of them can be retired by it.
+    assert len(batch.intents) == 1
+    retired = sum(1 for event in batch.lifecycle_events if event.event == 'retired')
+    assert retired == intents_db.FETCH_CANDIDATE_SCAN_MULTIPLIER * limit
+    assert firestore.transaction_count - transactions_before <= 2 * intents_db.FETCH_CANDIDATE_SCAN_MULTIPLIER * limit
 
 
 def test_stall_scan_includes_old_low_priority_intent_below_response_window(firestore):
@@ -1764,9 +1962,10 @@ def test_stall_scan_includes_old_low_priority_intent_below_response_window(fires
             now=NOW + timedelta(seconds=index),
             firestore_client=firestore,
         )
+    # Not a capture receipt: one this old is retired instead of stalling.
     old, _ = intents_db.create_intent(
         UID,
-        source='capture_arrival',
+        source='deferral_reraise',
         continuity_key='capture:old-low-priority',
         subject=ChatFirstSubject(kind='capture', id='old-low-priority'),
         blocks=[CaptureLinkSpec(type='captureLink', conversation_id='old-low-priority', summary='Old')],
@@ -1780,7 +1979,7 @@ def test_stall_scan_includes_old_low_priority_intent_below_response_window(fires
     )
 
     assert old.intent_id not in {intent.intent_id for intent in batch.intents}
-    assert batch.stalled_source == 'capture_arrival'
+    assert batch.stalled_source == 'deferral_reraise'
 
 
 def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_receipt(firestore):
