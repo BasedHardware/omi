@@ -1,7 +1,6 @@
 #import "OmiAuthModule.h"
 
 #import <AppKit/AppKit.h>
-#import <AuthenticationServices/AuthenticationServices.h>
 #import <CommonCrypto/CommonDigest.h>
 #import <LocalAuthentication/LocalAuthentication.h>
 #import <Security/Security.h>
@@ -15,8 +14,18 @@ static NSString *const OmiAuthKeychainService = @"com.omi.rnruntime.firebase-res
 static NSString *const OmiAuthKeychainAccount = @"firebase-rest-tokens";
 static NSString *const OmiOnboardingCompletedKey = @"omi.onboarding.completed";
 static NSString *const OmiAuthShippingSessionIgnoredKey = @"omi.auth.shippingSessionIgnored";
+// Public based-hardware Firebase Web API key. Same unrestricted key the Omi CLI
+// uses to mint a refreshable session from a custom token. Firebase API keys
+// identify the project; they are not secrets. /v1/config/api-keys requires a
+// cloud session, so first-run sign-in cannot fetch it.
+static NSString *const OmiAuthFirebaseApiKey = @"AIzaSyA88gHcmiAxjN_aE23tHRWXOgFfapyO6dk";
 
 static BOOL OmiAuthIgnoreEnvironmentCloudTokens = NO;
+
+static NSString *OmiAuthResolvedFirebaseApiKey(void) {
+  NSString *environment = NSProcessInfo.processInfo.environment[@"FIREBASE_API_KEY"];
+  return environment.length > 0 ? environment : OmiAuthFirebaseApiKey;
+}
 
 BOOL OmiAuthEnvironmentCloudTokensIgnored(void) {
   @synchronized (OmiAuthKeychainService) {
@@ -99,8 +108,8 @@ static BOOL OmiAuthPeerIsLoopback(int client) {
 }
 
 // Aside cannot close a tab it did not open. After a valid code, replace
-// the leftover product page with about:blank and try close; the app then
-// cancels ASWebAuthenticationSession and comes forward.
+// the leftover callback tab with about:blank and try close; the app then
+// comes forward.
 static NSString *OmiAuthBlankCallbackHTML(void) {
   return @"<!doctype html><html><head><meta charset='utf-8'><script>location.replace('about:blank');try{window.close();}catch(e){}</script></head><body></body></html>";
 }
@@ -359,8 +368,7 @@ static BOOL OmiAuthStoreSession(NSString *idToken, NSString *refreshToken, NSNum
   return status == errSecSuccess;
 }
 
-@interface OmiAuthModule () <ASWebAuthenticationPresentationContextProviding>
-@property(nonatomic, strong) ASWebAuthenticationSession *authenticationSession;
+@interface OmiAuthModule ()
 @property(nonatomic) int loopbackListener;
 @property(nonatomic) BOOL settled;
 @property(nonatomic) BOOL signInCompleting;
@@ -380,10 +388,6 @@ RCT_EXPORT_MODULE(OmiAuth)
   self = [super init];
   if (self) _loopbackListener = -1;
   return self;
-}
-
-- (ASPresentationAnchor)presentationAnchorForWebAuthenticationSession:(ASWebAuthenticationSession *)session {
-  return NSApp.keyWindow ?: NSApp.windows.firstObject;
 }
 
 - (void)closeLoopback {
@@ -526,8 +530,6 @@ RCT_EXPORT_MODULE(OmiAuth)
     self.signInCompleting = NO;
     self.pendingSignInReject = nil;
   }
-  [self.authenticationSession cancel];
-  self.authenticationSession = nil;
   [self closeLoopback];
   if (code != nil) {
     reject(code, message, error);
@@ -539,100 +541,78 @@ RCT_EXPORT_MODULE(OmiAuth)
   [self bringOmiToFront];
 }
 
+- (void)finishWithFirebaseCustomToken:(NSString *)customToken
+                              attempt:(NSUInteger)attempt
+                              resolve:(RCTPromiseResolveBlock)resolve
+                               reject:(RCTPromiseRejectBlock)reject {
+  NSString *firebaseKey = OmiAuthResolvedFirebaseApiKey();
+  NSURLComponents *components = [NSURLComponents componentsWithString:
+      @"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken"];
+  components.queryItems = @[[NSURLQueryItem queryItemWithName:@"key" value:firebaseKey]];
+  NSMutableURLRequest *firebase = [NSMutableURLRequest requestWithURL:components.URL];
+  firebase.HTTPMethod = @"POST";
+  [firebase setValue:@"application/json" forHTTPHeaderField:@"content-type"];
+  firebase.HTTPBody = [NSJSONSerialization dataWithJSONObject:@{
+    @"token" : customToken,
+    @"returnSecureToken" : @YES,
+  } options:0 error:nil];
+  [self performRequest:firebase completion:^(NSDictionary *tokens, NSError *firebaseError) {
+    if (![self isSignInAttemptCurrent:attempt]) return;
+    NSString *firebaseIdToken = [tokens[@"idToken"] isKindOfClass:NSString.class] ? tokens[@"idToken"] : nil;
+    NSString *refreshToken = [tokens[@"refreshToken"] isKindOfClass:NSString.class] ? tokens[@"refreshToken"] : nil;
+    if (firebaseError != nil || firebaseIdToken.length == 0 || refreshToken.length == 0 ||
+        !OmiAuthStoreSession(firebaseIdToken, refreshToken, tokens[@"expiresIn"],
+                             tokens[@"localId"], firebaseKey)) {
+      [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
+                        message:@"Omi cloud could not establish a Firebase session" error:firebaseError
+                        resolve:resolve reject:reject];
+      return;
+    }
+    [self finishSignInAttempt:attempt value:@{@"signedIn" : @YES} code:nil message:nil error:nil
+                      resolve:resolve reject:reject];
+  }];
+}
+
 - (void)finishWithTokenResponse:(NSDictionary *)tokenResponse
                          attempt:(NSUInteger)attempt
                          resolve:(RCTPromiseResolveBlock)resolve
                           reject:(RCTPromiseRejectBlock)reject {
   if (![self isSignInAttemptCurrent:attempt]) return;
-  NSString *idToken = [tokenResponse[@"id_token"] isKindOfClass:NSString.class] ? tokenResponse[@"id_token"] : nil;
-  if (idToken.length > 0) {
-    NSString *refreshToken = [tokenResponse[@"refresh_token"] isKindOfClass:NSString.class]
-        ? tokenResponse[@"refresh_token"] : tokenResponse[@"refreshToken"];
-    NSNumber *expiresIn = [tokenResponse[@"expires_in"] respondsToSelector:@selector(doubleValue)]
-        ? @([tokenResponse[@"expires_in"] doubleValue]) : @3600;
-    NSString *localId = [tokenResponse[@"local_id"] isKindOfClass:NSString.class]
-        ? tokenResponse[@"local_id"] : tokenResponse[@"localId"];
-    NSString *firebaseApiKey = [tokenResponse[@"firebase_api_key"] isKindOfClass:NSString.class]
-        ? tokenResponse[@"firebase_api_key"] : tokenResponse[@"firebaseApiKey"];
-    if (refreshToken.length == 0 || firebaseApiKey.length > 0) {
-      if (![self isSignInAttemptCurrent:attempt] ||
-          !OmiAuthStoreSession(idToken, refreshToken, expiresIn, localId, firebaseApiKey)) {
-        [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNCONFIGURED"
-                          message:@"Could not store the Omi cloud session" error:nil
-                          resolve:resolve reject:reject];
-        return;
-      }
-      [self finishSignInAttempt:attempt value:@{@"signedIn" : @YES} code:nil message:nil error:nil
-                        resolve:resolve reject:reject];
-      return;
-    }
-    NSMutableURLRequest *configuration = [NSMutableURLRequest requestWithURL:
-        [NSURL URLWithString:@"https://api.omi.me/v1/config/api-keys"]];
-    [configuration setValue:[NSString stringWithFormat:@"Bearer %@", idToken]
-         forHTTPHeaderField:@"authorization"];
-    [self performRequest:configuration completion:^(NSDictionary *keys, NSError *keysError) {
-      NSString *key = [keys[@"firebase_api_key"] isKindOfClass:NSString.class]
-          ? keys[@"firebase_api_key"] : keys[@"firebaseApiKey"];
-      if (![self isSignInAttemptCurrent:attempt]) return;
-      if (keysError != nil || key.length == 0 ||
-          !OmiAuthStoreSession(idToken, refreshToken, expiresIn, localId, key)) {
-        [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
-                          message:@"Omi cloud could not preserve a refreshable session" error:keysError
-                          resolve:resolve reject:reject];
-        return;
-      }
-      [self finishSignInAttempt:attempt value:@{@"signedIn" : @YES} code:nil message:nil error:nil
-                        resolve:resolve reject:reject];
-    }];
+  // /v1/auth/token with use_custom_token=true returns Google's id_token AND a
+  // Firebase custom_token. Storing the Google JWT never produces a refreshable
+  // Omi session, so mint Firebase tokens from custom_token first.
+  NSString *customToken = [tokenResponse[@"custom_token"] isKindOfClass:NSString.class]
+      ? tokenResponse[@"custom_token"] : tokenResponse[@"customToken"];
+  if (customToken.length > 0) {
+    [self finishWithFirebaseCustomToken:customToken attempt:attempt resolve:resolve reject:reject];
     return;
   }
-  NSString *customToken = [tokenResponse[@"custom_token"] isKindOfClass:NSString.class]
-      ? tokenResponse[@"custom_token"] : nil;
-  if (customToken.length == 0) {
+  NSString *idToken = [tokenResponse[@"id_token"] isKindOfClass:NSString.class]
+      ? tokenResponse[@"id_token"] : tokenResponse[@"idToken"];
+  NSString *refreshToken = [tokenResponse[@"refresh_token"] isKindOfClass:NSString.class]
+      ? tokenResponse[@"refresh_token"] : tokenResponse[@"refreshToken"];
+  if (idToken.length == 0 || refreshToken.length == 0) {
     [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
                       message:@"Omi cloud did not return a usable session" error:nil
                       resolve:resolve reject:reject];
     return;
   }
-  NSMutableURLRequest *configuration = [NSMutableURLRequest requestWithURL:
-      [NSURL URLWithString:@"https://api.omi.me/v1/config/api-keys"]];
-  [configuration setValue:[NSString stringWithFormat:@"Bearer %@", customToken]
-       forHTTPHeaderField:@"authorization"];
-  [self performRequest:configuration completion:^(NSDictionary *keys, NSError *keysError) {
-    if (![self isSignInAttemptCurrent:attempt]) return;
-    NSString *firebaseKey = [keys[@"firebase_api_key"] isKindOfClass:NSString.class]
-        ? keys[@"firebase_api_key"] : keys[@"firebaseApiKey"];
-    if (keysError != nil || firebaseKey.length == 0) {
-      [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
-                        message:@"Omi cloud could not establish a Firebase session" error:keysError
-                        resolve:resolve reject:reject];
-      return;
-    }
-    NSURLComponents *components = [NSURLComponents componentsWithString:
-        @"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken"];
-    components.queryItems = @[[NSURLQueryItem queryItemWithName:@"key" value:firebaseKey]];
-    NSMutableURLRequest *firebase = [NSMutableURLRequest requestWithURL:components.URL];
-    firebase.HTTPMethod = @"POST";
-    [firebase setValue:@"application/json" forHTTPHeaderField:@"content-type"];
-    firebase.HTTPBody = [NSJSONSerialization dataWithJSONObject:@{
-      @"token" : customToken,
-      @"returnSecureToken" : @YES,
-    } options:0 error:nil];
-    [self performRequest:firebase completion:^(NSDictionary *tokens, NSError *firebaseError) {
-      if (![self isSignInAttemptCurrent:attempt]) return;
-      NSString *firebaseIdToken = [tokens[@"idToken"] isKindOfClass:NSString.class] ? tokens[@"idToken"] : nil;
-      if (firebaseError != nil || firebaseIdToken.length == 0 ||
-          !OmiAuthStoreSession(firebaseIdToken, tokens[@"refreshToken"], tokens[@"expiresIn"],
-                               tokens[@"localId"], firebaseKey)) {
-        [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
-                          message:@"Omi cloud could not establish a Firebase session" error:firebaseError
-                          resolve:resolve reject:reject];
-        return;
-      }
-      [self finishSignInAttempt:attempt value:@{@"signedIn" : @YES} code:nil message:nil error:nil
-                        resolve:resolve reject:reject];
-    }];
-  }];
+  NSNumber *expiresIn = [tokenResponse[@"expires_in"] respondsToSelector:@selector(doubleValue)]
+      ? @([tokenResponse[@"expires_in"] doubleValue]) : @3600;
+  NSString *localId = [tokenResponse[@"local_id"] isKindOfClass:NSString.class]
+      ? tokenResponse[@"local_id"] : tokenResponse[@"localId"];
+  NSString *firebaseApiKey = [tokenResponse[@"firebase_api_key"] isKindOfClass:NSString.class]
+      ? tokenResponse[@"firebase_api_key"] : tokenResponse[@"firebaseApiKey"];
+  if (firebaseApiKey.length == 0) firebaseApiKey = OmiAuthResolvedFirebaseApiKey();
+  if (![self isSignInAttemptCurrent:attempt] ||
+      !OmiAuthStoreSession(idToken, refreshToken, expiresIn, localId, firebaseApiKey)) {
+    [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNCONFIGURED"
+                      message:@"Could not store the Omi cloud session" error:nil
+                      resolve:resolve reject:reject];
+    return;
+  }
+  [self finishSignInAttempt:attempt value:@{@"signedIn" : @YES} code:nil message:nil error:nil
+                    resolve:resolve reject:reject];
 }
 
 - (void)completeSignInWithCallback:(NSURL *)callbackURL
@@ -662,17 +642,23 @@ RCT_EXPORT_MODULE(OmiAuth)
       ![redirect.scheme.lowercaseString isEqualToString:@"http"] ||
       ![redirect.host.lowercaseString isEqualToString:@"127.0.0.1"] ||
       ![redirect.path isEqualToString:@"/callback"]) {
+    [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
+                      message:@"Omi cloud sign in was cancelled or failed" error:nil
+                      resolve:resolve reject:reject];
     return;
   }
   NSMutableDictionary<NSString *, NSString *> *values = [NSMutableDictionary dictionary];
   for (NSURLQueryItem *item in callback.queryItems) if (item.value != nil) values[item.name] = item.value;
-  if (![values[@"state"] isEqualToString:state] || values[@"code"].length == 0) return;
+  if (![values[@"state"] isEqualToString:state] || values[@"code"].length == 0) {
+    [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
+                      message:@"Omi cloud sign in was cancelled or failed" error:nil
+                      resolve:resolve reject:reject];
+    return;
+  }
   @synchronized (self) {
     if (attempt != self.signInAttempt || self.settled || self.signInCompleting) return;
     self.signInCompleting = YES;
   }
-  [self.authenticationSession cancel];
-  self.authenticationSession = nil;
   [self closeLoopback];
   [self bringOmiToFront];
   NSURLComponents *form = [[NSURLComponents alloc] init];
@@ -743,8 +729,6 @@ RCT_REMAP_METHOD(signIn,
     self.pendingSignInReject = nil;
     self.settled = YES;
     self.signInCompleting = NO;
-    [self.authenticationSession cancel];
-    self.authenticationSession = nil;
     [self closeLoopback];
     if (previousReject != nil) {
       previousReject(@"OMI_AUTH_UNAUTHORIZED", @"Omi cloud sign in was cancelled", nil);
@@ -763,8 +747,12 @@ RCT_REMAP_METHOD(signIn,
     self.pendingSignInReject = [reject copy];
     self.loopbackListener = listener;
     // api.omi.me accepts this loopback redirect. No custom URL scheme is
-    // registered for this bundle, so the loopback listener is the bounce-back
-    // and the auth sheet is cancelled programmatically once the code lands.
+    // registered for this bundle, so the loopback listener is the bounce-back.
+    // Open the system browser — not an ephemeral ASWebAuthenticationSession.
+    // After Google, api.omi.me serves HTTPS auth_callback.html which assigns
+    // http://127.0.0.1:port/callback. Isolated auth sheets block that mixed-
+    // content bounce, so the leftover "close this window" page stays up and
+    // no session is stored. The system browser allows the loopback hop.
     NSString *redirectURI = [NSString stringWithFormat:@"http://127.0.0.1:%u/callback", port];
     NSURLComponents *authorize = [NSURLComponents componentsWithString:@"https://api.omi.me/v1/auth/authorize"];
     authorize.queryItems = @[
@@ -787,26 +775,7 @@ RCT_REMAP_METHOD(signIn,
                                   reject:reject];
       });
     });
-    self.authenticationSession = [[ASWebAuthenticationSession alloc]
-        initWithURL:authorize.URL callbackURLScheme:@"http"
-        completionHandler:^(NSURL *callbackURL, NSError *__unused error) {
-      if (callbackURL == nil) {
-        return;
-      }
-      dispatch_async(dispatch_get_main_queue(), ^{
-        if (attempt != self.signInAttempt) return;
-        [self completeSignInWithCallback:callbackURL
-                                   state:state
-                                verifier:verifier
-                             redirectURI:redirectURI
-                                 attempt:attempt
-                                 resolve:resolve
-                                  reject:reject];
-      });
-    }];
-    self.authenticationSession.presentationContextProvider = self;
-    self.authenticationSession.prefersEphemeralWebBrowserSession = YES;
-    if (![self.authenticationSession start]) {
+    if (![NSWorkspace.sharedWorkspace openURL:authorize.URL]) {
       [self completeSignInWithCallback:nil
                                  state:state
                               verifier:verifier
