@@ -68,6 +68,8 @@ struct TaskChatPanel: View {
           // main window; taps route the one shell (`ChatFirstRichBlockContext.auxiliary`).
           chatFirstRichBlockContext: .auxiliary(chatProvider: coordinator.chatProvider),
           enablesPromptTimeline: false,
+          // This thread is about one task; the day's summary belongs in the main chat.
+          showsDailySummary: false,
           welcomeContent: { taskWelcome }
         )
         .frame(maxHeight: .infinity)

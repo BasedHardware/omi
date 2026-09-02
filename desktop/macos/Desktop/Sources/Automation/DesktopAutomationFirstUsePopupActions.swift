@@ -21,7 +21,7 @@ extension DesktopAutomationActionRegistry {
       }
       // The same persisted arming onboarding's handoff performs, so the popup is raised from the
       // state a real first launch has rather than a bare notification.
-      PostOnboardingPromptSuggestions.save([SBPostOnboardingGuidance.universalFallback])
+      PostOnboardingPromptSuggestions.save([HomeSuggestionComposer.universalFirstQuestion])
       NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
       return ["armed": PostOnboardingPromptSuggestions.shouldArmPopup() ? "true" : "false"]
     }

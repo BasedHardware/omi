@@ -145,7 +145,13 @@ struct QueryShellHome: View {
     // A typed character belongs in the field even when the field is not focused: this is a search
     // surface, and a search surface that swallows the first letter you type is broken.
     .onAppear {
+      takePendingDraftIfAny()
       claimCaret()
+    }
+    // A prefilled draft (first-real-app card, daily-summary follow-up) lands in the composer,
+    // focused and unsent. This is the app's only chat destination, so it is the only consumer.
+    .onReceive(NotificationCenter.default.publisher(for: .openMainChatRequested)) { _ in
+      takePendingDraftIfAny()
     }
     // **Coming back to Omi puts the caret back in the field.** This surface's whole job is to be typed
     // into, and re-activating the app is the one moment it is certain the person is here to type.
@@ -431,6 +437,14 @@ struct QueryShellHome: View {
   /// these call sites is written for.
   private func claimCaret() {
     caretClaims &+= 1
+  }
+
+  private func takePendingDraftIfAny() {
+    guard let draft = MainChatNavigationRequestStore.shared.consumeDraft() else { return }
+    // Leave search-results mode first, or the prefilled composer stays hidden behind the results.
+    searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
+    chatProvider.draftText = draft
+    claimCaret()
   }
 
   // MARK: - Where a row goes
