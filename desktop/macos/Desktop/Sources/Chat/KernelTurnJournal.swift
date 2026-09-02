@@ -340,6 +340,9 @@ extension ChatMessage {
     if let continuityKey, !continuityKey.isEmpty { metadata["continuityKey"] = continuityKey }
     if let models = self.metadata?.modelsUsed, !models.isEmpty { metadata["modelsUsed"] = models }
     if let notificationContext { metadata["notificationContext"] = notificationContext }
+    if let screenContext = self.metadata?.screenContext, !screenContext.isEmpty {
+      metadata["screen_context"] = String(screenContext.prefix(1_200))
+    }
     // These rollback-compatible fields are consumed only by the kernel outbox
     // renderer for the existing /v2/desktop/messages POST shape.
     if let appId { metadata["appId"] = appId }

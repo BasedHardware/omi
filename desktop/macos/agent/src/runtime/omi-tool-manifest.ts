@@ -267,14 +267,17 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         ...doc(
           "Search Screen History",
           "Search the user's on-screen history by meaning.",
-          ["Use for what the user saw, read, or worked on. Speak a short summary of the result."],
+          [
+            "Use for what the user saw, read, or worked on, including text they read on a page earlier (a riddle, a message, a document). Speak a short summary of the result.",
+            "Prefer this over conversation tools for anything that was displayed rather than spoken.",
+          ],
         ),
         surfaces: ["realtime_voice"],
       },
     },
     voice: {
       realtimeDescription:
-        "Search the user's on-screen history — what they saw, read, or worked on — by meaning. Use for 'when was I looking at X', 'find where I read about Y', 'what was I doing in app Z'. Returns matching moments with the app and context. Fast synchronous read. Speak the result.",
+        "Search the user's on-screen history — what they saw, read, or worked on — by meaning. Use for 'when was I looking at X', 'find where I read about Y', 'what was I doing in app Z', and for text they read on screen earlier ('the riddle on the first page', 'what did that message say'). Anything displayed rather than spoken lives here, not in conversations. Returns matching moments with the app, context, and an OCR text preview. Fast synchronous read. Speak the result.",
     },
   },
   get_daily_recap: {
@@ -401,7 +404,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     ),
     voice: {
       realtimeDescription:
-        "Search the user's past conversations for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'), or pass a canonical conversation UUID/share link for an exact lookup. Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
+        "Search the user's past spoken conversations (meetings, calls, things said aloud) for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'), or pass a canonical conversation UUID/share link for an exact lookup. Not for things the user read on screen; use search_screen_history for those. Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
     },
   },
   get_memories: {
@@ -763,7 +766,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     ]),
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     voice: {
-      realtimeDescription: "Capture the user's current screen so you can see what they're looking at.",
+      realtimeDescription: "Take a fresh capture of the user's screen. Every turn already includes the screen as it was when the user pressed the key; call this only when no image arrived with this turn or the user says the screen changed since.",
     },
   },
   report_screen_observation: {

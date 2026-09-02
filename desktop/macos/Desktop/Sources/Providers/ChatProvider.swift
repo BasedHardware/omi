@@ -1958,6 +1958,7 @@ class ChatProvider: ObservableObject {
     }
     let responseContext = [
       systemPromptSuffix?.trimmingCharacters(in: .whitespacesAndNewlines),
+      ThreeDoorsDemoPage.activeModelNote?.trimmingCharacters(in: .whitespacesAndNewlines),
       AssistantSettings.shared.hasExplicitVoiceLanguages
         ? Self.responseLanguageInstruction(languageCodes: AssistantSettings.shared.voiceLanguages)
         : nil,
@@ -7055,7 +7056,6 @@ class ChatProvider: ObservableObject {
       currentError = nil
       errorMessage = nil
       await runtime.unregisterClient(clientId: probeClientID)
-
       var detail = automationMainChatSnapshot(limit: 20)
       detail["owner_a"] = ownerA
       detail["owner_b"] = trimmedOwnerB

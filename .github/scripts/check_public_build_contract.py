@@ -7,9 +7,9 @@ import argparse
 import json
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT = ROOT / "config" / "public-build-contract.json"
@@ -19,6 +19,7 @@ NAME = re.compile(r"[A-Z][A-Z0-9_]*\Z")
 SECRET_REFERENCE = re.compile(r"[A-Za-z0-9_-]+:(?:latest|[1-9][0-9]*)\Z")
 ARG = re.compile(r"^\s*ARG\s+([A-Z][A-Z0-9_]*)\s*$", re.MULTILINE)
 GUARD = re.compile(r'^\s*ENV\s+OMI_REQUIRED_PUBLIC_BUILD_INPUTS="([A-Z0-9_ ]*)"\s*$', re.MULTILINE)
+REVISION_IDENTITY_ARGS = frozenset({"NEXT_PUBLIC_OMI_BUILD_SHA"})
 WEB_WORKFLOWS = frozenset(
     {
         ".github/workflows/gcp_admin.yml",
@@ -65,6 +66,80 @@ class PublicInput:
 class CandidateAcceptance:
     command: tuple[str, ...]
     marker: str
+    # environment -> absolute HTTPS URL served by the load balancer in front of
+    # the service. Required for any environment whose ingress hides the tagged
+    # candidate URL from CI; see acceptance_route().
+    public_urls: dict[str, str] = field(default_factory=dict)
+
+
+# Cloud Run ingress values under which the tagged run.app candidate URL answers
+# to CI. Every other value (internal, internal-and-cloud-load-balancing) makes
+# the tagged URL 404 for CI regardless of authentication.
+OPEN_INGRESS = frozenset({"", "all"})
+
+
+@dataclass(frozen=True)
+class AcceptanceRoute:
+    route: str  # "candidate_url" or "public_url"
+    public_url: str = ""
+
+
+def _parse_public_urls(raw: Any, *, target_name: str, environments: Iterable[str]) -> dict[str, str]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"target {target_name} candidate public_urls must be an object")
+    known = set(environments)
+    public_urls: dict[str, str] = {}
+    for environment, url in raw.items():
+        if environment not in known:
+            raise ValueError(f"target {target_name} candidate public_urls names unknown environment {environment!r}")
+        if not isinstance(url, str) or not url.startswith("https://") or url != url.strip() or url.endswith("/"):
+            raise ValueError(
+                f"target {target_name} candidate public_urls[{environment!r}] must be an absolute HTTPS URL without a trailing slash"
+            )
+        public_urls[environment] = url
+    return public_urls
+
+
+def acceptance_route(target: Target, *, environment: str, ingress: str) -> AcceptanceRoute:
+    """Decide how CI can observe a candidate for browser acceptance.
+
+    Open ingress: smoke the no-traffic candidate through its tagged URL before
+    promotion. Restricted ingress: the tagged URL is unreachable, so the
+    candidate can only be observed through the declared public URL after it
+    holds traffic; the promotion action smokes it there and rolls back on
+    failure. Restricted ingress without a declared public URL is refused here
+    with its real cause instead of surfacing later as a canary that never
+    became ready.
+    """
+
+    normalized = ingress.strip()
+    if normalized in OPEN_INGRESS:
+        return AcceptanceRoute(route="candidate_url")
+    public_url = target.candidate_acceptance.public_urls.get(environment, "")
+    if not public_url:
+        raise ValueError(
+            f"target {target.name}: ingress {normalized!r} hides the tagged candidate URL from CI and "
+            f"candidate_acceptance.public_urls declares no {environment!r} URL to smoke after promotion"
+        )
+    return AcceptanceRoute(route="public_url", public_url=public_url)
+
+
+def serving_revision(service_document: Mapping[str, Any]) -> str:
+    """Return the revision holding the largest traffic share, or "" when none does."""
+
+    status = service_document.get("status")
+    traffic = status.get("traffic") if isinstance(status, Mapping) else None
+    best_name, best_percent = "", 0
+    for entry in traffic or ():
+        if not isinstance(entry, Mapping):
+            continue
+        name = entry.get("revisionName")
+        percent = entry.get("percent")
+        if isinstance(name, str) and name and isinstance(percent, int) and percent > best_percent:
+            best_name, best_percent = name, percent
+    return best_name
 
 
 @dataclass(frozen=True)
@@ -285,6 +360,8 @@ def load_contract(path: Path) -> Contract:
             raise ValueError(f"{path}: target {target_name} candidate command is invalid")
         if "{base_url}" not in command:
             raise ValueError(f"{path}: target {target_name} candidate command must use {{base_url}}")
+        if "{sha}" in command and "--expect-sha" not in command:
+            raise ValueError(f"{path}: target {target_name} candidate command uses {{sha}} without --expect-sha")
         gateway_required = raw_target.get("gateway_required", False)
         if not isinstance(gateway_required, bool):
             raise ValueError(f"target {target_name} gateway_required must be boolean")
@@ -300,7 +377,11 @@ def load_contract(path: Path) -> Contract:
             ),
             inputs=inputs,
             candidate_acceptance=CandidateAcceptance(
-                command=tuple(command), marker=_require_string(acceptance.get("marker"), field="candidate marker")
+                command=tuple(command),
+                marker=_require_string(acceptance.get("marker"), field="candidate marker"),
+                public_urls=_parse_public_urls(
+                    acceptance.get("public_urls"), target_name=target_name, environments=environments
+                ),
             ),
             traffic_promotion=_require_string(
                 raw_target.get("traffic_promotion"), field=f"target {target_name} traffic_promotion"
@@ -366,6 +447,23 @@ def build_args(target: Target, values: Mapping[str, str]) -> str:
     return "\n".join(f"{item.name}={values[item.name]}" for item in target.inputs if item.name in values)
 
 
+def render_acceptance_command(
+    command: Sequence[str],
+    *,
+    base_url: str,
+    sha: str = "",
+) -> tuple[str, ...]:
+    """Replace {base_url} and {sha} in a candidate_acceptance.command template.
+
+    Targets that omit {sha} are unchanged even when a sha is supplied. A template
+    that declares {sha} requires a non-empty sha so the rendered argv cannot drop
+    the revision identity the smoke is supposed to assert.
+    """
+    if "{sha}" in command and not sha:
+        raise ValueError("candidate command requires {sha}")
+    return tuple(part.replace("{base_url}", base_url).replace("{sha}", sha) for part in command)
+
+
 def deployment_setting_names(classification_path: Path) -> dict[str, set[str]]:
     raw = _read_json(classification_path)
     try:
@@ -388,7 +486,11 @@ def public_build_names(classification_path: Path) -> set[str]:
 
 
 def _docker_public_args(text: str, classified_public: set[str]) -> set[str]:
-    return {name for name in ARG.findall(text) if name.startswith("NEXT_PUBLIC_") or name in classified_public}
+    return {
+        name
+        for name in ARG.findall(text)
+        if (name.startswith("NEXT_PUBLIC_") or name in classified_public) and name not in REVISION_IDENTITY_ARGS
+    }
 
 
 def _guarded_names(text: str) -> set[str]:
@@ -465,6 +567,10 @@ def validate_target(
     )
     if guard_names and 'test -n "$value"' not in dockerfile:
         errors.append(f"{target.dockerfile}: public-build guard must reject empty values")
+    if "{sha}" in target.candidate_acceptance.command:
+        dockerfile_args = set(ARG.findall(dockerfile))
+        if "NEXT_PUBLIC_OMI_BUILD_SHA" not in dockerfile_args:
+            errors.append(f"{target.dockerfile}: missing revision-identity ARG NEXT_PUBLIC_OMI_BUILD_SHA")
 
     workflow_path = root / target.workflow
     if not workflow_path.is_file():
@@ -514,6 +620,8 @@ def validate_target(
         canary = canary_path.read_text(encoding="utf-8")
         if "data-omi-public-build-canary" not in canary or target.name not in canary:
             errors.append(f"{target.canary_component}: must expose {target.name} browser canary")
+        if "{sha}" in target.candidate_acceptance.command and "data-omi-public-build-sha" not in canary:
+            errors.append(f"{target.canary_component}: must expose data-omi-public-build-sha")
     return errors
 
 
@@ -549,6 +657,8 @@ def validate_shared_actions(root: Path) -> list[str]:
             "OMI_LLM_GATEWAY_URL must be a non-empty HTTP(S) URL",
             "env_vars_update_strategy: merge",
             "secrets_update_strategy: merge",
+            "NEXT_PUBLIC_OMI_BUILD_SHA",
+            "steps.candidate.outputs.sha",
             PROMOTION_ACTION,
         )
         for marker in required_markers:
@@ -577,19 +687,29 @@ def validate_shared_actions(root: Path) -> list[str]:
         return errors
     promotion = promotion_path.read_text(encoding="utf-8")
     required_markers = (
+        "public_build_acceptance_route.py",
+        "run.googleapis.com/ingress",
         "resolve_cloud_run_tagged_url.py",
         "smoke_public_build_browser.py",
+        "--expect-sha",
         "status.latestCreatedRevisionName",
+        "previous_serving_revision",
         "gcloud run services update-traffic",
         "--to-revisions=",
     )
     for marker in required_markers:
         if marker not in promotion:
             errors.append(f"{PROMOTION_ACTION_PATH}: missing candidate-promotion marker {marker!r}")
+    route_index = promotion.find("public_build_acceptance_route.py")
     smoke_index = promotion.find("smoke_public_build_browser.py")
     promotion_index = promotion.find("gcloud run services update-traffic")
+    if route_index == -1 or smoke_index == -1 or route_index > smoke_index:
+        errors.append(f"{PROMOTION_ACTION_PATH}: acceptance route must be resolved before browser acceptance")
     if smoke_index == -1 or promotion_index == -1 or smoke_index > promotion_index:
         errors.append(f"{PROMOTION_ACTION_PATH}: browser acceptance must run before traffic promotion")
+    rollback_index = promotion.rfind("--to-revisions=")
+    if rollback_index == -1 or rollback_index <= promotion_index:
+        errors.append(f"{PROMOTION_ACTION_PATH}: public-URL acceptance must roll traffic back on failure")
     return errors
 
 

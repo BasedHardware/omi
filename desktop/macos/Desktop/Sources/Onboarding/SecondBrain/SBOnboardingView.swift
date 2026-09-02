@@ -734,17 +734,24 @@ struct SBOnboardingView: View {
   private var screenDemoWidget: some View {
     VStack(alignment: .leading, spacing: 12) {
       if model.screenDemoPTTReady {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Three doors. Three riddles. They open in your browser.")
+            .inkStyle(InkType.rowCopy, color: Ink.primary)
+            .fixedSize(horizontal: false, vertical: true)
           HStack(spacing: 5) {
-            Text("Hold").inkStyle(InkType.rowCopy, color: Ink.primary)
+            Text("Get stuck, then hold").inkStyle(InkType.rowCopy, color: Ink.primary)
             ForEach(model.voiceChordTokens, id: \.self) { tok in keycap(tok) }
-            Text("and ask me about it, out loud.").inkStyle(InkType.rowCopy, color: Ink.primary)
+            Text("and say what the page tells you.").inkStyle(InkType.rowCopy, color: Ink.primary)
           }
-          Text(
-            "Ask me what’s on your screen in \(model.selectedResponseLanguageName). I can see it, and I answer at the top of your screen."
-          )
-          .inkStyle(InkType.statusLabel, color: Ink.secondary)
-          .fixedSize(horizontal: false, vertical: true)
+          Text("I can see the page, and I answer at the top of your screen.")
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+          if model.threeDoorsOpened {
+            Button("Open the doors again") { model.openThreeDoorsPage() }
+              .buttonStyle(InkButtonStyle(kind: .secondary))
+          } else {
+            SBInkButton(title: "Open the doors", isDefaultAction: true) { model.openThreeDoorsPage() }
+          }
         }
       } else if model.screenDemoPTTUnavailable {
         VStack(alignment: .leading, spacing: 8) {
@@ -765,10 +772,12 @@ struct SBOnboardingView: View {
       // Continue appears once Omi has actually answered — before that, an always-
       // tappable, clearly-visible "Skip for now" so the user is never stuck if the
       // demo doesn't fire (it used to be a tiny, easily-missed text link).
+      // Skip appears only after the doors were opened: the person reads the step and tries the
+      // page before being offered a way past it. Continue still appears once Omi has answered.
       Group {
         if model.screenDemoDone {
           SBInkButton(title: "Continue", isDefaultAction: true) { model.answerScreenDemo() }
-        } else {
+        } else if model.threeDoorsOpened || model.screenDemoPTTUnavailable {
           Button {
             model.answerScreenDemo()
           } label: {

@@ -10005,12 +10005,8 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String shortConversationsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count maikling usapan',
-    );
-    return '$_temp0';
-  }
+  String get transcriptionNoAudio => 'Hindi tumatanggap ng audio ang transkripsyon';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

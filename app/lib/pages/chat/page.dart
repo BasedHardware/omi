@@ -59,13 +59,14 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => ChatPageState();
 }
 
-class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
+class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   TextEditingController textController = TextEditingController();
   late ScrollController scrollController;
   late FocusNode textFieldFocusNode;
 
   bool _isInitialLoad = true;
   bool _hasInitialScrolled = false;
+  double _lastBottomInset = 0;
   MessageProvider? _messageProvider;
 
   ChatScrollMode _chatScrollMode = ChatScrollMode.followingBottom;
@@ -92,6 +93,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   @override
   void initState() {
+    WidgetsBinding.instance.addObserver(this);
     apps = prefs.appsList;
     scrollController = ScrollController();
     textFieldFocusNode = FocusNode();
@@ -177,8 +179,24 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     }
   }
 
+  /// The keyboard shrinks the viewport after the initial jump to the bottom,
+  /// which leaves the transcript parked mid-way (the list keeps its pixel offset
+  /// while maxScrollExtent grows). Re-pin to the live edge on every inset change
+  /// while the reader is following, so opening chat always lands on the last
+  /// message regardless of keyboard animation timing.
+  @override
+  void didChangeMetrics() {
+    final view = View.of(context);
+    final bottomInset = view.viewInsets.bottom / view.devicePixelRatio;
+    if ((bottomInset - _lastBottomInset).abs() < 1) return;
+    _lastBottomInset = bottomInset;
+    if (_chatScrollMode != ChatScrollMode.followingBottom) return;
+    _schedulePostFrameModeAwareScroll();
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _messageProvider?.removeListener(_onMessageProviderChanged);
     _cancelPendingScrolls();
     textController.dispose();
@@ -270,78 +288,85 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           selectionHandleColor: Colors.blue,
                                         ),
                                       ),
-                                      child: Stack(
-                                        alignment: Alignment.bottomCenter,
-                                        children: [
-                                          Positioned.fill(
-                                            child: NotificationListener<ScrollNotification>(
-                                              onNotification: _handleScrollNotification,
-                                              child: ListView.builder(
-                                                shrinkWrap: false,
-                                                reverse: false,
-                                                controller: scrollController,
-                                                padding: const EdgeInsets.fromLTRB(
-                                                  18,
-                                                  16,
-                                                  18,
-                                                  ChatScrollPolicy.transcriptBottomPadding,
+                                      // Tight width: under the Column's loose constraints this Stack
+                                      // otherwise shrink-wraps to its only non-positioned child (the
+                                      // jump-to-latest chip, ~100pt), and every message collapses to a
+                                      // character-wide column whenever that chip is visible.
+                                      child: SizedBox(
+                                        width: constraints.maxWidth,
+                                        child: Stack(
+                                          alignment: Alignment.bottomCenter,
+                                          children: [
+                                            Positioned.fill(
+                                              child: NotificationListener<ScrollNotification>(
+                                                onNotification: _handleScrollNotification,
+                                                child: ListView.builder(
+                                                  shrinkWrap: false,
+                                                  reverse: false,
+                                                  controller: scrollController,
+                                                  padding: const EdgeInsets.fromLTRB(
+                                                    18,
+                                                    16,
+                                                    18,
+                                                    ChatScrollPolicy.transcriptBottomPadding,
+                                                  ),
+                                                  itemCount: provider.messages.length,
+                                                  itemBuilder: (context, chatIndex) {
+                                                    if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                                                      _hasInitialScrolled = true;
+                                                      _schedulePostFrameModeAwareScroll();
+                                                    }
+
+                                                    final message = provider.messages[chatIndex];
+                                                    double topPadding =
+                                                        chatIndex == provider.messages.length - 1 ? 8 : 16;
+                                                    double bottomPadding = chatIndex == 0 ? 16 : 0;
+
+                                                    return Padding(
+                                                      key: ValueKey(message.id),
+                                                      padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
+                                                      child: message.sender == MessageSender.ai
+                                                          ? AIMessage(
+                                                              showTypingIndicator: provider.showTypingIndicator &&
+                                                                  chatIndex == provider.messages.length - 1,
+                                                              showThinkingAfterText: provider.agentThinkingAfterText,
+                                                              message: message,
+                                                              sendMessage: _sendMessageUtil,
+                                                              onAskOmi: (text) {
+                                                                setState(() {
+                                                                  _selectedContext = text;
+                                                                });
+                                                                textFieldFocusNode.requestFocus();
+                                                              },
+                                                              displayOptions: provider.messages.length <= 1,
+                                                              appSender: provider.messageSenderApp(message.appId),
+                                                              updateConversation: (ServerConversation conversation) {
+                                                                context.read<ConversationProvider>().updateConversation(
+                                                                      conversation,
+                                                                    );
+                                                              },
+                                                              setMessageNps: (int value, {String? reason}) {
+                                                                provider.setMessageNps(message, value, reason: reason);
+                                                              },
+                                                            )
+                                                          : HumanMessage(
+                                                              message: message,
+                                                              onAskOmi: (text) {
+                                                                setState(() {
+                                                                  _selectedContext = text;
+                                                                });
+                                                                textFieldFocusNode.requestFocus();
+                                                              },
+                                                            ),
+                                                    );
+                                                  },
                                                 ),
-                                                itemCount: provider.messages.length,
-                                                itemBuilder: (context, chatIndex) {
-                                                  if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
-                                                    _hasInitialScrolled = true;
-                                                    _schedulePostFrameModeAwareScroll();
-                                                  }
-
-                                                  final message = provider.messages[chatIndex];
-                                                  double topPadding =
-                                                      chatIndex == provider.messages.length - 1 ? 8 : 16;
-                                                  double bottomPadding = chatIndex == 0 ? 16 : 0;
-
-                                                  return Padding(
-                                                    key: ValueKey(message.id),
-                                                    padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
-                                                    child: message.sender == MessageSender.ai
-                                                        ? AIMessage(
-                                                            showTypingIndicator: provider.showTypingIndicator &&
-                                                                chatIndex == provider.messages.length - 1,
-                                                            showThinkingAfterText: provider.agentThinkingAfterText,
-                                                            message: message,
-                                                            sendMessage: _sendMessageUtil,
-                                                            onAskOmi: (text) {
-                                                              setState(() {
-                                                                _selectedContext = text;
-                                                              });
-                                                              textFieldFocusNode.requestFocus();
-                                                            },
-                                                            displayOptions: provider.messages.length <= 1,
-                                                            appSender: provider.messageSenderApp(message.appId),
-                                                            updateConversation: (ServerConversation conversation) {
-                                                              context.read<ConversationProvider>().updateConversation(
-                                                                    conversation,
-                                                                  );
-                                                            },
-                                                            setMessageNps: (int value, {String? reason}) {
-                                                              provider.setMessageNps(message, value, reason: reason);
-                                                            },
-                                                          )
-                                                        : HumanMessage(
-                                                            message: message,
-                                                            onAskOmi: (text) {
-                                                              setState(() {
-                                                                _selectedContext = text;
-                                                              });
-                                                              textFieldFocusNode.requestFocus();
-                                                            },
-                                                          ),
-                                                  );
-                                                },
                                               ),
                                             ),
-                                          ),
-                                          if (_chatScrollMode == ChatScrollMode.freeScrolling)
-                                            _buildJumpToLatestButton(),
-                                        ],
+                                            if (_chatScrollMode == ChatScrollMode.freeScrolling)
+                                              _buildJumpToLatestButton(),
+                                          ],
+                                        ),
                                       ),
                                     );
                                   },
