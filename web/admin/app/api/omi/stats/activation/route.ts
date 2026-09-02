@@ -13,10 +13,12 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
 
 // Activation (Nik, 2026-08-28): a macOS signup counts as activated when they
-// ask 2+ chat questions within their first 48 hours. Signup = first-seen
+// ask 2+ questions within their first 48 hours. Signup = first-seen
 // macOS actor in PostHog (the same person-deduped anchor every other board
-// cohort uses); question = the `Chat Message Sent` event every main-window
-// chat surface funnels through. Signups younger than the 48h window are not
+// cohort uses); question = typed chat (`Chat Message Sent`, every main-window
+// chat surface) PLUS floating-bar/push-to-talk queries
+// (`floating_bar_query_sent`) — PTT is ~a third of question volume and must
+// count (Nik, 2026-09-01). Signups younger than the 48h window are not
 // yet matured and are excluded so the rate is never depressed by users whose
 // window is still open. Replaces the older Firestore definition (>=1
 // conversation within 7 days).
@@ -24,7 +26,7 @@ export const ACTIVATION_QUESTIONS = 2;
 export const ACTIVATION_WINDOW_HOURS = 48;
 
 export function activationCacheKey(days: number): string {
-  return `activation:v2:macos-2q48h:${days}`;
+  return `activation:v3:macos-2q48h-ptt:${days}`;
 }
 
 export type ActivationDailyPoint = {
@@ -93,7 +95,7 @@ export async function computeActivation(
       )
       SELECT toString(any(f.first_ts)) AS first_ts,
              countIf(
-               e.event = 'Chat Message Sent'
+               e.event IN ('Chat Message Sent', 'floating_bar_query_sent')
                AND e.timestamp >= f.first_ts
                AND e.timestamp <= f.first_ts + INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR
              ) AS questions

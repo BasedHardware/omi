@@ -474,7 +474,8 @@ def build_platform_board(base, scope: str) -> dict:
         # The stat tile is already platform-neutral ("Activation"); board
         # context makes the All board's "macOS only" marker redundant here.
         panel_by_title(dash, "Activation")["description"] = (
-            "% of first-seen macOS users who asked 2+ chat questions within their "
+            "% of first-seen macOS users who asked 2+ questions (typed chat or "
+            "push-to-talk) within their "
             "first 48 hours (PostHog; matured signups only). The aha moment — "
             "biggest controllable lever, first-5-minutes work."
         )

@@ -74,7 +74,9 @@ describe("computeActivation (2+ questions within 48h)", () => {
     expect(query).toContain(
       `first_ts <= now() - INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR`,
     );
-    expect(query).toContain("Chat Message Sent");
+    // Questions = typed chat AND floating-bar/PTT queries — counting only
+    // one of them undercounts activation by ~a third (user-reported).
+    expect(query).toContain("'Chat Message Sent', 'floating_bar_query_sent'");
     expect(query).toContain(
       `f.first_ts + INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR`,
     );
