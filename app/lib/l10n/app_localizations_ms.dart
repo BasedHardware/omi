@@ -9938,4 +9938,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Tidak dirakam ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

@@ -9891,4 +9891,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'रिकॉर्ड नहीं हुआ ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'ट्रांसक्रिप्शन ऑडियो प्राप्त नहीं कर रहा है';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

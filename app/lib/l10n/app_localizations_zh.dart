@@ -9724,4 +9724,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return '未记录 ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => '转录未接收到音频';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

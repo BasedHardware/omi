@@ -9999,4 +9999,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Non capturé ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'La transcription ne reçoit pas d\'audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

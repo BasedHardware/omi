@@ -9982,4 +9982,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Δεν καταγράφηκε ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Η μεταγραφή δεν λαμβάνει ήχο';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

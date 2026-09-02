@@ -88,6 +88,17 @@ final class ChatPromptsTests: XCTestCase {
     )
   }
 
+  func testScreenReadRecallRoutesToScreenHistoryNotConversations() {
+    // Regression: a voice turn asking about a riddle the user had only *read* on screen
+    // called search_conversations, found nothing, and answered "no riddles mentioned".
+    let voice = DesktopCapabilityRegistry.realtimeSelfModelPrompt
+    XCTAssertTrue(voice.contains("lives in screen history, not conversations: use search_screen_history"))
+    XCTAssertTrue(voice.contains("search screen history before saying it was never mentioned"))
+
+    let desktopPrompt = ChatPromptBuilder.buildDesktopChat(userName: "Taylor")
+    XCTAssertTrue(desktopPrompt.contains("-> semantic_search over screen history, not conversation tools"))
+  }
+
   func testOnboardingDefersWebResearchUntilAfterFileScanAndEmailAttempt() throws {
     let prompt = ChatPromptBuilder.buildOnboardingChat(
       userName: "Taylor Swift",

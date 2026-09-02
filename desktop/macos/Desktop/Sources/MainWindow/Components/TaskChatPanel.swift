@@ -65,6 +65,8 @@ struct TaskChatPanel: View {
           onRate: { _, _ in },
           localSendToken: taskState.localSendToken,
           enablesPromptTimeline: false,
+          // This thread is about one task; the day's summary belongs in the main chat.
+          showsDailySummary: false,
           welcomeContent: { taskWelcome }
         )
         .frame(maxHeight: .infinity)

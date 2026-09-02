@@ -9924,4 +9924,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'ریکارڈ نہیں ہوا ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'ٹرانسکرپشن آڈیو وصول نہیں کر رہی';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

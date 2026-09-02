@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-single-page-cap-mistaken-for-complete-proof",
+  "violated_contract": "A completeness proof over stored data must be complete for every realistic account, not just for accounts smaller than one page. Implementing 'prove the whole cohort' as a single bounded page with a fail-closed overflow makes the check's own cap the failure: any account whose cohort outgrows the page fails closed deterministically and forever, and the failure grows with exactly the accounts that use the product most.",
+  "canonical_prevention": "When a proof requires reading a complete cohort, drain a cursor in bounded pages and fail closed only at a ceiling sized for pathology, not for normal use. Size the ceiling from measured real-account data, keep the fail-closed overflow behavior, and keep regression tests for a cohort larger than one page (found and not-found) plus the above-ceiling refusal.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_daily_memory_sweep.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/memory/daily_memory_sweep.py",
+    "backend/utils/memory/canonical_memory_adapter.py",
+    "backend/database/memory_apply_store.py"
+  ],
+  "status": "open"
+}

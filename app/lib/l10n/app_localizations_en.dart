@@ -9903,4 +9903,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Not captured ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transcription not receiving audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

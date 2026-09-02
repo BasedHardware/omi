@@ -9743,4 +9743,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return '未記録 ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => '文字起こしが音声を受信していません';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

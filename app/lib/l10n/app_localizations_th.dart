@@ -9855,4 +9855,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'ไม่ได้บันทึก ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'การถอดเสียงไม่ได้รับเสียง';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

@@ -9924,4 +9924,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Kaydedilmedi ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripsiyon ses almıyor';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

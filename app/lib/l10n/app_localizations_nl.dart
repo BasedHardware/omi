@@ -9939,4 +9939,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Niet opgenomen ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transcriptie ontvangt geen audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

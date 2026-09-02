@@ -9916,4 +9916,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Inte fångat ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkrieringen tar inte emot ljud';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

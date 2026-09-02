@@ -9913,4 +9913,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Ei tallennettu ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkriptio ei vastaanota ääntä';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

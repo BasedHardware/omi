@@ -1,15 +1,21 @@
 """Durable Chat-first proactive intent state, separate from the chat journal."""
 
 import hashlib
+import json
+import logging
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
-from typing import Any, Iterable
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Iterable, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
-from database.firestore_index_registry import CHAT_FIRST_DEFERRALS_DUE_QUERY, CHAT_FIRST_DEFERRALS_SUBJECT_QUERY
+from database import chat_first_delivery_attempts as delivery_attempts
+from database.firestore_index_registry import (
+    CHAT_FIRST_DEFERRALS_DUE_QUERY,
+    CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
+)
 from database.read_boundary import MalformedDocError, parse_snapshot_strict
 from models.chat_first import (
     ChatFirstBlockSpec,
@@ -28,8 +34,49 @@ from models.task_intelligence import TaskWorkflowControl
 INTENTS_COLLECTION = 'chat_first_proactive_intents'
 DEFERRALS_COLLECTION = 'chat_first_deferrals'
 STATE_COLLECTION = 'chat_first_proactive_state'
+DELIVERY_ATTEMPTS_COLLECTION = 'chat_first_delivery_attempts'
+DEAD_LETTERS_COLLECTION = 'chat_first_dead_letters'
 BUDGET_DOCUMENT = 'budget'
 _DEFERRAL_DUE_AFTER = timedelta(hours=24)
+CONTINUOUS_DEFERRAL_BUDGET = timedelta(days=7)
+TRANSIENT_DEAD_LETTER_REPAIR_AGE = delivery_attempts.TRANSIENT_DEAD_LETTER_REPAIR_AGE
+FETCH_CANDIDATE_SCAN_MULTIPLIER = 2
+DEFERRAL_CANDIDATE_SCAN_LIMIT = 64
+UNACKNOWLEDGED_DEAD_LETTER_REASON = delivery_attempts.UNACKNOWLEDGED_DEAD_LETTER_REASON
+KERNEL_FAILURE_DEAD_LETTER_REASON = delivery_attempts.KERNEL_FAILURE_DEAD_LETTER_REASON
+TRANSIENT_DEAD_LETTER_REASONS = delivery_attempts.TRANSIENT_DEAD_LETTER_REASONS
+TRANSIENT_DEATH_AFTER_REQUEUE_REASON = 'transient_death_after_requeue'
+
+logger = logging.getLogger(__name__)
+
+# A ready intent must reach a terminal state under bounded identical retries:
+# typed kernel failures park it after three reports, while fetch-only clients
+# cannot keep any head item live beyond twenty unacknowledged deliveries.
+MATERIALIZATION_REJECTION_BUDGET = 3
+UNACKNOWLEDGED_FETCH_BUDGET = 20
+STALLED_READY_AGE = timedelta(hours=24)
+PERMANENT_REJECTION_CODES = frozenset({'invalid_intent', 'identity_conflict'})
+_SYNTHETIC_RECONCILIATION_RECEIPT_PREFIX = 'cfi_reconciled_'
+
+
+@dataclass(frozen=True)
+class IntentLifecycleEvent:
+    event: str
+    source: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class ReadyIntentBatch:
+    intents: list[ProactiveIntent]
+    lifecycle_events: tuple[IntentLifecycleEvent, ...]
+    stalled_source: ProactiveIntentSource | None
+
+
+@dataclass(frozen=True)
+class DeferralReleaseBatch:
+    intents: list[ProactiveIntent]
+    malformed_count: int
 
 
 class ChatFirstIntentStoreError(RuntimeError):
@@ -37,6 +84,14 @@ class ChatFirstIntentStoreError(RuntimeError):
 
 
 class ChatFirstIntentGenerationMismatch(ChatFirstIntentStoreError):
+    pass
+
+
+class ChatFirstIntentDocumentGenerationMismatch(ChatFirstIntentStoreError):
+    pass
+
+
+class ChatFirstMalformedDocument(ChatFirstIntentStoreError):
     pass
 
 
@@ -80,6 +135,16 @@ def _control_ref(uid: str, *, firestore_client: Any = None):
 
 def _intent_ref(uid: str, intent_id: str, *, firestore_client: Any = None):
     return _user_ref(uid, firestore_client=firestore_client).collection(INTENTS_COLLECTION).document(intent_id)
+
+
+def _delivery_attempt_ref(uid: str, intent_id: str, *, firestore_client: Any = None):
+    return (
+        _user_ref(uid, firestore_client=firestore_client).collection(DELIVERY_ATTEMPTS_COLLECTION).document(intent_id)
+    )
+
+
+def _dead_letter_ref(uid: str, intent_id: str, *, firestore_client: Any = None):
+    return _user_ref(uid, firestore_client=firestore_client).collection(DEAD_LETTERS_COLLECTION).document(intent_id)
 
 
 def _deferral_ref(uid: str, deferral_id: str, *, firestore_client: Any = None):
@@ -130,7 +195,7 @@ def _budget_from_snapshot(snapshot: Any, *, account_generation: int, now: dateti
     try:
         state = parse_snapshot_strict(ProactiveBudgetState, snapshot)
     except MalformedDocError as error:
-        raise ChatFirstIntentGenerationMismatch('chat-first proactive budget state is malformed') from error
+        raise ChatFirstMalformedDocument('chat-first proactive budget state is malformed') from error
     if state.account_generation != account_generation:
         return ProactiveBudgetState(account_generation=account_generation)
     return normalized_budget_state(state, now=now)
@@ -142,7 +207,7 @@ def _intent_from_snapshot(snapshot: Any) -> ProactiveIntent:
     try:
         return parse_snapshot_strict(ProactiveIntent, snapshot)
     except MalformedDocError as error:
-        raise ChatFirstIntentGenerationMismatch('chat-first proactive intent is malformed') from error
+        raise ChatFirstMalformedDocument('chat-first proactive intent is malformed') from error
 
 
 def _deferral_from_snapshot(snapshot: Any) -> ProactiveDeferral:
@@ -151,7 +216,7 @@ def _deferral_from_snapshot(snapshot: Any) -> ProactiveDeferral:
     try:
         return parse_snapshot_strict(ProactiveDeferral, snapshot)
     except MalformedDocError as error:
-        raise ChatFirstIntentGenerationMismatch('chat-first deferral is malformed') from error
+        raise ChatFirstMalformedDocument('chat-first deferral is malformed') from error
 
 
 def _require_current_control(uid: str, *, account_generation: int, firestore_client: Any) -> None:
@@ -165,7 +230,37 @@ def _require_current_control(uid: str, *, account_generation: int, firestore_cli
 
 
 def _intent_payload(intent: ProactiveIntent) -> dict[str, Any]:
-    return intent.model_dump(mode='python')
+    # Rolling-deploy safety: pre-Round-7 readers reject these newer fetch and
+    # repair fields. They live in a sibling document keyed by intent ID, never
+    # on the intent document consumed by old revisions.
+    delivery_fields = {
+        'fetch_count',
+        'last_fetched_at',
+        'requeue_count',
+        'materialization_attempts',
+        'last_rejection_code',
+        'last_rejection_at',
+        'first_deferred_at',
+        'last_deferral_at',
+        'dead_letter_reason',
+    }
+    # Old revisions also parse a receipt's intent by ID before checking whether
+    # it was already delivered. Keep every state they can read by ID strict-
+    # reader safe; dead letters alone retain queryable repair diagnostics.
+    exclude = delivery_fields if intent.delivery_state != 'dead_letter' else set()
+    payload = intent.model_dump(mode='python', exclude=exclude)
+    return payload
+
+
+def _intent_with_delivery_attempt(intent: ProactiveIntent, snapshot: Any) -> ProactiveIntent:
+    try:
+        return delivery_attempts.intent_with_delivery_attempt(intent, snapshot)
+    except delivery_attempts.ChatFirstMalformedDeliveryAttempt as error:
+        raise ChatFirstMalformedDocument('chat-first delivery attempt state is malformed') from error
+
+
+def _reset_malformed_delivery_attempt(intent: ProactiveIntent, raw: dict[str, Any], *, now: datetime) -> dict[str, Any]:
+    return delivery_attempts.reset_malformed_delivery_attempt(intent, raw, now=now)
 
 
 def get_budget_state(
@@ -316,6 +411,7 @@ def create_intent(
         created_at=now,
     )
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
+    dead_ref = _dead_letter_ref(uid, intent_id, firestore_client=client)
     budget_ref = _budget_ref(uid, firestore_client=client)
     transaction = client.transaction()
 
@@ -324,13 +420,25 @@ def create_intent(
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
         _require_control(control_snapshot, uid=uid, account_generation=account_generation)
         existing_snapshot = intent_ref.get(transaction=write_transaction)
+        dead_snapshot = dead_ref.get(transaction=write_transaction)
         budget_snapshot = (
             budget_ref.get(transaction=write_transaction)
-            if intent.consumes_turn_budget and not existing_snapshot.exists
+            if intent.consumes_turn_budget and not existing_snapshot.exists and not dead_snapshot.exists
             else None
         )
         if existing_snapshot.exists:
             existing = _intent_from_snapshot(existing_snapshot)
+            if (
+                existing.account_generation != account_generation
+                or existing.source != source
+                or existing.continuity_key != continuity_key
+                or existing.subject != subject
+                or existing.blocks != blocks
+            ):
+                raise ChatFirstIntentConflictError('intent continuity key was reused with different content')
+            return existing, False
+        if dead_snapshot.exists:
+            existing = _intent_from_snapshot(dead_snapshot)
             if (
                 existing.account_generation != account_generation
                 or existing.source != source
@@ -528,27 +636,234 @@ def has_active_sparse_cold_start_sequence(
     return False
 
 
-def fetch_ready_intents(
+def _stable_chat_first_turn_id(intent_id: str) -> str:
+    return f'turn_cfi_{hashlib.sha256(intent_id.encode()).hexdigest()[:24]}'
+
+
+def _synthetic_reconciliation_receipt_id(intent_id: str) -> str:
+    return f'{_SYNTHETIC_RECONCILIATION_RECEIPT_PREFIX}{hashlib.sha256(intent_id.encode()).hexdigest()[:24]}'
+
+
+def _message_has_intent_identity(uid: str, intent_id: str, *, firestore_client: Any) -> bool:
+    """Point-read the stable chat row and verify its embedded intent identity."""
+
+    snapshot = (
+        _user_ref(uid, firestore_client=firestore_client)
+        .collection('messages')
+        .document(_stable_chat_first_turn_id(intent_id))
+        .get()
+    )
+    if not snapshot.exists:
+        return False
+    metadata = (snapshot.to_dict() or {}).get('metadata')
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except (TypeError, ValueError):
+            return False
+    return isinstance(metadata, dict) and metadata.get('chatFirstIntentId') == intent_id
+
+
+def _fetch_priority(intent: ProactiveIntent) -> int:
+    if intent.source == 'daily_opener' or any(block.type == 'conversationLink' for block in intent.blocks):
+        return 0
+    if intent.source == 'capture_arrival' and all(block.type == 'captureLink' for block in intent.blocks):
+        return 2
+    return 1
+
+
+def _advance_fetched_intent(
+    uid: str,
+    intent_id: str,
+    *,
+    account_generation: int,
+    now: datetime,
+    reconcile: bool,
+    firestore_client: Any,
+) -> tuple[ProactiveIntent | None, IntentLifecycleEvent | None]:
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=firestore_client)
+    attempt_ref = _delivery_attempt_ref(uid, intent_id, firestore_client=firestore_client)
+    transaction = firestore_client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> tuple[ProactiveIntent | None, IntentLifecycleEvent | None]:
+        snapshot = intent_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return None, None
+        intent = _intent_from_snapshot(snapshot)
+        attempt_snapshot = attempt_ref.get(transaction=write_transaction)
+        malformed_attempt = False
+        try:
+            intent = _intent_with_delivery_attempt(intent, attempt_snapshot)
+        except ChatFirstMalformedDocument:
+            # The sibling is derived delivery bookkeeping. Repair it in this
+            # transaction instead of allowing corrupt derived state to hide a
+            # valid intent indefinitely.
+            malformed_attempt = True
+        if intent.account_generation != account_generation or intent.delivery_state not in {
+            'ready',
+            'pending_kernel_receipt',
+        }:
+            return None, None
+
+        attempt_update = (
+            _reset_malformed_delivery_attempt(intent, attempt_snapshot.to_dict() or {}, now=now)
+            if malformed_attempt
+            else {'fetch_count': intent.fetch_count + 1, 'last_fetched_at': now}
+        )
+        fetch_count = cast(int, attempt_update['fetch_count'])
+        requeue_count = cast(int, attempt_update.get('requeue_count', intent.requeue_count))
+        common = {'fetch_count': fetch_count, 'last_fetched_at': now}
+        if reconcile:
+            budget_ref = _budget_ref(uid, firestore_client=firestore_client)
+            budget_snapshot = budget_ref.get(transaction=write_transaction) if intent.consumes_turn_budget else None
+            delivered = intent.model_copy(
+                update={
+                    **common,
+                    'delivery_state': 'delivered',
+                    'delivered_at': now,
+                    'materialization_receipt_id': _synthetic_reconciliation_receipt_id(intent.intent_id),
+                }
+            )
+            if intent.consumes_turn_budget:
+                assert budget_snapshot is not None
+                budget = _budget_from_snapshot(budget_snapshot, account_generation=account_generation, now=now)
+                write_transaction.set(
+                    budget_ref, account_materialization(budget, intent_id=intent_id, now=now).model_dump(mode='python')
+                )
+            write_transaction.set(intent_ref, _intent_payload(delivered))
+            write_transaction.set(attempt_ref, attempt_update, merge=not malformed_attempt)
+            return None, IntentLifecycleEvent('reconciled', intent.source, 'existing_chat_row')
+        if fetch_count >= UNACKNOWLEDGED_FETCH_BUDGET:
+            dead_lettered = intent.model_copy(
+                update={
+                    **attempt_update,
+                    'delivery_state': 'dead_letter',
+                    'dead_letter_reason': (
+                        TRANSIENT_DEATH_AFTER_REQUEUE_REASON if requeue_count > 0 else UNACKNOWLEDGED_DEAD_LETTER_REASON
+                    ),
+                }
+            )
+            delivery_attempts.move_to_dead_letters(
+                write_transaction,
+                intent_ref_value=intent_ref,
+                dead_letter_ref_value=_dead_letter_ref(uid, intent_id, firestore_client=firestore_client),
+                intent=dead_lettered,
+                terminal_at=now,
+            )
+            write_transaction.set(attempt_ref, attempt_update, merge=not malformed_attempt)
+            return None, IntentLifecycleEvent(
+                'dead_letter', intent.source, dead_lettered.dead_letter_reason or 'unknown'
+            )
+        fetched = intent.model_copy(update=common)
+        write_transaction.set(attempt_ref, attempt_update, merge=not malformed_attempt)
+        event = (
+            IntentLifecycleEvent('malformed_attempt_reset', intent.source, 'malformed_document')
+            if malformed_attempt
+            else None
+        )
+        return fetched, event
+
+    return apply(transaction)
+
+
+def _dead_letter_malformed_intent(
+    uid: str,
+    intent_id: str,
+    *,
+    account_generation: int,
+    firestore_client: Any,
+) -> None:
+    """Terminalize one still-active malformed row without racing a newer writer."""
+
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=firestore_client)
+    transaction = firestore_client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> None:
+        snapshot = intent_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return
+        raw = snapshot.to_dict() or {}
+        if raw.get('account_generation') != account_generation or raw.get('delivery_state') not in {
+            'ready',
+            'pending_kernel_receipt',
+        }:
+            return
+        try:
+            _intent_from_snapshot(snapshot)
+        except ChatFirstMalformedDocument:
+            dead_payload = {
+                **raw,
+                'intent_id': raw.get('intent_id') or intent_id,
+                'delivery_state': 'dead_letter',
+                'dead_letter_reason': 'malformed_document',
+            }
+            write_transaction.set(_dead_letter_ref(uid, intent_id, firestore_client=firestore_client), dead_payload)
+            write_transaction.delete(intent_ref)
+
+    apply(transaction)
+
+
+def _requeue_transient_dead_letter(
+    uid: str,
+    intent_id: str,
+    *,
+    account_generation: int,
+    now: datetime,
+    firestore_client: Any,
+) -> ProactiveIntent | None:
+    try:
+        return delivery_attempts.requeue_transient_dead_letter(
+            uid,
+            intent_id,
+            account_generation=account_generation,
+            now=now,
+            firestore_client=firestore_client,
+        )
+    except delivery_attempts.ChatFirstMalformedDeliveryAttempt as error:
+        raise ChatFirstMalformedDocument('chat-first dead letter is malformed') from error
+
+
+def fetch_ready_intent_batch(
     uid: str,
     *,
     account_generation: int,
     limit: int = 8,
     exclude_block_types: set[str] | frozenset[str] | None = None,
+    deferred_intent_ids: set[str] | frozenset[str] | None = None,
+    now: datetime | None = None,
     firestore_client: Any = None,
-) -> list[ProactiveIntent]:
-    """Return ready intents only; this never changes delivery or writes Chat."""
+) -> ReadyIntentBatch:
+    """Fetch a priority batch while bounding poison retries and reconciling stable rows."""
 
     client = _db(firestore_client)
+    fetched_at = now or datetime.now(timezone.utc)
     _require_current_control(uid, account_generation=account_generation, firestore_client=client)
     collection = _user_ref(uid, firestore_client=client).collection(INTENTS_COLLECTION)
+    lifecycle_events: list[IntentLifecycleEvent] = []
+    if delivery_attempts.repair_transient_dead_letters(
+        uid,
+        account_generation=account_generation,
+        limit=limit,
+        now=fetched_at,
+        firestore_client=client,
+        requeue=_requeue_transient_dead_letter,
+    ):
+        lifecycle_events.append(IntentLifecycleEvent('repair_scan_failed', 'materialization', 'google_api_error'))
     # Push the delivery-state filter to Firestore so delivered historical rows
     # are never transferred for a foreground materialization.  The caller only
     # ever needs ready or pending-receipt intents, which are bounded; the full
     # collection otherwise grows with account age.
     query = collection.where(filter=FieldFilter('delivery_state', 'in', ['ready', 'pending_kernel_receipt']))
-    ready: list[ProactiveIntent] = []
+    candidates: list[ProactiveIntent] = []
+    malformed_intent_ids: list[str] = []
     for snapshot in query.stream():
-        intent = _intent_from_snapshot(snapshot)
+        try:
+            intent = _intent_from_snapshot(snapshot)
+        except ChatFirstMalformedDocument:
+            malformed_intent_ids.append(snapshot.id)
+            continue
         if intent.account_generation != account_generation:
             continue
         # Apply compatibility filtering before the delivery window is bounded.
@@ -557,9 +872,249 @@ def fetch_ready_intents(
         # legacy-compatible intents behind them.
         if exclude_block_types and any(block.type in exclude_block_types for block in intent.blocks):
             continue
-        ready.append(intent)
-    ready.sort(key=lambda intent: (intent.created_at, intent.intent_id))
-    return ready[:limit]
+        candidates.append(intent)
+    candidates.sort(key=lambda intent: (_fetch_priority(intent), intent.created_at, intent.intent_id))
+
+    ready: list[ProactiveIntent] = []
+    candidate_scan_limit = FETCH_CANDIDATE_SCAN_MULTIPLIER * limit
+    hydrated_attempts: dict[str, ProactiveIntent] = {}
+    stall_age_candidates: list[tuple[datetime, ProactiveIntent]] = []
+    oldest_candidates = sorted(candidates, key=lambda intent: (intent.created_at, intent.intent_id))
+    oldest_hydration_ids = {intent.intent_id for intent in oldest_candidates[:candidate_scan_limit]}
+    # Hydrate only the bounded oldest window. For the rest, ``created_at`` is
+    # a conservative stall clock: it can page early after an unobserved recent
+    # deferral, but it cannot make per-poll point reads linear in the backlog.
+    for intent in oldest_candidates:
+        if fetched_at - intent.created_at <= STALLED_READY_AGE:
+            continue
+        stall_age_from = intent.created_at
+        if intent.intent_id in oldest_hydration_ids:
+            try:
+                hydrated = _intent_with_delivery_attempt(
+                    intent,
+                    _delivery_attempt_ref(uid, intent.intent_id, firestore_client=client).get(),
+                )
+            except ChatFirstMalformedDocument:
+                hydrated = None
+            if hydrated is not None:
+                hydrated_attempts[intent.intent_id] = hydrated
+                stall_age_from = max(intent.created_at, hydrated.last_deferral_at or intent.created_at)
+        stall_age_candidates.append((stall_age_from, intent))
+    malformed_scan_count = min(len(malformed_intent_ids), candidate_scan_limit)
+    for intent_id in malformed_intent_ids[:malformed_scan_count]:
+        try:
+            _dead_letter_malformed_intent(
+                uid,
+                intent_id,
+                account_generation=account_generation,
+                firestore_client=client,
+            )
+        except Exception:
+            # A concurrently deleted or repaired malformed row is isolated from
+            # every independent ready intent in this fetch.
+            continue
+    # Process beyond the response limit when earlier candidates terminalize,
+    # but never let a poison backlog amplify point reads and transactions
+    # without bound on every device poll.
+    remaining_scan_limit = candidate_scan_limit - malformed_scan_count
+    for intent in candidates[:remaining_scan_limit]:
+        try:
+            intent = hydrated_attempts.get(intent.intent_id) or _intent_with_delivery_attempt(
+                intent, _delivery_attempt_ref(uid, intent.intent_id, firestore_client=client).get()
+            )
+        except ChatFirstMalformedDocument:
+            # Advancement repairs the derived sibling transactionally and
+            # returns the valid intent on this same poll.
+            pass
+        if deferred_intent_ids and intent.intent_id in deferred_intent_ids:
+            if len(ready) < limit:
+                ready.append(intent)
+            if len(ready) >= limit:
+                break
+            continue
+        reconcile = intent.fetch_count >= 2 and _message_has_intent_identity(
+            uid, intent.intent_id, firestore_client=client
+        )
+        try:
+            advanced, event = _advance_fetched_intent(
+                uid,
+                intent.intent_id,
+                account_generation=account_generation,
+                now=fetched_at,
+                reconcile=reconcile,
+                firestore_client=client,
+            )
+        except Exception:
+            # One concurrently malformed or otherwise unadvanceable row is
+            # never allowed to block independent ready intents.
+            continue
+        if event is not None:
+            lifecycle_events.append(event)
+        if advanced is not None and len(ready) < limit:
+            ready.append(advanced)
+        if len(ready) >= limit:
+            break
+
+    oldest_stall = min(
+        stall_age_candidates,
+        key=lambda item: (item[0], item[1].intent_id),
+        default=None,
+    )
+    stalled_source = None
+    if oldest_stall is not None:
+        stall_age_from, oldest_candidate = oldest_stall
+        if fetched_at - stall_age_from > STALLED_READY_AGE:
+            stalled_source = oldest_candidate.source
+    return ReadyIntentBatch(ready, tuple(lifecycle_events), stalled_source)
+
+
+def fetch_ready_intents(
+    uid: str,
+    *,
+    account_generation: int,
+    limit: int = 8,
+    exclude_block_types: set[str] | frozenset[str] | None = None,
+    now: datetime | None = None,
+    firestore_client: Any = None,
+) -> list[ProactiveIntent]:
+    """Compatibility wrapper for callers that only consume the live intents."""
+
+    return fetch_ready_intent_batch(
+        uid,
+        account_generation=account_generation,
+        limit=limit,
+        exclude_block_types=exclude_block_types,
+        now=now,
+        firestore_client=firestore_client,
+    ).intents
+
+
+def record_materialization_rejection(
+    uid: str,
+    *,
+    intent_id: str,
+    code: str,
+    account_generation: int,
+    now: datetime,
+    firestore_client: Any = None,
+) -> tuple[ProactiveIntent | None, str | None]:
+    """Record a typed kernel rejection and park deterministic poison within budget."""
+
+    client = _db(firestore_client)
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
+    attempt_ref = _delivery_attempt_ref(uid, intent_id, firestore_client=client)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> tuple[ProactiveIntent | None, str | None]:
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
+        _require_control(control_snapshot, uid=uid, account_generation=account_generation)
+        snapshot = intent_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return None, None
+        intent = _intent_from_snapshot(snapshot)
+        attempt_snapshot = attempt_ref.get(transaction=write_transaction)
+        intent = _intent_with_delivery_attempt(intent, attempt_snapshot)
+        if intent.account_generation != account_generation:
+            raise ChatFirstIntentDocumentGenerationMismatch('intent account generation changed')
+        if intent.delivery_state in {'dead_letter', 'delivered'}:
+            return intent, None
+        if intent.delivery_state not in {'ready', 'pending_kernel_receipt'}:
+            raise ProactiveIntentNotReady('proactive intent is not ready')
+
+        if code not in PERMANENT_REJECTION_CODES:
+            # Transient kernel/SQLite failures consume only the independent
+            # fetch budget. Re-reporting them must never permanently destroy
+            # the queued intent.
+            return intent, None
+        attempts = intent.materialization_attempts + 1
+        reason = f'permanent_rejection:{code}' if attempts >= MATERIALIZATION_REJECTION_BUDGET else None
+        rejected = intent.model_copy(
+            update={
+                'materialization_attempts': attempts,
+                'last_rejection_code': code,
+                'last_rejection_at': now,
+                **({'delivery_state': 'dead_letter', 'dead_letter_reason': reason} if reason else {}),
+            }
+        )
+        write_transaction.set(
+            attempt_ref,
+            {
+                'materialization_attempts': attempts,
+                'last_rejection_code': code,
+                'last_rejection_at': now,
+            },
+            merge=True,
+        )
+        if reason:
+            delivery_attempts.move_to_dead_letters(
+                write_transaction,
+                intent_ref_value=intent_ref,
+                dead_letter_ref_value=_dead_letter_ref(uid, intent_id, firestore_client=client),
+                intent=rejected,
+                terminal_at=now,
+            )
+        return rejected, reason
+
+    return apply(transaction)
+
+
+def record_materialization_deferral(
+    uid: str,
+    *,
+    intent_id: str,
+    account_generation: int,
+    now: datetime,
+    firestore_client: Any = None,
+) -> ProactiveIntent | None:
+    """Record one explicit suppression without refunding an earlier fetch."""
+
+    client = _db(firestore_client)
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
+    attempt_ref = _delivery_attempt_ref(uid, intent_id, firestore_client=client)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> ProactiveIntent | None:
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
+        _require_control(control_snapshot, uid=uid, account_generation=account_generation)
+        snapshot = intent_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return None
+        intent = _intent_from_snapshot(snapshot)
+        attempt_snapshot = attempt_ref.get(transaction=write_transaction)
+        intent = _intent_with_delivery_attempt(intent, attempt_snapshot)
+        if intent.account_generation != account_generation:
+            raise ChatFirstIntentDocumentGenerationMismatch('intent account generation changed')
+        if intent.delivery_state not in {'ready', 'pending_kernel_receipt'}:
+            return intent
+        first_deferred_at = intent.first_deferred_at or now
+        if now - first_deferred_at >= CONTINUOUS_DEFERRAL_BUDGET:
+            dead_lettered = intent.model_copy(
+                update={
+                    'first_deferred_at': first_deferred_at,
+                    'last_deferral_at': now,
+                    'delivery_state': 'dead_letter',
+                    'dead_letter_reason': 'deferred_beyond_budget',
+                }
+            )
+            delivery_attempts.move_to_dead_letters(
+                write_transaction,
+                intent_ref_value=intent_ref,
+                dead_letter_ref_value=_dead_letter_ref(uid, intent_id, firestore_client=client),
+                intent=dead_lettered,
+                terminal_at=now,
+            )
+            write_transaction.set(
+                attempt_ref, {'first_deferred_at': first_deferred_at, 'last_deferral_at': now}, merge=True
+            )
+            return dead_lettered
+        write_transaction.set(
+            attempt_ref, {'first_deferred_at': first_deferred_at, 'last_deferral_at': now}, merge=True
+        )
+        return intent.model_copy(update={'first_deferred_at': first_deferred_at, 'last_deferral_at': now})
+
+    return apply(transaction)
 
 
 def acknowledge_materialization(
@@ -576,6 +1131,7 @@ def acknowledge_materialization(
     client = _db(firestore_client)
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
     budget_ref = _budget_ref(uid, firestore_client=client)
+    attempt_ref = _delivery_attempt_ref(uid, intent_id, firestore_client=client)
     transaction = client.transaction()
 
     @firestore.transactional
@@ -586,14 +1142,25 @@ def acknowledge_materialization(
         if not intent_snapshot.exists:
             raise ProactiveIntentNotReady('proactive intent is not ready')
         intent = _intent_from_snapshot(intent_snapshot)
+        attempt_snapshot = attempt_ref.get(transaction=write_transaction)
+        intent = _intent_with_delivery_attempt(intent, attempt_snapshot)
         budget_snapshot = budget_ref.get(transaction=write_transaction) if intent.consumes_turn_budget else None
         if intent.account_generation != account_generation:
-            raise ChatFirstIntentGenerationMismatch('intent account generation changed')
+            raise ChatFirstIntentDocumentGenerationMismatch('intent account generation changed')
         if intent.delivery_state == 'delivered':
-            if intent.materialization_receipt_id != receipt_id:
-                raise ChatFirstIntentConflictError('intent was already acknowledged by a different receipt')
+            if intent.materialization_receipt_id != receipt_id and not (
+                intent.materialization_receipt_id or ''
+            ).startswith(_SYNTHETIC_RECONCILIATION_RECEIPT_PREFIX):
+                raise ChatFirstIntentConflictError('intent was delivered with a different receipt')
             return intent
-        if intent.delivery_state not in {'ready', 'pending_kernel_receipt'}:
+        repair_transient_dead_letter = (
+            intent.delivery_state == 'dead_letter'
+            and intent.dead_letter_reason in TRANSIENT_DEAD_LETTER_REASONS
+            and intent.requeue_count == 0
+        )
+        if intent.delivery_state == 'dead_letter' and not repair_transient_dead_letter:
+            return intent
+        if intent.delivery_state not in {'ready', 'pending_kernel_receipt'} and not repair_transient_dead_letter:
             raise ProactiveIntentNotReady('proactive intent is not ready')
 
         delivered = intent.model_copy(
@@ -609,6 +1176,8 @@ def acknowledge_materialization(
             accounted = account_materialization(budget, intent_id=intent_id, now=now)
             write_transaction.set(budget_ref, accounted.model_dump(mode='python'))
         write_transaction.set(intent_ref, _intent_payload(delivered))
+        if repair_transient_dead_letter:
+            write_transaction.set(attempt_ref, {'requeue_count': 1}, merge=True)
         return delivered
 
     return apply(transaction)
@@ -668,6 +1237,36 @@ def record_deferral(
     return apply(transaction)
 
 
+def _terminalize_malformed_deferral(
+    uid: str,
+    deferral_id: str,
+    *,
+    account_generation: int,
+    firestore_client: Any,
+) -> None:
+    """Remove one still-pending poison row from the bounded due-query head."""
+
+    if not deferral_id:
+        return
+    ref = _deferral_ref(uid, deferral_id, firestore_client=firestore_client)
+    transaction = firestore_client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> None:
+        snapshot = ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            return
+        raw = snapshot.to_dict() or {}
+        if raw.get('account_generation') != account_generation or raw.get('state') != 'pending':
+            return
+        try:
+            _deferral_from_snapshot(snapshot)
+        except ChatFirstMalformedDocument:
+            write_transaction.set(ref, {**raw, 'state': 'released'})
+
+    apply(transaction)
+
+
 def release_due_deferrals(
     uid: str,
     *,
@@ -675,7 +1274,7 @@ def release_due_deferrals(
     now: datetime,
     subject: ChatFirstSubject | None = None,
     firestore_client: Any = None,
-) -> list[ProactiveIntent]:
+) -> DeferralReleaseBatch:
     """Release due or meaningful-subject-change deferrals exactly once.
 
     Keep the pending/state and releaseability predicates in Firestore. A user's
@@ -703,10 +1302,24 @@ def release_due_deferrals(
             },
             field_filter_factory=FieldFilter,
         )
-    query = query.limit(32)
+    query = query.limit(DEFERRAL_CANDIDATE_SCAN_LIMIT)
     candidates: list[ProactiveDeferral] = []
+    malformed_count = 0
     for snapshot in query.stream():
-        deferred = _deferral_from_snapshot(snapshot)
+        try:
+            deferred = _deferral_from_snapshot(snapshot)
+        except ChatFirstMalformedDocument:
+            malformed_count += 1
+            try:
+                _terminalize_malformed_deferral(
+                    uid,
+                    snapshot.id,
+                    account_generation=account_generation,
+                    firestore_client=client,
+                )
+            except Exception:
+                logger.warning('Failed to terminalize malformed Chat-first deferral id=%s', snapshot.id)
+            continue
         # Keep strict model validation and an exact subject check as the final
         # fence for old/malformed rows and for fake clients that do not fully
         # emulate Firestore's nested-field filtering.
@@ -720,16 +1333,26 @@ def release_due_deferrals(
 
     released: list[ProactiveIntent] = []
     for deferred in candidates:
-        intent = _release_deferral_transaction(
-            uid,
-            deferred,
-            account_generation=account_generation,
-            now=now,
-            firestore_client=client,
-        )
+        try:
+            intent = _release_deferral_transaction(
+                uid,
+                deferred,
+                account_generation=account_generation,
+                now=now,
+                firestore_client=client,
+            )
+        except ChatFirstIntentGenerationMismatch:
+            raise
+        except ChatFirstMalformedDocument:
+            malformed_count += 1
+            continue
+        except Exception:
+            # One concurrently deleted, conflicting, or otherwise broken row
+            # cannot roll back independent due deferrals in this batch.
+            continue
         if intent is not None:
             released.append(intent)
-    return released
+    return DeferralReleaseBatch(released, malformed_count)
 
 
 def _release_deferral_transaction(
@@ -800,9 +1423,13 @@ __all__ = [
     'AgentJudgmentAdmission',
     'BUDGET_DOCUMENT',
     'ChatFirstIntentConflictError',
+    'ChatFirstIntentDocumentGenerationMismatch',
     'ChatFirstIntentGenerationMismatch',
+    'ChatFirstMalformedDocument',
     'ChatFirstIntentStoreError',
+    'DEAD_LETTERS_COLLECTION',
     'DEFERRALS_COLLECTION',
+    'DELIVERY_ATTEMPTS_COLLECTION',
     'INTENTS_COLLECTION',
     'ProactiveBudgetExhausted',
     'ProactiveIntentNotReady',
@@ -814,6 +1441,7 @@ __all__ = [
     'acknowledge_sparse_cold_start_sequence_terminal',
     'has_active_sparse_cold_start_sequence',
     'fetch_ready_intents',
+    'fetch_ready_intent_batch',
     'get_budget_state',
     'iter_ready_intent_ids',
     'proactive_deferral_id',
@@ -821,4 +1449,5 @@ __all__ = [
     'release_agent_judgment_admission',
     'record_deferral',
     'release_due_deferrals',
+    'record_materialization_rejection',
 ]

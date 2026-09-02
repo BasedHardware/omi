@@ -9965,4 +9965,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Не е снимено ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Транскрипцијата не прима аудио';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

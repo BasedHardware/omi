@@ -459,8 +459,13 @@ extension RealtimeHubController {
     s.commitInputTurn()
     AnalyticsManager.shared.floatingBarQuerySent(
       messageLength: turnTranscript.count,
-      hasScreenshot: false,
-      source: .pttRealtime
+      // A PTT turn does carry a screenshot whenever the pre-overlay capture produced usable
+      // pixels. Hard-coding false made every screen-grounded voice turn look screenshot-free.
+      // Only a Gemini session attaches the pre-overlay frame to the turn
+      // (`attachTurnScreenFrameIfNeeded`); elsewhere the image is not sent.
+      hasScreenshot: sessionProvider == .gemini && screenEvidence?.descriptor.canVerifyCurrentScreen == true,
+      source: .pttRealtime,
+      attemptID: turnID.description
     )
     VoiceTurnCoordinator.shared.publish(
       .hubCommitAccepted(

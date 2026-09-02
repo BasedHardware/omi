@@ -9910,4 +9910,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Ikke fanget opp ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transkripsjon mottar ikke lyd';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }

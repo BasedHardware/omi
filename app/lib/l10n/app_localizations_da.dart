@@ -9896,4 +9896,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String conversationsNotCapturedCount(int count) {
     return 'Ikke optaget ($count)';
   }
+
+  @override
+  String get transcriptionNoAudio => 'Transskription modtager ikke lyd';
+
+  @override
+  String get tapPlusToStartRecording => 'Tap + to start recording';
 }
