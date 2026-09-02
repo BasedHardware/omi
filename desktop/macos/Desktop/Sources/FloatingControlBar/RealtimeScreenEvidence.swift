@@ -16,8 +16,12 @@ enum RealtimeScreenEvidenceTarget: String, Equatable, Sendable {
 
 /// A physical capture failure that the realtime tool and local spoken fallback can explain
 /// without treating a missing image as visual evidence (for example, a black screen).
-enum RealtimeScreenEvidenceCaptureFailure: String, Equatable, Sendable {
+enum RealtimeScreenEvidenceCaptureFailure: String, CaseIterable, Equatable, Sendable {
   case screenRecordingPermissionRequired = "screen_recording_permission_required"
+  /// Screen Recording is granted now but was not granted when this process launched, so the
+  /// window-server connection carries no grant and capture stays dead until Omi is reopened.
+  /// Collapsing this into `captureUnavailable` made Omi tell the user nothing actionable.
+  case screenRecordingNeedsRelaunch = "screen_recording_needs_relaunch"
   case captureUnavailable = "capture_unavailable"
 }
 
@@ -160,6 +164,16 @@ enum RealtimeScreenEvidenceFreshnessPolicy {
 /// JPEG that was dispatched while fresh, but a missing report still cannot hold a PTT turn open.
 enum RealtimeScreenEvidenceProtocolPolicy {
   static let maximumReportWait: TimeInterval = 8
+
+  /// A turn with no installed evidence used to mint a zero deadline, which expired the protocol
+  /// in the same run loop and produced the canned "I couldn't verify the current screen." before
+  /// the provider could say anything. The screenshot tool still has to reach the provider and
+  /// come back with a structured unavailable result, so the report window is the same bounded
+  /// wait whether or not pixels were captured. Expiry semantics — not the deadline — decide
+  /// whether the failure is recoverable.
+  static func reportDeadline(hasInstalledEvidence: Bool) -> TimeInterval {
+    maximumReportWait
+  }
 }
 
 /// Bridges the post-capture JPEG worker to an authorized tool call without blocking the
@@ -347,6 +361,14 @@ enum RealtimeScreenTransportEnqueueDecision: Equatable {
   case evidenceExpired(RealtimeScreenEvidenceDescriptor)
 }
 
+/// What a `.notAdmitted` transport receipt means for the protocol that is currently open.
+enum RealtimeScreenTransportNotAdmittedOutcome: Equatable {
+  /// A callback from a superseded turn, epoch, or tool call. It must not mutate this turn.
+  case ignoreStaleCallback
+  /// This turn's admitted screenshot could not be enqueued. Reject it now, with a reason.
+  case reject(RealtimeScreenEvidenceDescriptor?)
+}
+
 /// A suspended screenshot tool execution may resume after a barge-in. A stale execution is
 /// allowed to fail its provider request, but it must never mutate or speak into the replacement
 /// turn. Keep the admission rule pure so this cancellation boundary has a direct regression.
@@ -382,7 +404,7 @@ enum RealtimeScreenGroundingPolicy {
     for evidence: RealtimeScreenEvidenceDescriptor?
   ) -> RealtimeScreenEvidenceFailureDisposition {
     switch evidence?.captureFailure {
-    case .screenRecordingPermissionRequired, .captureUnavailable:
+    case .screenRecordingPermissionRequired, .screenRecordingNeedsRelaunch, .captureUnavailable:
       // Screen Recording can be granted while the compositor is still
       // initializing. That must degrade the visual tool result, never consume
       // the user's PTT turn or replace native voice with a local terminal path.
@@ -392,12 +414,56 @@ enum RealtimeScreenGroundingPolicy {
     }
   }
 
+  /// The disposition that governs an already-admitted screen protocol failing.
+  ///
+  /// A turn where nothing was ever installed — capture failed, or a follow-up turn in a locked
+  /// listening session never recaptured — has no evidence descriptor to classify, and it is
+  /// exactly the case the canned local string served worst: the user heard "I couldn't verify
+  /// the current screen." with no cause and no way forward. Absent evidence is therefore
+  /// recoverable; only a failure about evidence that WAS captured (stale, contradictory, or
+  /// cross-turn) stays the deterministic local result.
+  static func rejectionDisposition(
+    for evidence: RealtimeScreenEvidenceDescriptor?
+  ) -> RealtimeScreenEvidenceFailureDisposition {
+    guard let evidence else { return .providerContinuation }
+    return failureDisposition(for: evidence)
+  }
+
+  /// Named rejection reason for a transport receipt that the admitted protocol could not
+  /// accept. Leaving that case silent kept the state in `awaitingScreenshot` with output
+  /// suppressed until the report deadline turned it into the canned local string.
+  static let transportNotAdmittedReason = "transport_not_admitted"
+
+  /// `.notAdmitted` is ambiguous. It is either a stale callback from a superseded turn or
+  /// epoch — which must stay a no-op so it cannot terminate a replacement turn — or the
+  /// admitted protocol for this exact call failing its own transport, which must be rejected
+  /// with a named reason instead of waiting out the report deadline in silence.
+  static func outcomeForNotAdmittedTransport(
+    state: RealtimeScreenGroundingState,
+    activeTurnID: VoiceTurnID?,
+    currentTurnEpoch: Int,
+    enqueuedTurnEpoch: Int,
+    callID: String
+  ) -> RealtimeScreenTransportNotAdmittedOutcome {
+    guard enqueuedTurnEpoch == currentTurnEpoch,
+      case .awaitingScreenshot(let request) = state,
+      request.screenshotCallID == callID,
+      request.turnID == activeTurnID
+    else { return .ignoreStaleCallback }
+    return .reject(request.descriptor)
+  }
+
   static func failureText(for evidence: RealtimeScreenEvidenceDescriptor?) -> String {
-    guard evidence?.captureFailure == .screenRecordingPermissionRequired else {
+    switch evidence?.captureFailure {
+    case .screenRecordingPermissionRequired:
+      return
+        "I need Screen Recording permission before I can view your screen. Say ‘grant it’ and I’ll open the permission request."
+    case .screenRecordingNeedsRelaunch:
+      return
+        "Screen Recording was granted after Omi launched, so I still can't see your screen. Quit Omi and open it again and I'll be able to."
+    case .captureUnavailable, nil:
       return "I couldn't verify the current screen."
     }
-    return
-      "I need Screen Recording permission before I can view your screen. Say ‘grant it’ and I’ll open the permission request."
   }
 
   /// Mints the local presentation receipt only after the session reports that it accepted the
@@ -518,15 +584,18 @@ enum RealtimeScreenEvidenceCapture {
     let displayID = displayContaining(windowID: frontmostWindowID) ?? onlyActiveDisplay()
     // A PTT evidence capture must never silently fall back to the mouse-selected display.
     // On an ambiguous multi-display desktop we fail closed instead of describing the wrong one.
-    let captureFailure: RealtimeScreenEvidenceCaptureFailure?
-    let image: CGImage?
-    if !CGPreflightScreenCaptureAccess() {
-      log("RealtimeScreenEvidenceCapture: Screen Recording permission not granted at PTT capture")
-      image = nil
-      captureFailure = .screenRecordingPermissionRequired
-    } else {
-      image = displayID.flatMap { ScreenCaptureManager.captureScreenImage(displayID: $0) }
-      captureFailure = image == nil ? .captureUnavailable : nil
+    let grantedNow = CGPreflightScreenCaptureAccess()
+    let grantedAtLaunch = ScreenCaptureService.grantedAtProcessStart
+    let canAttemptCapture =
+      grantedNow
+      && !ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: grantedNow, grantedAtLaunch: grantedAtLaunch)
+    let image: CGImage? =
+      canAttemptCapture ? displayID.flatMap { ScreenCaptureManager.captureScreenImage(displayID: $0) } : nil
+    let captureFailure = self.captureFailure(
+      grantedNow: grantedNow, grantedAtLaunch: grantedAtLaunch, capturedImage: image != nil)
+    if let captureFailure {
+      log("RealtimeScreenEvidenceCapture: PTT capture unavailable reason=\(captureFailure.rawValue)")
     }
     let target: RealtimeScreenEvidenceTarget = image == nil ? .unavailable : .frontmostDisplay
     let descriptor = RealtimeScreenEvidenceDescriptor(
@@ -547,6 +616,26 @@ enum RealtimeScreenEvidenceCapture {
       preOverlayImage: image,
       jpeg: nil,
       encodingFinished: image == nil)
+  }
+
+  /// Why a PTT capture produced no pixels, as a closed set the tool result and the local
+  /// spoken fallback can both explain.
+  ///
+  /// "Granted now but not at launch" used to collapse into `captureUnavailable`, which told the
+  /// user nothing: the window server evaluates the grant once per process connection, so capture
+  /// stays dead until Omi is reopened no matter how many times it is retried.
+  static func captureFailure(
+    grantedNow: Bool,
+    grantedAtLaunch: Bool,
+    capturedImage: Bool
+  ) -> RealtimeScreenEvidenceCaptureFailure? {
+    guard grantedNow else { return .screenRecordingPermissionRequired }
+    if ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+      grantedNow: grantedNow, grantedAtLaunch: grantedAtLaunch)
+    {
+      return .screenRecordingNeedsRelaunch
+    }
+    return capturedImage ? nil : .captureUnavailable
   }
 
   static func encode(_ evidence: RealtimeScreenEvidence) -> RealtimeScreenEvidence {

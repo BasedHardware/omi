@@ -111,7 +111,8 @@ extension RealtimeHubController {
     // Capture freshness is enforced when the exact JPEG enters the provider transport. Once it
     // is enqueued while fresh, the report gets this separate bounded wait rather than inheriting
     // a nearly-expired capture timestamp and failing before the model can inspect the image.
-    let expiresAfter = screenEvidence == nil ? 0 : RealtimeScreenEvidenceProtocolPolicy.maximumReportWait
+    let expiresAfter = RealtimeScreenEvidenceProtocolPolicy.reportDeadline(
+      hasInstalledEvidence: screenEvidence != nil)
     VoiceTurnCoordinator.shared.publish(
       .screenEvidenceProtocolStartedScoped(
         turnID: turnID,
@@ -163,7 +164,18 @@ extension RealtimeHubController {
     case .evidenceExpired(let evidence):
       rejectScreenEvidence(evidence, reason: "evidence_expired")
     case .notAdmitted:
-      return
+      switch RealtimeScreenGroundingPolicy.outcomeForNotAdmittedTransport(
+        state: screenGroundingState,
+        activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
+        currentTurnEpoch: realtimeToolTurnEpoch,
+        enqueuedTurnEpoch: turnEpoch,
+        callID: callID)
+      {
+      case .ignoreStaleCallback:
+        return
+      case .reject(let descriptor):
+        rejectScreenEvidence(descriptor, reason: RealtimeScreenGroundingPolicy.transportNotAdmittedReason)
+      }
     }
   }
 
@@ -200,6 +212,42 @@ extension RealtimeHubController {
     log(message)
   }
 
+  /// Bounded dimensions for every screen-evidence fallback and terminal event. A screen failure
+  /// used to be queryable only as an undifferentiated `capability_mismatch`, so the fresh-install
+  /// case that produced most of the canned local strings was invisible. Enum raw values, a
+  /// coarse age bucket, and the provider tag only — never window titles, app names, or text.
+  func screenEvidenceFallbackProperties(
+    evidence: RealtimeScreenEvidenceDescriptor?,
+    reason: String
+  ) -> [String: Any] {
+    [
+      "screen_evidence_reason": reason,
+      "user_visible": true,
+      "capture_failure": evidence?.captureFailure?.rawValue ?? (evidence == nil ? "no_evidence" : "none"),
+      "granted_at_launch": ScreenCaptureService.grantedAtProcessStart,
+      "evidence_age_ms_bucket": Self.screenEvidenceAgeBucket(evidence),
+      "provider": providerTag,
+    ]
+  }
+
+  /// Which spoken local string the user actually heard, as a closed set.
+  static func screenEvidenceFailureKind(_ evidence: RealtimeScreenEvidenceDescriptor?) -> String {
+    switch evidence?.captureFailure {
+    case .screenRecordingPermissionRequired: return "permission_required"
+    case .screenRecordingNeedsRelaunch: return "needs_relaunch"
+    case .captureUnavailable, nil: return "screen_unverified"
+    }
+  }
+
+  static func screenEvidenceAgeBucket(_ evidence: RealtimeScreenEvidenceDescriptor?) -> String {
+    guard let evidence else { return "none" }
+    let ageMs = max(0, Int(Date().timeIntervalSince(evidence.capturedAt) * 1_000))
+    if ageMs < 1_000 { return "lt_1s" }
+    if ageMs < 5_000 { return "lt_5s" }
+    if ageMs < 15_000 { return "lt_15s" }
+    return "gte_15s"
+  }
+
   func rejectScreenEvidence(
     _ evidence: RealtimeScreenEvidenceDescriptor?,
     reason: String
@@ -210,16 +258,23 @@ extension RealtimeHubController {
     // unavailable evidence. Let the provider turn that into its normal spoken
     // answer; taking over with the one-shot fallback produces the robotic
     // system voice and can consume an otherwise healthy PTT turn.
-    if reason == "capture_unavailable",
-      RealtimeScreenGroundingPolicy.failureDisposition(for: evidence) == .providerContinuation
-    {
+    //
+    // The disposition — not the reason string — decides this. Routing on
+    // `reason == "capture_unavailable"` meant a protocol that expired with no
+    // evidence at all (fresh install without the grant, a grant that is not live
+    // in this process, an ambiguous multi-display desktop, or a follow-up turn in
+    // a locked session that never recaptured) skipped the permission-aware
+    // disposition entirely and spoke the canned local string.
+    if RealtimeScreenGroundingPolicy.rejectionDisposition(for: evidence) == .providerContinuation {
       let completion = completeRecoverableScreenEvidenceFailure(token)
       guard completion == .completed else {
         log("RealtimeHub: ptt_screen_evidence recoverable_completion=\(completion.rawValue) action=fail_closed")
         screenGroundingState = .rejected(evidence, token)
         completeScreenEvidenceFailure(
           token,
-          failure: RealtimeScreenGroundingPolicy.failureText(for: evidence))
+          failure: RealtimeScreenGroundingPolicy.failureText(for: evidence),
+          evidence: evidence,
+          reason: reason)
         return
       }
       screenGroundingState = .inactive
@@ -230,9 +285,9 @@ extension RealtimeHubController {
         area: "realtime_hub",
         from: "screen_evidence",
         to: "provider_continuation",
-        reason: "screen_recording_permission_required",
+        reason: "capability_mismatch",
         outcome: .degraded,
-        extra: ["screen_evidence_reason": reason, "user_visible": true])
+        extra: screenEvidenceFallbackProperties(evidence: evidence, reason: reason))
       return
     }
     screenGroundingState = .rejected(evidence, token)
@@ -245,10 +300,12 @@ extension RealtimeHubController {
       to: "none",
       reason: "capability_mismatch",
       outcome: .exhausted,
-      extra: ["screen_evidence_reason": reason, "user_visible": true])
+      extra: screenEvidenceFallbackProperties(evidence: evidence, reason: reason))
     let completion = completeScreenEvidenceFailure(
       token,
-      failure: RealtimeScreenGroundingPolicy.failureText(for: evidence))
+      failure: RealtimeScreenGroundingPolicy.failureText(for: evidence),
+      evidence: evidence,
+      reason: reason)
     guard completion != .completed else { return }
 
     // A screenshot tool is intentionally held pending until this protocol reaches a local
@@ -309,7 +366,9 @@ extension RealtimeHubController {
   @discardableResult
   func completeScreenEvidenceFailure(
     _ token: VoiceScreenEvidenceProtocolToken,
-    failure: String
+    failure: String,
+    evidence: RealtimeScreenEvidenceDescriptor? = nil,
+    reason: String = "unspecified"
   ) -> RealtimeScreenEvidenceProtocolCompletion {
     guard VoiceTurnCoordinator.shared.activeTurnID == token.turnID else {
       return recordScreenEvidenceProtocolCompletion(.turnNotActive)
@@ -341,7 +400,7 @@ extension RealtimeHubController {
       return recordScreenEvidenceProtocolCompletion(.reducerDidNotResolve)
     }
 
-    presentScreenEvidenceFailure(presentedFailure)
+    presentScreenEvidenceFailure(presentedFailure, evidence: evidence, reason: reason)
     VoiceTurnCoordinator.shared.publish(
       .toolFinishedScoped(
         turnID: token.turnID,
@@ -466,11 +525,21 @@ extension RealtimeHubController {
     return snapshot
   }
 
-  func presentScreenEvidenceFailure(_ failure: String) {
+  func presentScreenEvidenceFailure(
+    _ failure: String,
+    evidence: RealtimeScreenEvidenceDescriptor? = nil,
+    reason: String = "unspecified"
+  ) {
     guard !screenFailurePresented else { return }
     screenFailurePresented = true
     assistantText = failure.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !assistantText.isEmpty else { return }
+    // The moment the local string is actually spoken. Recording it here — not at the rejection —
+    // makes the user-visible failure rate queryable without inferring it from fallback events
+    // that also cover recovered provider continuations.
+    var terminalProperties = screenEvidenceFallbackProperties(evidence: evidence, reason: reason)
+    terminalProperties["failure_kind"] = Self.screenEvidenceFailureKind(evidence)
+    DesktopDiagnosticsManager.shared.recordScreenEvidenceTerminal(properties: terminalProperties)
     takeOverVoiceOutputForAuthoritativeLocalResult()
     guard let lease = acquireVoiceOutput(.deterministicScreenEvidence, reason: "screen_evidence_failed")
     else { return }
