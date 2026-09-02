@@ -683,8 +683,12 @@ struct ChatBubble: View {
       }
 
       if showReasonPicker {
-        reasonPicker
-          .transition(.opacity)
+        ChatFeedbackReasonPicker(
+          selected: submittedReason,
+          onSelect: submitReason,
+          onSkip: { showReasonPicker = false }
+        )
+        .transition(.opacity)
       }
     }
     .omiAnimation(.easeInOut(duration: 0.2), value: showRatingFeedback)
@@ -696,48 +700,6 @@ struct ChatBubble: View {
     // swallows it — the rating can never be cleared.
     .onChange(of: message.rating, initial: true) { _, newValue in
       lastSubmittedRating = newValue
-    }
-  }
-
-  /// One-click "what went wrong" row, shown only after a thumbs-down.
-  ///
-  /// Deliberately inline rather than a modal sheet: the reason is a nicety, not
-  /// a toll. The user can ignore it and keep reading — the thumbs-down is
-  /// already recorded — and the row disappears once they answer.
-  @ViewBuilder
-  private var reasonPicker: some View {
-    HStack(spacing: OmiSpacing.xxs) {
-      Text("What went wrong?")
-        .scaledFont(size: OmiType.micro)
-        .foregroundColor(Ink.secondary)
-
-      ForEach(ChatFeedbackReason.allCases) { reason in
-        Button(action: { submitReason(reason) }) {
-          Text(reason.label)
-            .scaledFont(size: OmiType.micro)
-            .foregroundColor(submittedReason == reason ? Ink.primary : Ink.secondary)
-            .padding(.horizontal, OmiSpacing.xxs)
-            .padding(.vertical, 1)
-            .background(
-              RoundedRectangle(cornerRadius: 4)
-                .stroke(Ink.secondary.opacity(0.35), lineWidth: 1)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(reason.help)
-        .accessibilityLabel("Reason: \(reason.label)")
-      }
-
-      Button(action: { showReasonPicker = false }) {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.micro)
-          .foregroundColor(Ink.secondary)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .help("Skip")
-      .accessibilityLabel("Skip reason")
     }
   }
 
