@@ -992,7 +992,7 @@ class CaptureController extends ChangeNotifier
             _startVoiceCommandTimeout(deviceId);
             _playSpeakerHaptic(deviceId, 1);
           } else {
-            // Only end on second tap if session was started by toggle mode (not legacy)
+            // End on second tap
             debugPrint("Ending voice question session (toggle mode)");
             _endVoiceCommandSession(deviceId);
           }
@@ -1009,7 +1009,7 @@ class CaptureController extends ChangeNotifier
         }
 
         // Legacy support: release (end voice command) - older firmware
-        // Only end on release if session was started by legacy long press (buttonState 3)
+        // End on release if a voice command session is active
         if (buttonState == 5 && _voiceCommandSession != null) {
           debugPrint("Legacy: Release detected - ending voice command");
           _endVoiceCommandSession(deviceId);
