@@ -2541,6 +2541,12 @@ class PushToTalkManager: ObservableObject {
     overrideDeviceID: AudioDeviceID? = nil,
     diagnosticRecoveryAction: String? = nil
   ) {
+    // Above the guard: a start that is a no-op because one is already running is
+    // still a turn that asked for a capture, and `judgeableHoldSeconds` keys on
+    // that. Recording it below would let a turn that re-entered here with a
+    // capture already alive be judged as though it had no microphone to wait for.
+    // Idempotent — `captureStartRequested` refuses to overwrite a resolved outcome.
+    pttLifecycle.captureStartRequested()
     guard !micCaptureStartInFlight && !(audioCaptureService?.capturing ?? false) else {
       log("PushToTalkManager: mic capture start ignored — already active")
       if let diagnosticRecoveryAction {
@@ -2551,7 +2557,6 @@ class PushToTalkManager: ObservableObject {
       return
     }
     micCaptureStartInFlight = true
-    pttLifecycle.captureStartRequested()
     micCaptureGeneration &+= 1
     let generation = micCaptureGeneration
     guard let turnID = currentVoiceTurnID else {

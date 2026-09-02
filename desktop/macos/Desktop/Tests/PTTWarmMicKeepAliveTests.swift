@@ -147,12 +147,15 @@ final class PTTWarmMicKeepAliveTests: XCTestCase {
     let source = try pushToTalkManagerSource()
 
     XCTAssertTrue(source.contains("pttLifecycle.captureWasRequested ? pttLifecycle.holdSeconds : nil"))
-    XCTAssertFalse(
-      source.contains("holdSeconds: pttLifecycle.holdSeconds"),
-      "the discard judgement must read the gated hold, not the raw one")
-    XCTAssertFalse(
-      source.contains("holdSec: pttLifecycle.holdSeconds"),
-      "the dead-mic policy must read the gated hold, not the raw one")
+    // Both readers of the hold go through the gate. Counted rather than matched
+    // on argument text, which a reformat could silently make vacuous.
+    XCTAssertEqual(
+      source.components(separatedBy: "judgeableHoldSeconds").count - 1, 6,
+      "the discard judgement and the dead-mic policy must all read the gated hold")
+    // What makes an automation turn ungated: it returns before `startMicCapture`,
+    // so nothing ever records a capture-start request for it.
+    let bridge = try pushToTalkManagerSource()
+    XCTAssertTrue(bridge.contains("if automationCaptureBypass, let turnID = currentVoiceTurnID {"))
   }
 
   /// The device the snapshot vetted and the device that actually opened are not
