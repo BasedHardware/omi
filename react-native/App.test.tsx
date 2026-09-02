@@ -13,14 +13,22 @@ test('the product entry keeps the canonical orchestrator', () => {
   expect(app).not.toContain('Saved data unavailable');
 });
 
-test('macOS chrome is DesktopApp after first paint for every session state', () => {
+test('macOS mounts product chrome only once the session is really ready', () => {
   expect(orchestrator).toMatch(/if \(macDesktop\) \{/);
-  expect(orchestrator).not.toMatch(
-    /if \(macDesktop && onboardingRequired === false\)/,
-  );
   expect(orchestrator).toContain('<DesktopApp');
   expect(orchestrator).toContain('session=');
   expect(orchestrator).toContain('onSignIn=');
+  // While the gate is unsettled the desktop branch renders the shared
+  // first-run Welcome (or the empty session probe); DesktopApp — nav,
+  // omnibar, Home cards, Settings — mounts only after the gate is ready.
+  const macBranch = orchestrator.slice(
+    orchestrator.indexOf('if (macDesktop) {'),
+  );
+  expect(macBranch).toContain('onboardingRequired !== false');
+  expect(macBranch.indexOf('firstRunOnboarding')).toBeGreaterThan(-1);
+  expect(macBranch.indexOf('firstRunOnboarding')).toBeLessThan(
+    macBranch.indexOf('<DesktopApp'),
+  );
   expect(orchestrator).not.toContain('HomeRecovery');
   expect(orchestrator).not.toContain('HomeTimeline');
   expect(orchestrator).not.toContain('HomeSurface');
@@ -61,7 +69,7 @@ test('macOS first paint and session probe do not require native devices or BLE',
   expect(desktopMount).not.toContain('useNativeDevices');
 });
 
-test('DesktopApp owns sign-in inside the search-first shell', () => {
+test('DesktopApp owns the session gate inside the shell', () => {
   const chrome = readFileSync(
     resolve(__dirname, 'src/desktop/desktopChrome.ts'),
     'utf8',
@@ -75,9 +83,16 @@ test('DesktopApp owns sign-in inside the search-first shell', () => {
     .join('\n');
   expect(chrome).toContain("Search what you've seen and heard");
   expect(desktopKit).toContain('desktopSearchPlaceholder');
-  expect(desktopKit).toContain('signed-out');
-  expect(desktopKit).toContain('Restoring your session');
+  expect(desktopKit).toContain("session === 'signed-out'");
+  expect(desktopKit).toContain("session === 'probing'");
+  // The signed-out shell is the shared Welcome component and nothing else.
+  expect(desktopKit).toContain('<Onboarding');
+  expect(desktopKit).not.toContain('Restoring your session');
+  expect(desktopKit).not.toContain(
+    'Sign in to load conversations and memories.',
+  );
   expect(desktopKit).not.toContain('Saved data unavailable');
   expect(desktopKit).not.toContain('Omi disconnected');
+  // 'Welcome to Omi' copy lives in the shared Onboarding, not the kit.
   expect(desktopKit).not.toContain('Welcome to Omi');
 });

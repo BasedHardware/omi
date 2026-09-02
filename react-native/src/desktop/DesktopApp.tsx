@@ -7,7 +7,11 @@ import type {
   DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
+import {Onboarding} from '../ui/Onboarding';
 import {
+  desktopNavBarHeight,
+  desktopTrafficLightButton,
+  desktopTrafficLightRowWidth,
   visibleChatError,
   desktopWindowInset,
   type DesktopSession,
@@ -19,6 +23,16 @@ import {DesktopSettings} from './DesktopSettings';
 import {ShippingStage} from './ShippingStage';
 
 export type {DesktopSession};
+
+// The probing window keeps only the chrome row the native traffic lights sit
+// in, so an unsettled session probe never reads as a signed-in skeleton.
+export function DesktopSessionProbe() {
+  return (
+    <View accessibilityLabel="Session check" style={styles.probeRow}>
+      <View pointerEvents="none" style={styles.probeControls} />
+    </View>
+  );
+}
 
 type Props = {
   outcomes: DesktopReadOutcomes | null;
@@ -65,6 +79,25 @@ export function DesktopApp({
     return () => subscription.remove();
   }, []);
   const chatNotice = visibleChatError(session, chatError);
+  // Session gate. Until OmiAuth reports a real cloud session with onboarding
+  // complete, this shell paints no product IA at all: the probe keeps an
+  // empty window (traffic-light spacer only) and a signed-out Mac sees the
+  // same Welcome as every other surface — never nav pills, an omnibar, Home
+  // cards, Settings, or empty-state lists.
+  if (session === 'signed-out') {
+    return (
+      <View accessibilityLabel="Omi desktop" style={styles.root}>
+        <Onboarding onSignIn={onSignIn} signingIn={signingIn} />
+      </View>
+    );
+  }
+  if (session === 'probing') {
+    return (
+      <View accessibilityLabel="Omi desktop" style={styles.root}>
+        <DesktopSessionProbe />
+      </View>
+    );
+  }
   return (
     <View accessibilityLabel="Omi desktop" style={styles.root}>
       <DesktopChrome
@@ -83,12 +116,9 @@ export function DesktopApp({
             draft={draft}
             messages={messages}
             onRefresh={onRefresh}
-            onSignIn={onSignIn}
             outcomes={outcomes}
             reads={reads}
             readsPhase={readsPhase}
-            session={session}
-            signingIn={signingIn}
           />
         ) : route === 'Conversations' ? (
           <LibraryPage outcomes={outcomes} />
@@ -118,6 +148,15 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 8,
     padding: desktopWindowInset,
+  },
+  probeRow: {
+    flexDirection: 'row',
+    height: desktopNavBarHeight,
+  },
+  probeControls: {
+    alignSelf: 'center',
+    height: desktopTrafficLightButton,
+    width: desktopTrafficLightRowWidth,
   },
   page: {flex: 1},
 });

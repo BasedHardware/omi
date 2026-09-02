@@ -14,7 +14,6 @@ import type {
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
-import type {DesktopSession} from './desktopChrome';
 import {ShippingListInsert} from './ShippingStage';
 import {EmptyCopy, ReadRow, SectionTitle, TaskRow} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
@@ -24,12 +23,9 @@ type Props = {
   draft: string;
   messages: ChatMessage[];
   onRefresh: () => void;
-  onSignIn: () => void;
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
-  session: DesktopSession;
-  signingIn: boolean;
 };
 
 export function RewindPanel() {
@@ -48,47 +44,11 @@ export function RewindPanel() {
 
 function SessionBanner({
   onRefresh,
-  onSignIn,
   readsPhase,
-  session,
-  signingIn,
 }: {
   onRefresh: () => void;
-  onSignIn: () => void;
   readsPhase: ReadsPhase;
-  session: DesktopSession;
-  signingIn: boolean;
 }) {
-  if (session === 'probing') {
-    return (
-      <View accessibilityLabel="Session check" style={styles.banner}>
-        <ActivityIndicator color={token.color.inkMuted} size="small" />
-        <Text style={styles.bannerText}>Restoring your session…</Text>
-      </View>
-    );
-  }
-  if (session === 'signed-out') {
-    return (
-      <View style={styles.banner}>
-        <Text style={styles.bannerText}>
-          Sign in to load conversations and memories.
-        </Text>
-        <FocusPressable
-          accessibilityLabel="Sign in"
-          accessibilityRole="button"
-          disabled={signingIn}
-          onPress={onSignIn}
-          style={({pressed}) => [
-            styles.bannerActionHit,
-            pressed && styles.pressed,
-          ]}>
-          <Text style={styles.bannerAction}>
-            {signingIn ? 'Signing in…' : 'Sign in'}
-          </Text>
-        </FocusPressable>
-      </View>
-    );
-  }
   if (readsPhase === 'initial-loading' || readsPhase === 'refreshing') {
     return (
       <View accessibilityLabel="Reading your day" style={styles.banner}>
@@ -146,12 +106,9 @@ export function DesktopHome({
   draft,
   messages,
   onRefresh,
-  onSignIn,
   outcomes,
   reads,
   readsPhase,
-  session,
-  signingIn,
 }: Props) {
   const query = draft.trim();
   const normalized = query.toLocaleLowerCase();
@@ -175,13 +132,7 @@ export function DesktopHome({
   );
   return (
     <View style={styles.home}>
-      <SessionBanner
-        onRefresh={onRefresh}
-        onSignIn={onSignIn}
-        readsPhase={readsPhase}
-        session={session}
-        signingIn={signingIn}
-      />
+      <SessionBanner onRefresh={onRefresh} readsPhase={readsPhase} />
       <ScrollView
         contentContainerStyle={styles.listContent}
         style={styles.list}>
@@ -250,11 +201,6 @@ const styles = StyleSheet.create({
     fontFamily: token.font,
     fontSize: token.type.meta,
     minWidth: 0,
-  },
-  bannerActionHit: {
-    flexShrink: 0,
-    paddingHorizontal: 4,
-    paddingVertical: 6,
   },
   bannerAction: {
     color: token.color.ink,

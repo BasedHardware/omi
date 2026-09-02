@@ -59,7 +59,7 @@ test('keeps first-run onboarding copy off the retired host', () => {
   expect(desktopSource).not.toContain('8787');
 });
 
-test('macOS mounts DesktopApp for every session state', () => {
+test('macOS mounts DesktopApp only for a ready session', () => {
   const orchestrator = readFileSync(
     resolve(__dirname, '../src/app/AppOrchestrator.tsx'),
     'utf8',
@@ -68,6 +68,7 @@ test('macOS mounts DesktopApp for every session state', () => {
   expect(orchestrator).toContain('onboardingRequired');
   expect(orchestrator).toMatch(/if \(macDesktop\) \{/);
   expect(orchestrator).toContain('<DesktopApp');
+  expect(orchestrator).toContain('onboardingRequired !== false');
   expect(orchestrator).not.toMatch(
     /onboardingRequired === false\s*\?\s*macDesktopNav\s*:\s*null/,
   );
@@ -98,7 +99,7 @@ test('macOS sign-out ignores environment tokens so the session stays empty', () 
     /if \(!OmiAuthEnvironmentCloudTokensIgnored\(\)\) \{[^]*OMI_CLOUD_API_TOKEN[^]*OMI_API_TOKEN/,
   );
   expect(gate).toMatch(
-    /const result = await auth\.signOut\(\);[^]*const hasSession = await auth\.hasCloudSession\(\);[^]*setOnboardingRequired\(true\)/,
+    /const result = await auth\.signOut\(\);[^]*hasSession = await auth\.hasCloudSession\(\);[^]*setOnboardingRequired\(true\)/,
   );
   expect(auth).not.toContain('unsetenv');
   expect(auth).not.toContain('.zshrc');
