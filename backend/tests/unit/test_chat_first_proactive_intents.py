@@ -1875,6 +1875,59 @@ def test_a_capture_receipt_awaiting_its_kernel_receipt_is_never_retired(firestor
     assert {intent.intent_id for intent in batch.intents} == {pending.intent_id, newer.intent_id}
 
 
+def test_a_capture_receipt_a_kernel_already_holds_is_not_superseded(firestore):
+    """A fetch leaves a normal intent ``ready`` -- only the sibling attempt row moves.
+
+    So ``ready`` alone does not mean undelivered, and superseding on it would
+    delete a row out from under the kernel that is about to acknowledge it.
+    """
+
+    in_flight = _capture_receipt(firestore, 'in-flight', created_at=NOW)
+    first = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(minutes=1), firestore_client=firestore
+    )
+    assert [intent.intent_id for intent in first.intents] == [in_flight.intent_id]
+    assert (
+        firestore.rows[('users', UID, intents_db.INTENTS_COLLECTION, in_flight.intent_id)]['delivery_state'] == 'ready'
+    )
+
+    newer = _capture_receipt(firestore, 'newer', created_at=NOW + timedelta(minutes=2))
+    second = intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(minutes=3), firestore_client=firestore
+    )
+
+    assert _dead_letter_reason(firestore, in_flight.intent_id) is None
+    assert {intent.intent_id for intent in second.intents} == {in_flight.intent_id, newer.intent_id}
+    # The unacknowledged-fetch budget, not this rule, is what terminalizes it.
+    assert (
+        firestore.rows[('users', UID, intents_db.DELIVERY_ATTEMPTS_COLLECTION, in_flight.intent_id)]['fetch_count'] == 2
+    )
+
+
+def test_a_retired_receipt_keeps_its_delivery_attempt_history(firestore):
+    """The terminal record is written from the hydrated intent, not the bare row."""
+
+    superseded = _capture_receipt(firestore, 'superseded', created_at=NOW)
+    _capture_receipt(firestore, 'newest', created_at=NOW + timedelta(minutes=1))
+    deferred_at = NOW - timedelta(hours=2)
+    firestore.rows[('users', UID, intents_db.DELIVERY_ATTEMPTS_COLLECTION, superseded.intent_id)] = {
+        'fetch_count': 0,
+        'first_deferred_at': deferred_at,
+        'last_deferral_at': deferred_at,
+    }
+
+    intents_db.fetch_ready_intent_batch(
+        UID, account_generation=GENERATION, now=NOW + timedelta(minutes=2), firestore_client=firestore
+    )
+
+    dead = DeadLetteredProactiveIntent.model_validate(
+        firestore.rows[('users', UID, intents_db.DEAD_LETTERS_COLLECTION, superseded.intent_id)]
+    )
+    assert dead.dead_letter_reason == intents_db.SUPERSEDED_CAPTURE_DEAD_LETTER_REASON
+    assert dead.first_deferred_at == deferred_at
+    assert dead.last_deferral_at == deferred_at
+
+
 def test_capture_retirement_writes_stay_bounded_on_one_poll(firestore):
     limit = 2
     for index in range(4 * intents_db.FETCH_CANDIDATE_SCAN_MULTIPLIER * limit):

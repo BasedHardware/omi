@@ -859,15 +859,23 @@ def _retire_capture_receipt(
     now: datetime,
     firestore_client: Any,
 ) -> bool:
-    """Terminalize one undelivered capture receipt.
+    """Terminalize one capture receipt that was never handed to a kernel.
 
-    Re-reads inside the transaction and refuses anything that is no longer a
-    ready capture receipt, so a row a concurrent poll already advanced into
-    ``pending_kernel_receipt`` is never retired from under the kernel that is
-    about to acknowledge it.
+    Returns whether the row was retired. Everything is decided from a re-read
+    inside the transaction, because the caller's copy comes from a collection
+    scan that cannot see the sibling delivery-attempt document:
+
+    * A fetch does not change ``delivery_state`` for a normal intent -- it only
+      increments ``fetch_count`` on that sibling -- so ``ready`` alone does not
+      mean undelivered. A receipt some kernel is already holding is refused
+      here and left to the unacknowledged-fetch budget, which is the existing
+      owner of a delivery that never came back.
+    * The terminal record is written from the hydrated intent, so the dead
+      letter keeps the fetch and deferral history rather than defaults.
     """
 
     intent_ref = _intent_ref(uid, intent_id, firestore_client=firestore_client)
+    attempt_ref = _delivery_attempt_ref(uid, intent_id, firestore_client=firestore_client)
     transaction = firestore_client.transaction()
 
     @firestore.transactional
@@ -876,7 +884,9 @@ def _retire_capture_receipt(
         if not snapshot.exists:
             return False
         try:
-            intent = _intent_from_snapshot(snapshot)
+            intent = _intent_with_delivery_attempt(
+                _intent_from_snapshot(snapshot), attempt_ref.get(transaction=write_transaction)
+            )
         except ChatFirstMalformedDocument:
             # The malformed sweep in this same fetch owns that row.
             return False
@@ -884,6 +894,7 @@ def _retire_capture_receipt(
             intent.account_generation != account_generation
             or intent.delivery_state != 'ready'
             or not _is_capture_receipt(intent)
+            or intent.fetch_count > 0
         ):
             return False
         delivery_attempts.move_to_dead_letters(
@@ -957,26 +968,24 @@ def fetch_ready_intent_batch(
             continue
         candidates.append(intent)
 
-    # Keep at most the newest live receipt; retire the rest. Removing them here
-    # is what stops the backlog replay -- the bounded writes further down only
-    # stop the same rows being re-scanned on every later poll.
+    # Keep at most the newest live receipt and retire the rest.
     capture_receipts.sort(key=lambda intent: (intent.created_at, intent.intent_id))
     retiring_captures: list[tuple[ProactiveIntent, str]] = [
         (intent, SUPERSEDED_CAPTURE_DEAD_LETTER_REASON) for intent in capture_receipts[:-1]
     ]
+    deliverable_capture: ProactiveIntent | None = None
     if capture_receipts:
         newest = capture_receipts[-1]
         if fetched_at - newest.created_at > CAPTURE_RECEIPT_DELIVERY_WINDOW:
             retiring_captures.append((newest, STALE_CAPTURE_DEAD_LETTER_REASON))
         else:
-            candidates.append(newest)
-    candidates.sort(key=lambda intent: (_fetch_priority(intent), intent.created_at, intent.intent_id))
+            deliverable_capture = newest
 
     ready: list[ProactiveIntent] = []
     candidate_scan_limit = FETCH_CANDIDATE_SCAN_MULTIPLIER * limit
     # Bounded per poll so a long backlog can never make one fetch linear in its
-    # size. Whatever is left over is already excluded from this response, so it
-    # costs nothing to retire it on a later poll instead.
+    # size. Whatever is left over is excluded from this response either way, so
+    # it costs nothing to retire it on a later poll instead.
     for intent, reason in retiring_captures[:candidate_scan_limit]:
         try:
             retired = _retire_capture_receipt(
@@ -992,6 +1001,18 @@ def fetch_ready_intent_batch(
             continue
         if retired:
             lifecycle_events.append(IntentLifecycleEvent('retired', intent.source, reason))
+        else:
+            # A receipt a kernel is already holding, or one another poll changed
+            # underneath this scan. Put it back in play rather than leaving it
+            # out of every future response: its own delivery path -- the
+            # unacknowledged-fetch budget -- is what terminalizes it, and the
+            # kernel keys the row on a stable turn ID, so re-offering it cannot
+            # produce a second card.
+            candidates.append(intent)
+    if deliverable_capture is not None:
+        candidates.append(deliverable_capture)
+    candidates.sort(key=lambda intent: (_fetch_priority(intent), intent.created_at, intent.intent_id))
+
     hydrated_attempts: dict[str, ProactiveIntent] = {}
     stall_age_candidates: list[tuple[datetime, ProactiveIntent]] = []
     oldest_candidates = sorted(candidates, key=lambda intent: (intent.created_at, intent.intent_id))
